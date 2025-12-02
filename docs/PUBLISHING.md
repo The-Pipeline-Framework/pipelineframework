@@ -4,22 +4,18 @@ This document explains how to publish The Pipeline Framework to Maven Central an
 
 ## TL;DR: Automatic Release Process
 
-The release process is fully automated with GitHub Actions:
+The release process is fully automated with GitHub Actions using the Maven Release Plugin for version management:
 
-1. **Update version in root POM** (if needed): Change `<version.pipeline>` in `pom.xml`
-2. **Commit and push changes**: `git add . && git commit -m "Release x.y.z" && git push`
-3. **Create and push a Git tag**: `git tag vx.y.z && git push origin vx.y.z`
-4. **Watch GitHub Actions**: Go to the Actions tab to monitor the release workflow
-5. **Verify on Maven Central**: Check artifacts are published at <https://s01.oss.sonatype.org/>
+1. **Run the Maven Release Plugin**: `mvn release:prepare -Darguments="-DskipTests"` (updates versions across all modules and creates local tag)
+2. **Push the main branch**: `git push origin main` (pushes version updates; GitHub Actions runs tests but not full native build)
+3. **Push the tag**: `git push origin vx.y.z` (where x.y.z is your release version; triggers publishing workflow)
+4. **Monitor GitHub Actions**: Go to the Actions tab to monitor the publishing workflow (deploys to Sonatype Central, creates GitHub release)
+5. **Verify on Maven Central**: Check artifacts are published at <https://central.sonatype.com/>
 
 The GitHub Actions workflow automatically:
-- Builds and tests the complete project
-- Runs unit tests during the build phase
-- Runs integration tests (on main branch only)
-- Builds native executables for example services (on main branch)
+- Builds and tests the complete project (when pushing to main - though full native build is skipped for release commits)
 - Signs all artifacts with GPG
-- Deploys to Sonatype OSSRH
-- Closes and releases the staging repository
+- Deploys to Sonatype Central
 - Creates a GitHub release with notes
 
 ## Table of Contents
@@ -27,7 +23,7 @@ The GitHub Actions workflow automatically:
 - [Overview](#overview)
 - [Version Management](#version-management)
 - [Maven Central Publishing Setup](#maven-central-publishing-setup)
-- [settings.xml Configuration](#settingsxml-configuration)
+- [settings.xml Configuration](#local-settingsxml-configuration)
 - [GitHub Actions Workflow](#github-actions-workflow)
 - [Safe Release Process](#safe-release-process)
 - [Troubleshooting](#troubleshooting)
@@ -115,22 +111,9 @@ This configuration generates a `.flattened-pom.xml` file with all properties res
 
 ## Maven Central Publishing Setup
 
-The Maven Central publishing configuration is located in the framework's parent POM (`framework/pom.xml`):
-
-### Distribution Management
-
-```xml
-<distributionManagement>
-    <snapshotRepository>
-        <id>ossrh</id>
-        <url>https://s01.oss.sonatype.org/content/repositories/snapshots</url>
-    </snapshotRepository>
-    <repository>
-        <id>ossrh</id>
-        <url>https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/</url>
-    </repository>
-</distributionManagement>
-```
+The Maven Central publishing configuration is located in the framework's parent POM (`framework/pom.xml`). It is 
+handled by the GitHub Actions workflow, but this is a description of how such setup could be done on your local 
+workstation.
 
 ### Required Plugins
 
@@ -139,13 +122,13 @@ The following plugins are configured in the framework POM for Maven Central comp
 1. **Source Plugin**: Generates sources JAR
 2. **Javadoc Plugin**: Generates documentation JAR
 3. **GPG Plugin**: Signs artifacts
-4. **Nexus Staging Plugin**: Deploys to Sonatype OSSRH
+4. **Central Publishing Plugin**: Deploys to Sonatype Central
 
-For the complete configuration, see the release profile in `framework/pom.xml`.
+For the complete configuration, see the central-publishing profile in `framework/pom.xml`.
 
-## settings.xml Configuration
+### Local settings.xml Configuration
 
-To authenticate with Sonatype OSSRH and provide GPG credentials, configure your `~/.m2/settings.xml` file:
+To authenticate with Sonatype Central and provide GPG credentials, you could configure your `~/.m2/settings.xml` file:
 
 ```xml
 <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
@@ -154,7 +137,7 @@ To authenticate with Sonatype OSSRH and provide GPG credentials, configure your 
                               http://maven.apache.org/xsd/settings-1.0.0.xsd">
   <servers>
     <server>
-      <id>ossrh</id>
+      <id>central</id>
       <username>your-sonatype-username</username>
       <password>your-encrypted-sonatype-password</password>
     </server>
@@ -164,13 +147,12 @@ To authenticate with Sonatype OSSRH and provide GPG credentials, configure your 
 
 ### GPG Configuration
 
-For GPG signing, you have two options:
+The publishing workflow handles GPG signing on GitHub Actions, but for reference, this is how you could configure it on your local machine:
 
-**Option 1: In settings.xml (less secure)**
 ```xml
 <profiles>
   <profile>
-    <id>ossrh</id>
+    <id>central-publishing</id>
     <properties>
       <gpg.executable>gpg</gpg.executable>
       <gpg.passphrase>your-gpg-passphrase</gpg.passphrase>
@@ -180,16 +162,13 @@ For GPG signing, you have two options:
 </profiles>
 
 <activeProfiles>
-  <activeProfile>ossrh</activeProfile>
+  <activeProfile>central-publishing</activeProfile>
 </activeProfiles>
 ```
 
-**Option 2: Through environment variables (recommended for CI/CD)**
-Use environment variables and GPG agent for security in automated environments.
-
 ### Encrypting Passwords
 
-To encrypt your Sonatype password:
+To encrypt your Sonatype password on your local `settings.xml`:
 
 1. Create the master password:
    ```bash
@@ -206,14 +185,14 @@ To encrypt your Sonatype password:
 
 ## GitHub Actions Workflow
 
-The release process is automated using GitHub Actions.
+The publishing process is automated using GitHub Actions.
 
 ### Required GitHub Secrets
 
-To use the workflow, these secrets must exist in the GitHub repository:
+These secrets must exist in the GitHub repository:
 
-1. `OSSRH_USERNAME` - Your Sonatype username
-2. `OSSRH_PASSWORD` - Your Sonatype password
+1. `CENTRAL_USERNAME` - Your Sonatype username
+2. `CENTRAL_PASSWORD` - Your Sonatype password
 3. `GPG_PRIVATE_KEY` - Your GPG private key exported with `gpg --export-secret-keys --armor <your-key-id>`
 4. `GPG_PASSPHRASE` - The passphrase for your GPG key
 
@@ -221,26 +200,33 @@ To use the workflow, these secrets must exist in the GitHub repository:
 
 ### Standard Release Workflow (Recommended)
 
-The Maven Release Plugin provides a complete automated solution.
-Again, this is automatically managed by GitHub Actions, which actions the following steps.
+The Maven Release Plugin provides a complete automated solution that handles version updates across all modules.
 
 1. **Prepare the Release**:
    - Use the Maven Release Plugin to prepare the release:
      ```bash
-     mvn release:prepare
+     mvn release:prepare -Darguments="-DskipTests"
      ```
-   - This will update versions, create a tag, and prepare the release in one step
+   - This will update versions across all modules, create a tag, and set the next development version in one step
    - The plugin will prompt for:
      - The release version (e.g., 1.0.0)
      - The SCM tag (e.g., v1.0.0)
      - The next development version (e.g., 1.0.1-SNAPSHOT)
 
-2. **Perform the Release**:
-   - Deploy the release to Maven Central:
+2. **Push the Changes**:
+   - Push the version update commits to the main branch:
      ```bash
-     mvn release:perform
+     git push origin main
      ```
-   - This will check out the tagged version and run the deployment process with the `release` profile
+
+3. **Publish the Release**:
+   - Push the tag to trigger publishing to Maven Central:
+     ```bash
+     git push origin v1.0.0
+     ```
+   - This triggers the GitHub Actions workflow that runs `mvn deploy` to publish to Maven Central
+
+**Note**: The `mvn release:perform` step is not used in this setup since deployment is handled by GitHub Actions when a tag is pushed.
 
 ### When to Use the Versions Plugin Approach
 
@@ -252,12 +238,12 @@ Use this manual approach only when you need fine-grained control or the Release 
      mvn versions:set -DnewVersion=1.0.0
      mvn versions:commit
      ```
-   - Test the build with `mvn clean install -P release`
+   - Test the build with `mvn clean install -P central-publishing`
    - Create a Git tag (e.g., `v1.0.0`)
    - Push the tag to trigger the GitHub Actions release workflow
 
 **Comparison**:
-- **Release Plugin**: Handles everything automatically (version updates, SCM tagging, deployment) but requires proper plugin configuration
+- **Release Plugin**: Handles version updates across all modules automatically, but you still need to push commits and tags manually
 - **Versions Plugin**: Offers more manual control but requires multiple manual steps and careful coordination
 
 ### Alternative: Manual Release Workflow
@@ -285,8 +271,6 @@ This approach allows manual control over when releases happen.
 
 ## Troubleshooting
 
-### Common Issues
-
 **GPG Signing Errors**:
 - Verify your GPG key is properly configured
 - Check that the GPG key ID matches what's in your keystore
@@ -295,10 +279,10 @@ This approach allows manual control over when releases happen.
 **Sonatype Authentication Errors**:
 - Verify your credentials in settings.xml
 - Ensure you're using encrypted passwords in public repositories
-- Check that your OSSRH account has permissions for the group ID
+- Check that your Central account has permissions for the group ID
 
-**Nexus Staging Errors**:
-- Review Sonatype OSSRH logs
+**Sonatype Central Publishing Errors**:
+- Review Sonatype Central logs in the GitHub Actions workflow
 - Ensure all required artifacts (JARs, sources, javadoc, signatures) are present
 - Check that artifacts meet Maven Central requirements
 
@@ -307,12 +291,12 @@ This approach allows manual control over when releases happen.
 Before pushing a tag that triggers the release workflow:
 - `mvn clean verify` - test the build locally (runs unit tests)
 - `mvn clean verify -DskipITs` - test build without integration tests
-- `mvn clean verify -P release` - test with the release profile but without deployment
+- `mvn clean verify -P central-publishing` - test with the central publishing profile but without deployment
 - Use a test Sonatype repository for verification
 
 ## Important Notes
 
 - Only the framework artifacts (not example applications) are published to Maven Central
-- The examples project continues to depend on the published framework artifacts
+- The examples project does NOT depend on the published framework artifacts
 - The root POM orchestrates the overall build while the framework POM handles publishing
 - Always verify your release artifacts on Maven Central after a successful deployment

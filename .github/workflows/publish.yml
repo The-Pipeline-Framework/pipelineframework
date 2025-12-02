@@ -19,9 +19,9 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-          server-id: ossrh
-          server-username: OSSRH_USERNAME
-          server-password: OSSRH_PASSWORD
+          server-id: central
+          server-username: CENTRAL_USERNAME
+          server-password: CENTRAL_PASSWORD
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           gpg-passphrase: GPG_PASSPHRASE
 
@@ -32,15 +32,15 @@ jobs:
 
       - name: Build framework for release
         env:
-          OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
-          OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
+          OSSRH_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          OSSRH_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: ./mvnw -B -f framework/pom.xml clean install -Pcentral-publishing -DskipTests -Dgpg.passphrase=${{ secrets.GPG_PASSPHRASE }}
 
       - name: Deploy to Maven Central
         env:
-          OSSRH_USERNAME: ${{ secrets.OSSRH_USERNAME }}
-          OSSRH_PASSWORD: ${{ secrets.OSSRH_PASSWORD }}
+          OSSRH_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          OSSRH_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: ./mvnw -B -f framework/pom.xml deploy -Pcentral-publishing -DskipTests -U -Dgpg.passphrase=${{ secrets.GPG_PASSPHRASE }}
 
