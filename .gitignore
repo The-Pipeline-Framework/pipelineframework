@@ -66,3 +66,6 @@ QWEN.md
 /template-generator-node/test-output/
 /template-generator-node/node_modules/
 /template-generator-node/dist/
+
+# Maven Release Plugin backup files
+pom.xml.releaseBackup
