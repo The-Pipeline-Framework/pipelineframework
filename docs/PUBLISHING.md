@@ -147,8 +147,7 @@ To authenticate with Sonatype Central and provide GPG credentials, you could con
 
 ### GPG Configuration
 
-The publishing workflow handles GPG signing on GitHub Actions, but for reference, this is how you could configure it on
-your local:
+The publishing workflow handles GPG signing on GitHub Actions, but for reference, this is how you could configure it on your local machine:
 
 ```xml
 <profiles>
