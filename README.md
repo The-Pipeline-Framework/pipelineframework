@@ -130,6 +130,12 @@ See our [CI documentation](CI.md)
 ## 🧪 Testing
 See our [Testing documentation](TESTING.md)
 
+## 🛡️ Security
+
+If you discover a security vulnerability, please see our [security policy](SECURITY.md) for details on how to report it responsibly.
+
 ## 🤝 Contributing
 
-Contributions of all kinds are welcome — code, documentation, ideas, and especially questions.
+Contributions of all kinds are welcome — code, documentation, ideas, translations and questions.
+
+Please read our [contribution guidelines](CONTRIBUTING.md) for details on how to get started.
