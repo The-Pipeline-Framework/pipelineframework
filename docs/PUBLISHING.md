@@ -23,7 +23,7 @@ The GitHub Actions workflow automatically:
 - [Overview](#overview)
 - [Version Management](#version-management)
 - [Maven Central Publishing Setup](#maven-central-publishing-setup)
-- [settings.xml Configuration](#settingsxml-configuration)
+- [settings.xml Configuration](#local-settingsxml-configuration)
 - [GitHub Actions Workflow](#github-actions-workflow)
 - [Safe Release Process](#safe-release-process)
 - [Troubleshooting](#troubleshooting)
