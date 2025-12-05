@@ -81,16 +81,14 @@ public class RetryTestSteps {
         public void initialiseWithConfig(org.pipelineframework.config.StepConfig config) {
             // Check if this is the first time being configured with non-default values
             // If so, preserve these as manual configuration
-            if (!hasManualConfig && config != null) {
-                // Check if the incoming config has custom values
-                if (config.retryLimit() != new org.pipelineframework.config.StepConfig().retryLimit()
-                        || config.retryWait() != new org.pipelineframework.config.StepConfig().retryWait()
-                        || config.recoverOnFailure() != new org.pipelineframework.config.StepConfig()
-                                .recoverOnFailure()) {
-                    // This looks like manual configuration - save the values
-                    setManualConfig(
-                            config.retryLimit(), config.retryWait(), config.recoverOnFailure());
-                }
+            org.pipelineframework.config.StepConfig defaults = new org.pipelineframework.config.StepConfig();
+            if (!hasManualConfig && config != null
+                    && (config.retryLimit() != defaults.retryLimit()
+                            || config.retryWait() != defaults.retryWait()
+                            || config.recoverOnFailure() != defaults.recoverOnFailure())) {
+                // This looks like manual configuration - save the values
+                setManualConfig(
+                        config.retryLimit(), config.retryWait(), config.recoverOnFailure());
             }
 
             if (hasManualConfig) {
