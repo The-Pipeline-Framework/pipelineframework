@@ -102,14 +102,6 @@
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.14.0</version>
-                    <executions>
-                        <!-- Normal compile -->
-                        <execution>
-                            <id>default-compile</id>
-                            <phase>compile</phase>
-                            <goals><goal>compile</goal></goals>
-                        </execution>
-                    </executions>
                     <configuration>
                         <source>21</source>
                         <target>21</target>
