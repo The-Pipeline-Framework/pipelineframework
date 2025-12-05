@@ -53,6 +53,7 @@ class ParallelProcessingSmokeTest {
         private final List<String> results = new java.util.ArrayList<>();
 
         public TestStepOneToOne() {
+            // Empty constructor required for test class
         }
 
         @Override
@@ -103,6 +104,7 @@ class ParallelProcessingSmokeTest {
         private final List<String> results = new java.util.ArrayList<>();
 
         public TestStepOneToOneCompletableFuture() {
+            // Empty constructor required for test class
         }
 
         @Override
