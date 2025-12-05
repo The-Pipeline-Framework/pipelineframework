@@ -23,7 +23,8 @@ import org.pipelineframework.step.future.StepOneToOneCompletableFuture;
 /**
  * Example of a Future-based step that processes a payment asynchronously.
  *
- * <p>This step demonstrates how to use the StepOneToOneCompletableFuture interface for operations
+ * <p>
+ * This step demonstrates how to use the StepOneToOneCompletableFuture interface for operations
  * that need to process inputs asynchronously using standard Java CompletableFuture.
  */
 public class ProcessPaymentFutureStep extends ConfigurableStep

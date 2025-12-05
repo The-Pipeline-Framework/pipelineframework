@@ -99,10 +99,9 @@ class StepManyToOneTest {
         Uni<String> result = step.apply(input);
 
         // Then
-        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<String> subscriber =
-                result.subscribe()
-                        .withSubscriber(
-                                io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
+        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<String> subscriber = result.subscribe()
+                .withSubscriber(
+                        io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
         subscriber.awaitItem(java.time.Duration.ofSeconds(5));
         // All items processed and reduced in one operation
         subscriber.assertItem("Reduced: item1, item2, item3, item4");
@@ -112,17 +111,15 @@ class StepManyToOneTest {
     void testApplyMethodWithParallelConfig() {
         // Given
         ConfiguredTestStep step = new ConfiguredTestStep().withParallel(true);
-        Multi<String> input =
-                Multi.createFrom().items("item1", "item2", "item3", "item4", "item5", "item6");
+        Multi<String> input = Multi.createFrom().items("item1", "item2", "item3", "item4", "item5", "item6");
 
         // When
         Uni<String> result = step.apply(input);
 
         // Then
-        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<String> subscriber =
-                result.subscribe()
-                        .withSubscriber(
-                                io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
+        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<String> subscriber = result.subscribe()
+                .withSubscriber(
+                        io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
         subscriber.awaitItem(java.time.Duration.ofSeconds(5));
         // All items processed and reduced in one operation
         subscriber.assertItem("Reduced: item1, item2, item3, item4, item5, item6");
@@ -138,10 +135,9 @@ class StepManyToOneTest {
         Uni<String> result = step.apply(input);
 
         // Then
-        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<String> subscriber =
-                result.subscribe()
-                        .withSubscriber(
-                                io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
+        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<String> subscriber = result.subscribe()
+                .withSubscriber(
+                        io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
         subscriber.awaitItem(java.time.Duration.ofSeconds(5));
         // All items processed and reduced in one operation
         subscriber.assertItem("Reduced: item1, item2, item3");
@@ -151,17 +147,15 @@ class StepManyToOneTest {
     void testApplyMethodUsesConfiguredValues() {
         // Given - Test that configured values take effect
         ConfiguredTestStep step = new ConfiguredTestStep().withParallel(false);
-        Multi<String> input =
-                Multi.createFrom().items("item1", "item2", "item3", "item4", "item5", "item6");
+        Multi<String> input = Multi.createFrom().items("item1", "item2", "item3", "item4", "item5", "item6");
 
         // When
         Uni<String> result = step.apply(input);
 
         // Then - Should use configured parallel value (false)
-        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<String> subscriber =
-                result.subscribe()
-                        .withSubscriber(
-                                io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
+        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<String> subscriber = result.subscribe()
+                .withSubscriber(
+                        io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
         subscriber.awaitItem(java.time.Duration.ofSeconds(5));
         // All items are reduced to a single output
         subscriber.assertItem("Reduced: item1, item2, item3, item4, item5, item6");
@@ -177,10 +171,9 @@ class StepManyToOneTest {
         Uni<String> result = step.apply(input);
 
         // Then
-        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<String> subscriber =
-                result.subscribe()
-                        .withSubscriber(
-                                io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
+        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<String> subscriber = result.subscribe()
+                .withSubscriber(
+                        io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
         subscriber.awaitItem(java.time.Duration.ofSeconds(5));
         // All 4 items are processed and reduced in one operation
         subscriber.assertItem("Reduced: item1, item2, item3, item4");
@@ -191,19 +184,17 @@ class StepManyToOneTest {
         // Given - Simulate the CSV processing scenario where we want to process and reduce all
         // related records
         ConfiguredTestStep step = new ConfiguredTestStep().withParallel(false);
-        Multi<String> input =
-                Multi.createFrom()
-                        .range(1, 13) // 12 items simulating 12 PaymentOutput records
-                        .map(i -> "payment_" + i + "_for_csv_file_X");
+        Multi<String> input = Multi.createFrom()
+                .range(1, 13) // 12 items simulating 12 PaymentOutput records
+                .map(i -> "payment_" + i + "_for_csv_file_X");
 
         // When
         Uni<String> result = step.apply(input);
 
         // Then - All 12 items should be processed and reduced to a single result
-        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<String> subscriber =
-                result.subscribe()
-                        .withSubscriber(
-                                io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
+        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<String> subscriber = result.subscribe()
+                .withSubscriber(
+                        io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
         subscriber.awaitItem(java.time.Duration.ofSeconds(5));
         // All items should be in one reduced result
         String resultString = subscriber.getItem();
@@ -223,15 +214,13 @@ class StepManyToOneTest {
         Multi<String> emptyStream = Multi.createFrom().empty();
 
         // When
-        Uni<Void> result =
-                step.deadLetterStream(emptyStream, new RuntimeException("Test error"))
-                        .replaceWithVoid();
+        Uni<Void> result = step.deadLetterStream(emptyStream, new RuntimeException("Test error"))
+                .replaceWithVoid();
 
         // Then
-        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<Void> subscriber =
-                result.subscribe()
-                        .withSubscriber(
-                                io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
+        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<Void> subscriber = result.subscribe()
+                .withSubscriber(
+                        io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertNull(subscriber.getItem());
@@ -244,15 +233,13 @@ class StepManyToOneTest {
         Multi<String> singleItemStream = Multi.createFrom().item("single");
 
         // When
-        Uni<Void> result =
-                step.deadLetterStream(singleItemStream, new RuntimeException("Test error"))
-                        .replaceWithVoid();
+        Uni<Void> result = step.deadLetterStream(singleItemStream, new RuntimeException("Test error"))
+                .replaceWithVoid();
 
         // Then
-        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<Void> subscriber =
-                result.subscribe()
-                        .withSubscriber(
-                                io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
+        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<Void> subscriber = result.subscribe()
+                .withSubscriber(
+                        io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertNull(subscriber.getItem());
@@ -266,15 +253,13 @@ class StepManyToOneTest {
         Multi<String> multiStream = Multi.createFrom().iterable(items);
 
         // When
-        Uni<Void> result =
-                step.deadLetterStream(multiStream, new RuntimeException("Test error"))
-                        .replaceWithVoid();
+        Uni<Void> result = step.deadLetterStream(multiStream, new RuntimeException("Test error"))
+                .replaceWithVoid();
 
         // Then
-        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<Void> subscriber =
-                result.subscribe()
-                        .withSubscriber(
-                                io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
+        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<Void> subscriber = result.subscribe()
+                .withSubscriber(
+                        io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertNull(subscriber.getItem());
@@ -284,20 +269,17 @@ class StepManyToOneTest {
     void testDeadLetterStreamWithMoreItemsThanSampleSize() {
         // Given
         TestStep step = new TestStep();
-        Multi<String> multiStream =
-                Multi.createFrom()
-                        .items("item1", "item2", "item3", "item4", "item5", "item6", "item7");
+        Multi<String> multiStream = Multi.createFrom()
+                .items("item1", "item2", "item3", "item4", "item5", "item6", "item7");
 
         // When
-        Uni<Void> result =
-                step.deadLetterStream(multiStream, new RuntimeException("Test error"))
-                        .replaceWithVoid();
+        Uni<Void> result = step.deadLetterStream(multiStream, new RuntimeException("Test error"))
+                .replaceWithVoid();
 
         // Then
-        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<Void> subscriber =
-                result.subscribe()
-                        .withSubscriber(
-                                io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
+        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<Void> subscriber = result.subscribe()
+                .withSubscriber(
+                        io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertNull(subscriber.getItem());
@@ -311,15 +293,13 @@ class StepManyToOneTest {
         Multi<String> errorStream = Multi.createFrom().failure(streamError);
 
         // When
-        Uni<Void> result =
-                step.deadLetterStream(errorStream, new RuntimeException("Processing error"))
-                        .replaceWithVoid();
+        Uni<Void> result = step.deadLetterStream(errorStream, new RuntimeException("Processing error"))
+                .replaceWithVoid();
 
         // Then
-        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<Void> subscriber =
-                result.subscribe()
-                        .withSubscriber(
-                                io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
+        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<Void> subscriber = result.subscribe()
+                .withSubscriber(
+                        io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertNull(subscriber.getItem());

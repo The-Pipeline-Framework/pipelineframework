@@ -34,12 +34,11 @@ public class ExampleBidirectionalStreamingService
         return processableObj
                 .onItem()
                 .transformToMulti(
-                        item ->
-                                Multi.createFrom()
-                                        .items(
-                                                "processed_" + item + "_part1",
-                                                "processed_" + item + "_part2",
-                                                "processed_" + item + "_part3"))
+                        item -> Multi.createFrom()
+                                .items(
+                                        "processed_" + item + "_part1",
+                                        "processed_" + item + "_part2",
+                                        "processed_" + item + "_part3"))
                 .concatenate(); // Flatten the multi of multis into a single multi
     }
 }

@@ -35,7 +35,8 @@ import org.pipelineframework.step.blocking.StepOneToOneBlocking;
 @QuarkusTest
 public class ComprehensiveStepTypesTest {
 
-    @Inject PipelineRunner pipelineRunner;
+    @Inject
+    PipelineRunner pipelineRunner;
 
     @Test
     void testAllStepTypesWorkTogether() {
@@ -56,12 +57,9 @@ public class ComprehensiveStepTypesTest {
         processStep.initialiseWithConfig(processConfig);
 
         // When: Run pipeline with mixed step types
-        Multi<String> result =
-                (Multi<String>)
-                        pipelineRunner.run(input, List.of(validateStep, expandStep, processStep));
-        AssertSubscriber<String> subscriber =
-                result.subscribe()
-                        .withSubscriber(AssertSubscriber.create(6)); // 2 inputs * 3 expanded each
+        Multi<String> result = (Multi<String>) pipelineRunner.run(input, List.of(validateStep, expandStep, processStep));
+        AssertSubscriber<String> subscriber = result.subscribe()
+                .withSubscriber(AssertSubscriber.create(6)); // 2 inputs * 3 expanded each
 
         // Then: Verify results
         subscriber.awaitItems(6).awaitCompletion(Duration.ofSeconds(10));

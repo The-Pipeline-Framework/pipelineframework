@@ -60,7 +60,7 @@
         <grpc.version>1.75.0</grpc.version>
         <version.pipeline>0.9.2-SNAPSHOT</version.pipeline>
         <spotless.plugin.version>2.44.0</spotless.plugin.version>
-        <google-java-format.version>1.25.0</google-java-format.version>
+        <spotless.eclipse.format.file>${basedir}/ide-config/quarkus-formatter.xml</spotless.eclipse.format.file>
         <surefireArgLine />
     </properties>
 
@@ -148,33 +148,6 @@
                     <groupId>com.diffplug.spotless</groupId>
                     <artifactId>spotless-maven-plugin</artifactId>
                     <version>${spotless.plugin.version}</version>
-                    <configuration>
-                        <java>
-                            <googleJavaFormat>
-                                <version>${google-java-format.version}</version>
-                                <style>AOSP</style>
-                            </googleJavaFormat>
-                            <removeUnusedImports />
-                        </java>
-                        <formats>
-                            <format>
-                                <includes>
-                                    <include>src/main/**/*.java</include>
-                                    <include>jbang/*.java</include>
-                                </includes>
-                            </format>
-                        </formats>
-                    </configuration>
-                    <executions>
-                        <execution>
-                            <!-- Runs in compile phase to fail fast in case of formatting issues.-->
-                            <id>spotless-check</id>
-                            <phase>package</phase>
-                            <goals>
-                                <goal>check</goal>
-                            </goals>
-                        </execution>
-                    </executions>
                 </plugin>
                 <plugin>
                     <groupId>io.smallrye</groupId>

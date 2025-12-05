@@ -34,9 +34,11 @@ import org.pipelineframework.config.StepConfig;
 @QuarkusTest
 class PipelineRunnerTest {
 
-    @Inject PipelineConfig pipelineConfig;
+    @Inject
+    PipelineConfig pipelineConfig;
 
-    @Inject PipelineRunner runner;
+    @Inject
+    PipelineRunner runner;
 
     @Test
     void testPipelineRunnerCreation() {
@@ -54,16 +56,14 @@ class PipelineRunnerTest {
 
         Multi<Object> result = (Multi<Object>) runner.run(input, steps);
 
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(3));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
         subscriber.awaitItems(3, Duration.ofSeconds(5)).assertCompleted();
 
         // Grab all items
         List<Object> actualItems = subscriber.getItems();
 
         // Expected items
-        Set<String> expectedItems =
-                Set.of("Processed: item1", "Processed: item2", "Processed: item3");
+        Set<String> expectedItems = Set.of("Processed: item1", "Processed: item2", "Processed: item3");
 
         // Assert ignoring order
         assertEquals(expectedItems, new HashSet<>(actualItems));
@@ -85,8 +85,7 @@ class PipelineRunnerTest {
 
         Multi<Object> result = (Multi<Object>) runner.run(input, steps);
 
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(6));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(6));
         subscriber.awaitItems(6, Duration.ofSeconds(5));
         subscriber.assertItems("item1-1", "item1-2", "item1-3", "item2-1", "item2-2", "item2-3");
     }
@@ -98,8 +97,7 @@ class PipelineRunnerTest {
 
         Multi<Object> result = (Multi<Object>) runner.run(input, steps);
 
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(3));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
         subscriber.awaitItems(3, Duration.ofSeconds(5));
         subscriber.assertItems("Streamed: item1", "Streamed: item2", "Streamed: item3");
     }
@@ -111,8 +109,7 @@ class PipelineRunnerTest {
 
         Multi<Object> result = (Multi<Object>) runner.run(input, steps);
 
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(3));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
         subscriber.awaitItems(3, Duration.ofSeconds(5));
         subscriber.assertItems("Async: item1", "Async: item2", "Async: item3");
     }
@@ -120,29 +117,26 @@ class PipelineRunnerTest {
     @Test
     void testRunWithMultipleSteps() {
         Multi<String> input = Multi.createFrom().items("item1", "item2");
-        List<Object> steps =
-                List.of(
-                        new TestSteps.TestStepOneToOneBlocking(),
-                        new TestSteps.TestStepOneToMany());
+        List<Object> steps = List.of(
+                new TestSteps.TestStepOneToOneBlocking(),
+                new TestSteps.TestStepOneToMany());
 
         Multi<Object> result = (Multi<Object>) runner.run(input, steps);
 
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(6));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(6));
         subscriber.awaitItems(6, Duration.ofSeconds(5)).assertCompleted();
 
         // Grab all items
         List<Object> actualItems = subscriber.getItems();
 
         // Expected items
-        Set<String> expectedItems =
-                Set.of(
-                        "Processed: item1-1",
-                        "Processed: item1-2",
-                        "Processed: item1-3",
-                        "Processed: item2-1",
-                        "Processed: item2-2",
-                        "Processed: item2-3");
+        Set<String> expectedItems = Set.of(
+                "Processed: item1-1",
+                "Processed: item1-2",
+                "Processed: item1-3",
+                "Processed: item2-1",
+                "Processed: item2-2",
+                "Processed: item2-3");
 
         // Assert ignoring order
         assertEquals(expectedItems, new HashSet<>(actualItems));
@@ -155,8 +149,7 @@ class PipelineRunnerTest {
 
         Multi<Object> result = (Multi<Object>) runner.run(input, steps);
 
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(2));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(2));
         subscriber.awaitItems(2, Duration.ofSeconds(30)).assertCompleted();
 
         // With recovery enabled, items should pass through unchanged
@@ -167,7 +160,7 @@ class PipelineRunnerTest {
         assertEquals(
                 Set.of("item1", "item2"), // expected as a set
                 new HashSet<>(actualItems) // actual as a set
-                );
+        );
     }
 
     @Test
@@ -177,8 +170,7 @@ class PipelineRunnerTest {
 
         Multi<Object> result = (Multi<Object>) runner.run(input, steps);
 
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(1));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(1));
         subscriber.awaitFailure(Duration.ofSeconds(15));
 
         // Without recovery, should fail
@@ -198,8 +190,7 @@ class PipelineRunnerTest {
 
         Multi<Object> result = (Multi<Object>) runner.run(input, List.of((Object) step));
 
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(1));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(1));
         subscriber.awaitItems(1, Duration.ofSeconds(5));
 
         // Should succeed after 2 failures and 1 success
@@ -219,8 +210,7 @@ class PipelineRunnerTest {
 
         Multi<Object> result = (Multi<Object>) runner.run(input, List.of((Object) step));
 
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(1));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(1));
         subscriber.awaitFailure(Duration.ofSeconds(5));
 
         // Should fail after 2 retries (3 total attempts)
@@ -241,8 +231,7 @@ class PipelineRunnerTest {
 
         Multi<Object> result = (Multi<Object>) runner.run(input, List.of((Object) step));
 
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(1));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(1));
         subscriber.awaitItems(1, Duration.ofSeconds(5));
 
         // Should recover after 2 retries (3 total attempts)
@@ -266,8 +255,7 @@ class PipelineRunnerTest {
 
         Multi<Object> result = (Multi<Object>) runner.run(input, steps);
 
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(1));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(1));
         subscriber.awaitItems(1, Duration.ofSeconds(5)).assertCompleted();
 
         // Verify the configuration was applied

@@ -26,7 +26,8 @@ public class PaymentSummary {
     private String summary;
 
     // Required for JPA
-    public PaymentSummary() {}
+    public PaymentSummary() {
+    }
 
     // Getters and setters
     public Long getId() {

@@ -38,9 +38,11 @@ import org.pipelineframework.step.future.StepOneToOneCompletableFuture;
 @QuarkusTest
 class ConcurrencyVerificationTest {
 
-    @Inject private PipelineConfig pipelineConfig;
+    @Inject
+    private PipelineConfig pipelineConfig;
 
-    @Inject private PipelineRunner pipelineRunner;
+    @Inject
+    private PipelineRunner pipelineRunner;
 
     // Simple step that tracks processing
     private static class TrackingStepOneToOne extends ConfigurableStep
@@ -133,8 +135,7 @@ class ConcurrencyVerificationTest {
         Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step));
 
         // Then - Should process sequentially in order
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(3));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
         subscriber.awaitItems(3, Duration.ofSeconds(5)).assertCompleted();
 
         List<Object> items = subscriber.getItems();
@@ -165,8 +166,7 @@ class ConcurrencyVerificationTest {
         Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step));
 
         // Then - Should process concurrently (fast items finish before slow)
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(3));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
         subscriber.awaitItems(3, Duration.ofSeconds(2)).assertCompleted();
 
         List<Object> items = subscriber.getItems();
@@ -197,8 +197,7 @@ class ConcurrencyVerificationTest {
         Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step));
 
         // Then - Should process concurrently (fast items finish before slow)
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(3));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
         subscriber.awaitItems(3, Duration.ofSeconds(2)).assertCompleted();
 
         List<Object> items = subscriber.getItems();
@@ -228,8 +227,7 @@ class ConcurrencyVerificationTest {
         Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step));
 
         // Then - Should process concurrently (fast items finish before slow)
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(3));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
         subscriber.awaitItems(3, Duration.ofSeconds(2)).assertCompleted();
 
         List<Object> items = subscriber.getItems();
@@ -259,8 +257,7 @@ class ConcurrencyVerificationTest {
         Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step));
 
         // Then - Should work the same as before (backward compatibility)
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(2));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(2));
         subscriber.awaitItems(2, Duration.ofSeconds(5)).assertCompleted();
 
         List<Object> items = subscriber.getItems();

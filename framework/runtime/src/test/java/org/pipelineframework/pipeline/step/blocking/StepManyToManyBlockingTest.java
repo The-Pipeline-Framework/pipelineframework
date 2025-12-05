@@ -77,8 +77,7 @@ class StepManyToManyBlockingTest {
         Multi<Object> result = step.apply(input);
 
         // Then
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(2));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(2));
         subscriber.awaitItems(2, Duration.ofSeconds(5));
         subscriber.assertItems("Streamed: item1", "Streamed: item2");
     }

@@ -34,9 +34,11 @@ import org.pipelineframework.persistence.provider.ReactivePanachePersistenceProv
 
 class PersistenceManagerTest {
 
-    @Mock Instance<PersistenceProvider<?>> mockProviderInstance;
+    @Mock
+    Instance<PersistenceProvider<?>> mockProviderInstance;
 
-    @Mock PersistenceProvider<?> mockProvider;
+    @Mock
+    PersistenceProvider<?> mockProvider;
 
     private PersistenceManager persistenceManager;
 
@@ -65,8 +67,7 @@ class PersistenceManagerTest {
 
         Uni<Object> resultUni = persistenceManager.persist(entity);
 
-        UniAssertSubscriber<Object> subscriber =
-                resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
+        UniAssertSubscriber<Object> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertNull(subscriber.getItem());
@@ -84,8 +85,7 @@ class PersistenceManagerTest {
 
         Uni<Object> resultUni = persistenceManager.persist(entity);
 
-        UniAssertSubscriber<Object> subscriber =
-                resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
+        UniAssertSubscriber<Object> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertSame(entity, subscriber.getItem());
@@ -100,8 +100,7 @@ class PersistenceManagerTest {
         // Create a mock that extends ReactivePanachePersistenceProvider to pass the instanceof
         // check
         // but with method implementations that don't depend on Vert.x context
-        ReactivePanachePersistenceProvider mockProvider =
-                mock(ReactivePanachePersistenceProvider.class);
+        ReactivePanachePersistenceProvider mockProvider = mock(ReactivePanachePersistenceProvider.class);
         when(mockProvider.supports(entity)).thenReturn(true);
         when(mockProvider.supportsThreadContext())
                 .thenReturn(true); // For regular threads, it should return true
@@ -117,8 +116,7 @@ class PersistenceManagerTest {
 
         Uni<PanacheEntityBase> resultUni = persistenceManager.persist(entity);
 
-        UniAssertSubscriber<PanacheEntityBase> subscriber =
-                resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
+        UniAssertSubscriber<PanacheEntityBase> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertSame(entity, subscriber.getItem());
@@ -142,8 +140,7 @@ class PersistenceManagerTest {
 
         Uni<Object> resultUni = persistenceManager.persist(entity);
 
-        UniAssertSubscriber<Object> subscriber =
-                resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
+        UniAssertSubscriber<Object> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertSame(entity, subscriber.getItem());

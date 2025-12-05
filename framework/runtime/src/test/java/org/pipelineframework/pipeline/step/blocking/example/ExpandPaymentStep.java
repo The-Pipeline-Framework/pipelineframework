@@ -24,7 +24,8 @@ import org.pipelineframework.step.blocking.StepOneToManyBlocking;
 /**
  * Example of a blocking 1:N step that expands a single payment request into multiple transactions.
  *
- * <p>This step demonstrates how to use the StepOneToManyBlocking interface for blocking operations
+ * <p>
+ * This step demonstrates how to use the StepOneToManyBlocking interface for blocking operations
  * that need to expand a single input into multiple outputs.
  */
 public class ExpandPaymentStep extends ConfigurableStep

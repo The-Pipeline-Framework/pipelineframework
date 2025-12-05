@@ -41,11 +41,14 @@ import org.mockito.MockitoAnnotations;
 @QuarkusTest
 class VThreadPersistenceProviderTest {
 
-    @Mock private InjectableInstance<EntityManager> mockEntityManagerInstance;
+    @Mock
+    private InjectableInstance<EntityManager> mockEntityManagerInstance;
 
-    @Mock private EntityManager mockEntityManager;
+    @Mock
+    private EntityManager mockEntityManager;
 
-    @Mock private EntityTransaction mockTransaction;
+    @Mock
+    private EntityTransaction mockTransaction;
 
     private VThreadPersistenceProvider provider;
 
@@ -129,8 +132,7 @@ class VThreadPersistenceProviderTest {
         Uni<Object> result = provider.persist(entity);
 
         // Then
-        UniAssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(UniAssertSubscriber.create());
+        UniAssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertSame(entity, subscriber.getItem(), "Should return the persisted entity");
@@ -150,8 +152,7 @@ class VThreadPersistenceProviderTest {
         Uni<Object> result = provider.persist(entity);
 
         // Then
-        UniAssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(UniAssertSubscriber.create());
+        UniAssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitFailure();
 
         Throwable failure = subscriber.getFailure();
@@ -180,8 +181,7 @@ class VThreadPersistenceProviderTest {
         Uni<Object> result = provider.persist(entity);
 
         // Then
-        UniAssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(UniAssertSubscriber.create());
+        UniAssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitFailure();
 
         verify(mockTransaction).begin();
@@ -207,8 +207,7 @@ class VThreadPersistenceProviderTest {
         Uni<Object> result = provider.persist(entity);
 
         // Then
-        UniAssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(UniAssertSubscriber.create());
+        UniAssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitFailure();
 
         verify(mockTransaction).begin();
@@ -232,8 +231,7 @@ class VThreadPersistenceProviderTest {
         Uni<Object> result = provider.persist(entity);
 
         // Then
-        UniAssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(UniAssertSubscriber.create());
+        UniAssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitFailure();
 
         verify(mockEntityManager).close();
@@ -255,8 +253,7 @@ class VThreadPersistenceProviderTest {
         Uni<Object> result = provider.persist(entity);
 
         // Then
-        UniAssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(UniAssertSubscriber.create());
+        UniAssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitFailure();
 
         verify(mockTransaction).begin();
@@ -279,8 +276,7 @@ class VThreadPersistenceProviderTest {
         Uni<Object> result = provider.persist(entity);
 
         // Then
-        UniAssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(UniAssertSubscriber.create());
+        UniAssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         Object persistedEntity = subscriber.getItem();
@@ -322,7 +318,8 @@ class VThreadPersistenceProviderTest {
     @Entity
     private static class TestEntity {
         private String value;
-        @jakarta.persistence.Id private Long id;
+        @jakarta.persistence.Id
+        private Long id;
     }
 
     /** Another test entity class */
@@ -330,9 +327,11 @@ class VThreadPersistenceProviderTest {
     @Getter
     @Entity
     private static class AnotherTestEntity {
-        @jakarta.persistence.Id private Long id;
+        @jakarta.persistence.Id
+        private Long id;
     }
 
     /** Non-entity class for negative testing */
-    private static class NonEntityClass {}
+    private static class NonEntityClass {
+    }
 }

@@ -36,7 +36,8 @@ import org.pipelineframework.step.StepOneToMany;
 @QuarkusTest
 class VirtualThreadExecutorTest {
 
-    @Inject PipelineRunner runner;
+    @Inject
+    PipelineRunner runner;
 
     static class VirtualThreadTestStep extends ConfigurableStep
             implements StepOneToMany<String, String> {
@@ -63,8 +64,7 @@ class VirtualThreadExecutorTest {
 
         Multi<Object> result = (Multi<Object>) runner.run(input, List.of(step));
 
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(4));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(4));
         subscriber.awaitItems(4, Duration.ofSeconds(5));
 
         // With virtual threads, the order is not guaranteed, so we need to check that all
@@ -82,13 +82,11 @@ class VirtualThreadExecutorTest {
     void testPipelineRunnerCloseCleansUpExecutor() {
         // This test verifies that the PipelineRunner can be closed without issues
         Multi<String> input = Multi.createFrom().items("test");
-        List<TestSteps.TestStepOneToOneBlocking> steps =
-                List.of(new TestSteps.TestStepOneToOneBlocking());
+        List<TestSteps.TestStepOneToOneBlocking> steps = List.of(new TestSteps.TestStepOneToOneBlocking());
 
         Multi<Object> result = (Multi<Object>) runner.run(input, (List<Object>) (List<?>) steps);
 
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(1));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(1));
         subscriber.awaitItems(1, Duration.ofSeconds(5));
         subscriber.assertItems("Processed: test");
         // This should not throw any exceptions

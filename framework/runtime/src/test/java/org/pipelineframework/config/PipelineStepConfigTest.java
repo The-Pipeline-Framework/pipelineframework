@@ -32,7 +32,8 @@ import org.junit.jupiter.api.Test;
 @QuarkusTest
 class PipelineStepConfigTest {
 
-    @Inject PipelineStepConfig pipelineStepConfig;
+    @Inject
+    PipelineStepConfig pipelineStepConfig;
 
     @Test
     void testDefaultsAreAccessible() {
@@ -108,7 +109,8 @@ class PipelineStepConfigTest {
     @TestProfile(CustomDefaultsProfile.class)
     static class WithCustomDefaultsTest {
 
-        @Inject PipelineStepConfig pipelineStepConfig;
+        @Inject
+        PipelineStepConfig pipelineStepConfig;
 
         @Test
         void testCustomDefaultValues() {
@@ -145,7 +147,8 @@ class PipelineStepConfigTest {
     @TestProfile(PerStepConfigProfile.class)
     static class WithPerStepConfigTest {
 
-        @Inject PipelineStepConfig pipelineStepConfig;
+        @Inject
+        PipelineStepConfig pipelineStepConfig;
 
         @Test
         void testPerStepConfigurationIsLoaded() {
@@ -166,8 +169,7 @@ class PipelineStepConfigTest {
             assertEquals(7, myStepConfig.retryLimit());
             assertTrue(myStepConfig.parallel());
 
-            PipelineStepConfig.StepConfig anotherStepConfig =
-                    stepMap.get("com.example.AnotherStep");
+            PipelineStepConfig.StepConfig anotherStepConfig = stepMap.get("com.example.AnotherStep");
             assertEquals(200, anotherStepConfig.order());
             assertEquals(15, anotherStepConfig.retryLimit());
         }

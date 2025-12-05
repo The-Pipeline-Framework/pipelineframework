@@ -34,7 +34,8 @@ import org.pipelineframework.step.functional.ManyToOne;
 @QuarkusTest
 public class ManyToOneStepsTest {
 
-    @Inject PipelineRunner pipelineRunner;
+    @Inject
+    PipelineRunner pipelineRunner;
 
     @Test
     void testReactiveManyToOneStep() {
@@ -44,8 +45,7 @@ public class ManyToOneStepsTest {
         TestPaymentEntity payment3 = new TestPaymentEntity("Bob Johnson", new BigDecimal("75.25"));
         TestPaymentEntity payment4 = new TestPaymentEntity("Alice Brown", new BigDecimal("300.75"));
 
-        Multi<TestPaymentEntity> input =
-                Multi.createFrom().items(payment1, payment2, payment3, payment4);
+        Multi<TestPaymentEntity> input = Multi.createFrom().items(payment1, payment2, payment3, payment4);
 
         // Create steps and configure them properly
         ValidatePaymentStepBlocking validateStep = new ValidatePaymentStepBlocking();
@@ -58,12 +58,11 @@ public class ManyToOneStepsTest {
 
         // When: Run pipeline
         Object result1 = pipelineRunner.run(input, List.of(validateStep, aggregateStep));
-        PaymentSummary result =
-                ((io.smallrye.mutiny.Uni<PaymentSummary>) result1)
-                        .onItem()
-                        .castTo(PaymentSummary.class)
-                        .await()
-                        .atMost(Duration.ofSeconds(10));
+        PaymentSummary result = ((io.smallrye.mutiny.Uni<PaymentSummary>) result1)
+                .onItem()
+                .castTo(PaymentSummary.class)
+                .await()
+                .atMost(Duration.ofSeconds(10));
 
         // Then: Verify result
         assertNotNull(result);
@@ -80,11 +79,9 @@ public class ManyToOneStepsTest {
         TestPaymentEntity payment2 = new TestPaymentEntity("Jane Smith", new BigDecimal("150.25"));
         TestPaymentEntity payment3 = new TestPaymentEntity("Bob Johnson", new BigDecimal("25.50"));
         TestPaymentEntity payment4 = new TestPaymentEntity("Alice Brown", new BigDecimal("125.75"));
-        TestPaymentEntity payment5 =
-                new TestPaymentEntity("Charlie Wilson", new BigDecimal("80.00"));
+        TestPaymentEntity payment5 = new TestPaymentEntity("Charlie Wilson", new BigDecimal("80.00"));
 
-        Multi<TestPaymentEntity> input =
-                Multi.createFrom().items(payment1, payment2, payment3, payment4, payment5);
+        Multi<TestPaymentEntity> input = Multi.createFrom().items(payment1, payment2, payment3, payment4, payment5);
 
         // Create steps and configure them properly
         ValidatePaymentStepBlocking validateStep = new ValidatePaymentStepBlocking();
@@ -97,12 +94,11 @@ public class ManyToOneStepsTest {
 
         // When: Run pipeline
         Object result2 = pipelineRunner.run(input, List.of(validateStep, aggregateStep));
-        PaymentSummary result =
-                ((io.smallrye.mutiny.Uni<PaymentSummary>) result2)
-                        .onItem()
-                        .castTo(PaymentSummary.class)
-                        .await()
-                        .atMost(Duration.ofSeconds(10));
+        PaymentSummary result = ((io.smallrye.mutiny.Uni<PaymentSummary>) result2)
+                .onItem()
+                .castTo(PaymentSummary.class)
+                .await()
+                .atMost(Duration.ofSeconds(10));
 
         // Then: Verify result
         assertNotNull(result);
@@ -159,10 +155,9 @@ public class ManyToOneStepsTest {
                     .onItem()
                     .transform(
                             list -> {
-                                BigDecimal totalAmount =
-                                        list.stream()
-                                                .map(TestPaymentEntity::getAmount)
-                                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                                BigDecimal totalAmount = list.stream()
+                                        .map(TestPaymentEntity::getAmount)
+                                        .reduce(BigDecimal.ZERO, BigDecimal::add);
                                 return new PaymentSummary(list.size(), totalAmount);
                             });
         }
@@ -222,16 +217,14 @@ public class ManyToOneStepsTest {
 
     // Helper step for imperative aggregation
     public static class PaymentAggregationStepBlocking extends ConfigurableStep
-            implements org.pipelineframework.step.blocking.StepManyToOneBlocking<
-                    TestPaymentEntity, PaymentSummary> {
+            implements org.pipelineframework.step.blocking.StepManyToOneBlocking<TestPaymentEntity, PaymentSummary> {
 
         @Override
         public PaymentSummary applyBatchList(List<TestPaymentEntity> inputs) {
             // Aggregate payments in the batch
-            BigDecimal totalAmount =
-                    inputs.stream()
-                            .map(TestPaymentEntity::getAmount)
-                            .reduce(BigDecimal.ZERO, BigDecimal::add);
+            BigDecimal totalAmount = inputs.stream()
+                    .map(TestPaymentEntity::getAmount)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
             return new PaymentSummary(inputs.size(), totalAmount);
         }
 

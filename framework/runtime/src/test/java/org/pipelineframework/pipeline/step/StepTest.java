@@ -66,10 +66,9 @@ class StepTest {
         TestStep step = new TestStep();
 
         // When
-        var result =
-                step.deadLetter(
-                        io.smallrye.mutiny.Uni.createFrom().item("testItem"),
-                        new RuntimeException("test error"));
+        var result = step.deadLetter(
+                io.smallrye.mutiny.Uni.createFrom().item("testItem"),
+                new RuntimeException("test error"));
 
         // Then
         assertNotNull(result);
@@ -87,8 +86,7 @@ class StepTest {
         Multi<Object> result = input.onItem().transformToUni(step::applyOneToOne).concatenate();
 
         // Then
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(2));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(2));
         subscriber.awaitItems(2, Duration.ofSeconds(5));
         subscriber.assertItems("item1", "item2");
     }

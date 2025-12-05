@@ -26,9 +26,11 @@ import org.pipelineframework.step.ConfigFactory;
 @QuarkusTest
 class PipelineConfigWithApplicationPropertiesTest {
 
-    @Inject PipelineConfig pipelineConfig;
+    @Inject
+    PipelineConfig pipelineConfig;
 
-    @Inject ConfigFactory configFactory;
+    @Inject
+    ConfigFactory configFactory;
 
     @Test
     void testPipelineConfigDefaultsFromApplicationProperties() {

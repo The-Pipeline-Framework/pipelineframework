@@ -69,3 +69,4 @@ QWEN.md
 
 # Maven Release Plugin backup files
 pom.xml.releaseBackup
+/release.properties

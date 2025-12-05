@@ -31,44 +31,48 @@ import org.pipelineframework.service.ReactiveStreamingService;
 
 class GrpcServiceStreamingAdapterTest {
 
-    @Mock private ReactiveStreamingService<DomainIn, DomainOut> mockReactiveService;
+    @Mock
+    private ReactiveStreamingService<DomainIn, DomainOut> mockReactiveService;
 
     private GrpcServiceStreamingAdapter<GrpcIn, GrpcOut, DomainIn, DomainOut> adapter;
 
-    private static class GrpcIn {}
+    private static class GrpcIn {
+    }
 
-    private static class GrpcOut {}
+    private static class GrpcOut {
+    }
 
-    private static class DomainIn {}
+    private static class DomainIn {
+    }
 
-    private static class DomainOut {}
+    private static class DomainOut {
+    }
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
 
-        adapter =
-                new GrpcServiceStreamingAdapter<>() {
-                    @Override
-                    protected ReactiveStreamingService<DomainIn, DomainOut> getService() {
-                        return mockReactiveService;
-                    }
+        adapter = new GrpcServiceStreamingAdapter<>() {
+            @Override
+            protected ReactiveStreamingService<DomainIn, DomainOut> getService() {
+                return mockReactiveService;
+            }
 
-                    @Override
-                    protected DomainIn fromGrpc(GrpcIn grpcIn) {
-                        return new DomainIn();
-                    }
+            @Override
+            protected DomainIn fromGrpc(GrpcIn grpcIn) {
+                return new DomainIn();
+            }
 
-                    @Override
-                    protected GrpcOut toGrpc(DomainOut domainOut) {
-                        return new GrpcOut();
-                    }
+            @Override
+            protected GrpcOut toGrpc(DomainOut domainOut) {
+                return new GrpcOut();
+            }
 
-                    @Override
-                    protected boolean isAutoPersistenceEnabled() {
-                        return false;
-                    }
-                };
+            @Override
+            protected boolean isAutoPersistenceEnabled() {
+                return false;
+            }
+        };
     }
 
     @Test
@@ -128,35 +132,33 @@ class GrpcServiceStreamingAdapterTest {
         GrpcIn grpcRequest = new GrpcIn();
 
         // Create a verification service to check the transformation
-        ReactiveStreamingService<DomainIn, DomainOut> verificationService =
-                domainIn -> {
-                    assertNotNull(domainIn);
-                    return Multi.createFrom().items(new DomainOut());
-                };
+        ReactiveStreamingService<DomainIn, DomainOut> verificationService = domainIn -> {
+            assertNotNull(domainIn);
+            return Multi.createFrom().items(new DomainOut());
+        };
 
-        GrpcServiceStreamingAdapter<GrpcIn, GrpcOut, DomainIn, DomainOut> verificationAdapter =
-                new GrpcServiceStreamingAdapter<>() {
-                    @Override
-                    protected ReactiveStreamingService<DomainIn, DomainOut> getService() {
-                        return verificationService;
-                    }
+        GrpcServiceStreamingAdapter<GrpcIn, GrpcOut, DomainIn, DomainOut> verificationAdapter = new GrpcServiceStreamingAdapter<>() {
+            @Override
+            protected ReactiveStreamingService<DomainIn, DomainOut> getService() {
+                return verificationService;
+            }
 
-                    @Override
-                    protected DomainIn fromGrpc(GrpcIn grpcIn) {
-                        assertNotNull(grpcIn);
-                        return new DomainIn();
-                    }
+            @Override
+            protected DomainIn fromGrpc(GrpcIn grpcIn) {
+                assertNotNull(grpcIn);
+                return new DomainIn();
+            }
 
-                    @Override
-                    protected GrpcOut toGrpc(DomainOut domainOut) {
-                        return new GrpcOut();
-                    }
+            @Override
+            protected GrpcOut toGrpc(DomainOut domainOut) {
+                return new GrpcOut();
+            }
 
-                    @Override
-                    protected boolean isAutoPersistenceEnabled() {
-                        return false;
-                    }
-                };
+            @Override
+            protected boolean isAutoPersistenceEnabled() {
+                return false;
+            }
+        };
 
         // When
         Multi<GrpcOut> result = verificationAdapter.remoteProcess(grpcRequest);
@@ -179,29 +181,28 @@ class GrpcServiceStreamingAdapterTest {
                 .thenReturn(Multi.createFrom().items(domainOut));
 
         // Create a verification adapter to check the transformation
-        GrpcServiceStreamingAdapter<GrpcIn, GrpcOut, DomainIn, DomainOut> verificationAdapter =
-                new GrpcServiceStreamingAdapter<>() {
-                    @Override
-                    protected ReactiveStreamingService<DomainIn, DomainOut> getService() {
-                        return mockReactiveService;
-                    }
+        GrpcServiceStreamingAdapter<GrpcIn, GrpcOut, DomainIn, DomainOut> verificationAdapter = new GrpcServiceStreamingAdapter<>() {
+            @Override
+            protected ReactiveStreamingService<DomainIn, DomainOut> getService() {
+                return mockReactiveService;
+            }
 
-                    @Override
-                    protected DomainIn fromGrpc(GrpcIn grpcIn) {
-                        return new DomainIn();
-                    }
+            @Override
+            protected DomainIn fromGrpc(GrpcIn grpcIn) {
+                return new DomainIn();
+            }
 
-                    @Override
-                    protected GrpcOut toGrpc(DomainOut domainOut) {
-                        assertNotNull(domainOut);
-                        return new GrpcOut();
-                    }
+            @Override
+            protected GrpcOut toGrpc(DomainOut domainOut) {
+                assertNotNull(domainOut);
+                return new GrpcOut();
+            }
 
-                    @Override
-                    protected boolean isAutoPersistenceEnabled() {
-                        return false;
-                    }
-                };
+            @Override
+            protected boolean isAutoPersistenceEnabled() {
+                return false;
+            }
+        };
 
         // When
         Multi<GrpcOut> result = verificationAdapter.remoteProcess(grpcRequest);

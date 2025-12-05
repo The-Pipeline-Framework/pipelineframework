@@ -33,7 +33,8 @@ import org.pipelineframework.step.StepOneToMany;
 @QuarkusTest
 public class CollectionStepsTest {
 
-    @Inject PipelineRunner pipelineRunner;
+    @Inject
+    PipelineRunner pipelineRunner;
 
     @Test
     void testOneToManyCollectionStep() {
@@ -52,11 +53,9 @@ public class CollectionStepsTest {
         expandStep.initialiseWithConfig(expandConfig);
 
         // When: Run pipeline
-        Multi<String> result =
-                (Multi<String>) pipelineRunner.run(input, List.of(validateStep, expandStep));
-        AssertSubscriber<String> subscriber =
-                result.subscribe()
-                        .withSubscriber(AssertSubscriber.create(6)); // 2 inputs * 3 expanded each
+        Multi<String> result = (Multi<String>) pipelineRunner.run(input, List.of(validateStep, expandStep));
+        AssertSubscriber<String> subscriber = result.subscribe()
+                .withSubscriber(AssertSubscriber.create(6)); // 2 inputs * 3 expanded each
 
         // Then: Verify results
         subscriber.awaitItems(6).awaitCompletion(Duration.ofSeconds(10));

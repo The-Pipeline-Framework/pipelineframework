@@ -42,11 +42,14 @@ import org.pipelineframework.annotation.PipelineStep;
 @MockitoSettings(strictness = Strictness.LENIENT)
 class PipelineStepProcessorTest {
 
-    @Mock private ProcessingEnvironment processingEnv;
+    @Mock
+    private ProcessingEnvironment processingEnv;
 
-    @Mock private RoundEnvironment roundEnv;
+    @Mock
+    private RoundEnvironment roundEnv;
 
-    @Mock private Messager messager;
+    @Mock
+    private Messager messager;
 
     private PipelineStepProcessor processor;
 
@@ -98,7 +101,7 @@ class PipelineStepProcessorTest {
         assertFalse(result);
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({ "unchecked", "rawtypes" })
     @Test
     void testProcessWithPipelineStepAnnotationPresent() {
         // Mock the @PipelineStep TypeElement
@@ -156,7 +159,7 @@ class PipelineStepProcessorTest {
         }
     }
 
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({ "unchecked", "rawtypes" })
     @Test
     void testProcessWithNonClassAnnotatedElement() {
         // Mock the @PipelineStep TypeElement
@@ -196,14 +199,14 @@ class PipelineStepProcessorTest {
 
     @ParameterizedTest
     @CsvSource({
-        "ProcessCustomerService, /api/v1/process-customer",
-        "ValidateOrderService, /api/v1/validate-order",
-        "CustomerService, /api/v1/customer",
-        "ProcessPaymentStatus, /api/v1/process-payment-status",
-        "SimpleClass, /api/v1/simple-class",
-        "UPPERCASE, /api/v1/uppercase",
-        "camelCase, /api/v1/camel-case",
-        "XMLHttpRequest, /api/v1/xml-http-request"
+            "ProcessCustomerService, /api/v1/process-customer",
+            "ValidateOrderService, /api/v1/validate-order",
+            "CustomerService, /api/v1/customer",
+            "ProcessPaymentStatus, /api/v1/process-payment-status",
+            "SimpleClass, /api/v1/simple-class",
+            "UPPERCASE, /api/v1/uppercase",
+            "camelCase, /api/v1/camel-case",
+            "XMLHttpRequest, /api/v1/xml-http-request"
     })
     void testDeriveResourcePath(String className, String expectedPath) {
         assertEquals(expectedPath, processor.deriveResourcePath(className));
@@ -225,24 +228,23 @@ class PipelineStepProcessorTest {
 
     @ParameterizedTest
     @CsvSource({
-        "com.example.domain.CustomerInput, com.example.dto.CustomerInputDto",
-        "com.example.common.domain.CustomerOutput, com.example.common.dto.CustomerOutputDto",
-        "com.example.domain.payment.PaymentRecord, com.example.dto.payment.PaymentRecordDto",
-        "com.example.domain.CustomerInputDto, com.example.domain.CustomerInputDto", // Already ends
-        // with Dto
-        "com.example.service.Customer, com.example.dto.CustomerDto", // Service package
-        "com.example.model.Customer, com.example.model.CustomerDto", // Not in domain package
-        "com.example.foo.domain.bar.Type, com.example.foo.dto.bar.TypeDto", // Nested domain
-        // packages
-        "CustomerInput, CustomerInputDto", // No package
-        "com.example.domain, com.example.dto.domainDto", // Edge case with class named domain
-        "com.example.common.domain, com.example.common.dto.domainDto" // Edge case with class named
-        // domain
+            "com.example.domain.CustomerInput, com.example.dto.CustomerInputDto",
+            "com.example.common.domain.CustomerOutput, com.example.common.dto.CustomerOutputDto",
+            "com.example.domain.payment.PaymentRecord, com.example.dto.payment.PaymentRecordDto",
+            "com.example.domain.CustomerInputDto, com.example.domain.CustomerInputDto", // Already ends
+            // with Dto
+            "com.example.service.Customer, com.example.dto.CustomerDto", // Service package
+            "com.example.model.Customer, com.example.model.CustomerDto", // Not in domain package
+            "com.example.foo.domain.bar.Type, com.example.foo.dto.bar.TypeDto", // Nested domain
+            // packages
+            "CustomerInput, CustomerInputDto", // No package
+            "com.example.domain, com.example.dto.domainDto", // Edge case with class named domain
+            "com.example.common.domain, com.example.common.dto.domainDto" // Edge case with class named
+    // domain
     })
     void testGetDtoType(String domainType, String expectedDtoType) {
         // Create a proper TypeMirror mock that returns the domainType when toString is called
-        javax.lang.model.type.TypeMirror mockTypeMirror =
-                mock(javax.lang.model.type.TypeMirror.class);
+        javax.lang.model.type.TypeMirror mockTypeMirror = mock(javax.lang.model.type.TypeMirror.class);
         when(mockTypeMirror.toString()).thenReturn(domainType);
 
         String actualDtoType = processor.getDtoType(mockTypeMirror);
@@ -252,8 +254,7 @@ class PipelineStepProcessorTest {
     @Test
     void testGetDtoTypeWithNullInput() {
         // Create a TypeMirror mock that returns null for toString
-        javax.lang.model.type.TypeMirror mockTypeMirror =
-                mock(javax.lang.model.type.TypeMirror.class);
+        javax.lang.model.type.TypeMirror mockTypeMirror = mock(javax.lang.model.type.TypeMirror.class);
         when(mockTypeMirror.toString()).thenReturn(null);
 
         // When toString returns null, the method should return null
@@ -280,9 +281,8 @@ class PipelineStepProcessorTest {
         when(mockServiceClass.getInterfaces()).thenReturn(Collections.emptyList());
 
         // Test with a class that doesn't implement the interface
-        boolean result =
-                localProcessor.implementsInterface(
-                        mockServiceClass, "org.pipelineframework.service.ReactiveService");
+        boolean result = localProcessor.implementsInterface(
+                mockServiceClass, "org.pipelineframework.service.ReactiveService");
         // This should return false since we mocked empty interfaces
         assertFalse(result);
     }

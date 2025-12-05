@@ -34,7 +34,7 @@ public class ValidatePaymentStep extends ConfigurableStep
      *
      * @param payment the payment entity to validate; its `status` is updated in-place
      * @return the same payment entity with `status` set to `"VALIDATED"` if `amount` is greater
-     *     than zero, `"REJECTED"` otherwise
+     *         than zero, `"REJECTED"` otherwise
      */
     @Override
     public Uni<TestPaymentEntity> apply(TestPaymentEntity payment) {

@@ -85,11 +85,10 @@ class ReactiveServiceAdapterBaseTest {
         TestReactiveServiceAdapter testAdapter = new TestReactiveServiceAdapter(false);
 
         // When & Then
-        IllegalStateException ex =
-                assertThrows(
-                        IllegalStateException.class,
-                        () -> testAdapter.switchToEventLoopPublic().await().indefinitely(),
-                        "Should have thrown IllegalStateException");
+        IllegalStateException ex = assertThrows(
+                IllegalStateException.class,
+                () -> testAdapter.switchToEventLoopPublic().await().indefinitely(),
+                "Should have thrown IllegalStateException");
         assertEquals(
                 "No Vert.x context available",
                 ex.getMessage(),

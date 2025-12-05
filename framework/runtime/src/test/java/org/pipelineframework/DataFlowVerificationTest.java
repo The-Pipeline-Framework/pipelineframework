@@ -35,9 +35,11 @@ import org.pipelineframework.step.StepOneToOne;
 @QuarkusTest
 class DataFlowVerificationTest {
 
-    @Inject private PipelineRunner pipelineRunner;
+    @Inject
+    private PipelineRunner pipelineRunner;
 
-    @Inject private PipelineConfig pipelineConfig;
+    @Inject
+    private PipelineConfig pipelineConfig;
 
     // Simple step that tracks how many items it processes
     private static class TrackingStep extends ConfigurableStep
@@ -88,9 +90,8 @@ class DataFlowVerificationTest {
         Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step1, step2));
 
         // Subscribe and collect results
-        AssertSubscriber<Object> subscriber =
-                result.subscribe()
-                        .withSubscriber(AssertSubscriber.create(10)); // Buffer more than needed
+        AssertSubscriber<Object> subscriber = result.subscribe()
+                .withSubscriber(AssertSubscriber.create(10)); // Buffer more than needed
 
         System.out.println("Waiting for results...");
         subscriber.awaitItems(3, Duration.ofSeconds(10)).assertCompleted();
@@ -151,9 +152,8 @@ class DataFlowVerificationTest {
         Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step1, step2));
 
         // Subscribe and collect results
-        AssertSubscriber<Object> subscriber =
-                result.subscribe()
-                        .withSubscriber(AssertSubscriber.create(10)); // Buffer more than needed
+        AssertSubscriber<Object> subscriber = result.subscribe()
+                .withSubscriber(AssertSubscriber.create(10)); // Buffer more than needed
 
         System.out.println("Waiting for results...");
         subscriber.awaitItems(3, Duration.ofSeconds(10)).assertCompleted();

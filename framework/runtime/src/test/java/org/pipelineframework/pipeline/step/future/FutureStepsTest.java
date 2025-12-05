@@ -33,7 +33,8 @@ import org.pipelineframework.step.blocking.StepOneToOneBlocking;
 @QuarkusTest
 public class FutureStepsTest {
 
-    @Inject PipelineRunner pipelineRunner;
+    @Inject
+    PipelineRunner pipelineRunner;
 
     @Test
     void testCompletableFutureStep() {
@@ -50,10 +51,8 @@ public class FutureStepsTest {
         processStep.initialiseWithConfig(processConfig);
 
         // When: Run pipeline
-        Multi<String> result =
-                (Multi<String>) pipelineRunner.run(input, List.of(validateStep, processStep));
-        AssertSubscriber<String> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(3));
+        Multi<String> result = (Multi<String>) pipelineRunner.run(input, List.of(validateStep, processStep));
+        AssertSubscriber<String> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
 
         // Then: Verify results
         subscriber.awaitItems(3).awaitCompletion(Duration.ofSeconds(10));

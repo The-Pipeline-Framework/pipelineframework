@@ -26,9 +26,11 @@ import org.pipelineframework.step.ConfigFactory;
 @QuarkusTest
 class PipelineConfigSyncTest {
 
-    @Inject PipelineConfig pipelineConfig;
+    @Inject
+    PipelineConfig pipelineConfig;
 
-    @Inject ConfigFactory configFactory;
+    @Inject
+    ConfigFactory configFactory;
 
     @Test
     void testConfigFactoryUsesPipelineConfigDefaults() throws IllegalAccessException {
@@ -43,8 +45,7 @@ class PipelineConfigSyncTest {
         Class<?> mockStepClass = String.class; // Using String as a placeholder
 
         // Get config from the factory when there's no specific config for the class
-        org.pipelineframework.config.StepConfig factoryConfig =
-                configFactory.buildConfig(mockStepClass, pipelineConfig);
+        org.pipelineframework.config.StepConfig factoryConfig = configFactory.buildConfig(mockStepClass, pipelineConfig);
 
         // Get a new config from pipelineConfig directly
         org.pipelineframework.config.StepConfig directConfig = pipelineConfig.newStepConfig();

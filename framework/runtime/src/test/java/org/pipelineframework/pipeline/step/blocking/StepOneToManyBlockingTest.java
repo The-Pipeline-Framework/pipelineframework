@@ -76,14 +76,12 @@ class StepOneToManyBlockingTest {
         Multi<String> input = Multi.createFrom().items("item1", "item2");
 
         // When
-        Multi<String> result =
-                input.onItem()
-                        .transformToMulti(item -> Multi.createFrom().iterable(step.applyList(item)))
-                        .concatenate();
+        Multi<String> result = input.onItem()
+                .transformToMulti(item -> Multi.createFrom().iterable(step.applyList(item)))
+                .concatenate();
 
         // Then
-        AssertSubscriber<String> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(6));
+        AssertSubscriber<String> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(6));
         subscriber.awaitItems(6, Duration.ofSeconds(5));
         subscriber.assertItems("item1-1", "item1-2", "item1-3", "item2-1", "item2-2", "item2-3");
     }

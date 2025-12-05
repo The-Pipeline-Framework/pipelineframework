@@ -93,16 +93,14 @@ class StepOneToOneBlockingTest {
         Multi<String> result = input.onItem().transformToUni(step::apply).concatenate();
 
         // Then
-        AssertSubscriber<String> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(3));
+        AssertSubscriber<String> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
         subscriber.awaitItems(3, Duration.ofSeconds(5));
 
         // Grab all items
         List<String> actualItems = subscriber.getItems();
 
         // Expected items
-        Set<String> expectedItems =
-                Set.of("Processed: item1", "Processed: item2", "Processed: item3");
+        Set<String> expectedItems = Set.of("Processed: item1", "Processed: item2", "Processed: item3");
 
         // Assert ignoring order
         assertEquals(expectedItems, new HashSet<>(actualItems));

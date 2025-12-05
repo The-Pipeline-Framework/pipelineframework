@@ -85,8 +85,7 @@ class StepSideEffectTest {
         Multi<String> result = input.onItem().transformToUni(step::applyOneToOne).concatenate();
 
         // Then
-        AssertSubscriber<String> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(2));
+        AssertSubscriber<String> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(2));
         subscriber.awaitItems(2, Duration.ofSeconds(5));
         subscriber.assertItems("item1", "item2"); // Items should pass through unchanged
     }

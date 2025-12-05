@@ -39,12 +39,13 @@ import org.pipelineframework.service.throwStatusRuntimeExceptionFunction;
 @QuarkusTest
 class GrpcReactiveServiceAdapterComprehensiveTest {
 
-    @Mock private ReactiveService<DomainIn, DomainOut> mockReactiveService;
-    @Mock private PersistenceManager mockPersistenceManager;
+    @Mock
+    private ReactiveService<DomainIn, DomainOut> mockReactiveService;
+    @Mock
+    private PersistenceManager mockPersistenceManager;
 
     private GrpcReactiveServiceAdapter<GrpcIn, GrpcOut, DomainIn, DomainOut> unitTestAdapter;
-    private GrpcReactiveServiceAdapter<Object, Object, TestEntity, TestResult>
-            integrationTestAdapter;
+    private GrpcReactiveServiceAdapter<Object, Object, TestEntity, TestResult> integrationTestAdapter;
 
     // Test-specific adapter that bypasses transaction for unit testing of core logic
     private static class UnitTestGrpcReactiveServiceAdapter
@@ -90,17 +91,23 @@ class GrpcReactiveServiceAdapterComprehensiveTest {
         }
     }
 
-    private static class GrpcIn {}
+    private static class GrpcIn {
+    }
 
-    private static class GrpcOut {}
+    private static class GrpcOut {
+    }
 
-    private static class DomainIn {}
+    private static class DomainIn {
+    }
 
-    private static class DomainOut {}
+    private static class DomainOut {
+    }
 
-    private static class TestGrpcRequest {}
+    private static class TestGrpcRequest {
+    }
 
-    private static class TestGrpcResponse {}
+    private static class TestGrpcResponse {
+    }
 
     @BeforeEach
     void setUp() throws Exception {
@@ -108,60 +115,57 @@ class GrpcReactiveServiceAdapterComprehensiveTest {
 
         // Setup for unit tests (bypasses transaction)
         unitTestAdapter = new UnitTestGrpcReactiveServiceAdapter(mockReactiveService);
-        java.lang.reflect.Field field =
-                GrpcReactiveServiceAdapter.class.getDeclaredField("persistenceManager");
+        java.lang.reflect.Field field = GrpcReactiveServiceAdapter.class.getDeclaredField("persistenceManager");
         field.setAccessible(true);
         field.set(unitTestAdapter, mockPersistenceManager);
 
         // Setup for integration tests (uses real adapter but with mock service)
-        integrationTestAdapter =
-                new GrpcReactiveServiceAdapter<>() {
-                    @Override
-                    protected ReactiveService<TestEntity, TestResult> getService() {
-                        return new TestReactiveService();
-                    }
+        integrationTestAdapter = new GrpcReactiveServiceAdapter<>() {
+            @Override
+            protected ReactiveService<TestEntity, TestResult> getService() {
+                return new TestReactiveService();
+            }
 
-                    @Override
-                    protected TestEntity fromGrpc(Object grpcIn) {
-                        return new TestEntity("test", "description");
-                    }
+            @Override
+            protected TestEntity fromGrpc(Object grpcIn) {
+                return new TestEntity("test", "description");
+            }
 
-                    @Override
-                    protected Object toGrpc(TestResult domainOut) {
-                        return new TestGrpcResponse();
-                    }
+            @Override
+            protected Object toGrpc(TestResult domainOut) {
+                return new TestGrpcResponse();
+            }
 
-                    @Override
-                    protected boolean isAutoPersistenceEnabled() {
-                        return true;
-                    }
+            @Override
+            protected boolean isAutoPersistenceEnabled() {
+                return true;
+            }
 
-                    // Override remoteProcess to bypass Panache transaction for testing purposes
-                    @Override
-                    public Uni<Object> remoteProcess(Object grpcRequest) {
-                        TestEntity entity = fromGrpc(grpcRequest);
+            // Override remoteProcess to bypass Panache transaction for testing purposes
+            @Override
+            public Uni<Object> remoteProcess(Object grpcRequest) {
+                TestEntity entity = fromGrpc(grpcRequest);
 
-                        Uni<TestResult> processedResult = getService().process(entity);
+                Uni<TestResult> processedResult = getService().process(entity);
 
-                        Uni<TestResult> withPersistence =
-                                isAutoPersistenceEnabled()
-                                        ? processedResult
-                                                .onItem()
-                                                .call(
-                                                        ignored ->
-                                                                // If auto-persistence is enabled,
-                                                                // persist the input entity after
-                                                                // successful processing
-                                                                persistenceManager.persist(entity))
-                                        : processedResult;
-
-                        return withPersistence
+                Uni<TestResult> withPersistence = isAutoPersistenceEnabled()
+                        ? processedResult
                                 .onItem()
-                                .transform(this::toGrpc)
-                                .onFailure()
-                                .transform(new throwStatusRuntimeExceptionFunction());
-                    }
-                };
+                                .call(
+                                        ignored ->
+                // If auto-persistence is enabled,
+                // persist the input entity after
+                // successful processing
+                persistenceManager.persist(entity))
+                        : processedResult;
+
+                return withPersistence
+                        .onItem()
+                        .transform(this::toGrpc)
+                        .onFailure()
+                        .transform(new throwStatusRuntimeExceptionFunction());
+            }
+        };
 
         field = GrpcReactiveServiceAdapter.class.getDeclaredField("persistenceManager");
         field.setAccessible(true);
@@ -179,8 +183,7 @@ class GrpcReactiveServiceAdapterComprehensiveTest {
 
         Uni<GrpcOut> resultUni = unitTestAdapter.remoteProcess(grpcRequest);
 
-        UniAssertSubscriber<GrpcOut> subscriber =
-                resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
+        UniAssertSubscriber<GrpcOut> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertNotNull(subscriber.getItem());
@@ -197,8 +200,7 @@ class GrpcReactiveServiceAdapterComprehensiveTest {
 
         Uni<GrpcOut> resultUni = unitTestAdapter.remoteProcess(grpcRequest);
 
-        UniAssertSubscriber<GrpcOut> subscriber =
-                resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
+        UniAssertSubscriber<GrpcOut> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitFailure();
 
         Throwable failure = subscriber.getFailure();
@@ -221,8 +223,7 @@ class GrpcReactiveServiceAdapterComprehensiveTest {
 
         Uni<Object> resultUni = integrationTestAdapter.remoteProcess(grpcRequest);
 
-        UniAssertSubscriber<Object> subscriber =
-                resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
+        UniAssertSubscriber<Object> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertNotNull(subscriber.getItem());
@@ -231,61 +232,57 @@ class GrpcReactiveServiceAdapterComprehensiveTest {
 
     @Test
     void integrationTest_WithAutoPersistenceDisabled_ShouldNotCallPersist() {
-        GrpcReactiveServiceAdapter<Object, Object, TestEntity, TestResult>
-                adapterWithoutPersistence =
-                        new GrpcReactiveServiceAdapter<>() {
-                            @Override
-                            protected ReactiveService<TestEntity, TestResult> getService() {
-                                return new TestReactiveService();
-                            }
+        GrpcReactiveServiceAdapter<Object, Object, TestEntity, TestResult> adapterWithoutPersistence = new GrpcReactiveServiceAdapter<>() {
+            @Override
+            protected ReactiveService<TestEntity, TestResult> getService() {
+                return new TestReactiveService();
+            }
 
-                            @Override
-                            protected TestEntity fromGrpc(Object grpcIn) {
-                                return new TestEntity("test", "description");
-                            }
+            @Override
+            protected TestEntity fromGrpc(Object grpcIn) {
+                return new TestEntity("test", "description");
+            }
 
-                            @Override
-                            protected Object toGrpc(TestResult domainOut) {
-                                return new TestGrpcResponse();
-                            }
+            @Override
+            protected Object toGrpc(TestResult domainOut) {
+                return new TestGrpcResponse();
+            }
 
-                            @Override
-                            protected boolean isAutoPersistenceEnabled() {
-                                return false;
-                            }
+            @Override
+            protected boolean isAutoPersistenceEnabled() {
+                return false;
+            }
 
-                            // Override to bypass Panache transaction for testing purposes
-                            @Override
-                            public Uni<Object> remoteProcess(Object grpcRequest) {
-                                TestEntity entity = fromGrpc(grpcRequest);
+            // Override to bypass Panache transaction for testing purposes
+            @Override
+            public Uni<Object> remoteProcess(Object grpcRequest) {
+                TestEntity entity = fromGrpc(grpcRequest);
 
-                                Uni<TestResult> processedResult = getService().process(entity);
+                Uni<TestResult> processedResult = getService().process(entity);
 
-                                Uni<TestResult> withPersistence =
-                                        isAutoPersistenceEnabled()
-                                                ? processedResult
-                                                        .onItem()
-                                                        .call(
-                                                                ignored ->
-                                                                        // If auto-persistence is
-                                                                        // enabled, persist the
-                                                                        // input entity after
-                                                                        // successful processing
-                                                                        persistenceManager.persist(
-                                                                                entity))
-                                                : processedResult;
+                Uni<TestResult> withPersistence = isAutoPersistenceEnabled()
+                        ? processedResult
+                                .onItem()
+                                .call(
+                                        ignored ->
+                // If auto-persistence is
+                // enabled, persist the
+                // input entity after
+                // successful processing
+                persistenceManager.persist(
+                        entity))
+                        : processedResult;
 
-                                return withPersistence
-                                        .onItem()
-                                        .transform(this::toGrpc)
-                                        .onFailure()
-                                        .transform(new throwStatusRuntimeExceptionFunction());
-                            }
-                        };
+                return withPersistence
+                        .onItem()
+                        .transform(this::toGrpc)
+                        .onFailure()
+                        .transform(new throwStatusRuntimeExceptionFunction());
+            }
+        };
 
         try {
-            java.lang.reflect.Field field =
-                    GrpcReactiveServiceAdapter.class.getDeclaredField("persistenceManager");
+            java.lang.reflect.Field field = GrpcReactiveServiceAdapter.class.getDeclaredField("persistenceManager");
             field.setAccessible(true);
             field.set(adapterWithoutPersistence, mockPersistenceManager);
         } catch (Exception e) {
@@ -296,8 +293,7 @@ class GrpcReactiveServiceAdapterComprehensiveTest {
 
         Uni<Object> resultUni = adapterWithoutPersistence.remoteProcess(grpcRequest);
 
-        UniAssertSubscriber<Object> subscriber =
-                resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
+        UniAssertSubscriber<Object> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertNotNull(subscriber.getItem());

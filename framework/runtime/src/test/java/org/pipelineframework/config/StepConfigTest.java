@@ -40,53 +40,52 @@ class StepConfigTest {
     @Test
     void testConfigFromPipelineStepConfig() {
         // Given
-        PipelineStepConfig.StepConfig mockStepConfig =
-                new PipelineStepConfig.StepConfig() {
-                    @Override
-                    public Integer retryLimit() {
-                        return 5;
-                    }
+        PipelineStepConfig.StepConfig mockStepConfig = new PipelineStepConfig.StepConfig() {
+            @Override
+            public Integer retryLimit() {
+                return 5;
+            }
 
-                    @Override
-                    public Long retryWaitMs() {
-                        return 3000L;
-                    }
+            @Override
+            public Long retryWaitMs() {
+                return 3000L;
+            }
 
-                    @Override
-                    public Boolean parallel() {
-                        return true;
-                    }
+            @Override
+            public Boolean parallel() {
+                return true;
+            }
 
-                    @Override
-                    public Boolean recoverOnFailure() {
-                        return true;
-                    }
+            @Override
+            public Boolean recoverOnFailure() {
+                return true;
+            }
 
-                    @Override
-                    public Long maxBackoff() {
-                        return 60000L;
-                    }
+            @Override
+            public Long maxBackoff() {
+                return 60000L;
+            }
 
-                    @Override
-                    public Boolean jitter() {
-                        return true;
-                    }
+            @Override
+            public Boolean jitter() {
+                return true;
+            }
 
-                    @Override
-                    public Integer backpressureBufferCapacity() {
-                        return 2048;
-                    }
+            @Override
+            public Integer backpressureBufferCapacity() {
+                return 2048;
+            }
 
-                    @Override
-                    public String backpressureStrategy() {
-                        return "DROP";
-                    }
+            @Override
+            public String backpressureStrategy() {
+                return "DROP";
+            }
 
-                    @Override
-                    public Integer order() {
-                        return 100;
-                    }
-                };
+            @Override
+            public Integer order() {
+                return 100;
+            }
+        };
 
         // When
         StepConfig config = new StepConfig(mockStepConfig);
@@ -453,16 +452,15 @@ class StepConfigTest {
     @Test
     void testToStringContainsAllProperties() {
         // Given
-        StepConfig config =
-                new StepConfig()
-                        .retryLimit(5)
-                        .retryWait(Duration.ofSeconds(3))
-                        .parallel(true)
-                        .recoverOnFailure(true)
-                        .maxBackoff(Duration.ofMinutes(1))
-                        .jitter(true)
-                        .backpressureBufferCapacity(2048)
-                        .backpressureStrategy("DROP");
+        StepConfig config = new StepConfig()
+                .retryLimit(5)
+                .retryWait(Duration.ofSeconds(3))
+                .parallel(true)
+                .recoverOnFailure(true)
+                .maxBackoff(Duration.ofMinutes(1))
+                .jitter(true)
+                .backpressureBufferCapacity(2048)
+                .backpressureStrategy("DROP");
 
         // When
         String result = config.toString();
@@ -484,15 +482,14 @@ class StepConfigTest {
         StepConfig config = new StepConfig();
 
         // When - chain multiple setters
-        StepConfig result =
-                config.retryLimit(10)
-                        .retryWait(Duration.ofMillis(500))
-                        .parallel(true)
-                        .recoverOnFailure(true)
-                        .maxBackoff(Duration.ofMinutes(5))
-                        .jitter(true)
-                        .backpressureBufferCapacity(4096)
-                        .backpressureStrategy("DROP");
+        StepConfig result = config.retryLimit(10)
+                .retryWait(Duration.ofMillis(500))
+                .parallel(true)
+                .recoverOnFailure(true)
+                .maxBackoff(Duration.ofMinutes(5))
+                .jitter(true)
+                .backpressureBufferCapacity(4096)
+                .backpressureStrategy("DROP");
 
         // Then
         assertSame(config, result);
@@ -509,53 +506,52 @@ class StepConfigTest {
     @Test
     void testConfigFromPipelineStepConfigWithMinimalValues() {
         // Given
-        PipelineStepConfig.StepConfig mockStepConfig =
-                new PipelineStepConfig.StepConfig() {
-                    @Override
-                    public Integer retryLimit() {
-                        return 0;
-                    }
+        PipelineStepConfig.StepConfig mockStepConfig = new PipelineStepConfig.StepConfig() {
+            @Override
+            public Integer retryLimit() {
+                return 0;
+            }
 
-                    @Override
-                    public Long retryWaitMs() {
-                        return 1L;
-                    }
+            @Override
+            public Long retryWaitMs() {
+                return 1L;
+            }
 
-                    @Override
-                    public Boolean parallel() {
-                        return false;
-                    }
+            @Override
+            public Boolean parallel() {
+                return false;
+            }
 
-                    @Override
-                    public Boolean recoverOnFailure() {
-                        return false;
-                    }
+            @Override
+            public Boolean recoverOnFailure() {
+                return false;
+            }
 
-                    @Override
-                    public Long maxBackoff() {
-                        return 1L;
-                    }
+            @Override
+            public Long maxBackoff() {
+                return 1L;
+            }
 
-                    @Override
-                    public Boolean jitter() {
-                        return false;
-                    }
+            @Override
+            public Boolean jitter() {
+                return false;
+            }
 
-                    @Override
-                    public Integer backpressureBufferCapacity() {
-                        return 1;
-                    }
+            @Override
+            public Integer backpressureBufferCapacity() {
+                return 1;
+            }
 
-                    @Override
-                    public String backpressureStrategy() {
-                        return "BUFFER";
-                    }
+            @Override
+            public String backpressureStrategy() {
+                return "BUFFER";
+            }
 
-                    @Override
-                    public Integer order() {
-                        return 1;
-                    }
-                };
+            @Override
+            public Integer order() {
+                return 1;
+            }
+        };
 
         // When
         StepConfig config = new StepConfig(mockStepConfig);
@@ -574,53 +570,52 @@ class StepConfigTest {
     @Test
     void testConfigFromPipelineStepConfigWithMaximalValues() {
         // Given
-        PipelineStepConfig.StepConfig mockStepConfig =
-                new PipelineStepConfig.StepConfig() {
-                    @Override
-                    public Integer retryLimit() {
-                        return Integer.MAX_VALUE;
-                    }
+        PipelineStepConfig.StepConfig mockStepConfig = new PipelineStepConfig.StepConfig() {
+            @Override
+            public Integer retryLimit() {
+                return Integer.MAX_VALUE;
+            }
 
-                    @Override
-                    public Long retryWaitMs() {
-                        return Long.MAX_VALUE;
-                    }
+            @Override
+            public Long retryWaitMs() {
+                return Long.MAX_VALUE;
+            }
 
-                    @Override
-                    public Boolean parallel() {
-                        return true;
-                    }
+            @Override
+            public Boolean parallel() {
+                return true;
+            }
 
-                    @Override
-                    public Boolean recoverOnFailure() {
-                        return true;
-                    }
+            @Override
+            public Boolean recoverOnFailure() {
+                return true;
+            }
 
-                    @Override
-                    public Long maxBackoff() {
-                        return Long.MAX_VALUE;
-                    }
+            @Override
+            public Long maxBackoff() {
+                return Long.MAX_VALUE;
+            }
 
-                    @Override
-                    public Boolean jitter() {
-                        return true;
-                    }
+            @Override
+            public Boolean jitter() {
+                return true;
+            }
 
-                    @Override
-                    public Integer backpressureBufferCapacity() {
-                        return Integer.MAX_VALUE;
-                    }
+            @Override
+            public Integer backpressureBufferCapacity() {
+                return Integer.MAX_VALUE;
+            }
 
-                    @Override
-                    public String backpressureStrategy() {
-                        return "DROP";
-                    }
+            @Override
+            public String backpressureStrategy() {
+                return "DROP";
+            }
 
-                    @Override
-                    public Integer order() {
-                        return Integer.MAX_VALUE;
-                    }
-                };
+            @Override
+            public Integer order() {
+                return Integer.MAX_VALUE;
+            }
+        };
 
         // When
         StepConfig config = new StepConfig(mockStepConfig);

@@ -34,9 +34,11 @@ import org.pipelineframework.service.throwStatusRuntimeExceptionFunction;
 @QuarkusTest
 class GrpcServiceBidirectionalStreamingAdapterTest {
 
-    @Mock private ReactiveBidirectionalStreamingService<String, String> mockService;
+    @Mock
+    private ReactiveBidirectionalStreamingService<String, String> mockService;
 
-    @Mock private PersistenceManager mockPersistenceManager;
+    @Mock
+    private PersistenceManager mockPersistenceManager;
 
     private TestBidirectionalAdapter adapter;
 
@@ -83,16 +85,15 @@ class GrpcServiceBidirectionalStreamingAdapterTest {
 
             Multi<String> processedStream = getService().process(inputDomainStream);
 
-            Multi<String> withAutoPersistence =
-                    isAutoPersistenceEnabled()
-                            ? processedStream
-                                    .onItem()
-                                    .call(
-                                            domainItem ->
-                                                    // If auto-persistence is enabled, persist each
-                                                    // item after processing
-                                                    persistenceManager.persist(domainItem))
-                            : processedStream;
+            Multi<String> withAutoPersistence = isAutoPersistenceEnabled()
+                    ? processedStream
+                            .onItem()
+                            .call(
+                                    domainItem ->
+                                    // If auto-persistence is enabled, persist each
+                                    // item after processing
+                                    persistenceManager.persist(domainItem))
+                    : processedStream;
 
             return withAutoPersistence
                     .onItem()
@@ -108,9 +109,8 @@ class GrpcServiceBidirectionalStreamingAdapterTest {
         adapter = new TestBidirectionalAdapter(mockService);
 
         // Inject the mock persistence manager using reflection
-        java.lang.reflect.Field field =
-                GrpcServiceBidirectionalStreamingAdapter.class.getDeclaredField(
-                        "persistenceManager");
+        java.lang.reflect.Field field = GrpcServiceBidirectionalStreamingAdapter.class.getDeclaredField(
+                "persistenceManager");
         field.setAccessible(true);
         field.set(adapter, mockPersistenceManager);
     }
@@ -126,9 +126,8 @@ class GrpcServiceBidirectionalStreamingAdapterTest {
         // Mock persistence calls to return the same item
         when(mockPersistenceManager.persist(any(String.class)))
                 .thenAnswer(
-                        invocation ->
-                                io.smallrye.mutiny.Uni.createFrom()
-                                        .item(invocation.getArgument(0)));
+                        invocation -> io.smallrye.mutiny.Uni.createFrom()
+                                .item(invocation.getArgument(0)));
 
         // Create input stream
         Multi<String> input = Multi.createFrom().items("input1", "input2");

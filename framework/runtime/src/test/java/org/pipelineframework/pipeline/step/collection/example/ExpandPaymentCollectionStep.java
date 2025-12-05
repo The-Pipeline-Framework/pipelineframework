@@ -25,7 +25,8 @@ import org.pipelineframework.step.blocking.StepOneToManyBlocking;
  * Example of a collection-based 1:N step that expands a single payment request into multiple
  * transactions.
  *
- * <p>This step demonstrates how to use the StepOneToManyBlocking interface for operations that need
+ * <p>
+ * This step demonstrates how to use the StepOneToManyBlocking interface for operations that need
  * to expand a single input into multiple outputs using standard Java collections.
  */
 public class ExpandPaymentCollectionStep extends ConfigurableStep

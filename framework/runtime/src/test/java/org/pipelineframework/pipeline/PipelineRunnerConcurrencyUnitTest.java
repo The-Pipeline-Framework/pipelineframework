@@ -42,10 +42,9 @@ class PipelineRunnerConcurrencyUnitTest {
             callCount.incrementAndGet();
 
             // Simulate processing time that varies by input using Uni.delay for async behavior
-            Duration delay =
-                    input.equals("slow")
-                            ? Duration.ofMillis(500)
-                            : Duration.ofMillis(100); // slow item takes longer
+            Duration delay = input.equals("slow")
+                    ? Duration.ofMillis(500)
+                    : Duration.ofMillis(100); // slow item takes longer
 
             return Uni.createFrom().item("processed:" + input).onItem().delayIt().by(delay);
         }
@@ -64,8 +63,7 @@ class PipelineRunnerConcurrencyUnitTest {
         Multi<String> result = (Multi<String>) PipelineRunnerTestHelper.applyOneToOne(step, input);
 
         // Then - Should process sequentially
-        AssertSubscriber<String> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(3));
+        AssertSubscriber<String> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
         List<String> items = subscriber.awaitItems(3, Duration.ofSeconds(5)).getItems();
 
         assertEquals(3, items.size());
@@ -91,8 +89,7 @@ class PipelineRunnerConcurrencyUnitTest {
 
         // Then - Should process concurrently, with fast items potentially completing before slow
         // item
-        AssertSubscriber<String> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(3));
+        AssertSubscriber<String> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
         List<String> items = subscriber.awaitItems(3, Duration.ofSeconds(2)).getItems();
 
         assertEquals(3, items.size());
@@ -119,8 +116,7 @@ class PipelineRunnerConcurrencyUnitTest {
         Multi<String> result = (Multi<String>) PipelineRunnerTestHelper.applyOneToOne(step, input);
 
         // Then - Should work the same as before (backward compatibility maintained)
-        AssertSubscriber<String> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(2));
+        AssertSubscriber<String> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(2));
         List<String> items = subscriber.awaitItems(2, Duration.ofSeconds(5)).getItems();
 
         assertEquals(2, items.size());

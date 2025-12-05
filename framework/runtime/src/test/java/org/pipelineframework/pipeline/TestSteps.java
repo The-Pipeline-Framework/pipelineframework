@@ -58,7 +58,8 @@ public class TestSteps {
          * Initialises the step with the provided configuration, preserving any first non-default
          * values as manual overrides.
          *
-         * <p>If this is the first time a non-default configuration is supplied, the method records
+         * <p>
+         * If this is the first time a non-default configuration is supplied, the method records
          * the supplied `retryLimit` and `retryWait` as manual configuration. Once manual
          * configuration exists, those stored values are applied to any subsequent incoming `config`
          * before delegating to the superclass initialisation.
@@ -71,8 +72,7 @@ public class TestSteps {
             // If so, preserve these as manual configuration
             if (!hasManualConfig && config != null) {
                 // Check if the incoming config has custom values
-                final org.pipelineframework.config.StepConfig defaultCfg =
-                        new org.pipelineframework.config.StepConfig();
+                final org.pipelineframework.config.StepConfig defaultCfg = new org.pipelineframework.config.StepConfig();
                 if (config.retryLimit() != defaultCfg.retryLimit()
                         || !java.util.Objects.equals(config.retryWait(), defaultCfg.retryWait())) {
                     // This looks like manual configuration - save the values
@@ -162,8 +162,7 @@ public class TestSteps {
         private int manualRetryLimit = -1;
         private java.time.Duration manualRetryWait = null;
         private boolean manualRecoverOnFailure = false;
-        private boolean manualRecoverOnFailureSet =
-                false; // Sentinel to track if constructor set the value
+        private boolean manualRecoverOnFailureSet = false; // Sentinel to track if constructor set the value
 
         public FailingStepBlocking() {
             // Leave recoverOnFailure to be driven by configuration unless explicitly set
@@ -171,8 +170,7 @@ public class TestSteps {
 
         public FailingStepBlocking(boolean shouldRecover) {
             this.manualRecoverOnFailure = shouldRecover;
-            this.manualRecoverOnFailureSet =
-                    true; // Mark that constructor explicitly set this value
+            this.manualRecoverOnFailureSet = true; // Mark that constructor explicitly set this value
         }
 
         @Override
@@ -202,23 +200,24 @@ public class TestSteps {
             return failedItem
                     .onItem()
                     .invoke(
-                            item ->
-                                    LOG.infof(
-                                            "Dead letter handled for item: %s, cause: %s",
-                                            item, cause.getMessage()));
+                            item -> LOG.infof(
+                                    "Dead letter handled for item: %s, cause: %s",
+                                    item, cause.getMessage()));
         }
 
         /**
          * Initialise the step with the provided step configuration, preserving any first-seen
          * non-default values as manual overrides.
          *
-         * <p>If this is the first time the step receives a non-default configuration, the method
+         * <p>
+         * If this is the first time the step receives a non-default configuration, the method
          * records the incoming retryLimit, retryWait and recoverOnFailure as manual configuration.
          * Once manual configuration is present, subsequent initialisation calls apply the recorded
          * retryLimit, retryWait and recoverOnFailure to the incoming config before delegating to
          * the superclass.
          *
-         * <p>The recoverOnFailure value provided by the step's constructor (if set) takes
+         * <p>
+         * The recoverOnFailure value provided by the step's constructor (if set) takes
          * precedence over a value from the incoming config when deciding what to record or apply.
          *
          * @param config the step configuration to apply; may be null
@@ -229,19 +228,16 @@ public class TestSteps {
             // If so, preserve these as manual configuration (like AsyncFailNTimesStep)
             if (!hasManualConfig && config != null) {
                 // Check if the incoming config has custom values
-                final org.pipelineframework.config.StepConfig defaultCfg =
-                        new org.pipelineframework.config.StepConfig();
-                boolean hasConfigRecoverOnFailure =
-                        config.recoverOnFailure() != defaultCfg.recoverOnFailure();
+                final org.pipelineframework.config.StepConfig defaultCfg = new org.pipelineframework.config.StepConfig();
+                boolean hasConfigRecoverOnFailure = config.recoverOnFailure() != defaultCfg.recoverOnFailure();
                 if (config.retryLimit() != defaultCfg.retryLimit()
                         || !java.util.Objects.equals(config.retryWait(), defaultCfg.retryWait())
                         || hasConfigRecoverOnFailure) {
                     // This looks like manual configuration - save the values
                     // Only set recoverOnFailure from config if constructor didn't set it
-                    boolean recoverOnFailureToUse =
-                            manualRecoverOnFailureSet
-                                    ? manualRecoverOnFailure
-                                    : config.recoverOnFailure();
+                    boolean recoverOnFailureToUse = manualRecoverOnFailureSet
+                            ? manualRecoverOnFailure
+                            : config.recoverOnFailure();
                     setManualConfig(config.retryLimit(), config.retryWait(), recoverOnFailureToUse);
                 }
             }
@@ -268,14 +264,15 @@ public class TestSteps {
         /**
          * Record manual configuration values for retry behaviour and dead-letter recovery.
          *
-         * <p>Sets the step into a manual-configured state and stores the provided retry limit and
+         * <p>
+         * Sets the step into a manual-configured state and stores the provided retry limit and
          * retry wait duration. The recoverOnFailure flag is stored only if it was not explicitly
          * set by the constructor.
          *
          * @param retryLimit the manual retry limit to apply
          * @param retryWait the manual duration to wait between retries
          * @param recoverOnFailure whether failed items should be recovered instead of
-         *     dead-lettered; ignored if the constructor previously fixed this behaviour
+         *        dead-lettered; ignored if the constructor previously fixed this behaviour
          */
         private void setManualConfig(
                 int retryLimit, java.time.Duration retryWait, boolean recoverOnFailure) {

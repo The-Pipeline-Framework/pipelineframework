@@ -40,9 +40,11 @@ import org.pipelineframework.step.future.StepOneToOneCompletableFuture;
 @QuarkusTest
 class ConcurrencyIntegrationTest {
 
-    @Inject private PipelineConfig pipelineConfig;
+    @Inject
+    private PipelineConfig pipelineConfig;
 
-    @Inject private PipelineRunner pipelineRunner;
+    @Inject
+    private PipelineRunner pipelineRunner;
 
     private static class TestStepOneToOne extends ConfigurableStep
             implements StepOneToOne<String, String> {
@@ -150,8 +152,7 @@ class ConcurrencyIntegrationTest {
         Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step));
 
         // Then - Should process sequentially in order
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(3));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
         subscriber.awaitItems(3, Duration.ofSeconds(5)).assertCompleted();
 
         List<Object> items = subscriber.getItems();
@@ -179,8 +180,7 @@ class ConcurrencyIntegrationTest {
         Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step));
 
         // Then - Should process concurrently (fast items finish before slow)
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(3));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
         subscriber.awaitItems(3, Duration.ofSeconds(2)).assertCompleted();
 
         List<Object> items = subscriber.getItems();
@@ -206,8 +206,7 @@ class ConcurrencyIntegrationTest {
         Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step));
 
         // Then - Should work the same as before (backward compatibility)
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(2));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(2));
         subscriber.awaitItems(2, Duration.ofSeconds(5)).assertCompleted();
 
         List<Object> items = subscriber.getItems();
@@ -228,10 +227,9 @@ class ConcurrencyIntegrationTest {
         Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step));
 
         // Then
-        AssertSubscriber<Object> subscriber =
-                result.subscribe()
-                        .withSubscriber(
-                                AssertSubscriber.create(6)); // Each input produces 2 outputs
+        AssertSubscriber<Object> subscriber = result.subscribe()
+                .withSubscriber(
+                        AssertSubscriber.create(6)); // Each input produces 2 outputs
         subscriber.awaitItems(6, Duration.ofSeconds(2)).assertCompleted();
 
         List<Object> items = subscriber.getItems();
@@ -251,10 +249,9 @@ class ConcurrencyIntegrationTest {
         Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step));
 
         // Then
-        AssertSubscriber<Object> subscriber =
-                result.subscribe()
-                        .withSubscriber(
-                                AssertSubscriber.create(6)); // Each input produces 2 outputs
+        AssertSubscriber<Object> subscriber = result.subscribe()
+                .withSubscriber(
+                        AssertSubscriber.create(6)); // Each input produces 2 outputs
         subscriber.awaitItems(6, Duration.ofSeconds(2)).assertCompleted();
 
         List<Object> items = subscriber.getItems();
@@ -274,8 +271,7 @@ class ConcurrencyIntegrationTest {
         Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step));
 
         // Then
-        AssertSubscriber<Object> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(3));
+        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
         subscriber.awaitItems(3, Duration.ofSeconds(2)).assertCompleted();
 
         List<Object> items = subscriber.getItems();

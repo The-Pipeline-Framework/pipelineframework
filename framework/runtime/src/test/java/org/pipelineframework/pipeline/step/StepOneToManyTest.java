@@ -52,8 +52,7 @@ class StepOneToManyTest {
         Multi<String> result = step.applyOneToMany("test");
 
         // Then
-        AssertSubscriber<String> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(3));
+        AssertSubscriber<String> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
         subscriber.awaitItems(3, Duration.ofSeconds(5));
         subscriber.assertItems("test-1", "test-2", "test-3");
     }
@@ -65,14 +64,12 @@ class StepOneToManyTest {
         Multi<String> input = Multi.createFrom().items("item1", "item2");
 
         // When
-        Multi<String> result =
-                input.onItem()
-                        .transformToMulti(item -> step.apply(Uni.createFrom().item(item)))
-                        .concatenate();
+        Multi<String> result = input.onItem()
+                .transformToMulti(item -> step.apply(Uni.createFrom().item(item)))
+                .concatenate();
 
         // Then
-        AssertSubscriber<String> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(6));
+        AssertSubscriber<String> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(6));
         subscriber.awaitItems(6, Duration.ofSeconds(5));
         subscriber.assertItems("item1-1", "item1-2", "item1-3", "item2-1", "item2-2", "item2-3");
     }

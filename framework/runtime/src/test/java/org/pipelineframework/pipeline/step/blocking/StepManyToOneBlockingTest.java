@@ -94,22 +94,19 @@ class StepManyToOneBlockingTest {
         Multi<String> input = Multi.createFrom().items("item1", "item2", "item3", "item4");
 
         // When
-        Multi<String> result =
-                input.group()
-                        .intoLists()
-                        .of(step.batchSize())
-                        .onItem()
-                        .transformToUniAndMerge(
-                                list ->
-                                        io.smallrye.mutiny.Uni.createFrom()
-                                                .item(step.applyBatchList(list)))
-                        .onItem()
-                        .transformToMulti(item -> io.smallrye.mutiny.Multi.createFrom().item(item))
-                        .concatenate();
+        Multi<String> result = input.group()
+                .intoLists()
+                .of(step.batchSize())
+                .onItem()
+                .transformToUniAndMerge(
+                        list -> io.smallrye.mutiny.Uni.createFrom()
+                                .item(step.applyBatchList(list)))
+                .onItem()
+                .transformToMulti(item -> io.smallrye.mutiny.Multi.createFrom().item(item))
+                .concatenate();
 
         // Then
-        AssertSubscriber<String> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(2));
+        AssertSubscriber<String> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(2));
         subscriber.awaitItems(2, Duration.ofSeconds(5));
         subscriber.assertItems("Batch processed: item1, item2", "Batch processed: item3, item4");
     }

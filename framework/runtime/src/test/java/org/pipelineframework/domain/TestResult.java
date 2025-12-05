@@ -21,7 +21,8 @@ public class TestResult {
     private String processedName;
     private String processedDescription;
 
-    public TestResult() {}
+    public TestResult() {
+    }
 
     public TestResult(String processedName, String processedDescription) {
         this.processedName = processedName;

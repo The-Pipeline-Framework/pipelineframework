@@ -78,14 +78,12 @@ class StepOneToOneCompletableFutureTest {
         Multi<String> input = Multi.createFrom().items("item1", "item2");
 
         // When
-        Multi<String> result =
-                input.onItem()
-                        .transformToUniAndConcatenate(
-                                item -> step.apply(Uni.createFrom().item(item)));
+        Multi<String> result = input.onItem()
+                .transformToUniAndConcatenate(
+                        item -> step.apply(Uni.createFrom().item(item)));
 
         // Then
-        AssertSubscriber<String> subscriber =
-                result.subscribe().withSubscriber(AssertSubscriber.create(2));
+        AssertSubscriber<String> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(2));
         subscriber.awaitItems(2, Duration.ofSeconds(5));
         subscriber.assertItems("Future processed: item1", "Future processed: item2");
     }

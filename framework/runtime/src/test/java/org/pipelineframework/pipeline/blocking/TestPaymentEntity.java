@@ -26,7 +26,8 @@ public class TestPaymentEntity {
     private String status;
 
     // Required for JPA
-    public TestPaymentEntity() {}
+    public TestPaymentEntity() {
+    }
 
     public TestPaymentEntity(String recipient, BigDecimal amount) {
         this.recipient = recipient;
