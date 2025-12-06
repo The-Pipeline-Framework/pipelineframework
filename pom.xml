@@ -62,7 +62,6 @@
         <version.jandex>3.5.0</version.jandex>
         <grpc.version>1.63.0</grpc.version>
         <spotless.plugin.version>2.44.0</spotless.plugin.version>
-        <spotless.eclipse.format.file>${basedir}/ide-config/quarkus-formatter.xml</spotless.eclipse.format.file>
         <surefireArgLine />
     </properties>
 
