@@ -78,6 +78,18 @@
             </exclusions>
         </dependency>
         <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>persistence-svc</artifactId>
+            <version>0.9.2-SNAPSHOT</version>
+            <classifier>client</classifier>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-grpc-protoc-plugin</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-picocli</artifactId>
         </dependency>
