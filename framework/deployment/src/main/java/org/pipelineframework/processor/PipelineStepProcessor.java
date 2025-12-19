@@ -70,7 +70,7 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
         super.init(processingEnv);
-        
+
         this.irExtractor = new PipelineStepIRExtractor(processingEnv);
         this.validator = new PipelineStepValidator(processingEnv);
         this.grpcRenderer = new GrpcServiceAdapterRenderer();
@@ -120,7 +120,7 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
                     case GRPC_SERVICE:
                         if (ir.getStepKind() != org.pipelineframework.processor.ir.StepKind.LOCAL) {
                             JavaFileObject grpcFile = processingEnv.getFiler()
-                                .createSourceFile(ir.getServicePackage() + PIPELINE_PACKAGE_SUFFIX + 
+                                .createSourceFile(ir.getServicePackage() + PIPELINE_PACKAGE_SUFFIX +
                                     "." + ir.getServiceName() + GRPC_SERVICE_SUFFIX);
                             grpcRenderer.render(ir, new GenerationContext(processingEnv, grpcFile));
                         }
@@ -128,16 +128,16 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
                     case CLIENT_STEP:
                         if (ir.getStepKind() != org.pipelineframework.processor.ir.StepKind.LOCAL) {
                             JavaFileObject clientFile = processingEnv.getFiler()
-                                .createSourceFile(ir.getServicePackage() + PIPELINE_PACKAGE_SUFFIX + 
-                                    "." + ir.getServiceName().replace("Service", "") + 
+                                .createSourceFile(ir.getServicePackage() + PIPELINE_PACKAGE_SUFFIX +
+                                    "." + ir.getServiceName().replace("Service", "") +
                                     CLIENT_STEP_SUFFIX);
                             clientRenderer.render(ir, new GenerationContext(processingEnv, clientFile));
                         }
                         break;
                     case REST_RESOURCE:
                         JavaFileObject restFile = processingEnv.getFiler()
-                            .createSourceFile(ir.getServicePackage() + PIPELINE_PACKAGE_SUFFIX + 
-                                "." + ir.getServiceName().replace("Service", "").replace("Reactive", "") + 
+                            .createSourceFile(ir.getServicePackage() + PIPELINE_PACKAGE_SUFFIX +
+                                "." + ir.getServiceName().replace("Service", "").replace("Reactive", "") +
                                 REST_RESOURCE_SUFFIX);
                         restRenderer.render(ir, new GenerationContext(processingEnv, restFile));
                         break;

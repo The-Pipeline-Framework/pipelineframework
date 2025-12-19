@@ -123,30 +123,20 @@ public class RestResourceRenderer implements PipelineRenderer {
             convertDomainToDtoType(ir.getOutputMapping().getDomainType()) : ClassName.OBJECT;
 
         // Create the process method based on service type (determined from streaming shape)
-        MethodSpec processMethod;
-        switch (ir.getStreamingShape()) {
-            case UNARY_STREAMING:
-                processMethod = createReactiveStreamingServiceProcessMethod(
+        MethodSpec processMethod = switch (ir.getStreamingShape()) {
+            case UNARY_STREAMING -> createReactiveStreamingServiceProcessMethod(
                     inputDtoClassName, outputDtoClassName,
                     inboundMapperFieldName, outboundMapperFieldName, ir);
-                break;
-            case STREAMING_UNARY:
-                processMethod = createReactiveStreamingClientServiceProcessMethod(
+            case STREAMING_UNARY -> createReactiveStreamingClientServiceProcessMethod(
                     inputDtoClassName, outputDtoClassName,
                     inboundMapperFieldName, outboundMapperFieldName, ir);
-                break;
-            case STREAMING_STREAMING:
-                processMethod = createReactiveBidirectionalStreamingServiceProcessMethod(
+            case STREAMING_STREAMING -> createReactiveBidirectionalStreamingServiceProcessMethod(
                     inputDtoClassName, outputDtoClassName,
                     inboundMapperFieldName, outboundMapperFieldName, ir);
-                break;
-            case UNARY_UNARY:
-            default:
-                processMethod = createReactiveServiceProcessMethod(
+            default -> createReactiveServiceProcessMethod(
                     inputDtoClassName, outputDtoClassName,
                     inboundMapperFieldName, outboundMapperFieldName, ir);
-                break;
-        }
+        };
 
         resourceBuilder.addMethod(processMethod);
 
@@ -385,7 +375,7 @@ public class RestResourceRenderer implements PipelineRenderer {
             int lastDot = domainTypeStr.lastIndexOf('.');
             String packageName = lastDot > 0 ? domainTypeStr.substring(0, lastDot) : "";
             String simpleName = lastDot > 0 ? domainTypeStr.substring(lastDot + 1) : domainTypeStr;
-
+            // Add Dto suffix to the class name
             String dtoSimpleName = simpleName + "Dto";
             return ClassName.get(packageName, dtoSimpleName);
         }

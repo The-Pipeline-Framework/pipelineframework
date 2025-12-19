@@ -71,11 +71,8 @@ public class PipelineStepValidator {
     
     private boolean validateTypeMapping(TypeMapping mapping, String mappingType, TypeElement serviceClass) {
         // If we have both domain and gRPC types, we need a mapper
-        if (mapping.getDomainType() != null && 
-            mapping.getGrpcType() != null && 
-            !mapping.hasMapper()) {
-            return false;
-        }
-        return true;
+        return mapping.getDomainType() == null ||
+                mapping.getGrpcType() == null ||
+                mapping.hasMapper();
     }
 }
