@@ -41,37 +41,20 @@ public final class AnnotationProcessingUtils {
     public static TypeMirror getAnnotationValue(AnnotationMirror annotation, String memberName) {
         for (ExecutableElement executableElement : annotation.getElementValues().keySet()) {
             if (executableElement.getSimpleName().toString().equals(memberName)) {
-                Object value = annotation.getElementValues().get(executableElement).getValue();
+                javax.lang.model.element.AnnotationValue annotationValue = annotation.getElementValues().get(executableElement);
+
+                // Properly extract the value from AnnotationValue
+                Object value = annotationValue.getValue();
+
+                // For Class<?> values in annotations, the value is typically a TypeMirror wrapped in AnnotationValue
                 if (value instanceof TypeMirror) {
                     return (TypeMirror) value;
-                } else if (value instanceof String className) {
-                    // Handle string values that should be class names
-                    if ("void".equals(className) || className.isEmpty() || "java.lang.Void".equals(className)) {
-                        // Return null for void types
-                        return null;
+                } else if (value instanceof javax.lang.model.element.AnnotationValue) {
+                    // Sometimes the value is doubly wrapped
+                    Object unwrappedValue = ((javax.lang.model.element.AnnotationValue) value).getValue();
+                    if (unwrappedValue instanceof TypeMirror) {
+                        return (TypeMirror) unwrappedValue;
                     }
-                }
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Extracts a String value from an annotation by member name.
-     *
-     * @param annotation The annotation mirror to extract the value from
-     * @param memberName The name of the annotation member to extract
-     * @return The String value of the annotation member, or null if not found
-     */
-    public static String getAnnotationValueAsString(AnnotationMirror annotation, String memberName) {
-        for (ExecutableElement executableElement : annotation.getElementValues().keySet()) {
-            if (executableElement.getSimpleName().toString().equals(memberName)) {
-                Object value = annotation.getElementValues().get(executableElement).getValue();
-                if (value instanceof String) {
-                    return (String) value;
-                } else if (value instanceof TypeMirror) {
-                    // For class types, get the qualified name
-                    return value.toString();
                 }
             }
         }

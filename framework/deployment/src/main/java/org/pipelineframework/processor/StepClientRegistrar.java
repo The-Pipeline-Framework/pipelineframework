@@ -16,18 +16,19 @@
 
 package org.pipelineframework.processor;
 
-import static org.pipelineframework.processor.PipelineStepProcessor.CLIENT_STEP_SUFFIX;
+import java.util.List;
 
 import io.quarkus.arc.deployment.AdditionalBeanBuildItem;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
 import io.quarkus.deployment.builditem.FeatureBuildItem;
-import java.util.List;
 import org.jboss.jandex.ClassInfo;
 import org.jboss.jandex.IndexView;
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.PipelineCliAppConfig;
+
+import static org.pipelineframework.processor.PipelineStepProcessor.CLIENT_STEP_SUFFIX;
 
 /**
  * Registers client step classes as additional unremovable beans when CLI client generation is enabled.
@@ -55,7 +56,7 @@ public class StepClientRegistrar {
 
     /**
      * Exposes discovered pipeline step client classes as additional unremovable beans when CLI client generation is enabled.
-     *
+     * <p>
      * Scans the provided Jandex index for classes whose simple name ends with the configured client step suffix and registers each
      * matching class as an unremovable AdditionalBeanBuildItem when CLI generation is enabled via the supplied configuration.
      *

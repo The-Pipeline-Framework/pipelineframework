@@ -3,11 +3,11 @@ package org.pipelineframework.processor.validator;
 import javax.lang.model.element.TypeElement;
 import javax.tools.Diagnostic;
 
-import org.pipelineframework.processor.ir.PipelineStepIR;
+import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.TypeMapping;
 
 /**
- * Validates the PipelineStepIR to ensure semantic consistency
+ * Validates the PipelineStepModel to ensure semantic consistency
  */
 public class PipelineStepValidator {
 
@@ -23,56 +23,43 @@ public class PipelineStepValidator {
     }
 
     /**
-     * Validates the PipelineStepIR for semantic consistency.
+     * Validates the PipelineStepModel for semantic consistency.
      *
-     * @param ir the PipelineStepIR to validate
+     * @param model the PipelineStepModel to validate
      * @param serviceClass the service class being processed
      * @return true if validation passes, false otherwise
      */
-    public boolean validate(PipelineStepIR ir, TypeElement serviceClass) {
+    public boolean validate(PipelineStepModel model, TypeElement serviceClass) {
         boolean isValid = true;
-        
+
         // Validate type mappings have required components
-        isValid &= validateTypeMapping(ir.getInputMapping(), "input", serviceClass);
-        isValid &= validateTypeMapping(ir.getOutputMapping(), "output", serviceClass);
-        
-        // Validate REST path if REST is enabled
-        if (ir.getEnabledTargets().contains(org.pipelineframework.processor.ir.GenerationTarget.REST_RESOURCE) 
-            && ir.getRestPath() == null) {
-            processingEnv.getMessager().printMessage(
-                Diagnostic.Kind.WARNING,
-                "REST resource generation enabled but no path specified for " + ir.getServiceName(),
-                serviceClass);
-        }
-        
-        // Validate that mappers exist when both domain and gRPC types are specified
-        if (ir.getInputMapping().getDomainType() != null && 
-            ir.getInputMapping().getGrpcType() != null &&
-            !ir.getInputMapping().hasMapper()) {
+        isValid &= validateTypeMapping(model.inputMapping());
+        isValid &= validateTypeMapping(model.outputMapping());
+
+        // Validate that mappers exist when domain types are specified
+        if (model.inputMapping().domainType() != null &&
+            !model.inputMapping().hasMapper()) {
             processingEnv.getMessager().printMessage(
                 Diagnostic.Kind.ERROR,
-                "Input mapper is required when both inputType and inputGrpcType are specified for " + ir.getServiceName(),
+                "Input mapper is required when inputType is specified for " + model.serviceName(),
                 serviceClass);
             isValid = false;
         }
-        
-        if (ir.getOutputMapping().getDomainType() != null && 
-            ir.getOutputMapping().getGrpcType() != null &&
-            !ir.getOutputMapping().hasMapper()) {
+
+        if (model.outputMapping().domainType() != null &&
+            !model.outputMapping().hasMapper()) {
             processingEnv.getMessager().printMessage(
                 Diagnostic.Kind.ERROR,
-                "Output mapper is required when both outputType and outputGrpcType are specified for " + ir.getServiceName(),
+                "Output mapper is required when outputType is specified for " + model.serviceName(),
                 serviceClass);
             isValid = false;
         }
-        
+
         return isValid;
     }
-    
-    private boolean validateTypeMapping(TypeMapping mapping, String mappingType, TypeElement serviceClass) {
-        // If we have both domain and gRPC types, we need a mapper
-        return mapping.getDomainType() == null ||
-                mapping.getGrpcType() == null ||
-                mapping.hasMapper();
+
+    private boolean validateTypeMapping(TypeMapping mapping) {
+        // If we have a domain type, we need a mapper
+        return mapping.domainType() == null || mapping.hasMapper();
     }
 }

@@ -54,11 +54,8 @@ class PipelineStepProcessorTest {
     @Mock
     private Messager messager;
 
-    private PipelineStepProcessor processor;
-
     @BeforeEach
     void setUp() {
-        processor = new PipelineStepProcessor();
         when(processingEnv.getMessager()).thenReturn(messager);
         when(processingEnv.getElementUtils())
                 .thenReturn(mock(javax.lang.model.util.Elements.class));
@@ -114,22 +111,31 @@ class PipelineStepProcessorTest {
         // Mock a valid class element annotated with @PipelineStep
         TypeElement mockServiceClass = mock(TypeElement.class);
         when(mockServiceClass.getKind()).thenReturn(ElementKind.CLASS);
-        javax.lang.model.element.Name nameMock = mock(javax.lang.model.element.Name.class);
-        when(nameMock.toString()).thenReturn("TestService");
-        when(mockServiceClass.getSimpleName()).thenReturn(nameMock);
+        when(mockServiceClass.getNestingKind()).thenReturn(NestingKind.TOP_LEVEL);
 
+        // Set up simple name
+        javax.lang.model.element.Name simpleNameMock = mock(javax.lang.model.element.Name.class);
+        when(simpleNameMock.toString()).thenReturn("TestService");
+        when(mockServiceClass.getSimpleName()).thenReturn(simpleNameMock);
+
+        // Set up qualified name
         javax.lang.model.element.Name qualifiedNameMock = mock(javax.lang.model.element.Name.class);
         when(qualifiedNameMock.toString()).thenReturn("test.TestService");
         when(mockServiceClass.getQualifiedName()).thenReturn(qualifiedNameMock);
 
-        // Mock the enclosing element (package) to avoid null pointer in ClassName.get()
-        PackageElement enclosingPackageElement = mock(PackageElement.class);
-        when(mockServiceClass.getEnclosingElement()).thenReturn((Element) enclosingPackageElement);
+        // Mock the enclosing element (package)
+        PackageElement packageElement = mock(PackageElement.class);
+        when(packageElement.getKind()).thenReturn(ElementKind.PACKAGE);
+        when(mockServiceClass.getEnclosingElement()).thenReturn(packageElement);
+
+        // Mock the package element name
+        javax.lang.model.element.Name packageNameMock = mock(javax.lang.model.element.Name.class);
+        when(packageNameMock.toString()).thenReturn("test");
+        when(packageElement.getQualifiedName()).thenReturn(packageNameMock);
         PipelineStep mockAnnotation = mock(PipelineStep.class);
         when(mockServiceClass.getAnnotation(PipelineStep.class)).thenReturn(mockAnnotation);
         // Mock the grpcEnabled property to return true (default value)
         when(mockAnnotation.grpcEnabled()).thenReturn(true);
-        when(mockAnnotation.local()).thenReturn(false); // Also mock local to be false to generate client step
 
         // Use raw types to avoid generic issues
         when(roundEnv.getElementsAnnotatedWith(PipelineStep.class))
@@ -149,6 +155,7 @@ class PipelineStepProcessorTest {
         when(packageName.toString()).thenReturn("test");
         when(packageElementUtils.getQualifiedName()).thenReturn(packageName);
         when(elementsUtils.getPackageOf(mockServiceClass)).thenReturn(packageElementUtils);
+        when(elementsUtils.getTypeElement(mockServiceClass.getQualifiedName().toString())).thenReturn(mockServiceClass);
 
         // Mock the annotation mirror for PipelineStep
         AnnotationMirror mockAnnotationMirror = mock(AnnotationMirror.class);
@@ -157,6 +164,84 @@ class PipelineStepProcessorTest {
         javax.lang.model.type.DeclaredType declaredType = mock(javax.lang.model.type.DeclaredType.class);
         when(mockAnnotationMirror.getAnnotationType()).thenReturn(declaredType);
         when(declaredType.toString()).thenReturn("org.pipelineframework.annotation.PipelineStep");
+
+        // Mock annotation values to ensure the extractor can access them
+        // Removed duplicate: when(elementsUtils.getPackageOf(mockServiceClass)).thenReturn(packageElementUtils);
+
+        // Mock the element values map for the annotation with wildcard types
+        java.util.Map elementValuesMap = new java.util.HashMap();
+
+        // Create mock executable elements for the annotation attributes
+        ExecutableElement inputTypeElement = createMockExecutableElement("inputType");
+        ExecutableElement inputGrpcTypeElement = createMockExecutableElement("inputGrpcType");
+        ExecutableElement inboundMapperElement = createMockExecutableElement("inboundMapper");
+        ExecutableElement outputTypeElement = createMockExecutableElement("outputType");
+        ExecutableElement outputGrpcTypeElement = createMockExecutableElement("outputGrpcType");
+        ExecutableElement outboundMapperElement = createMockExecutableElement("outboundMapper");
+        ExecutableElement stepTypeElement = createMockExecutableElement("stepType");
+        ExecutableElement grpcImplElement = createMockExecutableElement("grpcImpl");
+        ExecutableElement grpcStubElement = createMockExecutableElement("grpcStub");
+        ExecutableElement grpcClientElement = createMockExecutableElement("grpcClient");
+        ExecutableElement sideEffectElement = createMockExecutableElement("sideEffect");
+        ExecutableElement pathElement = createMockExecutableElement("path");
+
+        // Create mock TypeElement objects for the types using the helper
+        javax.lang.model.type.DeclaredType stringTypeMirror = createMockTypeMirror("java.lang.String");
+        javax.lang.model.type.DeclaredType integerTypeMirror = createMockTypeMirror("java.lang.Integer");
+        javax.lang.model.type.DeclaredType voidTypeMirror = createMockTypeMirror("java.lang.Void");
+        javax.lang.model.type.DeclaredType grpcStringTypeMirror = createMockTypeMirror("test.TestServiceGrpcMessage");
+        javax.lang.model.type.DeclaredType grpcIntegerTypeMirror = createMockTypeMirror("test.TestServiceGrpcMessageResponse");
+
+        // Create mock annotation values with proper TypeMirror objects
+        AnnotationValue inputTypeValue = mock(AnnotationValue.class);
+        when(inputTypeValue.getValue()).thenReturn(stringTypeMirror);
+        elementValuesMap.put(inputTypeElement, inputTypeValue);
+
+        AnnotationValue inputGrpcTypeValue = mock(AnnotationValue.class);
+        when(inputGrpcTypeValue.getValue()).thenReturn(grpcStringTypeMirror);
+        elementValuesMap.put(inputGrpcTypeElement, inputGrpcTypeValue);
+
+        AnnotationValue inboundMapperValue = mock(AnnotationValue.class);
+        when(inboundMapperValue.getValue()).thenReturn(voidTypeMirror);
+        elementValuesMap.put(inboundMapperElement, inboundMapperValue);
+
+        AnnotationValue outputTypeValue = mock(AnnotationValue.class);
+        when(outputTypeValue.getValue()).thenReturn(integerTypeMirror);
+        elementValuesMap.put(outputTypeElement, outputTypeValue);
+
+        AnnotationValue outputGrpcTypeValue = mock(AnnotationValue.class);
+        when(outputGrpcTypeValue.getValue()).thenReturn(grpcIntegerTypeMirror);
+        elementValuesMap.put(outputGrpcTypeElement, outputGrpcTypeValue);
+
+        AnnotationValue outboundMapperValue = mock(AnnotationValue.class);
+        when(outboundMapperValue.getValue()).thenReturn(voidTypeMirror);
+        elementValuesMap.put(outboundMapperElement, outboundMapperValue);
+
+        AnnotationValue stepTypeValue = mock(AnnotationValue.class);
+        when(stepTypeValue.getValue()).thenReturn("org.pipelineframework.step.StepOneToOne");
+        elementValuesMap.put(stepTypeElement, stepTypeValue);
+
+        AnnotationValue grpcImplValue = mock(AnnotationValue.class);
+        when(grpcImplValue.getValue()).thenReturn(grpcStringTypeMirror);
+        elementValuesMap.put(grpcImplElement, grpcImplValue);
+
+        AnnotationValue grpcStubValue = mock(AnnotationValue.class);
+        when(grpcStubValue.getValue()).thenReturn(grpcStringTypeMirror);
+        elementValuesMap.put(grpcStubElement, grpcStubValue);
+
+        AnnotationValue grpcClientValue = mock(AnnotationValue.class);
+        when(grpcClientValue.getValue()).thenReturn("testClient");
+        elementValuesMap.put(grpcClientElement, grpcClientValue);
+
+        AnnotationValue sideEffectValue = mock(AnnotationValue.class);
+        when(sideEffectValue.getValue()).thenReturn(voidTypeMirror);
+        elementValuesMap.put(sideEffectElement, sideEffectValue);
+
+        AnnotationValue pathValue = mock(AnnotationValue.class);
+        when(pathValue.getValue()).thenReturn("/test");
+        elementValuesMap.put(pathElement, pathValue);
+
+        when(mockAnnotationMirror.getElementValues()).thenReturn(elementValuesMap);
 
         localProcessor.init(localProcessingEnv);
 
@@ -177,22 +262,31 @@ class PipelineStepProcessorTest {
         // Mock a valid class element annotated with @PipelineStep
         TypeElement mockServiceClass = mock(TypeElement.class);
         when(mockServiceClass.getKind()).thenReturn(ElementKind.CLASS);
-        javax.lang.model.element.Name nameMock = mock(javax.lang.model.element.Name.class);
-        when(nameMock.toString()).thenReturn("TestService");
-        when(mockServiceClass.getSimpleName()).thenReturn(nameMock);
+        when(mockServiceClass.getNestingKind()).thenReturn(NestingKind.TOP_LEVEL);
 
+        // Set up simple name
+        javax.lang.model.element.Name simpleNameMock = mock(javax.lang.model.element.Name.class);
+        when(simpleNameMock.toString()).thenReturn("TestService");
+        when(mockServiceClass.getSimpleName()).thenReturn(simpleNameMock);
+
+        // Set up qualified name
         javax.lang.model.element.Name qualifiedNameMock = mock(javax.lang.model.element.Name.class);
         when(qualifiedNameMock.toString()).thenReturn("test.TestService");
         when(mockServiceClass.getQualifiedName()).thenReturn(qualifiedNameMock);
 
-        // Mock the enclosing element (package) to avoid null pointer in ClassName.get()
-        PackageElement enclosingPackageElement = mock(PackageElement.class);
-        when(mockServiceClass.getEnclosingElement()).thenReturn((Element) enclosingPackageElement);
+        // Mock the enclosing element (package)
+        PackageElement packageElement = mock(PackageElement.class);
+        when(packageElement.getKind()).thenReturn(ElementKind.PACKAGE);
+        when(mockServiceClass.getEnclosingElement()).thenReturn(packageElement);
+
+        // Mock the package element name
+        javax.lang.model.element.Name packageNameMock = mock(javax.lang.model.element.Name.class);
+        when(packageNameMock.toString()).thenReturn("test");
+        when(packageElement.getQualifiedName()).thenReturn(packageNameMock);
         PipelineStep mockAnnotation = mock(PipelineStep.class);
         when(mockServiceClass.getAnnotation(PipelineStep.class)).thenReturn(mockAnnotation);
         // Mock the grpcEnabled property to return false (disabled)
         when(mockAnnotation.grpcEnabled()).thenReturn(false);
-        when(mockAnnotation.local()).thenReturn(false); // Also mock local to be false to generate client step
 
         // Use raw types to avoid generic issues
         when(roundEnv.getElementsAnnotatedWith(PipelineStep.class))
@@ -212,6 +306,7 @@ class PipelineStepProcessorTest {
         when(packageName.toString()).thenReturn("test");
         when(packageElementUtils.getQualifiedName()).thenReturn(packageName);
         when(elementsUtils.getPackageOf(mockServiceClass)).thenReturn(packageElementUtils);
+        when(elementsUtils.getTypeElement(mockServiceClass.getQualifiedName().toString())).thenReturn(mockServiceClass);
 
         // Mock the annotation mirror for PipelineStep
         AnnotationMirror mockAnnotationMirror = mock(AnnotationMirror.class);
@@ -220,6 +315,84 @@ class PipelineStepProcessorTest {
         javax.lang.model.type.DeclaredType declaredType = mock(javax.lang.model.type.DeclaredType.class);
         when(mockAnnotationMirror.getAnnotationType()).thenReturn(declaredType);
         when(declaredType.toString()).thenReturn("org.pipelineframework.annotation.PipelineStep");
+
+        // Mock annotation values to ensure the extractor can access them
+        // Removed duplicate: when(elementsUtils.getPackageOf(mockServiceClass)).thenReturn(packageElementUtils);
+
+        // Mock the element values map for the annotation with wildcard types
+        java.util.Map elementValuesMap = new java.util.HashMap();
+
+        // Create mock executable elements for the annotation attributes
+        ExecutableElement inputTypeElement = createMockExecutableElement("inputType");
+        ExecutableElement inputGrpcTypeElement = createMockExecutableElement("inputGrpcType");
+        ExecutableElement inboundMapperElement = createMockExecutableElement("inboundMapper");
+        ExecutableElement outputTypeElement = createMockExecutableElement("outputType");
+        ExecutableElement outputGrpcTypeElement = createMockExecutableElement("outputGrpcType");
+        ExecutableElement outboundMapperElement = createMockExecutableElement("outboundMapper");
+        ExecutableElement stepTypeElement = createMockExecutableElement("stepType");
+        ExecutableElement grpcImplElement = createMockExecutableElement("grpcImpl");
+        ExecutableElement grpcStubElement = createMockExecutableElement("grpcStub");
+        ExecutableElement grpcClientElement = createMockExecutableElement("grpcClient");
+        ExecutableElement sideEffectElement = createMockExecutableElement("sideEffect");
+        ExecutableElement pathElement = createMockExecutableElement("path");
+
+        // Create mock TypeElement objects for the types using the helper
+        javax.lang.model.type.DeclaredType stringTypeMirror = createMockTypeMirror("java.lang.String");
+        javax.lang.model.type.DeclaredType integerTypeMirror = createMockTypeMirror("java.lang.Integer");
+        javax.lang.model.type.DeclaredType voidTypeMirror = createMockTypeMirror("java.lang.Void");
+        javax.lang.model.type.DeclaredType grpcStringTypeMirror = createMockTypeMirror("test.TestServiceGrpcMessage");
+        javax.lang.model.type.DeclaredType grpcIntegerTypeMirror = createMockTypeMirror("test.TestServiceGrpcMessageResponse");
+
+        // Create mock annotation values with proper TypeMirror objects
+        AnnotationValue inputTypeValue = mock(AnnotationValue.class);
+        when(inputTypeValue.getValue()).thenReturn(stringTypeMirror);
+        elementValuesMap.put(inputTypeElement, inputTypeValue);
+
+        AnnotationValue inputGrpcTypeValue = mock(AnnotationValue.class);
+        when(inputGrpcTypeValue.getValue()).thenReturn(grpcStringTypeMirror);
+        elementValuesMap.put(inputGrpcTypeElement, inputGrpcTypeValue);
+
+        AnnotationValue inboundMapperValue = mock(AnnotationValue.class);
+        when(inboundMapperValue.getValue()).thenReturn(voidTypeMirror);
+        elementValuesMap.put(inboundMapperElement, inboundMapperValue);
+
+        AnnotationValue outputTypeValue = mock(AnnotationValue.class);
+        when(outputTypeValue.getValue()).thenReturn(integerTypeMirror);
+        elementValuesMap.put(outputTypeElement, outputTypeValue);
+
+        AnnotationValue outputGrpcTypeValue = mock(AnnotationValue.class);
+        when(outputGrpcTypeValue.getValue()).thenReturn(grpcIntegerTypeMirror);
+        elementValuesMap.put(outputGrpcTypeElement, outputGrpcTypeValue);
+
+        AnnotationValue outboundMapperValue = mock(AnnotationValue.class);
+        when(outboundMapperValue.getValue()).thenReturn(voidTypeMirror);
+        elementValuesMap.put(outboundMapperElement, outboundMapperValue);
+
+        AnnotationValue stepTypeValue = mock(AnnotationValue.class);
+        when(stepTypeValue.getValue()).thenReturn("org.pipelineframework.step.StepOneToOne");
+        elementValuesMap.put(stepTypeElement, stepTypeValue);
+
+        AnnotationValue grpcImplValue = mock(AnnotationValue.class);
+        when(grpcImplValue.getValue()).thenReturn(grpcStringTypeMirror);
+        elementValuesMap.put(grpcImplElement, grpcImplValue);
+
+        AnnotationValue grpcStubValue = mock(AnnotationValue.class);
+        when(grpcStubValue.getValue()).thenReturn(grpcStringTypeMirror);
+        elementValuesMap.put(grpcStubElement, grpcStubValue);
+
+        AnnotationValue grpcClientValue = mock(AnnotationValue.class);
+        when(grpcClientValue.getValue()).thenReturn("testClient");
+        elementValuesMap.put(grpcClientElement, grpcClientValue);
+
+        AnnotationValue sideEffectValue = mock(AnnotationValue.class);
+        when(sideEffectValue.getValue()).thenReturn(voidTypeMirror);
+        elementValuesMap.put(sideEffectElement, sideEffectValue);
+
+        AnnotationValue pathValue = mock(AnnotationValue.class);
+        when(pathValue.getValue()).thenReturn("/test");
+        elementValuesMap.put(pathElement, pathValue);
+
+        when(mockAnnotationMirror.getElementValues()).thenReturn(elementValuesMap);
 
         localProcessor.init(localProcessingEnv);
 
@@ -294,5 +467,60 @@ class PipelineStepProcessorTest {
         // The implementsReactiveService method has been removed in the new architecture
         // This test is no longer applicable
         assertTrue(true); // Placeholder to keep the test compiling
+    }
+
+    private ExecutableElement createMockExecutableElement(String name) {
+        ExecutableElement element = mock(ExecutableElement.class);
+        javax.lang.model.element.Name elementName = mock(javax.lang.model.element.Name.class);
+        when(elementName.toString()).thenReturn(name);
+        when(element.getSimpleName()).thenReturn(elementName);
+        when(element.getSimpleName().toString()).thenReturn(name);
+        return element;
+    }
+
+    private javax.lang.model.type.DeclaredType createMockTypeMirror(String qualifiedName) {
+        String packageName = qualifiedName.contains(".")
+            ? qualifiedName.substring(0, qualifiedName.lastIndexOf('.'))
+            : "";
+        TypeElement typeElement = mock(TypeElement.class);
+        Name nameMock = mock(Name.class);
+        when(nameMock.toString()).thenReturn(qualifiedName);
+        when(typeElement.getQualifiedName()).thenReturn(nameMock);
+        when(typeElement.getKind()).thenReturn(ElementKind.CLASS);
+        when(typeElement.getModifiers()).thenReturn(Collections.emptySet());
+
+        Name simpleNameMock = mock(Name.class);
+        String simpleName = qualifiedName.contains(".") ? qualifiedName.substring(qualifiedName.lastIndexOf('.') + 1) : qualifiedName;
+        when(simpleNameMock.toString()).thenReturn(simpleName);
+        when(typeElement.getSimpleName()).thenReturn(simpleNameMock);
+
+        PackageElement packageElement = mock(PackageElement.class);
+        Name packageNameMock = mock(Name.class);
+        when(packageNameMock.toString()).thenReturn(packageName);
+        when(packageElement.getQualifiedName()).thenReturn(packageNameMock);
+        when(packageElement.getKind()).thenReturn(ElementKind.PACKAGE);
+        when(typeElement.getEnclosingElement()).thenReturn(packageElement);
+
+        javax.lang.model.type.DeclaredType typeMirror = mock(javax.lang.model.type.DeclaredType.class);
+        when(typeMirror.asElement()).thenReturn(typeElement);
+        when(typeMirror.toString()).thenReturn(qualifiedName);
+        when(typeMirror.getKind()).thenReturn(javax.lang.model.type.TypeKind.DECLARED);
+        when(typeMirror.getTypeArguments()).thenReturn(java.util.Collections.emptyList());
+
+        javax.lang.model.type.NoType noType = mock(javax.lang.model.type.NoType.class);
+        when(noType.getKind()).thenReturn(javax.lang.model.type.TypeKind.NONE);
+        when(typeMirror.getEnclosingType()).thenReturn(noType);
+
+        // Mock the accept method for both the declared type and the enclosing NoType
+        when(typeMirror.accept(any(), any())).thenAnswer(invocation -> {
+            javax.lang.model.type.TypeVisitor visitor = invocation.getArgument(0);
+            return visitor.visitDeclared(typeMirror, invocation.getArgument(1));
+        });
+        when(noType.accept(any(), any())).thenAnswer(invocation -> {
+            javax.lang.model.type.TypeVisitor visitor = invocation.getArgument(0);
+            return visitor.visitNoType(noType, invocation.getArgument(1));
+        });
+
+        return typeMirror;
     }
 }

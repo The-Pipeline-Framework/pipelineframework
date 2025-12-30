@@ -2,10 +2,7 @@ package org.pipelineframework.processor;
 
 import java.io.IOException;
 import java.util.Set;
-import javax.annotation.processing.ProcessingEnvironment;
-import javax.annotation.processing.RoundEnvironment;
-import javax.annotation.processing.SupportedAnnotationTypes;
-import javax.annotation.processing.SupportedSourceVersion;
+import javax.annotation.processing.*;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
@@ -13,14 +10,21 @@ import javax.lang.model.element.TypeElement;
 import javax.tools.Diagnostic;
 import javax.tools.JavaFileObject;
 
+import com.google.protobuf.DescriptorProtos;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.processor.extractor.PipelineStepIRExtractor;
 import org.pipelineframework.processor.ir.GenerationTarget;
-import org.pipelineframework.processor.ir.PipelineStepIR;
+import org.pipelineframework.processor.ir.GrpcBinding;
+import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.RestBinding;
 import org.pipelineframework.processor.renderer.ClientStepRenderer;
 import org.pipelineframework.processor.renderer.GenerationContext;
 import org.pipelineframework.processor.renderer.GrpcServiceAdapterRenderer;
 import org.pipelineframework.processor.renderer.RestResourceRenderer;
+import org.pipelineframework.processor.util.DescriptorFileLocator;
+import org.pipelineframework.processor.util.GrpcBindingResolver;
+import org.pipelineframework.processor.util.RestBindingResolver;
+import org.pipelineframework.processor.util.RoleMetadataGenerator;
 import org.pipelineframework.processor.validator.PipelineStepValidator;
 
 /**
@@ -32,6 +36,10 @@ import org.pipelineframework.processor.validator.PipelineStepValidator;
  */
 @SuppressWarnings("unused")
 @SupportedAnnotationTypes("org.pipelineframework.annotation.PipelineStep")
+@SupportedOptions({
+    "protobuf.descriptor.path",  // Optional: path to directory containing descriptor files
+    "protobuf.descriptor.file"   // Optional: path to a specific descriptor file
+})
 @SupportedSourceVersion(SourceVersion.RELEASE_21)
 public class PipelineStepProcessor extends AbstractProcessingTool {
 
@@ -66,6 +74,9 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
     private GrpcServiceAdapterRenderer grpcRenderer;
     private ClientStepRenderer clientRenderer;
     private RestResourceRenderer restRenderer;
+    private GrpcBindingResolver bindingResolver;
+    private RestBindingResolver restBindingResolver;
+    private RoleMetadataGenerator roleMetadataGenerator;
 
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
@@ -73,9 +84,12 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
 
         this.irExtractor = new PipelineStepIRExtractor(processingEnv);
         this.validator = new PipelineStepValidator(processingEnv);
-        this.grpcRenderer = new GrpcServiceAdapterRenderer();
-        this.clientRenderer = new ClientStepRenderer();
+        this.grpcRenderer = new GrpcServiceAdapterRenderer(GenerationTarget.GRPC_SERVICE);
+        this.clientRenderer = new ClientStepRenderer(GenerationTarget.CLIENT_STEP);
         this.restRenderer = new RestResourceRenderer();
+        this.bindingResolver = new GrpcBindingResolver();
+        this.restBindingResolver = new RestBindingResolver();
+        this.roleMetadataGenerator = new RoleMetadataGenerator(processingEnv);
     }
 
     /**
@@ -85,7 +99,28 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
         if (annotations.isEmpty()) {
+            // Only write metadata when no more annotations to process (end of last round)
+            if (roundEnv.processingOver()) {
+                try {
+                    roleMetadataGenerator.writeRoleMetadata();
+                } catch (IOException e) {
+                    processingEnv.getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR,
+                        "Failed to write role metadata: " + e.getMessage());
+                }
+            }
             return false;
+        }
+
+        // Locate and load FileDescriptorSet from protobuf compilation
+        DescriptorProtos.FileDescriptorSet descriptorSet = null;
+        DescriptorFileLocator descriptorLocator = new DescriptorFileLocator();
+        try {
+            descriptorSet = descriptorLocator.locateAndLoadDescriptors(processingEnv.getOptions());
+        } catch (IOException e) {
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING,
+                "Failed to load protobuf FileDescriptorSet: " + e.getMessage() +
+                ". Falling back to annotation-based type resolution. " +
+                "Please ensure protobuf compilation happens before annotation processing.");
         }
 
         for (Element annotatedElement : roundEnv.getElementsAnnotatedWith(PipelineStep.class)) {
@@ -98,53 +133,79 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
             TypeElement serviceClass = (TypeElement) annotatedElement;
             PipelineStep pipelineStep = serviceClass.getAnnotation(PipelineStep.class);
 
-            // Extract semantic information into IR
-            PipelineStepIR ir = irExtractor.extract(serviceClass, pipelineStep);
-            
-            // Validate the IR for semantic consistency
-            if (!validator.validate(ir, serviceClass)) {
+            // Extract semantic information into model and binding
+            var result = irExtractor.extract(serviceClass);
+            if (result == null) {
                 continue;
             }
-            
-            // Generate artifacts based on the IR
-            generateArtifacts(ir);
+            PipelineStepModel model = result.model();
+
+            // Validate the model for semantic consistency
+            if (!validator.validate(model, serviceClass)) {
+                continue;
+            }
+
+            GrpcBinding grpcBinding = null;
+            if (model.enabledTargets().contains(GenerationTarget.GRPC_SERVICE)
+                || model.enabledTargets().contains(GenerationTarget.CLIENT_STEP)) {
+                try {
+                    grpcBinding = bindingResolver.resolve(model, descriptorSet);
+                } catch (Exception e) {
+                    processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR,
+                        "Failed to resolve gRPC binding for service '" + model.serviceName() + "': " + e.getMessage() +
+                        ". This indicates a mismatch between the @PipelineStep annotation and the protobuf definition.");
+                    continue;
+                }
+            }
+
+            RestBinding restBinding = null;
+            if (model.enabledTargets().contains(GenerationTarget.REST_RESOURCE)) {
+                restBinding = restBindingResolver.resolve(model, processingEnv);
+            }
+
+            // Generate artifacts based on the resolved bindings
+            generateArtifacts(model, grpcBinding, restBinding);
         }
 
         return true;
     }
-    
-    private void generateArtifacts(PipelineStepIR ir) {
-        for (GenerationTarget target : ir.getEnabledTargets()) {
+
+    private void generateArtifacts(PipelineStepModel model, GrpcBinding grpcBinding, RestBinding restBinding) {
+        for (GenerationTarget target : model.enabledTargets()) {
             try {
                 switch (target) {
                     case GRPC_SERVICE:
-                        if (ir.getStepKind() != org.pipelineframework.processor.ir.StepKind.LOCAL) {
-                            JavaFileObject grpcFile = processingEnv.getFiler()
-                                .createSourceFile(ir.getServicePackage() + PIPELINE_PACKAGE_SUFFIX +
-                                    "." + ir.getServiceName() + GRPC_SERVICE_SUFFIX);
-                            grpcRenderer.render(ir, new GenerationContext(processingEnv, grpcFile));
-                        }
+                        String grpcClassName = model.servicePackage() + PIPELINE_PACKAGE_SUFFIX +
+                                "." + model.serviceName() + GRPC_SERVICE_SUFFIX;
+                        JavaFileObject grpcFile = processingEnv.getFiler()
+                                .createSourceFile(grpcClassName);
+                        grpcRenderer.render(grpcBinding, new GenerationContext(processingEnv, grpcFile));
+                        roleMetadataGenerator.recordClassWithRole(grpcClassName, "PIPELINE_SERVER");
                         break;
                     case CLIENT_STEP:
-                        if (ir.getStepKind() != org.pipelineframework.processor.ir.StepKind.LOCAL) {
-                            JavaFileObject clientFile = processingEnv.getFiler()
-                                .createSourceFile(ir.getServicePackage() + PIPELINE_PACKAGE_SUFFIX +
-                                    "." + ir.getServiceName().replace("Service", "") +
-                                    CLIENT_STEP_SUFFIX);
-                            clientRenderer.render(ir, new GenerationContext(processingEnv, clientFile));
-                        }
+                        String clientClassName = model.servicePackage() + PIPELINE_PACKAGE_SUFFIX +
+                                "." + model.serviceName().replace("Service", "") +
+                                CLIENT_STEP_SUFFIX;
+                        JavaFileObject clientFile = processingEnv.getFiler()
+                            .createSourceFile(clientClassName);
+                        clientRenderer.render(grpcBinding, new GenerationContext(processingEnv, clientFile));
+                        // Determine if it's a plugin client or orchestrator client
+                        String role = clientClassName.contains("SideEffect") ? "PLUGIN_CLIENT" : "ORCHESTRATOR_CLIENT";
+                        roleMetadataGenerator.recordClassWithRole(clientClassName, role);
                         break;
                     case REST_RESOURCE:
+                        String restClassName = model.servicePackage() + PIPELINE_PACKAGE_SUFFIX +
+                                "." + model.serviceName().replace("Service", "").replace("Reactive", "") +
+                                REST_RESOURCE_SUFFIX;
                         JavaFileObject restFile = processingEnv.getFiler()
-                            .createSourceFile(ir.getServicePackage() + PIPELINE_PACKAGE_SUFFIX +
-                                "." + ir.getServiceName().replace("Service", "").replace("Reactive", "") +
-                                REST_RESOURCE_SUFFIX);
-                        restRenderer.render(ir, new GenerationContext(processingEnv, restFile));
+                            .createSourceFile(restClassName);
+                        restRenderer.render(restBinding, new GenerationContext(processingEnv, restFile));
+                        roleMetadataGenerator.recordClassWithRole(restClassName, "REST_SERVER");
                         break;
                 }
             } catch (IOException e) {
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR,
-                    "Failed to generate " + target + " for " + ir.getServiceName() + ": " + e.getMessage());
+                    "Failed to generate " + target + " for " + model.serviceName() + ": " + e.getMessage());
             }
         }
     }

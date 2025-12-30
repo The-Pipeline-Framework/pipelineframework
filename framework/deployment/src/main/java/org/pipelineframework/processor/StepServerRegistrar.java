@@ -16,8 +16,6 @@
 
 package org.pipelineframework.processor;
 
-import static org.pipelineframework.processor.PipelineStepProcessor.GRPC_SERVICE_SUFFIX;
-
 import io.quarkus.arc.deployment.AdditionalBeanBuildItem;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
@@ -26,6 +24,8 @@ import io.quarkus.deployment.builditem.FeatureBuildItem;
 import org.jboss.jandex.IndexView;
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.PipelineCliAppConfig;
+
+import static org.pipelineframework.processor.PipelineStepProcessor.GRPC_SERVICE_SUFFIX;
 
 /**
  * Registers generated gRPC service classes as additional unremovable beans when CLI generation is disabled.
@@ -53,7 +53,7 @@ public class StepServerRegistrar {
 
     /**
      * Registers generated gRPC service classes as unremovable CDI beans when CLI generation is disabled.
-     *
+     * <p>
      * If CLI generation is enabled this step performs no registration.
      *
      * @param additionalBeans producer used to register discovered service classes as unremovable CDI beans

@@ -10,42 +10,45 @@ import org.jboss.resteasy.reactive.RestResponse;
 import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.GenerationTarget;
-import org.pipelineframework.processor.ir.PipelineStepIR;
+import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.RestBinding;
 
 /**
- * Renderer for REST resource implementations based on PipelineStepIR
+ * Renderer for REST resource implementations based on PipelineStepModel and RestBinding
  */
-public class RestResourceRenderer implements PipelineRenderer {
+public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
 
     /**
      * Creates a new RestResourceRenderer.
      */
     public RestResourceRenderer() {
     }
-    
+
     @Override
     public GenerationTarget target() {
         return GenerationTarget.REST_RESOURCE;
     }
-    
+
     @Override
-    public void render(PipelineStepIR ir, GenerationContext ctx) throws IOException {
-        TypeSpec restResourceClass = buildRestResourceClass(ir, ctx.getProcessingEnv());
-        
+    public void render(RestBinding binding, GenerationContext ctx) throws IOException {
+        TypeSpec restResourceClass = buildRestResourceClass(binding);
+
         // Write the generated class
         JavaFile javaFile = JavaFile.builder(
-            ir.getServicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX, 
+            binding.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
             restResourceClass)
             .build();
 
-        try (var writer = ctx.getBuilderFile().openWriter()) {
+        try (var writer = ctx.builderFile().openWriter()) {
             javaFile.writeTo(writer);
         }
     }
-    
-    private TypeSpec buildRestResourceClass(PipelineStepIR ir, javax.annotation.processing.ProcessingEnvironment processingEnv) {
-        String serviceClassName = ir.getServiceName();
-        
+
+    private TypeSpec buildRestResourceClass(RestBinding binding) {
+        PipelineStepModel model = binding.model();
+
+        String serviceClassName = binding.serviceName();
+
         // Determine the resource class name - remove "Service" and optionally "Reactive" for cleaner naming
         String baseName = serviceClassName.replace("Service", "");
         if (baseName.endsWith("Reactive")) {
@@ -55,17 +58,23 @@ public class RestResourceRenderer implements PipelineRenderer {
 
         // Create the REST resource class
         TypeSpec.Builder resourceBuilder = TypeSpec.classBuilder(resourceClassName)
-            .addModifiers(Modifier.PUBLIC);
+            .addModifiers(Modifier.PUBLIC)
+            // Add the GeneratedRole annotation to indicate this is a REST server
+            .addAnnotation(AnnotationSpec.builder(ClassName.get("org.pipelineframework.annotation", "GeneratedRole"))
+                    .addMember("value", "$T.$L",
+                        ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role"),
+                        "REST_SERVER")
+                    .build());
 
         // Add @Path annotation - derive path from service class name or use provided path
-        String servicePath = ir.getRestPath() != null ? ir.getRestPath() : deriveResourcePath(serviceClassName);
+        String servicePath = binding.restPathOverride() != null ? binding.restPathOverride() : deriveResourcePath(serviceClassName);
         resourceBuilder.addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Path"))
             .addMember("value", "$S", servicePath)
             .build());
 
         // Add service field with @Inject
         FieldSpec serviceField = FieldSpec.builder(
-            ir.getServiceClassName(),
+            model.serviceClassName(),
             "domainService")
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
             .build();
@@ -75,28 +84,28 @@ public class RestResourceRenderer implements PipelineRenderer {
         String inboundMapperFieldName = "inboundMapper";
         String outboundMapperFieldName = "outboundMapper";
 
-        if (ir.getInputMapping().hasMapper()) {
-            String inboundMapperSimpleName = ir.getInputMapping().getMapperType().toString().substring(
-                ir.getInputMapping().getMapperType().toString().lastIndexOf('.') + 1);
-            inboundMapperFieldName = inboundMapperSimpleName.substring(0, 1).toLowerCase() + 
+        if (model.inputMapping().hasMapper()) {
+            String inboundMapperSimpleName = model.inputMapping().mapperType().toString().substring(
+                model.inputMapping().mapperType().toString().lastIndexOf('.') + 1);
+            inboundMapperFieldName = inboundMapperSimpleName.substring(0, 1).toLowerCase() +
                 inboundMapperSimpleName.substring(1);
 
             FieldSpec inboundMapperField = FieldSpec.builder(
-                ir.getInputMapping().getMapperType(),
+                model.inputMapping().mapperType(),
                 inboundMapperFieldName)
                 .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
                 .build();
             resourceBuilder.addField(inboundMapperField);
         }
 
-        if (ir.getOutputMapping().hasMapper()) {
-            String outboundMapperSimpleName = ir.getOutputMapping().getMapperType().toString().substring(
-                ir.getOutputMapping().getMapperType().toString().lastIndexOf('.') + 1);
-            outboundMapperFieldName = outboundMapperSimpleName.substring(0, 1).toLowerCase() + 
+        if (model.outputMapping().hasMapper()) {
+            String outboundMapperSimpleName = model.outputMapping().mapperType().toString().substring(
+                model.outputMapping().mapperType().toString().lastIndexOf('.') + 1);
+            outboundMapperFieldName = outboundMapperSimpleName.substring(0, 1).toLowerCase() +
                 outboundMapperSimpleName.substring(1);
 
             FieldSpec outboundMapperField = FieldSpec.builder(
-                ir.getOutputMapping().getMapperType(),
+                model.outputMapping().mapperType(),
                 outboundMapperFieldName)
                 .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
                 .build();
@@ -114,28 +123,28 @@ public class RestResourceRenderer implements PipelineRenderer {
             .build();
         resourceBuilder.addField(loggerField);
 
-        // For REST resources, we should use appropriate DTO types, not gRPC types
-        // The DTO types should be derived from domain types (following the original approach)
-        // using the same transformation logic as the original getDtoType method would have used
-        TypeName inputDtoClassName = ir.getInputMapping().getDomainType() != null ?
-            convertDomainToDtoType(ir.getInputMapping().getDomainType()) : ClassName.OBJECT;
-        TypeName outputDtoClassName = ir.getOutputMapping().getDomainType() != null ?
-            convertDomainToDtoType(ir.getOutputMapping().getDomainType()) : ClassName.OBJECT;
+        // For REST resources, we use appropriate DTO types, not gRPC types
+        // The DTO types should be derived from domain types using the same
+        // transformation logic as the original getDtoType method would have used
+        TypeName inputDtoClassName = model.inputMapping().domainType() != null ?
+            convertDomainToDtoType(model.inputMapping().domainType()) : ClassName.OBJECT;
+        TypeName outputDtoClassName = model.outputMapping().domainType() != null ?
+            convertDomainToDtoType(model.outputMapping().domainType()) : ClassName.OBJECT;
 
         // Create the process method based on service type (determined from streaming shape)
-        MethodSpec processMethod = switch (ir.getStreamingShape()) {
+        MethodSpec processMethod = switch (model.streamingShape()) {
             case UNARY_STREAMING -> createReactiveStreamingServiceProcessMethod(
                     inputDtoClassName, outputDtoClassName,
-                    inboundMapperFieldName, outboundMapperFieldName, ir);
+                    inboundMapperFieldName, outboundMapperFieldName, model);
             case STREAMING_UNARY -> createReactiveStreamingClientServiceProcessMethod(
                     inputDtoClassName, outputDtoClassName,
-                    inboundMapperFieldName, outboundMapperFieldName, ir);
+                    inboundMapperFieldName, outboundMapperFieldName, model);
             case STREAMING_STREAMING -> createReactiveBidirectionalStreamingServiceProcessMethod(
                     inputDtoClassName, outputDtoClassName,
-                    inboundMapperFieldName, outboundMapperFieldName, ir);
+                    inboundMapperFieldName, outboundMapperFieldName, model);
             default -> createReactiveServiceProcessMethod(
                     inputDtoClassName, outputDtoClassName,
-                    inboundMapperFieldName, outboundMapperFieldName, ir);
+                    inboundMapperFieldName, outboundMapperFieldName, model);
         };
 
         resourceBuilder.addMethod(processMethod);
@@ -146,11 +155,11 @@ public class RestResourceRenderer implements PipelineRenderer {
 
         return resourceBuilder.build();
     }
-    
+
     private MethodSpec createReactiveServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             String inboundMapperFieldName, String outboundMapperFieldName,
-            PipelineStepIR ir) {
+            PipelineStepModel model) {
 
         TypeName uniOutputDto = ParameterizedTypeName.get(ClassName.get(Uni.class), outputDtoClassName);
 
@@ -166,14 +175,14 @@ public class RestResourceRenderer implements PipelineRenderer {
 
         // Add the implementation code
         methodBuilder.addStatement("$T inputDomain = $L.fromDto(inputDto)",
-                ir.getInputMapping().getDomainType(),
+                model.inputMapping().domainType(),
                 inboundMapperFieldName);
 
         methodBuilder.addStatement("return domainService.process(inputDomain).map(output -> $L.toDto(output))",
                 outboundMapperFieldName);
 
         // Add @RunOnVirtualThread annotation if the property is enabled
-        if (ir.getExecutionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
+        if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
             methodBuilder.addAnnotation(ClassName.get("io.smallrye.common.annotation", "RunOnVirtualThread"));
         }
 
@@ -183,7 +192,7 @@ public class RestResourceRenderer implements PipelineRenderer {
     private MethodSpec createReactiveStreamingServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             String inboundMapperFieldName, String outboundMapperFieldName,
-            PipelineStepIR ir) {
+            PipelineStepModel model) {
 
         TypeName multiOutputDto = ParameterizedTypeName.get(ClassName.get(Multi.class), outputDtoClassName);
 
@@ -202,7 +211,7 @@ public class RestResourceRenderer implements PipelineRenderer {
 
         // Add the implementation code
         methodBuilder.addStatement("$T inputDomain = $L.fromDto(inputDto)",
-                ir.getInputMapping().getDomainType(),
+                model.inputMapping().domainType(),
                 inboundMapperFieldName);
 
         // Return the stream, allowing errors to propagate to the exception mapper
@@ -210,7 +219,7 @@ public class RestResourceRenderer implements PipelineRenderer {
                 outboundMapperFieldName);
 
         // Add @RunOnVirtualThread annotation if the property is enabled
-        if (ir.getExecutionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
+        if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
             methodBuilder.addAnnotation(ClassName.get("io.smallrye.common.annotation", "RunOnVirtualThread"));
         }
 
@@ -220,7 +229,7 @@ public class RestResourceRenderer implements PipelineRenderer {
     private MethodSpec createReactiveStreamingClientServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             String inboundMapperFieldName, String outboundMapperFieldName,
-            PipelineStepIR ir) {
+            PipelineStepModel model) {
 
         TypeName multiInputDto = ParameterizedTypeName.get(ClassName.get(Multi.class), inputDtoClassName);
         TypeName uniOutputDto = ParameterizedTypeName.get(ClassName.get(Uni.class), outputDtoClassName);
@@ -239,14 +248,14 @@ public class RestResourceRenderer implements PipelineRenderer {
         // Add the implementation code
         methodBuilder.addStatement("$T<$T> domainInputs = inputDtos.map(input -> $L.fromDto(input))",
                 ClassName.get(Multi.class),
-                ir.getInputMapping().getDomainType(),
+                model.inputMapping().domainType(),
                 inboundMapperFieldName);
 
         methodBuilder.addStatement("return domainService.process(domainInputs).map(output -> $L.toDto(output))",
                 outboundMapperFieldName);
 
         // Add @RunOnVirtualThread annotation if the property is enabled
-        if (ir.getExecutionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
+        if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
             methodBuilder.addAnnotation(ClassName.get("io.smallrye.common.annotation", "RunOnVirtualThread"));
         }
 
@@ -256,7 +265,7 @@ public class RestResourceRenderer implements PipelineRenderer {
     private MethodSpec createReactiveBidirectionalStreamingServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             String inboundMapperFieldName, String outboundMapperFieldName,
-            PipelineStepIR ir) {
+            PipelineStepModel model) {
 
         TypeName multiInputDto = ParameterizedTypeName.get(ClassName.get(Multi.class), inputDtoClassName);
         TypeName multiOutputDto = ParameterizedTypeName.get(ClassName.get(Multi.class), outputDtoClassName);
@@ -283,20 +292,20 @@ public class RestResourceRenderer implements PipelineRenderer {
         // Add the implementation code
         methodBuilder.addStatement("$T<$T> domainInputs = inputDtos.map(input -> $L.fromDto(input))",
                 ClassName.get(Multi.class),
-                ir.getInputMapping().getDomainType(),
+                model.inputMapping().domainType(),
                 inboundMapperFieldName);
 
         methodBuilder.addStatement("return domainService.process(domainInputs).map(output -> $L.toDto(output))",
                 outboundMapperFieldName);
 
         // Add @RunOnVirtualThread annotation if the property is enabled
-        if (ir.getExecutionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
+        if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
             methodBuilder.addAnnotation(ClassName.get("io.smallrye.common.annotation", "RunOnVirtualThread"));
         }
 
         return methodBuilder.build();
     }
-    
+
     private MethodSpec createExceptionMapperMethod() {
         return MethodSpec.methodBuilder("handleException")
             .addAnnotation(AnnotationSpec.builder(ClassName.get(ServerExceptionMapper.class))
@@ -322,7 +331,7 @@ public class RestResourceRenderer implements PipelineRenderer {
             .endControlFlow()
             .build();
     }
-    
+
     private String deriveResourcePath(String className) {
         // Remove "Service" suffix if present
         if (className.endsWith("Service")) {

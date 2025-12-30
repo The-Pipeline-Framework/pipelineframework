@@ -10,322 +10,368 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.GenerationTarget;
-import org.pipelineframework.processor.ir.PipelineStepIR;
+import org.pipelineframework.processor.ir.GrpcBinding;
+import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.util.GrpcJavaTypeResolver;
 
 /**
- * Renderer for gRPC service adapters based on PipelineStepIR
+ * Renderer for gRPC service adapters based on PipelineStepModel and GrpcBinding.
+ * Supports both regular gRPC services and plugin gRPC services
+ *
+ * @param target The generation target for this renderer
  */
-public class GrpcServiceAdapterRenderer implements PipelineRenderer {
+public record GrpcServiceAdapterRenderer(GenerationTarget target) implements PipelineRenderer<GrpcBinding> {
 
-    /**
-     * Creates a new GrpcServiceAdapterRenderer.
-     */
-    public GrpcServiceAdapterRenderer() {
-    }
-    
     @Override
-    public GenerationTarget target() {
-        return GenerationTarget.GRPC_SERVICE;
-    }
-    
-    @Override
-    public void render(PipelineStepIR ir, GenerationContext ctx) throws IOException {
-        if (ir.getStepKind() == org.pipelineframework.processor.ir.StepKind.LOCAL) {
-            return; // Skip for local steps
-        }
-        
-        TypeSpec grpcServiceClass = buildGrpcServiceClass(ir, ctx.getProcessingEnv());
-        
+    public void render(GrpcBinding binding, GenerationContext ctx) throws IOException {
+        TypeSpec grpcServiceClass = buildGrpcServiceClass(binding);
+
         // Write the generated class
         JavaFile javaFile = JavaFile.builder(
-            ir.getServicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX, 
-            grpcServiceClass)
-            .build();
+                        binding.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
+                        grpcServiceClass)
+                .build();
 
-        try (var writer = ctx.getBuilderFile().openWriter()) {
+        try (var writer = ctx.builderFile().openWriter()) {
             javaFile.writeTo(writer);
         }
     }
-    
-    private TypeSpec buildGrpcServiceClass(PipelineStepIR ir, javax.annotation.processing.ProcessingEnvironment processingEnv) {
-        String simpleClassName = ir.getServiceName() + PipelineStepProcessor.GRPC_SERVICE_SUFFIX;
-        
+
+    private TypeSpec buildGrpcServiceClass(GrpcBinding binding) {
+        PipelineStepModel model = binding.model();
+        String simpleClassName;
+        // For gRPC services: ${ServiceName}GrpcService
+        simpleClassName = binding.serviceName() + PipelineStepProcessor.GRPC_SERVICE_SUFFIX;
+
         // Determine the appropriate gRPC service base class based on configuration
-        ClassName grpcBaseClassName = determineGrpcBaseClass(ir);
-        
+        ClassName grpcBaseClassName = determineGrpcBaseClass(binding);
+
         TypeSpec.Builder grpcServiceBuilder = TypeSpec.classBuilder(simpleClassName)
-            .addModifiers(Modifier.PUBLIC)
-            .addAnnotation(AnnotationSpec.builder(ClassName.get(GrpcService.class)).build())
-            .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Singleton")).build())
-            .addAnnotation(AnnotationSpec.builder(Unremovable.class).build())
-            .superclass(grpcBaseClassName); // Extend the actual gRPC service base class
+                .addModifiers(Modifier.PUBLIC)
+                .addAnnotation(AnnotationSpec.builder(ClassName.get(GrpcService.class)).build())
+                .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Singleton")).build())
+                .addAnnotation(AnnotationSpec.builder(Unremovable.class).build())
+                // Add the GeneratedRole annotation to indicate this is a pipeline server
+                .addAnnotation(AnnotationSpec.builder(ClassName.get("org.pipelineframework.annotation", "GeneratedRole"))
+                        .addMember("value", "$T.$L",
+                            ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role"),
+                            determineRoleForGrpcService(binding))
+                        .build())
+                .superclass(grpcBaseClassName); // Extend the actual gRPC service base class
 
         // Add mapper fields with @Inject if they exist
-        if (ir.getInputMapping().hasMapper()) {
+        if (model.inputMapping().hasMapper()) {
             FieldSpec inboundMapperField = FieldSpec.builder(
-                ir.getInputMapping().getMapperType(),
-                "inboundMapper")
-                .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
-                .build();
+                            model.inputMapping().mapperType(),
+                            "inboundMapper")
+                    .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
+                    .build();
             grpcServiceBuilder.addField(inboundMapperField);
         }
 
-        if (ir.getOutputMapping().hasMapper()) {
+        if (model.outputMapping().hasMapper()) {
             FieldSpec outboundMapperField = FieldSpec.builder(
-                ir.getOutputMapping().getMapperType(),
-                "outboundMapper")
-                .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
-                .build();
+                            model.outputMapping().mapperType(),
+                            "outboundMapper")
+                    .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
+                    .build();
             grpcServiceBuilder.addField(outboundMapperField);
         }
 
+        TypeName serviceType = model.serviceClassName();
+
         FieldSpec serviceField = FieldSpec.builder(
-            ir.getServiceClassName(),
-            "service")
-            .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
-            .build();
+                        serviceType,
+                        "service")
+                .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
+                .build();
         grpcServiceBuilder.addField(serviceField);
 
         // Add the required gRPC service method implementation based on streaming shape
-        switch (ir.getStreamingShape()) {
+        switch (model.streamingShape()) {
             case UNARY_UNARY:
-                addUnaryUnaryMethod(grpcServiceBuilder, ir);
+                addUnaryUnaryMethod(grpcServiceBuilder, binding);
                 break;
             case UNARY_STREAMING:
-                addUnaryStreamingMethod(grpcServiceBuilder, ir);
+                addUnaryStreamingMethod(grpcServiceBuilder, binding);
                 break;
             case STREAMING_UNARY:
-                addStreamingUnaryMethod(grpcServiceBuilder, ir);
+                addStreamingUnaryMethod(grpcServiceBuilder, binding);
                 break;
             case STREAMING_STREAMING:
-                addStreamingStreamingMethod(grpcServiceBuilder, ir);
+                addStreamingStreamingMethod(grpcServiceBuilder, binding);
                 break;
         }
 
         return grpcServiceBuilder.build();
     }
-    
-    private ClassName determineGrpcBaseClass(PipelineStepIR ir) {
-        // Check if there's an explicit gRPC implementation class specified in the annotation
-        if (ir.getGrpcImplType() != null) {
-            // Use the explicit gRPC implementation class
-            String grpcImplTypeStr = ir.getGrpcImplType().toString();
-            // Split the name to package and simple name
-            int lastDot = grpcImplTypeStr.lastIndexOf('.');
-            if (lastDot > 0) {
-                String packageName = grpcImplTypeStr.substring(0, lastDot);
-                String simpleName = grpcImplTypeStr.substring(lastDot + 1);
-                return ClassName.get(packageName, simpleName);
-            } else {
-                // If no package, just use the simple name
-                return ClassName.get("", grpcImplTypeStr);
-            }
-        }
 
-        // Default to determine the package from available gRPC types
-        String grpcPackage = ir.getServicePackage() + ".grpc";
-
-        // Try to determine the actual gRPC package from grpcStub if available
-        // This is more reliable than using inputGrpcType/outputGrpcType which might be generic types like Any/Empty
-        if (ir.getGrpcStubType() != null &&
-            !ir.getGrpcStubType().toString().equals("void") &&
-            !ir.getGrpcStubType().toString().equals("java.lang.Void") &&
-            !ir.getGrpcStubType().toString().equals(Void.class.getName())) {
-            // Use the grpcStub type to determine the correct package
-            String grpcStubString = ir.getGrpcStubType().toString();
-            int lastDotIndex = grpcStubString.lastIndexOf('.');
-            if (lastDotIndex > 0) {
-                grpcPackage = grpcStubString.substring(0, lastDotIndex);
-            }
-        } else if (ir.getInputMapping().getDomainType() != null &&
-                   !ir.getInputMapping().getDomainType().toString().equals("void") &&
-                   !ir.getInputMapping().getDomainType().toString().equals("java.lang.Void") &&
-                   !ir.getInputMapping().getDomainType().toString().contains("google.protobuf")) {
-            // Use input domain type if grpcStub is not available
-            String domainTypeString = ir.getInputMapping().getDomainType().toString();
-            int lastDotIndex = domainTypeString.lastIndexOf('.');
-            if (lastDotIndex > 0) {
-                grpcPackage = domainTypeString.substring(0, lastDotIndex);
-            }
-        } else if (ir.getOutputMapping().getDomainType() != null &&
-                   !ir.getOutputMapping().getDomainType().toString().equals("void") &&
-                   !ir.getOutputMapping().getDomainType().toString().equals("java.lang.Void") &&
-                   !ir.getOutputMapping().getDomainType().toString().contains("google.protobuf")) {
-            // Use output domain type if other options are not available
-            String domainTypeString = ir.getOutputMapping().getDomainType().toString();
-            int lastDotIndex = domainTypeString.lastIndexOf('.');
-            if (lastDotIndex > 0) {
-                grpcPackage = domainTypeString.substring(0, lastDotIndex);
-            }
-        }
-
-        // Construct the gRPC service base class using the determined package
-        // The gRPC implementation class follows the pattern: {ServiceName}ImplBase
-        // where {ServiceName} is the full service class name (e.g., "PersistenceService" -> "PersistenceServiceImplBase")
-        String baseServiceName = ir.getServiceName();
-        String grpcServiceBaseClassSimple = baseServiceName + "ImplBase";
-
-        return ClassName.get(grpcPackage, grpcServiceBaseClassSimple);
+    private ClassName determineGrpcBaseClass(GrpcBinding binding) {
+        // Use the new GrpcJavaTypeResolver to determine the gRPC implementation base class
+        GrpcJavaTypeResolver grpcTypeResolver = new GrpcJavaTypeResolver();
+        GrpcJavaTypeResolver.GrpcJavaTypes types = grpcTypeResolver.resolve(binding);
+        return types.implBase();
     }
-    
-    private void addUnaryUnaryMethod(TypeSpec.Builder builder, PipelineStepIR ir) {
-        ClassName grpcAdapterClassName = 
-            ClassName.get("org.pipelineframework.grpc", "GrpcReactiveServiceAdapter");
+
+    private void addUnaryUnaryMethod(TypeSpec.Builder builder, GrpcBinding binding) {
+        PipelineStepModel model = binding.model();
+        ClassName grpcAdapterClassName =
+                ClassName.get("org.pipelineframework.grpc", "GrpcReactiveServiceAdapter");
+
+        // Use the GrpcJavaTypeResolver to get the proper gRPC types from the binding
+        GrpcJavaTypeResolver grpcTypeResolver = new GrpcJavaTypeResolver();
+        GrpcJavaTypeResolver.GrpcJavaTypes grpcTypes = grpcTypeResolver.resolve(binding);
+
+        // Validate that required gRPC types are available
+        if (grpcTypes.grpcParameterType() == null || grpcTypes.grpcReturnType() == null) {
+            throw new IllegalStateException("Missing required gRPC parameter or return type for service: " + binding.serviceName());
+        }
 
         // Create the inline adapter
-        TypeSpec inlineAdapter = inlineAdapterBuilder(ir, grpcAdapterClassName);
+        TypeSpec inlineAdapter = inlineAdapterBuilder(binding, grpcAdapterClassName);
+
+        TypeName inputDomainTypeUnary = model.inputMapping().domainType();
+        TypeName outputDomainTypeUnary = model.outputMapping().domainType();
+
+        // Validate that required domain types are available
+        if (inputDomainTypeUnary == null || outputDomainTypeUnary == null) {
+            throw new IllegalStateException("Missing required domain parameter or return type for service: " + binding.serviceName());
+        }
 
         MethodSpec.Builder remoteProcessMethodBuilder = MethodSpec.methodBuilder("remoteProcess")
-            .addAnnotation(Override.class)
-            .addModifiers(Modifier.PUBLIC)
-            .returns(ParameterizedTypeName.get(ClassName.get(Uni.class),
-                ir.getOutputMapping().getGrpcType()))
-            .addParameter(ir.getInputMapping().getGrpcType(), "request")
-            .addStatement("$T adapter = $L",
-                ParameterizedTypeName.get(grpcAdapterClassName,
-                    ir.getInputMapping().getGrpcType(),
-                    ir.getOutputMapping().getGrpcType(),
-                    ir.getInputMapping().getDomainType(),
-                    ir.getOutputMapping().getDomainType()),
-                inlineAdapter)
-            .addStatement("return adapter.remoteProcess($N)", "request");
+                .addAnnotation(Override.class)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(ParameterizedTypeName.get(ClassName.get(Uni.class),
+                        grpcTypes.grpcReturnType()))
+                .addParameter(grpcTypes.grpcParameterType(), "request")
+                .addStatement("$T adapter = $L",
+                        ParameterizedTypeName.get(grpcAdapterClassName,
+                                grpcTypes.grpcParameterType(),
+                                grpcTypes.grpcReturnType(),
+                                inputDomainTypeUnary,
+                                outputDomainTypeUnary),
+                        inlineAdapter)
+                .addStatement("return adapter.remoteProcess($N)", "request");
 
         // Add @RunOnVirtualThread annotation if the property is enabled
-        if (ir.getExecutionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
+        if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
             remoteProcessMethodBuilder.addAnnotation(
-                ClassName.get("io.smallrye.common.annotation", "RunOnVirtualThread"));
+                    ClassName.get("io.smallrye.common.annotation", "RunOnVirtualThread"));
         }
 
         builder.addMethod(remoteProcessMethodBuilder.build());
     }
 
-    private void addUnaryStreamingMethod(TypeSpec.Builder builder, PipelineStepIR ir) {
-        ClassName grpcAdapterClassName = 
-            ClassName.get("org.pipelineframework.grpc", "GrpcServiceStreamingAdapter");
+    private void addUnaryStreamingMethod(TypeSpec.Builder builder, GrpcBinding binding) {
+        PipelineStepModel model = binding.model();
+        ClassName grpcAdapterClassName =
+                ClassName.get("org.pipelineframework.grpc", "GrpcServiceStreamingAdapter");
 
-        // Create the inline adapter
-        TypeSpec inlineAdapter = inlineAdapterBuilder(ir, grpcAdapterClassName);
+        // Use the GrpcJavaTypeResolver to get the proper gRPC types from the binding
+        GrpcJavaTypeResolver grpcTypeResolver = new GrpcJavaTypeResolver();
+        GrpcJavaTypeResolver.GrpcJavaTypes grpcTypes = grpcTypeResolver.resolve(binding);
 
-        MethodSpec.Builder remoteProcessMethodBuilder = MethodSpec.methodBuilder("remoteProcess")
-            .addAnnotation(Override.class)
-            .addModifiers(Modifier.PUBLIC)
-            .returns(ParameterizedTypeName.get(ClassName.get(Multi.class),
-                ir.getOutputMapping().getGrpcType()))
-            .addParameter(ir.getInputMapping().getGrpcType(), "request")
-            .addStatement("$T adapter = $L",
-                ParameterizedTypeName.get(grpcAdapterClassName,
-                    ir.getInputMapping().getGrpcType(),
-                    ir.getOutputMapping().getGrpcType(),
-                    ir.getInputMapping().getDomainType(),
-                    ir.getOutputMapping().getDomainType()),
-                inlineAdapter)
-            .addStatement("return adapter.remoteProcess($N)", "request");
-
-        // Add @RunOnVirtualThread annotation if the property is enabled
-        if (ir.getExecutionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
-            remoteProcessMethodBuilder.addAnnotation(
-                ClassName.get("io.smallrye.common.annotation", "RunOnVirtualThread"));
+        // Validate that required gRPC types are available
+        if (grpcTypes.grpcParameterType() == null || grpcTypes.grpcReturnType() == null) {
+            throw new IllegalStateException("Missing required gRPC parameter or return type for service: " + binding.serviceName());
         }
 
-        builder.addMethod(remoteProcessMethodBuilder.build());
-    }
-    
-    private void addStreamingUnaryMethod(TypeSpec.Builder builder, PipelineStepIR ir) {
-        ClassName grpcAdapterClassName = 
-            ClassName.get("org.pipelineframework.grpc", "GrpcServiceClientStreamingAdapter");
-
         // Create the inline adapter
-        TypeSpec inlineAdapter = inlineAdapterBuilder(ir, grpcAdapterClassName);
+        TypeSpec inlineAdapter = inlineAdapterBuilder(binding, grpcAdapterClassName);
+
+        TypeName inputDomainTypeUnaryStreaming = model.inputMapping().domainType();
+        TypeName outputDomainTypeUnaryStreaming = model.outputMapping().domainType();
+
+        // Validate that required domain types are available
+        if (inputDomainTypeUnaryStreaming == null || outputDomainTypeUnaryStreaming == null) {
+            throw new IllegalStateException("Missing required domain parameter or return type for service: " + binding.serviceName());
+        }
 
         MethodSpec.Builder remoteProcessMethodBuilder = MethodSpec.methodBuilder("remoteProcess")
-            .addAnnotation(Override.class)
-            .addModifiers(Modifier.PUBLIC)
-            .returns(ParameterizedTypeName.get(ClassName.get(Uni.class),
-                ir.getOutputMapping().getGrpcType()))
-            .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class),
-                ir.getInputMapping().getGrpcType()), "request")
-            .addStatement("$T adapter = $L",
-                ParameterizedTypeName.get(grpcAdapterClassName,
-                    ir.getInputMapping().getGrpcType(),
-                    ir.getOutputMapping().getGrpcType(),
-                    ir.getInputMapping().getDomainType(),
-                    ir.getOutputMapping().getDomainType()),
-                inlineAdapter)
-            .addStatement("return adapter.remoteProcess($N)", "request");
+                .addAnnotation(Override.class)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(ParameterizedTypeName.get(ClassName.get(Multi.class),
+                        grpcTypes.grpcReturnType()))
+                .addParameter(grpcTypes.grpcParameterType(), "request")
+                .addStatement("$T adapter = $L",
+                        ParameterizedTypeName.get(grpcAdapterClassName,
+                                grpcTypes.grpcParameterType(),
+                                grpcTypes.grpcReturnType(),
+                                inputDomainTypeUnaryStreaming,
+                                outputDomainTypeUnaryStreaming),
+                        inlineAdapter)
+                .addStatement("return adapter.remoteProcess($N)", "request");
 
         // Add @RunOnVirtualThread annotation if the property is enabled
-        if (ir.getExecutionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
+        if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
             remoteProcessMethodBuilder.addAnnotation(
-                ClassName.get("io.smallrye.common.annotation", "RunOnVirtualThread"));
+                    ClassName.get("io.smallrye.common.annotation", "RunOnVirtualThread"));
         }
 
         builder.addMethod(remoteProcessMethodBuilder.build());
     }
 
-    private void addStreamingStreamingMethod(TypeSpec.Builder builder, PipelineStepIR ir) {
-        ClassName grpcAdapterClassName = 
-            ClassName.get("org.pipelineframework.grpc", "GrpcServiceBidirectionalStreamingAdapter");
+    private void addStreamingUnaryMethod(TypeSpec.Builder builder, GrpcBinding binding) {
+        PipelineStepModel model = binding.model();
+        ClassName grpcAdapterClassName =
+                ClassName.get("org.pipelineframework.grpc", "GrpcServiceClientStreamingAdapter");
+
+        // Use the GrpcJavaTypeResolver to get the proper gRPC types from the binding
+        GrpcJavaTypeResolver grpcTypeResolver = new GrpcJavaTypeResolver();
+        GrpcJavaTypeResolver.GrpcJavaTypes grpcTypes = grpcTypeResolver.resolve(binding);
+
+        // Validate that required gRPC types are available
+        if (grpcTypes.grpcParameterType() == null || grpcTypes.grpcReturnType() == null) {
+            throw new IllegalStateException("Missing required gRPC parameter or return type for service: " + binding.serviceName());
+        }
 
         // Create the inline adapter
-        TypeSpec inlineAdapterStreaming = inlineAdapterBuilder(ir, grpcAdapterClassName);
+        TypeSpec inlineAdapter = inlineAdapterBuilder(binding, grpcAdapterClassName);
+
+        TypeName inputDomainTypeStreamingUnary = model.inputMapping().domainType();
+        TypeName outputDomainTypeStreamingUnary = model.outputMapping().domainType();
+
+        // Validate that required domain types are available
+        if (inputDomainTypeStreamingUnary == null || outputDomainTypeStreamingUnary == null) {
+            throw new IllegalStateException("Missing required domain parameter or return type for service: " + binding.serviceName());
+        }
 
         MethodSpec.Builder remoteProcessMethodBuilder = MethodSpec.methodBuilder("remoteProcess")
-            .addAnnotation(Override.class)
-            .addModifiers(Modifier.PUBLIC)
-            .returns(ParameterizedTypeName.get(ClassName.get(Multi.class),
-                ir.getOutputMapping().getGrpcType()))
-            .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class),
-                ir.getInputMapping().getGrpcType()), "request")
-            .addStatement("$T adapter = $L",
-                ParameterizedTypeName.get(grpcAdapterClassName,
-                    ir.getInputMapping().getGrpcType(),
-                    ir.getOutputMapping().getGrpcType(),
-                    ir.getInputMapping().getDomainType(),
-                    ir.getOutputMapping().getDomainType()),
-                inlineAdapterStreaming)
-            .addStatement("return adapter.remoteProcess($N)", "request");
+                .addAnnotation(Override.class)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(ParameterizedTypeName.get(ClassName.get(Uni.class),
+                        grpcTypes.grpcReturnType()))
+                .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class),
+                        grpcTypes.grpcParameterType()), "request")
+                .addStatement("$T adapter = $L",
+                        ParameterizedTypeName.get(grpcAdapterClassName,
+                                grpcTypes.grpcParameterType(),
+                                grpcTypes.grpcReturnType(),
+                                inputDomainTypeStreamingUnary,
+                                outputDomainTypeStreamingUnary),
+                        inlineAdapter)
+                .addStatement("return adapter.remoteProcess($N)", "request");
 
         // Add @RunOnVirtualThread annotation if the property is enabled
-        if (ir.getExecutionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
+        if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
             remoteProcessMethodBuilder.addAnnotation(
-                ClassName.get("io.smallrye.common.annotation", "RunOnVirtualThread"));
+                    ClassName.get("io.smallrye.common.annotation", "RunOnVirtualThread"));
+        }
+
+        builder.addMethod(remoteProcessMethodBuilder.build());
+    }
+
+    private void addStreamingStreamingMethod(TypeSpec.Builder builder, GrpcBinding binding) {
+        PipelineStepModel model = binding.model();
+        ClassName grpcAdapterClassName =
+                ClassName.get("org.pipelineframework.grpc", "GrpcServiceBidirectionalStreamingAdapter");
+
+        // Use the GrpcJavaTypeResolver to get the proper gRPC types from the binding
+        GrpcJavaTypeResolver grpcTypeResolver = new GrpcJavaTypeResolver();
+        GrpcJavaTypeResolver.GrpcJavaTypes grpcTypes = grpcTypeResolver.resolve(binding);
+
+        // Validate that required gRPC types are available
+        if (grpcTypes.grpcParameterType() == null || grpcTypes.grpcReturnType() == null) {
+            throw new IllegalStateException("Missing required gRPC parameter or return type for service: " + binding.serviceName());
+        }
+
+        // Create the inline adapter
+        TypeSpec inlineAdapterStreaming = inlineAdapterBuilder(binding, grpcAdapterClassName);
+
+        TypeName inputDomainTypeStreamingStreaming = model.inputMapping().domainType();
+        TypeName outputDomainTypeStreamingStreaming = model.outputMapping().domainType();
+
+        // Validate that required domain types are available
+        if (inputDomainTypeStreamingStreaming == null || outputDomainTypeStreamingStreaming == null) {
+            throw new IllegalStateException("Missing required domain parameter or return type for service: " + binding.serviceName());
+        }
+
+        MethodSpec.Builder remoteProcessMethodBuilder = MethodSpec.methodBuilder("remoteProcess")
+                .addAnnotation(Override.class)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(ParameterizedTypeName.get(ClassName.get(Multi.class),
+                        grpcTypes.grpcReturnType()))
+                .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class),
+                        grpcTypes.grpcParameterType()), "request")
+                .addStatement("$T adapter = $L",
+                        ParameterizedTypeName.get(grpcAdapterClassName,
+                                grpcTypes.grpcParameterType(),
+                                grpcTypes.grpcReturnType(),
+                                inputDomainTypeStreamingStreaming,
+                                outputDomainTypeStreamingStreaming),
+                        inlineAdapterStreaming)
+                .addStatement("return adapter.remoteProcess($N)", "request");
+
+        // Add @RunOnVirtualThread annotation if the property is enabled
+        if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
+            remoteProcessMethodBuilder.addAnnotation(
+                    ClassName.get("io.smallrye.common.annotation", "RunOnVirtualThread"));
         }
 
         builder.addMethod(remoteProcessMethodBuilder.build());
     }
 
     private TypeSpec inlineAdapterBuilder(
-            PipelineStepIR ir,
+            GrpcBinding binding,
             ClassName grpcAdapterClassName
     ) {
+        PipelineStepModel model = binding.model();
+        TypeName serviceType = model.serviceClassName();
+
+        // Use the GrpcJavaTypeResolver to get the proper gRPC types from the binding
+        GrpcJavaTypeResolver grpcTypeResolver = new GrpcJavaTypeResolver();
+        GrpcJavaTypeResolver.GrpcJavaTypes grpcTypes = grpcTypeResolver.resolve(binding);
+
+        // Validate that required gRPC types are available
+        if (grpcTypes.grpcParameterType() == null || grpcTypes.grpcReturnType() == null) {
+            throw new IllegalStateException("Missing required gRPC parameter or return type for service: " + binding.serviceName());
+        }
+
+        TypeName inputGrpcType = grpcTypes.grpcParameterType(); // Get the correct input gRPC type
+        TypeName outputGrpcType = grpcTypes.grpcReturnType(); // Get the correct output gRPC type
+        TypeName inputDomainType = model.inputMapping().domainType();
+        TypeName outputDomainType = model.outputMapping().domainType();
+
+        // Validate that required domain types are available
+        if (inputDomainType == null || outputDomainType == null) {
+            throw new IllegalStateException("Missing required domain parameter or return type for service: " + binding.serviceName());
+        }
+
         return TypeSpec.anonymousClassBuilder("")
                 .superclass(ParameterizedTypeName.get(
                         grpcAdapterClassName,
-                        ir.getInputMapping().getGrpcType(),
-                        ir.getOutputMapping().getGrpcType(),
-                        ir.getInputMapping().getDomainType(),
-                        ir.getOutputMapping().getDomainType()
+                        inputGrpcType,
+                        outputGrpcType,
+                        inputDomainType,
+                        outputDomainType
                 ))
                 .addMethod(MethodSpec.methodBuilder("getService")
                         .addAnnotation(Override.class)
                         .addModifiers(Modifier.PROTECTED)
-                        .returns(ir.getServiceClassName())
+                        .returns(serviceType)
                         .addStatement("return service")
                         .build())
                 .addMethod(MethodSpec.methodBuilder("fromGrpc")
                         .addAnnotation(Override.class)
                         .addModifiers(Modifier.PROTECTED)
-                        .returns(ir.getInputMapping().getDomainType())
-                        .addParameter(ir.inboundGrpcParamType(), "grpcIn")
+                        .returns(inputDomainType)
+                        .addParameter(inputGrpcType, "grpcIn")
                         .addStatement("return inboundMapper.fromGrpcFromDto(grpcIn)")
                         .build())
                 .addMethod(MethodSpec.methodBuilder("toGrpc")
                         .addAnnotation(Override.class)
                         .addModifiers(Modifier.PROTECTED)
-                        .returns(ir.getOutputMapping().getGrpcType())
-                        .addParameter(ir.getOutputMapping().getDomainType(), "output")
+                        .returns(outputGrpcType)
+                        .addParameter(outputDomainType, "output")
                         .addStatement("return outboundMapper.toDtoToGrpc(output)")
                         .build())
                 .build();
+    }
+
+    private String determineRoleForGrpcService(GrpcBinding binding) {
+        // For now, assume it's a regular pipeline server
+        // In a future implementation, we could distinguish between regular and plugin servers
+        // based on additional metadata in the binding
+        return "PIPELINE_SERVER";
     }
 }

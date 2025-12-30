@@ -11,8 +11,4 @@ public enum GenerationTarget {
     GRPC_SERVICE,
     /** JAX-RS resource */
     REST_RESOURCE,
-    /** Adapter that bridges gRPC messages to plugin implementations */
-    PLUGIN_ADAPTER,
-    /** Reactive service that delegates to plugin adapter */
-    PLUGIN_REACTIVE_SERVICE
 }
