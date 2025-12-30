@@ -16,9 +16,10 @@
 
 package org.pipelineframework.csv.service;
 
-import io.smallrye.mutiny.Uni;
-import jakarta.enterprise.context.ApplicationScoped;
 import java.util.UUID;
+import jakarta.enterprise.context.ApplicationScoped;
+
+import io.smallrye.mutiny.Uni;
 import lombok.Getter;
 import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
@@ -35,15 +36,10 @@ import org.pipelineframework.service.ReactiveService;
 @PipelineStep(
     inputType = PaymentStatus.class,
     outputType = PaymentOutput.class,
-    inputGrpcType = org.pipelineframework.csv.grpc.PaymentsProcessingSvc.PaymentStatus.class,
-    outputGrpcType = org.pipelineframework.csv.grpc.PaymentStatusSvc.PaymentOutput.class,
     stepType = org.pipelineframework.step.StepOneToOne.class,
     backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-    grpcStub = org.pipelineframework.csv.grpc.MutinyProcessPaymentStatusServiceGrpc.MutinyProcessPaymentStatusServiceStub.class,
-    grpcImpl = org.pipelineframework.csv.grpc.MutinyProcessPaymentStatusServiceGrpc.ProcessPaymentStatusServiceImplBase.class,
     inboundMapper = PaymentStatusMapper.class,
     outboundMapper = PaymentOutputMapper.class,
-    grpcClient = "process-payment-status",
     restEnabled = true
 )
 @ApplicationScoped

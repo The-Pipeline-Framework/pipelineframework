@@ -16,11 +16,6 @@
 
 package org.pipelineframework.csv.service;
 
-import com.opencsv.exceptions.CsvDataTypeMismatchException;
-import com.opencsv.exceptions.CsvRequiredFieldEmptyException;
-import io.smallrye.mutiny.Multi;
-import io.smallrye.mutiny.Uni;
-import jakarta.enterprise.context.ApplicationScoped;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
@@ -28,6 +23,12 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import jakarta.enterprise.context.ApplicationScoped;
+
+import com.opencsv.exceptions.CsvDataTypeMismatchException;
+import com.opencsv.exceptions.CsvRequiredFieldEmptyException;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
 import org.pipelineframework.annotation.PipelineStep;
@@ -52,15 +53,10 @@ import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
 @PipelineStep(
   inputType = PaymentOutput.class,
   outputType = CsvPaymentsOutputFile.class,
-  inputGrpcType = org.pipelineframework.csv.grpc.PaymentStatusSvc.PaymentOutput.class,
-  outputGrpcType = org.pipelineframework.csv.grpc.OutputCsvFileProcessingSvc.CsvPaymentsOutputFile.class,
   stepType = org.pipelineframework.step.StepManyToMany.class,
   backendType = org.pipelineframework.grpc.GrpcServiceBidirectionalStreamingAdapter.class,
-  grpcStub = org.pipelineframework.csv.grpc.MutinyProcessCsvPaymentsOutputFileServiceGrpc.MutinyProcessCsvPaymentsOutputFileServiceStub.class,
-  grpcImpl = org.pipelineframework.csv.grpc.MutinyProcessCsvPaymentsOutputFileServiceGrpc.ProcessCsvPaymentsOutputFileServiceImplBase.class,
   inboundMapper = PaymentOutputMapper.class,
-  outboundMapper = CsvPaymentsOutputFileMapper.class,
-  grpcClient = "process-csv-payments-output-file"
+  outboundMapper = CsvPaymentsOutputFileMapper.class
 )
 @ApplicationScoped
 public class ProcessCsvPaymentsOutputFileReactiveService

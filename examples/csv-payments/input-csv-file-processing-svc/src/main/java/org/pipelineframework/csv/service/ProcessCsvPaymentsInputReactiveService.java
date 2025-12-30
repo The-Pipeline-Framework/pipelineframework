@@ -16,16 +16,17 @@
 
 package org.pipelineframework.csv.service;
 
+import java.io.IOException;
+import java.time.Duration;
+import java.util.Iterator;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+
 import com.opencsv.bean.CsvToBeanBuilder;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import io.smallrye.mutiny.subscription.FixedDemandPacer;
 import io.smallrye.mutiny.unchecked.Unchecked;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
-import java.io.IOException;
-import java.time.Duration;
-import java.util.Iterator;
 import lombok.Getter;
 import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
@@ -34,22 +35,16 @@ import org.pipelineframework.csv.common.domain.CsvPaymentsInputFile;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.mapper.CsvPaymentsInputFileMapper;
 import org.pipelineframework.csv.common.mapper.PaymentRecordMapper;
-import org.pipelineframework.csv.grpc.MutinyProcessCsvPaymentsInputFileServiceGrpc;
 import org.pipelineframework.csv.util.DemandPacerConfig;
 import org.pipelineframework.service.ReactiveStreamingService;
 
 @PipelineStep(
     inputType = CsvPaymentsInputFile.class,
     outputType = PaymentRecord.class,
-    inputGrpcType = org.pipelineframework.csv.grpc.InputCsvFileProcessingSvc.CsvPaymentsInputFile.class,
-    outputGrpcType = org.pipelineframework.csv.grpc.InputCsvFileProcessingSvc.PaymentRecord.class,
     stepType = org.pipelineframework.step.StepOneToMany.class,
     backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-    grpcStub = MutinyProcessCsvPaymentsInputFileServiceGrpc.MutinyProcessCsvPaymentsInputFileServiceStub.class,
-    grpcImpl = MutinyProcessCsvPaymentsInputFileServiceGrpc.ProcessCsvPaymentsInputFileServiceImplBase.class,
     inboundMapper = CsvPaymentsInputFileMapper.class,
-    outboundMapper = PaymentRecordMapper.class,
-    grpcClient = "process-csv-payments-input-file"
+    outboundMapper = PaymentRecordMapper.class
 )
 @ApplicationScoped
 @Getter

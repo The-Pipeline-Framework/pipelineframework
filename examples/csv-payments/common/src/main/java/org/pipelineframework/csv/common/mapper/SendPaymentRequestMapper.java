@@ -19,6 +19,7 @@ package org.pipelineframework.csv.common.mapper;
 import java.math.BigDecimal;
 import java.util.Currency;
 import java.util.UUID;
+
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
@@ -27,14 +28,14 @@ import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
-import org.pipelineframework.csv.grpc.PaymentStatusSvc;
+import org.pipelineframework.csv.grpc.PaymentsProcessingSvc;
 
 @SuppressWarnings("unused")
 @Mapper(
     componentModel = "jakarta",
     uses = {CommonConverters.class, PaymentRecordMapper.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface SendPaymentRequestMapper extends org.pipelineframework.mapper.Mapper<PaymentStatusSvc.SendPaymentRequest, SendPaymentRequestMapper.SendPaymentRequest, SendPaymentRequestMapper.SendPaymentRequest> {
+public interface SendPaymentRequestMapper extends org.pipelineframework.mapper.Mapper<PaymentsProcessingSvc.SendPaymentRequest, SendPaymentRequestMapper.SendPaymentRequest, SendPaymentRequestMapper.SendPaymentRequest> {
 
   SendPaymentRequestMapper INSTANCE = Mappers.getMapper( SendPaymentRequestMapper.class );
   
@@ -42,13 +43,13 @@ public interface SendPaymentRequestMapper extends org.pipelineframework.mapper.M
   @Mapping(source = "amount", target = "amount", qualifiedByName = "stringToBigDecimal")
   @Mapping(source = "currency", target = "currency", qualifiedByName = "stringToCurrency")
   @Mapping(source = "paymentRecordId", target = "paymentRecordId", qualifiedByName = "stringToUUID")
-  SendPaymentRequest fromGrpc(PaymentStatusSvc.SendPaymentRequest grpcRequest);
+  SendPaymentRequest fromGrpc(PaymentsProcessingSvc.SendPaymentRequest grpcRequest);
 
   @Override
   @Mapping(source = "amount", target = "amount", qualifiedByName = "bigDecimalToString")
   @Mapping(source = "currency", target = "currency", qualifiedByName = "currencyToString")
   @Mapping(source = "paymentRecordId", target = "paymentRecordId", qualifiedByName = "uuidToString")
-  PaymentStatusSvc.SendPaymentRequest toGrpc(SendPaymentRequest dto);
+  PaymentsProcessingSvc.SendPaymentRequest toGrpc(SendPaymentRequest dto);
 
   @Setter
   @Getter

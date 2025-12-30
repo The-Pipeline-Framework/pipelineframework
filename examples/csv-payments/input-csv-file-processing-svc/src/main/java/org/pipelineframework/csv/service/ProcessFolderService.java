@@ -16,15 +16,16 @@
 
 package org.pipelineframework.csv.service;
 
-import io.smallrye.mutiny.Multi;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 import java.io.File;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.util.Arrays;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+
+import io.smallrye.mutiny.Multi;
 import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
 import org.pipelineframework.annotation.PipelineStep;
@@ -32,22 +33,16 @@ import org.pipelineframework.csv.common.domain.CsvFolder;
 import org.pipelineframework.csv.common.domain.CsvPaymentsInputFile;
 import org.pipelineframework.csv.common.mapper.CsvFolderMapper;
 import org.pipelineframework.csv.common.mapper.CsvPaymentsInputFileMapper;
-import org.pipelineframework.csv.grpc.MutinyProcessFolderServiceGrpc;
 import org.pipelineframework.csv.util.HybridResourceLoader;
 
 @ApplicationScoped
 @PipelineStep(
     inputType = CsvFolder.class,
     outputType = CsvPaymentsInputFile.class,
-    inputGrpcType = org.pipelineframework.csv.grpc.InputCsvFileProcessingSvc.CsvFolder.class,
-    outputGrpcType = org.pipelineframework.csv.grpc.InputCsvFileProcessingSvc.CsvPaymentsInputFile.class,
     stepType = org.pipelineframework.step.StepOneToMany.class,
     backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-    grpcStub = MutinyProcessFolderServiceGrpc.MutinyProcessFolderServiceStub.class,
-    grpcImpl = MutinyProcessFolderServiceGrpc.ProcessFolderServiceImplBase.class,
     inboundMapper = CsvFolderMapper.class,
-    outboundMapper = CsvPaymentsInputFileMapper.class,
-    grpcClient = "process-folder"
+    outboundMapper = CsvPaymentsInputFileMapper.class
 )
 public class ProcessFolderService implements org.pipelineframework.service.ReactiveStreamingService<CsvFolder, CsvPaymentsInputFile> {
 

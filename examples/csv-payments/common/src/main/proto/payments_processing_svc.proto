@@ -4,6 +4,16 @@ option java_package = "org.pipelineframework.csv.grpc";
 
 import "input_csv_file_processing_svc.proto";
 
+message SendPaymentRequest {
+  string msisdn = 1;
+  string amount = 2;
+  string currency = 3;
+  string reference = 4;
+  string url = 5;
+  string paymentRecordId = 6;
+  PaymentRecord paymentRecord = 7;
+}
+
 message AckPaymentSent {
   string id = 1; // from BaseEntity
   string conversationId = 2;
@@ -23,11 +33,16 @@ message PaymentStatus {
   AckPaymentSent ackPaymentSent = 7;
 }
 
-service SendPaymentRecordService {
+service PaymentProviderService {
+  rpc sendPayment(SendPaymentRequest) returns (AckPaymentSent);
+  rpc getPaymentStatus(AckPaymentSent) returns(PaymentStatus);
+}
+
+service ProcessSendPaymentRecordReactiveService {
   rpc remoteProcess(PaymentRecord) returns (AckPaymentSent);
 }
 
-service ProcessAckPaymentSentService {
+service ProcessAckPaymentSentReactiveService {
   rpc remoteProcess(AckPaymentSent) returns (PaymentStatus);
 }
 

@@ -16,10 +16,11 @@
 
 package org.pipelineframework.csv.service;
 
-import io.smallrye.mutiny.Uni;
-import io.vertx.mutiny.core.Vertx;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+
+import io.smallrye.mutiny.Uni;
+import io.vertx.mutiny.core.Vertx;
 import lombok.Getter;
 import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
@@ -29,25 +30,19 @@ import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.mapper.AckPaymentSentMapper;
 import org.pipelineframework.csv.common.mapper.PaymentRecordMapper;
 import org.pipelineframework.csv.common.mapper.SendPaymentRequestMapper;
-import org.pipelineframework.csv.grpc.MutinySendPaymentRecordServiceGrpc;
 import org.pipelineframework.service.ReactiveService;
 
 @PipelineStep(
   inputType = PaymentRecord.class,
   outputType = AckPaymentSent.class,
-  inputGrpcType = org.pipelineframework.csv.grpc.InputCsvFileProcessingSvc.PaymentRecord.class,
-  outputGrpcType = org.pipelineframework.csv.grpc.PaymentsProcessingSvc.AckPaymentSent.class,
   stepType = org.pipelineframework.step.StepOneToOne.class,
   backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-  grpcStub = MutinySendPaymentRecordServiceGrpc.MutinySendPaymentRecordServiceStub.class,
-  grpcImpl = MutinySendPaymentRecordServiceGrpc.SendPaymentRecordServiceImplBase.class,
   inboundMapper = PaymentRecordMapper.class,
-  outboundMapper = AckPaymentSentMapper.class,
-  grpcClient = "send-payment-record"
+  outboundMapper = AckPaymentSentMapper.class
 )
 @ApplicationScoped
 @Getter
-public class SendPaymentRecordReactiveService
+public class ProcessSendPaymentRecordReactiveService
     implements ReactiveService<PaymentRecord, AckPaymentSent> {
   private final PaymentProviderServiceMock paymentProviderServiceMock;
 
@@ -55,7 +50,7 @@ public class SendPaymentRecordReactiveService
   Vertx vertx;
 
   @Inject
-  public SendPaymentRecordReactiveService(PaymentProviderServiceMock paymentProviderServiceMock, Vertx vertx) {
+  public ProcessSendPaymentRecordReactiveService(PaymentProviderServiceMock paymentProviderServiceMock, Vertx vertx) {
     this.paymentProviderServiceMock = paymentProviderServiceMock;
     this.vertx = vertx;
   }

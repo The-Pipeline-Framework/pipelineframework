@@ -10,6 +10,6 @@ message CsvPaymentsOutputFile {
   string csvFolderPath = 3;
 }
 
-service ProcessCsvPaymentsOutputFileService {
+service ProcessCsvPaymentsOutputFileReactiveService {
   rpc remoteProcess(stream PaymentOutput) returns (stream CsvPaymentsOutputFile);
 }

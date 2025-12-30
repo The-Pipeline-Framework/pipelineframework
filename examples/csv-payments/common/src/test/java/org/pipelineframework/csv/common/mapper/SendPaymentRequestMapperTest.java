@@ -16,16 +16,18 @@
 
 package org.pipelineframework.csv.common.mapper;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.util.Currency;
 import java.util.UUID;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
-import org.pipelineframework.csv.grpc.PaymentStatusSvc;
+import org.pipelineframework.csv.grpc.PaymentsProcessingSvc;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class SendPaymentRequestMapperTest {
 
@@ -84,8 +86,8 @@ class SendPaymentRequestMapperTest {
     @Test
     void testGrpcToDomain() {
         // Given
-        PaymentStatusSvc.SendPaymentRequest grpc =
-                PaymentStatusSvc.SendPaymentRequest.newBuilder()
+        PaymentsProcessingSvc.SendPaymentRequest grpc =
+                PaymentsProcessingSvc.SendPaymentRequest.newBuilder()
                         .setMsisdn("123456789")
                         .setAmount("100.50")
                         .setCurrency("EUR")

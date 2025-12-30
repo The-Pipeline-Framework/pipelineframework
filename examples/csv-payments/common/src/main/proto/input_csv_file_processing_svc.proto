@@ -21,7 +21,7 @@ message CsvPaymentsInputStream {
   string source = 1;
 }
 
-service ProcessCsvPaymentsInputFileService {
+service ProcessCsvPaymentsInputReactiveService {
   rpc remoteProcess(CsvPaymentsInputFile) returns (stream PaymentRecord);
 }
 

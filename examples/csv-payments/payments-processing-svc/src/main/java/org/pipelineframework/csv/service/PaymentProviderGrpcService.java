@@ -16,17 +16,17 @@
 
 package org.pipelineframework.csv.service;
 
+import jakarta.inject.Inject;
+
 import io.grpc.Metadata;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.quarkus.grpc.GrpcService;
 import io.smallrye.mutiny.Uni;
-import jakarta.inject.Inject;
 import org.pipelineframework.csv.common.mapper.AckPaymentSentMapper;
 import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
 import org.pipelineframework.csv.common.mapper.SendPaymentRequestMapper;
 import org.pipelineframework.csv.grpc.MutinyPaymentProviderServiceGrpc;
-import org.pipelineframework.csv.grpc.PaymentStatusSvc;
 import org.pipelineframework.csv.grpc.PaymentsProcessingSvc;
 
 @GrpcService
@@ -41,7 +41,7 @@ public class PaymentProviderGrpcService
 
   @Override
   public Uni<PaymentsProcessingSvc.AckPaymentSent> sendPayment(
-      PaymentStatusSvc.SendPaymentRequest grpcRequest) {
+      PaymentsProcessingSvc.SendPaymentRequest grpcRequest) {
     return Uni.createFrom()
         .item(
             () -> {

@@ -16,16 +16,12 @@
 
 package org.pipelineframework.csv.service;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.when;
+import java.math.BigDecimal;
+import java.util.UUID;
 
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.smallrye.mutiny.Uni;
-import java.math.BigDecimal;
-import java.util.UUID;
 import lombok.SneakyThrows;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -43,6 +39,11 @@ import org.pipelineframework.csv.common.mapper.PaymentRecordMapper;
 import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
 import org.pipelineframework.csv.common.mapper.SendPaymentRequestMapper;
 import org.pipelineframework.csv.grpc.PaymentsProcessingSvc;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 class PaymentProviderGrpcServiceTest {
 
@@ -65,8 +66,8 @@ class PaymentProviderGrpcServiceTest {
     @DisplayName("sendPayment: Should successfully process request and return AckPaymentSent")
     void sendPayment_happyPath() {
         // Given
-        org.pipelineframework.csv.grpc.PaymentStatusSvc.SendPaymentRequest grpcRequest =
-                org.pipelineframework.csv.grpc.PaymentStatusSvc.SendPaymentRequest.newBuilder()
+        org.pipelineframework.csv.grpc.PaymentsProcessingSvc.SendPaymentRequest grpcRequest =
+                org.pipelineframework.csv.grpc.PaymentsProcessingSvc.SendPaymentRequest.newBuilder()
                         .setAmount("100.00")
                         .setCurrency("USD")
                         .setReference("John Doe")
@@ -107,7 +108,7 @@ class PaymentProviderGrpcServiceTest {
 
         when(sendPaymentRequestMapper.fromGrpc(
                         any(
-                                org.pipelineframework.csv.grpc.PaymentStatusSvc.SendPaymentRequest
+                                org.pipelineframework.csv.grpc.PaymentsProcessingSvc.SendPaymentRequest
                                         .class)))
                 .thenReturn(request);
         when(domainService.sendPayment(request)).thenReturn(domainOut);
@@ -126,8 +127,8 @@ class PaymentProviderGrpcServiceTest {
     @DisplayName("sendPayment: Should throw StatusRuntimeException on domain service error")
     void sendPayment_domainServiceError_shouldThrowStatusRuntimeException() {
         // Given
-        org.pipelineframework.csv.grpc.PaymentStatusSvc.SendPaymentRequest grpcRequest =
-                org.pipelineframework.csv.grpc.PaymentStatusSvc.SendPaymentRequest.newBuilder()
+        org.pipelineframework.csv.grpc.PaymentsProcessingSvc.SendPaymentRequest grpcRequest =
+                org.pipelineframework.csv.grpc.PaymentsProcessingSvc.SendPaymentRequest.newBuilder()
                         .setAmount("100.00")
                         .setCurrency("USD")
                         .setReference("John Doe")
@@ -157,7 +158,7 @@ class PaymentProviderGrpcServiceTest {
 
         when(sendPaymentRequestMapper.fromGrpc(
                         any(
-                                org.pipelineframework.csv.grpc.PaymentStatusSvc.SendPaymentRequest
+                                org.pipelineframework.csv.grpc.PaymentsProcessingSvc.SendPaymentRequest
                                         .class)))
                 .thenThrow(domainException);
         when(domainService.sendPayment(request)).thenThrow(domainException);

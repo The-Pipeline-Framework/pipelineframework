@@ -16,14 +16,15 @@
 
 package org.pipelineframework.csv.service;
 
-import com.opencsv.bean.CsvToBeanBuilder;
-import io.smallrye.mutiny.Multi;
-import io.smallrye.mutiny.unchecked.Unchecked;
+import java.util.Iterator;
+import java.util.concurrent.Executor;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
-import java.util.Iterator;
-import java.util.concurrent.Executor;
+
+import com.opencsv.bean.CsvToBeanBuilder;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.unchecked.Unchecked;
 import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
 import org.pipelineframework.annotation.PipelineStep;
@@ -40,16 +41,10 @@ import org.pipelineframework.service.ReactiveStreamingService;
 @PipelineStep(
     inputType = CsvPaymentsInputStream.class,
     outputType = PaymentRecord.class,
-    inputGrpcType = org.pipelineframework.csv.grpc.InputCsvFileProcessingSvc.CsvPaymentsInputStream.class,
-    outputGrpcType = org.pipelineframework.csv.grpc.InputCsvFileProcessingSvc.PaymentRecord.class,
     stepType = org.pipelineframework.step.StepOneToMany.class,
     backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-    grpcStub = org.pipelineframework.csv.grpc.MutinyProcessCsvPaymentsInputStreamServiceGrpc.MutinyProcessCsvPaymentsInputStreamServiceStub.class,
-    grpcImpl = org.pipelineframework.csv.grpc.MutinyProcessCsvPaymentsInputStreamServiceGrpc.ProcessCsvPaymentsInputStreamServiceImplBase.class,
     inboundMapper = CsvPaymentsInputStreamMapper.class,
-    outboundMapper = PaymentRecordMapper.class,
-    grpcClient = "process-csv-payments-input-stream",
-    restEnabled = true
+    outboundMapper = PaymentRecordMapper.class
 )
 @ApplicationScoped
 public class ProcessCsvPaymentsInputStreamService

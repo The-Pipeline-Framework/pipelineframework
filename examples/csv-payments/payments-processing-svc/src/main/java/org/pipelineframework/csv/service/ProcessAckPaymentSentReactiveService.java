@@ -16,9 +16,10 @@
 
 package org.pipelineframework.csv.service;
 
-import io.smallrye.mutiny.Uni;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+
+import io.smallrye.mutiny.Uni;
 import lombok.Getter;
 import org.jboss.logging.Logger;
 import org.pipelineframework.annotation.PipelineStep;
@@ -26,22 +27,16 @@ import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
 import org.pipelineframework.csv.common.mapper.AckPaymentSentMapper;
 import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
-import org.pipelineframework.csv.grpc.MutinyProcessAckPaymentSentServiceGrpc;
 import org.pipelineframework.grpc.GrpcReactiveServiceAdapter;
 import org.pipelineframework.service.ReactiveService;
 
 @PipelineStep(
     inputType = AckPaymentSent.class,
     outputType = PaymentStatus.class,
-    inputGrpcType = org.pipelineframework.csv.grpc.PaymentsProcessingSvc.AckPaymentSent.class,
-    outputGrpcType = org.pipelineframework.csv.grpc.PaymentsProcessingSvc.PaymentStatus.class,
     stepType = org.pipelineframework.step.StepOneToOne.class,
     backendType = GrpcReactiveServiceAdapter.class,
-    grpcStub = MutinyProcessAckPaymentSentServiceGrpc.MutinyProcessAckPaymentSentServiceStub.class,
-    grpcImpl = MutinyProcessAckPaymentSentServiceGrpc.ProcessAckPaymentSentServiceImplBase.class,
     inboundMapper = AckPaymentSentMapper.class,
     outboundMapper = PaymentStatusMapper.class,
-    grpcClient = "process-ack-payment-sent",
     restEnabled = true
 )
 @ApplicationScoped

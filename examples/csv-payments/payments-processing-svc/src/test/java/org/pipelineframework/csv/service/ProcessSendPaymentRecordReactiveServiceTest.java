@@ -16,25 +16,30 @@
 
 package org.pipelineframework.csv.service;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import java.util.concurrent.Callable;
 
 import io.smallrye.mutiny.Uni;
 import io.vertx.mutiny.core.Vertx;
-import java.util.concurrent.Callable;
-import org.junit.jupiter.api.*;
-import org.mockito.*;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.mapper.SendPaymentRequestMapper;
 
-class SendPaymentRecordReactiveServiceTest {
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+
+class ProcessSendPaymentRecordReactiveServiceTest {
 
     @Mock private PaymentProviderServiceMock paymentProviderServiceMock;
     @Mock private PaymentRecord paymentRecord;
     @Mock private Vertx vertx; // 👈 mock Vertx itself
 
-    @InjectMocks private SendPaymentRecordReactiveService sendPaymentRecordReactiveService;
+    @InjectMocks private ProcessSendPaymentRecordReactiveService processSendPaymentRecordReactiveService;
 
     @BeforeEach
     void setUp() {
@@ -65,7 +70,7 @@ class SendPaymentRecordReactiveServiceTest {
                 .thenReturn(expectedAck);
 
         // When
-        Uni<AckPaymentSent> result = sendPaymentRecordReactiveService.process(paymentRecord);
+        Uni<AckPaymentSent> result = processSendPaymentRecordReactiveService.process(paymentRecord);
 
         // Then
         result.subscribe().with(ack -> Assertions.assertEquals(expectedAck, ack));
