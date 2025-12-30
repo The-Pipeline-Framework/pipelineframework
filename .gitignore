@@ -60,6 +60,8 @@ web-ui/node_modules/.vite/
 
 # AI Agents
 QWEN.md
+GEMINI.md
+AGENTS.md
 
 # Template generator
 /template-generator-node/test-output/
