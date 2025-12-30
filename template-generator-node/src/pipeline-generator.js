@@ -179,10 +179,6 @@ class PipelineGenerator {
             
             processedStep.order = i + 1;
             
-            if (!processedStep.grpcClientName) {
-                processedStep.grpcClientName = step.name.replace(/[^a-zA-Z0-9]/g, '') + 'Svc';
-            }
-            
             // Determine stepType based on cardinality if not already present
             if (!processedStep.stepType) {
                 processedStep.stepType = this.getStepTypeForCardinality(step.cardinality);

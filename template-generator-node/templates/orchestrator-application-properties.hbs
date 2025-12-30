@@ -28,11 +28,11 @@ pipeline.step."{{../basePackage}}.{{serviceNameForPackage}}.pipeline.{{this.serv
 
 {{#each steps}}
 # Talk to {{serviceName}} service
-quarkus.grpc.clients.{{grpcClientName}}.host=localhost
-quarkus.grpc.clients.{{grpcClientName}}.port={{add 8443 order}}
-quarkus.grpc.clients.{{grpcClientName}}.plain-text=false
-quarkus.grpc.clients.{{grpcClientName}}.use-quarkus-grpc-client=true
-quarkus.grpc.clients.{{grpcClientName}}.tls.enabled=true
+quarkus.grpc.clients.Process{{this.serviceNameFormatted}}.host=localhost
+quarkus.grpc.clients.Process{{this.serviceNameFormatted}}.port={{add 8443 order}}
+quarkus.grpc.clients.Process{{this.serviceNameFormatted}}.plain-text=false
+quarkus.grpc.clients.Process{{this.serviceNameFormatted}}.use-quarkus-grpc-client=true
+quarkus.grpc.clients.Process{{this.serviceNameFormatted}}.tls.enabled=true
 {{/each}}
 
 # Talk to orchestrator-svc (self)

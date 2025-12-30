@@ -136,6 +136,42 @@
         },
         "required": ["name", "cardinality", "inputTypeName", "inputFields", "outputTypeName", "outputFields"]
       }
+    },
+    "aspects": {
+      "type": "object",
+      "description": "Pipeline aspects - cross-cutting concerns that apply around pipeline steps",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the aspect is enabled",
+            "default": true
+          },
+          "scope": {
+            "type": "string",
+            "description": "Scope of the aspect application",
+            "enum": ["GLOBAL", "STEPS"]
+          },
+          "position": {
+            "type": "string",
+            "description": "Position relative to the step",
+            "enum": ["BEFORE_STEP", "AFTER_STEP"]
+          },
+          "order": {
+            "type": "integer",
+            "description": "Order of application (lower executes closer to the step boundary). Negative values are allowed and execute before zero-valued aspects.",
+            "default": 0
+          },
+          "config": {
+            "type": "object",
+            "description": "Free-form configuration for the aspect",
+            "additionalProperties": true
+          }
+        },
+        "required": ["enabled", "scope", "position"],
+        "additionalProperties": false
+      }
     }
   },
   "required": ["appName", "basePackage", "steps"]

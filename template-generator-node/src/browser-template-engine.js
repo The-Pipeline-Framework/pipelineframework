@@ -489,17 +489,6 @@ class BrowserTemplateEngine {
         const protoClassName = this.formatForProtoClassName(step.serviceName);
         context.protoClassName = protoClassName;
 
-        // Determine the inputGrpcType proto class name based on step position
-        if (stepIndex === 0) {
-            // For the first step, inputGrpcType comes from the same proto file
-            context.inputGrpcProtoClassName = protoClassName;
-        } else {
-            // For subsequent steps, inputGrpcType comes from the previous step's proto file
-            const previousStep = allSteps[stepIndex - 1];
-            const previousProtoClassName = this.formatForProtoClassName(previousStep.serviceName);
-            context.inputGrpcProtoClassName = previousProtoClassName;
-        }
-
         // Use the serviceNameCamel field from the configuration to form the gRPC class names
         const serviceNameCamel = step.serviceNameCamel ?? (step.serviceName || '').replace(/-svc$/, '').replace(/-([a-z])/g, (_, c) => c.toUpperCase());
         // Convert camelCase to PascalCase
@@ -510,14 +499,6 @@ class BrowserTemplateEngine {
         // Extract the entity name from the PascalCase service name to match proto service names
         const entityName = this.extractEntityName(serviceNamePascal);
 
-        // For gRPC class names
-        const grpcServiceName = 'MutinyProcess' + entityName + 'ServiceGrpc';
-        const grpcStubName = grpcServiceName + '.MutinyProcess' + entityName + 'ServiceStub';
-        const grpcImplName = grpcServiceName + '.Process' + entityName + 'ServiceImplBase';
-
-        context.grpcServiceName = grpcServiceName;
-        context.grpcStubName = grpcStubName;
-        context.grpcImplName = grpcImplName;
         context.serviceNamePascal = serviceNamePascal;
         context.serviceNameFormatted = step.name;
 
