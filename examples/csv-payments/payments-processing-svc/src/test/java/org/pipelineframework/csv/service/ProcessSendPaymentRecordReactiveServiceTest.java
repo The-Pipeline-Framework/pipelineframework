@@ -70,7 +70,7 @@ class ProcessSendPaymentRecordReactiveServiceTest {
                 .thenReturn(expectedAck);
 
         // When
-        AckPaymentSent result = processSendPaymentRecordReactiveService.process(paymentRecord).await().indefinitely();;
+        AckPaymentSent result = processSendPaymentRecordReactiveService.process(paymentRecord).await().indefinitely();
 
         // Then
         Assertions.assertEquals(expectedAck, result);
