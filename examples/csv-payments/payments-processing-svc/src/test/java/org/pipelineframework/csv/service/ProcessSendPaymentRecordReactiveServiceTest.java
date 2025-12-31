@@ -70,9 +70,9 @@ class ProcessSendPaymentRecordReactiveServiceTest {
                 .thenReturn(expectedAck);
 
         // When
-        Uni<AckPaymentSent> result = processSendPaymentRecordReactiveService.process(paymentRecord);
+        AckPaymentSent result = processSendPaymentRecordReactiveService.process(paymentRecord).await().indefinitely();;
 
         // Then
-        result.subscribe().with(ack -> Assertions.assertEquals(expectedAck, ack));
+        Assertions.assertEquals(expectedAck, result);
     }
 }
