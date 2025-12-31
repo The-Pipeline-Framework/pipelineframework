@@ -217,14 +217,7 @@ The DLQ mechanism captures failed items for later inspection and reprocessing.
 
 ### DLQ Configuration
 
-Enable DLQ at the step level:
-
-```java
-@PipelineStep(
-    // ... other configuration
-    recoverOnFailure = true  // Enable DLQ
-)
-```
+DLQ/recovery is configured at runtime, not via @PipelineStep. Use StepConfig or application.properties (see Configuration Reference and Runtime Configuration below) for the exact settings.
 
 ### Persistence Dependencies
 
