@@ -21,9 +21,9 @@ public class PipelineStepIRExtractor {
     private final ProcessingEnvironment processingEnv;
 
     /**
-     * Creates a new PipelineStepIRExtractor.
+     * Initialises the extractor with the processing environment used for annotation processing and type utilities.
      *
-     * @param processingEnv the processing environment
+     * @param processingEnv the ProcessingEnvironment used for annotation processing, messaging and type utilities
      */
     public PipelineStepIRExtractor(ProcessingEnvironment processingEnv) {
         this.processingEnv = processingEnv;
@@ -35,10 +35,10 @@ public class PipelineStepIRExtractor {
     public record ExtractResult(PipelineStepModel model) {}
 
     /**
-     * Extracts semantic information from a PipelineStep annotation into PipelineStepModel.
+     * Produces a PipelineStepModel by extracting semantic information from a class annotated with `@PipelineStep`.
      *
-     * @param serviceClass the annotated service class element
-     * @return the extracted ExtractResult containing model, or null if extraction failed
+     * @param serviceClass the element representing the annotated service class
+     * @return the extraction result wrapping the constructed PipelineStepModel, or `null` if the annotation mirror could not be obtained
      */
     public ExtractResult extract(TypeElement serviceClass) {
         // Get the annotation mirror to extract TypeMirror values
@@ -102,6 +102,16 @@ public class PipelineStepIRExtractor {
         return new ExtractResult(model);
     }
 
+    /**
+     * Create a TypeMapping describing the relationship between a domain type and an optional mapper type.
+     *
+     * If `domainType` is null or represents `void`/`java.lang.Void`, the result is disabled with no domain or mapper.
+     * If `mapperType` is null or represents `void`/`java.lang.Void`, the result contains the domain type, no mapper, and is disabled.
+     *
+     * @param domainType the domain type to map from; may be null or a `void` type to indicate absence
+     * @param mapperType the mapper type to convert the domain type; may be null or a `void` type to indicate no mapper
+     * @return a TypeMapping containing resolved `TypeName` values and an `enabled` flag set to `true` only when both domain and mapper are present
+     */
     private TypeMapping extractTypeMapping(TypeMirror domainType, TypeMirror mapperType) {
         if (domainType == null || domainType.toString().equals("void") || domainType.toString().equals("java.lang.Void")) {
             return new TypeMapping(null, null, false);
@@ -117,6 +127,17 @@ public class PipelineStepIRExtractor {
         );
     }
 
+    /**
+     * Determine the streaming shape corresponding to a pipeline step type.
+     *
+     * @param stepType the annotated step type as a TypeMirror (may be null)
+     * @return the corresponding StreamingShape; defaults to `UNARY_UNARY` if `stepType` is null or unrecognised.
+     *         Recognised mappings:
+     *         - `org.pipelineframework.step.StepOneToMany` → `UNARY_STREAMING`
+     *         - `org.pipelineframework.step.StepManyToOne` → `STREAMING_UNARY`
+     *         - `org.pipelineframework.step.StepManyToMany` → `STREAMING_STREAMING`
+     *         - `org.pipelineframework.step.StepOneToOne` → `UNARY_UNARY`
+     */
     private StreamingShape determineStreamingShape(TypeMirror stepType) {
         if (stepType != null) {
             String stepTypeStr = stepType.toString();

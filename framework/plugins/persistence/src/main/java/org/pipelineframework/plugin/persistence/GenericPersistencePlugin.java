@@ -32,10 +32,21 @@ public class GenericPersistencePlugin implements PluginReactiveUnary<Object> {
 
     private final PersistenceManager persistenceManager;
 
+    /**
+     * Create a GenericPersistencePlugin using the supplied persistence manager.
+     *
+     * @param persistenceManager manager used to persist entities
+     */
     public GenericPersistencePlugin(PersistenceManager persistenceManager) {
         this.persistenceManager = persistenceManager;
     }
 
+    /**
+     * Persists the provided entity using the configured PersistenceManager.
+     *
+     * @param item the entity to persist; if null the method returns immediately without attempting persistence
+     * @return a Uni that completes with no value when persistence has finished; completes immediately if the item is null
+     */
     @Override
     public Uni<Void> process(Object item) {
         LOG.debugf("About to persist entity: %s", item != null ? item.getClass().getName() : "null");

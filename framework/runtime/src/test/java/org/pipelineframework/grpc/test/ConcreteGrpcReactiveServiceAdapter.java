@@ -26,6 +26,11 @@ import org.pipelineframework.service.ReactiveService;
 public class ConcreteGrpcReactiveServiceAdapter
         extends GrpcReactiveServiceAdapter<Object, Object, TestEntity, TestResult> {
 
+    /**
+     * Provides the ReactiveService implementation used by this adapter for testing.
+     *
+     * @return the ReactiveService handling TestEntity to TestResult operations
+     */
     @Override
     protected ReactiveService<TestEntity, TestResult> getService() {
         return new org.pipelineframework.service.TestReactiveService();
@@ -37,18 +42,22 @@ public class ConcreteGrpcReactiveServiceAdapter
     }
 
     /**
-     * Convert a domain TestResult into its gRPC representation.
+     * Converts a domain TestResult into its gRPC representation.
      *
-     * @param domainOut the domain-level result to convert
-     * @return an Object representing the gRPC response; in this test implementation a newly created
-     *         generic Object
+     * @param domainOut the domain result to convert
+     * @return an Object representing the gRPC response; in this test implementation a new generic Object
      */
     @Override
     protected Object toGrpc(TestResult domainOut) {
         return new Object(); // This is just for testing
     }
 
-    // Public methods for testing
+    /**
+     * Convert a gRPC-format input object into a TestEntity.
+     *
+     * @param grpcIn the gRPC-format input object to convert
+     * @return the resulting TestEntity
+     */
     public TestEntity testFromGrpc(Object grpcIn) {
         return fromGrpc(grpcIn);
     }

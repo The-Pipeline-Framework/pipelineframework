@@ -60,14 +60,14 @@ public class PipelineRunner implements AutoCloseable {
     }
 
     /**
-     * Run a sequence of pipeline steps against the provided reactive source.
+     * Execute the provided pipeline steps against a reactive source.
      *
-     * Configurable steps are initialised with configuration built from the injected factories before being applied.
+     * Configurable steps are initialised with configuration built from the injected factories before they are applied.
      *
-     * @param input the source Multi of items to process through the pipeline; may be transformed to a Uni/Multi by steps
-     * @param steps the list of step instances to apply; must not be null; null entries are skipped
-     * @return either a Multi containing the resulting stream of items or a Uni containing the final single result
-     * @throws NullPointerException if steps is null
+     * @param input  the source Multi of items to process; steps may convert this to a Uni or a different Multi
+     * @param steps  the list of step instances to apply; must not be null — null entries within the list are skipped
+     * @return       a Multi containing the resulting stream of items, or a Uni containing the final single result
+     * @throws NullPointerException if {@code steps} is null
      */
     public Object run(Multi<?> input, List<Object> steps) {
         Objects.requireNonNull(steps, "Steps list must not be null");
@@ -108,10 +108,15 @@ public class PipelineRunner implements AutoCloseable {
     }
 
     /**
-     * Orders the provided steps according to the pipeline configuration.
+     * Determine the execution order of the given pipeline steps using the configured global order.
+     *
+     * If a global order is not configured or contains no valid entries, the original list is returned.
+     * Steps named in the configuration are matched by their fully-qualified class name; names present
+     * in the configuration but not found in the provided list are logged and ignored. Any steps not
+     * mentioned in the configuration are appended in their original relative order.
      *
      * @param steps the list of step instances to order
-     * @return the ordered list of step instances
+     * @return an ordered list of step instances according to the pipeline configuration
      */
     List<Object> orderSteps(List<Object> steps) {
         // Check if there's a global pipeline order configured

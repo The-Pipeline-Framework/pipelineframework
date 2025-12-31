@@ -39,37 +39,35 @@ public abstract class GrpcReactiveServiceAdapter<GrpcIn, GrpcOut, DomainIn, Doma
   }
 
   /**
-   * Provides the reactive service responsible for processing domain inputs into domain outputs.
-   *
-   * @return the ReactiveService that processes DomainIn to produce DomainOut.
-   */
+ * Obtain the domain reactive service used to process domain inputs into domain outputs.
+ *
+ * @return the ReactiveService instance that processes DomainIn into DomainOut
+ */
   protected abstract ReactiveService<DomainIn, DomainOut> getService();
 
   /**
-   * Convert a gRPC input object into the corresponding domain input representation.
-   *
-   * @param grpcIn the gRPC input object to convert
-   * @return the resulting domain input object
-   */
+ * Map a gRPC request message to the corresponding domain-layer input object.
+ *
+ * @param grpcIn the incoming gRPC message to convert
+ * @return the domain input object produced from the gRPC message
+ */
   protected abstract DomainIn fromGrpc(GrpcIn grpcIn);
 
   /**
-   * Convert a domain-layer output value into its gRPC representation.
-   *
-   * @param domainOut the domain-layer result to convert
-   * @return the corresponding gRPC output instance
-   */
+ * Convert a domain-layer output value to its gRPC representation.
+ *
+ * @param domainOut the domain-layer result to convert into a gRPC message
+ * @return the corresponding gRPC output message
+ */
   protected abstract GrpcOut toGrpc(DomainOut domainOut);
 
   /**
    * Process a gRPC request through the reactive domain service.
-   * <p>
-   * Converts the provided gRPC request to a domain input, invokes the underlying reactive service,
-   * and converts the resulting domain output back to a gRPC response.
    *
-   * @param grpcRequest the incoming gRPC request to convert and process
-   * @return the gRPC response message corresponding to the processed domain result
-   * @throws io.grpc.StatusRuntimeException if processing fails; failures are mapped to an appropriate gRPC status
+   * Converts the gRPC request to a domain input, invokes the domain reactive service, and converts the resulting domain output back to a gRPC response.
+   *
+   * @param grpcRequest the incoming gRPC request to process
+   * @return the gRPC response corresponding to the processed domain output
    */
   public Uni<GrpcOut> remoteProcess(GrpcIn grpcRequest) {
     DomainIn entity = fromGrpc(grpcRequest);

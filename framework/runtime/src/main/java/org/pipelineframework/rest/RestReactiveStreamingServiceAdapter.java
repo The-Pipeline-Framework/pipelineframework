@@ -28,23 +28,25 @@ import org.pipelineframework.service.ReactiveStreamingService;
 public abstract class RestReactiveStreamingServiceAdapter<DomainIn, DomainOut, DtoOut> {
 
     /**
-     * Default constructor for RestReactiveStreamingServiceAdapter.
+     * Initialises a RestReactiveStreamingServiceAdapter instance.
+     *
+     * Provided for subclassing; no initialisation logic is performed.
      */
     public RestReactiveStreamingServiceAdapter() {
     }
 
     /**
-     * Provide the reactive streaming service used to process domain inputs into domain outputs.
-     *
-     * @return the {@link ReactiveStreamingService} instance that processes {@code DomainIn} into {@code DomainOut}
-     */
+ * Provides the reactive streaming service that processes domain inputs into domain outputs.
+ *
+ * @return the {@link ReactiveStreamingService} instance that processes {@code DomainIn} into {@code DomainOut}
+ */
     protected abstract ReactiveStreamingService<DomainIn, DomainOut> getService();
 
     /**
-     * Convert a processed domain object to its corresponding DTO representation.
-     *
-     * @param domainOut the domain-level result to convert
-     * @return the DTO representation of the provided domain object
-     */
+ * Convert a domain output value into its DTO representation.
+ *
+ * @param domainOut the domain-level result produced by the service to convert
+ * @return the DTO representation of the provided domain output
+ */
     protected abstract DtoOut toDto(DomainOut domainOut);
 }

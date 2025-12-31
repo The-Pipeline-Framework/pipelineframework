@@ -11,12 +11,18 @@ import javax.annotation.processing.ProcessingEnvironment;
  */
 public abstract class AbstractProcessingTool extends AbstractProcessor {
     /**
-     * Creates a new AbstractProcessingTool instance.
-     * Default constructor provided by AbstractProcessor.
+     * Initialises a new AbstractProcessingTool instance.
+     *
+     * No additional initialisation is performed beyond the superclass construction.
      */
     public AbstractProcessingTool() {
     }
 
+    /**
+     * Initialises the processor with the supplied processing environment.
+     *
+     * @param processingEnv the processing environment to be used by this processor
+     */
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
         super.init(processingEnv);

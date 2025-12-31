@@ -32,10 +32,10 @@ public abstract class ReactiveServiceAdapterBase {
 
   /**
    * Switches execution to the current Vert.x event loop.
-   * <p>
-   * If no Vert.x context is present the returned Uni fails with an IllegalStateException.
    *
-   * @return a Uni that completes with `null` once the current Vert.x context has executed on its event loop,
+   * <p>If no Vert.x context is present the returned Uni fails with an {@link IllegalStateException}.
+   *
+   * @return {@code null} when execution has been scheduled on the current Vert.x event loop,
    *         or fails with an {@link IllegalStateException} when no Vert.x context is available
    */
   protected Uni<Void> switchToEventLoop() {

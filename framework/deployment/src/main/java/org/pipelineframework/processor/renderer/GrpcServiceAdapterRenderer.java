@@ -24,6 +24,16 @@ import org.pipelineframework.processor.util.GrpcJavaTypeResolver;
 public record GrpcServiceAdapterRenderer(GenerationTarget target) implements PipelineRenderer<GrpcBinding> {
     private static final GrpcJavaTypeResolver GRPC_TYPE_RESOLVER = new GrpcJavaTypeResolver();
 
+    /**
+     * Generate and write a gRPC service adapter class for the provided binding into the generation context.
+     *
+     * The generated Java file is placed in the package formed by binding.servicePackage() plus the pipeline suffix
+     * and written to the writer supplied by the generation context.
+     *
+     * @param binding the gRPC binding describing the service and its pipeline step model
+     * @param ctx the generation context providing file output and processing environment
+     * @throws IOException if an error occurs while writing the generated file
+     */
     @Override
     public void render(GrpcBinding binding, GenerationContext ctx) throws IOException {
         TypeSpec grpcServiceClass = buildGrpcServiceClass(binding, ctx.processingEnv().getMessager());
@@ -39,6 +49,18 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         }
     }
 
+    /**
+     * Builds a JavaPoet TypeSpec for the gRPC service adapter class corresponding to the given binding.
+     *
+     * The generated class is annotated as a gRPC service, registered as a singleton and unremovable,
+     * given a generated role indicating a pipeline server, extends the resolved gRPC base class,
+     * conditionally declares injected mapper fields, and implements the appropriate remote method
+     * for the model's streaming shape.
+     *
+     * @param binding   the gRPC binding containing the pipeline step model and service metadata used to generate the class
+     * @param messager  a Messager for reporting diagnostics and assisting type resolution during generation
+     * @return          a TypeSpec representing the complete gRPC service adapter class to be written to a Java file
+     */
     private TypeSpec buildGrpcServiceClass(GrpcBinding binding, Messager messager) {
         PipelineStepModel model = binding.model();
         String simpleClassName;
@@ -108,12 +130,30 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         return grpcServiceBuilder.build();
     }
 
+    /**
+     * Resolve the gRPC implementation base class for the given binding.
+     *
+     * @param binding the gRPC binding containing pipeline and service metadata
+     * @param messager a compiler messager used for type resolution diagnostics
+     * @return the ClassName representing the gRPC implementation base class for the binding
+     */
     private ClassName determineGrpcBaseClass(GrpcBinding binding, Messager messager) {
         // Use the new GrpcJavaTypeResolver to determine the gRPC implementation base class
         GrpcJavaTypeResolver.GrpcJavaTypes types = GRPC_TYPE_RESOLVER.resolve(binding, messager);
         return types.implBase();
     }
 
+    /**
+     * Add a unary-to-unary gRPC remoteProcess method to the provided class builder for the given binding.
+     *
+     * The generated method constructs an inline GrpcReactiveServiceAdapter tailored to the binding's
+     * gRPC parameter/return types and domain types, and delegates request handling to that adapter.
+     *
+     * @param builder the JavaPoet TypeSpec.Builder representing the class being generated
+     * @param binding provides pipeline step model and gRPC type metadata used to build the method
+     * @param messager used to report messages during type resolution
+     * @throws IllegalStateException if required gRPC parameter/return types or domain input/output types are missing for the service
+     */
     private void addUnaryUnaryMethod(TypeSpec.Builder builder, GrpcBinding binding, Messager messager) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
@@ -162,6 +202,20 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         builder.addMethod(remoteProcessMethodBuilder.build());
     }
 
+    /**
+     * Add a unary-to-streaming gRPC service method implementation to the generated class.
+     *
+     * <p>Constructs and appends a public {@code remoteProcess} method that accepts a single gRPC
+     * request and returns a reactive stream of gRPC responses. The method instantiates an inline
+     * streaming adapter (mapping between gRPC and domain types) and delegates processing to it.
+     * If the step's execution mode is configured for virtual threads, the method is annotated with
+     * {@code @RunOnVirtualThread}.</p>
+     *
+     * @param builder the TypeSpec.Builder for the service class being generated
+     * @param binding the gRPC binding containing pipeline and type information for this service
+     * @param messager the annotation processing messager used during type resolution
+     * @throws IllegalStateException if required gRPC parameter/return types or domain input/output types are missing for the service
+     */
     private void addUnaryStreamingMethod(TypeSpec.Builder builder, GrpcBinding binding, Messager messager) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
@@ -210,6 +264,21 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         builder.addMethod(remoteProcessMethodBuilder.build());
     }
 
+    /**
+     * Add the streaming-unary gRPC service method implementation to the provided class builder.
+     *
+     * Builds and appends a public `remoteProcess(Multi<GrpcRequest>) : Uni<GrpcResponse>` method that
+     * instantiates an inline client-streaming adapter bridging gRPC message types and domain types,
+     * and delegates processing to that adapter.
+     *
+     * @param builder the TypeSpec.Builder to which the generated method will be added
+     * @param binding source metadata containing the pipeline step model and service name used to
+     *                resolve gRPC and domain types
+     *
+     * @throws IllegalStateException if the binding does not resolve to required gRPC parameter or
+     *                               return types, or if the model lacks the necessary inbound or
+     *                               outbound domain types
+     */
     private void addStreamingUnaryMethod(TypeSpec.Builder builder, GrpcBinding binding, Messager messager) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
@@ -259,6 +328,17 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         builder.addMethod(remoteProcessMethodBuilder.build());
     }
 
+    /**
+     * Adds a bidirectional gRPC `remoteProcess` method to the generated service class.
+     *
+     * The generated method overrides `remoteProcess`, accepts a `Multi` of gRPC request messages,
+     * and returns a `Multi` of gRPC response messages by delegating to an inline streaming adapter.
+     *
+     * @param builder the TypeSpec builder for the service class being generated
+     * @param binding the gRPC binding containing the pipeline step model and service metadata
+     * @param messager a processing messager used for type resolution diagnostics
+     * @throws IllegalStateException if required gRPC parameter/return types or domain types are missing for the service
+     */
     private void addStreamingStreamingMethod(TypeSpec.Builder builder, GrpcBinding binding, Messager messager) {
         PipelineStepModel model = binding.model();
         ClassName grpcAdapterClassName =
@@ -308,6 +388,15 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         builder.addMethod(remoteProcessMethodBuilder.build());
     }
 
+    /**
+     * Builds an anonymous subclass of the given gRPC adapter type that bridges between gRPC DTOs and domain types.
+     *
+     * @param binding               the gRPC binding containing the pipeline step model and service metadata
+     * @param grpcAdapterClassName  the adapter base class to extend (parameterised with input/output gRPC and domain types)
+     * @param messager              a Messager passed to the type resolver for diagnostics
+     * @return                      a TypeSpec for an anonymous class implementing `getService`, `fromGrpc` and `toGrpc`
+     * @throws IllegalStateException if required gRPC parameter/return types or domain input/output types are missing for the binding
+     */
     private TypeSpec inlineAdapterBuilder(
             GrpcBinding binding,
             ClassName grpcAdapterClassName,
@@ -378,6 +467,12 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 .build();
     }
 
+    /**
+     * Determine the GeneratedRole value to apply to the generated gRPC service.
+     *
+     * @param binding the gRPC binding providing context for role selection
+     * @return the role name to assign to the generated gRPC service
+     */
     private String determineRoleForGrpcService(GrpcBinding binding) {
         // For now, assume it's a regular pipeline server
         // In a future implementation, we could distinguish between regular and plugin servers

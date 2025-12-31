@@ -21,10 +21,21 @@ package org.pipelineframework.plugin.runtime;
  */
 public class PluginResolutionException extends RuntimeException {
 
+    /**
+     * Create a PluginResolutionException with the specified detail message.
+     *
+     * @param message the detail message describing why the plugin could not be resolved
+     */
     public PluginResolutionException(String message) {
         super(message);
     }
 
+    /**
+     * Creates a new PluginResolutionException with the specified detail message and cause.
+     *
+     * @param message the detail message explaining why the plugin could not be resolved
+     * @param cause the underlying cause of the resolution failure, or {@code null} if none
+     */
     public PluginResolutionException(String message, Throwable cause) {
         super(message, cause);
     }
