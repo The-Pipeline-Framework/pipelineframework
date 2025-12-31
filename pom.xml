@@ -64,6 +64,7 @@
         <spotless.plugin.version>2.44.0</spotless.plugin.version>
         <jakarta.cdi.version>4.0.1</jakarta.cdi.version>
         <junit.jupiter.version>5.13.4</junit.jupiter.version>
+        <compile.testing.version>0.23.0</compile.testing.version>
         <mockito.version>5.15.2</mockito.version>
         <surefireArgLine />
     </properties>
