@@ -10,9 +10,6 @@ import javax.annotation.processing.ProcessingEnvironment;
  * Default constructor is provided by the abstract processor.
  */
 public abstract class AbstractProcessingTool extends AbstractProcessor {
-    /** Processing environment for this processor. */
-    protected ProcessingEnvironment processingEnv;
-
     /**
      * Creates a new AbstractProcessingTool instance.
      * Default constructor provided by AbstractProcessor.
@@ -22,6 +19,6 @@ public abstract class AbstractProcessingTool extends AbstractProcessor {
 
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
-        this.processingEnv = processingEnv;
+        super.init(processingEnv);
     }
 }
