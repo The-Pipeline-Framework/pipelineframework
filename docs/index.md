@@ -82,6 +82,7 @@ To get started with The Pipeline Framework, explore these guides:
 
 ### Advanced Topics
 - [Pipeline Compilation](/guide/pipeline-compilation.html): Understanding how the annotation processor works
+- [Migrations](/guide/migrations.html): Upgrade notes and breaking changes
 - [Error Handling & DLQ](/guide/error-handling.html): Managing errors and dead letter queues
 - [Observability](/guide/observability.html): Monitoring and observing pipeline applications
 

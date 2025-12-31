@@ -44,6 +44,7 @@ The framework allows you to define pipeline steps as simple classes annotated wi
 
 ### Advanced Topics
 - [Pipeline Compilation](/guide/pipeline-compilation): Understanding how the annotation processor works
+- [Migrations](/guide/migrations): Upgrade notes and breaking changes
 - [Error Handling & DLQ](/guide/error-handling): Managing errors and dead letter queues
 - [Observability](/guide/observability): Monitoring and observing pipeline applications
 
