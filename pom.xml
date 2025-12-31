@@ -62,6 +62,8 @@
         <version.jandex>3.5.0</version.jandex>
         <grpc.version>1.63.0</grpc.version>
         <spotless.plugin.version>2.44.0</spotless.plugin.version>
+        <jakarta.cdi.version>4.0.1</jakarta.cdi.version>
+        <junit.jupiter.version>5.13.4</junit.jupiter.version>
         <mockito.version>5.15.2</mockito.version>
         <surefireArgLine />
     </properties>
