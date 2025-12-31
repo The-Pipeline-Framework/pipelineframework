@@ -50,15 +50,6 @@ public record PipelineStepModel(
             StreamingShape streamingShape,
             Set<GenerationTarget> enabledTargets,
             ExecutionMode executionMode) {
-        this.serviceName = serviceName;
-        this.servicePackage = servicePackage;
-        this.serviceClassName = serviceClassName;
-        this.inputMapping = inputMapping;
-        this.outputMapping = outputMapping;
-        this.streamingShape = streamingShape;
-        this.enabledTargets = Set.copyOf(enabledTargets); // Defensive copy
-        this.executionMode = executionMode;
-
         // Validate non-null invariants
         if (serviceName == null)
             throw new IllegalArgumentException("serviceName cannot be null");
@@ -72,6 +63,15 @@ public record PipelineStepModel(
             throw new IllegalArgumentException("enabledTargets cannot be null");
         if (executionMode == null)
             throw new IllegalArgumentException("executionMode cannot be null");
+
+        this.serviceName = serviceName;
+        this.servicePackage = servicePackage;
+        this.serviceClassName = serviceClassName;
+        this.inputMapping = inputMapping;
+        this.outputMapping = outputMapping;
+        this.streamingShape = streamingShape;
+        this.enabledTargets = Set.copyOf(enabledTargets); // Defensive copy
+        this.executionMode = executionMode;
     }
 
     /**
