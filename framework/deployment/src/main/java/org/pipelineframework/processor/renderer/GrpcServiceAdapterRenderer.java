@@ -337,6 +337,31 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
             throw new IllegalStateException("Missing required domain parameter or return type for service: " + binding.serviceName());
         }
 
+        boolean hasInboundMapper = model.inputMapping().hasMapper();
+        boolean hasOutboundMapper = model.outputMapping().hasMapper();
+
+        MethodSpec.Builder fromGrpcMethodBuilder = MethodSpec.methodBuilder("fromGrpc")
+                .addAnnotation(Override.class)
+                .addModifiers(Modifier.PROTECTED)
+                .returns(inputDomainType)
+                .addParameter(inputGrpcType, "grpcIn");
+        if (hasInboundMapper) {
+            fromGrpcMethodBuilder.addStatement("return inboundMapper.fromGrpcFromDto(grpcIn)");
+        } else {
+            fromGrpcMethodBuilder.addStatement("return ($T) grpcIn", inputDomainType);
+        }
+
+        MethodSpec.Builder toGrpcMethodBuilder = MethodSpec.methodBuilder("toGrpc")
+                .addAnnotation(Override.class)
+                .addModifiers(Modifier.PROTECTED)
+                .returns(outputGrpcType)
+                .addParameter(outputDomainType, "output");
+        if (hasOutboundMapper) {
+            toGrpcMethodBuilder.addStatement("return outboundMapper.toDtoToGrpc(output)");
+        } else {
+            toGrpcMethodBuilder.addStatement("return ($T) output", outputGrpcType);
+        }
+
         return TypeSpec.anonymousClassBuilder("")
                 .superclass(ParameterizedTypeName.get(
                         grpcAdapterClassName,
@@ -351,20 +376,8 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                         .returns(serviceType)
                         .addStatement("return service")
                         .build())
-                .addMethod(MethodSpec.methodBuilder("fromGrpc")
-                        .addAnnotation(Override.class)
-                        .addModifiers(Modifier.PROTECTED)
-                        .returns(inputDomainType)
-                        .addParameter(inputGrpcType, "grpcIn")
-                        .addStatement("return inboundMapper.fromGrpcFromDto(grpcIn)")
-                        .build())
-                .addMethod(MethodSpec.methodBuilder("toGrpc")
-                        .addAnnotation(Override.class)
-                        .addModifiers(Modifier.PROTECTED)
-                        .returns(outputGrpcType)
-                        .addParameter(outputDomainType, "output")
-                        .addStatement("return outboundMapper.toDtoToGrpc(output)")
-                        .build())
+                .addMethod(fromGrpcMethodBuilder.build())
+                .addMethod(toGrpcMethodBuilder.build())
                 .build();
     }
 
