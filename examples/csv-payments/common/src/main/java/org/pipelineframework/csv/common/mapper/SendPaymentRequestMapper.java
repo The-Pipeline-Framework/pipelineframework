@@ -39,12 +39,24 @@ public interface SendPaymentRequestMapper extends org.pipelineframework.mapper.M
 
   SendPaymentRequestMapper INSTANCE = Mappers.getMapper( SendPaymentRequestMapper.class );
 
+  /**
+   * Map a SendPaymentRequest DTO to its gRPC SendPaymentRequest representation.
+   *
+   * @param dto the DTO containing payment details to convert
+   * @return a gRPC SendPaymentRequest with `amount`, `currency` and `paymentRecordId` converted to string fields
+   */
   @Override
   @Mapping(source = "amount", target = "amount", qualifiedByName = "bigDecimalToString")
   @Mapping(source = "currency", target = "currency", qualifiedByName = "currencyToString")
   @Mapping(source = "paymentRecordId", target = "paymentRecordId", qualifiedByName = "uuidToString")
   PaymentsProcessingSvc.SendPaymentRequest toGrpc(SendPaymentRequest dto);
 
+  /**
+   * Convert a gRPC send payment request into the DTO representation.
+   *
+   * @param grpcRequest the gRPC send payment request to convert
+   * @return a SendPaymentRequest DTO populated from the gRPC request
+   */
   @Override
   @Mapping(source = "amount", target = "amount", qualifiedByName = "stringToBigDecimal")
   @Mapping(source = "currency", target = "currency", qualifiedByName = "stringToCurrency")

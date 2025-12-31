@@ -34,17 +34,19 @@ public abstract class RestReactiveServiceAdapter<DomainIn, DomainOut, DtoOut> {
     }
 
     /**
-     * Provides the reactive service used to process domain inputs into domain outputs.
-     *
-     * @return the {@code ReactiveService<DomainIn, DomainOut>} instance used to process domain objects
-     */
+ * Supply the ReactiveService that performs processing of domain inputs to domain outputs.
+ *
+ * Implementations must provide the service instance the adapter will delegate domain processing to.
+ *
+ * @return the {@code ReactiveService<DomainIn, DomainOut>} instance used to process domain inputs into domain outputs
+ */
     protected abstract ReactiveService<DomainIn, DomainOut> getService();
 
     /**
-     * Convert a processed domain object to its REST DTO representation.
-     *
-     * @param domainOut the processed domain model instance to convert
-     * @return the DTO representation to be returned by the REST resource
-     */
+ * Converts a processed domain object to its REST DTO representation.
+ *
+ * @param domainOut the processed domain model instance to convert
+ * @return the DTO representation to be returned by the REST resource
+ */
     protected abstract DtoOut toDto(DomainOut domainOut);
 }

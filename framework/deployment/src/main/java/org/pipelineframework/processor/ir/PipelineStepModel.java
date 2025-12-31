@@ -30,17 +30,18 @@ public record PipelineStepModel(
         ExecutionMode executionMode
 ) {
     /**
-     * Creates a new PipelineStepModel instance.
-     *
-     * @param serviceName the name of the service
-     * @param servicePackage the package of the service
-     * @param serviceClassName the class name of the service
-     * @param inputMapping the input type mapping
-     * @param outputMapping the output type mapping
-     * @param streamingShape the streaming shape for the service
-     * @param enabledTargets the set of generation targets to enable
-     * @param executionMode the execution mode to use
-     */
+         * Creates a new PipelineStepModel with the supplied service identity, type mappings and generation configuration.
+         *
+         * @param serviceName      the service name; must not be null
+         * @param servicePackage   the service package; must not be null
+         * @param serviceClassName the service class name; must not be null
+         * @param inputMapping     the input domain→gRPC type mapping, or {@code null} if not applicable
+         * @param outputMapping    the output domain→gRPC type mapping, or {@code null} if not applicable
+         * @param streamingShape   the streaming shape configuration; must not be null
+         * @param enabledTargets   the set of enabled generation targets; must not be null
+         * @param executionMode    the execution mode for the service; must not be null
+         * @throws IllegalArgumentException if any parameter documented as 'must not be null' is null
+         */
     @SuppressWarnings("ConstantValue")
     public PipelineStepModel(String serviceName,
             String servicePackage,
@@ -75,16 +76,18 @@ public record PipelineStepModel(
     }
 
     /**
-     * Gets the inbound domain type.
-     * @return the inbound domain type
+     * The inbound domain type for this pipeline step.
+     *
+     * @return the domain `TypeName` used as the service's input
      */
     public TypeName inboundDomainType() {
         return inputMapping.domainType();
     }
 
     /**
-     * Gets the outbound domain type.
-     * @return the outbound domain type
+     * Obtain the domain type used for outbound mapping.
+     *
+     * @return a TypeName representing the outbound domain type
      */
     public TypeName outboundDomainType() {
         return outputMapping.domainType();
@@ -133,9 +136,9 @@ public record PipelineStepModel(
         }
 
         /**
-         * Sets the service class name.
+         * Sets the service class's ClassName used to identify the service implementation.
          *
-         * @param serviceClassName the service class name to set
+         * @param serviceClassName the ClassName representing the service class
          * @return this builder instance
          */
         public Builder serviceClassName(ClassName serviceClassName) {
@@ -144,9 +147,9 @@ public record PipelineStepModel(
         }
 
         /**
-         * Sets the input type mapping.
+         * Set the mapping used to convert the service's inbound domain type to its gRPC representation.
          *
-         * @param inputMapping the input type mapping to set
+         * @param inputMapping mapping describing how the service input domain type is translated to transport types
          * @return this builder instance
          */
         public Builder inputMapping(TypeMapping inputMapping) {
@@ -155,9 +158,9 @@ public record PipelineStepModel(
         }
 
         /**
-         * Sets the output type mapping.
+         * Set the output type mapping used for the service's outbound domain to gRPC mapping.
          *
-         * @param outputMapping the output type mapping to set
+         * @param outputMapping mapping describing how domain output types map to gRPC types
          * @return this builder instance
          */
         public Builder outputMapping(TypeMapping outputMapping) {
@@ -166,9 +169,9 @@ public record PipelineStepModel(
         }
 
         /**
-         * Sets the streaming shape.
+         * Set the streaming shape for the pipeline step under construction.
          *
-         * @param streamingShape the streaming shape to set
+         * @param streamingShape the streaming shape configuration for the service
          * @return this builder instance
          */
         public Builder streamingShape(StreamingShape streamingShape) {
@@ -188,9 +191,9 @@ public record PipelineStepModel(
         }
 
         /**
-         * Sets the enabled generation targets.
+         * Replace the builder's enabled generation targets with a defensive copy of the given set.
          *
-         * @param enabledTargets the enabled generation targets to set
+         * @param enabledTargets the set of generation targets to enable; a defensive copy is stored
          * @return this builder instance
          */
         public Builder enabledTargets(Set<GenerationTarget> enabledTargets) {
@@ -199,9 +202,9 @@ public record PipelineStepModel(
         }
 
         /**
-         * Sets the execution mode.
+         * Set the execution mode for the pipeline step being built.
          *
-         * @param executionMode the execution mode to set
+         * @param executionMode the execution mode to apply
          * @return this builder instance
          */
         public Builder executionMode(ExecutionMode executionMode) {
@@ -210,9 +213,12 @@ public record PipelineStepModel(
         }
 
         /**
-         * Builds the PipelineStepModel instance.
+         * Create a PipelineStepModel populated from the builder's current state.
          *
-         * @return the constructed PipelineStepModel instance
+         * @return a PipelineStepModel populated with the builder's state
+         * @throws IllegalStateException if any required property is not set — specifically when
+         *                               serviceName, servicePackage, serviceClassName,
+         *                               streamingShape, or executionMode is null
          */
         public PipelineStepModel build() {
             // Validate required fields are not null

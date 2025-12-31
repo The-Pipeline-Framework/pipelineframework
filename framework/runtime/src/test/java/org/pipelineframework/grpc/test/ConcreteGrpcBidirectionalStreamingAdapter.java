@@ -25,6 +25,11 @@ import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
 public class ConcreteGrpcBidirectionalStreamingAdapter
         extends GrpcServiceBidirectionalStreamingAdapter<String, String, String, String> {
 
+    /**
+     * Provide the reactive bidirectional streaming service used by this adapter.
+     *
+     * @return the ReactiveBidirectionalStreamingService instance that processes String stream inputs and produces String stream outputs
+     */
     @Override
     protected ReactiveBidirectionalStreamingService<String, String> getService() {
         return new TestBidirectionalStreamingService();
@@ -46,7 +51,12 @@ public class ConcreteGrpcBidirectionalStreamingAdapter
         return "grpc_" + domainOut;
     }
 
-    // Public methods for testing
+    /**
+     * Exposes the conversion of a gRPC input string to the adapter's domain representation for tests.
+     *
+     * @param grpcIn the input string in gRPC form
+     * @return the corresponding domain representation of the input
+     */
     public String testFromGrpc(String grpcIn) {
         return fromGrpc(grpcIn);
     }

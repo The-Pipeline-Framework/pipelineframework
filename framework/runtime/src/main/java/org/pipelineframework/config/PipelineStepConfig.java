@@ -36,21 +36,23 @@ import io.smallrye.config.WithName;
 public interface PipelineStepConfig {
 
     /**
-     * Global pipeline order - specifies the ordered list of step classes to execute.
+     * Specifies the global execution order of pipeline steps.
      *
-     * @return the ordered list of step class names to execute in the pipeline
+     * <p>This ordered list contains fully-qualified step class names that determine which steps run and their sequence.
+     *
+     * @return the ordered list of fully-qualified step class names to execute in the pipeline
      */
     @WithDefault(" ")
     java.util.List<String> order();
 
     /**
-     * Global default configuration for pipeline steps.
-     * <p>
-     * Properties from this configuration are applied to every step unless a step defines overrides; the `order`
-     * property is ignored when these values are used as global defaults.
-     *
-     * @return the StepConfig instance containing default values for pipeline steps
-     */
+ * Default configuration applied to every pipeline step.
+ *
+ * When used as global defaults, properties are applied to every step unless a step provides overrides; the
+ * `order` property is ignored in the global defaults.
+ *
+ * @return the StepConfig containing default values for pipeline steps
+ */
     StepConfig defaults();
     
     /**

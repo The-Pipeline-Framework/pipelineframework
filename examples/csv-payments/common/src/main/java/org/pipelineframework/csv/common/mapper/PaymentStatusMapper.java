@@ -47,6 +47,12 @@ public interface PaymentStatusMapper extends org.pipelineframework.mapper.Mapper
   @Mapping(target = "ackPaymentSentId", qualifiedByName = "uuidToString")
   PaymentsProcessingSvc.PaymentStatus toGrpc(PaymentStatusDto dto);
 
+  /**
+   * Converts a gRPC PaymentsProcessingSvc.PaymentStatus message into a PaymentStatusDto.
+   *
+   * @param grpcRequest the gRPC PaymentStatus message to convert
+   * @return the DTO representation of the provided gRPC PaymentStatus
+   */
   @Override
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
   @Mapping(target = "fee", qualifiedByName = "stringToBigDecimal")

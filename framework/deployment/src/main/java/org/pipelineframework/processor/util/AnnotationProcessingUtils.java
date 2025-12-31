@@ -10,6 +10,9 @@ import javax.lang.model.type.TypeMirror;
  */
 public final class AnnotationProcessingUtils {
 
+    /**
+     * Prevents instantiation of this utility class.
+     */
     private AnnotationProcessingUtils() {
         // Prevent instantiation
     }
@@ -32,11 +35,11 @@ public final class AnnotationProcessingUtils {
     }
 
     /**
-     * Extracts a TypeMirror value from an annotation by member name.
+     * Retrieve the TypeMirror value of a named member from an AnnotationMirror.
      *
-     * @param annotation The annotation mirror to extract the value from
-     * @param memberName The name of the annotation member to extract
-     * @return The TypeMirror value of the annotation member, or null if not found or if it's a void type
+     * @param annotation the AnnotationMirror to inspect
+     * @param memberName the simple name of the annotation member to read
+     * @return the TypeMirror of the specified member, or {@code null} if the member is absent or its value is not a TypeMirror
      */
     public static TypeMirror getAnnotationValue(AnnotationMirror annotation, String memberName) {
         for (ExecutableElement executableElement : annotation.getElementValues().keySet()) {
@@ -62,12 +65,12 @@ public final class AnnotationProcessingUtils {
     }
 
     /**
-     * Extracts a boolean value from an annotation by member name.
+     * Obtain a boolean member value from an annotation, returning a provided fallback when the member is absent or not a boolean.
      *
-     * @param annotation The annotation mirror to extract the value from
-     * @param memberName The name of the annotation member to extract
-     * @param defaultValue The default value to return if the annotation value is not found
-     * @return The boolean value of the annotation member, or the default value if not found
+     * @param annotation   the annotation mirror to read the member from
+     * @param memberName   the simple name of the annotation member to look up
+     * @param defaultValue the value to return if the member is not present or is not a boolean
+     * @return `true` if the specified annotation member has the boolean value `true`, `false` otherwise; returns the supplied `defaultValue` when the member is absent or not a boolean
      */
     public static boolean getAnnotationValueAsBoolean(AnnotationMirror annotation, String memberName, boolean defaultValue) {
         for (ExecutableElement executableElement : annotation.getElementValues().keySet()) {

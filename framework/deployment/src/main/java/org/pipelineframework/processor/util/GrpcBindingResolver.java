@@ -20,12 +20,16 @@ public class GrpcBindingResolver {
     }
 
     /**
-     * Resolves gRPC bindings for a given PipelineStepModel using the provided FileDescriptorSet.
+     * Produce a GrpcBinding for the step by resolving descriptors from the given FileDescriptorSet.
      *
-     * @param stepModel The semantic pipeline step definition
-     * @param descriptorSet The compiled protobuf descriptors
-     * @return A fully populated GrpcBinding
-     * @throws IllegalStateException if validation fails or descriptorSet is null
+     * Locates the service named by the model, finds its `remoteProcess` RPC, validates streaming
+     * semantics and type mappings, and builds the binding. On any resolution or validation failure
+     * an IllegalStateException is thrown with contextual details.
+     *
+     * @param stepModel     the semantic pipeline step definition (provides expected service name and streaming shape)
+     * @param descriptorSet the compiled protobuf FileDescriptorSet used to resolve service and method descriptors
+     * @return              a GrpcBinding populated with the model, service descriptor and method descriptor
+     * @throws IllegalStateException if the descriptorSet is null, the service or method cannot be resolved, or validation fails
      */
     public GrpcBinding resolve(PipelineStepModel stepModel, DescriptorProtos.FileDescriptorSet descriptorSet) {
         if (descriptorSet == null) {
@@ -66,6 +70,20 @@ public class GrpcBindingResolver {
                 .build();
     }
 
+    /**
+     * Resolve and return the service descriptor whose name matches the step's configured service.
+     *
+     * Builds FileDescriptor instances from the provided FileDescriptorSet in dependency order,
+     * searches the resulting descriptors for a service named after stepModel.serviceName(), and returns it.
+     *
+     * @param stepModel      the pipeline step model containing the expected service name
+     * @param descriptorSet  the compiled protobuf FileDescriptorSet used to construct file descriptors
+     * @return               the located Descriptors.ServiceDescriptor matching the step's service name
+     * @throws IllegalStateException if the service name does not start with "Process", if file descriptors
+     *                               cannot be built due to unresolved dependencies or build errors, if no
+     *                               service with the expected name is found, or if multiple services with
+     *                               the same name are present in the descriptor set
+     */
     private Descriptors.ServiceDescriptor findServiceDescriptor(PipelineStepModel stepModel, DescriptorProtos.FileDescriptorSet descriptorSet) {
         String expectedServiceName = stepModel.serviceName();
 
@@ -175,6 +193,19 @@ public class GrpcBindingResolver {
         return foundService;
     }
 
+    /**
+     * Locate the service RPC named "remoteProcess" within the given service descriptor.
+     *
+     * Searches the service for a single method called "remoteProcess" and returns its descriptor.
+     * If more than one method with that name exists, or if no such method is found, an
+     * IllegalStateException is thrown. If the service contains other RPCs, a warning is emitted
+     * indicating only "remoteProcess" will be bound.
+     *
+     * @param serviceDescriptor the service descriptor to search
+     * @param stepModel         pipeline step model used to provide contextual information for errors
+     * @return                  the descriptor for the "remoteProcess" RPC method
+     * @throws IllegalStateException if no "remoteProcess" method is found or multiple methods with that name exist
+     */
     private Descriptors.MethodDescriptor findRemoteProcessMethod(Descriptors.ServiceDescriptor serviceDescriptor, PipelineStepModel stepModel) {
         String expectedMethodName = "remoteProcess";
         Descriptors.MethodDescriptor foundMethod = null;
@@ -205,6 +236,13 @@ public class GrpcBindingResolver {
         return foundMethod;
     }
 
+    /**
+     * Validate that the RPC method's streaming shape matches the pipeline step's expected streaming shape.
+     *
+     * @param methodDescriptor the gRPC method descriptor whose client/server streaming flags will be inspected
+     * @param stepModel the pipeline step model supplying the expected streaming shape (and service name for error context)
+     * @throws IllegalStateException if the method's actual streaming shape differs from the expected shape declared on the step
+     */
     private void validateStreamingSemantics(Descriptors.MethodDescriptor methodDescriptor, PipelineStepModel stepModel) {
         StreamingShape expectedShape = stepModel.streamingShape();
         boolean isRequestStreaming = methodDescriptor.isClientStreaming();
@@ -228,6 +266,15 @@ public class GrpcBindingResolver {
         }
     }
 
+    /**
+     * Placeholder for validating that the gRPC method's request and response types match the pipeline step's expected mappings.
+     *
+     * <p>Currently a no-op: type resolution and detailed mapping validation are performed later at render time by
+     * GrpcJavaTypeResolver.
+     *
+     * @param methodDescriptor the gRPC method descriptor to validate
+     * @param stepModel the pipeline step model containing expected type/mapping metadata
+     */
     private void validateTypeMappings(Descriptors.MethodDescriptor methodDescriptor, PipelineStepModel stepModel) {
         // Type mappings are resolved at render time via GrpcJavaTypeResolver.
     }

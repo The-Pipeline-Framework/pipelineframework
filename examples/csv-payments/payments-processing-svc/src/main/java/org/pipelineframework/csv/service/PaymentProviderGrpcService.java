@@ -39,6 +39,14 @@ public class PaymentProviderGrpcService
   AckPaymentSentMapper ackPaymentSentMapper = AckPaymentSentMapper.INSTANCE;
   PaymentStatusMapper paymentStatusMapper = PaymentStatusMapper.INSTANCE;
 
+  /**
+   * Handle a SendPayment gRPC request and produce an acknowledgement.
+   *
+   * @param grpcRequest the gRPC request containing the payment details to process
+   * @return an AckPaymentSent message acknowledging the processed payment
+   * @throws io.grpc.StatusRuntimeException if processing fails; failures are propagated with `Status.INTERNAL`
+   *         and include metadata describing the error
+   */
   @Override
   public Uni<PaymentsProcessingSvc.AckPaymentSent> sendPayment(
       PaymentsProcessingSvc.SendPaymentRequest grpcRequest) {

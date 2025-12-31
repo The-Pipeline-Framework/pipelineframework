@@ -41,6 +41,13 @@ import org.pipelineframework.step.StepOneToOne;
  */
 public record ClientStepRenderer(GenerationTarget target) implements PipelineRenderer<GrpcBinding> {
 
+    /**
+     * Generate and write the gRPC client step class for the given binding.
+     *
+     * @param binding the gRPC binding and its associated pipeline model used to build the client step
+     * @param ctx     the generation context providing file writers and processing environment
+     * @throws IOException if an I/O error occurs while writing the generated Java file
+     */
     @Override
     public void render(GrpcBinding binding, GenerationContext ctx) throws IOException {
         TypeSpec clientStepClass = buildClientStepClass(binding, ctx.processingEnv().getMessager());
@@ -56,6 +63,18 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
         }
     }
 
+    /**
+     * Build the JavaPoet TypeSpec for a gRPC client pipeline step corresponding to the given binding.
+     *
+     * The produced TypeSpec represents a public ConfigurableStep subclass annotated for CDI and Quarkus,
+     * optionally containing a gRPC client field, implementing the pipeline step interface appropriate
+     * to the model's streaming shape, and providing the corresponding apply* method that delegates to
+     * the gRPC client.
+     *
+     * @param binding  the gRPC binding describing the service, model and generated-class naming
+     * @param messager the annotation processing Messager used during gRPC type resolution
+     * @return the generated TypeSpec describing the client step class
+     */
     private TypeSpec buildClientStepClass(GrpcBinding binding, Messager messager) {
         PipelineStepModel model = binding.model();
         String clientStepClassName = getClientStepClassName(binding);
@@ -193,6 +212,12 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
         return clientStepBuilder.build();
     }
 
+    /**
+     * Compute the Java class name for the generated client step for the given gRPC binding.
+     *
+     * @param binding the gRPC binding whose service name is used to derive the client step class name
+     * @return the client step class name derived from the binding's service name
+     */
     private String getClientStepClassName(GrpcBinding binding) {
         String serviceClassName = binding.serviceName();
 
@@ -203,11 +228,26 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
         return clientStepClassName;
     }
 
+    /**
+     * Resolve the gRPC stub TypeName to be used for a client field for the given binding.
+     *
+     * @param binding the gRPC binding describing the service and step model
+     * @return the TypeName of the gRPC stub to inject, or `null` if resolution is not available
+     */
     private TypeName resolveGrpcStubType(GrpcBinding binding, Messager messager) {
         GrpcJavaTypeResolver grpcTypeResolver = new GrpcJavaTypeResolver();
         return grpcTypeResolver.resolve(binding, messager).stub();
     }
 
+    /**
+     * Convert a gRPC service class name into a hyphen-separated lowercase client name.
+     *
+     * <p>Removes a trailing "Service" suffix (if present) then inserts hyphens at camel-case boundaries
+     * and returns the result in lowercase.</p>
+     *
+     * @param serviceName the service class name to convert; may be null or blank
+     * @return the hyphen-separated lowercase client name, or an empty string if {@code serviceName} is null or blank
+     */
     private static String toGrpcClientName(String serviceName) {
         if (serviceName == null || serviceName.isBlank()) {
             return "";
@@ -220,6 +260,15 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
         return withBoundaryHyphens.toLowerCase();
     }
 
+    /**
+     * Choose the generated role for a client step based on its client step class name.
+     *
+     * If the computed client step class name starts with "SideEffect" the step is treated as a plugin client;
+     * otherwise it is treated as an orchestrator client.
+     *
+     * @param binding the gRPC binding model used to derive the client step class name
+     * @return `"PLUGIN_CLIENT"` if the client step class name starts with `"SideEffect"`, `"ORCHESTRATOR_CLIENT"` otherwise
+     */
     private String determineRoleForClientStep(GrpcBinding binding) {
         // For now, determine the role based on naming convention
         // If the class name starts with "SideEffect", it's a plugin client

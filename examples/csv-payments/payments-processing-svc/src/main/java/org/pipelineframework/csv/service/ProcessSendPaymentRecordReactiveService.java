@@ -49,6 +49,12 @@ public class ProcessSendPaymentRecordReactiveService
   @Inject
   Vertx vertx;
 
+  /**
+   * Create a ProcessSendPaymentRecordReactiveService with its required dependencies.
+   *
+   * @param paymentProviderServiceMock the payment provider mock used to perform payment operations
+   * @param vertx the Vert.x instance used to offload blocking work to the Vert.x context
+   */
   @Inject
   public ProcessSendPaymentRecordReactiveService(PaymentProviderServiceMock paymentProviderServiceMock, Vertx vertx) {
     this.paymentProviderServiceMock = paymentProviderServiceMock;

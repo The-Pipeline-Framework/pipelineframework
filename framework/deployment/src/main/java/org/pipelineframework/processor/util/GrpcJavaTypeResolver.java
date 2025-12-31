@@ -39,13 +39,14 @@ public class GrpcJavaTypeResolver {
     }
 
     /**
-     * Resolves the gRPC Java types for a given GrpcBinding, emitting warnings via messager when possible.
-     *
-     * @param binding The pipeline step binding containing the service descriptor
-     * @param messager Messager for diagnostics, or null to skip warnings
-     * @return GrpcJavaTypes containing the resolved stub, impl base, parameter and return class names
-     * @throws IllegalArgumentException if the service descriptor is invalid
-     */
+         * Resolve gRPC Java types for a given GrpcBinding and emit optional warnings via a Messager.
+         *
+         * @param binding the pipeline step binding containing the service and method descriptors
+         * @param messager a Messager for diagnostics, or {@code null} to disable warnings
+         * @return a GrpcJavaTypes holder containing the resolved stub, impl base, parameter and return class names
+         * @throws IllegalArgumentException if the binding's service descriptor is not a Descriptors.ServiceDescriptor
+         * @throws IllegalStateException if required descriptor information (such as the method descriptor) is missing or resolution fails
+         */
     public GrpcJavaTypes resolve(GrpcBinding binding, Messager messager) {
         Object serviceDescriptorObj = binding.serviceDescriptor();
         if (!(serviceDescriptorObj instanceof Descriptors.ServiceDescriptor serviceDescriptor)) {
@@ -112,12 +113,13 @@ public class GrpcJavaTypeResolver {
     }
 
     /**
-     * Converts a protobuf full name to a ClassName object, properly handling
-     * the protobuf to Java class name mapping considering java_package, java_outer_classname, and java_multiple_files options.
+     * Resolve a protobuf message fully-qualified name to the corresponding JavaPoet ClassName,
+     * honouring `java_package`, `java_outer_classname` and `java_multiple_files` file options.
      *
-     * @param descriptorProtoFqn The fully qualified name from the protobuf descriptor (e.g., ".pkg.PaymentStatus")
-     * @param methodDescriptor The method descriptor containing the input/output type
-     * @return The corresponding ClassName, or null if the fullName is null or empty
+     * @param descriptorProtoFqn the protobuf descriptor full name (for example ".pkg.PaymentStatus"); used to locate the message type on the provided method descriptor
+     * @param methodDescriptor the method descriptor whose input/output types are consulted to resolve the message descriptor
+     * @return the JavaPoet ClassName for the protobuf message, or `null` if `descriptorProtoFqn` is null or empty
+     * @throws IllegalStateException if the message descriptor cannot be resolved from the given method descriptor
      */
     private ClassName convertProtoFqnToJavaClassName(String descriptorProtoFqn, Descriptors.MethodDescriptor methodDescriptor) {
         if (descriptorProtoFqn == null || descriptorProtoFqn.isEmpty()) {
@@ -174,11 +176,10 @@ public class GrpcJavaTypeResolver {
     }
 
     /**
-     * Converts a protobuf full name to a ClassName object.
-     * For example, "org.example.MyMessage" becomes a ClassName for that type.
+     * Converts a dotted fully-qualified class name (optionally containing `$` to denote nested classes) into a ClassName.
      *
-     * @param fullyQualifiedClassName The full name of the protobuf message
-     * @return The corresponding ClassName, or null if the fullName is null or empty
+     * @param fullyQualifiedClassName the fully qualified class name, may include `$` to separate nested classes
+     * @return the corresponding ClassName, or `null` if {@code fullyQualifiedClassName} is null or empty
      */
     private ClassName convertFullNameToClassName(String fullyQualifiedClassName) {
         if (fullyQualifiedClassName == null || fullyQualifiedClassName.isEmpty()) {
@@ -207,11 +208,11 @@ public class GrpcJavaTypeResolver {
     }
 
     /**
-     * Derives the gRPC outer class name from the service descriptor.
+     * Determine the fully qualified gRPC outer class name for a service descriptor.
      *
-     * @param serviceDescriptor The service descriptor
-     * @return The fully qualified name of the gRPC outer class
-     * @throws IllegalStateException if the service descriptor is invalid
+     * @param serviceDescriptor the service descriptor whose file options and service name are used to derive the outer class
+     * @return the fully qualified outer class name (package and outer class) or the outer class name alone if the file has no Java package
+     * @throws IllegalStateException if the provided service descriptor is null
      */
     private String deriveGrpcOuterClass(Descriptors.ServiceDescriptor serviceDescriptor) {
         if (serviceDescriptor == null) {
@@ -244,12 +245,13 @@ public class GrpcJavaTypeResolver {
     }
 
     /**
-     * Derives the gRPC implementation base class name.
-     *
-     * @param grpcOuterClass The gRPC outer class name
-     * @param serviceName The service name
-     * @return The fully qualified name of the gRPC implementation base class
-     */
+         * Compute the fully qualified class name for the gRPC implementation base for a given service.
+         *
+         * @param grpcOuterClass the fully qualified gRPC outer class name (must not be null or empty)
+         * @param serviceName the service name as defined in the proto descriptor
+         * @return the fully qualified name of the gRPC implementation base class
+         * @throws IllegalStateException if {@code grpcOuterClass} is null or empty
+         */
     private String deriveImplBaseClass(String grpcOuterClass, String serviceName) {
         if (grpcOuterClass == null || grpcOuterClass.isEmpty()) {
             throw new IllegalStateException("gRPC outer class name is null or empty");
@@ -267,12 +269,13 @@ public class GrpcJavaTypeResolver {
     }
 
     /**
-     * Derives the gRPC stub class name.
-     *
-     * @param grpcOuterClass The gRPC outer class name
-     * @param serviceName The service name
-     * @return The fully qualified name of the gRPC stub class
-     */
+         * Derives the fully qualified Mutiny gRPC stub class name for a service.
+         *
+         * @param grpcOuterClass the fully qualified gRPC outer class name (must not be null or empty)
+         * @param serviceName the service name as declared in the proto
+         * @return the fully qualified class name of the Mutiny gRPC stub
+         * @throws IllegalStateException if {@code grpcOuterClass} is null or empty
+         */
     private String deriveStubClass(String grpcOuterClass, String serviceName) {
         if (grpcOuterClass == null || grpcOuterClass.isEmpty()) {
             throw new IllegalStateException("gRPC outer class name is null or empty");
@@ -294,6 +297,14 @@ public class GrpcJavaTypeResolver {
         private final ClassName grpcParameterType;
         private final ClassName grpcReturnType;
 
+        /**
+         * Initialises a holder containing resolved gRPC-related Java type names.
+         *
+         * @param stub              the client stub class `ClassName` (Mutiny stub) for the service, or `null` if not resolved
+         * @param implBase          the server implementation base class `ClassName` for the service, or `null` if not resolved
+         * @param grpcParameterType the Java `ClassName` for the gRPC request message type, or `null` if not applicable
+         * @param grpcReturnType    the Java `ClassName` for the gRPC response message type, or `null` if not applicable
+         */
         public GrpcJavaTypes(ClassName stub, ClassName implBase, ClassName grpcParameterType, ClassName grpcReturnType) {
             this.stub = stub;
             this.implBase = implBase;
@@ -301,18 +312,38 @@ public class GrpcJavaTypeResolver {
             this.grpcReturnType = grpcReturnType;
         }
 
+        /**
+         * Access the resolved gRPC client stub ClassName.
+         *
+         * @return the ClassName representing the generated Mutiny client stub
+         */
         public ClassName stub() {
             return stub;
         }
 
+        /**
+         * The implementation base class for the gRPC service.
+         *
+         * @return the `ClassName` representing the generated service implementation base
+         */
         public ClassName implBase() {
             return implBase;
         }
 
+        /**
+         * The resolved gRPC request message type for the method.
+         *
+         * @return the protobuf-derived Java ClassName for the gRPC request message, or null if not available.
+         */
         public ClassName grpcParameterType() {
             return grpcParameterType;
         }
 
+        /**
+         * The Java type used as the gRPC method response.
+         *
+         * @return the `ClassName` for the gRPC method's response message, or `null` if unavailable
+         */
         public ClassName grpcReturnType() {
             return grpcReturnType;
         }

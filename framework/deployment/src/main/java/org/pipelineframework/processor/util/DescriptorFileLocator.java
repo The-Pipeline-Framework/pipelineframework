@@ -95,11 +95,15 @@ public class DescriptorFileLocator {
     private static final int DEFAULT_SEARCH_DEPTH = 4;
 
     /**
-     * Locates and loads a FileDescriptorSet from available sources.
+     * Locate and load a protobuf FileDescriptorSet following explicit options or sensible defaults.
      *
-     * @param processorOptions Annotation processor options that may contain descriptor location hints
-     * @return The loaded FileDescriptorSet
-     * @throws IOException If a descriptor file cannot be found or read
+     * <p>The method first honours the processor option for a specific descriptor file, then a
+     * processor option pointing to a directory, and finally searches sensible module and sibling
+     * locations (including the default relative path) until a readable descriptor is found.</p>
+     *
+     * @param processorOptions annotation processor options that may contain descriptor location hints
+     * @return the loaded and parsed FileDescriptorSet
+     * @throws IOException if no readable descriptor file can be found or if the found file cannot be read
      */
     public DescriptorProtos.FileDescriptorSet locateAndLoadDescriptors(Map<String, String> processorOptions) throws IOException {
         // First, check if a specific descriptor file is provided via annotation processor option
@@ -150,11 +154,11 @@ public class DescriptorFileLocator {
     }
 
     /**
-     * Finds a protobuf descriptor file in the given directory.
-     *
-     * @param directory The directory to search in
-     * @return Optional containing the path to the descriptor file, or empty if not found
-     */
+         * Locate a protobuf descriptor file by checking known descriptor filenames in the specified directory.
+         *
+         * @param directory the directory to search
+         * @return an {@link Optional} containing the readable descriptor file path if found, otherwise an empty {@link Optional}
+         */
     private Optional<Path> findDescriptorFile(Path directory) {
         for (String fileName : DESCRIPTOR_FILE_NAMES) {
             Path candidate = directory.resolve(fileName);
@@ -165,6 +169,16 @@ public class DescriptorFileLocator {
         return Optional.empty();
     }
 
+    /**
+     * Attempt to locate a protobuf FileDescriptorSet starting from a base directory using multiple search strategies.
+     *
+     * <p>Checks the given directory and common module locations (including a "common" module and sibling modules),
+     * then performs a depth-limited directory walk; returns the first matching descriptor found.</p>
+     *
+     * @param baseDirectory the directory to start searching from; may be null
+     * @return the parsed FileDescriptorSet if found, `null` if no descriptor was located
+     * @throws IOException if an I/O error occurs while traversing directories or reading descriptor files
+     */
     private DescriptorProtos.FileDescriptorSet locateFromBase(Path baseDirectory) throws IOException {
         if (baseDirectory == null) {
             return null;
@@ -216,6 +230,16 @@ public class DescriptorFileLocator {
         return null;
     }
 
+    /**
+     * Attempt to load a protobuf FileDescriptorSet from common locations under the given module directory.
+     *
+     * Searches the module for the default descriptor relative path and for known alternate locations, and parses
+     * the first readable descriptor file found.
+     *
+     * @param moduleDirectory the module root directory to search; may be null
+     * @return the parsed FileDescriptorSet if a descriptor file is found and readable, `null` otherwise
+     * @throws IOException if a discovered descriptor file cannot be read or parsed
+     */
     private DescriptorProtos.FileDescriptorSet loadFromModulePath(Path moduleDirectory) throws IOException {
         if (moduleDirectory == null || !Files.exists(moduleDirectory) || !Files.isDirectory(moduleDirectory)) {
             return null;
@@ -239,6 +263,17 @@ public class DescriptorFileLocator {
         return null;
     }
 
+    /**
+     * Search a directory tree up to a specified depth for a protobuf descriptor file at the default relative path and load it.
+     *
+     * Searches every directory under `baseDir` (including `baseDir`) up to `maxDepth` for a file at
+     * DEFAULT_DESCRIPTOR_RELATIVE_PATH; when a readable file is found it is parsed and returned.
+     *
+     * @param baseDir  the root directory to start the walk from; ignored if null or not a directory
+     * @param maxDepth the maximum directory depth to traverse from `baseDir`
+     * @return the parsed {@code DescriptorProtos.FileDescriptorSet} if a descriptor file is found, or {@code null} if none is found or an I/O error occurs while walking
+     * @throws IOException if an I/O error occurs while reading or parsing a discovered descriptor file
+     */
     private DescriptorProtos.FileDescriptorSet findDescriptorByWalk(Path baseDir, int maxDepth) throws IOException {
         if (baseDir == null || !Files.exists(baseDir) || !Files.isDirectory(baseDir)) {
             return null;
@@ -258,6 +293,12 @@ public class DescriptorFileLocator {
         return null;
     }
 
+    /**
+     * Compute base directories used as roots when searching for descriptor files.
+     *
+     * @return a LinkedHashSet of Paths containing the Maven `maven.multiModuleProjectDirectory` (if set and not blank)
+     *         followed by the current working directory from `user.dir` (defaults to ".")
+     */
     private java.util.Set<Path> getBaseDirectories() {
         java.util.Set<Path> baseDirs = new java.util.LinkedHashSet<>();
         String multiModuleDir = System.getProperty("maven.multiModuleProjectDirectory");
@@ -269,11 +310,11 @@ public class DescriptorFileLocator {
     }
 
     /**
-     * Loads a FileDescriptorSet from the given file path.
+     * Load a protobuf descriptor set from the specified file path.
      *
-     * @param filePath The path to the descriptor file
-     * @return The loaded FileDescriptorSet
-     * @throws IOException If an error occurs while reading the file
+     * @param filePath the path to the descriptor file; must point to a readable file
+     * @return the parsed FileDescriptorSet
+     * @throws IOException if the file cannot be read or the descriptor cannot be parsed
      */
     private DescriptorProtos.FileDescriptorSet loadDescriptorFile(Path filePath) throws IOException {
         try (FileInputStream fis = new FileInputStream(filePath.toFile())) {

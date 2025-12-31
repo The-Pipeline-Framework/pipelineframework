@@ -24,11 +24,23 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     public RestResourceRenderer() {
     }
 
+    /**
+     * Identify the generation target produced by this renderer.
+     *
+     * @return GenerationTarget.REST_RESOURCE when the renderer generates REST resource classes
+     */
     @Override
     public GenerationTarget target() {
         return GenerationTarget.REST_RESOURCE;
     }
 
+    /**
+     * Generates and writes a REST resource class for the given binding into the generation context.
+     *
+     * @param binding the RestBinding describing the service, model and REST-specific overrides used to build the resource class
+     * @param ctx the GenerationContext providing access to the output builder file where the generated Java file will be written
+     * @throws IOException if writing the generated Java file to the provided writer fails
+     */
     @Override
     public void render(RestBinding binding, GenerationContext ctx) throws IOException {
         TypeSpec restResourceClass = buildRestResourceClass(binding);
@@ -44,6 +56,17 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         }
     }
 
+    /**
+     * Builds a REST resource class TypeSpec from the given binding.
+     *
+     * Constructs a public REST resource class populated with JAX-RS and DI annotations,
+     * injected service and optional mapper fields, a logger, a process endpoint tailored
+     * to the service's streaming shape and DTO conversions, and an exception mapper.
+     *
+     * @param binding the RestBinding that provides the PipelineStepModel, service name,
+     *                optional path override and mapping information used to generate the resource
+     * @return the generated TypeSpec representing the REST resource class
+     */
     private TypeSpec buildRestResourceClass(RestBinding binding) {
         PipelineStepModel model = binding.model();
 
@@ -156,6 +179,20 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         return resourceBuilder.build();
     }
 
+    /**
+     * Create the REST POST "process" method for a unary reactive service endpoint.
+     *
+     * The generated method is a public POST handler at path "/process" that accepts an input DTO,
+     * converts it to the inbound domain type using the inbound mapper, delegates to the injected
+     * domain service, and maps the service result to an output DTO using the outbound mapper.
+     *
+     * @param inputDtoClassName           the DTO type used as the method parameter
+     * @param outputDtoClassName          the DTO type produced by the method
+     * @param inboundMapperFieldName      name of the injected inbound mapper field used to convert DTO to domain
+     * @param outboundMapperFieldName     name of the injected outbound mapper field used to convert domain to DTO
+     * @param model                       the pipeline step model used to determine domain types and execution mode
+     * @return                            a MethodSpec for the generated REST "process" method that returns a `Uni` of the output DTO
+     */
     private MethodSpec createReactiveServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             String inboundMapperFieldName, String outboundMapperFieldName,
@@ -189,6 +226,16 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         return methodBuilder.build();
     }
 
+    /**
+     * Exposes a POST /process endpoint that accepts a single input DTO and returns a JSON stream of output DTOs.
+     *
+     * @param inputDtoClassName           the DTO type accepted by the endpoint
+     * @param outputDtoClassName          the DTO type emitted by the returned stream
+     * @param inboundMapperFieldName      name of the injected inbound mapper field used to convert the input DTO to the domain type
+     * @param outboundMapperFieldName     name of the injected outbound mapper field used to convert domain outputs to DTOs
+     * @param model                       pipeline step model used to determine domain types and execution mode
+     * @return                            a `Multi` that emits output DTO instances converted from the service's domain outputs
+     */
     private MethodSpec createReactiveStreamingServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             String inboundMapperFieldName, String outboundMapperFieldName,
@@ -226,6 +273,21 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         return methodBuilder.build();
     }
 
+    /**
+     * Builds the reactive client-streaming "process" JAX-RS method for the generated REST resource.
+     *
+     * The generated method is a public POST endpoint at path "/process" that accepts a Multi of input DTOs,
+     * maps each DTO to its domain representation using the inbound mapper field, delegates processing to the
+     * injected domain service, then maps the service result to an output DTO using the outbound mapper field.
+     * If the pipeline step's execution mode is `VIRTUAL_THREADS`, the method will be annotated to run on a virtual thread.
+     *
+     * @param inputDtoClassName    the TypeName used for individual input DTOs
+     * @param outputDtoClassName   the TypeName used for the output DTO
+     * @param inboundMapperFieldName  the name of the injected inbound mapper field used to convert DTOs to domain objects
+     * @param outboundMapperFieldName the name of the injected outbound mapper field used to convert domain objects to DTOs
+     * @param model                the pipeline step model that influences method generation (for example execution mode)
+     * @return                     a MethodSpec representing the generated "process" method
+     */
     private MethodSpec createReactiveStreamingClientServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             String inboundMapperFieldName, String outboundMapperFieldName,
@@ -262,6 +324,16 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         return methodBuilder.build();
     }
 
+    /**
+     * Exposes a bidirectional streaming POST endpoint at "/process" that accepts a stream of input DTOs and returns a stream of output DTOs.
+     *
+     * @param inputDtoClassName      the DTO type for incoming stream elements
+     * @param outputDtoClassName     the DTO type for outgoing stream elements
+     * @param inboundMapperFieldName name of the injected mapper field used to convert incoming DTOs to domain objects
+     * @param outboundMapperFieldName name of the injected mapper field used to convert domain outputs to DTOs
+     * @param model                  the pipeline step model that influences streaming shape and execution mode; if the execution mode is VIRTUAL_THREADS the generated method will be annotated with `@RunOnVirtualThread`
+     * @return                       a `Multi` of output DTO instances produced by mapping the domain service's outputs to DTOs
+     */
     private MethodSpec createReactiveBidirectionalStreamingServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             String inboundMapperFieldName, String outboundMapperFieldName,
@@ -306,6 +378,12 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         return methodBuilder.build();
     }
 
+    /**
+     * Map an exception thrown by a resource method to an appropriate RestResponse.
+     *
+     * @param ex the exception to map
+     * @return a RestResponse with `BAD_REQUEST` and message "Invalid request" when `ex` is an `IllegalArgumentException`; otherwise a RestResponse with `INTERNAL_SERVER_ERROR` and message "An unexpected error occurred"
+     */
     private MethodSpec createExceptionMapperMethod() {
         return MethodSpec.methodBuilder("handleException")
             .addAnnotation(AnnotationSpec.builder(ClassName.get(ServerExceptionMapper.class))
@@ -332,6 +410,16 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             .build();
     }
 
+    /**
+     * Derives the REST resource path for a given service class name.
+     *
+     * The method removes a trailing "Service" suffix and any "Reactive" substring,
+     * converts the resulting PascalCase name to kebab-case, and prefixes it with
+     * "/api/v1/".
+     *
+     * @param className the original service class name (for example "ProcessPaymentReactiveService")
+     * @return the resource path beginning with "/api/v1/" followed by the kebab-case name
+     */
     private String deriveResourcePath(String className) {
         // Remove "Service" suffix if present
         if (className.endsWith("Service")) {
@@ -351,12 +439,15 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-     * Converts a domain type name to its corresponding DTO type name.
-     * This follows the common pattern of changing .domain. to .dto. in the package name
-     * and adding "Dto" suffix to the class name (like the original getDtoType method would have done).
+     * Derives the DTO TypeName for a given domain TypeName.
      *
-     * @param domainType the domain type to convert
-     * @return the corresponding DTO type name
+     * <p>If {@code domainType} is {@code null} the method returns {@code ClassName.OBJECT}. Otherwise
+     * it converts common package segments (for example {@code .domain.} or {@code .service.}) to
+     * {@code .dto.} and appends the suffix {@code Dto} to the simple class name to produce the DTO
+     * TypeName.
+     *
+     * @param domainType the domain type to convert; may be {@code null}
+     * @return the corresponding DTO TypeName, or {@code ClassName.OBJECT} when {@code domainType} is {@code null}
      */
     private TypeName convertDomainToDtoType(TypeName domainType) {
         if (domainType == null) {

@@ -14,9 +14,9 @@ public class PipelineStepValidator {
     private final javax.annotation.processing.ProcessingEnvironment processingEnv;
 
     /**
-     * Creates a new PipelineStepValidator.
+     * Constructs a PipelineStepValidator that uses the given processing environment to report validation diagnostics.
      *
-     * @param processingEnv the processing environment
+     * @param processingEnv the processing environment used to report validation diagnostics
      */
     public PipelineStepValidator(javax.annotation.processing.ProcessingEnvironment processingEnv) {
         this.processingEnv = processingEnv;
@@ -58,6 +58,12 @@ public class PipelineStepValidator {
         return isValid;
     }
 
+    /**
+     * Checks whether a type mapping satisfies the requirement that a domain type must have a mapper.
+     *
+     * @param mapping the type mapping to validate
+     * @return `true` if the mapping has no domain type or provides a mapper, `false` otherwise
+     */
     private boolean validateTypeMapping(TypeMapping mapping) {
         // If we have a domain type, we need a mapper
         return mapping.domainType() == null || mapping.hasMapper();

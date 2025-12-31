@@ -44,7 +44,10 @@ import org.pipelineframework.processor.validator.PipelineStepValidator;
 public class PipelineStepProcessor extends AbstractProcessingTool {
 
     /**
-     * Creates a new PipelineStepProcessor instance.
+     * Creates a new PipelineStepProcessor.
+     *
+     * <p>Constructs an instance without configuring internal components; call {@link #init(javax.annotation.processing.ProcessingEnvironment)}
+     * with a ProcessingEnvironment before using the processor.</p>
      */
     public PipelineStepProcessor() {
     }
@@ -78,6 +81,14 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
     private RestBindingResolver restBindingResolver;
     private RoleMetadataGenerator roleMetadataGenerator;
 
+    /**
+     * Initialises the processor and its helper components using the provided processing environment.
+     *
+     * Initialises the IR extractor, validator, gRPC/client/REST renderers, binding resolvers and
+     * the role metadata generator so the processor is ready to perform annotation processing.
+     *
+     * @param processingEnv the processing environment used to configure compiler-facing utilities
+     */
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
         super.init(processingEnv);
@@ -93,8 +104,15 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
     }
 
     /**
-     * Processes elements annotated with {@code @PipelineStep} by extracting semantic
-     * information into IR, validating it, and coordinating code generation.
+     * Coordinates extraction, validation and artifact generation for elements annotated with {@code @PipelineStep}.
+     *
+     * <p>For each annotated class this method extracts a pipeline model, validates it, resolves gRPC/REST bindings
+     * as required and orchestrates generation of the corresponding artifacts. When processing is finished it writes
+     * role metadata.</p>
+     *
+     * @param annotations the annotation types requested to be processed in this round
+     * @param roundEnv the environment for information about the current and prior round
+     * @return {@code true} if at least one annotation was processed, {@code false} when no annotations were present
      */
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
@@ -170,6 +188,17 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
         return true;
     }
 
+    /**
+     * Generate Java source artifacts for the given pipeline step model and record their roles.
+     *
+     * For each target enabled on the model this method creates a source file, delegates rendering
+     * to the appropriate renderer (gRPC service, client step or REST resource) and records the
+     * generated class with the corresponding role in the role metadata generator.
+     *
+     * @param model       the pipeline step model containing service/package names and enabled targets
+     * @param grpcBinding gRPC binding information used for gRPC and client generation; may be null if not applicable
+     * @param restBinding REST binding information used for REST resource generation; may be null if not applicable
+     */
     private void generateArtifacts(PipelineStepModel model, GrpcBinding grpcBinding, RestBinding restBinding) {
         for (GenerationTarget target : model.enabledTargets()) {
             try {

@@ -48,11 +48,11 @@ public abstract class GrpcServiceBidirectionalStreamingAdapter<
   protected abstract ReactiveBidirectionalStreamingService<DomainIn, DomainOut> getService();
 
   /**
-   * Converts a gRPC input object to the corresponding domain input object.
-   *
-   * @param grpcIn the gRPC input object to convert
-   * @return the corresponding domain input object
-   */
+ * Map a gRPC request message to the adapter's domain input representation.
+ *
+ * @param grpcIn the incoming gRPC message
+ * @return the domain input object corresponding to the provided gRPC message
+ */
   protected abstract DomainIn fromGrpc(GrpcIn grpcIn);
 
   /**
