@@ -19,7 +19,7 @@ package org.pipelineframework.rest;
 import org.pipelineframework.service.ReactiveStreamingService;
 
 /**
- * Base class for streaming REST resources that provides auto-persistence functionality.
+ * Base class for streaming REST resources that bridges reactive streaming services to REST endpoints.
  * 
  * @param <DomainIn> The domain input type
  * @param <DomainOut> The domain output type

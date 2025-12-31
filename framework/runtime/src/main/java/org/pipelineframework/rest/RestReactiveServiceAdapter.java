@@ -19,7 +19,7 @@ package org.pipelineframework.rest;
 import org.pipelineframework.service.ReactiveService;
 
 /**
- * Base class for REST resources that provides auto-persistence functionality.
+ * Base adapter for REST resources that process domain inputs via a ReactiveService and convert outputs to DTOs.
  * 
  * @param <DomainIn> The domain input type
  * @param <DomainOut> The domain output type
