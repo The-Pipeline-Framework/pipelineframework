@@ -57,24 +57,27 @@ public class GrpcJavaTypeResolver {
             ClassName grpcParameterType;
             ClassName grpcReturnType;
 
-            if (binding.methodDescriptor() != null) {
-                Descriptors.MethodDescriptor methodDescriptor = (Descriptors.MethodDescriptor) binding.methodDescriptor();
-
-                // Get the full names of the input and output types from the method descriptor
-                // These are the actual protobuf message types (e.g., ".org.example.CsvFolder")
-                String inputTypeName = methodDescriptor.getInputType().getFullName();
-                String outputTypeName = methodDescriptor.getOutputType().getFullName();
-
-                // Convert the protobuf FQNs to Java ClassNames properly
-                grpcParameterType = convertProtoFqnToJavaClassName(inputTypeName, methodDescriptor);
-                grpcReturnType = convertProtoFqnToJavaClassName(outputTypeName, methodDescriptor);
-            } else {
+            Object methodDescriptorObj = binding.methodDescriptor();
+            if (!(methodDescriptorObj instanceof Descriptors.MethodDescriptor methodDescriptor)) {
+                String detail = methodDescriptorObj == null
+                        ? "null"
+                        : methodDescriptorObj.getClass().getName();
                 throw new IllegalStateException(
-                    String.format("Method descriptor is null for service '%s'. " +
+                    String.format("Method descriptor is %s for service '%s'. " +
                         "This indicates that the protobuf descriptor does not contain the expected RPC method information. " +
                         "Please ensure the protobuf compilation is working correctly and the descriptor file is properly configured.",
+                        detail,
                         binding.serviceName()));
             }
+
+            // Get the full names of the input and output types from the method descriptor
+            // These are the actual protobuf message types (e.g., ".org.example.CsvFolder")
+            String inputTypeName = methodDescriptor.getInputType().getFullName();
+            String outputTypeName = methodDescriptor.getOutputType().getFullName();
+
+            // Convert the protobuf FQNs to Java ClassNames properly
+            grpcParameterType = convertProtoFqnToJavaClassName(inputTypeName, methodDescriptor);
+            grpcReturnType = convertProtoFqnToJavaClassName(outputTypeName, methodDescriptor);
 
             // For the stub and impl base classes, we'll try to derive them from the service descriptor
             // but if that fails (e.g., in test scenarios), we'll return null which is acceptable
