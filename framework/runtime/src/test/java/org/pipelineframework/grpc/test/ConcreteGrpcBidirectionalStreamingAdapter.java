@@ -16,8 +16,9 @@
 
 package org.pipelineframework.grpc.test;
 
-import io.smallrye.mutiny.Multi;
 import jakarta.enterprise.context.ApplicationScoped;
+
+import io.smallrye.mutiny.Multi;
 import org.pipelineframework.grpc.GrpcServiceBidirectionalStreamingAdapter;
 import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
 
@@ -61,6 +62,12 @@ public class ConcreteGrpcBidirectionalStreamingAdapter
         return fromGrpc(grpcIn);
     }
 
+    /**
+     * Exposes the conversion of a domain output string to its gRPC representation for tests.
+     *
+     * @param domainOut the domain output string to convert
+     * @return the corresponding gRPC representation of the output
+     */
     public String testToGrpc(String domainOut) {
         return toGrpc(domainOut);
     }
