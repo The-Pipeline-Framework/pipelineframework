@@ -28,6 +28,7 @@ import javax.lang.model.element.*;
 import javax.tools.Diagnostic;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -441,32 +442,16 @@ class PipelineStepProcessorTest {
                         eq(mockElement));
     }
 
-    @Test
-    void testDeriveResourcePath() {
-        // This method has been moved to the RestResourceRenderer, so this test is no longer applicable
-        // For now, make it pass with a placeholder
-        assertTrue(true); // Placeholder to keep the test compiling
-    }
+    // Resource path and DTO type derivation are covered in RestResourceRendererTest.
 
-    @Test
-    void testGetDtoType() {
-        // This method has been refactored to use IR and TypeMapping, so this test is no longer applicable
-        // For now, make it pass with a placeholder
-        assertTrue(true); // Placeholder to keep the test compiling
-    }
-
+    @Disabled("TODO(issues/annotation-processor-tests): add IR extraction tests for interface detection.")
     @Test
     void testImplementsInterface() {
-        // This method has been refactored, so this test is no longer applicable
-        // For now, make it pass with a placeholder
-        assertTrue(true); // Placeholder to keep the test compiling
     }
 
+    @Disabled("TODO(issues/annotation-processor-tests): add IR extraction tests for reactive service detection.")
     @Test
     void testImplementsReactiveService() {
-        // The implementsReactiveService method has been removed in the new architecture
-        // This test is no longer applicable
-        assertTrue(true); // Placeholder to keep the test compiling
     }
 
     private ExecutableElement createMockExecutableElement(String name) {
