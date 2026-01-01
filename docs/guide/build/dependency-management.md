@@ -72,7 +72,7 @@ Services declare dependencies on the common module and framework. Both runtime a
 graph TD
     A[Parent POM] --> B[Common Module]
     A --> C[Step Services]
-    A --> D[Orchestrator Service]
+    A --> D[Orchestrator Runtime]
     B --> C
     B --> D
     C --> D

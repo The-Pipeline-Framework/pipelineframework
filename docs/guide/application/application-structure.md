@@ -18,10 +18,51 @@ The Pipeline Framework includes a visual canvas designer at <a href="https://app
 
 Applications built with The Pipeline Framework follow a modular architecture with clear separation of concerns. The framework promotes a clean division between:
 
-1. **Orchestrator Service**: Coordinates the overall pipeline execution
+1. **Orchestrator Runtime**: Coordinates the overall pipeline execution
 2. **Backend Services**: Implement individual pipeline steps
 3. **Common Module**: Shared domain objects, DTOs, and mappers
 4. **Framework**: Provides the pipeline infrastructure
+
+## Project Structure Overview
+
+A typical pipeline application follows this structure. Note that the deployment module is not typically included as a module in the application's parent POM since it's used at build time with provided scope:
+
+```text
+my-pipeline-application/
+├── pom.xml                           # Parent POM
+├── common/                           # Shared components
+│   ├── pom.xml
+│   └── src/
+│       └── main/java/
+│           └── com/example/app/common/
+│               ├── domain/           # Domain entities
+│               ├── dto/              # Data transfer objects
+│               └── mapper/           # Shared mappers
+├── orchestrator-svc/                 # Pipeline orchestrator
+│   ├── pom.xml
+│   └── src/
+│       └── main/java/
+│           └── com/example/app/orchestrator/
+│               ├── service/         # Pipeline execution service
+│               └── OrchestratorApplication.java
+├── step-one-svc/                     # First pipeline step
+│   ├── pom.xml
+│   └── src/
+│       └── main/java/
+│           └── com/example/app/stepone/
+│               ├── service/         # Step implementation
+│               └── mapper/          # Step-specific mappers
+├── step-two-svc/                     # Second pipeline step
+│   ├── pom.xml
+│   └── src/
+│       └── main/java/
+│           └── com/example/app/steptwo/
+│               ├── service/        # Step implementation
+│               └── mapper/          # Step-specific mappers
+└── pipeline-framework/              # Framework modules
+    ├── runtime/                     # Runtime components (dependency)
+    └── deployment/                  # Build-time components (provided scope)
+```
 
 ## Architecture Diagram
 
@@ -29,7 +70,7 @@ Applications built with The Pipeline Framework follow a modular architecture wit
 graph TB
     subgraph "Pipeline Application"
         A[Common Module]
-        B[Orchestrator Service]
+        B[Orchestrator Runtime]
         C[Step 1 Service]
         D[Step 2 Service]
     end
@@ -51,24 +92,24 @@ The shared components module contains code that is used across all services in t
 ### Backend Services
 Backend services implement individual pipeline steps with specific processing logic. Each service focuses on a single responsibility and can be independently configured.
 
-[Learn about Backend Service Structure](./backend-services.md)
+[Learn about Code a Step](/guide/development/code-a-step)
 
-### Orchestrator Service
-The orchestrator service coordinates the overall pipeline execution, managing the flow of data through the pipeline steps and handling input/output operations.
+### Orchestrator Runtime
+The orchestrator runtime coordinates the overall pipeline execution, managing the flow of data through the pipeline steps and handling input/output operations.
 
-[Learn about Orchestrator Service Structure](./orchestrator-service-structure)
+[Learn about Orchestrator Runtime](/guide/development/orchestrator-runtime)
 
 ### Dependency Management
 Proper dependency management is crucial for maintaining clean, modular pipeline applications. This includes parent POM configurations and service-specific dependencies.
 
-[Learn about Dependency Management](./dependency-management)
+[Learn about Dependency Management](/guide/build/dependency-management)
 
 ### Configuration
 Configure pipeline behavior through application properties and environment-specific profiles to support different deployment scenarios.
 
-[Learn about Configuration](./configuration)
+[Learn about Configuration](/guide/application/configuration)
 
 ### Best Practices
 Follow industry-standard practices for designing and implementing pipeline applications to ensure maintainability and reliability.
 
-[Learn about Best Practices](./best-practices)
+[Learn about Best Practices](/guide/operations/best-practices)

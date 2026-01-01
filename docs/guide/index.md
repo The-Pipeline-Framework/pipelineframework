@@ -10,7 +10,7 @@ The Pipeline Framework includes a visual canvas designer at <a href="https://app
 
 - **Reactive Programming**: Built on top of Mutiny for non-blocking operations
 - **Immutable Architecture**: No database updates during pipeline execution - only appends/preserves, ensuring data integrity
-- **Visual Design Canvas**: Create and configure pipelines with the visual designer at <a href="https://app.pipelineframework.org" target="_blank">https://app.pipelineframework.org</a>
+- **Visual Design Canvas**: Create and configure pipelines with the visual designer at [https://app.pipelineframework.org](https://app.pipelineframework.org)
 - **Annotation-Based Configuration**: Simplifies adapter generation with `@PipelineStep`
 - **gRPC & REST Flexibility**: Automatic adapter generation for fast gRPC or easy REST integration
 - **Multiple Processing Patterns**: OneToOne, OneToMany, ManyToOne, ManyToMany, SideEffect and blocking variants
@@ -23,33 +23,64 @@ The Pipeline Framework includes a visual canvas designer at <a href="https://app
 
 For complete documentation of the framework architecture, implementation details, and reference implementations, see the complete documentation files in the main repository:
 
-- [Reference Implementation](/REFERENCE_IMPLEMENTATION.html) - Complete implementation guide with examples
-- [YAML Configuration Schema](/YAML_SCHEMA.html) - Complete YAML schema documentation
-- [Canvas Designer Guide](/CANVAS_GUIDE.html) - Complete Canvas usage guide
-- [Java-Centered Types](/JAVA_CENTERED_TYPES.html) - Comprehensive Java-first approach with automatic protobuf mapping
+- [Reference Implementation](/guide/evolve/reference-implementation) - Complete implementation guide with examples
+- [Canvas Designer Guide](/guide/getting-started/canvas-guide) - Complete Canvas usage guide
+- [Java-Centered Types](/guide/development/java-centered-types) - Comprehensive Java-first approach with automatic protobuf mapping
 
 ## How It Works
 
-The framework allows you to define pipeline steps as simple classes annotated with `@PipelineStep`. The framework automatically generates the necessary adapters at build time, eliminating the need for manual configuration.
+The framework lets you define pipeline steps as simple classes annotated with `@PipelineStep`. At build time, it generates the adapters and infrastructure, keeping services clean and focused on business logic.
 
-### Getting Started
-- [Quick Start](/guide/quick-start): Get started quickly with the visual Canvas designer
-- [Canvas Designer Guide](/CANVAS_GUIDE.html): Complete guide to using the visual designer
-- [Using the Template Generator](/guide/using-template-generator): Advanced usage of the template generator
+### Build Fast
+- [Quick Start](/guide/getting-started/quick-start): Create a pipeline via the Canvas and run it locally
+- [Business Value](/guide/getting-started/business-value): Speed, ROI, and portability
+- [Canvas Designer Guide](/guide/getting-started/canvas-guide): Complete guide to the visual designer
 
-### Application Development
-- [Application Structure](/guide/application-structure): Structuring pipeline applications
-- [Backend Services](/guide/backend-services): Creating backend services that implement pipeline steps
-- [Orchestrator Services](/guide/orchestrator-services): Building orchestrator services that coordinate pipelines
+### Functional Architecture
+- [Application Structure](/guide/application/application-structure): Modular layout and service boundaries
+- [Common Module Structure](/guide/application/common-module-structure): Shared domain types and mappers
+- [Pipeline Compilation](/guide/build/pipeline-compilation): Build-time generation flow
+- [Best Practices](/guide/operations/best-practices): Operational and design guidance
 
-### Advanced Topics
-- [Pipeline Compilation](/guide/pipeline-compilation): Understanding how the annotation processor works
-- [Migrations](/guide/migrations): Upgrade notes and breaking changes
-- [Error Handling & DLQ](/guide/error-handling): Managing errors and dead letter queues
-- [Observability](/guide/observability): Monitoring and observing pipeline applications
+### Develop
+- [@PipelineStep Annotation](/guide/development/pipeline-step): Annotation contract and parameters
+- [Code a Step](/guide/development/code-a-step): Implement a step and its mappers
+- [Using Plugins](/guide/development/using-plugins): Apply plugins to pipelines
+- [Mappers and DTOs](/guide/development/mappers-and-dtos): Type conversions across layers
+- [Dependency Management](/guide/build/dependency-management): Manage build-time and runtime deps
+- [Upgrade Guide](/guide/development/upgrade): Version changes and migrations
+- [Orchestrator Runtime](/guide/development/orchestrator-runtime): Coordinate pipeline execution
 
-### Reference
-- [Architecture](/reference/architecture): Deep dive into the framework architecture
-- [Annotation Processor Architecture](/reference/annotation-processor-architecture): Build-time IR, bindings, and renderers
+### Observe
+- [Observability Overview](/guide/operations/observability/): Metrics, tracing, logs, and security notes
+- [Metrics](/guide/operations/observability/metrics): Instrumentation and dashboards
+- [Tracing](/guide/operations/observability/tracing): Distributed tracing and context propagation
+- [Logging](/guide/operations/observability/logging): Structured logging and levels
+- [Health Checks](/guide/operations/observability/health-checks): Liveness and readiness
+- [Alerting](/guide/operations/observability/alerting): Alerts and noise reduction
+- [Security Notes](/guide/operations/observability/security): Protect telemetry data
+- [Error Handling & DLQ](/guide/operations/error-handling): Failure handling patterns
 
-This approach reduces boilerplate code and ensures consistency across your pipeline steps.
+### Extend
+- [Writing a Plugin](/guide/plugins/writing-a-plugin): Create plugins and aspects
+- [Orchestrator Extensions](/guide/development/extension/orchestrator-runtime): Customize orchestration flows
+- [Reactive Service Extensions](/guide/development/extension/reactive-services): Wrap or adapt process() behavior
+- [Client Step Extensions](/guide/development/extension/client-steps): Customize client-side calls
+- [REST Resource Extensions](/guide/development/extension/rest-resources): Extend generated REST resources
+
+### Evolve
+- [Functional Architecture](/guide/evolve/architecture): Core concepts and architectural patterns
+- [Annotation Processor Architecture](/guide/evolve/annotation-processor-architecture): Build-time IR, bindings, and renderers
+- [Plugins Architecture](/guide/evolve/plugins-architecture): Cross-cutting behavior model
+- [Aspect Semantics](/guide/evolve/aspects/semantics): Aspect expansion rules
+- [Aspect Ordering](/guide/evolve/aspects/ordering): Ordering guarantees and constraints
+- [Aspect Warnings](/guide/evolve/aspects/warnings): Known limitations and caveats
+- [Reference Implementation](/guide/evolve/reference-implementation): End-to-end example and rationale
+- [Template Generator (Reference)](/guide/evolve/template-generator): Automation/CI usage
+- [Publishing](/guide/evolve/publishing): Release and publishing workflow
+- [CI Guidelines](/guide/evolve/ci-guidelines): Build validation and automation
+- [Testing Guidelines](/guide/evolve/testing-guidelines): Coverage and test strategy
+- [Gotchas & Pitfalls](/guide/evolve/gotchas-pitfalls): Known sharp edges
+- [Proto Descriptor Integration](/guide/evolve/protobuf-integration-descriptor-res): Descriptor generation and troubleshooting
+
+This approach reduces boilerplate and keeps pipeline code consistent and portable.

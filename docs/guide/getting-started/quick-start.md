@@ -53,10 +53,12 @@ Your application is now ready to run!
 
 Congratulations! You've successfully created your first pipeline application. Now explore these topics:
 
-- [Canvas Designer Guide](/CANVAS_GUIDE.html) - Complete guide to using the visual designer
-- [Application Structure](/guide/application-structure) - Learn how the generated application is structured
-- [Framework Overview](/FRAMEWORK_OVERVIEW.html) - Deep dive into the framework architecture
+- [Canvas Designer Guide](/guide/getting-started/canvas-guide) - Complete guide to using the visual designer
+- [Application Structure](/guide/application/application-structure) - Learn how the generated application is structured
+- [Functional Architecture](/guide/evolve/architecture) - Deep dive into the framework architecture
 
-## Need More Control?
+## Template Generator (Reference Only)
 
-If you need more control over the generation process or want to automate the generation, see the [Template Generator Guide](/guide/using-template-generator) for advanced usage options.
+The visual Canvas is the primary way to create new applications. If you need automation or CI-only generation, use the template generator as a secondary option.
+
+See [Template Generator Guide](/guide/evolve/template-generator) for details.

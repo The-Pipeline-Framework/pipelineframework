@@ -1,4 +1,4 @@
-# Migrations and Upgrade Notes
+# Upgrade Guide
 
 ## Descriptor-Driven gRPC Type Resolution
 
@@ -10,4 +10,4 @@ Add the following to `application.properties` (or your profile-specific file):
 quarkus.generate-code.grpc.descriptor-set.generate=true
 ```
 
-See `docs/protobuf-integration-descriptor-res.md` for full setup details and troubleshooting.
+See [protobuf descriptor integration](/guide/evolve/protobuf-integration-descriptor-res) for full setup details and troubleshooting.

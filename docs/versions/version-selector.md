@@ -6,8 +6,7 @@ export default {
     return {
       versions: [
         { name: 'v0.9.2', url: '/', current: true },
-        { name: 'v0.8.0', url: '/v0.8.0/', current: false },
-        { name: 'v0.7.0', url: '/v0.7.0/', current: false }
+        { name: 'v0.9.0', url: '/versions/v0.9.0/', current: false }
       ]
     }
   },

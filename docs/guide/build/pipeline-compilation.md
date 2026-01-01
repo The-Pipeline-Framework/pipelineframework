@@ -2,7 +2,7 @@
 
 This guide explains how The Pipeline Framework's annotation processor works to automatically generate pipeline applications and adapters at build time.
 
-For the architecture overview of the processor, see [Annotation Processor Architecture](/reference/annotation-processor-architecture.html).
+For the architecture overview of the processor, see [Annotation Processor Architecture](/guide/evolve/annotation-processor-architecture).
 
 ## Overview
 
@@ -86,7 +86,7 @@ The orchestrator is generated from a template that implements QuarkusApplication
     name = "orchestrator",
     mixinStandardHelpOptions = true,
     version = "1.0.0",
-    description = "{{appName}} Orchestrator Service")
+    description = "{{appName}} Orchestrator Runtime")
 @Dependent
 public class OrchestratorApplication implements QuarkusApplication, Callable<Integer> {
 

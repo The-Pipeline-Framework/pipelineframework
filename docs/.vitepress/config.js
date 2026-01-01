@@ -34,75 +34,93 @@ export default withMermaid(
     themeConfig: {
         nav: [
             {text: 'Home', link: '/'},
-            {text: 'Guide', link: '/guide/'},
-            {text: 'Annotations', link: '/annotations/pipeline-step'},
-            {text: 'Versions', link: '/versions'},
-            {text: 'Dev Guidelines', link: '/ci-guidelines'}
+            {text: 'Guides', link: '/guide/'},
+            {text: 'Evolve', link: '/guide/evolve/'},
+            {text: 'Versions', link: '/versions'}
         ],
 
         sidebar: [
             {
-                text: 'Getting Started',
+                text: 'Build Fast',
                 items: [
-                    {text: 'Guide Overview', link: '/guide/'},
-                    {text: 'Quick Start', link: '/guide/quick-start'},
-                    {text: 'Getting Started', link: '/guide/getting-started'},
+                    {text: 'Overview', link: '/guide/'},
+                    {text: 'Quick Start', link: '/guide/getting-started/quick-start'},
+                    {text: 'Canvas Guide', link: '/guide/getting-started/canvas-guide'},
+                    {text: 'Business Value', link: '/guide/getting-started/business-value'}
                 ]
             },
             {
-                text: 'Essential Guides',
+                text: 'Functional Architecture',
                 items: [
-                    {text: 'Creating Pipeline Steps', link: '/guide/creating-steps'},
-                    {text: 'Application Structure', link: '/guide/application-structure'},
-                    {text: 'Backend Services', link: '/guide/backend-services'},
-                    {text: 'Mappers and DTOs', link: '/guide/mappers-and-dtos'},
-                    {text: 'Orchestrator Services', link: '/guide/orchestrator-services'},
+                    {text: 'Application Structure', link: '/guide/application/application-structure'},
+                    {text: 'Common Module Structure', link: '/guide/application/common-module-structure'},
+                    {text: 'Pipeline Compilation', link: '/guide/build/pipeline-compilation'},
+                    {text: 'Best Practices', link: '/guide/operations/best-practices'}
                 ]
             },
             {
-                text: 'Advanced Guides',
+                text: 'Develop',
                 items: [
-                    {text: 'Pipeline Compilation', link: '/guide/pipeline-compilation'},
-                    {text: 'Error Handling & DLQ', link: '/guide/error-handling'},
-                    {text: 'Observability', link: '/guide/observability'},
-                    {text: 'Configuration', link: '/guide/configuration'},
-                    {text: 'Best Practices', link: '/guide/best-practices'},
+                    {text: '@PipelineStep Annotation', link: '/guide/development/pipeline-step'},
+                    {text: 'Code a Step', link: '/guide/development/code-a-step'},
+                    {text: 'Using Plugins', link: '/guide/development/using-plugins'},
+                    {text: 'Mappers and DTOs', link: '/guide/development/mappers-and-dtos'},
+                    {text: 'Handling File Operations', link: '/guide/development/handling-file-operations'},
+                    {text: 'Java-Centered Types', link: '/guide/development/java-centered-types'},
+                    {text: 'Dependency Management', link: '/guide/build/dependency-management'},
+                    {text: 'Upgrade Guide', link: '/guide/development/upgrade'},
+                    {text: 'Orchestrator Runtime', link: '/guide/development/orchestrator-runtime'},
+                    {text: 'Configuration', link: '/guide/application/configuration'}
                 ]
             },
             {
-                text: 'Reference',
+                text: 'Observe',
                 items: [
-                    {text: 'Architecture', link: '/reference/architecture'},
-                    {text: 'Reference Implementation', link: '/REFERENCE_IMPLEMENTATION'},
-                    {text: 'YAML Schema', link: '/YAML_SCHEMA'},
-                    {text: 'Canvas Guide', link: '/CANVAS_GUIDE'},
-                    {text: 'Java-Centered Types', link: '/JAVA_CENTERED_TYPES'},
+                    {text: 'Observability Overview', link: '/guide/operations/observability/'},
+                    {text: 'Metrics', link: '/guide/operations/observability/metrics'},
+                    {text: 'Tracing', link: '/guide/operations/observability/tracing'},
+                    {text: 'Logging', link: '/guide/operations/observability/logging'},
+                    {text: 'Health Checks', link: '/guide/operations/observability/health-checks'},
+                    {text: 'Alerting', link: '/guide/operations/observability/alerting'},
+                    {text: 'Security Notes', link: '/guide/operations/observability/security'},
+                    {text: 'Error Handling & DLQ', link: '/guide/operations/error-handling'},
                 ]
             },
             {
-                text: 'API Reference',
+                text: 'Extend',
                 items: [
-                    {text: '@PipelineStep Annotation', link: '/annotations/pipeline-step'},
+                    {text: 'Writing a Plugin', link: '/guide/plugins/writing-a-plugin'},
+                    {text: 'Orchestrator Extensions', link: '/guide/development/extension/orchestrator-runtime'},
+                    {text: 'Reactive Service Extensions', link: '/guide/development/extension/reactive-services'},
+                    {text: 'Client Step Extensions', link: '/guide/development/extension/client-steps'},
+                    {text: 'REST Resource Extensions', link: '/guide/development/extension/rest-resources'}
+                ]
+            },
+            {
+                text: 'Evolve',
+                items: [
+                    {text: 'Architecture', link: '/guide/evolve/architecture'},
+                    {text: 'Annotation Processor Architecture', link: '/guide/evolve/annotation-processor-architecture'},
+                    {text: 'Plugins Architecture', link: '/guide/evolve/plugins-architecture'},
+                    {text: 'Aspect Semantics', link: '/guide/evolve/aspects/semantics'},
+                    {text: 'Aspect Ordering', link: '/guide/evolve/aspects/ordering'},
+                    {text: 'Aspect Warnings', link: '/guide/evolve/aspects/warnings'},
+                    {text: 'Reference Implementation', link: '/guide/evolve/reference-implementation'},
+                    {text: 'Template Generator (Reference)', link: '/guide/evolve/template-generator'},
+                    {text: 'Publishing', link: '/guide/evolve/publishing'},
+                    {text: 'CI Guidelines', link: '/guide/evolve/ci-guidelines'},
+                    {text: 'Testing Guidelines', link: '/guide/evolve/testing-guidelines'},
+                    {text: 'Gotchas & Pitfalls', link: '/guide/evolve/gotchas-pitfalls'},
+                    {text: 'Proto Descriptor Integration', link: '/guide/evolve/protobuf-integration-descriptor-res'}
                 ]
             },
             {
                 text: 'Additional Resources',
                 items: [
-                    {text: 'Common Module Structure', link: '/guide/common-module-structure'},
-                    {text: 'Local Steps', link: '/guide/local-steps'},
-                    {text: 'Handling File Operations', link: '/guide/handling-file-operations'},
-                    {text: 'Using Template Generator', link: '/guide/using-template-generator'},
-                    {text: 'Versions', link: '/versions'},
+                    {text: 'Versions', link: '/versions'}
                 ]
             },
-            {
-                text: 'Development Guidelines',
-                items: [
-                    {text: 'CI Guidelines', link: '/ci-guidelines'},
-                    {text: 'Testing Guidelines', link: '/testing-guidelines'},
-                    {text: 'Gotchas & Pitfalls', link: '/gotchas-pitfalls'},
-                ]
-            }
+            
         ],
 
       // Add search functionality

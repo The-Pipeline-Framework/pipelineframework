@@ -67,6 +67,17 @@ mvn versions:revert
 
 This ensures that all modules in the multimodule project are updated consistently.
 
+### Documentation Snapshot (Hybrid Versioning)
+
+For major/minor releases, snapshot the docs into `docs/versions/`:
+
+```bash
+cd docs
+npm run snapshot -- --version v0.9.3
+```
+
+Then update `docs/versions.md` to mark the latest version and confirm the version selector list.
+
 
 ## Maven Central Publishing Setup
 

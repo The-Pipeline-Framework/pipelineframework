@@ -39,13 +39,6 @@ public class ProcessPaymentService implements StepOneToOne<PaymentRecord, Paymen
 }
 ```
 
-## Understanding parallel vs runOnVirtualThreads
-
-It's important to understand the difference between these two configuration options:
-
-- **`parallel`**: For client-side steps, enables concurrent processing of multiple items from the same stream. This translates into a flatMap() call (when parallel=true) or a concatMap() call (when parallel=false)
-- **`runOnVirtualThreads`**: For server-side gRPC services, enables execution of `process()` code on virtual threads for better I/O handling
-
 ## Usage
 
 Developers only need to:
@@ -53,5 +46,7 @@ Developers only need to:
 1. Annotate their service class with `@PipelineStep`
 2. Create MapStruct-based mapper interfaces that extend the `Mapper<Grpc, Dto, Domain>` interface
 3. Implement the service interface (`StepOneToOne`, etc.)
+
+Parallelism is configured at runtime (StepConfig or `application.properties`), not via `@PipelineStep`.
 
 The framework automatically generates and registers the adapter beans at build time.
