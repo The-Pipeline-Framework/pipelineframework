@@ -32,7 +32,7 @@ import org.pipelineframework.service.throwStatusRuntimeExceptionFunction;
  * @param <DomainOut> the domain output object type
  */
 public abstract class GrpcServiceBidirectionalStreamingAdapter<
-    GrpcIn, GrpcOut, DomainIn, DomainOut> extends ReactiveServiceAdapterBase {
+    GrpcIn, GrpcOut, DomainIn, DomainOut> {
 
   /**
    * Default constructor for GrpcServiceBidirectionalStreamingAdapter.
