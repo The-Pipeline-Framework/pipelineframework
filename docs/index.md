@@ -76,10 +76,15 @@ To get started with The Pipeline Framework, explore these guides:
 - [Business Value](/guide/getting-started/business-value): Speed, ROI, and portability
 - [Canvas Designer Guide](/guide/getting-started/canvas-guide): Deep dive into the visual designer
 
-### Functional Architecture
-- [Application Structure](/guide/application/application-structure): Structuring pipeline applications
-- [Common Module Structure](/guide/application/common-module-structure): Shared components and type mappings
+### Design
+- [Application Structure](/guide/design/application-structure): Structuring pipeline applications
+- [Common Module Structure](/guide/design/common-module-structure): Shared components and type mappings
+- [Expansion and Reduction](/guide/design/expansion-and-reduction): Cardinality explained for imperative developers
+
+### Build
 - [Pipeline Compilation](/guide/build/pipeline-compilation): How build-time generation works
+- [Configuration Reference](/guide/build/configuration/): Build-time and runtime settings
+- [Dependency Management](/guide/build/dependency-management): Manage build-time and runtime deps
 - [Best Practices](/guide/operations/best-practices): Operational and design guidance
 
 ### Develop

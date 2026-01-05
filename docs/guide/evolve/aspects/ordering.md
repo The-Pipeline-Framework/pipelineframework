@@ -4,9 +4,9 @@
 
 1. **Aspects are applied in ascending order** - Aspects with lower order values are applied before aspects with higher order values.
 
-2. **Lower order executes closer to the step boundary** - When aspects are nested around a step, those with lower order values are positioned closer to the actual step execution.
+2. **Lower order executes closer to the step boundary** - When aspects are chained around a step, those with lower order values are positioned closer to the actual step execution.
 
-3. **Same position nesting** - If multiple aspects target the same position (BEFORE_STEP or AFTER_STEP), they are nested in order (lower order values closest to the step).
+3. **Same position chaining** - If multiple aspects target the same position (BEFORE_STEP or AFTER_STEP), they execute in order (lower order values closest to the step).
 
 4. **Default order is 0** - If no order is specified, aspects default to order 0.
 
@@ -25,11 +25,11 @@ Consider these aspects applied to a single step:
 - Aspect D: position=AFTER_STEP, order=1
 
 The execution order would be:
-1. Aspect B executes (BEFORE_STEP, closest to step)
-2. Actual step executes
-3. Aspect D executes (AFTER_STEP, closest to step)
-4. Aspect C executes (AFTER_STEP, farthest from step)
-5. Aspect A executes (BEFORE_STEP, farthest from step)
+1. Aspect A executes (BEFORE_STEP, farthest from step)
+2. Aspect B executes (BEFORE_STEP, closest to step)
+3. Actual step executes
+4. Aspect D executes (AFTER_STEP, closest to step)
+5. Aspect C executes (AFTER_STEP, farthest from step)
 
 This creates the following logical pipeline:
 ```

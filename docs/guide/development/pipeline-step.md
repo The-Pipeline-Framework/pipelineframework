@@ -15,8 +15,6 @@ The `@PipelineStep` annotation marks a class as a pipeline step and enables auto
 - `inboundMapper`: The inbound mapper class for this pipeline service/step - handles conversion from gRPC to domain types (using MapStruct-based unified Mapper interface)
 - `outboundMapper`: The outbound mapper class for this pipeline service/step - handles conversion from domain to gRPC types (using MapStruct-based unified Mapper interface)
 - `runOnVirtualThreads`: Whether to offload server processing to virtual threads, i.e. for I/O-bound operations (defaults to `false`)
-- `grpcEnabled`: Whether to enable gRPC adapter generation for this step (defaults to `true`)
-- `restEnabled`: Whether to enable REST adapter generation for this step (defaults to `false`)
 
 ### Example
 
@@ -44,5 +42,7 @@ Developers only need to:
 3. Implement the service interface (`StepOneToOne`, etc.)
 
 Parallelism is configured at runtime (StepConfig or `application.properties`), not via `@PipelineStep`.
+
+Transport selection (gRPC vs REST) is configured globally in `pipeline.yaml`, not on the annotation.
 
 The framework automatically generates and registers the adapter beans at build time.

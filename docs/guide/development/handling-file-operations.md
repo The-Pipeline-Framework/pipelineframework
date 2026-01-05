@@ -4,7 +4,7 @@ This guide explains how to handle file operations such as downloads and uploads 
 
 ## Overview
 
-The Pipeline Framework automatically generates REST adapters when you use the `restEnabled = true` parameter in your `@PipelineStep` annotation. However, the generated resources focus on standard DTO processing and may not handle specialized operations like file downloads directly.
+The Pipeline Framework automatically generates REST adapters when the pipeline transport is set to REST in your `pipeline.yaml`. However, the generated resources focus on standard DTO processing and may not handle specialized operations like file downloads directly.
 
 ## Generated REST Resources vs. Manual Resources
 
@@ -13,8 +13,7 @@ When you use:
 ```java
 @PipelineStep(
     inputType = InputType.class,
-    outputType = OutputFileType.class,
-    restEnabled = true
+    outputType = OutputFileType.class
 )
 public class ProcessFileReactiveService implements ReactiveStreamingClientService<InputType, OutputFileType> {
     // ...
@@ -98,7 +97,7 @@ public class ProcessFileRestResource {
 ### Option 1: Hybrid Approach (Recommended)
 Keep both the generated resource for standard operations and create custom resources for file operations:
 
-1. **Enable `restEnabled = true`** in your `@PipelineStep` annotation for standard DTO processing
+1. **Set `transport: REST`** in your pipeline YAML for standard DTO processing
 2. **Create a separate resource class** for specialized file operations
 3. **Re-use the same service instance** to avoid duplication of business logic
 
@@ -108,8 +107,7 @@ Keep both the generated resource for standard operations and create custom resou
     inputType = InputType.class,
     outputType = OutputFileType.class,
     inboundMapper = InputTypeMapper.class,
-    outboundMapper = OutputFileTypeMapper.class,
-    restEnabled = true  // This will generate the standard resource
+    outboundMapper = OutputFileTypeMapper.class
 )
 public class ProcessFileReactiveService implements ReactiveStreamingClientService<InputType, OutputFileType> {
     // Your service business logic

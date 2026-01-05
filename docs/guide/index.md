@@ -36,10 +36,15 @@ The framework lets you define pipeline steps as simple classes annotated with `@
 - [Business Value](/guide/getting-started/business-value): Speed, ROI, and portability
 - [Canvas Designer Guide](/guide/getting-started/canvas-guide): Complete guide to the visual designer
 
-### Functional Architecture
-- [Application Structure](/guide/application/application-structure): Modular layout and service boundaries
-- [Common Module Structure](/guide/application/common-module-structure): Shared domain types and mappers
+### Design
+- [Application Structure](/guide/design/application-structure): Modular layout and service boundaries
+- [Common Module Structure](/guide/design/common-module-structure): Shared domain types and mappers
+- [Expansion and Reduction](/guide/design/expansion-and-reduction): Cardinality explained for imperative developers
+
+### Build
 - [Pipeline Compilation](/guide/build/pipeline-compilation): Build-time generation flow
+- [Configuration Reference](/guide/build/configuration/): Build-time and runtime settings
+- [Dependency Management](/guide/build/dependency-management): Manage build-time and runtime deps
 - [Best Practices](/guide/operations/best-practices): Operational and design guidance
 
 ### Develop
@@ -60,6 +65,7 @@ The framework lets you define pipeline steps as simple classes annotated with `@
 - [Alerting](/guide/operations/observability/alerting): Alerts and noise reduction
 - [Security Notes](/guide/operations/observability/security): Protect telemetry data
 - [Error Handling & DLQ](/guide/operations/error-handling): Failure handling patterns
+- [Caching](/guide/plugins/caching/): Cache policies, backends, and invalidation
 
 ### Extend
 - [Writing a Plugin](/guide/plugins/writing-a-plugin): Create plugins and aspects

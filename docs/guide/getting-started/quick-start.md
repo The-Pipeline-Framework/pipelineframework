@@ -54,7 +54,7 @@ Your application is now ready to run!
 Congratulations! You've successfully created your first pipeline application. Now explore these topics:
 
 - [Canvas Designer Guide](/guide/getting-started/canvas-guide) - Complete guide to using the visual designer
-- [Application Structure](/guide/application/application-structure) - Learn how the generated application is structured
+- [Application Structure](/guide/design/application-structure) - Learn how the generated application is structured
 - [Functional Architecture](/guide/evolve/architecture) - Deep dive into the framework architecture
 
 ## Template Generator (Reference Only)

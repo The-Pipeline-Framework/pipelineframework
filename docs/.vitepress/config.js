@@ -36,6 +36,7 @@ export default withMermaid(
             {text: 'Home', link: '/'},
             {text: 'Guides', link: '/guide/'},
             {text: 'Evolve', link: '/guide/evolve/'},
+            {text: 'Configuration', link: '/guide/build/configuration/'},
             {text: 'Versions', link: '/versions'}
         ],
 
@@ -50,11 +51,19 @@ export default withMermaid(
                 ]
             },
             {
-                text: 'Functional Architecture',
+                text: 'Design',
                 items: [
-                    {text: 'Application Structure', link: '/guide/application/application-structure'},
-                    {text: 'Common Module Structure', link: '/guide/application/common-module-structure'},
+                    {text: 'Application Structure', link: '/guide/design/application-structure'},
+                    {text: 'Common Module Structure', link: '/guide/design/common-module-structure'},
+                    {text: 'Expansion and Reduction', link: '/guide/design/expansion-and-reduction'}
+                ]
+            },
+            {
+                text: 'Build',
+                items: [
                     {text: 'Pipeline Compilation', link: '/guide/build/pipeline-compilation'},
+                    {text: 'Configuration Reference', link: '/guide/build/configuration/'},
+                    {text: 'Dependency Management', link: '/guide/build/dependency-management'},
                     {text: 'Best Practices', link: '/guide/operations/best-practices'}
                 ]
             },
@@ -67,10 +76,9 @@ export default withMermaid(
                     {text: 'Mappers and DTOs', link: '/guide/development/mappers-and-dtos'},
                     {text: 'Handling File Operations', link: '/guide/development/handling-file-operations'},
                     {text: 'Java-Centered Types', link: '/guide/development/java-centered-types'},
-                    {text: 'Dependency Management', link: '/guide/build/dependency-management'},
                     {text: 'Upgrade Guide', link: '/guide/development/upgrade'},
                     {text: 'Orchestrator Runtime', link: '/guide/development/orchestrator-runtime'},
-                    {text: 'Configuration', link: '/guide/application/configuration'}
+                    {text: 'Performance', link: '/guide/development/performance'}
                 ]
             },
             {
@@ -83,13 +91,27 @@ export default withMermaid(
                     {text: 'Health Checks', link: '/guide/operations/observability/health-checks'},
                     {text: 'Alerting', link: '/guide/operations/observability/alerting'},
                     {text: 'Security Notes', link: '/guide/operations/observability/security'},
-                    {text: 'Error Handling & DLQ', link: '/guide/operations/error-handling'},
+                    {text: 'Error Handling & DLQ', link: '/guide/operations/error-handling'}
+                ]
+            },
+            {
+                text: 'Plugins',
+                items: [
+                    {text: 'Using Plugins', link: '/guide/development/using-plugins'},
+                    {text: 'Writing a Plugin', link: '/guide/plugins/writing-a-plugin'},
+                    {text: 'Persistence Plugin', link: '/guide/plugins/persistence'},
+                    {text: 'Caching', link: '/guide/plugins/caching/'},
+                    {text: 'Caching Configuration', link: '/guide/plugins/caching/configuration'},
+                    {text: 'Caching Policies', link: '/guide/plugins/caching/policies'},
+                    {text: 'Caching Invalidation', link: '/guide/plugins/caching/invalidation'},
+                    {text: 'Search Replay Walkthrough', link: '/guide/plugins/caching/replay-walkthrough'},
+                    {text: 'Cache Key Strategy', link: '/guide/plugins/caching/key-strategy'},
+                    {text: 'Cache vs Persistence', link: '/guide/plugins/caching/cache-vs-persistence'}
                 ]
             },
             {
                 text: 'Extend',
                 items: [
-                    {text: 'Writing a Plugin', link: '/guide/plugins/writing-a-plugin'},
                     {text: 'Orchestrator Extensions', link: '/guide/development/extension/orchestrator-runtime'},
                     {text: 'Reactive Service Extensions', link: '/guide/development/extension/reactive-services'},
                     {text: 'Client Step Extensions', link: '/guide/development/extension/client-steps'},
@@ -130,7 +152,12 @@ export default withMermaid(
       
       socialLinks: [
         { icon: 'github', link: 'https://github.com/mbarcia/pipelineframework' }
-      ]
+      ],
+
+      editLink: {
+        pattern: 'https://github.com/mbarcia/pipelineframework/edit/main/docs/:path',
+        text: 'Edit this page'
+      }
     },
     
     vite: {

@@ -1,4 +1,4 @@
-# Architectural overview (AOP-style, high level)
+# Architectural overview
 
 The plugin and aspect system implements an AOP-like model where cross-cutting concerns are applied declaratively to pipeline steps. This preserves the simplicity of step-focused pipeline definitions while enabling sophisticated infrastructure capabilities.
 
@@ -20,6 +20,48 @@ To:
 `Input -> ProcessOrder -> Persistence -> Output`
 
 This expansion happens during compilation and is not visible in your source configuration.
+
+## Side-effect transport model
+
+Side-effect plugins observe stream elements and are always exposed as unary gRPC services derived from message types.
+The service name is deterministic and aspect-qualified:
+`Observe<AspectName><T>SideEffectService`, where `AspectName` is the PascalCase aspect name and `T` is the protobuf
+message name. This avoids collisions when multiple aspects observe the same type.
+
+Placement depends on aspect position:
+- `AFTER_STEP`: services observe the step output type.
+- `BEFORE_STEP`: services observe the step input type.
+
+## Plugin host modules
+
+Plugin-server artifacts are generated only in modules that declare a `@PipelinePlugin("name")` marker. This keeps
+plugin implementations out of regular service modules while still producing the required plugin-client and server
+adapters for orchestrator and plugin deployments.
+
+## Build-time requirements
+
+- A pipeline config YAML must be available so the processor can discover step output types for type-indexed side-effect adapters.
+  The loader searches the parent module root and a `config/` subfolder for `pipeline.yaml`, `pipeline-config.yaml`,
+  or `*-canvas-config.yaml`.
+- Protobuf definitions must include the type-indexed, aspect-qualified
+  `Observe<AspectName><T>SideEffectService` services for any observed type, and the descriptor set must include those
+  definitions.
+
+## Compilation flow (plugins)
+
+```mermaid
+flowchart TD
+  A[pipeline-config.yaml] --> B[AspectExpansionProcessor]
+  C[Protobuf descriptor set] --> D[GrpcBindingResolver]
+  B --> E[Synthetic side-effect steps]
+  E --> D
+  D --> F[Role-specific renderers]
+  F --> G[plugin-server sources<br/>@PipelinePlugin module]
+  F --> H[plugin-client sources<br/>@PipelinePlugin module]
+  F --> I[pipeline-server / orchestrator-client sources]
+  G --> J[plugin-server classifier JAR]
+  H --> K[plugin-client classifier JAR]
+```
 
 ## Expansion example
 
@@ -54,6 +96,13 @@ By applying aspects at compile-time:
 - Aspects cannot alter the functional behavior of the pipeline
 - Plugin interfaces are limited to side-effect patterns
 - Aspect configuration is declarative rather than programmatic
+
+## Deployment Roles & Packaging Boundaries
+
+- Role selection is a deployment concern; it must not change generated code.
+- Aspect expansion decides deployment roles for synthetic steps; normal steps keep their configured role.
+- Renderers are pure code generators; they only write to role-specific directories and apply `@GeneratedRole`.
+- Packaging policy (classifier JARs, fat artifacts) is a build-time decision, not a generator decision.
 
 ## Non-goals
 

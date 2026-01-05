@@ -66,6 +66,10 @@ Services declare dependencies on the common module and framework. Both runtime a
 </project>
 ```
 
+## Build Warning Note
+
+When compiling role-specific outputs in a single module (for example, orchestrator-client and pipeline-server), Maven may emit a warning like "Overwriting artifact's file". This comes from the compiler plugin updating the project's output directory per execution and does not indicate class files are being overwritten.
+
 ## Dependency Flow Diagram
 
 ```mermaid

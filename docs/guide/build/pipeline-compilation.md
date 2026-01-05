@@ -2,7 +2,7 @@
 
 This guide explains how The Pipeline Framework's annotation processor works to automatically generate pipeline applications and adapters at build time.
 
-For the architecture overview of the processor, see [Annotation Processor Architecture](/guide/evolve/annotation-processor-architecture).
+For the architecture overview of the processor, see [Annotation Processor Architecture](../../evolve/annotation-processor-architecture.md)
 
 ## Overview
 
@@ -36,110 +36,31 @@ public class ProcessPaymentService implements StepOneToOne<PaymentRecord, Paymen
 }
 ```
 
-### 2. Code Generation
-The processor generates several classes:
+### 2. Compile-time Code Generation
+The Pipeline Framework extension processor generates several classes:
 
-#### a) gRPC Adapter Class
-A service endpoint that handles gRPC requests:
+- gRPC service adapter class: a service endpoint that handles gRPC requests.
+- gRPC client step class: a client-side implementation for pipeline step execution.
+- REST resource adapter class: a REST resource endpoint that handles REST requests.
+- "synthetic" gRCP client step classes for the configured plugins
+- "synthetic" REST client step classes for the configured plugins
 
-```java
-// Generated: ProcessPaymentServiceGrpcService.java
-@GrpcService
-public class ProcessPaymentServiceGrpcService extends GenericGrpcReactiveServiceAdapter<...> {
-    @Inject
-    PaymentRecordInboundMapper inboundMapper;
-    
-    @Inject
-    PaymentStatusOutboundMapper outboundMapper;
-    
-    @Inject
-    ProcessPaymentService service;
-    
-    @Inject
-    PersistenceManager persistenceManager;
-    
-    // Generated methods for gRPC endpoint
-}
-```
-
-#### b) Step Class
-A client-side step implementation for pipeline execution:
-
-```java
-// Generated: ProcessPaymentServiceStep.java
-@ApplicationScoped
-public class ProcessPaymentServiceStep implements StepOneToOne<PaymentRecord, PaymentStatus> {
-    @Inject
-    MutinyProcessPaymentServiceGrpc.MutinyProcessPaymentServiceStub grpcClient;
-    
-    @GrpcClient("process-payment")
-    // Generated methods for pipeline step execution
-}
-```
-
-#### c) Orchestrator Application
-The orchestrator is generated from a template that implements QuarkusApplication and Callable:
-
-```java
-// Generated: OrchestratorApplication.java (from template)
-@CommandLine.Command(
-    name = "orchestrator",
-    mixinStandardHelpOptions = true,
-    version = "1.0.0",
-    description = "{{appName}} Orchestrator Runtime")
-@Dependent
-public class OrchestratorApplication implements QuarkusApplication, Callable<Integer> {
-
-    @Option(
-        names = {"-i", "--input"}, 
-        description = "Input value for the pipeline",
-        defaultValue = ""
-    )
-    String input;
-
-    @Inject
-    PipelineExecutionService pipelineExecutionService;
-
-    @Override
-    public int run(String... args) {
-        return new CommandLine(this).execute(args);
-    }
-
-    public Integer call() {
-        // Use command line option if provided, otherwise fall back to environment variable
-        String actualInput = input;
-        if (actualInput == null || actualInput.trim().isEmpty()) {
-            actualInput = System.getenv("PIPELINE_INPUT");
-        }
-        
-        if (actualInput == null || actualInput.trim().isEmpty()) {
-            System.err.println("Input parameter is required");
-            return CommandLine.ExitCode.USAGE;
-        }
-        
-        Multi<{{firstInputTypeName}}> inputMulti = getInputMulti(actualInput);
-
-        // Execute the pipeline with the processed input using injected service
-        pipelineExecutionService.executePipeline(inputMulti)
-            .collect().asList()
-            .await().indefinitely();
-
-        System.out.println("Pipeline execution completed");
-        return CommandLine.ExitCode.OK;
-    }
-    
-    // This method needs to be implemented by the user after template generation
-    // based on their specific input type and requirements
-    private Multi<{{firstInputTypeName}}> getInputMulti(String input) {
-        // User implementation required
-    }
-}
-```
+### 2.5 Scaffolding
+The template generator provides the necessary scaffolding for:
 
 ### 3. Dependency Injection Registration
 All generated classes are automatically registered with the CDI container, making them available for injection.
 
 ## Generated Classes in Detail
+
+## Role-Specific Output Directories
+
+Generated sources are written into role-specific directories under `target/generated-sources/pipeline`, one per deployment role. Packaging relies on these directories instead of class-name patterns.
+
+Build configuration notes:
+- Pass `-Apipeline.generatedSourcesDir=target/generated-sources/pipeline` to the compiler during `compile` only, to avoid warnings during `testCompile`.
+- Register the role directories as sources for IDEs via `build-helper-maven-plugin`.
+- If tests reference generated classes (e.g., REST resources), register the same directories as test sources in `generate-test-sources`.
 
 ### gRPC Adapter Generation
 
@@ -149,7 +70,6 @@ The gRPC adapter acts as a server-side endpoint that:
 2. Uses the inbound mapper to convert gRPC objects to domain objects
 3. Calls the actual service implementation
 4. Uses the outbound mapper to convert domain objects to gRPC responses
-5. Handles persistence if auto-persist is enabled
 
 ```java
 // Generated class structure
@@ -184,7 +104,7 @@ public class ServiceNameGrpcService extends GenericGrpcReactiveServiceAdapter<GR
 }
 ```
 
-### Step Class Generation
+### gRPC Step Class Generation
 
 The step class acts as a client-side component that:
 

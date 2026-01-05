@@ -31,11 +31,9 @@ A plugin is not:
 
 ## Plugin interfaces
 
-The framework provides several interfaces for different patterns:
+The framework provides interfaces for different patterns:
 
-- `PluginReactiveUnary<T>`: Process a single item and perform a side effect
-- `PluginReactiveUnaryReply<T, R>`: Process input and return a result
-- `PluginReactiveStreamIn<T>`: Process a stream of inputs
+- `ReactiveSideEffectService<T>`: Observe a single item and return it unchanged
 
 The `T` type represents your domain type - the actual business object your plugin will work with. The framework handles converting between your domain types and transport types.
 
@@ -45,20 +43,45 @@ Here's a simple persistence plugin that stores domain objects:
 
 ```java
 @ApplicationScoped
-public class PersistencePlugin<T> implements PluginReactiveUnary<T> {
+public class PersistenceService<T> implements ReactiveSideEffectService<T> {
     private final PersistenceManager persistenceManager;
 
-    public PersistencePlugin(PersistenceManager persistenceManager) {
+    public PersistenceService(PersistenceManager persistenceManager) {
         this.persistenceManager = persistenceManager;
     }
 
     @Override
-    public Uni<Void> process(T item) {
+    public Uni<T> process(T item) {
         return persistenceManager.persist(item)
-            .replaceWithVoid();
+            .replaceWith(item);
     }
 }
 ```
+
+## Persistence plugin requirements
+
+The foundational persistence plugin is intentionally small and expects the host application to provide the rest:
+
+- **Depends on `common`**: the host service module must depend on the `common` module so the generated gRPC adapters can reference your domain types.
+- **Database providers are pluggable**: add the provider dependency you want (reactive or blocking). The plugin auto-selects a provider that supports the current execution context.
+- **Service host module required**: the typed gRPC services and client steps are generated in a dedicated service module, not inside the plugin library itself.
+
+In practice, you wire this as:
+
+1. `plugins/foundational/persistence` (library, no generated gRPC code)
+2. `examples/.../persistence-svc` (service host module with the marker annotation)
+
+For a complete walkthrough, see the dedicated persistence plugin page.
+
+## Plugin host modules
+
+To generate plugin-server artifacts in a dedicated module, add a marker class annotated with `@PipelinePlugin("name")`
+inside that module. This tells the annotation processor to emit the gRPC server adapters and CDI producers there.
+
+The host module should depend on:
+- Your plugin library (e.g., `plugins/foundational/persistence`)
+- The `common` module that owns your domain types
+- Any persistence provider dependencies (reactive or blocking)
 
 ## Plugin lifecycle and constraints
 
