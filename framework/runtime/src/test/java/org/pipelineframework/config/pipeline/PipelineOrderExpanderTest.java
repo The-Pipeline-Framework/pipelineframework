@@ -36,6 +36,7 @@ class PipelineOrderExpanderTest {
             ),
             List.of(
                 new PipelineYamlAspect("persistence", true, "GLOBAL", "AFTER_STEP", List.of()),
+                new PipelineYamlAspect("cache", true, "GLOBAL", "AFTER_STEP", List.of()),
                 new PipelineYamlAspect("cache-invalidate-all", true, "STEPS", "BEFORE_STEP", List.of("StepBService"))
             )
         );

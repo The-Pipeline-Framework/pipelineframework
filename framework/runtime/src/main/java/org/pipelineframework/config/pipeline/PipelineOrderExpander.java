@@ -115,7 +115,14 @@ public final class PipelineOrderExpander {
         if (aspect == null || !aspect.enabled()) {
             return false;
         }
+        if (isCacheAspect(aspect)) {
+            return false;
+        }
         return true;
+    }
+
+    private static boolean isCacheAspect(PipelineYamlAspect aspect) {
+        return aspect.name() != null && "cache".equalsIgnoreCase(aspect.name());
     }
 
     private static boolean matchesScope(PipelineYamlAspect aspect, String stepClassName) {
