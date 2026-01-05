@@ -36,6 +36,7 @@ public interface AckPaymentSentMapper extends org.pipelineframework.mapper.Mappe
   // Domain ↔ DTO
   @Override
   @Mapping(target = "id")
+  @Mapping(target = "conversationId")
   @Mapping(target = "paymentRecordId")
   @Mapping(target = "status")
   @Mapping(target = "message")
@@ -44,6 +45,7 @@ public interface AckPaymentSentMapper extends org.pipelineframework.mapper.Mappe
 
   @Override
   @Mapping(target = "id")
+  @Mapping(target = "conversationId")
   @Mapping(target = "paymentRecordId")
   @Mapping(target = "status")
   @Mapping(target = "message")
@@ -53,6 +55,7 @@ public interface AckPaymentSentMapper extends org.pipelineframework.mapper.Mappe
   // DTO ↔ gRPC
   @Override
   @Mapping(target = "id", qualifiedByName = "uuidToString")
+  @Mapping(target = "conversationId", qualifiedByName = "uuidToString")
   @Mapping(target = "paymentRecordId", qualifiedByName = "uuidToString")
   @Mapping(target = "status", qualifiedByName = "longToString")
   @Mapping(target = "message")
@@ -61,6 +64,7 @@ public interface AckPaymentSentMapper extends org.pipelineframework.mapper.Mappe
 
   @Override
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
+  @Mapping(target = "conversationId", qualifiedByName = "stringToUUID")
   @Mapping(target = "paymentRecordId", qualifiedByName = "stringToUUID")
   @Mapping(target = "status", qualifiedByName = "stringToLong")
   @Mapping(target = "message")

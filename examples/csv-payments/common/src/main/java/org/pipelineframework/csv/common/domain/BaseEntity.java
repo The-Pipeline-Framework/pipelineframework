@@ -16,12 +16,13 @@
 
 package org.pipelineframework.csv.common.domain;
 
-
-import io.quarkus.hibernate.reactive.panache.PanacheEntityBase;
+import java.util.UUID;
 import jakarta.persistence.Column;
 import jakarta.persistence.Id;
 import jakarta.persistence.MappedSuperclass;
-import java.util.UUID;
+import jakarta.persistence.PrePersist;
+
+import io.quarkus.hibernate.reactive.panache.PanacheEntityBase;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -36,5 +37,12 @@ public abstract class BaseEntity extends PanacheEntityBase {
 
   public BaseEntity() {
     id = UUID.randomUUID();
+  }
+
+  @PrePersist
+  protected void ensureId() {
+    if (id == null) {
+      id = UUID.randomUUID();
+    }
   }
 }

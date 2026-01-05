@@ -36,3 +36,11 @@ message CsvFolder {
 service ProcessFolderService {
   rpc remoteProcess(CsvFolder) returns (stream CsvPaymentsInputFile);
 }
+
+service ObservePersistenceCsvPaymentsInputFileSideEffectService {
+  rpc remoteProcess(CsvPaymentsInputFile) returns (CsvPaymentsInputFile);
+}
+
+service ObservePersistencePaymentRecordSideEffectService {
+  rpc remoteProcess(PaymentRecord) returns (PaymentRecord);
+}

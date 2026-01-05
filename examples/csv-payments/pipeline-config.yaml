@@ -1,5 +1,16 @@
 appName: "csv-payments"
 basePackage: "org.pipelineframework.csv"
+transport: "GRPC"
+aspects:
+  persistence:
+    enabled: true
+    scope: "GLOBAL"
+    position: "AFTER_STEP"
+    config:
+      pluginImplementationClass: "org.pipelineframework.plugin.persistence.PersistenceService"
+      enabledTargets:
+        - "GRPC_SERVICE"
+        - "CLIENT_STEP"
 steps:
   - name: "Process Folder"
     cardinality: "EXPANSION"

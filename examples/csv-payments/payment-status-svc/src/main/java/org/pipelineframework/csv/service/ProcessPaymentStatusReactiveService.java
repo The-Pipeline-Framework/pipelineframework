@@ -39,8 +39,7 @@ import org.pipelineframework.service.ReactiveService;
     stepType = org.pipelineframework.step.StepOneToOne.class,
     backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
     inboundMapper = PaymentStatusMapper.class,
-    outboundMapper = PaymentOutputMapper.class,
-    restEnabled = true
+    outboundMapper = PaymentOutputMapper.class
 )
 @ApplicationScoped
 @Getter

@@ -14,16 +14,12 @@
  * limitations under the License.
  */
 
-package org.pipelineframework.csv;
+package org.pipelineframework.csv.persistence;
 
-import io.quarkus.test.junit.QuarkusTest;
-import org.junit.jupiter.api.Test;
+import org.pipelineframework.annotation.PipelinePlugin;
 
-@QuarkusTest
-class FakeQuarkusTest {
-
-    @Test
-    void test() {
-        // This test is here to enable jacoco coverage reports
+@PipelinePlugin("persistence")
+public final class PersistencePluginHost {
+    private PersistencePluginHost() {
     }
 }

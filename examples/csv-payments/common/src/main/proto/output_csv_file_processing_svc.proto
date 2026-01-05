@@ -13,3 +13,7 @@ message CsvPaymentsOutputFile {
 service ProcessCsvPaymentsOutputFileReactiveService {
   rpc remoteProcess(stream PaymentOutput) returns (stream CsvPaymentsOutputFile);
 }
+
+service ObservePersistenceCsvPaymentsOutputFileSideEffectService {
+  rpc remoteProcess(CsvPaymentsOutputFile) returns (CsvPaymentsOutputFile);
+}

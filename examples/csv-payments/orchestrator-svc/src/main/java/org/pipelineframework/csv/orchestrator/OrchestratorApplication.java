@@ -16,12 +16,15 @@
 
 package org.pipelineframework.csv.orchestrator;
 
-import io.quarkus.runtime.QuarkusApplication;
-import io.smallrye.mutiny.Multi;
+import java.time.Duration;
+import java.util.concurrent.Callable;
 import jakarta.enterprise.context.Dependent;
 import jakarta.inject.Inject;
-import java.util.concurrent.Callable;
+
+import io.quarkus.runtime.QuarkusApplication;
+import io.smallrye.mutiny.Multi;
 import org.pipelineframework.PipelineExecutionService;
+import org.pipelineframework.config.PipelineStepConfig;
 import org.pipelineframework.csv.grpc.InputCsvFileProcessingSvc;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
@@ -45,6 +48,9 @@ public class OrchestratorApplication implements QuarkusApplication, Callable<Int
 
     @Inject
     PipelineExecutionService pipelineExecutionService;
+
+    @Inject
+    PipelineStepConfig pipelineStepConfig;
 
     public static void main(String[] args) {
         io.quarkus.runtime.Quarkus.run(OrchestratorApplication.class, args);
@@ -75,6 +81,10 @@ public class OrchestratorApplication implements QuarkusApplication, Callable<Int
         }
 
         Multi<InputCsvFileProcessingSvc.CsvFolder> inputMulti = getInputMulti(actualInput);
+
+        Duration timeout = pipelineStepConfig.health().startupTimeout();
+        pipelineExecutionService.awaitStartupHealth(timeout);
+
 
         // Execute the pipeline with the processed input using injected service
         pipelineExecutionService.executePipeline(inputMulti)

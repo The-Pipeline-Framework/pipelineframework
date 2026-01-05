@@ -49,3 +49,11 @@ service ProcessAckPaymentSentReactiveService {
 service PollAckPaymentSentService {
   rpc remoteProcess(AckPaymentSent) returns (PaymentStatus);
 }
+
+service ObservePersistenceAckPaymentSentSideEffectService {
+  rpc remoteProcess(AckPaymentSent) returns (AckPaymentSent);
+}
+
+service ObservePersistencePaymentStatusSideEffectService {
+  rpc remoteProcess(PaymentStatus) returns (PaymentStatus);
+}
