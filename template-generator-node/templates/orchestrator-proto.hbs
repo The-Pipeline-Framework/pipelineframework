@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+option java_package = "{{basePackage}}.grpc";
+
+import "{{inputProtoFile}}";
+{{#if outputProtoImport}}
+import "{{outputProtoFile}}";
+{{/if}}
+
+service OrchestratorService {
+  rpc Run ({{#if inputStreaming}}stream {{/if}}{{inputTypeName}}) returns ({{#if outputStreaming}}stream {{/if}}{{outputTypeName}});
+}

@@ -1,4 +1,6 @@
-quarkus.package.main-class={{basePackage}}.orchestrator.OrchestratorApplication
+quarkus.package.main-class={{basePackage}}.orchestrator.service.OrchestratorServerApplication
+# To run the CLI orchestrator instead, set:
+# quarkus.package.main-class={{basePackage}}.orchestrator.service.OrchestratorApplication
 
 quarkus.hibernate-orm.enabled=false
 quarkus.datasource.jdbc=false
@@ -17,20 +19,42 @@ pipeline-cli.cli-version=0.9.2
 pipeline-cli.cli-description="{{appName}} CLI"
 pipeline-cli.cli-name="{{appName}} Processing System"
 
-# Pipeline step configurations
+# Pipeline step execution order - defines the sequence of processing steps
+# Each step is listed in the order it should execute in the pipeline
+pipeline.order={{#each steps}}{{#if @first}}{{../basePackage}}.{{serviceNameForPackage}}.service.pipeline.Process{{serviceNameCamel}}{{../clientStepSuffix}}{{else}},\
+              {{../basePackage}}.{{serviceNameForPackage}}.service.pipeline.Process{{serviceNameCamel}}{{../clientStepSuffix}}{{/if}}{{/each}}
+
+# Pipeline step configurations - configure specific step properties (without order)
 {{#each steps}}
 {{#if this.parallel}}
-pipeline.step."{{../basePackage}}.{{serviceNameForPackage}}.pipeline.{{this.serviceNameFormatted}}ClientStep".parallel=true
+pipeline.step."{{../basePackage}}.{{serviceNameForPackage}}.service.pipeline.Process{{serviceNameCamel}}{{../clientStepSuffix}}".parallel=true
 {{/if}}
 {{/each}}
 
+# Index client-step classifier jars so CDI can discover generated steps
+{{#each steps}}
+quarkus.index-dependency."{{replace serviceName "-svc" ""}}-client".group-id={{../basePackage}}
+quarkus.index-dependency."{{replace serviceName "-svc" ""}}-client".artifact-id={{serviceName}}
+quarkus.index-dependency."{{replace serviceName "-svc" ""}}-client".classifier=orchestrator-client
+{{/each}}
+{{#if includePersistenceModule}}
+quarkus.index-dependency."persistence-client".group-id={{basePackage}}
+quarkus.index-dependency."persistence-client".artifact-id=persistence-svc
+quarkus.index-dependency."persistence-client".classifier=plugin-client
+{{/if}}
+{{#if includeCacheInvalidationModule}}
+quarkus.index-dependency."cache-invalidation-client".group-id={{basePackage}}
+quarkus.index-dependency."cache-invalidation-client".artifact-id=cache-invalidation-svc
+quarkus.index-dependency."cache-invalidation-client".classifier=plugin-client
+{{/if}}
+
 {{#each steps}}
 # Talk to {{serviceName}} service
-quarkus.grpc.clients.{{replace serviceName "-svc" ""}}.host=localhost
-quarkus.grpc.clients.{{replace serviceName "-svc" ""}}.port={{add 8443 portOffset}}
-quarkus.grpc.clients.{{replace serviceName "-svc" ""}}.plain-text=false
-quarkus.grpc.clients.{{replace serviceName "-svc" ""}}.use-quarkus-grpc-client=true
-quarkus.grpc.clients.{{replace serviceName "-svc" ""}}.tls.enabled=true
+quarkus.grpc.clients.process-{{replace serviceNameForPackage "_" "-"}}.host=localhost
+quarkus.grpc.clients.process-{{replace serviceNameForPackage "_" "-"}}.port={{add 8443 portOffset}}
+quarkus.grpc.clients.process-{{replace serviceNameForPackage "_" "-"}}.plain-text=false
+quarkus.grpc.clients.process-{{replace serviceNameForPackage "_" "-"}}.use-quarkus-grpc-client=true
+quarkus.grpc.clients.process-{{replace serviceNameForPackage "_" "-"}}.tls.enabled=true
 {{/each}}
 
 # Talk to orchestrator-svc (self)
@@ -39,15 +63,39 @@ quarkus.grpc.clients.orchestrator-service.port=8443
 quarkus.grpc.clients.orchestrator-service.plain-text=false
 quarkus.grpc.clients.orchestrator-service.use-quarkus-grpc-client=true
 quarkus.grpc.clients.orchestrator-service.tls.enabled=true
+{{#if includePersistenceModule}}
+# Talk to persistence-side-effect services
+{{#each persistenceAspectNames}}
+{{#each ../persistenceSideEffectTypes}}
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.host=localhost
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.port={{add 8443 ../../persistencePortOffset}}
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.plain-text=false
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.use-quarkus-grpc-client=true
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.tls.enabled=true
+{{/each}}
+{{/each}}
+{{/if}}
+{{#if includeCacheInvalidationModule}}
+# Talk to cache-invalidation side-effect services
+{{#each cacheInvalidationAspectNames}}
+{{#each ../cacheInvalidationSideEffectTypes}}
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.host=localhost
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.port={{add 8443 ../../cacheInvalidationPortOffset}}
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.plain-text=false
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.use-quarkus-grpc-client=true
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.tls.enabled=true
+{{/each}}
+{{/each}}
+{{/if}}
 
 # Vert.x configuration
-# Server endpoints are disabled as the orchestrator is purely a gRPC client
-quarkus.http.host-enabled=false
+quarkus.http.host-enabled=true
 
+{{#if isGrpcTransport}}
 # gRPC server configuration
-# Server endpoints are disabled as the orchestrator is purely a gRPC client
 quarkus.grpc.server.use-separate-server=false
 quarkus.grpc.server.port=8450
+{{/if}}
 # Increase msg size limit for all clients to 32M
 quarkus.grpc.clients.default.max-inbound-message-size=33554432
 
@@ -72,6 +120,6 @@ quarkus.otel.logs.enabled=true
 # Docker image
 quarkus.container-image.builder=jib
 quarkus.container-image.registry=localhost
-quarkus.container-image.group={{basePackage}}
+quarkus.container-image.group={{rootProjectName}}
 quarkus.container-image.name={{serviceName}}
 quarkus.container-image.tag=latest

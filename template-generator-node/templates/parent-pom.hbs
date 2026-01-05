@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
     <modelVersion>4.0.0</modelVersion>
     <groupId>{{basePackage}}</groupId>
     <artifactId>{{artifactId}}</artifactId>
-    <version>1.0.0</version>
+    <!-- version is not needed as it is automatically inherited from the parent-->
     <packaging>pom</packaging>
     <name>{{name}}</name>
 
@@ -12,6 +13,12 @@
         {{#steps}}
         <module>{{serviceName}}</module>
         {{/steps}}
+        {{#if includePersistenceModule}}
+        <module>persistence-svc</module>
+        {{/if}}
+        {{#if includeCacheInvalidationModule}}
+        <module>cache-invalidation-svc</module>
+        {{/if}}
         <module>orchestrator-svc</module>
     </modules>
 
@@ -26,9 +33,20 @@
         <protobuf.version>4.28.2</protobuf.version>
         <grpc.version>1.63.0</grpc.version>
         <version.jandex>3.5.0</version.jandex>
+        <mockito.version>5.21.0</mockito.version>
         <version.pipeline>0.9.2</version.pipeline>
         <spotless.plugin.version>2.44.0</spotless.plugin.version>
         <google-java-format.version>1.25.0</google-java-format.version>
+        <surefireArgLine />
+        <pipeline.generatedSourcesArg />
+        <protobuf.descriptor.fileArg />
+        <!-- Default: don't build containers unless specifically enabled -->
+        <quarkus.container-image.build>false</quarkus.container-image.build>
+        <quarkus.container-image.registry>localhost</quarkus.container-image.registry>
+        <quarkus.container-image.tag>latest</quarkus.container-image.tag>
+        <quarkus.container-image.group>{{artifactId}}</quarkus.container-image.group>
+        <quarkus.container-image.platforms>linux/amd64,linux/arm64/v8</quarkus.container-image.platforms>
+        <quarkus.jib.jvm-additional-arguments>--enable-preview</quarkus.jib.jvm-additional-arguments>
     </properties>
 
     <dependencyManagement>
@@ -49,27 +67,73 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+            <!-- Pipeline Framework Runtime Module -->
+            <dependency>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework</artifactId>
+                <version>${version.pipeline}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
     <build>
+        <plugins>
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <id>add-pipeline-generated-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${project.build.directory}/generated-sources/pipeline/orchestrator-client</source>
+                                <source>${project.build.directory}/generated-sources/pipeline/pipeline-server</source>
+                                <source>${project.build.directory}/generated-sources/pipeline/plugin-client</source>
+                                <source>${project.build.directory}/generated-sources/pipeline/plugin-server</source>
+                                <source>${project.build.directory}/generated-sources/pipeline/rest-server</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>add-pipeline-generated-test-sources</id>
+                        <phase>generate-test-sources</phase>
+                        <goals>
+                            <goal>add-test-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${project.build.directory}/generated-sources/pipeline/orchestrator-client</source>
+                                <source>${project.build.directory}/generated-sources/pipeline/pipeline-server</source>
+                                <source>${project.build.directory}/generated-sources/pipeline/plugin-client</source>
+                                <source>${project.build.directory}/generated-sources/pipeline/plugin-server</source>
+                                <source>${project.build.directory}/generated-sources/pipeline/rest-server</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+
         <pluginManagement>
             <plugins>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.14.0</version>
-                    <executions>
-                        <!-- Normal compile -->
-                        <execution>
-                            <id>default-compile</id>
-                            <phase>compile</phase>
-                            <goals><goal>compile</goal></goals>
-                        </execution>
-                    </executions>
                     <configuration>
                         <source>21</source>
                         <target>21</target>
+                        <release>21</release>
+                        <enablePreview>true</enablePreview>
                         <annotationProcessorPaths>
                             <!-- lombok must come first -->
                             <path>
@@ -83,25 +147,108 @@
                                 <version>1.5.5.Final</version>
                             </path>
                             <path>
-                                <groupId>org.pipelineframework</groupId>
-                                <artifactId>pipelineframework-deployment</artifactId>
-                                <version>${version.pipeline}</version>
-                            </path>
-                            <path>
                                 <groupId>io.quarkus</groupId>
                                 <artifactId>quarkus-extension-processor</artifactId>
                                 <version>${quarkus.platform.version}</version>
                             </path>
+                            <path>
+                                <groupId>org.pipelineframework</groupId>
+                                <artifactId>pipelineframework-deployment</artifactId>
+                                <version>${version.pipeline}</version>
+                            </path>
                         </annotationProcessorPaths>
-                        <compilerArgs>
-                            <arg>--enable-preview</arg>
-                        </compilerArgs>
                     </configuration>
+                    <executions>
+                        <execution>
+                            <id>default-compile</id>
+                            <phase>compile</phase>
+                            <goals>
+                                <goal>compile</goal>
+                            </goals>
+                            <configuration>
+                                <compilerArgs>
+                                    <arg>${pipeline.generatedSourcesArg}</arg>
+                                    <arg>${protobuf.descriptor.fileArg}</arg>
+                                </compilerArgs>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>compile-orchestrator-client</id>
+                            <phase>process-classes</phase>
+                            <goals>
+                                <goal>compile</goal>
+                            </goals>
+                            <configuration>
+                                <proc>none</proc>
+                                <generatedSourcesDirectory>${project.build.directory}/generated-sources/role-compile/orchestrator-client</generatedSourcesDirectory>
+                                <compileSourceRoots>
+                                    <compileSourceRoot>${project.build.directory}/generated-sources/pipeline/orchestrator-client</compileSourceRoot>
+                                </compileSourceRoots>
+                                <outputDirectory>${project.build.directory}/classes-pipeline/orchestrator-client</outputDirectory>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>compile-pipeline-server</id>
+                            <phase>process-classes</phase>
+                            <goals>
+                                <goal>compile</goal>
+                            </goals>
+                            <configuration>
+                                <proc>none</proc>
+                                <generatedSourcesDirectory>${project.build.directory}/generated-sources/role-compile/pipeline-server</generatedSourcesDirectory>
+                                <compileSourceRoots>
+                                    <compileSourceRoot>${project.build.directory}/generated-sources/pipeline/pipeline-server</compileSourceRoot>
+                                </compileSourceRoots>
+                                <outputDirectory>${project.build.directory}/classes-pipeline/pipeline-server</outputDirectory>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>compile-plugin-client</id>
+                            <phase>process-classes</phase>
+                            <goals>
+                                <goal>compile</goal>
+                            </goals>
+                            <configuration>
+                                <proc>none</proc>
+                                <generatedSourcesDirectory>${project.build.directory}/generated-sources/role-compile/plugin-client</generatedSourcesDirectory>
+                                <compileSourceRoots>
+                                    <compileSourceRoot>${project.build.directory}/generated-sources/pipeline/plugin-client</compileSourceRoot>
+                                </compileSourceRoots>
+                                <outputDirectory>${project.build.directory}/classes-pipeline/plugin-client</outputDirectory>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>compile-plugin-server</id>
+                            <phase>process-classes</phase>
+                            <goals>
+                                <goal>compile</goal>
+                            </goals>
+                            <configuration>
+                                <proc>none</proc>
+                                <generatedSourcesDirectory>${project.build.directory}/generated-sources/role-compile/plugin-server</generatedSourcesDirectory>
+                                <compileSourceRoots>
+                                    <compileSourceRoot>${project.build.directory}/generated-sources/pipeline/plugin-server</compileSourceRoot>
+                                </compileSourceRoots>
+                                <outputDirectory>${project.build.directory}/classes-pipeline/plugin-server</outputDirectory>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>compile-rest-server</id>
+                            <phase>process-classes</phase>
+                            <goals>
+                                <goal>compile</goal>
+                            </goals>
+                            <configuration>
+                                <proc>none</proc>
+                                <generatedSourcesDirectory>${project.build.directory}/generated-sources/role-compile/rest-server</generatedSourcesDirectory>
+                                <compileSourceRoots>
+                                    <compileSourceRoot>${project.build.directory}/generated-sources/pipeline/rest-server</compileSourceRoot>
+                                </compileSourceRoots>
+                                <outputDirectory>${project.build.directory}/classes-pipeline/rest-server</outputDirectory>
+                            </configuration>
+                        </execution>
+                    </executions>
                 </plugin>
-                <!-- 
-                The annotation processor automatically handles generation of gRPC services and client steps 
-                based on the @PipelineStep annotation. Generation type (client vs server) is determined by 
-                the pipeline.generate-cli property. -->
                 <plugin>
                     <groupId>io.quarkus</groupId>
                     <artifactId>quarkus-maven-plugin</artifactId>
@@ -130,6 +277,11 @@
                             <artifactId>asm</artifactId>
                             <version>9.5</version>
                         </dependency>
+                        <dependency>
+                            <groupId>org.mockito</groupId>
+                            <artifactId>mockito-core</artifactId>
+                            <version>${mockito.version}</version>
+                        </dependency>
                     </dependencies>
                     <configuration>
                         <useSystemClassLoader>true</useSystemClassLoader>
@@ -138,47 +290,17 @@
                         <systemPropertyVariables>
                             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         </systemPropertyVariables>
-                        <argLine>--enable-preview -XX:+EnableDynamicAgentLoading</argLine>
+                        <!--suppress UnresolvedMavenProperty -->
+                        <argLine>${surefireArgLine} -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar --enable-preview -XX:+EnableDynamicAgentLoading</argLine>
                     </configuration>
-                </plugin>
-                <plugin>
-                    <groupId>com.diffplug.spotless</groupId>
-                    <artifactId>spotless-maven-plugin</artifactId>
-                    <version>${spotless.plugin.version}</version>
-                    <configuration>
-                        <java>
-                            <googleJavaFormat>
-                                <version>${google-java-format.version}</version>
-                                <style>AOSP</style>
-                            </googleJavaFormat>
-                            <removeUnusedImports/>
-                        </java>
-                        <formats>
-                            <format>
-                                <includes>
-                                    <include>src/main/**/*.java</include>
-                                    <include>jbang/*.java</include>
-                                </includes>
-                            </format>
-                        </formats>
-                    </configuration>
-                    <executions>
-                        <execution>
-                            <!-- Runs in compile phase to fail fast in case of formatting issues.-->
-                            <id>spotless-check</id>
-                            <phase>package</phase>
-                            <goals>
-                                <goal>check</goal>
-                            </goals>
-                        </execution>
-                    </executions>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-failsafe-plugin</artifactId>
                     <version>3.5.1</version>
                     <configuration>
-                        <argLine>--enable-preview</argLine>
+                        <!--suppress UnresolvedMavenProperty -->
+                        <argLine>${surefireArgLine} --enable-preview</argLine>
                     </configuration>
                     <executions>
                         <execution>
@@ -202,17 +324,122 @@
                         </execution>
                     </executions>
                 </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-jar-plugin</artifactId>
+                    <version>3.4.2</version>
+                    <executions>
+                        <execution>
+                            <id>orchestrator-client-jar</id>
+                            <phase>package</phase>
+                            <goals>
+                                <goal>jar</goal>
+                            </goals>
+                            <configuration>
+                                <classifier>orchestrator-client</classifier>
+                                <classesDirectory>${project.build.directory}/classes-pipeline/orchestrator-client</classesDirectory>
+                                <skipIfEmpty>true</skipIfEmpty>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>pipeline-server-jar</id>
+                            <phase>package</phase>
+                            <goals>
+                                <goal>jar</goal>
+                            </goals>
+                            <configuration>
+                                <classifier>pipeline-server</classifier>
+                                <classesDirectory>${project.build.directory}/classes-pipeline/pipeline-server</classesDirectory>
+                                <skipIfEmpty>true</skipIfEmpty>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>plugin-client-jar</id>
+                            <phase>package</phase>
+                            <goals>
+                                <goal>jar</goal>
+                            </goals>
+                            <configuration>
+                                <classifier>plugin-client</classifier>
+                                <classesDirectory>${project.build.directory}/classes-pipeline/plugin-client</classesDirectory>
+                                <skipIfEmpty>true</skipIfEmpty>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>plugin-server-jar</id>
+                            <phase>package</phase>
+                            <goals>
+                                <goal>jar</goal>
+                            </goals>
+                            <configuration>
+                                <classifier>plugin-server</classifier>
+                                <classesDirectory>${project.build.directory}/classes-pipeline/plugin-server</classesDirectory>
+                                <skipIfEmpty>true</skipIfEmpty>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>rest-server-jar</id>
+                            <phase>package</phase>
+                            <goals>
+                                <goal>jar</goal>
+                            </goals>
+                            <configuration>
+                                <classifier>rest-server</classifier>
+                                <classesDirectory>${project.build.directory}/classes-pipeline/rest-server</classesDirectory>
+                                <skipIfEmpty>true</skipIfEmpty>
+                            </configuration>
+                        </execution>
+                    </executions>
+                </plugin>
             </plugins>
         </pluginManagement>
     </build>
 
     <profiles>
         <profile>
-            <id>native</id>
-            <properties>
-                <quarkus.native.enabled>true</quarkus.native.enabled>
-            </properties>
+            <id>coverage</id>
+            <activation>
+                <property>
+                    <name>!skipTests</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.jacoco</groupId>
+                        <artifactId>jacoco-maven-plugin</artifactId>
+                        <version>0.8.12</version>
+                        <executions>
+                            <execution>
+                                <id>prepare-agent</id>
+                                <goals>
+                                    <goal>prepare-agent</goal>
+                                </goals>
+                                <configuration>
+                                    <destFile>${session.executionRootDirectory}/target/jacoco.exec</destFile>
+                                    <propertyName>surefireArgLine</propertyName>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+            <reporting>
+                <plugins>
+                    <plugin>
+                        <groupId>org.jacoco</groupId>
+                        <artifactId>jacoco-maven-plugin</artifactId>
+                        <version>0.8.12</version>
+                        <reportSets>
+                            <reportSet>
+                                <reports>
+                                    <report>report</report>
+                                </reports>
+                            </reportSet>
+                        </reportSets>
+                    </plugin>
+                </plugins>
+            </reporting>
         </profile>
     </profiles>
-
 </project>

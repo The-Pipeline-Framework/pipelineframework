@@ -11,16 +11,20 @@
     <parent>
         <groupId>{{basePackage}}</groupId>
         <artifactId>{{rootProjectName}}</artifactId>
-        <version>1.0.0</version>
+        <version>1.0.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
+
+    <properties>
+        <pipeline.generatedSourcesArg>-Apipeline.generatedSourcesDir=${project.build.directory}/generated-sources/pipeline</pipeline.generatedSourcesArg>
+        <protobuf.descriptor.fileArg>-Aprotobuf.descriptor.file=${project.parent.basedir}/common/target/generated-sources/grpc/descriptor_set.dsc</protobuf.descriptor.fileArg>
+    </properties>
 
     <dependencies>
         <dependency>
             <groupId>{{basePackage}}</groupId>
             <artifactId>common</artifactId>
             <version>${version.pipeline}</version>
-            <scope>compile</scope>
         </dependency>
         <!-- Hibernate Reactive for reactive persistence (non-virtual threads) -->
         <dependency>
@@ -76,6 +80,10 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-smallrye-health</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-container-image-jib</artifactId>
+        </dependency>
 
         <!-- Test Dependencies -->
         <dependency>
@@ -129,9 +137,28 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-jacoco</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>jakarta.validation</groupId>
             <artifactId>jakarta.validation-api</artifactId>
             <version>3.1.1</version>
+        </dependency>
+        <!-- Observability-->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-observability-devservices-lgtm</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-opentelemetry</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-micrometer-opentelemetry</artifactId>
         </dependency>
     </dependencies>
 
@@ -156,6 +183,10 @@
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
             </plugin>
         </plugins>
     </build>

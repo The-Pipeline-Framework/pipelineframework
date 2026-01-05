@@ -13,6 +13,12 @@
       "description": "Base package name for the generated Java code (e.g., com.example)",
       "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$"
     },
+    "transport": {
+      "type": "string",
+      "description": "Global transport for generated adapters",
+      "enum": ["GRPC", "REST"],
+      "default": "GRPC"
+    },
     "steps": {
       "type": "array",
       "description": "List of pipeline steps to generate",
@@ -142,7 +148,11 @@
     },
     "aspects": {
       "type": "object",
-      "description": "Pipeline aspects - cross-cutting concerns that apply around pipeline steps",
+      "description": "Pipeline aspects - cross-cutting concerns that apply around pipeline steps. Aspect names must be lower-kebab-case and typically match the plugin module base name (e.g., persistence -> persistence-svc). Cache invalidation aspects (cache-invalidate, cache-invalidate-all) are hosted in cache-invalidation-svc.",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
       "additionalProperties": {
         "type": "object",
         "properties": {

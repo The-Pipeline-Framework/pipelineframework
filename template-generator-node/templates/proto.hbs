@@ -49,3 +49,23 @@ service Process{{serviceNameFormatted}}Service {
 {{/unless}}
 {{/unless}}
 }
+
+{{#if isFirstStep}}
+{{#each beforeAspects}}
+service {{observeServiceName this.name ../inputTypeName}} {
+  rpc remoteProcess({{../inputTypeName}}) returns ({{../inputTypeName}});
+}
+{{/each}}
+{{/if}}
+
+{{#each afterAspects}}
+service {{observeServiceName this.name ../outputTypeName}} {
+  rpc remoteProcess({{../outputTypeName}}) returns ({{../outputTypeName}});
+}
+{{/each}}
+
+{{#each beforeAspects}}
+service {{observeServiceName this.name ../outputTypeName}} {
+  rpc remoteProcess({{../outputTypeName}}) returns ({{../outputTypeName}});
+}
+{{/each}}

@@ -182,7 +182,15 @@ class BrowserTemplateEngine {
         return template(context);
     }
 
-    async generateApplication(appName, basePackage, steps, fileCallback) {
+    async generateApplication(appName, basePackage, steps, aspects, fileCallback) {
+        if (typeof aspects === 'function' && fileCallback === undefined) {
+            fileCallback = aspects;
+            aspects = {};
+        }
+        const aspectConfig = aspects || {};
+        const includePersistenceModule = this.isAspectEnabled(aspectConfig, 'persistence');
+        const includeCacheInvalidationModule = this.isAspectEnabled(aspectConfig, 'cache-invalidate')
+            || this.isAspectEnabled(aspectConfig, 'cache-invalidate-all');
         // For sequential pipeline, update input types of steps after the first one
         // to match the output type of the previous step
         for (let i = 1; i < steps.length; i++) {
@@ -196,7 +204,13 @@ class BrowserTemplateEngine {
         }
 
         // Generate parent POM
-        await this.generateParentPom(appName, basePackage, steps, fileCallback);
+        await this.generateParentPom(
+            appName,
+            basePackage,
+            steps,
+            includePersistenceModule,
+            includeCacheInvalidationModule,
+            fileCallback);
 
         // Generate common module
         await this.generateCommonModule(appName, basePackage, steps, fileCallback);
@@ -206,17 +220,25 @@ class BrowserTemplateEngine {
             await this.generateStepService(appName, basePackage, steps[i], i, steps, fileCallback);
         }
 
-        // Generate orchestrator
-        await this.generateOrchestrator(appName, basePackage, steps, fileCallback);
+        if (includePersistenceModule) {
+            await this.generatePersistenceModule(appName, basePackage, steps, fileCallback);
+        }
 
-        // Generate docker-compose
-        await this.generateDockerCompose(appName, steps, fileCallback);
+        if (includeCacheInvalidationModule) {
+            await this.generateCacheInvalidationModule(appName, basePackage, fileCallback);
+        }
+
+        // Generate orchestrator
+        await this.generateOrchestrator(
+            appName,
+            basePackage,
+            steps,
+            includePersistenceModule,
+            includeCacheInvalidationModule,
+            fileCallback);
 
         // Generate utility scripts
         await this.generateUtilityScripts(fileCallback);
-
-        // Generate observability configs
-        await this.generateObservabilityConfigs(fileCallback);
 
         // Generate mvnw files
         await this.generateMvNWFiles(fileCallback);
@@ -228,7 +250,13 @@ class BrowserTemplateEngine {
         await this.generateOtherFiles(appName, fileCallback);
     }
 
-    async generateParentPom(appName, basePackage, steps, fileCallback) {
+    async generateParentPom(
+        appName,
+        basePackage,
+        steps,
+        includePersistenceModule,
+        includeCacheInvalidationModule,
+        fileCallback) {
         const context = {
             basePackage,
             artifactId: appName
@@ -236,7 +264,9 @@ class BrowserTemplateEngine {
               .replace(/[^a-z0-9]+/g, '-')
               .replace(/^-+|-+$/g, ''),
             name: appName,
-            steps
+            steps,
+            includePersistenceModule,
+            includeCacheInvalidationModule
         };
 
         const rendered = this.render('parent-pom', context);
@@ -265,6 +295,37 @@ class BrowserTemplateEngine {
 
         // Generate common converters
         await this.generateCommonConverters(basePackage, fileCallback);
+    }
+
+    async generatePersistenceModule(appName, basePackage, steps, fileCallback) {
+        const packagePath = this.toPath(basePackage + '.persistence');
+        const rootProjectName = appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-');
+        const pomContent = this.render('persistence-svc-pom', { basePackage, rootProjectName });
+        await fileCallback('persistence-svc/pom.xml', pomContent);
+
+        const hostContent = this.render('persistence-plugin-host', { basePackage });
+        await fileCallback(`persistence-svc/src/main/java/${packagePath}/PersistencePluginHost.java`, hostContent);
+
+        const appPropsContent = this.render('persistence-application-properties', {
+            basePackage,
+            rootProjectName,
+            portOffset: steps.length + 1,
+            serviceName: 'persistence-svc'
+        });
+        await fileCallback('persistence-svc/src/main/resources/application.properties', appPropsContent);
+    }
+
+    async generateCacheInvalidationModule(appName, basePackage, fileCallback) {
+        const packagePath = this.toPath(basePackage + '.cache');
+        const rootProjectName = appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-');
+        const pomContent = this.render('cache-invalidation-svc-pom', { basePackage, rootProjectName });
+        await fileCallback('cache-invalidation-svc/pom.xml', pomContent);
+
+        const hostContent = this.render('cache-invalidation-plugin-host', { basePackage });
+        await fileCallback(`cache-invalidation-svc/src/main/java/${packagePath}/CacheInvalidationPluginHost.java`, hostContent);
+
+        const hostAllContent = this.render('cache-invalidation-all-plugin-host', { basePackage });
+        await fileCallback(`cache-invalidation-svc/src/main/java/${packagePath}/CacheInvalidationAllPluginHost.java`, hostAllContent);
     }
 
     async generateCommonPom(appName, basePackage, fileCallback) {
@@ -467,8 +528,8 @@ class BrowserTemplateEngine {
         // Generate the service class
         await this.generateStepServiceClass(appName, basePackage, step, stepIndex, allSteps, fileCallback);
 
-        // Generate Dockerfile
-        await this.generateDockerfile(step.serviceName, fileCallback);
+        // Generate Dockerfile.jvm
+        await this.generateStepDockerfile(step, fileCallback);
     }
 
     async generateStepPom(step, basePackage, fileCallback) {
@@ -535,19 +596,41 @@ class BrowserTemplateEngine {
         await fileCallback(filePath, rendered);
     }
 
-    async generateOrchestrator(appName, basePackage, steps, fileCallback) {
-        // Generate orchestrator POM
-        await this.generateOrchestratorPom(appName, basePackage, fileCallback);
-
-        // Generate Dockerfile
-        await this.generateDockerfile('orchestrator-svc', fileCallback);
+    async generateStepDockerfile(step, fileCallback) {
+        const rendered = this.render('dockerfile-jvm', {});
+        const filePath = `${step.serviceName}/src/main/docker/Dockerfile.jvm`;
+        await fileCallback(filePath, rendered);
     }
 
-    async generateOrchestratorPom(appName, basePackage, fileCallback) {
+    async generateOrchestrator(
+        appName,
+        basePackage,
+        steps,
+        includePersistenceModule,
+        includeCacheInvalidationModule,
+        fileCallback) {
+        // Generate orchestrator POM
+        await this.generateOrchestratorPom(
+            appName,
+            basePackage,
+            includePersistenceModule,
+            includeCacheInvalidationModule,
+            fileCallback);
+
+    }
+
+    async generateOrchestratorPom(
+        appName,
+        basePackage,
+        includePersistenceModule,
+        includeCacheInvalidationModule,
+        fileCallback) {
         const context = {
             basePackage,
             artifactId: 'orchestrator-svc',
-            rootProjectName: appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-')
+            rootProjectName: appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-'),
+            includePersistenceModule,
+            includeCacheInvalidationModule
         };
 
         const rendered = this.render('orchestrator-pom', context);
@@ -601,6 +684,10 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         // Create .gitignore
         const gitignoreContent = this.render('gitignore', {});
         await fileCallback('.gitignore', gitignoreContent);
+
+        // Create formatter config
+        const formatterContent = this.render('quarkus-formatter', {});
+        await fileCallback('ide-config/quarkus-formatter.xml', formatterContent);
     }
 
     // Utility methods
@@ -640,6 +727,14 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         }
         // For other cases, we'll default to the whole string
         return serviceNamePascal;
+    }
+
+    isAspectEnabled(aspects, aspectName) {
+        if (!aspects || !Object.prototype.hasOwnProperty.call(aspects, aspectName)) {
+            return false;
+        }
+        const config = aspects[aspectName];
+        return config == null || config.enabled !== false;
     }
 }
 

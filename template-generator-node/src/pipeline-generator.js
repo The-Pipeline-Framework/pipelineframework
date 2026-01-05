@@ -35,8 +35,8 @@ class PipelineGenerator {
      */
     async generateFromConfig(configPath, outputPath) {
         const config = this.loadConfig(configPath);
-        const { appName, basePackage, steps } = config;
-        await this.engine.generateApplication(appName, basePackage, steps, outputPath);
+        const { appName, basePackage, steps, aspects, transport } = config;
+        await this.engine.generateApplication(appName, basePackage, steps, aspects, transport, outputPath);
     }
 
     /**
@@ -48,6 +48,7 @@ class PipelineGenerator {
         const config = {
             appName: 'Sample Pipeline App',
             basePackage: 'com.example.sample',
+            transport: 'GRPC',
             steps: [
                 {
                     name: 'Process Customer',
@@ -117,6 +118,8 @@ class PipelineGenerator {
             throw new Error(`Configuration validation failed:\n${errorMessages}`);
         }
         
+        this.validateAspectNames(config.aspects);
+
         // Process steps to add missing properties that are normally added by interactive mode
         config.steps = this.processSteps(config.steps);
         
@@ -199,6 +202,46 @@ class PipelineGenerator {
             
             return processedStep;
         });
+    }
+
+    /**
+     * Validates aspect names to ensure they map cleanly to Maven module naming.
+     *
+     * @param {object|undefined} aspects The aspects map from the config
+     */
+    validateAspectNames(aspects) {
+        if (!aspects) {
+            return;
+        }
+
+        const namePattern = /^[a-z][a-z0-9-]*$/;
+        const moduleOverrides = {
+            'cache-invalidate': 'cache-invalidation',
+            'cache-invalidate-all': 'cache-invalidation'
+        };
+        for (const [aspectName, aspectConfig] of Object.entries(aspects)) {
+            if (!namePattern.test(aspectName) || aspectName.endsWith('-svc')) {
+                throw new Error(
+                    `Aspect name '${aspectName}' must be lower-kebab-case and match the plugin module base name. ` +
+                    `Use '${aspectName.replace(/-svc$/, '')}' and ensure the module is named ` +
+                    `'${aspectName.replace(/-svc$/, '')}-svc'.`
+                );
+            }
+
+            const pluginImpl = aspectConfig?.config?.pluginImplementationClass;
+            if (pluginImpl) {
+                const parts = String(pluginImpl).split('.');
+                const packageSegment = parts.length > 1 ? parts[parts.length - 2] : null;
+                const override = moduleOverrides[aspectName];
+                if (packageSegment && packageSegment !== aspectName && packageSegment !== override) {
+                    throw new Error(
+                        `Aspect '${aspectName}' must align with the plugin module base name. ` +
+                        `The implementation class '${pluginImpl}' suggests '${packageSegment}', so ` +
+                        `either rename the aspect to '${packageSegment}' or align the module/package names.`
+                    );
+                }
+            }
+        }
     }
 
     /**

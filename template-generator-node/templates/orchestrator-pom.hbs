@@ -11,18 +11,54 @@
     <parent>
         <groupId>{{basePackage}}</groupId>
         <artifactId>{{rootProjectName}}</artifactId>
-        <version>1.0.0</version>
+        <version>1.0.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <dependencies>
+        <!-- Backend service dependencies for pipeline processing -->
         {{#steps}}
         <dependency>
             <groupId>{{basePackage}}</groupId>
             <artifactId>{{serviceName}}</artifactId>
             <version>${version.pipeline}</version>
+            <classifier>orchestrator-client</classifier>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-grpc-protoc-plugin</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         {{/steps}}
+        {{#if includePersistenceModule}}
+        <dependency>
+            <groupId>{{basePackage}}</groupId>
+            <artifactId>persistence-svc</artifactId>
+            <version>${version.pipeline}</version>
+            <classifier>plugin-client</classifier>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-grpc-protoc-plugin</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        {{/if}}
+        {{#if includeCacheInvalidationModule}}
+        <dependency>
+            <groupId>{{basePackage}}</groupId>
+            <artifactId>cache-invalidation-svc</artifactId>
+            <version>${version.pipeline}</version>
+            <classifier>plugin-client</classifier>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-grpc-protoc-plugin</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        {{/if}}
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-picocli</artifactId>
@@ -46,16 +82,6 @@
             <artifactId>jakarta.resource-api</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>postgresql</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.testcontainers</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-rest</artifactId>
         </dependency>
@@ -75,6 +101,53 @@
             <version>3.26.3</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-inline</artifactId>
+            <version>5.2.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.2.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-jacoco</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Hibernate Reactive and PostgreSQL reactive -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-hibernate-orm</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-jdbc-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Observability-->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-observability-devservices-lgtm</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-opentelemetry</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-micrometer-opentelemetry</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
@@ -86,6 +159,10 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
             </plugin>
             <plugin>
                 <groupId>io.quarkus</groupId>

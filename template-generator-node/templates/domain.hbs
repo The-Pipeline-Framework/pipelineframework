@@ -2,10 +2,14 @@ package {{basePackage}}.common.domain;
 
 import io.quarkus.hibernate.reactive.panache.PanacheEntityBase;
 import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.MappedSuperclass;
+import java.io.Serializable;
 import java.util.UUID;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 {{#if hasDateFields}}
@@ -49,7 +53,10 @@ import java.util.Map;
 
 @Setter
 @Getter
-public class {{className}} extends BaseEntity {
+@Entity
+@NoArgsConstructor
+@AllArgsConstructor
+public class {{className}} extends BaseEntity implements Serializable {
 
 {{#each fields}}
 {{#unless (isIdField this.name)}}
