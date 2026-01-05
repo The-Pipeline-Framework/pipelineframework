@@ -31,12 +31,12 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
      * and written to the writer supplied by the generation context.
      *
      * @param binding the gRPC binding describing the service and its pipeline step model
-     * @param ctx the generation context providing file output and processing environment
+     * @param ctx the generation context providing output directories and processing environment
      * @throws IOException if an error occurs while writing the generated file
      */
     @Override
     public void render(GrpcBinding binding, GenerationContext ctx) throws IOException {
-        TypeSpec grpcServiceClass = buildGrpcServiceClass(binding, ctx.processingEnv().getMessager());
+        TypeSpec grpcServiceClass = buildGrpcServiceClass(binding, ctx.processingEnv().getMessager(), ctx.role());
 
         // Write the generated class
         JavaFile javaFile = JavaFile.builder(
@@ -44,9 +44,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                         grpcServiceClass)
                 .build();
 
-        try (var writer = ctx.builderFile().openWriter()) {
-            javaFile.writeTo(writer);
-        }
+        javaFile.writeTo(ctx.outputDir());
     }
 
     /**
@@ -61,11 +59,11 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
      * @param messager  a Messager for reporting diagnostics and assisting type resolution during generation
      * @return          a TypeSpec representing the complete gRPC service adapter class to be written to a Java file
      */
-    private TypeSpec buildGrpcServiceClass(GrpcBinding binding, Messager messager) {
+    private TypeSpec buildGrpcServiceClass(GrpcBinding binding, Messager messager, org.pipelineframework.processor.ir.DeploymentRole role) {
         PipelineStepModel model = binding.model();
         String simpleClassName;
         // For gRPC services: ${ServiceName}GrpcService
-        simpleClassName = binding.serviceName() + PipelineStepProcessor.GRPC_SERVICE_SUFFIX;
+        simpleClassName = model.generatedName() + PipelineStepProcessor.GRPC_SERVICE_SUFFIX;
 
         // Determine the appropriate gRPC service base class based on configuration
         ClassName grpcBaseClassName = determineGrpcBaseClass(binding, messager);
@@ -75,11 +73,11 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 .addAnnotation(AnnotationSpec.builder(ClassName.get(GrpcService.class)).build())
                 .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Singleton")).build())
                 .addAnnotation(AnnotationSpec.builder(Unremovable.class).build())
-                // Add the GeneratedRole annotation to indicate this is a pipeline server
+                // Add the GeneratedRole annotation to indicate the target role
                 .addAnnotation(AnnotationSpec.builder(ClassName.get("org.pipelineframework.annotation", "GeneratedRole"))
                         .addMember("value", "$T.$L",
                             ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role"),
-                            determineRoleForGrpcService(binding))
+                            role.name())
                         .build())
                 .superclass(grpcBaseClassName); // Extend the actual gRPC service base class
 
@@ -102,11 +100,9 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
             grpcServiceBuilder.addField(outboundMapperField);
         }
 
-        TypeName serviceType = model.serviceClassName();
+        TypeName serviceType = resolveServiceType(model);
 
-        FieldSpec serviceField = FieldSpec.builder(
-                        serviceType,
-                        "service")
+        FieldSpec serviceField = FieldSpec.builder(serviceType, "service")
                 .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
                 .build();
         grpcServiceBuilder.addField(serviceField);
@@ -403,7 +399,6 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
             Messager messager
     ) {
         PipelineStepModel model = binding.model();
-        TypeName serviceType = model.serviceClassName();
 
         // Use the GrpcJavaTypeResolver to get the proper gRPC types from the binding
         GrpcJavaTypeResolver.GrpcJavaTypes grpcTypes = GRPC_TYPE_RESOLVER.resolve(binding, messager);
@@ -448,6 +443,13 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
             toGrpcMethodBuilder.addStatement("return ($T) output", outputGrpcType);
         }
 
+        MethodSpec.Builder getServiceBuilder = MethodSpec.methodBuilder("getService")
+                .addAnnotation(Override.class)
+                .addModifiers(Modifier.PROTECTED)
+                .returns(resolveServiceType(model));
+
+        getServiceBuilder.addStatement("return service");
+
         return TypeSpec.anonymousClassBuilder("")
                 .superclass(ParameterizedTypeName.get(
                         grpcAdapterClassName,
@@ -456,27 +458,21 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                         inputDomainType,
                         outputDomainType
                 ))
-                .addMethod(MethodSpec.methodBuilder("getService")
-                        .addAnnotation(Override.class)
-                        .addModifiers(Modifier.PROTECTED)
-                        .returns(serviceType)
-                        .addStatement("return service")
-                        .build())
+                .addMethod(getServiceBuilder.build())
                 .addMethod(fromGrpcMethodBuilder.build())
                 .addMethod(toGrpcMethodBuilder.build())
                 .build();
     }
 
-    /**
-     * Determine the GeneratedRole value to apply to the generated gRPC service.
-     *
-     * @param binding the gRPC binding providing context for role selection
-     * @return the role name to assign to the generated gRPC service
-     */
-    private String determineRoleForGrpcService(GrpcBinding binding) {
-        // For now, assume it's a regular pipeline server
-        // In a future implementation, we could distinguish between regular and plugin servers
-        // based on additional metadata in the binding
-        return "PIPELINE_SERVER";
+    private TypeName resolveServiceType(PipelineStepModel model) {
+        if (!model.sideEffect()) {
+            return model.serviceClassName();
+        }
+        TypeName outputDomainType = model.outboundDomainType();
+        if (outputDomainType == null) {
+            return model.serviceClassName();
+        }
+        return ParameterizedTypeName.get(model.serviceClassName(), outputDomainType);
     }
+
 }

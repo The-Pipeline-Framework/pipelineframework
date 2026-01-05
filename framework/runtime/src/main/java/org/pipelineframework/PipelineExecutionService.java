@@ -16,18 +16,31 @@
 
 package org.pipelineframework;
 
-import io.smallrye.mutiny.Multi;
-import io.smallrye.mutiny.Uni;
+import java.nio.file.Path;
+import java.text.MessageFormat;
+import java.time.Duration;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
+import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Inject;
-import java.text.MessageFormat;
-import java.util.*;
-import java.util.concurrent.TimeUnit;
+
+import io.quarkus.arc.properties.IfBuildProperty;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.apache.commons.lang3.time.StopWatch;
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.config.PipelineStepConfig;
+import org.pipelineframework.config.pipeline.PipelineOrderExpander;
+import org.pipelineframework.config.pipeline.PipelineYamlConfig;
+import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
+import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 
 /**
  * Service responsible for executing pipeline logic.
@@ -35,6 +48,7 @@ import org.pipelineframework.config.PipelineStepConfig;
  * the PipelineApplication and the CLI app without duplicating code.
  */
 @ApplicationScoped
+@IfBuildProperty(name = "pipeline-cli.generate-cli", stringValue = "true")
 public class PipelineExecutionService {
 
   private static final Logger LOG = Logger.getLogger(PipelineExecutionService.class);
@@ -51,16 +65,71 @@ public class PipelineExecutionService {
   @Inject
   protected HealthCheckService healthCheckService;
 
+  private final AtomicReference<StartupHealthState> startupHealthState =
+      new AtomicReference<>(StartupHealthState.PENDING);
+  private volatile CompletableFuture<Boolean> startupHealthFuture = new CompletableFuture<>();
+
+  public enum StartupHealthState {
+    PENDING,
+    HEALTHY,
+    UNHEALTHY,
+    ERROR
+  }
+
   /**
    * Default constructor for PipelineExecutionService.
    */
   public PipelineExecutionService() {
   }
 
+  @PostConstruct
+  void runStartupHealthChecks() {
+    List<Object> steps;
+    try {
+      steps = loadPipelineSteps();
+    } catch (PipelineConfigurationException e) {
+      LOG.errorf(e, "Pipeline configuration invalid during startup health check: %s", e.getMessage());
+      startupHealthState.set(StartupHealthState.ERROR);
+      startupHealthFuture.completeExceptionally(e);
+      return;
+    } catch (Exception e) {
+      LOG.errorf(e, "Unexpected error while loading pipeline steps for health check: %s", e.getMessage());
+      startupHealthState.set(StartupHealthState.ERROR);
+      startupHealthFuture.completeExceptionally(e);
+      return;
+    }
+
+    if (steps == null || steps.isEmpty()) {
+      LOG.info("No pipeline steps configured, skipping startup health checks.");
+      startupHealthState.set(StartupHealthState.HEALTHY);
+      startupHealthFuture.complete(true);
+      return;
+    }
+
+    CompletableFuture<Boolean> healthCheckFuture = CompletableFuture.supplyAsync(
+        () -> healthCheckService.checkHealthOfDependentServices(steps),
+            Infrastructure.getDefaultExecutor());
+    startupHealthFuture = healthCheckFuture;
+    healthCheckFuture.whenComplete((result, throwable) -> {
+      if (throwable != null) {
+        LOG.errorf(throwable, "Unexpected failure during startup health checks: %s", throwable.getMessage());
+        startupHealthState.set(StartupHealthState.ERROR);
+        return;
+      }
+      if (Boolean.TRUE.equals(result)) {
+        LOG.info("Startup health checks passed.");
+        startupHealthState.set(StartupHealthState.HEALTHY);
+      } else {
+        LOG.error("Startup health checks failed.");
+        startupHealthState.set(StartupHealthState.UNHEALTHY);
+      }
+    });
+  }
+
   /**
    * Execute the configured pipeline using the provided input.
    * <p>
-   * Performs a health check of dependent services before running the pipeline. If the health check fails,
+   * Relies on the startup health check of dependent services before running the pipeline. If the health check fails,
    * returns a failed Multi with a RuntimeException. If the pipeline runner returns null or an unexpected
    * type, returns a failed Multi with an IllegalStateException. On success returns the Multi produced by
    * the pipeline (a Uni is converted to a Multi) with lifecycle hooks attached for timing and logging.
@@ -71,67 +140,191 @@ public class PipelineExecutionService {
    *         an IllegalStateException
    */
   public Multi<?> executePipeline(Multi<?> input) {
+    return executePipelineStreaming(input);
+  }
+
+  /**
+   * Execute the configured pipeline and return a streaming result.
+   *
+   * <p>Accepts either a {@code Uni} or {@code Multi} input. If the pipeline produces a {@code Uni},
+   * it is converted to a {@code Multi}. Health checks and logging hooks mirror those in
+   * {@link #executePipeline(Multi)}.</p>
+   *
+   * @param input the input Uni or Multi supplied to the pipeline steps
+   * @param <T> the expected output type
+   * @return the pipeline result as a Multi with lifecycle hooks attached
+   */
+  @SuppressWarnings("unchecked")
+  public <T> Multi<T> executePipelineStreaming(Object input) {
+    return (Multi<T>) executePipelineStreamingInternal(input);
+  }
+
+  /**
+   * Execute the configured pipeline and return a unary result.
+   *
+   * <p>Accepts either a {@code Uni} or {@code Multi} input. If the pipeline produces a stream,
+   * the result is a failed {@code Uni} indicating a shape mismatch.</p>
+   *
+   * @param input the input Uni or Multi supplied to the pipeline steps
+   * @param <T> the expected output type
+   * @return the pipeline result as a Uni with lifecycle hooks attached
+   */
+  @SuppressWarnings("unchecked")
+  public <T> Uni<T> executePipelineUnary(Object input) {
+    return (Uni<T>) executePipelineUnaryInternal(input);
+  }
+
+  public StartupHealthState getStartupHealthState() {
+    return startupHealthState.get();
+  }
+
+  /**
+   * Block until startup health checks complete, or throw if they fail or time out.
+   *
+   * @param timeout maximum time to wait for health checks
+   * @return the resulting startup health state
+   */
+  public StartupHealthState awaitStartupHealth(Duration timeout) {
+    CompletableFuture<Boolean> future = startupHealthFuture;
+    if (future == null) {
+      return startupHealthState.get();
+    }
+    try {
+      future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+    } catch (TimeoutException e) {
+      throw new RuntimeException("Startup health checks are still running.");
+    } catch (Exception e) {
+      throw new RuntimeException("Startup health checks failed.", e);
+    }
+    StartupHealthState state = startupHealthState.get();
+    if (state != StartupHealthState.HEALTHY) {
+      throw new RuntimeException("Startup health checks failed (" + state + ").");
+    }
+    return state;
+  }
+
+  private Multi<?> executePipelineStreamingInternal(Object input) {
     return Multi.createFrom().deferred(() -> {
-      // This code is executed at subscription time
       StopWatch watch = new StopWatch();
-
-      // Check health of dependent services before proceeding with pipeline execution
-      List<Object> steps;
-      try {
-          steps = loadPipelineSteps();
-      } catch (PipelineConfigurationException e) {
-          LOG.errorf(e, "Failed to load pipeline configuration: %s", e.getMessage());
-          return Multi.createFrom().failure(e);
+      List<Object> steps = loadStepsForExecution();
+      if (steps == null) {
+        return Multi.createFrom().failure(new IllegalStateException("Pipeline steps could not be loaded."));
       }
-
-      if (!healthCheckService.checkHealthOfDependentServices(steps)) {
-        return Multi.createFrom().failure(new RuntimeException("One or more dependent services are not healthy. Pipeline execution aborted after retries."));
+      RuntimeException healthFailure = healthCheckFailure();
+      if (healthFailure != null) {
+        return Multi.createFrom().failure(healthFailure);
+      }
+      RuntimeException inputFailure = validateInputShape(input);
+      if (inputFailure != null) {
+        return Multi.createFrom().failure(inputFailure);
       }
 
       Object result = pipelineRunner.run(input, steps);
-
       return switch (result) {
-        case null -> Multi.createFrom().failure(new IllegalStateException(
-          "PipelineRunner returned null"));
-        case Multi<?> multi1 -> multi1
-          .onSubscription().invoke(ignored -> {
-            LOG.info("PIPELINE BEGINS processing");
-            watch.start();
-          })
-          .onCompletion().invoke(() -> {
-            watch.stop();
-            LOG.infof("✅ PIPELINE FINISHED processing in %s seconds", watch.getTime(TimeUnit.SECONDS));
-          })
-          .onFailure().invoke(failure -> {
-            watch.stop();
-            LOG.errorf(failure, "❌ PIPELINE FAILED after %s seconds", watch.getTime(TimeUnit.SECONDS));
-          });
-        case Uni<?> uni -> uni.toMulti()
-          .onSubscription().invoke(ignored -> {
-            LOG.info("PIPELINE BEGINS processing");
-            watch.start();
-          })
-          .onCompletion().invoke(() -> {
-            watch.stop();
-            LOG.infof("✅ PIPELINE FINISHED processing in %s seconds", watch.getTime(TimeUnit.SECONDS));
-          })
-          .onFailure().invoke(failure -> {
-            watch.stop();
-            LOG.errorf(failure, "❌ PIPELINE FAILED after %s seconds", watch.getTime(TimeUnit.SECONDS));
-          });
+        case null -> Multi.createFrom().failure(new IllegalStateException("PipelineRunner returned null"));
+        case Multi<?> multi -> attachMultiHooks(multi, watch);
+        case Uni<?> uni -> attachMultiHooks(uni.toMulti(), watch);
         default -> Multi.createFrom().failure(new IllegalStateException(
-          MessageFormat.format("PipelineRunner returned unexpected type: {0}", result.getClass().getName())
-        ));
+            MessageFormat.format("PipelineRunner returned unexpected type: {0}", result.getClass().getName())));
       };
     });
+  }
+
+  private Uni<?> executePipelineUnaryInternal(Object input) {
+    return Uni.createFrom().deferred(() -> {
+      StopWatch watch = new StopWatch();
+      List<Object> steps = loadStepsForExecution();
+      if (steps == null) {
+        return Uni.createFrom().failure(new IllegalStateException("Pipeline steps could not be loaded."));
+      }
+      RuntimeException healthFailure = healthCheckFailure();
+      if (healthFailure != null) {
+        return Uni.createFrom().failure(healthFailure);
+      }
+      RuntimeException inputFailure = validateInputShape(input);
+      if (inputFailure != null) {
+        return Uni.createFrom().failure(inputFailure);
+      }
+
+      Object result = pipelineRunner.run(input, steps);
+      return switch (result) {
+        case null -> Uni.createFrom().failure(new IllegalStateException("PipelineRunner returned null"));
+        case Uni<?> uni -> attachUniHooks(uni, watch);
+        case Multi<?> multi -> Uni.createFrom().failure(new IllegalStateException(
+            "PipelineRunner returned stream output where unary output was expected"));
+        default -> Uni.createFrom().failure(new IllegalStateException(
+            MessageFormat.format("PipelineRunner returned unexpected type: {0}", result.getClass().getName())));
+      };
+    });
+  }
+
+  private List<Object> loadStepsForExecution() {
+    try {
+      return loadPipelineSteps();
+    } catch (PipelineConfigurationException e) {
+      LOG.errorf(e, "Failed to load pipeline configuration: %s", e.getMessage());
+      return null;
+    }
+  }
+
+  private RuntimeException healthCheckFailure() {
+    StartupHealthState state = startupHealthState.get();
+    if (state == StartupHealthState.PENDING) {
+      return new RuntimeException("Startup health checks are still running.");
+    }
+    if (state != StartupHealthState.HEALTHY) {
+      return new RuntimeException(
+          "One or more dependent services are not healthy. Pipeline execution aborted (" + state + ").");
+    }
+    return null;
+  }
+
+  private RuntimeException validateInputShape(Object input) {
+    if (input instanceof Uni<?> || input instanceof Multi<?>) {
+      return null;
+    }
+    return new IllegalArgumentException(MessageFormat.format(
+        "Pipeline input must be Uni or Multi, got: {0}",
+        input == null ? "null" : input.getClass().getName()));
+  }
+
+  private <T> Multi<T> attachMultiHooks(Multi<T> multi, StopWatch watch) {
+    return multi
+        .onSubscription().invoke(ignored -> {
+          LOG.info("PIPELINE BEGINS processing");
+          watch.start();
+        })
+        .onCompletion().invoke(() -> {
+          watch.stop();
+          LOG.infof("✅ PIPELINE FINISHED processing in %s seconds", watch.getTime(TimeUnit.SECONDS));
+        })
+        .onFailure().invoke(failure -> {
+          watch.stop();
+          LOG.errorf(failure, "❌ PIPELINE FAILED after %s seconds", watch.getTime(TimeUnit.SECONDS));
+        });
+  }
+
+  private <T> Uni<T> attachUniHooks(Uni<T> uni, StopWatch watch) {
+    return uni
+        .onSubscription().invoke(ignored -> {
+          LOG.info("PIPELINE BEGINS processing");
+          watch.start();
+        })
+        .onItemOrFailure().invoke((item, failure) -> {
+          watch.stop();
+          if (failure == null) {
+            LOG.infof("✅ PIPELINE FINISHED processing in %s seconds", watch.getTime(TimeUnit.SECONDS));
+          } else {
+            LOG.errorf(failure, "❌ PIPELINE FAILED after %s seconds", watch.getTime(TimeUnit.SECONDS));
+          }
+        });
   }
 
   /**
    * Load configured pipeline steps, instantiate them as CDI-managed beans and return them in execution order.
    *
-   * <p>Steps are ordered by their `order` property; entries without an `order` are treated as 0. If configuration
-   * cannot be read or an error occurs while instantiating steps, an exception is thrown to indicate the failure,
-   * except when no steps are configured (empty stepConfigs map), which returns an empty list.
+   * <p>If configuration cannot be read or an error occurs while instantiating steps, an exception is thrown to
+   * indicate the failure, except when no steps are configured (empty stepConfigs map), which returns an empty list.
    *
    * @return the instantiated pipeline step objects in execution order, or an empty list if no steps are configured
    * @throws PipelineConfigurationException if there are configuration or instantiation failures
@@ -142,6 +335,18 @@ public class PipelineExecutionService {
       PipelineStepConfig pipelineStepConfig = CDI.current()
         .select(PipelineStepConfig.class).get();
 
+      List<String> configuredOrder = pipelineStepConfig.order();
+      List<String> orderedStepNames = configuredOrder == null
+        ? List.of()
+        : configuredOrder.stream()
+          .filter(name -> name != null && !name.trim().isEmpty())
+          .toList();
+
+      if (!orderedStepNames.isEmpty()) {
+        List<String> expanded = expandPipelineOrderIfConfigured(orderedStepNames);
+        return instantiateStepsInOrder(expanded);
+      }
+
       Map<String, org.pipelineframework.config.PipelineStepConfig.StepConfig> stepConfigs =
         pipelineStepConfig.step();
 
@@ -151,40 +356,89 @@ public class PipelineExecutionService {
         return Collections.emptyList();
       }
 
-      // Sort the steps by their order property
-      List<Map.Entry<String, org.pipelineframework.config.PipelineStepConfig.StepConfig>> sortedStepEntries =
-        stepConfigs.entrySet().stream()
-          .sorted(Map.Entry.comparingByValue(
-            Comparator.comparingInt(config -> config.order() != null ? config.order() : 0)))
-          .toList();
-
-      List<Object> steps = new ArrayList<>();
-      List<String> failedSteps = new ArrayList<>();
-      for (Map.Entry<String, org.pipelineframework.config.PipelineStepConfig.StepConfig> entry : sortedStepEntries) {
-        String stepClassName = entry.getKey();  // The fully qualified class name
-	      Object step = createStepFromConfig(stepClassName);
-        if (step != null) {
-          steps.add(step);
-        } else {
-          failedSteps.add(stepClassName);
-        }
-      }
-
-      if (!failedSteps.isEmpty()) {
-        String message = String.format("Failed to instantiate %d step(s): %s",
-          failedSteps.size(), String.join(", ", failedSteps));
-        LOG.error(message);
-        throw new PipelineConfigurationException(message);
-      }
-
-      if (LOG.isDebugEnabled()) {
-        LOG.debugf("Loaded %d pipeline steps from application properties", steps.size());
-      }
-      return steps;
+      return instantiateStepsFromConfig(stepConfigs);
     } catch (Exception e) {
       LOG.errorf(e, "Failed to load configuration: %s", e.getMessage());
       throw new PipelineConfigurationException("Failed to load pipeline configuration: " + e.getMessage(), e);
     }
+  }
+
+  private List<Object> instantiateStepsInOrder(List<String> orderedStepNames) {
+    List<Object> steps = new ArrayList<>();
+    List<String> failedSteps = new ArrayList<>();
+    for (String stepClassName : orderedStepNames) {
+      Object step = createStepFromConfig(stepClassName);
+      if (step != null) {
+        steps.add(step);
+      } else {
+        failedSteps.add(stepClassName);
+      }
+    }
+
+    if (!failedSteps.isEmpty()) {
+      String message = String.format("Failed to instantiate %d step(s): %s",
+        failedSteps.size(), String.join(", ", failedSteps));
+      LOG.error(message);
+      throw new PipelineConfigurationException(message);
+    }
+
+    if (LOG.isDebugEnabled()) {
+      LOG.debugf("Loaded %d pipeline steps from pipeline.order", steps.size());
+    }
+    return steps;
+  }
+
+  private List<String> expandPipelineOrderIfConfigured(List<String> orderedStepNames) {
+    PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
+    Path moduleDir = Path.of(System.getProperty("user.dir"));
+    try {
+      Optional<Path> configPath = locator.locate(moduleDir);
+      if (configPath.isEmpty()) {
+        return orderedStepNames;
+      }
+
+      PipelineYamlConfigLoader loader = new PipelineYamlConfigLoader();
+      PipelineYamlConfig config = loader.load(configPath.get());
+      ClassLoader classLoader = PipelineExecutionService.class.getClassLoader();
+      List<String> expanded = PipelineOrderExpander.expand(orderedStepNames, config, classLoader);
+      if (LOG.isDebugEnabled() && !expanded.equals(orderedStepNames)) {
+        LOG.debugf("Expanded pipeline order from %s to %s", orderedStepNames, expanded);
+      }
+      return expanded;
+    } catch (Exception e) {
+      LOG.warnf(e, "Failed to expand pipeline order from pipeline config, using configured order only.");
+      return orderedStepNames;
+    }
+  }
+
+  private List<Object> instantiateStepsFromConfig(
+    Map<String, org.pipelineframework.config.PipelineStepConfig.StepConfig> stepConfigs) {
+    List<String> orderedStepNames = stepConfigs.keySet().stream()
+      .sorted()
+      .toList();
+
+    List<Object> steps = new ArrayList<>();
+    List<String> failedSteps = new ArrayList<>();
+    for (String stepClassName : orderedStepNames) {
+      Object step = createStepFromConfig(stepClassName);
+      if (step != null) {
+        steps.add(step);
+      } else {
+        failedSteps.add(stepClassName);
+      }
+    }
+
+    if (!failedSteps.isEmpty()) {
+      String message = String.format("Failed to instantiate %d step(s): %s",
+        failedSteps.size(), String.join(", ", failedSteps));
+      LOG.error(message);
+      throw new PipelineConfigurationException(message);
+    }
+
+    if (LOG.isDebugEnabled()) {
+      LOG.debugf("Loaded %d pipeline steps from application properties", steps.size());
+    }
+    return steps;
   }
 
   /**
@@ -195,7 +449,28 @@ public class PipelineExecutionService {
    */
   private Object createStepFromConfig(String stepClassName) {
     try {
-      Class<?> stepClass = Thread.currentThread().getContextClassLoader().loadClass(stepClassName);
+      ClassLoader[] candidates = new ClassLoader[] {
+        Thread.currentThread().getContextClassLoader(),
+        PipelineExecutionService.class.getClassLoader(),
+        ClassLoader.getSystemClassLoader()
+      };
+
+      Class<?> stepClass = null;
+      for (ClassLoader candidate : candidates) {
+        if (candidate == null) {
+          continue;
+        }
+        try {
+          stepClass = Class.forName(stepClassName, true, candidate);
+          break;
+        } catch (ClassNotFoundException ignored) {
+          // try next loader
+        }
+      }
+
+      if (stepClass == null) {
+        throw new ClassNotFoundException(stepClassName);
+      }
       return io.quarkus.arc.Arc.container().instance(stepClass).get();
     } catch (Exception e) {
       LOG.errorf(e, "Failed to instantiate pipeline step: %s, error: %s", stepClassName, e.getMessage());

@@ -38,12 +38,12 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
      * Generates and writes a REST resource class for the given binding into the generation context.
      *
      * @param binding the RestBinding describing the service, model and REST-specific overrides used to build the resource class
-     * @param ctx the GenerationContext providing access to the output builder file where the generated Java file will be written
+     * @param ctx the GenerationContext providing access to the output directory where the generated Java file will be written
      * @throws IOException if writing the generated Java file to the provided writer fails
      */
     @Override
     public void render(RestBinding binding, GenerationContext ctx) throws IOException {
-        TypeSpec restResourceClass = buildRestResourceClass(binding);
+        TypeSpec restResourceClass = buildRestResourceClass(binding, ctx);
 
         // Write the generated class
         JavaFile javaFile = JavaFile.builder(
@@ -51,9 +51,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             restResourceClass)
             .build();
 
-        try (var writer = ctx.builderFile().openWriter()) {
-            javaFile.writeTo(writer);
-        }
+        javaFile.writeTo(ctx.outputDir());
     }
 
     /**
@@ -67,11 +65,12 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
      *                optional path override and mapping information used to generate the resource
      * @return the generated TypeSpec representing the REST resource class
      */
-    private TypeSpec buildRestResourceClass(RestBinding binding) {
+    private TypeSpec buildRestResourceClass(RestBinding binding, GenerationContext ctx) {
+        org.pipelineframework.processor.ir.DeploymentRole role = ctx.role();
         PipelineStepModel model = binding.model();
         validateRestMappings(model);
 
-        String serviceClassName = binding.serviceName();
+        String serviceClassName = model.generatedName();
 
         // Determine the resource class name - remove "Service" and optionally "Reactive" for cleaner naming
         String baseName = serviceClassName.replace("Service", "");
@@ -87,7 +86,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             .addAnnotation(AnnotationSpec.builder(ClassName.get("org.pipelineframework.annotation", "GeneratedRole"))
                     .addMember("value", "$T.$L",
                         ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role"),
-                        "REST_SERVER")
+                        role.name())
                     .build());
 
         // Add @Path annotation - derive path from service class name or use provided path
@@ -107,33 +106,47 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         // Add mapper fields with @Inject if they exist
         String inboundMapperFieldName = "inboundMapper";
         String outboundMapperFieldName = "outboundMapper";
+        TypeName inboundMapperType = null;
+        TypeName outboundMapperType = null;
+        boolean inboundMapperAdded = false;
 
         if (model.inputMapping().hasMapper()) {
-            String inboundMapperSimpleName = model.inputMapping().mapperType().toString().substring(
-                model.inputMapping().mapperType().toString().lastIndexOf('.') + 1);
+            inboundMapperType = model.inputMapping().mapperType();
+            String inboundMapperSimpleName = inboundMapperType.toString().substring(
+                inboundMapperType.toString().lastIndexOf('.') + 1);
             inboundMapperFieldName = inboundMapperSimpleName.substring(0, 1).toLowerCase() +
                 inboundMapperSimpleName.substring(1);
 
             FieldSpec inboundMapperField = FieldSpec.builder(
-                model.inputMapping().mapperType(),
+                inboundMapperType,
                 inboundMapperFieldName)
                 .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
                 .build();
             resourceBuilder.addField(inboundMapperField);
+            inboundMapperAdded = true;
         }
 
         if (model.outputMapping().hasMapper()) {
-            String outboundMapperSimpleName = model.outputMapping().mapperType().toString().substring(
-                model.outputMapping().mapperType().toString().lastIndexOf('.') + 1);
+            outboundMapperType = model.outputMapping().mapperType();
+            String outboundMapperSimpleName = outboundMapperType.toString().substring(
+                outboundMapperType.toString().lastIndexOf('.') + 1);
             outboundMapperFieldName = outboundMapperSimpleName.substring(0, 1).toLowerCase() +
                 outboundMapperSimpleName.substring(1);
 
-            FieldSpec outboundMapperField = FieldSpec.builder(
-                model.outputMapping().mapperType(),
-                outboundMapperFieldName)
-                .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
-                .build();
-            resourceBuilder.addField(outboundMapperField);
+            boolean sameMapper = inboundMapperAdded && outboundMapperType.equals(inboundMapperType);
+            if (sameMapper) {
+                outboundMapperFieldName = inboundMapperFieldName;
+            } else {
+                if (inboundMapperAdded && outboundMapperFieldName.equals(inboundMapperFieldName)) {
+                    outboundMapperFieldName = "outboundMapper";
+                }
+                FieldSpec outboundMapperField = FieldSpec.builder(
+                    outboundMapperType,
+                    outboundMapperFieldName)
+                    .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
+                    .build();
+                resourceBuilder.addField(outboundMapperField);
+            }
         }
 
         // Add logger field to the resource class
@@ -168,7 +181,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
                     inboundMapperFieldName, outboundMapperFieldName, model);
             default -> createReactiveServiceProcessMethod(
                     inputDtoClassName, outputDtoClassName,
-                    inboundMapperFieldName, outboundMapperFieldName, model);
+                    inboundMapperFieldName, outboundMapperFieldName, model, ctx);
         };
 
         resourceBuilder.addMethod(processMethod);
@@ -192,12 +205,14 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
      * @param inboundMapperFieldName      name of the injected inbound mapper field used to convert DTO to domain
      * @param outboundMapperFieldName     name of the injected outbound mapper field used to convert domain to DTO
      * @param model                       the pipeline step model used to determine domain types and execution mode
+     * @param ctx                         generation context carrying enabled aspects and deployment role
      * @return                            a MethodSpec for the generated REST "process" method that returns a `Uni` of the output DTO
      */
     private MethodSpec createReactiveServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             String inboundMapperFieldName, String outboundMapperFieldName,
-            PipelineStepModel model) {
+            PipelineStepModel model,
+            GenerationContext ctx) {
         validateRestMappings(model);
 
         TypeName uniOutputDto = ParameterizedTypeName.get(ClassName.get(Uni.class), outputDtoClassName);
@@ -225,7 +240,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             methodBuilder.addAnnotation(ClassName.get("io.smallrye.common.annotation", "RunOnVirtualThread"));
         }
 
-        return methodBuilder.build();
+        return maybeAddCacheAnnotation(methodBuilder.build(), model, ctx);
     }
 
     /**
@@ -389,11 +404,17 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
      * @return a RestResponse with `BAD_REQUEST` and message "Invalid request" when `ex` is an `IllegalArgumentException`; otherwise a RestResponse with `INTERNAL_SERVER_ERROR` and message "An unexpected error occurred"
      */
     private MethodSpec createExceptionMapperMethod() {
+        TypeName responseType = ParameterizedTypeName.get(
+            ClassName.get(RestResponse.class),
+            ClassName.get(String.class));
         return MethodSpec.methodBuilder("handleException")
+            .addAnnotation(AnnotationSpec.builder(ClassName.get(SuppressWarnings.class))
+                .addMember("value", "$S", "unused")
+                .build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get(ServerExceptionMapper.class))
                 .build())
             .addModifiers(Modifier.PUBLIC)
-            .returns(ClassName.get(RestResponse.class))
+            .returns(responseType)
             .addParameter(Exception.class, "ex")
             .beginControlFlow("if (ex instanceof $T)", IllegalArgumentException.class)
                 .addStatement("logger.warn(\"Invalid request\", ex)")
@@ -504,5 +525,33 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
                 "REST resource generation for '%s' requires a non-null output domain type and outbound mapper",
                 model.serviceName()));
         }
+    }
+
+    private MethodSpec maybeAddCacheAnnotation(MethodSpec method, PipelineStepModel model, GenerationContext ctx) {
+        if (!ctx.enabledAspects().contains("cache")) {
+            return method;
+        }
+        if (ctx.role() != org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER) {
+            return method;
+        }
+        if (model.sideEffect() || model.streamingShape() != org.pipelineframework.processor.ir.StreamingShape.UNARY_UNARY) {
+            return method;
+        }
+
+        AnnotationSpec cacheAnnotation = AnnotationSpec.builder(ClassName.get("io.quarkus.cache", "CacheResult"))
+            .addMember("cacheName", "$S", "pipeline-cache")
+            .addMember("keyGenerator", "$T.class", resolveCacheKeyGenerator(ctx))
+            .build();
+
+        return method.toBuilder()
+            .addAnnotation(cacheAnnotation)
+            .build();
+    }
+
+    private TypeName resolveCacheKeyGenerator(GenerationContext ctx) {
+        if (ctx.cacheKeyGenerator() != null) {
+            return ctx.cacheKeyGenerator();
+        }
+        return ClassName.get("org.pipelineframework.cache", "PipelineCacheKeyGenerator");
     }
 }

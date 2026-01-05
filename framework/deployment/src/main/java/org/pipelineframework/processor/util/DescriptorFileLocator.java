@@ -24,6 +24,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
 import java.util.Optional;
+import javax.annotation.processing.Messager;
+import javax.tools.Diagnostic;
 
 import com.google.protobuf.DescriptorProtos;
 
@@ -106,11 +108,45 @@ public class DescriptorFileLocator {
      * @throws IOException if no readable descriptor file can be found or if the found file cannot be read
      */
     public DescriptorProtos.FileDescriptorSet locateAndLoadDescriptors(Map<String, String> processorOptions) throws IOException {
+        return locateAndLoadDescriptors(processorOptions, null, null);
+    }
+
+    /**
+     * Locate and load a protobuf FileDescriptorSet, preferring descriptor sets that contain the expected services.
+     *
+     * <p>If expected service names are provided and no explicit descriptor options are set, the locator scans
+     * candidate descriptor sets and returns the first one that declares at least one of the expected service names.</p>
+     *
+     * @param processorOptions annotation processor options that may contain descriptor location hints
+     * @param expectedServiceNames service names that should be present in the descriptor set (may be null or empty)
+     * @return the loaded and parsed FileDescriptorSet
+     * @throws IOException if no readable descriptor file can be found or if the found file cannot be read
+     */
+    public DescriptorProtos.FileDescriptorSet locateAndLoadDescriptors(
+            Map<String, String> processorOptions,
+            java.util.Set<String> expectedServiceNames) throws IOException {
+        return locateAndLoadDescriptors(processorOptions, expectedServiceNames, null);
+    }
+
+    /**
+     * Locate and load a protobuf FileDescriptorSet, optionally emitting selection details via the annotation processor messager.
+     *
+     * @param processorOptions annotation processor options that may contain descriptor location hints
+     * @param expectedServiceNames service names that should be present in the descriptor set (may be null or empty)
+     * @param messager optional messager for emitting selection info
+     * @return the loaded and parsed FileDescriptorSet
+     * @throws IOException if no readable descriptor file can be found or if the found file cannot be read
+     */
+    public DescriptorProtos.FileDescriptorSet locateAndLoadDescriptors(
+            Map<String, String> processorOptions,
+            java.util.Set<String> expectedServiceNames,
+            Messager messager) throws IOException {
         // First, check if a specific descriptor file is provided via annotation processor option
         String specificFile = processorOptions.get(DESCRIPTOR_FILE_OPTION);
         if (specificFile != null && !specificFile.trim().isEmpty()) {
             Path specificPath = Paths.get(specificFile);
             if (Files.exists(specificPath) && Files.isReadable(specificPath)) {
+                logSelectedDescriptor(messager, specificPath);
                 return loadDescriptorFile(specificPath);
             } else {
                 throw new IOException("Specified descriptor file does not exist or is not readable: " + specificFile);
@@ -122,11 +158,13 @@ public class DescriptorFileLocator {
         if (descriptorPath != null && !descriptorPath.trim().isEmpty()) {
             Path basePath = Paths.get(descriptorPath);
             if (Files.exists(basePath) && Files.isRegularFile(basePath) && Files.isReadable(basePath)) {
+                logSelectedDescriptor(messager, basePath);
                 return loadDescriptorFile(basePath);
             }
             if (Files.exists(basePath) && Files.isDirectory(basePath)) {
                 Optional<Path> descriptorFile = findDescriptorFile(basePath);
                 if (descriptorFile.isPresent()) {
+                    logSelectedDescriptor(messager, descriptorFile.get());
                     return loadDescriptorFile(descriptorFile.get());
                 }
                 throw new IOException(
@@ -136,13 +174,47 @@ public class DescriptorFileLocator {
             throw new IOException("Specified descriptor path does not exist or is not readable: " + descriptorPath);
         }
 
-        // Third, check smart defaults based on module roots
-        DescriptorProtos.FileDescriptorSet descriptorSet;
-        for (Path baseDir : getBaseDirectories()) {
-            descriptorSet = locateFromBase(baseDir);
-            if (descriptorSet != null) {
+        // Third, prefer module-local descriptor sets when no expected services are provided
+        if (expectedServiceNames == null || expectedServiceNames.isEmpty()) {
+            java.util.List<Path> preferredCandidates = new java.util.ArrayList<>();
+            Path moduleDir = Paths.get(System.getProperty("user.dir", ".")).toAbsolutePath();
+            addCandidatesFromModulePath(moduleDir, preferredCandidates);
+            Path moduleParent = moduleDir.getParent();
+            if (moduleParent != null) {
+                addCandidatesFromModulePath(moduleParent.resolve(DEFAULT_DESCRIPTOR_MODULE), preferredCandidates);
+            }
+            preferredCandidates = dedupeCandidates(preferredCandidates);
+            for (Path candidate : preferredCandidates) {
+                DescriptorProtos.FileDescriptorSet descriptorSet = loadDescriptorFile(candidate);
+                logSelectedDescriptor(messager, candidate);
                 return descriptorSet;
             }
+        }
+
+        // Fourth, check smart defaults based on module roots
+        java.util.List<Path> candidates = new java.util.ArrayList<>();
+        for (Path baseDir : getBaseDirectories()) {
+            candidates.addAll(collectDescriptorCandidates(baseDir));
+        }
+        candidates = dedupeCandidates(candidates);
+
+        for (Path candidate : candidates) {
+            DescriptorProtos.FileDescriptorSet descriptorSet = loadDescriptorFile(candidate);
+            if (expectedServiceNames == null || expectedServiceNames.isEmpty()) {
+                logSelectedDescriptor(messager, candidate);
+                return descriptorSet;
+            }
+            if (containsAnyService(descriptorSet, expectedServiceNames)) {
+                logSelectedDescriptor(messager, candidate);
+                return descriptorSet;
+            }
+        }
+
+        if (!candidates.isEmpty() && !expectedServiceNames.isEmpty()) {
+            throw new IOException(
+                "No protobuf descriptor file found containing expected services: " +
+                    String.join(", ", expectedServiceNames) +
+                    ". Candidates: " + joinCandidatePaths(candidates));
         }
 
         throw new IOException(
@@ -151,6 +223,15 @@ public class DescriptorFileLocator {
                 "or -A" + DESCRIPTOR_PATH_OPTION + "=<descriptor-directory>. " +
                 "Defaults searched: " + DEFAULT_DESCRIPTOR_RELATIVE_PATH + " in module, " +
                 "module '" + DEFAULT_DESCRIPTOR_MODULE + "', and sibling modules.");
+    }
+
+    private void logSelectedDescriptor(Messager messager, Path descriptorPath) {
+        if (messager == null || descriptorPath == null) {
+            return;
+        }
+        messager.printMessage(
+            Diagnostic.Kind.NOTE,
+            "Using protobuf descriptor set file: " + descriptorPath.toAbsolutePath());
     }
 
     /**
@@ -179,55 +260,34 @@ public class DescriptorFileLocator {
      * @return the parsed FileDescriptorSet if found, `null` if no descriptor was located
      * @throws IOException if an I/O error occurs while traversing directories or reading descriptor files
      */
-    private DescriptorProtos.FileDescriptorSet locateFromBase(Path baseDirectory) throws IOException {
+    private java.util.List<Path> collectDescriptorCandidates(Path baseDirectory) throws IOException {
+        java.util.List<Path> candidates = new java.util.ArrayList<>();
         if (baseDirectory == null) {
-            return null;
+            return candidates;
         }
 
         Path baseDir = baseDirectory.toAbsolutePath();
-        DescriptorProtos.FileDescriptorSet descriptorSet = loadFromModulePath(baseDir);
-        if (descriptorSet != null) {
-            return descriptorSet;
-        }
-
-        descriptorSet = loadFromModulePath(baseDir.resolve(DEFAULT_DESCRIPTOR_MODULE));
-        if (descriptorSet != null) {
-            return descriptorSet;
-        }
+        addCandidatesFromModulePath(baseDir, candidates);
+        addCandidatesFromModulePath(baseDir.resolve(DEFAULT_DESCRIPTOR_MODULE), candidates);
 
         Path parentDir = baseDir.getParent();
         if (parentDir != null) {
-            descriptorSet = loadFromModulePath(parentDir.resolve(DEFAULT_DESCRIPTOR_MODULE));
-            if (descriptorSet != null) {
-                return descriptorSet;
-            }
+            addCandidatesFromModulePath(parentDir.resolve(DEFAULT_DESCRIPTOR_MODULE), candidates);
 
             try (var siblings = Files.list(parentDir)) {
                 for (Path sibling : (Iterable<Path>) siblings.filter(Files::isDirectory)::iterator) {
-                    descriptorSet = loadFromModulePath(sibling);
-                    if (descriptorSet != null) {
-                        return descriptorSet;
-                    }
-
-                    descriptorSet = loadFromModulePath(sibling.resolve(DEFAULT_DESCRIPTOR_MODULE));
-                    if (descriptorSet != null) {
-                        return descriptorSet;
-                    }
+                    addCandidatesFromModulePath(sibling, candidates);
+                    addCandidatesFromModulePath(sibling.resolve(DEFAULT_DESCRIPTOR_MODULE), candidates);
                 }
             }
         }
 
-        descriptorSet = findDescriptorByWalk(baseDir, DEFAULT_SEARCH_DEPTH);
-        if (descriptorSet != null) {
-            return descriptorSet;
-        }
-
+        collectDescriptorByWalk(baseDir, DEFAULT_SEARCH_DEPTH, candidates);
         if (parentDir != null) {
-            descriptorSet = findDescriptorByWalk(parentDir, DEFAULT_SEARCH_DEPTH);
-            return descriptorSet;
+            collectDescriptorByWalk(parentDir, DEFAULT_SEARCH_DEPTH, candidates);
         }
 
-        return null;
+        return candidates;
     }
 
     /**
@@ -263,6 +323,25 @@ public class DescriptorFileLocator {
         return null;
     }
 
+    private void addCandidatesFromModulePath(Path moduleDirectory, java.util.List<Path> candidates) throws IOException {
+        if (moduleDirectory == null || !Files.exists(moduleDirectory) || !Files.isDirectory(moduleDirectory)) {
+            return;
+        }
+
+        Path defaultDescriptorPath = moduleDirectory.resolve(DEFAULT_DESCRIPTOR_RELATIVE_PATH);
+        if (Files.exists(defaultDescriptorPath) && Files.isReadable(defaultDescriptorPath)) {
+            candidates.add(defaultDescriptorPath);
+        }
+
+        for (String defaultLocation : DEFAULT_LOCATIONS) {
+            Path locationPath = moduleDirectory.resolve(defaultLocation);
+            if (Files.exists(locationPath) && Files.isDirectory(locationPath)) {
+                Optional<Path> descriptorFile = findDescriptorFile(locationPath);
+                descriptorFile.ifPresent(candidates::add);
+            }
+        }
+    }
+
     /**
      * Search a directory tree up to a specified depth for a protobuf descriptor file at the default relative path and load it.
      *
@@ -292,6 +371,53 @@ public class DescriptorFileLocator {
 
         return null;
     }
+
+    private void collectDescriptorByWalk(Path baseDir, int maxDepth, java.util.List<Path> candidates) throws IOException {
+        if (baseDir == null || !Files.exists(baseDir) || !Files.isDirectory(baseDir)) {
+            return;
+        }
+
+        try (var paths = Files.walk(baseDir, maxDepth)) {
+            for (Path dir : (Iterable<Path>) paths.filter(Files::isDirectory)::iterator) {
+                Path candidate = dir.resolve(DEFAULT_DESCRIPTOR_RELATIVE_PATH);
+                if (Files.exists(candidate) && Files.isReadable(candidate)) {
+                    candidates.add(candidate);
+                }
+            }
+        } catch (UncheckedIOException e) {
+            // Ignore walk failures for heuristic search
+        }
+    }
+
+    private java.util.List<Path> dedupeCandidates(java.util.List<Path> candidates) {
+        java.util.LinkedHashSet<Path> unique = new java.util.LinkedHashSet<>(candidates);
+        return new java.util.ArrayList<>(unique);
+    }
+
+    private String joinCandidatePaths(java.util.List<Path> candidates) {
+        java.util.List<String> paths = new java.util.ArrayList<>();
+        for (Path candidate : candidates) {
+            paths.add(candidate.toString());
+        }
+        return String.join(", ", paths);
+    }
+
+    private boolean containsAnyService(
+            DescriptorProtos.FileDescriptorSet descriptorSet,
+            java.util.Set<String> expectedServiceNames) {
+        if (descriptorSet == null || expectedServiceNames == null || expectedServiceNames.isEmpty()) {
+            return false;
+        }
+        for (DescriptorProtos.FileDescriptorProto fileProto : descriptorSet.getFileList()) {
+            for (DescriptorProtos.ServiceDescriptorProto serviceProto : fileProto.getServiceList()) {
+                if (expectedServiceNames.contains(serviceProto.getName())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
 
     /**
      * Compute base directories used as roots when searching for descriptor files.

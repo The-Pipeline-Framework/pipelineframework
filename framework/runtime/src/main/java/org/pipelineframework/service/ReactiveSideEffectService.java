@@ -25,13 +25,14 @@ import io.smallrye.mutiny.Uni;
  *
  * @param <T> the type of input/output object
  */
-public interface ReactiveSideEffectService<T> {
+public interface ReactiveSideEffectService<T> extends ReactiveService<T, T> {
     /**
      * Process a single input object and return the original input unchanged after performing side effects.
      *
      * @param input the input object to process
      * @return a Uni that emits the original input object unchanged
      */
+    @Override
     Uni<T> process(T input);
 
     /**

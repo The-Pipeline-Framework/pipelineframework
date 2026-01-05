@@ -85,4 +85,31 @@ public final class AnnotationProcessingUtils {
         }
         return defaultValue;
     }
+
+    /**
+     * Obtain a string member value from an annotation, returning a provided fallback when the member is absent or not a string.
+     *
+     * @param annotation   the annotation mirror to read the member from
+     * @param memberName   the simple name of the annotation member to look up
+     * @param defaultValue the value to return if the member is not present or is not a string
+     * @return the string value of the specified annotation member, or {@code defaultValue} when absent or not a string
+     */
+    public static String getAnnotationValueAsString(AnnotationMirror annotation, String memberName, String defaultValue) {
+        for (ExecutableElement executableElement : annotation.getElementValues().keySet()) {
+            if (executableElement.getSimpleName().toString().equals(memberName)) {
+                Object value = annotation.getElementValues().get(executableElement).getValue();
+                if (value instanceof String) {
+                    return (String) value;
+                }
+                if (value instanceof javax.lang.model.element.AnnotationValue annotationValue) {
+                    Object unwrapped = annotationValue.getValue();
+                    if (unwrapped instanceof String) {
+                        return (String) unwrapped;
+                    }
+                }
+                break; // Exit after finding the element even if it's not the correct type
+            }
+        }
+        return defaultValue;
+    }
 }

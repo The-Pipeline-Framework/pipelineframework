@@ -135,8 +135,6 @@ class PipelineStepProcessorTest {
         when(packageElement.getQualifiedName()).thenReturn(packageNameMock);
         PipelineStep mockAnnotation = mock(PipelineStep.class);
         when(mockServiceClass.getAnnotation(PipelineStep.class)).thenReturn(mockAnnotation);
-        // Mock the grpcEnabled property to return true (default value)
-        when(mockAnnotation.grpcEnabled()).thenReturn(true);
 
         // Use raw types to avoid generic issues
         when(roundEnv.getElementsAnnotatedWith(PipelineStep.class))
@@ -286,8 +284,6 @@ class PipelineStepProcessorTest {
         when(packageElement.getQualifiedName()).thenReturn(packageNameMock);
         PipelineStep mockAnnotation = mock(PipelineStep.class);
         when(mockServiceClass.getAnnotation(PipelineStep.class)).thenReturn(mockAnnotation);
-        // Mock the grpcEnabled property to return false (disabled)
-        when(mockAnnotation.grpcEnabled()).thenReturn(false);
 
         // Use raw types to avoid generic issues
         when(roundEnv.getElementsAnnotatedWith(PipelineStep.class))

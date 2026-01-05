@@ -1,17 +1,14 @@
 package org.pipelineframework.processor.renderer;
 
-import java.io.StringWriter;
-import java.io.Writer;
-import java.net.URI;
+import java.nio.file.Path;
 import javax.annotation.processing.ProcessingEnvironment;
-import javax.tools.JavaFileObject;
-import javax.tools.SimpleJavaFileObject;
 
 import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
 import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.processor.ir.*;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -21,6 +18,9 @@ import static org.mockito.Mockito.when;
 class ClientStepRendererTest {
 
     private ClientStepRenderer renderer;
+
+    @TempDir
+    Path tempDir;
 
     @BeforeEach
     void setUp() {
@@ -37,9 +37,6 @@ class ClientStepRendererTest {
         Descriptors.MethodDescriptor methodDescriptor = serviceDescriptor.findMethodByName("remoteProcess");
         GrpcBinding binding = new GrpcBinding(model, serviceDescriptor, methodDescriptor);
 
-        JavaFileObject javaFileObject = new InMemoryJavaFileObject(
-            "com.example.service.pipeline.TestServiceClientStep");
-
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getElementUtils()).thenReturn(null);
         when(processingEnv.getTypeUtils()).thenReturn(null);
@@ -47,7 +44,7 @@ class ClientStepRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         // Create a mock context for the renderer
-        var context = new GenerationContext(processingEnv, javaFileObject);
+        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, java.util.Set.of(), null);
 
         // Render the client step - this should not throw an exception
         assertDoesNotThrow(() -> renderer.render(binding, context));
@@ -63,9 +60,6 @@ class ClientStepRendererTest {
         Descriptors.MethodDescriptor methodDescriptor = serviceDescriptor.findMethodByName("remoteProcess");
         GrpcBinding binding = new GrpcBinding(model, serviceDescriptor, methodDescriptor);
 
-        JavaFileObject javaFileObject = new InMemoryJavaFileObject(
-            "com.example.service.pipeline.TestServiceClientStep");
-
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getElementUtils()).thenReturn(null);
         when(processingEnv.getTypeUtils()).thenReturn(null);
@@ -73,7 +67,7 @@ class ClientStepRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         // Create a mock context for the renderer
-        var context = new GenerationContext(processingEnv, javaFileObject);
+        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT, java.util.Set.of(), null);
 
         // Render the client step - this should not throw an exception
         assertDoesNotThrow(() -> renderer.render(binding, context));
@@ -127,21 +121,4 @@ class ClientStepRendererTest {
         }
     }
 
-    private static final class InMemoryJavaFileObject extends SimpleJavaFileObject {
-        private final StringWriter writer = new StringWriter();
-
-        private InMemoryJavaFileObject(String className) {
-            super(URI.create("string:///" + className.replace('.', '/') + Kind.SOURCE.extension), Kind.SOURCE);
-        }
-
-        @Override
-        public Writer openWriter() {
-            return writer;
-        }
-
-        @Override
-        public CharSequence getCharContent(boolean ignoreEncodingErrors) {
-            return writer.toString();
-        }
-    }
 }

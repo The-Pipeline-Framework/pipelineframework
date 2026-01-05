@@ -1,11 +1,11 @@
 package org.pipelineframework.processor;
 
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
+import com.google.protobuf.Descriptors;
+import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.TypeName;
 import org.pipelineframework.processor.ir.*;
 
 /**
@@ -30,12 +30,12 @@ public class AspectExpansionProcessor {
      * @param aspects The aspects to be expanded into synthetic steps
      * @return A list of pipeline steps with aspects expanded as synthetic steps
      */
-    public List<PipelineStepModel> expandAspects(
-            List<PipelineStepModel> originalSteps,
+    public List<ResolvedStep> expandAspects(
+            List<ResolvedStep> originalSteps,
             List<PipelineAspectModel> aspects) {
         
         // Create a snapshot of original steps to prevent reprocessing synthetic steps
-        List<PipelineStepModel> originalStepsSnapshot = new ArrayList<>(originalSteps);
+        List<ResolvedStep> originalStepsSnapshot = new ArrayList<>(originalSteps);
         
         // Separate GLOBAL and STEP-scoped aspects
         List<PipelineAspectModel> globalAspects = aspects.stream()
@@ -51,44 +51,46 @@ public class AspectExpansionProcessor {
         // Validate step targeting for STEP-scoped aspects
         validateStepTargeting(originalStepsSnapshot, stepAspects);
         
-        List<PipelineStepModel> expandedSteps = new ArrayList<>();
+        List<ResolvedStep> expandedSteps = new ArrayList<>();
         
-        for (PipelineStepModel originalStep : originalStepsSnapshot) {
-            // Apply GLOBAL aspects BEFORE the step first
-            for (PipelineAspectModel aspect : globalAspects) {
-                if (aspect.position() == AspectPosition.BEFORE_STEP) {
-                    expandedSteps.add(createSyntheticStep(originalStep, aspect));
-                }
-            }
+        Set<String> generatedKeys = new java.util.HashSet<>();
 
-            // Apply STEP aspects BEFORE the step
+        for (ResolvedStep originalStep : originalStepsSnapshot) {
+            PipelineStepModel originalModel = originalStep.model();
+
+            List<PipelineAspectModel> applicable = new ArrayList<>();
+            applicable.addAll(globalAspects);
             for (PipelineAspectModel aspect : stepAspects) {
-                @SuppressWarnings("unchecked")
-                Set<String> targetSteps = (Set<String>) aspect.config().get("targetSteps");
-                if (aspect.position() == AspectPosition.BEFORE_STEP &&
-                    targetSteps != null && targetSteps.contains(originalStep.serviceName())) {
-                    expandedSteps.add(createSyntheticStep(originalStep, aspect));
-                }
-            }
-            
-            // Add the original step
-            expandedSteps.add(originalStep);
-            
-            // Apply STEP aspects AFTER the step first (in reverse order to maintain precedence)
-            for (int i = stepAspects.size() - 1; i >= 0; i--) {
-                PipelineAspectModel aspect = stepAspects.get(i);
-                @SuppressWarnings("unchecked")
-                Set<String> targetSteps = (Set<String>) aspect.config().get("targetSteps");
-                if (aspect.position() == AspectPosition.AFTER_STEP &&
-                    targetSteps != null && targetSteps.contains(originalStep.serviceName())) {
-                    expandedSteps.add(createSyntheticStep(originalStep, aspect));
+                Set<String> targetSteps = extractTargetSteps(aspect);
+                if (targetSteps != null && targetSteps.contains(originalModel.serviceName())) {
+                    applicable.add(aspect);
                 }
             }
 
-            // Apply GLOBAL aspects AFTER the step
-            for (PipelineAspectModel aspect : globalAspects) {
-                if (aspect.position() == AspectPosition.AFTER_STEP) {
-                    expandedSteps.add(createSyntheticStep(originalStep, aspect));
+            List<PipelineAspectModel> beforeAspects = applicable.stream()
+                .filter(aspect -> aspect.position() == AspectPosition.BEFORE_STEP)
+                .sorted(Comparator.comparingInt(PipelineAspectModel::order))
+                .collect(Collectors.toList());
+            List<PipelineAspectModel> afterAspects = applicable.stream()
+                .filter(aspect -> aspect.position() == AspectPosition.AFTER_STEP)
+                .sorted(Comparator.comparingInt(PipelineAspectModel::order))
+                .collect(Collectors.toList());
+
+            for (PipelineAspectModel aspect : beforeAspects) {
+                ResolvedStep synthetic = createSyntheticStep(originalStep, aspect, AspectPosition.BEFORE_STEP);
+                String key = synthetic.model().serviceName() + ":" + aspect.name() + ":before";
+                if (generatedKeys.add(key)) {
+                    expandedSteps.add(synthetic);
+                }
+            }
+
+            expandedSteps.add(originalStep);
+
+            for (PipelineAspectModel aspect : afterAspects) {
+                ResolvedStep synthetic = createSyntheticStep(originalStep, aspect, AspectPosition.AFTER_STEP);
+                String key = synthetic.model().serviceName() + ":" + aspect.name() + ":after";
+                if (generatedKeys.add(key)) {
+                    expandedSteps.add(synthetic);
                 }
             }
         }
@@ -96,14 +98,15 @@ public class AspectExpansionProcessor {
         return expandedSteps;
     }
     
-    private PipelineStepModel createSyntheticStep(
-            PipelineStepModel originalStep,
-            PipelineAspectModel aspect) {
-        
-        String syntheticName = "Process" +
-                capitalize(originalStep.serviceClassName().simpleName()) +
-                capitalize(aspect.name()) +
-                (aspect.position() == AspectPosition.BEFORE_STEP ? "Before" : "After");
+    private ResolvedStep createSyntheticStep(
+            ResolvedStep originalStep,
+            PipelineAspectModel aspect,
+            AspectPosition position) {
+
+        PipelineStepModel originalModel = originalStep.model();
+        String messageName = resolveMessageName(originalStep, position);
+        String serviceName = "Observe" + toPascalCase(aspect.name()) + messageName + "SideEffectService";
+        String syntheticName = toPascalCase(aspect.name()) + messageName + "SideEffect";
         
         // Resolve the plugin service package from the aspect's plugin implementation
         String pluginServiceClass = (String) aspect.config().get("pluginImplementationClass");
@@ -114,42 +117,82 @@ public class AspectExpansionProcessor {
         String pluginPackage = extractPackage(pluginServiceClass);
         String pluginSimpleClassName = pluginServiceClass.substring(pluginServiceClass.lastIndexOf('.') + 1);
 
-        // Recompute generation targets based on plugin service configuration
-        Set<GenerationTarget> recomputedTargets = computeGenerationTargets(aspect);
+        Set<GenerationTarget> recomputedTargets = Set.copyOf(originalModel.enabledTargets());
 
-        return new PipelineStepModel.Builder()
-                .servicePackage(pluginPackage)
+        TypeMapping mapping = position == AspectPosition.BEFORE_STEP
+            ? originalModel.inputMapping()
+            : originalModel.outputMapping();
+        if (mapping.domainType() == null) {
+            throw new IllegalArgumentException(
+                "Aspect '" + aspect.name() + "' requires a " +
+                    (position == AspectPosition.BEFORE_STEP ? "input" : "output") +
+                    " mapping for step '" +
+                    originalModel.serviceName() + "'");
+        }
+
+        PipelineStepModel syntheticModel = new PipelineStepModel.Builder()
+                .serviceName(serviceName)
+                .generatedName(syntheticName)
+                .servicePackage(originalModel.servicePackage())
                 .serviceClassName(com.squareup.javapoet.ClassName.get(pluginPackage, pluginSimpleClassName))
-                .serviceName(syntheticName)
-                .inputMapping(originalStep.inputMapping())
-                .outputMapping(originalStep.outputMapping())
-                .streamingShape(originalStep.streamingShape())
-                .executionMode(originalStep.executionMode())
+                .inputMapping(mapping)
+                .outputMapping(mapping)
+                .streamingShape(StreamingShape.UNARY_UNARY)
+                .executionMode(originalModel.executionMode())
                 .enabledTargets(recomputedTargets) // Recompute targets
+                .deploymentRole(DeploymentRole.PLUGIN_SERVER)
+                .sideEffect(true)
                 .build();
+
+        return new ResolvedStep(syntheticModel, null, null);
     }
     
     private void validateStepTargeting(
-            List<PipelineStepModel> originalSteps,
+            List<ResolvedStep> originalSteps,
             List<PipelineAspectModel> stepAspects) {
-        
         Set<String> availableStepNames = originalSteps.stream()
-                .map(PipelineStepModel::serviceName)
+                .map(step -> step.model().serviceName())
                 .collect(Collectors.toSet());
 
+        if (availableStepNames.size() <= 1) {
+            return;
+        }
+
         for (PipelineAspectModel aspect : stepAspects) {
-            @SuppressWarnings("unchecked")
-            Set<String> targetSteps = (Set<String>) aspect.config().get("targetSteps");
-            if (targetSteps != null) {
-                for (String targetStep : targetSteps) {
-                    if (!availableStepNames.contains(targetStep)) {
-                        throw new IllegalArgumentException(
-                            "STEP-scoped aspect '" + aspect.name() +
-                            "' targets non-existent step: " + targetStep);
-                    }
-                }
+            Set<String> targetSteps = extractTargetSteps(aspect);
+            if (targetSteps == null) {
+                continue;
+            }
+            for (String targetStep : targetSteps) {
+                validateTargetStepName(availableStepNames, aspect.name(), targetStep);
             }
         }
+    }
+
+    private void validateTargetStepName(Set<String> availableStepNames, String aspectName, String targetStep) {
+        if (!availableStepNames.contains(targetStep)) {
+            throw new IllegalArgumentException(
+                "STEP-scoped aspect '" + aspectName +
+                    "' targets non-existent step: " + targetStep);
+        }
+    }
+
+    private Set<String> extractTargetSteps(PipelineAspectModel aspect) {
+        Object targetStepsValue = aspect.config().get("targetSteps");
+        if (targetStepsValue == null) {
+            return null;
+        }
+        Set<String> targetSteps = new java.util.LinkedHashSet<>();
+        if (targetStepsValue instanceof Iterable<?> iterable) {
+            for (Object entry : iterable) {
+                if (entry != null) {
+                    targetSteps.add(entry.toString());
+                }
+            }
+        } else {
+            targetSteps.add(targetStepsValue.toString());
+        }
+        return targetSteps.isEmpty() ? null : targetSteps;
     }
     
     private String extractPackage(String fullyQualifiedClassName) {
@@ -160,18 +203,55 @@ public class AspectExpansionProcessor {
         return ""; // Default package
     }
     
-    private Set<GenerationTarget> computeGenerationTargets(PipelineAspectModel aspect) {
-        // Compute targets based on plugin service configuration
-        // This would typically come from the plugin service metadata in the config
-        @SuppressWarnings("unchecked")
-        Set<GenerationTarget> targets = (Set<GenerationTarget>) aspect.config().get("enabledTargets");
-        return targets != null ? targets : Set.of(); // Return empty set if not specified
+    private String resolveMessageName(ResolvedStep originalStep, AspectPosition position) {
+        if (originalStep.grpcBinding() != null
+            && originalStep.grpcBinding().methodDescriptor() instanceof Descriptors.MethodDescriptor methodDescriptor) {
+            return position == AspectPosition.BEFORE_STEP
+                ? methodDescriptor.getInputType().getName()
+                : methodDescriptor.getOutputType().getName();
+        }
+
+        PipelineStepModel model = originalStep.model();
+        TypeMapping mapping = position == AspectPosition.BEFORE_STEP
+            ? model.inputMapping()
+            : model.outputMapping();
+        if (mapping.domainType() == null) {
+            throw new IllegalStateException(
+                "Missing domain type for step '" + model.serviceName() +
+                    "'; cannot derive side-effect service name.");
+        }
+        return simpleTypeName(mapping.domainType());
     }
 
-    private String capitalize(String input) {
-        if (input == null || input.isEmpty()) {
+    private String simpleTypeName(TypeName type) {
+        if (type instanceof ClassName className) {
+            return className.simpleName();
+        }
+        String name = type.toString();
+        int generics = name.indexOf('<');
+        if (generics != -1) {
+            name = name.substring(0, generics);
+        }
+        int lastDot = name.lastIndexOf('.');
+        String simple = lastDot == -1 ? name : name.substring(lastDot + 1);
+        return simple.replace("[]", "");
+    }
+
+    private String toPascalCase(String input) {
+        if (input == null || input.isBlank()) {
             return input;
         }
-        return input.substring(0, 1).toUpperCase() + input.substring(1);
+        StringBuilder builder = new StringBuilder();
+        String[] parts = input.split("[^a-zA-Z0-9]+");
+        for (String part : parts) {
+            if (part.isBlank()) {
+                continue;
+            }
+            builder.append(part.substring(0, 1).toUpperCase(Locale.ROOT));
+            if (part.length() > 1) {
+                builder.append(part.substring(1));
+            }
+        }
+        return builder.toString();
     }
 }

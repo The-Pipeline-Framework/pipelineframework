@@ -12,8 +12,9 @@ import com.squareup.javapoet.ClassName;
 
 /**
  * Utility class to generate role metadata for pipeline artifacts.
- * This generates a META-INF/pipeline/roles.json file that Maven can use
- * for classifier-based packaging.
+ * This generates a META-INF/pipeline/roles.json file for documentation
+ * and optional validation; classifier packaging should rely on role-based
+ * source/output directories instead of this metadata.
  */
 public class RoleMetadataGenerator {
 

@@ -28,7 +28,8 @@ import org.jboss.jandex.IndexView;
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.PipelineCliAppConfig;
 
-import static org.pipelineframework.processor.PipelineStepProcessor.CLIENT_STEP_SUFFIX;
+import static org.pipelineframework.processor.PipelineStepProcessor.GRPC_CLIENT_STEP_SUFFIX;
+import static org.pipelineframework.processor.PipelineStepProcessor.REST_CLIENT_STEP_SUFFIX;
 
 /**
  * Registers client step classes as additional unremovable beans when CLI client generation is enabled.
@@ -74,9 +75,12 @@ public class StepClientRegistrar {
 
         IndexView index = combinedIndex.getIndex();
 
-        // Find all classes ending with "ClientStep"
+        // Find all classes ending with client step suffixes
         List<ClassInfo> classes = index.getKnownClasses().stream()
-                .filter(ci -> ci.name().toString().endsWith(CLIENT_STEP_SUFFIX))
+                .filter(ci -> {
+                    String name = ci.name().toString();
+                    return name.endsWith(GRPC_CLIENT_STEP_SUFFIX) || name.endsWith(REST_CLIENT_STEP_SUFFIX);
+                })
                 .toList();
 
         for (ClassInfo ci : classes) {

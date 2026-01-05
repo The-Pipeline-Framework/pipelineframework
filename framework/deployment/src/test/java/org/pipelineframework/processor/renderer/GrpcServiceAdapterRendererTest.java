@@ -1,26 +1,29 @@
 package org.pipelineframework.processor.renderer;
 
-import java.io.StringWriter;
-import java.io.Writer;
-import java.net.URI;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import javax.annotation.processing.ProcessingEnvironment;
-import javax.tools.JavaFileObject;
-import javax.tools.SimpleJavaFileObject;
 
 import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
 import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.processor.ir.*;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class GrpcServiceAdapterRendererTest {
 
     private GrpcServiceAdapterRenderer renderer;
+
+    @TempDir
+    Path tempDir;
 
     @BeforeEach
     void setUp() {
@@ -37,9 +40,6 @@ class GrpcServiceAdapterRendererTest {
         Descriptors.MethodDescriptor methodDescriptor = serviceDescriptor.findMethodByName("remoteProcess");
         GrpcBinding binding = new GrpcBinding(model, serviceDescriptor, methodDescriptor);
 
-        JavaFileObject javaFileObject = new InMemoryJavaFileObject(
-            "com.example.service.pipeline.TestServiceGrpcService");
-
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getElementUtils()).thenReturn(null);
         when(processingEnv.getTypeUtils()).thenReturn(null);
@@ -47,7 +47,7 @@ class GrpcServiceAdapterRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         // Create a mock context for the renderer
-        var context = new GenerationContext(processingEnv, javaFileObject);
+        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER, java.util.Set.of(), null);
 
         // Render the gRPC service adapter - this should not throw an exception
         assertDoesNotThrow(() -> renderer.render(binding, context));
@@ -63,9 +63,6 @@ class GrpcServiceAdapterRendererTest {
         Descriptors.MethodDescriptor methodDescriptor = serviceDescriptor.findMethodByName("remoteProcess");
         GrpcBinding binding = new GrpcBinding(model, serviceDescriptor, methodDescriptor);
 
-        JavaFileObject javaFileObject = new InMemoryJavaFileObject(
-            "com.example.service.pipeline.TestServiceGrpcService");
-
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getElementUtils()).thenReturn(null);
         when(processingEnv.getTypeUtils()).thenReturn(null);
@@ -73,10 +70,47 @@ class GrpcServiceAdapterRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         // Create a mock context for the renderer
-        var context = new GenerationContext(processingEnv, javaFileObject);
+        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER, java.util.Set.of(), null);
 
         // Render the gRPC service adapter - this should not throw an exception
         assertDoesNotThrow(() -> renderer.render(binding, context));
+    }
+
+    @Test
+    void testRenderSideEffectServiceUsesParameterizedPlugin() throws IOException {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("ObserveOutputTypeSideEffectService")
+            .generatedName("PersistenceOutputTypeSideEffect")
+            .servicePackage("com.example")
+            .serviceClassName(ClassName.get("org.pipelineframework.plugin.persistence", "PersistenceService"))
+            .inputMapping(new TypeMapping(ClassName.get("com.example.domain", "OutputType"), null, false))
+            .outputMapping(new TypeMapping(ClassName.get("com.example.domain", "OutputType"), null, false))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.DEFAULT)
+            .enabledTargets(java.util.Set.of(GenerationTarget.GRPC_SERVICE))
+            .deploymentRole(DeploymentRole.PLUGIN_SERVER)
+            .sideEffect(true)
+            .build();
+
+        Descriptors.FileDescriptor fileDescriptor = buildSideEffectDescriptor();
+        Descriptors.ServiceDescriptor serviceDescriptor = fileDescriptor.findServiceByName("ObserveOutputTypeSideEffectService");
+        Descriptors.MethodDescriptor methodDescriptor = serviceDescriptor.findMethodByName("remoteProcess");
+        GrpcBinding binding = new GrpcBinding(model, serviceDescriptor, methodDescriptor);
+
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getElementUtils()).thenReturn(null);
+        when(processingEnv.getTypeUtils()).thenReturn(null);
+        when(processingEnv.getFiler()).thenReturn(null);
+        when(processingEnv.getMessager()).thenReturn(null);
+
+        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PLUGIN_SERVER, java.util.Set.of(), null);
+        renderer.render(binding, context);
+
+        Path generated = tempDir.resolve("com/example/pipeline/PersistenceOutputTypeSideEffectGrpcService.java");
+        String source = Files.readString(generated);
+        assertTrue(source.contains("PersistenceService<OutputType> service"));
+        assertTrue(source.contains("protected PersistenceService<OutputType> getService()"));
+        assertTrue(source.contains("return service"));
     }
 
     private TypeMapping createTypeMapping(String simpleName) {
@@ -127,21 +161,29 @@ class GrpcServiceAdapterRendererTest {
         }
     }
 
-    private static final class InMemoryJavaFileObject extends SimpleJavaFileObject {
-        private final StringWriter writer = new StringWriter();
+    private Descriptors.FileDescriptor buildSideEffectDescriptor() {
+        DescriptorProtos.FileDescriptorProto proto = DescriptorProtos.FileDescriptorProto.newBuilder()
+            .setName("observe_output_type.proto")
+            .setPackage("com.example.grpc")
+            .setOptions(DescriptorProtos.FileOptions.newBuilder()
+                .setJavaPackage("com.example.grpc")
+                .setJavaOuterClassname("ObserveOutputTypeOuterClass")
+                .build())
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder()
+                .setName("OutputType"))
+            .addService(DescriptorProtos.ServiceDescriptorProto.newBuilder()
+                .setName("ObserveOutputTypeSideEffectService")
+                .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
+                    .setName("remoteProcess")
+                    .setInputType(".com.example.grpc.OutputType")
+                    .setOutputType(".com.example.grpc.OutputType")))
+            .build();
 
-        private InMemoryJavaFileObject(String className) {
-            super(URI.create("string:///" + className.replace('.', '/') + Kind.SOURCE.extension), Kind.SOURCE);
-        }
-
-        @Override
-        public Writer openWriter() {
-            return writer;
-        }
-
-        @Override
-        public CharSequence getCharContent(boolean ignoreEncodingErrors) {
-            return writer.toString();
+        try {
+            return Descriptors.FileDescriptor.buildFrom(proto, new Descriptors.FileDescriptor[] {});
+        } catch (Descriptors.DescriptorValidationException e) {
+            throw new IllegalStateException("Failed to build test descriptor", e);
         }
     }
+
 }

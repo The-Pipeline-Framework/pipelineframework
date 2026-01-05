@@ -11,6 +11,7 @@ import com.squareup.javapoet.TypeName;
  * information needed to generate pipeline artifacts.
  *
  * @param serviceName Gets the name of the service.
+ * @param generatedName Gets the generated class name base for the service.
  * @param servicePackage Gets the package of the service.
  * @param serviceClassName Gets the ClassName of the service.
  * @param inputMapping Gets the input type mapping for this service. Directional type mappings Domain -> gRPC
@@ -18,16 +19,21 @@ import com.squareup.javapoet.TypeName;
  * @param streamingShape Gets the streaming shape for this service. Semantic configuration
  * @param enabledTargets Gets the set of enabled generation targets.
  * @param executionMode Gets the execution mode for this service.
+ * @param deploymentRole Gets the deployment role for the service implementation.
+ * @param sideEffect Gets whether the step is a synthetic side-effect observer.
  */
 public record PipelineStepModel(
         String serviceName,
+        String generatedName,
         String servicePackage,
         ClassName serviceClassName,
         TypeMapping inputMapping,
         TypeMapping outputMapping,
         StreamingShape streamingShape,
         Set<GenerationTarget> enabledTargets,
-        ExecutionMode executionMode
+        ExecutionMode executionMode,
+        DeploymentRole deploymentRole,
+        boolean sideEffect
 ) {
     /**
          * Creates a new PipelineStepModel with the supplied service identity, type mappings and generation configuration.
@@ -40,20 +46,26 @@ public record PipelineStepModel(
          * @param streamingShape   the streaming shape configuration; must not be null
          * @param enabledTargets   the set of enabled generation targets; must not be null
          * @param executionMode    the execution mode for the service; must not be null
+         * @param deploymentRole   the deployment role for the service implementation; must not be null
          * @throws IllegalArgumentException if any parameter documented as 'must not be null' is null
          */
     @SuppressWarnings("ConstantValue")
     public PipelineStepModel(String serviceName,
+            String generatedName,
             String servicePackage,
             ClassName serviceClassName,
             TypeMapping inputMapping,
             TypeMapping outputMapping,
             StreamingShape streamingShape,
             Set<GenerationTarget> enabledTargets,
-            ExecutionMode executionMode) {
+            ExecutionMode executionMode,
+            DeploymentRole deploymentRole,
+            boolean sideEffect) {
         // Validate non-null invariants
         if (serviceName == null)
             throw new IllegalArgumentException("serviceName cannot be null");
+        if (generatedName == null)
+            throw new IllegalArgumentException("generatedName cannot be null");
         if (servicePackage == null)
             throw new IllegalArgumentException("servicePackage cannot be null");
         if (serviceClassName == null)
@@ -64,8 +76,11 @@ public record PipelineStepModel(
             throw new IllegalArgumentException("enabledTargets cannot be null");
         if (executionMode == null)
             throw new IllegalArgumentException("executionMode cannot be null");
+        if (deploymentRole == null)
+            throw new IllegalArgumentException("deploymentRole cannot be null");
 
         this.serviceName = serviceName;
+        this.generatedName = generatedName;
         this.servicePackage = servicePackage;
         this.serviceClassName = serviceClassName;
         this.inputMapping = inputMapping != null ? inputMapping : new TypeMapping(null, null, false);
@@ -73,6 +88,8 @@ public record PipelineStepModel(
         this.streamingShape = streamingShape;
         this.enabledTargets = Set.copyOf(enabledTargets); // Defensive copy
         this.executionMode = executionMode;
+        this.deploymentRole = deploymentRole;
+        this.sideEffect = sideEffect;
     }
 
     /**
@@ -105,6 +122,7 @@ public record PipelineStepModel(
         }
 
         private String serviceName;
+        private String generatedName;
         private String servicePackage;
         private ClassName serviceClassName;
         private TypeMapping inputMapping = new TypeMapping(null, null, false);
@@ -112,6 +130,8 @@ public record PipelineStepModel(
         private StreamingShape streamingShape;
         private Set<GenerationTarget> enabledTargets = new HashSet<>();
         private ExecutionMode executionMode;
+        private DeploymentRole deploymentRole = DeploymentRole.PIPELINE_SERVER;
+        private boolean sideEffect;
 
         /**
          * Sets the service name.
@@ -121,6 +141,17 @@ public record PipelineStepModel(
          */
         public Builder serviceName(String serviceName) {
             this.serviceName = serviceName;
+            return this;
+        }
+
+        /**
+         * Sets the generated class name base for the service.
+         *
+         * @param generatedName the generated class name base to set
+         * @return this builder instance
+         */
+        public Builder generatedName(String generatedName) {
+            this.generatedName = generatedName;
             return this;
         }
 
@@ -213,6 +244,28 @@ public record PipelineStepModel(
         }
 
         /**
+         * Set the deployment role for the service implementation.
+         *
+         * @param deploymentRole the deployment role to apply
+         * @return this builder instance
+         */
+        public Builder deploymentRole(DeploymentRole deploymentRole) {
+            this.deploymentRole = deploymentRole;
+            return this;
+        }
+
+        /**
+         * Marks the step as a synthetic side-effect observer.
+         *
+         * @param sideEffect whether the step is a side-effect observer
+         * @return this builder instance
+         */
+        public Builder sideEffect(boolean sideEffect) {
+            this.sideEffect = sideEffect;
+            return this;
+        }
+
+        /**
          * Create a PipelineStepModel populated from the builder's current state.
          *
          * @return a PipelineStepModel populated with the builder's state
@@ -224,6 +277,9 @@ public record PipelineStepModel(
             // Validate required fields are not null
             if (serviceName == null)
                 throw new IllegalStateException("serviceName is required");
+            if (generatedName == null) {
+                generatedName = serviceName;
+            }
             if (servicePackage == null)
                 throw new IllegalStateException("servicePackage is required");
             if (serviceClassName == null)
@@ -232,15 +288,20 @@ public record PipelineStepModel(
                 throw new IllegalStateException("streamingShape is required");
             if (executionMode == null)
                 throw new IllegalStateException("executionMode is required");
+            if (deploymentRole == null)
+                throw new IllegalStateException("deploymentRole is required");
 
             return new PipelineStepModel(serviceName,
+                    generatedName,
                     servicePackage,
                     serviceClassName,
                     inputMapping,
                     outputMapping,
                     streamingShape,
                     enabledTargets,
-                    executionMode);
+                    executionMode,
+                    deploymentRole,
+                    sideEffect);
         }
     }
 }

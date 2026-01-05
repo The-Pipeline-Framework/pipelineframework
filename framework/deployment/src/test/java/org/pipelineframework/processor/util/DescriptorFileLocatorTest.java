@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Collections;
+import java.util.Set;
 
 import com.google.protobuf.DescriptorProtos;
 import org.junit.jupiter.api.AfterEach;
@@ -170,5 +171,54 @@ class DescriptorFileLocatorTest {
         assertNotNull(loadedSet);
         assertEquals(1, loadedSet.getFileCount());
         assertEquals("test.proto", loadedSet.getFile(0).getName());
+    }
+
+    @Test
+    void selectsDescriptorSetContainingExpectedService() throws IOException {
+        Path rootDir = tempDir.resolve("root");
+        Path serviceDir = rootDir.resolve("crawl-source-svc");
+        Path commonDir = rootDir.resolve("common");
+        Path otherDir = tempDir.resolve("other-project");
+        Path otherCommonDir = otherDir.resolve("common");
+
+        Files.createDirectories(serviceDir);
+        Files.createDirectories(commonDir.resolve("target/generated-sources/grpc"));
+        Files.createDirectories(otherCommonDir.resolve("target/generated-sources/grpc"));
+
+        writeDescriptorSet(
+            commonDir.resolve("target/generated-sources/grpc/descriptor_set.dsc"),
+            "other.proto",
+            "OtherService");
+        writeDescriptorSet(
+            otherCommonDir.resolve("target/generated-sources/grpc/descriptor_set.dsc"),
+            "target.proto",
+            "TargetService");
+
+        System.setProperty("user.dir", serviceDir.toString());
+        System.setProperty("maven.multiModuleProjectDirectory", tempDir.toString());
+        DescriptorProtos.FileDescriptorSet loadedSet = locator.locateAndLoadDescriptors(
+            Collections.emptyMap(),
+            Set.of("TargetService"));
+
+        assertNotNull(loadedSet);
+        assertEquals("target.proto", loadedSet.getFile(0).getName());
+        assertEquals("TargetService", loadedSet.getFile(0).getService(0).getName());
+    }
+
+    private void writeDescriptorSet(Path descriptorFile, String fileName, String serviceName) throws IOException {
+        DescriptorProtos.FileDescriptorSet descriptorSet = DescriptorProtos.FileDescriptorSet.newBuilder()
+            .addFile(DescriptorProtos.FileDescriptorProto.newBuilder()
+                .setName(fileName)
+                .addService(DescriptorProtos.ServiceDescriptorProto.newBuilder()
+                    .setName(serviceName)
+                    .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
+                        .setName("remoteProcess")
+                        .setInputType("TestMessage")
+                        .setOutputType("TestMessage"))))
+            .build();
+
+        try (FileOutputStream fos = new FileOutputStream(descriptorFile.toFile())) {
+            descriptorSet.writeTo(fos);
+        }
     }
 }

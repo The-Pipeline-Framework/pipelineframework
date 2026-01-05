@@ -64,13 +64,19 @@ public class PipelineRunner implements AutoCloseable {
      *
      * Configurable steps are initialised with configuration built from the injected factories before they are applied.
      *
-     * @param input  the source Multi of items to process; steps may convert this to a Uni or a different Multi
+     * @param input  the source Uni or Multi of items to process; steps may convert this to a Uni or a different Multi
      * @param steps  the list of step instances to apply; must not be null — null entries within the list are skipped
      * @return       a Multi containing the resulting stream of items, or a Uni containing the final single result
      * @throws NullPointerException if {@code steps} is null
+     * @throws IllegalArgumentException if {@code input} is not a Uni or Multi
      */
-    public Object run(Multi<?> input, List<Object> steps) {
+    public Object run(Object input, List<Object> steps) {
         Objects.requireNonNull(steps, "Steps list must not be null");
+        if (!(input instanceof Uni<?> || input instanceof Multi<?>)) {
+            throw new IllegalArgumentException(MessageFormat.format(
+                "Unsupported input type for PipelineRunner: {0}",
+                input == null ? "null" : input.getClass().getName()));
+        }
 
         // Order the steps according to the pipeline configuration if available
         List<Object> orderedSteps = orderSteps(steps);
@@ -108,6 +114,18 @@ public class PipelineRunner implements AutoCloseable {
     }
 
     /**
+     * Execute the provided pipeline steps against a reactive source Multi.
+     *
+     * @param input  the source Multi of items to process; steps may convert this to a Uni or a different Multi
+     * @param steps  the list of step instances to apply; must not be null — null entries within the list are skipped
+     * @return       a Multi containing the resulting stream of items, or a Uni containing the final single result
+     * @throws NullPointerException if {@code steps} is null
+     */
+    public Object run(Multi<?> input, List<Object> steps) {
+        return run((Object) input, steps);
+    }
+
+    /**
      * Determine the execution order of the given pipeline steps using the configured global order.
      *
      * If a global order is not configured or contains no valid entries, the original list is returned.
@@ -134,6 +152,16 @@ public class PipelineRunner implements AutoCloseable {
 
         if (filteredPipelineOrder.isEmpty()) {
             // If after filtering there are no steps, use the existing order
+            return steps;
+        }
+
+        // If the steps list contains entries not listed in pipeline.order, preserve the existing order.
+        java.util.Set<String> configuredNames = new java.util.HashSet<>(filteredPipelineOrder);
+        boolean hasUnconfiguredSteps = steps.stream()
+            .map(step -> step != null ? step.getClass().getName() : null)
+            .anyMatch(name -> name != null && !configuredNames.contains(name));
+        if (hasUnconfiguredSteps) {
+            logger.debug("Pipeline order configured, but step list contains unconfigured entries; preserving existing order.");
             return steps;
         }
 

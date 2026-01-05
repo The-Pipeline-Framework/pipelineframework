@@ -87,18 +87,6 @@ public @interface PipelineStep {
     Class<?> backendType() default Void.class;
 
     /**
-     * Whether to enable gRPC adapter generation for this step.
-     * @return true if gRPC adapter should be generated, false otherwise
-     */
-    boolean grpcEnabled() default true;
-
-    /**
-     * Whether to enable REST adapter generation for this step (default=false)
-     * @return true if REST adapter should be generated, false otherwise
-     */
-    boolean restEnabled() default false;
-
-    /**
      * Whether the entrypoint method (REST or gRPC) should run on a virtual thread (default=false)
      * @return true if virtual threads should be used, false otherwise
      */

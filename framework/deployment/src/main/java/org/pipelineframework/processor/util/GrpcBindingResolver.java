@@ -88,9 +88,9 @@ public class GrpcBindingResolver {
         String expectedServiceName = stepModel.serviceName();
 
         // Validate service name starts with Process
-        if (!expectedServiceName.startsWith("Process")) {
+        if (!expectedServiceName.startsWith("Process") && !expectedServiceName.startsWith("Observe")) {
             throw new IllegalStateException(
-                String.format("Build error for step '%s': Service name '%s' must start with 'Process'",
+                String.format("Build error for step '%s': Service name '%s' must start with 'Process' or 'Observe",
                     stepModel.serviceName(), expectedServiceName));
         }
 

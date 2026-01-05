@@ -56,13 +56,8 @@ public class PipelineStepIRExtractor {
             AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "stepType"));
 
         Set<GenerationTarget> targets = EnumSet.noneOf(GenerationTarget.class);
-        if (AnnotationProcessingUtils.getAnnotationValueAsBoolean(annotationMirror, "grpcEnabled", true)) {
-            targets.add(GenerationTarget.GRPC_SERVICE);
-            targets.add(GenerationTarget.CLIENT_STEP);
-        }
-        if (AnnotationProcessingUtils.getAnnotationValueAsBoolean(annotationMirror, "restEnabled", false)) {
-            targets.add(GenerationTarget.REST_RESOURCE);
-        }
+        targets.add(GenerationTarget.GRPC_SERVICE);
+        targets.add(GenerationTarget.CLIENT_STEP);
 
         ExecutionMode executionMode = AnnotationProcessingUtils.getAnnotationValueAsBoolean(annotationMirror, "runOnVirtualThreads", false)
             ? ExecutionMode.VIRTUAL_THREADS : ExecutionMode.DEFAULT;
@@ -77,7 +72,7 @@ public class PipelineStepIRExtractor {
             AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "outboundMapper"));
 
         String qualifiedServiceName = serviceClass.getQualifiedName().toString();
-        ClassName serviceClassName;
+        ClassName serviceClassName = null;
         try {
             serviceClassName = ClassName.get(serviceClass);
         } catch (Exception e) {
@@ -85,7 +80,15 @@ public class PipelineStepIRExtractor {
                 javax.tools.Diagnostic.Kind.NOTE,
                 "Could not obtain ClassName directly, falling back to bestGuess: " + e.getMessage(),
                 serviceClass);
-            serviceClassName = ClassName.bestGuess(qualifiedServiceName);
+            if (qualifiedServiceName != null && !qualifiedServiceName.isBlank()) {
+                serviceClassName = ClassName.bestGuess(qualifiedServiceName);
+            }
+        }
+        if (serviceClassName == null) {
+            String fallbackName = serviceClass.getSimpleName() != null
+                ? serviceClass.getSimpleName().toString()
+                : "UnknownService";
+            serviceClassName = ClassName.bestGuess(fallbackName);
         }
 
         // Build the model
@@ -98,6 +101,7 @@ public class PipelineStepIRExtractor {
             .streamingShape(streamingShape)
             .enabledTargets(targets)
             .executionMode(executionMode)
+            .deploymentRole(DeploymentRole.PIPELINE_SERVER)
             .build();
 
         return new ExtractResult(model);

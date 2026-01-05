@@ -16,11 +16,12 @@
 
 package org.pipelineframework.config;
 
+import java.util.Optional;
+
 import io.quarkus.runtime.annotations.ConfigPhase;
 import io.quarkus.runtime.annotations.ConfigRoot;
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
-import java.util.Optional;
 
 /**
  * Build-time config for the Pipeline Framework extension.
@@ -48,21 +49,19 @@ public interface PipelineCliAppConfig {
     /**
      * CLI Command Name
      * <p>
-     * If not provided, defaults to an empty string (no specific command name).
+     * If not provided, the value is absent.
      *
      * @return the CLI command name
      */
-    @WithDefault("")
     Optional<String> cliName();
 
     /**
      * CLI Command Description
      * <p>
-     * If not provided, defaults to an empty string (no description).
+     * If not provided, the value is absent.
      *
      * @return the CLI command description
      */
-    @WithDefault("")
     Optional<String> cliDescription();
 
     /**

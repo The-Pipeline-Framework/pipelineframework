@@ -16,8 +16,6 @@
 
 package org.pipelineframework;
 
-import io.smallrye.mutiny.Uni;
-import jakarta.enterprise.context.ApplicationScoped;
 import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
@@ -30,6 +28,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import jakarta.enterprise.context.ApplicationScoped;
+
+import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.unchecked.Unchecked;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.logging.Logger;
 
@@ -258,7 +260,7 @@ public void checkServerTrusted(java.security.cert.X509Certificate[] certs, Strin
         }
 
         // Create a Uni that performs the health checks and apply retry logic
-        Uni<Boolean> healthCheckUni = Uni.createFrom().item(() -> {
+        Uni<Boolean> healthCheckUni = Uni.createFrom().item(Unchecked.supplier(() -> {
             boolean allHealthy = true;
             Set<String> unhealthyServices = new HashSet<>();
 
@@ -274,10 +276,10 @@ public void checkServerTrusted(java.security.cert.X509Certificate[] certs, Strin
                 LOG.info("All dependent services are healthy. Proceeding with pipeline execution.");
                 return true;
             } else {
-                LOG.warn("Health check failed. Services not healthy: " + unhealthyServices);
-                throw new RuntimeException("Health check failed: " + unhealthyServices);
+                LOG.warnf("Health check failed. Services not healthy: %s", unhealthyServices);
+                throw new RuntimeException("Health check failed");
             }
-        })
+        }))
         .onFailure().retry()
         .withBackOff(Duration.ofSeconds(5), Duration.ofSeconds(5))
         .atMost(24); // 24 attempts with 5s backoff = ~2 minutes
@@ -285,7 +287,7 @@ public void checkServerTrusted(java.security.cert.X509Certificate[] certs, Strin
         try {
             return healthCheckUni.await().indefinitely();
         } catch (Exception e) {
-            LOG.error("Health checks failed after maximum attempts. Pipeline execution will not proceed.");
+            LOG.errorf("Health checks failed after maximum attempts. Pipeline execution will not proceed. %s", e.getMessage());
             return false;
         }
     }

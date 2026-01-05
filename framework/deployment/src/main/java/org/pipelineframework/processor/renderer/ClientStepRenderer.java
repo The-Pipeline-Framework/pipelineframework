@@ -26,9 +26,7 @@ import io.quarkus.grpc.GrpcClient;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.processor.PipelineStepProcessor;
-import org.pipelineframework.processor.ir.GenerationTarget;
-import org.pipelineframework.processor.ir.GrpcBinding;
-import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.*;
 import org.pipelineframework.processor.util.GrpcJavaTypeResolver;
 import org.pipelineframework.step.StepManyToOne;
 import org.pipelineframework.step.StepOneToOne;
@@ -45,12 +43,12 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
      * Generate and write the gRPC client step class for the given binding.
      *
      * @param binding the gRPC binding and its associated pipeline model used to build the client step
-     * @param ctx     the generation context providing file writers and processing environment
+     * @param ctx     the generation context providing output directories and processing environment
      * @throws IOException if an I/O error occurs while writing the generated Java file
      */
     @Override
     public void render(GrpcBinding binding, GenerationContext ctx) throws IOException {
-        TypeSpec clientStepClass = buildClientStepClass(binding, ctx.processingEnv().getMessager());
+        TypeSpec clientStepClass = buildClientStepClass(binding, ctx);
 
         // Write the generated class
         JavaFile javaFile = JavaFile.builder(
@@ -58,14 +56,12 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
                         clientStepClass)
                 .build();
 
-        try (var writer = ctx.builderFile().openWriter()) {
-            javaFile.writeTo(writer);
-        }
+        javaFile.writeTo(ctx.outputDir());
     }
 
     /**
      * Build the JavaPoet TypeSpec for a gRPC client pipeline step corresponding to the given binding.
-     *
+     * <p>
      * The produced TypeSpec represents a public ConfigurableStep subclass annotated for CDI and Quarkus,
      * optionally containing a gRPC client field, implementing the pipeline step interface appropriate
      * to the model's streaming shape, and providing the corresponding apply* method that delegates to
@@ -75,9 +71,11 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
      * @param messager the annotation processing Messager used during gRPC type resolution
      * @return the generated TypeSpec describing the client step class
      */
-    private TypeSpec buildClientStepClass(GrpcBinding binding, Messager messager) {
+    private TypeSpec buildClientStepClass(GrpcBinding binding, GenerationContext ctx) {
+        Messager messager = ctx.processingEnv().getMessager();
+        org.pipelineframework.processor.ir.DeploymentRole role = ctx.role();
         PipelineStepModel model = binding.model();
-        String clientStepClassName = getClientStepClassName(binding);
+        String clientStepClassName = getClientStepClassName(model);
 
         // Use the gRPC types resolved via GrpcJavaTypeResolver
         GrpcJavaTypeResolver grpcTypeResolver = new GrpcJavaTypeResolver();
@@ -92,11 +90,11 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
                         .build())
                 .addAnnotation(AnnotationSpec.builder(ClassName.get(Unremovable.class))
                         .build())
-                // Add the GeneratedRole annotation to indicate this is an orchestrator client
+                // Add the GeneratedRole annotation to indicate the target role
                 .addAnnotation(AnnotationSpec.builder(ClassName.get("org.pipelineframework.annotation", "GeneratedRole"))
                         .addMember("value", "$T.$L",
                             ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role"),
-                            determineRoleForClientStep(binding))
+                            role.name())
                         .build());
 
         // Add gRPC client field with @GrpcClient annotation
@@ -105,8 +103,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
         if (grpcClientType != null) {
             FieldSpec grpcClientField = FieldSpec.builder(
                             grpcClientType,
-                            "grpcClient",
-                            Modifier.PRIVATE)
+                            "grpcClient")
                     .addAnnotation(AnnotationSpec.builder(GrpcClient.class)
                             .addMember("value", "$S", toGrpcClientName(binding.serviceName()))
                             .build())
@@ -206,6 +203,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
                             .addParameter(inputGrpcType, "input")
                             .addStatement("return this.grpcClient.remoteProcess(input)")
                             .build();
+                    applyOneToOneMethod = maybeAddCacheAnnotation(applyOneToOneMethod, model, ctx);
                     clientStepBuilder.addMethod(applyOneToOneMethod);
                     break;
             }
@@ -220,13 +218,13 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
      * @param binding the gRPC binding whose service name is used to derive the client step class name
      * @return the client step class name derived from the binding's service name
      */
-    private String getClientStepClassName(GrpcBinding binding) {
-        String serviceClassName = binding.serviceName();
+    private String getClientStepClassName(PipelineStepModel model) {
+        String serviceClassName = model.generatedName();
 
         // Determine client step class name based on the target
         String clientStepClassName;
-        // For client steps: ${PluginName}ClientStep
-        clientStepClassName = serviceClassName.replace("Service", "") + PipelineStepProcessor.CLIENT_STEP_SUFFIX;
+        // For client steps: ${PluginName}GrpcClientStep
+        clientStepClassName = serviceClassName.replace("Service", "") + PipelineStepProcessor.GRPC_CLIENT_STEP_SUFFIX;
         return clientStepClassName;
     }
 
@@ -262,22 +260,32 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
         return withBoundaryHyphens.toLowerCase();
     }
 
-    /**
-     * Choose the generated role for a client step based on its client step class name.
-     *
-     * If the computed client step class name starts with "SideEffect" the step is treated as a plugin client;
-     * otherwise it is treated as an orchestrator client.
-     *
-     * @param binding the gRPC binding model used to derive the client step class name
-     * @return `"PLUGIN_CLIENT"` if the client step class name starts with `"SideEffect"`, `"ORCHESTRATOR_CLIENT"` otherwise
-     */
-    private String determineRoleForClientStep(GrpcBinding binding) {
-        // For now, determine the role based on naming convention
-        // If the class name starts with "SideEffect", it's a plugin client
-        if (getClientStepClassName(binding).startsWith("SideEffect")) {
-            return "PLUGIN_CLIENT";
-        } else {
-            return "ORCHESTRATOR_CLIENT";
+    private MethodSpec maybeAddCacheAnnotation(MethodSpec method, PipelineStepModel model, GenerationContext ctx) {
+        if (!ctx.enabledAspects().contains("cache")) {
+            return method;
         }
+        if (ctx.role() != DeploymentRole.ORCHESTRATOR_CLIENT) {
+            return method;
+        }
+        if (model.sideEffect() || model.streamingShape() != StreamingShape.UNARY_UNARY) {
+            return method;
+        }
+
+        AnnotationSpec cacheAnnotation = AnnotationSpec.builder(ClassName.get("io.quarkus.cache", "CacheResult"))
+            .addMember("cacheName", "$S", "pipeline-cache")
+            .addMember("keyGenerator", "$T.class", resolveCacheKeyGenerator(ctx))
+            .build();
+
+        return method.toBuilder()
+            .addAnnotation(cacheAnnotation)
+            .build();
     }
+
+    private TypeName resolveCacheKeyGenerator(GenerationContext ctx) {
+        if (ctx.cacheKeyGenerator() != null) {
+            return ctx.cacheKeyGenerator();
+        }
+        return ClassName.get("org.pipelineframework.cache", "PipelineCacheKeyGenerator");
+    }
+
 }

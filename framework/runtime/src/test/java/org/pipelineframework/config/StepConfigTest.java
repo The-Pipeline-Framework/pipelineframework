@@ -16,10 +16,11 @@
 
 package org.pipelineframework.config;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 import java.time.Duration;
+
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class StepConfigTest {
 
@@ -79,11 +80,6 @@ class StepConfigTest {
             @Override
             public String backpressureStrategy() {
                 return "DROP";
-            }
-
-            @Override
-            public Integer order() {
-                return 100;
             }
         };
 
@@ -546,11 +542,6 @@ class StepConfigTest {
             public String backpressureStrategy() {
                 return "BUFFER";
             }
-
-            @Override
-            public Integer order() {
-                return 1;
-            }
         };
 
         // When
@@ -609,11 +600,6 @@ class StepConfigTest {
             @Override
             public String backpressureStrategy() {
                 return "DROP";
-            }
-
-            @Override
-            public Integer order() {
-                return Integer.MAX_VALUE;
             }
         };
 

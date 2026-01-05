@@ -16,7 +16,9 @@
 
 package org.pipelineframework.config;
 
+import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 
 import io.quarkus.arc.Unremovable;
 import io.smallrye.config.ConfigMapping;
@@ -54,6 +56,20 @@ public interface PipelineStepConfig {
  * @return the StepConfig containing default values for pipeline steps
  */
     StepConfig defaults();
+
+    /**
+     * Health check configuration for pipeline startup.
+     *
+     * @return health check configuration
+     */
+    HealthConfig health();
+
+    /**
+     * Cache configuration for pipeline cache providers.
+     *
+     * @return cache configuration
+     */
+    CacheConfig cache();
     
     /**
      * Per-step configuration overrides keyed by each step's fully qualified class name.
@@ -70,16 +86,6 @@ public interface PipelineStepConfig {
      */
     interface StepConfig {
         /**
-         * Execution order of this step within the pipeline.
-         * <p>
-         * When this value is used in global defaults (pipeline.defaults) it is ignored; order is only
-         * meaningful for per-step configuration.
-         *
-         * @return the step order as an integer; `0` if not specified for a specific step.
-         */
-        @WithDefault("0")
-        Integer order();
-
         /**
          * Maximum number of retry attempts for failed operations.
          * @return maximum retry attempts
@@ -144,5 +150,107 @@ public interface PipelineStepConfig {
          */
         @WithDefault("BUFFER")
         String backpressureStrategy();
+    }
+
+    /**
+     * Health check configuration for startup dependency checks.
+     */
+    interface HealthConfig {
+        /**
+         * Maximum time to wait for startup health checks to complete.
+         *
+         * @return startup health check timeout
+         */
+        @WithDefault("PT5M")
+        Duration startupTimeout();
+    }
+
+    /**
+     * Cache configuration for pipeline cache providers.
+     */
+    interface CacheConfig {
+        /**
+         * Selects which cache provider to use (for example "redis", "caffeine", "memory").
+         *
+         * @return optional provider name
+         */
+        Optional<String> provider();
+
+        /**
+         * Cache policy for cache plugin behavior.
+         *
+         * @return cache policy
+         */
+        @WithDefault("cache-only")
+        String policy();
+
+        /**
+         * Default cache TTL for cache plugin operations.
+         *
+         * @return optional TTL duration
+         */
+        Optional<Duration> ttl();
+
+        /**
+         * Configuration for the caffeine cache provider.
+         *
+         * @return caffeine cache configuration
+         */
+        CaffeineConfig caffeine();
+
+        /**
+         * Configuration for the redis cache provider.
+         *
+         * @return redis cache configuration
+         */
+        RedisConfig redis();
+    }
+
+    /**
+     * Caffeine cache provider configuration.
+     */
+    interface CaffeineConfig {
+        /**
+         * Cache name used for Quarkus cache.
+         *
+         * @return cache name
+         */
+        @WithDefault("pipeline-cache")
+        String name();
+
+        /**
+         * Maximum size for the cache.
+         *
+         * @return maximum cache size
+         */
+        @WithDefault("10000")
+        long maximumSize();
+
+        /**
+         * Expire after write duration.
+         *
+         * @return optional expiration duration
+         */
+        Optional<Duration> expireAfterWrite();
+
+        /**
+         * Expire after access duration.
+         *
+         * @return optional expiration duration
+         */
+        Optional<Duration> expireAfterAccess();
+    }
+
+    /**
+     * Redis cache provider configuration.
+     */
+    interface RedisConfig {
+        /**
+         * Prefix applied to cache keys in Redis.
+         *
+         * @return cache key prefix
+         */
+        @WithDefault("pipeline-cache:")
+        String prefix();
     }
 }

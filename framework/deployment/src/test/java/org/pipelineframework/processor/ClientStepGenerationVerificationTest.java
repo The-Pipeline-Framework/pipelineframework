@@ -1,11 +1,14 @@
 package org.pipelineframework.processor;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import javax.tools.JavaFileObject;
 
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.Compiler;
 import com.google.testing.compile.JavaFileObjects;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -15,6 +18,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ClientStepGenerationVerificationTest {
 
     private static final String PROTOBUF_DESCRIPTOR_FILE = "protobuf.descriptor.file";
+
+    @TempDir
+    Path tempDir;
 
     @Test
     void verifyClientStepUsesGrpcTypes() throws Exception {
@@ -311,12 +317,8 @@ class ClientStepGenerationVerificationTest {
                 Class<?> backendType();
                 Class<?> inboundMapper() default Void.class;
                 Class<?> outboundMapper() default Void.class;
-                boolean grpcEnabled() default true;
-                String grpcClient() default "";
-                Class<?> inputGrpcType() default Void.class;
-                Class<?> outputGrpcType() default Void.class;
-                Class<?> grpcImpl() default Void.class;
-                Class<?> grpcStub() default Void.class;
+                boolean runOnVirtualThreads() default false;
+                Class<?> sideEffect() default Void.class;
             }
             """
         );
@@ -391,7 +393,11 @@ class ClientStepGenerationVerificationTest {
         // Compile with the PipelineStepProcessor and check the generated code
         Compilation compilation = Compiler.javac()
             .withProcessors(new PipelineStepProcessor())
-            .withOptions("-Xlint:unchecked", "-A" + PROTOBUF_DESCRIPTOR_FILE + "=" + descriptorPath.toString())
+            .withOptions(
+                "-Xlint:unchecked",
+                "-A" + PROTOBUF_DESCRIPTOR_FILE + "=" + descriptorPath.toString(),
+                "-Apipeline.generatedSourcesDir=" + tempDir.toString()
+            )
             .compile(
                 processFolderServiceSource,
                 csvFolderSource,
@@ -408,38 +414,18 @@ class ClientStepGenerationVerificationTest {
                 grpcServiceStreamingAdapterClass
             );
 
-        // Look for the generated client step class
-        boolean clientStepGenerated = false;
-        for (JavaFileObject fileObject : compilation.generatedSourceFiles()) {
-            if (fileObject.getName().contains("ProcessFolderClientStep")) {
-                String sourceCode = fileObject.getCharContent(true).toString();
-                System.out.println("Generated Client Step Code:");
-                System.out.println(sourceCode);
-                
-                // Check that the generated client step uses gRPC types instead of domain types
-                assertTrue(sourceCode.contains("StepOneToMany"),
-                    "Client step should implement StepOneToMany interface");
-                
-                // The interface should use gRPC types, not domain types
-                // Previously it was using CsvFolder and CsvPaymentsInputFile (domain types)
-                // Now it should use InputCsvFileProcessingSvc.CsvFolder and InputCsvFileProcessingSvc.CsvPaymentsInputFile (gRPC types)
-                if (sourceCode.contains("CsvFolder") && !sourceCode.contains("InputCsvFileProcessingSvc")) {
-                    System.out.println("ERROR: Client step is still using domain type 'CsvFolder' instead of gRPC type");
-                } else if (sourceCode.contains("InputCsvFileProcessingSvc") && sourceCode.contains("CsvFolder")) {
-                    System.out.println("SUCCESS: Client step is using gRPC type 'InputCsvFileProcessingSvc.CsvFolder'");
-                }
-                
-                if (sourceCode.contains("CsvPaymentsInputFile") && !sourceCode.contains("InputCsvFileProcessingSvc")) {
-                    System.out.println("ERROR: Client step is still using domain type 'CsvPaymentsInputFile' instead of gRPC type");
-                } else if (sourceCode.contains("InputCsvFileProcessingSvc") && sourceCode.contains("CsvPaymentsInputFile")) {
-                    System.out.println("SUCCESS: Client step is using gRPC type 'InputCsvFileProcessingSvc.CsvPaymentsInputFile'");
-                }
-                
-                clientStepGenerated = true;
-                break;
-            }
-        }
+        Path generatedSource = tempDir.resolve(
+            "orchestrator-client/org/pipelineframework/csv/service/pipeline/ProcessFolderGrpcClientStep.java");
+        assertTrue(Files.exists(generatedSource), "Client step should be generated");
 
-        assertTrue(clientStepGenerated, "Client step should be generated");
+        String sourceCode = Files.readString(generatedSource);
+
+        // Check that the generated client step uses gRPC types instead of domain types
+        assertTrue(sourceCode.contains("StepOneToMany"),
+            "Client step should implement StepOneToMany interface");
+        assertTrue(sourceCode.contains("InputCsvFileProcessingSvc.CsvFolder"),
+            "Client step should use gRPC input type");
+        assertTrue(sourceCode.contains("InputCsvFileProcessingSvc.CsvPaymentsInputFile"),
+            "Client step should use gRPC output type");
     }
 }

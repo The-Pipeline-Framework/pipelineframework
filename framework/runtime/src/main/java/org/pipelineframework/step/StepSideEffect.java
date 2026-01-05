@@ -31,9 +31,9 @@ public interface StepSideEffect<I> extends Configurable, StepOneToOne<I, I>, Dea
 
     /**
      * Whether to enable parallel processing for this side effect step.
-     * @return true if parallel processing is enabled, false for sequential processing (defaults to false)
+     * @return true if parallel processing is enabled, false for sequential processing
      */
-    default boolean parallel() { return false; } // enable parallel processing
+    default boolean parallel() { return effectiveConfig().parallel(); }
 
     /**
      * Indicates whether this step should run with virtual threads.
