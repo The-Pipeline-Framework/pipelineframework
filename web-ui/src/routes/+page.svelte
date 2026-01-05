@@ -68,13 +68,14 @@
     { value: 'ONE_TO_ONE', label: '1-1 (One-to-One)' },
     { value: 'EXPANSION', label: 'Expansion (1-Many)' },
     { value: 'REDUCTION', label: 'Reduction (Many-1)' },
+    { value: 'MANY_TO_MANY', label: 'Many-to-Many (N-M)' },
     { value: 'SIDE_EFFECT', label: 'Side-effect' }
   ];
 
   
   
   // Function to check if a type is valid (scalar, Enum, or defined in previous steps)
-  function isValidFieldType(type, currentStepIndex) {
+  function isValidFieldType(type, currentStepIndex, stepsOverride = null) {
     // Trim whitespace from type
     type = typeof type === 'string' ? type.trim() : type;
     
@@ -113,9 +114,10 @@
     }
     
     // If not scalar or Enum, check if it's defined in any previous step as an input or output type
-    for (let i = 0; i < currentStepIndex; i++) {
-      const step = config.steps[i];
-      if (step.inputTypeName === type || step.outputTypeName === type) {
+    const stepsToCheck = stepsOverride ?? config.steps;
+    for (let i = 0; i < currentStepIndex && i < stepsToCheck.length; i++) {
+      const step = stepsToCheck[i];
+      if (step && (step.inputTypeName === type || step.outputTypeName === type)) {
         return true;
       }
     }
@@ -740,7 +742,7 @@
             throw new Error(`Invalid configuration file: input field ${j+1} in step ${i+1} is missing required properties (name, type, protoType)`);
           }
           // Validate that field.type is a valid Java scalar type or custom message type from a previous step
-          if (!isValidFieldType(field.type, i)) {
+          if (!isValidFieldType(field.type, i, data.steps)) {
             // Additional check to log what specifically is wrong with the type
             console.error(`Invalid field type detected: "${field.type}" in step ${i+1}, input field ${j+1}`);
             console.error(`Type length: ${field.type.length}, ends with: "${field.type.slice(-10)}"`);
@@ -754,7 +756,7 @@
             throw new Error(`Invalid configuration file: output field ${j+1} in step ${i+1} is missing required properties (name, type, protoType)`);
           }
           // Validate that field.type is a valid Java scalar type or custom message type from a previous step
-          if (!isValidFieldType(field.type, i)) {
+          if (!isValidFieldType(field.type, i, data.steps)) {
             // Additional check to log what specifically is wrong with the type
             console.error(`Invalid field type detected: "${field.type}" in step ${i+1}, output field ${j+1}`);
             console.error(`Type length: ${field.type.length}, ends with: "${field.type.slice(-10)}"`);
@@ -770,6 +772,9 @@
               break;
             case 'REDUCTION':
               step.stepType = 'StepManyToOne';
+              break;
+            case 'MANY_TO_MANY':
+              step.stepType = 'StepManyToMany';
               break;
             case 'SIDE_EFFECT':
               step.stepType = 'StepSideEffect';
