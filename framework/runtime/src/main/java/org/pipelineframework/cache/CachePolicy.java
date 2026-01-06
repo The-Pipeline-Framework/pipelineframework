@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-package org.pipelineframework.plugin.cache;
+package org.pipelineframework.cache;
 
 /**
- * Cache policy applied by the cache plugin.
+ * Cache policy applied by the cache plugin and pipeline cache support.
  */
 public enum CachePolicy {
     CACHE_ONLY,
@@ -26,7 +26,7 @@ public enum CachePolicy {
     REQUIRE_CACHE,
     BYPASS_CACHE;
 
-    static CachePolicy fromConfig(String value) {
+    public static CachePolicy fromConfig(String value) {
         if (value == null || value.isBlank()) {
             return CACHE_ONLY;
         }

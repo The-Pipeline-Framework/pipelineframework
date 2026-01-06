@@ -22,6 +22,8 @@ import io.smallrye.mutiny.Uni;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.pipelineframework.cache.CacheKey;
+import org.pipelineframework.cache.CacheMissException;
+import org.pipelineframework.cache.CachePolicy;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.service.ReactiveSideEffectService;

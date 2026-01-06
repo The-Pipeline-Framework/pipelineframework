@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package org.pipelineframework.plugin.cache;
+package org.pipelineframework.cache;
 
 import org.pipelineframework.step.NonRetryableException;
 

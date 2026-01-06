@@ -19,7 +19,9 @@ package org.pipelineframework.search.orchestrator.service;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.sql.*;
 import java.time.Duration;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import io.quarkus.test.junit.QuarkusIntegrationTest;
@@ -29,6 +31,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
+import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -47,15 +50,33 @@ class SearchPipelineEndToEndIT {
         "search.image.tokenize-content", "localhost/search-pipeline/tokenize-content-svc:latest");
     private static final String INDEX_IMAGE = System.getProperty(
         "search.image.index-document", "localhost/search-pipeline/index-document-svc:latest");
+    private static final String PERSISTENCE_IMAGE = System.getProperty(
+        "search.image.persistence", "localhost/search/persistence-svc:latest");
+    private static final String CACHE_INVALIDATION_IMAGE = System.getProperty(
+        "search.image.cache-invalidation", "localhost/search/cache-invalidation-svc:latest");
+
+    private static final PostgreSQLContainer<?> postgres =
+        new PostgreSQLContainer<>("postgres:18")
+            .withDatabaseName("quarkus")
+            .withUsername("quarkus")
+            .withPassword("quarkus")
+            .withNetwork(NETWORK)
+            .withNetworkAliases("postgres")
+            .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofSeconds(60)));
+
+    private static final GenericContainer<?> redis =
+        new GenericContainer<>("redis:7-alpine")
+            .withNetwork(NETWORK)
+            .withNetworkAliases("redis")
+            .withExposedPorts(6379)
+            .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofSeconds(30)));
 
     private static final GenericContainer<?> crawlService =
         new GenericContainer<>(CRAWL_IMAGE)
             .withNetwork(NETWORK)
             .withNetworkAliases("crawl-source-svc")
-            .withExposedPorts(8080, 8444)
+            .withExposedPorts(8444)
             .withEnv("QUARKUS_PROFILE", "test")
-            .withEnv("QUARKUS_GRPC_SERVER_PORT", "8444")
-            .withEnv("QUARKUS_GRPC_SERVER_PLAINTEXT", "true")
             .waitingFor(
                 Wait.forHttps("/q/health")
                     .forPort(8444)
@@ -66,10 +87,8 @@ class SearchPipelineEndToEndIT {
         new GenericContainer<>(PARSE_IMAGE)
             .withNetwork(NETWORK)
             .withNetworkAliases("parse-document-svc")
-            .withExposedPorts(8080, 8445)
+            .withExposedPorts(8445)
             .withEnv("QUARKUS_PROFILE", "test")
-            .withEnv("QUARKUS_GRPC_SERVER_PORT", "8445")
-            .withEnv("QUARKUS_GRPC_SERVER_PLAINTEXT", "true")
             .waitingFor(
                 Wait.forHttps("/q/health")
                     .forPort(8445)
@@ -80,10 +99,8 @@ class SearchPipelineEndToEndIT {
         new GenericContainer<>(TOKENIZE_IMAGE)
             .withNetwork(NETWORK)
             .withNetworkAliases("tokenize-content-svc")
-            .withExposedPorts(8080, 8446)
+            .withExposedPorts(8446)
             .withEnv("QUARKUS_PROFILE", "test")
-            .withEnv("QUARKUS_GRPC_SERVER_PORT", "8446")
-            .withEnv("QUARKUS_GRPC_SERVER_PLAINTEXT", "true")
             .waitingFor(
                 Wait.forHttps("/q/health")
                     .forPort(8446)
@@ -94,40 +111,132 @@ class SearchPipelineEndToEndIT {
         new GenericContainer<>(INDEX_IMAGE)
             .withNetwork(NETWORK)
             .withNetworkAliases("index-document-svc")
-            .withExposedPorts(8080, 8447)
+            .withExposedPorts(8447)
             .withEnv("QUARKUS_PROFILE", "test")
-            .withEnv("QUARKUS_GRPC_SERVER_PORT", "8447")
-            .withEnv("QUARKUS_GRPC_SERVER_PLAINTEXT", "true")
             .waitingFor(
                 Wait.forHttps("/q/health")
                     .forPort(8447)
                     .allowInsecure()
                     .withStartupTimeout(Duration.ofSeconds(60)));
 
+    private static final GenericContainer<?> persistenceService =
+        new GenericContainer<>(PERSISTENCE_IMAGE)
+            .withNetwork(NETWORK)
+            .withNetworkAliases("persistence-svc")
+            .withExposedPorts(8448)
+            .withEnv("QUARKUS_PROFILE", "test")
+            .withEnv("QUARKUS_DATASOURCE_REACTIVE_URL", "postgresql://postgres:5432/quarkus")
+            .withEnv("QUARKUS_DATASOURCE_USERNAME", "quarkus")
+            .withEnv("QUARKUS_DATASOURCE_PASSWORD", "quarkus")
+            .waitingFor(
+                Wait.forHttps("/q/health")
+                    .forPort(8448)
+                    .allowInsecure()
+                    .withStartupTimeout(Duration.ofSeconds(60)));
+
+    private static final GenericContainer<?> cacheInvalidationService =
+        new GenericContainer<>(CACHE_INVALIDATION_IMAGE)
+            .withNetwork(NETWORK)
+            .withNetworkAliases("cache-invalidation-svc")
+            .withExposedPorts(8449)
+            .withEnv("QUARKUS_PROFILE", "test")
+            .withEnv("PIPELINE_CACHE_PROVIDER", "redis")
+            .withEnv("QUARKUS_REDIS_HOSTS", "redis://redis:6379")
+            .waitingFor(
+                Wait.forHttps("/q/health")
+                    .forPort(8449)
+                    .allowInsecure()
+                    .withStartupTimeout(Duration.ofSeconds(60)));
+
     @BeforeAll
     static void startServices() {
+        postgres.start();
+        redis.start();
         crawlService.start();
         parseService.start();
         tokenizeService.start();
         indexService.start();
+        persistenceService.start();
+        cacheInvalidationService.start();
     }
 
     @AfterAll
     static void stopServices() {
+        cacheInvalidationService.stop();
+        persistenceService.stop();
         indexService.stop();
         tokenizeService.stop();
         parseService.stop();
         crawlService.stop();
+        redis.stop();
+        postgres.stop();
     }
 
     @Test
-    void fullPipelineWorks() throws Exception {
-        ProcessResult result = orchestratorTriggerRun("https://example.com");
-        assertTrue(result.exitCode == 0, "Expected orchestrator exit code 0, got " + result.exitCode);
-        assertTrue(result.output.contains("Pipeline execution completed"), "Expected completion message");
+    void requireCacheFailsOnColdCache() throws Exception {
+        String version = "cold-" + UUID.randomUUID();
+        ProcessResult result = orchestratorTriggerRun("https://example.com", "require-cache", version);
+        assertExitFailure(result, "Expected require-cache to fail on a cold cache");
     }
 
-    private ProcessResult orchestratorTriggerRun(String input) throws Exception {
+    @Test
+    void preferCacheWarmsCacheAndRequireCacheSucceeds() throws Exception {
+        String version = "warm-" + UUID.randomUUID();
+        ProcessResult warm = orchestratorTriggerRun("https://example.com", "prefer-cache", version);
+        assertExitSuccess(warm, "Expected prefer-cache run to succeed");
+
+        ProcessResult require = orchestratorTriggerRun("https://example.com", "require-cache", version);
+        assertExitSuccess(require, "Expected require-cache to succeed after warm cache");
+    }
+
+    @Test
+    void versionTagIsolatesReplay() throws Exception {
+        String versionA = "replay-" + UUID.randomUUID();
+        String versionB = "rewind-" + UUID.randomUUID();
+
+        ProcessResult warm = orchestratorTriggerRun("https://example.com", "prefer-cache", versionA);
+        assertExitSuccess(warm, "Expected prefer-cache run to succeed");
+
+        ProcessResult requireSame = orchestratorTriggerRun("https://example.com", "require-cache", versionA);
+        assertExitSuccess(requireSame, "Expected require-cache to succeed for same version");
+
+        ProcessResult requireOther = orchestratorTriggerRun("https://example.com", "require-cache", versionB);
+        assertExitFailure(requireOther, "Expected require-cache to fail for a new version tag");
+    }
+
+    @Test
+    void bypassCacheDoesNotWarmCache() throws Exception {
+        String version = "bypass-" + UUID.randomUUID();
+        ProcessResult bypass = orchestratorTriggerRun("https://example.com", "bypass-cache", version);
+        assertExitSuccess(bypass, "Expected bypass-cache run to succeed");
+
+        ProcessResult require = orchestratorTriggerRun("https://example.com", "require-cache", version);
+        assertExitFailure(require, "Expected require-cache to fail after bypass-cache run");
+    }
+
+    @Test
+    void cacheOnlyWarmsCache() throws Exception {
+        String version = "cache-only-" + UUID.randomUUID();
+        ProcessResult cacheOnly = orchestratorTriggerRun("https://example.com", "cache-only", version);
+        assertExitSuccess(cacheOnly, "Expected cache-only run to succeed");
+
+        ProcessResult require = orchestratorTriggerRun("https://example.com", "require-cache", version);
+        assertExitSuccess(require, "Expected require-cache to succeed after cache-only run");
+    }
+
+    @Test
+    void persistenceWritesOutputs() throws Exception {
+        String version = "persist-" + UUID.randomUUID();
+        ProcessResult result = orchestratorTriggerRun("https://example.com", "prefer-cache", version);
+        assertExitSuccess(result, "Expected pipeline run to succeed");
+
+        assertTrue(countRows("rawdocument") > 0, "Expected RawDocument persistence");
+        assertTrue(countRows("parseddocument") > 0, "Expected ParsedDocument persistence");
+        assertTrue(countRows("tokenbatch") > 0, "Expected TokenBatch persistence");
+        assertTrue(countRows("indexack") > 0, "Expected IndexAck persistence");
+    }
+
+    private ProcessResult orchestratorTriggerRun(String input, String cachePolicy, String versionTag) throws Exception {
         ProcessBuilder pb =
             new ProcessBuilder(
                 "java",
@@ -137,30 +246,33 @@ class SearchPipelineEndToEndIT {
                 "-i=" + input);
 
         pb.environment().put("QUARKUS_PROFILE", "test");
-        pb.environment().put("QUARKUS_GRPC_CLIENTS_CRAWL_SOURCE_HOST", crawlService.getHost());
-        pb.environment().put("QUARKUS_GRPC_CLIENTS_CRAWL_SOURCE_PORT", String.valueOf(crawlService.getMappedPort(8444)));
-        pb.environment().put("QUARKUS_GRPC_CLIENTS_CRAWL_SOURCE_PLAIN_TEXT", "true");
-        pb.environment().put("QUARKUS_GRPC_CLIENTS_CRAWL_SOURCE_TLS_ENABLED", "false");
+        pb.environment().put("PIPELINE_CACHE_POLICY", cachePolicy);
+        pb.environment().put("PIPELINE_VERSION", versionTag);
 
-        pb.environment().put("QUARKUS_GRPC_CLIENTS_PARSE_DOCUMENT_HOST", parseService.getHost());
-        pb.environment().put("QUARKUS_GRPC_CLIENTS_PARSE_DOCUMENT_PORT", String.valueOf(parseService.getMappedPort(8445)));
-        pb.environment().put("QUARKUS_GRPC_CLIENTS_PARSE_DOCUMENT_PLAIN_TEXT", "true");
-        pb.environment().put("QUARKUS_GRPC_CLIENTS_PARSE_DOCUMENT_TLS_ENABLED", "false");
+        applyRestClientUrl(pb, "PROCESS_CRAWL_SOURCE", crawlService, 8444);
+        applyRestClientUrl(pb, "PROCESS_PARSE_DOCUMENT", parseService, 8445);
+        applyRestClientUrl(pb, "PROCESS_TOKENIZE_CONTENT", tokenizeService, 8446);
+        applyRestClientUrl(pb, "PROCESS_INDEX_DOCUMENT", indexService, 8447);
+        applyRestClientUrl(pb, "ORCHESTRATOR_SERVICE", "https://localhost:8443");
 
-        pb.environment().put("QUARKUS_GRPC_CLIENTS_TOKENIZE_CONTENT_HOST", tokenizeService.getHost());
-        pb.environment().put("QUARKUS_GRPC_CLIENTS_TOKENIZE_CONTENT_PORT", String.valueOf(tokenizeService.getMappedPort(8446)));
-        pb.environment().put("QUARKUS_GRPC_CLIENTS_TOKENIZE_CONTENT_PLAIN_TEXT", "true");
-        pb.environment().put("QUARKUS_GRPC_CLIENTS_TOKENIZE_CONTENT_TLS_ENABLED", "false");
+        applyRestClientUrl(pb, "OBSERVE_PERSISTENCE_RAW_DOCUMENT_SIDE_EFFECT", persistenceService, 8448);
+        applyRestClientUrl(pb, "OBSERVE_PERSISTENCE_PARSED_DOCUMENT_SIDE_EFFECT", persistenceService, 8448);
+        applyRestClientUrl(pb, "OBSERVE_PERSISTENCE_TOKEN_BATCH_SIDE_EFFECT", persistenceService, 8448);
+        applyRestClientUrl(pb, "OBSERVE_PERSISTENCE_INDEX_ACK_SIDE_EFFECT", persistenceService, 8448);
 
-        pb.environment().put("QUARKUS_GRPC_CLIENTS_INDEX_DOCUMENT_HOST", indexService.getHost());
-        pb.environment().put("QUARKUS_GRPC_CLIENTS_INDEX_DOCUMENT_PORT", String.valueOf(indexService.getMappedPort(8447)));
-        pb.environment().put("QUARKUS_GRPC_CLIENTS_INDEX_DOCUMENT_PLAIN_TEXT", "true");
-        pb.environment().put("QUARKUS_GRPC_CLIENTS_INDEX_DOCUMENT_TLS_ENABLED", "false");
+        applyRestClientUrl(pb, "OBSERVE_CACHE_INVALIDATE_CRAWL_REQUEST_SIDE_EFFECT", cacheInvalidationService, 8449);
+        applyRestClientUrl(pb, "OBSERVE_CACHE_INVALIDATE_RAW_DOCUMENT_SIDE_EFFECT", cacheInvalidationService, 8449);
+        applyRestClientUrl(pb, "OBSERVE_CACHE_INVALIDATE_PARSED_DOCUMENT_SIDE_EFFECT", cacheInvalidationService, 8449);
+        applyRestClientUrl(pb, "OBSERVE_CACHE_INVALIDATE_TOKEN_BATCH_SIDE_EFFECT", cacheInvalidationService, 8449);
+        applyRestClientUrl(pb, "OBSERVE_CACHE_INVALIDATE_ALL_CRAWL_REQUEST_SIDE_EFFECT", cacheInvalidationService, 8449);
+        applyRestClientUrl(pb, "OBSERVE_CACHE_INVALIDATE_ALL_RAW_DOCUMENT_SIDE_EFFECT", cacheInvalidationService, 8449);
+        applyRestClientUrl(pb, "OBSERVE_CACHE_INVALIDATE_ALL_PARSED_DOCUMENT_SIDE_EFFECT", cacheInvalidationService, 8449);
+        applyRestClientUrl(pb, "OBSERVE_CACHE_INVALIDATE_ALL_TOKEN_BATCH_SIDE_EFFECT", cacheInvalidationService, 8449);
 
         pb.redirectErrorStream(true);
         Process process = pb.start();
         String output = readOutput(process);
-        boolean finished = process.waitFor(90, TimeUnit.SECONDS);
+        boolean finished = process.waitFor(120, TimeUnit.SECONDS);
         if (!finished) {
             process.destroyForcibly();
             throw new IllegalStateException("Orchestrator did not finish in time");
@@ -168,6 +280,15 @@ class SearchPipelineEndToEndIT {
         int exitCode = process.exitValue();
         LOG.infof("Orchestrator output:%n%s", output);
         return new ProcessResult(exitCode, output);
+    }
+
+    private void applyRestClientUrl(ProcessBuilder pb, String clientName, GenericContainer<?> container, int port) {
+        String url = "https://" + container.getHost() + ":" + container.getMappedPort(port);
+        applyRestClientUrl(pb, clientName, url);
+    }
+
+    private void applyRestClientUrl(ProcessBuilder pb, String clientName, String url) {
+        pb.environment().put("QUARKUS_REST_CLIENT_" + clientName + "_URL", url);
     }
 
     private String readOutput(Process process) throws IOException {
@@ -179,6 +300,27 @@ class SearchPipelineEndToEndIT {
             }
         }
         return builder.toString();
+    }
+
+    private int countRows(String table) throws SQLException {
+        String sql = "select count(*) from " + table;
+        try (Connection connection = DriverManager.getConnection(
+                postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
+             PreparedStatement statement = connection.prepareStatement(sql);
+             ResultSet resultSet = statement.executeQuery()) {
+            resultSet.next();
+            return resultSet.getInt(1);
+        }
+    }
+
+    private void assertExitSuccess(ProcessResult result, String message) {
+        assertTrue(result.exitCode == 0, message + ": " + result.output);
+        assertTrue(result.output.contains("Pipeline execution completed"),
+            "Expected completion message");
+    }
+
+    private void assertExitFailure(ProcessResult result, String message) {
+        assertTrue(result.exitCode != 0, message + ": " + result.output);
     }
 
     private record ProcessResult(int exitCode, String output) {

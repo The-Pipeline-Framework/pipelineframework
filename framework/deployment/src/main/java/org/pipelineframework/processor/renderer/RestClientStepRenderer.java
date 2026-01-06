@@ -8,7 +8,10 @@ import io.quarkus.arc.Unremovable;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.processor.PipelineStepProcessor;
-import org.pipelineframework.processor.ir.*;
+import org.pipelineframework.processor.ir.DeploymentRole;
+import org.pipelineframework.processor.ir.GenerationTarget;
+import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.RestBinding;
 import org.pipelineframework.step.StepManyToOne;
 import org.pipelineframework.step.StepOneToOne;
 
@@ -122,6 +125,15 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
             .build();
 
         clientStepBuilder.addField(restClientField);
+        boolean useCache = shouldApplyCache(model, ctx);
+        if (useCache) {
+            FieldSpec cacheSupportField = FieldSpec.builder(
+                    ClassName.get("org.pipelineframework.cache", "PipelineCacheSupport"),
+                    "pipelineCache")
+                .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
+                .build();
+            clientStepBuilder.addField(cacheSupportField);
+        }
 
         MethodSpec constructor = MethodSpec.constructorBuilder()
             .addModifiers(Modifier.PUBLIC)
@@ -135,15 +147,19 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
             case UNARY_UNARY -> {
                 clientStepBuilder.addSuperinterface(ParameterizedTypeName.get(
                     ClassName.get(StepOneToOne.class), inputDto, outputDto));
-                MethodSpec applyOneToOneMethod = MethodSpec.methodBuilder("applyOneToOne")
+                MethodSpec.Builder applyOneToOneMethod = MethodSpec.methodBuilder("applyOneToOne")
                     .addAnnotation(Override.class)
                     .addModifiers(Modifier.PUBLIC)
                     .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputDto))
-                    .addParameter(inputDto, "input")
-                    .addStatement("return this.restClient.process(input)")
-                    .build();
-                applyOneToOneMethod = maybeAddCacheAnnotation(applyOneToOneMethod, model, ctx);
-                clientStepBuilder.addMethod(applyOneToOneMethod);
+                    .addParameter(inputDto, "input");
+                if (useCache) {
+                    applyOneToOneMethod.addStatement(
+                        "return this.pipelineCache.apply($T.class, new Object[] { input }, () -> this.restClient.process(input))",
+                        resolveCacheKeyGenerator(model, ctx));
+                } else {
+                    applyOneToOneMethod.addStatement("return this.restClient.process(input)");
+                }
+                clientStepBuilder.addMethod(applyOneToOneMethod.build());
             }
             case UNARY_STREAMING -> {
                 ClassName stepInterface = ClassName.get("org.pipelineframework.step", "StepOneToMany");
@@ -307,25 +323,8 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
         }
     }
 
-    private MethodSpec maybeAddCacheAnnotation(MethodSpec method, PipelineStepModel model, GenerationContext ctx) {
-        if (!ctx.enabledAspects().contains("cache")) {
-            return method;
-        }
-        if (ctx.role() != DeploymentRole.ORCHESTRATOR_CLIENT) {
-            return method;
-        }
-        if (model.sideEffect() || model.streamingShape() != StreamingShape.UNARY_UNARY) {
-            return method;
-        }
-
-        AnnotationSpec cacheAnnotation = AnnotationSpec.builder(ClassName.get("io.quarkus.cache", "CacheResult"))
-            .addMember("cacheName", "$S", "pipeline-cache")
-            .addMember("keyGenerator", "$T.class", resolveCacheKeyGenerator(model, ctx))
-            .build();
-
-        return method.toBuilder()
-            .addAnnotation(cacheAnnotation)
-            .build();
+    private boolean shouldApplyCache(PipelineStepModel model, GenerationContext ctx) {
+        return false;
     }
 
     private TypeName resolveCacheKeyGenerator(PipelineStepModel model, GenerationContext ctx) {

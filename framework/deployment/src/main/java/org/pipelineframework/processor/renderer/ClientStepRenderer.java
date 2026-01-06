@@ -76,6 +76,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
         org.pipelineframework.processor.ir.DeploymentRole role = ctx.role();
         PipelineStepModel model = binding.model();
         String clientStepClassName = getClientStepClassName(model);
+        boolean useCache = shouldApplyCache(model, ctx);
 
         // Use the gRPC types resolved via GrpcJavaTypeResolver
         GrpcJavaTypeResolver grpcTypeResolver = new GrpcJavaTypeResolver();
@@ -110,6 +111,14 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
                     .build();
 
             clientStepBuilder.addField(grpcClientField);
+        }
+        if (useCache) {
+            FieldSpec cacheSupportField = FieldSpec.builder(
+                    ClassName.get("org.pipelineframework.cache", "PipelineCacheSupport"),
+                    "pipelineCache")
+                .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
+                .build();
+            clientStepBuilder.addField(cacheSupportField);
         }
 
         // Add default constructor
@@ -195,16 +204,20 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
                 case UNARY_UNARY:
                 default:
                     // Default to OneToOne: Input -> Uni<Output> (StepOneToOne interface has applyOneToOne(Input in) method)
-                    MethodSpec applyOneToOneMethod = MethodSpec.methodBuilder("applyOneToOne")
+                    MethodSpec.Builder applyOneToOneMethod = MethodSpec.methodBuilder("applyOneToOne")
                             .addAnnotation(Override.class)
                             .addModifiers(Modifier.PUBLIC)
                             .returns(ParameterizedTypeName.get(ClassName.get(Uni.class),
                                     outputGrpcType))
-                            .addParameter(inputGrpcType, "input")
-                            .addStatement("return this.grpcClient.remoteProcess(input)")
-                            .build();
-                    applyOneToOneMethod = maybeAddCacheAnnotation(applyOneToOneMethod, model, ctx);
-                    clientStepBuilder.addMethod(applyOneToOneMethod);
+                            .addParameter(inputGrpcType, "input");
+                    if (useCache) {
+                        applyOneToOneMethod.addStatement(
+                            "return this.pipelineCache.apply($T.class, new Object[] { input }, () -> this.grpcClient.remoteProcess(input))",
+                            resolveCacheKeyGenerator(model, ctx));
+                    } else {
+                        applyOneToOneMethod.addStatement("return this.grpcClient.remoteProcess(input)");
+                    }
+                    clientStepBuilder.addMethod(applyOneToOneMethod.build());
                     break;
             }
         }
@@ -260,25 +273,14 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
         return withBoundaryHyphens.toLowerCase();
     }
 
-    private MethodSpec maybeAddCacheAnnotation(MethodSpec method, PipelineStepModel model, GenerationContext ctx) {
+    private boolean shouldApplyCache(PipelineStepModel model, GenerationContext ctx) {
         if (!ctx.enabledAspects().contains("cache")) {
-            return method;
+            return false;
         }
         if (ctx.role() != DeploymentRole.ORCHESTRATOR_CLIENT) {
-            return method;
+            return false;
         }
-        if (model.sideEffect() || model.streamingShape() != StreamingShape.UNARY_UNARY) {
-            return method;
-        }
-
-        AnnotationSpec cacheAnnotation = AnnotationSpec.builder(ClassName.get("io.quarkus.cache", "CacheResult"))
-            .addMember("cacheName", "$S", "pipeline-cache")
-            .addMember("keyGenerator", "$T.class", resolveCacheKeyGenerator(model, ctx))
-            .build();
-
-        return method.toBuilder()
-            .addAnnotation(cacheAnnotation)
-            .build();
+        return !(model.sideEffect() || model.streamingShape() != StreamingShape.UNARY_UNARY);
     }
 
     private TypeName resolveCacheKeyGenerator(PipelineStepModel model, GenerationContext ctx) {

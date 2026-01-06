@@ -69,6 +69,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         org.pipelineframework.processor.ir.DeploymentRole role = ctx.role();
         PipelineStepModel model = binding.model();
         validateRestMappings(model);
+        boolean useCache = shouldApplyCache(model, ctx);
 
         String serviceClassName = model.generatedName();
 
@@ -102,6 +103,14 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
             .build();
         resourceBuilder.addField(serviceField);
+        if (useCache) {
+            FieldSpec cacheSupportField = FieldSpec.builder(
+                    ClassName.get("org.pipelineframework.cache", "PipelineCacheSupport"),
+                    "pipelineCache")
+                .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
+                .build();
+            resourceBuilder.addField(cacheSupportField);
+        }
 
         // Add mapper fields with @Inject if they exist
         String inboundMapperFieldName = "inboundMapper";
@@ -199,7 +208,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             case STREAMING_STREAMING -> createReactiveBidirectionalStreamingServiceProcessMethod(
                     inputDtoClassName, outputDtoClassName, model);
             default -> createReactiveServiceProcessMethod(
-                    inputDtoClassName, outputDtoClassName, model, ctx);
+                    inputDtoClassName, outputDtoClassName, model, ctx, useCache);
         };
 
         resourceBuilder.addMethod(processMethod);
@@ -226,7 +235,8 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     private MethodSpec createReactiveServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             PipelineStepModel model,
-            GenerationContext ctx) {
+            GenerationContext ctx,
+            boolean useCache) {
         validateRestMappings(model);
 
         TypeName uniOutputDto = ParameterizedTypeName.get(ClassName.get(Uni.class), outputDtoClassName);
@@ -241,14 +251,20 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             .returns(uniOutputDto)
             .addParameter(inputDtoClassName, "inputDto");
 
-        methodBuilder.addStatement("return remoteProcess(inputDto)");
+        if (useCache) {
+            methodBuilder.addStatement(
+                "return pipelineCache.apply($T.class, new Object[] { inputDto }, () -> remoteProcess(inputDto))",
+                resolveCacheKeyGenerator(model, ctx));
+        } else {
+            methodBuilder.addStatement("return remoteProcess(inputDto)");
+        }
 
         // Add @RunOnVirtualThread annotation if the property is enabled
         if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
             methodBuilder.addAnnotation(ClassName.get("io.smallrye.common.annotation", "RunOnVirtualThread"));
         }
 
-        return maybeAddCacheAnnotation(methodBuilder.build(), model, ctx);
+        return methodBuilder.build();
     }
 
     /**
@@ -593,25 +609,14 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         }
     }
 
-    private MethodSpec maybeAddCacheAnnotation(MethodSpec method, PipelineStepModel model, GenerationContext ctx) {
+    private boolean shouldApplyCache(PipelineStepModel model, GenerationContext ctx) {
         if (!ctx.enabledAspects().contains("cache")) {
-            return method;
+            return false;
         }
         if (ctx.role() != org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER) {
-            return method;
+            return false;
         }
-        if (model.sideEffect() || model.streamingShape() != org.pipelineframework.processor.ir.StreamingShape.UNARY_UNARY) {
-            return method;
-        }
-
-        AnnotationSpec cacheAnnotation = AnnotationSpec.builder(ClassName.get("io.quarkus.cache", "CacheResult"))
-            .addMember("cacheName", "$S", "pipeline-cache")
-            .addMember("keyGenerator", "$T.class", resolveCacheKeyGenerator(model, ctx))
-            .build();
-
-        return method.toBuilder()
-            .addAnnotation(cacheAnnotation)
-            .build();
+        return !(model.sideEffect() || model.streamingShape() != org.pipelineframework.processor.ir.StreamingShape.UNARY_UNARY);
     }
 
     private TypeName resolveCacheKeyGenerator(PipelineStepModel model, GenerationContext ctx) {
