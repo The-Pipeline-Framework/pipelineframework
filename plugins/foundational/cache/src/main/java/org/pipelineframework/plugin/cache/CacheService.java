@@ -64,6 +64,10 @@ public class CacheService<T> implements ReactiveSideEffectService<T> {
         String overridePolicy = context != null ? context.cachePolicy() : null;
         CachePolicy policy = CachePolicy.fromConfig(overridePolicy != null ? overridePolicy : policyValue);
 
+        if (policy == CachePolicy.BYPASS_CACHE) {
+            return Uni.createFrom().item(item);
+        }
+
         if (!(item instanceof CacheKey cacheKey)) {
             if (policy == CachePolicy.REQUIRE_CACHE) {
                 return Uni.createFrom().failure(new CacheMissException(
@@ -110,6 +114,7 @@ public class CacheService<T> implements ReactiveSideEffectService<T> {
                     .orElseGet(() -> Uni.createFrom().failure(new CacheMissException(
                         "Cache entry missing for key %s".formatted(finalKey)))))
                 .onFailure().invoke(failure -> logger.error("Failed to read from cache", failure));
+            case BYPASS_CACHE -> Uni.createFrom().item(item);
             case CACHE_ONLY -> cacheManager.cache(item)
                 .onItem().invoke(result -> logger.debugf("Cached item of type: %s", result != null ? result.getClass().getName() : "null"))
                 .onFailure().invoke(failure -> logger.error("Failed to cache item", failure))

@@ -34,26 +34,38 @@ x-pipeline-cache-policy: cache-only
 This caches every stage output under:
 
 ```
-v1:{docId}
+v1:{Type}:{docId}
 ```
 
-## Step 3: Replay from Parse with new tokenizer (v2)
+## Step 3: Recompute downstream while reusing cached upstream outputs
 
-Change the tokenizer logic and replay from Parse onward:
+Change the tokenizer logic and reuse cached outputs from earlier steps by keeping the same version tag:
 
 ```
-x-pipeline-version: v2
-x-pipeline-cache-policy: return-cached
-x-pipeline-replay: from-parse
+x-pipeline-version: v1
+x-pipeline-cache-policy: prefer-cache
 ```
 
 Now:
-- Parse cache lookup hits `v1:{docId}` (or stored outputs).
+- Parse cache lookup hits `v1:{Type}:{docId}`.
 - Tokenize runs with new logic.
 - Index runs with new logic.
-- Outputs are cached under `v2:{docId}`.
+- Outputs are cached under `v1:{Type}:{docId}`.
+
+`x-pipeline-replay` is currently propagated as a header only; it is not interpreted by the runtime.
 
 Caching happens in the orchestrator client step before the remote call, so the step services remain unchanged.
+
+## Step 4: Fork a new version
+
+If you want a clean namespace for a new run, bump the version tag:
+
+```
+x-pipeline-version: v2
+x-pipeline-cache-policy: cache-only
+```
+
+This intentionally misses old cache entries and recomputes the pipeline.
 
 ## Replay flow diagram
 
@@ -65,15 +77,15 @@ sequenceDiagram
   participant Tokenize
   participant Index
 
-  Client->>Orchestrator: replay from Parse (version v2)
-  Orchestrator->>Cache: lookup v1:docId (Parse output)
+  Client->>Orchestrator: run with version v1
+  Orchestrator->>Cache: lookup v1:Type:docId (Parse output)
   Cache-->>Orchestrator: HIT (ParsedDocument)
   Orchestrator->>Tokenize: process(ParsedDocument)
   Tokenize-->>Orchestrator: TokenBatch
-  Orchestrator->>Cache: store v2:docId (TokenBatch)
+  Orchestrator->>Cache: store v1:Type:docId (TokenBatch)
   Orchestrator->>Index: process(TokenBatch)
   Index-->>Orchestrator: IndexAck
-  Orchestrator->>Cache: store v2:docId (IndexAck)
+  Orchestrator->>Cache: store v1:Type:docId (IndexAck)
 ```
 
 ## Header propagation diagram
@@ -85,7 +97,7 @@ sequenceDiagram
   participant StepA
   participant StepB
 
-  Client->>Orchestrator: x-pipeline-version=v2<br/>x-pipeline-cache-policy=return-cached
+  Client->>Orchestrator: x-pipeline-version=v1<br/>x-pipeline-cache-policy=prefer-cache
   Orchestrator->>StepA: propagate headers
   StepA-->>Orchestrator: response
   Orchestrator->>StepB: propagate headers

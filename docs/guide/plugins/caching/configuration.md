@@ -35,7 +35,7 @@ Cache plugin service properties:
 
 ```
 pipeline.cache.provider=caffeine
-pipeline.cache.policy=return-cached
+pipeline.cache.policy=prefer-cache
 pipeline.cache.ttl=PT10M
 pipeline.cache.caffeine.maximum-size=10000
 pipeline.cache.caffeine.expire-after-write=PT30M
@@ -103,3 +103,5 @@ public class MyInput implements CacheKey {
 ```
 
 TPF prefixes cache keys with the input type so bulk invalidation can target a step by its input type.
+
+`prefer-cache` and `return-cached` are equivalent; use either name in config or headers.

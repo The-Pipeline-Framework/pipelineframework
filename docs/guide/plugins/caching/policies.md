@@ -7,11 +7,31 @@ Caching policies control how the orchestrator treats cache hits and writes.
 Set `pipeline.cache.policy`:
 
 - `cache-only`: always cache the item and continue
-- `return-cached`: use latest cached if present, otherwise compute and cache
+- `prefer-cache` (aka `return-cached`): use cached value if present, otherwise compute and cache
 - `skip-if-present`: if the key exists, skip caching and return the original item
 - `require-cache`: return cached value if present, otherwise fail the step
+- `bypass-cache`: ignore cache entirely (no read, no write)
 
 `require-cache` raises `CacheMissException`, which the runner treats as non-retryable.
+
+## Policy matrix
+
+| Policy          | Read | Write | Fail on miss |
+| --------------- | ---- | ----- | ------------ |
+| PREFER_CACHE    | ✅    | ✅     | ❌         |
+| SKIP_IF_PRESENT | ❌    | ❌*    | ❌         |
+| REQUIRE_CACHE   | ✅    | ❌     | ✅         |
+| CACHE_ONLY      | ❌    | ✅     | ❌         |
+| BYPASS_CACHE    | ❌    | ❌     | ❌         |
+
+* SKIP_IF_PRESENT only checks existence, it doesn’t read or overwrite.
+
+Execution intents:
+
+1. Normal production run → PREFER_CACHE
+2. Deterministic replay → REQUIRE_CACHE
+3. Forced rebuild → CACHE_ONLY
+4. Debug / verification → BYPASS_CACHE
 
 ## Policy decision flow
 
@@ -22,7 +42,7 @@ flowchart TD
   C --> D[Store output in cache]
   D --> E[Continue]
 
-  B -->|return-cached| F{Cache hit?}
+  B -->|prefer-cache| F{Cache hit?}
   F -->|Yes| G[Return cached output]
   F -->|No| C
 
@@ -33,6 +53,8 @@ flowchart TD
   B -->|require-cache| J{Cache hit?}
   J -->|Yes| K[Return cached output]
   J -->|No| L[Fail step]
+
+  B -->|bypass-cache| M[Return input unchanged]
 ```
 
 ## Per-request overrides
@@ -40,7 +62,7 @@ flowchart TD
 You can override policy using headers:
 
 ```
-x-pipeline-cache-policy: return-cached
+x-pipeline-cache-policy: prefer-cache
 ```
 
 Headers are propagated by the orchestrator to downstream steps.

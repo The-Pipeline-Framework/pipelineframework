@@ -31,9 +31,6 @@ aspects:
       targetSteps:
         - ProcessParseDocumentService
       pluginImplementationClass: "org.pipelineframework.plugin.cache.CacheInvalidationService"
-      enabledTargets:
-        - GRPC_SERVICE
-        - CLIENT_STEP
 ```
 
 This uses the input item `CacheKey` to invalidate a single entry.
@@ -53,9 +50,6 @@ aspects:
       targetSteps:
         - ProcessParseDocumentService
       pluginImplementationClass: "org.pipelineframework.plugin.cache.CacheInvalidationAllService"
-      enabledTargets:
-        - GRPC_SERVICE
-        - CLIENT_STEP
 ```
 
 Bulk invalidation requires a backend that can enumerate keys (Redis or in-memory). Caffeine does not support prefix invalidation.
@@ -75,9 +69,6 @@ aspects:
       targetSteps:
         - "ProcessTokenizeContentService"
       pluginImplementationClass: "org.pipelineframework.plugin.cache.CacheInvalidationService"
-      enabledTargets:
-        - "GRPC_SERVICE"
-        - "CLIENT_STEP"
   cache-invalidate-all:
     enabled: true
     scope: "STEPS"
@@ -87,9 +78,6 @@ aspects:
       targetSteps:
         - "ProcessParseDocumentService"
       pluginImplementationClass: "org.pipelineframework.plugin.cache.CacheInvalidationAllService"
-      enabledTargets:
-        - "GRPC_SERVICE"
-        - "CLIENT_STEP"
 ```
 
 Why these targets?

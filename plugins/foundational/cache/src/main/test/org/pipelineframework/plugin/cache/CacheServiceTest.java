@@ -146,6 +146,22 @@ class CacheServiceTest {
     }
 
     @Test
+    void process_WithBypassCachePolicy_ShouldSkipReadAndWrite() throws Exception {
+        CacheManager cacheManager = mock(CacheManager.class);
+        CacheService<TestItem> service = new CacheService<>(cacheManager);
+        setPolicy(service, "bypass-cache");
+
+        TestItem item = new TestItem("id-bypass");
+
+        Uni<TestItem> resultUni = service.process(item);
+        UniAssertSubscriber<TestItem> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
+        subscriber.awaitItem();
+
+        assertSame(item, subscriber.getItem());
+        verifyNoInteractions(cacheManager);
+    }
+
+    @Test
     void process_WithRequireCachePolicy_ShouldReturnCachedWhenPresent() throws Exception {
         CacheManager cacheManager = mock(CacheManager.class);
         CacheService<TestItem> service = new CacheService<>(cacheManager);

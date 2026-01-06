@@ -23,13 +23,17 @@ public enum CachePolicy {
     CACHE_ONLY,
     RETURN_CACHED,
     SKIP_IF_PRESENT,
-    REQUIRE_CACHE;
+    REQUIRE_CACHE,
+    BYPASS_CACHE;
 
     static CachePolicy fromConfig(String value) {
         if (value == null || value.isBlank()) {
             return CACHE_ONLY;
         }
         String normalized = value.trim().replace('-', '_').toUpperCase();
+        if ("PREFER_CACHE".equals(normalized)) {
+            return RETURN_CACHED;
+        }
         for (CachePolicy policy : values()) {
             if (policy.name().equals(normalized)) {
                 return policy;
