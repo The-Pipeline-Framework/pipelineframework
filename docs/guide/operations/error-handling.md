@@ -15,16 +15,15 @@ The framework leverages Mutiny's reactive processing model for high-throughput, 
     inputType = PaymentRecord.class,
     outputType = PaymentStatus.class,
     stepType = StepOneToOne.class,
-    backendType = GenericGrpcReactiveServiceAdapter.class,
     inboundMapper = PaymentRecordInboundMapper.class,
     outboundMapper = PaymentStatusOutboundMapper.class,
     runOnVirtualThreads = true  // Run on virtual threads for I/O-bound operations
 )
 @ApplicationScoped
-public class ProcessPaymentService implements StepOneToOne<PaymentRecord, PaymentStatus> {
+public class ProcessPaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
 
     @Override
-    public Uni<PaymentStatus> applyOneToOne(PaymentRecord paymentRecord) {
+    public Uni<PaymentStatus> process(PaymentRecord paymentRecord) {
         // This will run reactively using Mutiny's event/worker thread model
         return processPaymentWithExternalService(paymentRecord);
     }
@@ -45,27 +44,20 @@ public class ProcessPaymentService implements StepOneToOne<PaymentRecord, Paymen
 
 Control the maximum number of concurrent operations through backpressure and buffer settings:
 
-```java
-@PipelineStep(
-    // ... other configuration
-    // Use backpressureBufferCapacity and concurrency control via reactive streams
-    backpressureBufferCapacity = 1024  // Buffer capacity when using BUFFER strategy
-)
+```properties
+# application.properties
+pipeline.defaults.backpressure-buffer-capacity=1024
+pipeline.defaults.backpressure-strategy=BUFFER
 ```
 
 ### Backpressure Handling
 
-The framework automatically handles backpressure through reactive streams with configurable strategies. You can control backpressure behavior through the `@PipelineStep` annotation:
+The framework automatically handles backpressure through reactive streams with configurable strategies. You can override backpressure per step at runtime:
 
-```java
-@PipelineStep(
-    inputType = PaymentRecord.class,
-    outputType = PaymentStatus.class,
-    stepType = StepOneToOne.class,
-    backendType = GenericGrpcReactiveServiceAdapter.class,
-    inboundMapper = PaymentRecordInboundMapper.class,
-    outboundMapper = PaymentStatusOutboundMapper.class
-)
+```properties
+# application.properties
+pipeline.step."com.example.ProcessPaymentService".backpressure-strategy=DROP
+pipeline.step."com.example.ProcessPaymentService".backpressure-buffer-capacity=256
 ```
 
 The available overflow strategies are:
@@ -77,14 +69,14 @@ Programmatic configuration is also possible:
 
 ```java
 @Override
-public Uni<PaymentStatus> applyOneToOne(PaymentRecord paymentRecord) {
+public Uni<PaymentStatus> process(PaymentRecord paymentRecord) {
     return externalService.process(paymentRecord)
         .onFailure().retry().withBackOff(Duration.ofMillis(100), Duration.ofSeconds(5))
         .atMost(3);
 }
 
 // The framework automatically applies the configured backpressure strategy
-// based on the annotation or configuration settings.
+// based on runtime configuration.
 ```
 
 ### Relationship Between Concurrency and Buffer
@@ -108,21 +100,19 @@ The Pipeline Framework provides comprehensive error handling with multiple recov
 
 Built-in retry with exponential backoff:
 
-```java
-@PipelineStep(
-    // ... other configuration
-    retryLimit = 5,           // Retry up to 5 times
-    retryWait = "PT1S",       // Initial wait of 1 second
-    maxBackoff = "PT30S",     // Maximum backoff of 30 seconds
-    jitter = true             // Add randomization to prevent thundering herd
-)
+```properties
+# application.properties
+pipeline.defaults.retry-limit=5
+pipeline.defaults.retry-wait-ms=1000
+pipeline.defaults.max-backoff=30000
+pipeline.defaults.jitter=true
 ```
 
 Programmatic retry configuration:
 
 ```java
 @Override
-public Uni<PaymentStatus> applyOneToOne(PaymentRecord paymentRecord) {
+public Uni<PaymentStatus> process(PaymentRecord paymentRecord) {
     return processPayment(paymentRecord)
         .onFailure().retry()
         .withBackOff(Duration.ofSeconds(1), Duration.ofSeconds(30))
@@ -167,7 +157,7 @@ Implement circuit breaker for external service calls:
 CircuitBreaker circuitBreaker;
 
 @Override
-public Uni<PaymentStatus> applyOneToOne(PaymentRecord paymentRecord) {
+public Uni<PaymentStatus> process(PaymentRecord paymentRecord) {
     return circuitBreaker.execute(
         () -> processPayment(paymentRecord),
         // Fallback method when circuit is open
@@ -195,7 +185,7 @@ Differentiate between recoverable and unrecoverable errors:
 
 ```java
 @Override
-public Uni<PaymentStatus> applyOneToOne(PaymentRecord paymentRecord) {
+public Uni<PaymentStatus> process(PaymentRecord paymentRecord) {
     return processPayment(paymentRecord)
         .onFailure().recoverWithUni(error -> {
             if (isRecoverableError(error)) {
@@ -355,7 +345,7 @@ Preserve error context for better debugging:
 
 ```java
 @Override
-public Uni<PaymentStatus> applyOneToOne(PaymentRecord paymentRecord) {
+public Uni<PaymentStatus> process(PaymentRecord paymentRecord) {
     MDC.put("paymentId", paymentRecord.getId().toString());
     MDC.put("customerId", paymentRecord.getCustomerId());
     
@@ -400,7 +390,7 @@ Implement graceful degradation for partial failures:
 
 ```java
 @Override
-public Uni<PaymentStatus> applyOneToOne(PaymentRecord paymentRecord) {
+public Uni<PaymentStatus> process(PaymentRecord paymentRecord) {
     return processPrimaryService(paymentRecord)
         .onFailure().recoverWithUni(error -> {
             LOG.warn("Primary service failed, falling back to secondary", error);
@@ -420,50 +410,35 @@ public Uni<PaymentStatus> applyOneToOne(PaymentRecord paymentRecord) {
 ```properties
 # application.properties
 # Retry configuration
-pipeline.runtime.retry-limit=3
-pipeline.runtime.retry-wait=PT500MS
-pipeline.runtime.max-backoff=PT30S
-pipeline.runtime.jitter=true
-
-# Concurrency configuration
-pipeline.runtime.run-with-virtual-threads=true
+pipeline.defaults.retry-limit=3
+pipeline.defaults.retry-wait-ms=500
+pipeline.defaults.max-backoff=30000
+pipeline.defaults.jitter=true
 
 # Error handling
-pipeline.runtime.recover-on-failure=true
-pipeline.runtime.auto-persist=true
+pipeline.defaults.recover-on-failure=true
 ```
 
 ### Profile-Specific Configuration
 
 ```properties
 # application-dev.properties
-pipeline.runtime.retry-limit=1
-pipeline.runtime.retry-wait=PT100MS
-pipeline.runtime.run-with-virtual-threads=false  # Disable in dev for easier debugging
+pipeline.defaults.retry-limit=1
+pipeline.defaults.retry-wait-ms=100
 
 # application-prod.properties
-pipeline.runtime.retry-limit=5
-pipeline.runtime.retry-wait=PT1S
-pipeline.runtime.max-backoff=PT60S
-pipeline.runtime.run-with-virtual-threads=true
+pipeline.defaults.retry-limit=5
+pipeline.defaults.retry-wait-ms=1000
+pipeline.defaults.max-backoff=60000
 ```
 
-### Runtime Configuration
+### Per-Step Overrides
 
-Modify configuration at runtime:
+Override retry settings for a single step:
 
-```java
-@Inject
-ConfigurableStep step;
-
-public void updateStepConfiguration() {
-    step.liveConfig()
-        .retryLimit(10)
-        .retryWait(Duration.ofSeconds(2))
-        .concurrency(2000)
-        .debug(true)
-        .recoverOnFailure(true);
-}
+```properties
+pipeline.step."com.example.ProcessPaymentService".retry-limit=10
+pipeline.step."com.example.ProcessPaymentService".retry-wait-ms=2000
 ```
 
 ## Best Practices

@@ -167,7 +167,7 @@ While the template generator creates a complete application, you can customize i
 
 ### 1. Modify Service Implementations
 
-Each generated service includes a placeholder `apply()` method that you need to implement:
+Each generated service includes a placeholder `process()` method that you need to implement:
 
 ```java
 // process-customer-svc/src/main/java/com/example/app/processcustomer/service/ProcessProcessCustomerService.java
@@ -178,18 +178,16 @@ Each generated service includes a placeholder `apply()` method that you need to 
    inboundMapper = CustomerInputMapper.class,
    outboundMapper = CustomerOutputMapper.class
 )
-public class ProcessProcessCustomerService implements StepOneToOne<CustomerInput, CustomerOutput> {
+public class ProcessProcessCustomerService implements ReactiveService<CustomerInput, CustomerOutput> {
     @Override
-    public Uni<CustomerOutput> applyOneToOne(Uni<CustomerInput> request) {
+    public Uni<CustomerOutput> process(CustomerInput request) {
         // TODO: Implement your business logic here
-        return request.map(customerInput -> {
-            CustomerOutput output = new CustomerOutput();
-            output.setId(customerInput.getId());
-            output.setName(customerInput.getName().toUpperCase());
-            output.setStatus("PROCESSED");
-            output.setProcessedAt(LocalDateTime.now().toString());
-            return output;
-        });
+        CustomerOutput output = new CustomerOutput();
+        output.setId(request.getId());
+        output.setName(request.getName().toUpperCase());
+        output.setStatus("PROCESSED");
+        output.setProcessedAt(LocalDateTime.now().toString());
+        return Uni.createFrom().item(output);
     }
 }
 ```
@@ -217,8 +215,8 @@ Customize the generated application properties:
 ```properties
 # orchestrator-svc/src/main/resources/application.properties
 # Pipeline Configuration
-pipeline.runtime.retry-limit=5
-pipeline.runtime.retry-wait-ms=1000
+pipeline.defaults.retry-limit=5
+pipeline.defaults.retry-wait-ms=1000
 ```
 
 ## Advanced Features
@@ -285,7 +283,7 @@ The template generator validates your configuration against a comprehensive JSON
 ### Generated Code Maintenance
 
 - Preserve the generated structure and annotations
-- Implement business logic in the designated `apply()` methods
+- Implement business logic in the designated `process()` methods
 - Add custom dependencies to the appropriate module POMs
 
 ### Version Control

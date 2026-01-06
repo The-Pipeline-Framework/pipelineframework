@@ -70,7 +70,7 @@ Prefix: `pipeline.cache`
 | Property | Type | Default | Description |
 | --- | --- | --- | --- |
 | `pipeline.cache.provider` | string | none | Cache provider name (for example `redis`, `caffeine`, `memory`). |
-| `pipeline.cache.policy` | string | `cache-only` | Default cache policy (`cache-only`, `return-cached`, `skip-if-present`, `require-cache`). |
+| `pipeline.cache.policy` | string | `cache-only` | Default cache policy (`prefer-cache`/`return-cached`, `cache-only`, `skip-if-present`, `require-cache`, `bypass-cache`). |
 | `pipeline.cache.ttl` | duration | none | Default cache TTL. |
 | `pipeline.cache.caffeine.name` | string | `pipeline-cache` | Cache name for the Caffeine provider. |
 | `pipeline.cache.caffeine.maximum-size` | long | `10000` | Maximum cache size for the Caffeine provider. |

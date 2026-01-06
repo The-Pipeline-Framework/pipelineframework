@@ -3,7 +3,7 @@
 This guide will help you quickly get started with The Pipeline Framework using the visual Canvas designer - the fastest and easiest way to create your first pipeline application!
 
 <Callout type="tip" title="Immutable Architecture">
-The Pipeline Framework follows an immutable architecture where no database updates occur during pipeline execution - only appends/preserves. This ensures complete data integrity and provides a complete audit trail of all transformations.
+The Pipeline Framework encourages append-only persistence by default; updates are explicit and opt-in. This improves data integrity and makes audit trails straightforward.
 </Callout>
 
 <Callout type="tip" title="Rich Processing Patterns">

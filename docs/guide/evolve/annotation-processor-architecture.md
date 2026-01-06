@@ -187,7 +187,7 @@ This guarantees the gRPC surface is deterministic and derived, not user-defined.
 
 ### Removal of transport-specific annotation parameters
 
-Transport-specific annotation parameters were removed from the semantic model.
+Transport-specific annotation parameters are ignored by the semantic model and renderers.
 
 Rationale:
 
@@ -195,7 +195,9 @@ Rationale:
 - They are meaningful only for specific backends.
 - They would force the IR to grow with every new transport.
 
-They are now handled exclusively by renderer-specific configuration and bindings.
+They are now handled exclusively by renderer-specific configuration and bindings. The legacy `backendType`
+field remains on `@PipelineStep` for compatibility but is not used by the processor. Transport selection is
+configured globally via `pipeline.yaml`.
 
 ### Deployment roles drive packaging
 

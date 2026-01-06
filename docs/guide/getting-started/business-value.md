@@ -7,7 +7,7 @@ The Pipeline Framework is designed to accelerate delivery without locking you in
 1. **Speed of Development**: Visual pipeline design produces runnable services in minutes.
 2. **Microservices-in-a-Box**: Each step is a standalone service, with adapters generated at build time.
 3. **Lower Risk of Lock-in**: Plain Java, Quarkus, and standard gRPC keep the stack portable.
-4. **Operational Clarity**: Immutable, append-only processing improves traceability and auditability.
+4. **Operational Clarity**: Append-first persistence improves traceability and auditability when enabled.
 
 ## Observed Impact (CSV Payments)
 

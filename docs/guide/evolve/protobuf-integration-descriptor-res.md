@@ -9,13 +9,11 @@ To use the descriptor-driven resolution, you need to ensure that:
 1. Your protobuf files are compiled during the build process before annotation processing
 2. The generated FileDescriptorSet files (typically with `.desc` or `.dsc` extensions) are available in the build directory
 3. The annotation processor can locate these descriptor files
-4. Quarkus is configured to generate descriptor sets
+4. Quarkus (or your protobuf build) is configured to generate descriptor sets
 
-The build will fail for gRPC services if descriptor sets are not generated. Ensure this property is set:
-
-```properties
-quarkus.generate-code.grpc.descriptor-set.generate=true
-```
+The build will fail for gRPC services if descriptor sets are not generated. Use the descriptor-set configuration
+supported by your Quarkus/protobuf build, or supply `protobuf.descriptor.path`/`protobuf.descriptor.file` to the
+annotation processor.
 
 ## Default Descriptor Locations
 

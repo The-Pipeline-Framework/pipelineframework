@@ -15,7 +15,7 @@ The plugin is split into two parts:
 1. **Plugin library**: `plugins/foundational/persistence`
 2. **Service host module**: e.g. `examples/.../persistence-svc`
 
-The host module exists so the annotation processor can generate typed gRPC adapters and client steps in a concrete module that knows your domain types.
+The host module exists so the annotation processor can generate typed transport adapters and client steps in a concrete module that knows your domain types.
 
 ## Required dependencies
 
@@ -51,9 +51,6 @@ aspects:
     position: "AFTER_STEP"
     config:
       pluginImplementationClass: "org.pipelineframework.plugin.persistence.PersistenceService"
-      enabledTargets:
-        - "GRPC_SERVICE"
-        - "CLIENT_STEP"
 ```
 
 The framework expands this into side-effect steps that observe the stream after each step.

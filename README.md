@@ -107,10 +107,11 @@ Here's a simple pipeline step implementation:
     inputType = PaymentRecord.class,
     outputType = PaymentStatus.class,
     stepType = StepOneToOne.class,
-    backendType = GenericGrpcReactiveServiceAdapter.class
+    inboundMapper = PaymentRecordMapper.class,
+    outboundMapper = PaymentStatusMapper.class
 )
 @ApplicationScoped
-public class ProcessPaymentService implements ReactiveStreamingClientService<PaymentRecord, PaymentStatus> {
+public class ProcessPaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
 
     @Override
     public Uni<PaymentStatus> process(PaymentRecord input) {

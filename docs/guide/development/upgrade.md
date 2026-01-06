@@ -2,13 +2,10 @@
 
 ## Descriptor-Driven gRPC Type Resolution
 
-If you are upgrading to a version that requires descriptor-driven gRPC resolution, you must enable descriptor set generation in Quarkus. Without it, gRPC service/client generation will fail at build time.
+If you are upgrading to a version that requires descriptor-driven gRPC resolution, you must enable descriptor set generation in your gRPC/protobuf build. Without it, gRPC service/client generation will fail at build time.
 
-Add the following to `application.properties` (or your profile-specific file):
-
-```properties
-quarkus.generate-code.grpc.descriptor-set.generate=true
-```
+Ensure your build emits a descriptor set (for example via Quarkus gRPC codegen for your version), or provide
+`protobuf.descriptor.path`/`protobuf.descriptor.file` to the annotation processor.
 
 See [protobuf descriptor integration](/guide/evolve/protobuf-integration-descriptor-res) for full setup details and troubleshooting.
 

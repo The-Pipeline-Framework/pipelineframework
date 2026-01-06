@@ -57,14 +57,15 @@ To make an aspect best-effort, enable recovery for the corresponding side-effect
 
 ## Side-effect transport contract
 Side-effect plugins observe stream elements and never alter the stream shape. For transport, each observation is modeled
-as a unary gRPC call using a deterministic, type-indexed service derived from the element message type:
+as a unary call for the configured transport (gRPC or REST) using a deterministic, type-indexed service derived from
+the element type:
 
-- gRPC shape: `T -> T` (always unary)
-- Service name: `Observe<T>SideEffectService` (where `<T>` is the protobuf message name)
-- Injection point: AFTER each step, using the step's output element type
+- Shape: `T -> T` (always unary)
+- Service name: `Observe<T>SideEffectService`
+- Injection point: BEFORE or AFTER each step, based on aspect position
 
-The protobuf descriptor set used during compilation must include these `Observe<T>SideEffectService` definitions, or
-side-effect adapter generation will be skipped.
+For gRPC transport, the protobuf descriptor set used during compilation must include these
+`Observe<T>SideEffectService` definitions or side-effect adapter generation will be skipped.
 
 ## Aspect Invariants
 - Aspects do not change pipeline types or topology

@@ -62,13 +62,13 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T> {
 
 The foundational persistence plugin is intentionally small and expects the host application to provide the rest:
 
-- **Depends on `common`**: the host service module must depend on the `common` module so the generated gRPC adapters can reference your domain types.
+- **Depends on `common`**: the host service module must depend on the `common` module so the generated transport adapters can reference your domain types.
 - **Database providers are pluggable**: add the provider dependency you want (reactive or blocking). The plugin auto-selects a provider that supports the current execution context.
-- **Service host module required**: the typed gRPC services and client steps are generated in a dedicated service module, not inside the plugin library itself.
+- **Service host module required**: the typed transport services and client steps are generated in a dedicated service module, not inside the plugin library itself.
 
 In practice, you wire this as:
 
-1. `plugins/foundational/persistence` (library, no generated gRPC code)
+1. `plugins/foundational/persistence` (library, no generated transport code)
 2. `examples/.../persistence-svc` (service host module with the marker annotation)
 
 For a complete walkthrough, see the dedicated persistence plugin page.
@@ -76,7 +76,7 @@ For a complete walkthrough, see the dedicated persistence plugin page.
 ## Plugin host modules
 
 To generate plugin-server artifacts in a dedicated module, add a marker class annotated with `@PipelinePlugin("name")`
-inside that module. This tells the annotation processor to emit the gRPC server adapters and CDI producers there.
+inside that module. This tells the annotation processor to emit the transport adapters and CDI producers there.
 
 The host module should depend on:
 - Your plugin library (e.g., `plugins/foundational/persistence`)

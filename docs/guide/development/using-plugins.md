@@ -32,17 +32,17 @@ plugin dependencies consistently and avoid ambiguous module resolution.
 
 ## Side-effect transport contract
 
-Side-effect plugins observe stream elements and are always exposed as unary gRPC services derived from the element
-message type. The framework generates deterministic type-indexed services like `ObservePaymentRecordSideEffectService`
-with the signature `PaymentRecord -> PaymentRecord`, and injects them into the stream after each step.
+Side-effect plugins observe stream elements and are exposed as unary services for the configured transport (gRPC or REST).
+The framework generates deterministic type-indexed services like `ObservePaymentRecordSideEffectService` with the
+signature `PaymentRecord -> PaymentRecord`, and injects them into the stream after each step.
 
 ## Build-time requirements
 
 - A pipeline config YAML must be available so the processor can discover step output types for type-indexed side-effect adapters.
   The loader searches the parent module root and a `config/` subfolder for `pipeline.yaml`, `pipeline-config.yaml`,
   or `*-canvas-config.yaml`.
-- Protobuf definitions must include the type-indexed `Observe<T>SideEffectService` services for any observed type,
-  and the descriptor set must include those definitions.
+- For gRPC transport, protobuf definitions must include the type-indexed `Observe<T>SideEffectService` services for any
+  observed type, and the descriptor set must include those definitions.
 
 ## Plugin host modules
 
@@ -52,10 +52,10 @@ regular service modules do not depend on plugin implementations.
 
 ## Global vs step-scoped aspects
 
-Currently, aspects support two scopes:
+Aspects support two scopes:
 
 - **GLOBAL**: Applies to all steps in the pipeline
-- **STEPS**: Reserved for future extensions (currently treated as GLOBAL with a warning)
+- **STEPS**: Applies to the configured `targetSteps` list in the aspect config
 
 ## Positioning with BEFORE and AFTER
 
@@ -63,7 +63,7 @@ Aspects can be positioned:
 - **BEFORE_STEP**: Executes before the main step
 - **AFTER_STEP**: Executes after the main step
 
-BEFORE_STEP is currently normalized to AFTER_STEP during compilation.
+BEFORE_STEP and AFTER_STEP are applied as configured during compilation.
 
 ## Example: Pipeline with persistence aspect
 

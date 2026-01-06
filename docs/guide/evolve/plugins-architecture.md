@@ -23,10 +23,10 @@ This expansion happens during compilation and is not visible in your source conf
 
 ## Side-effect transport model
 
-Side-effect plugins observe stream elements and are always exposed as unary gRPC services derived from message types.
+Side-effect plugins observe stream elements and are exposed as unary services for the configured transport (gRPC or REST).
 The service name is deterministic and aspect-qualified:
-`Observe<AspectName><T>SideEffectService`, where `AspectName` is the PascalCase aspect name and `T` is the protobuf
-message name. This avoids collisions when multiple aspects observe the same type.
+`Observe<AspectName><T>SideEffectService`, where `AspectName` is the PascalCase aspect name and `T` is the element type name.
+This avoids collisions when multiple aspects observe the same type.
 
 Placement depends on aspect position:
 - `AFTER_STEP`: services observe the step output type.
@@ -43,7 +43,7 @@ adapters for orchestrator and plugin deployments.
 - A pipeline config YAML must be available so the processor can discover step output types for type-indexed side-effect adapters.
   The loader searches the parent module root and a `config/` subfolder for `pipeline.yaml`, `pipeline-config.yaml`,
   or `*-canvas-config.yaml`.
-- Protobuf definitions must include the type-indexed, aspect-qualified
+- For gRPC transport, protobuf definitions must include the type-indexed, aspect-qualified
   `Observe<AspectName><T>SideEffectService` services for any observed type, and the descriptor set must include those
   definitions.
 
@@ -52,7 +52,7 @@ adapters for orchestrator and plugin deployments.
 ```mermaid
 flowchart TD
   A[pipeline-config.yaml] --> B[AspectExpansionProcessor]
-  C[Protobuf descriptor set] --> D[GrpcBindingResolver]
+  C[Descriptor set (gRPC only)] --> D[Transport binding resolver]
   B --> E[Synthetic side-effect steps]
   E --> D
   D --> F[Role-specific renderers]
@@ -87,7 +87,6 @@ By applying aspects at compile-time:
 
 ## Known limitations
 
-- STEPS-scoped aspects are not yet fully implemented
 - Aspect ordering within the same position and order value is implementation-dependent
 - Complex aspect interactions may be difficult to reason about
 

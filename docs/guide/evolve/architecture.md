@@ -1,6 +1,6 @@
 # Architecture
 
-The Pipeline Framework is designed as a modular, extensible system for building reactive pipeline processing applications. Understanding its architecture is key to leveraging its full potential. Built on an immutable architecture, the framework ensures data integrity by preserving all transformations and maintaining a complete audit trail.
+The Pipeline Framework is designed as a modular, extensible system for building reactive pipeline processing applications. Understanding its architecture is key to leveraging its full potential. The framework encourages append-only persistence by default, helping preserve transformations and maintain an audit trail when desired.
 
 ## Related Architecture Topics
 
@@ -9,7 +9,7 @@ The Pipeline Framework is designed as a modular, extensible system for building 
 ## Core Concepts
 
 ### Pipeline
-A pipeline is a sequence of processing steps that transform input data into output data. Each step in the pipeline performs a specific transformation or operation on the data flowing through it. The framework follows an immutable architecture where no database updates occur during pipeline execution - only appends/preserves.
+A pipeline is a sequence of processing steps that transform input data into output data. Each step in the pipeline performs a specific transformation or operation on the data flowing through it. The framework encourages append-only persistence by default; updates are explicit and opt-in.
 
 ```mermaid
 graph TD
@@ -151,19 +151,21 @@ Steps can be configured to run with different concurrency models, including virt
 pipeline-framework/
 ├── runtime/                 # Core framework components
 │   ├── src/main/java/
-│   │   └── org/pipelineframework/pipeline/
+│   │   └── org/pipelineframework/
 │   │       ├── annotation/    # Framework annotations
+│   │       ├── cache/          # Cache utilities
 │   │       ├── config/         # Configuration classes
+│   │       ├── grpc/           # gRPC adapters
 │   │       ├── mapper/        # Mapper interfaces
 │   │       ├── persistence/   # Persistence utilities
 │   │       ├── service/       # Service interfaces
 │   │       ├── step/          # Step interfaces and base classes
-│   │       └── GenericGrpcReactiveServiceAdapter.java
+│   │       └── PipelineExecutionService.java
 │   └── pom.xml
 ├── deployment/              # Build-time processors (used with provided scope)
 │   ├── src/main/java/
-│   │   └── org/pipelineframework/pipeline/processor/
-│   │       └── PipelineProcessor.java
+│   │   └── org/pipelineframework/processor/
+│   │       └── PipelineStepProcessor.java
 │   └── pom.xml
 └── pom.xml
 ```
@@ -179,7 +181,7 @@ The framework automatically generates gRPC adapters for pipeline steps, enabling
 REST adapters can be generated to expose pipeline steps as HTTP endpoints.
 
 ### Database Integration
-Built-in persistence support allows steps to automatically persist entities before processing.
+Persistence is provided via a side-effect plugin and configured as an aspect (typically AFTER_STEP). It observes inputs or outputs and persists them without changing the stream.
 
 ## Configuration Model
 

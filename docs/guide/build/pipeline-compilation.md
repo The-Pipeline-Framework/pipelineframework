@@ -9,8 +9,8 @@ For the architecture overview of the processor, see [Annotation Processor Archit
 The Pipeline Framework uses annotation processing to automatically generate the necessary infrastructure for pipeline execution. When you annotate your services with `@PipelineStep`, the framework's annotation processor:
 
 1. Discovers all annotated services at build time
-2. Generates gRPC and REST adapters for each service
-3. Creates a complete pipeline application that orchestrates all steps
+2. Generates transport adapters and client steps for the configured transport (gRPC or REST)
+3. Expands configured aspects into synthetic side-effect steps when a plugin host is present
 4. Registers all generated components with the dependency injection container
 
 This eliminates the need for manual configuration and ensures consistency across your pipeline.
@@ -26,24 +26,24 @@ During the Maven build process, the annotation processor scans for `@PipelineSte
     inputType = PaymentRecord.class,
     outputType = PaymentStatus.class,
     stepType = StepOneToOne.class,
-    backendType = GenericGrpcReactiveServiceAdapter.class,
     inboundMapper = PaymentRecordInboundMapper.class,
     outboundMapper = PaymentStatusOutboundMapper.class
 )
 @ApplicationScoped
-public class ProcessPaymentService implements StepOneToOne<PaymentRecord, PaymentStatus> {
-    // Implementation
+public class ProcessPaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
+    @Override
+    public Uni<PaymentStatus> process(PaymentRecord input) {
+        // Implementation
+    }
 }
 ```
 
 ### 2. Compile-time Code Generation
 The Pipeline Framework extension processor generates several classes:
 
-- gRPC service adapter class: a service endpoint that handles gRPC requests.
-- gRPC client step class: a client-side implementation for pipeline step execution.
-- REST resource adapter class: a REST resource endpoint that handles REST requests.
-- "synthetic" gRCP client step classes for the configured plugins
-- "synthetic" REST client step classes for the configured plugins
+- If `transport: GRPC`, gRPC service adapters and gRPC client steps.
+- If `transport: REST`, REST resource adapters and REST client steps.
+- Synthetic client steps for configured plugin aspects (in a plugin host module).
 
 ### 2.5 Scaffolding
 The template generator provides the necessary scaffolding for:
@@ -72,34 +72,22 @@ The gRPC adapter acts as a server-side endpoint that:
 4. Uses the outbound mapper to convert domain objects to gRPC responses
 
 ```java
-// Generated class structure
-public class ServiceNameGrpcService extends GenericGrpcReactiveServiceAdapter<GRpcIn, DomainIn, DomainOut, GRpcOut> {
-    
+// Generated class structure (simplified)
+public class ServiceNameGrpcService extends ServiceNameGrpc.ServiceNameImplBase {
+
     @Inject
-    InboundMapper<GRpcIn, DomainIn> inboundMapper;
-    
+    PaymentRecordInboundMapper inboundMapper;
+
     @Inject
-    OutboundMapper<DomainOut, GRpcOut> outboundMapper;
-    
+    PaymentStatusOutboundMapper outboundMapper;
+
     @Inject
     ServiceName service;  // Your actual service implementation
-    
-    @Inject
-    PersistenceManager persistenceManager;
-    
-    public Uni<GRpcOut> remoteProcess(GRpcIn grpcRequest) {
-        // Convert gRPC to domain
-        DomainIn domainInput = inboundMapper.fromGrpcFromDto(grpcRequest);
-        
-        // Auto-persist if enabled
-        Uni<DomainIn> persistedInput = getPersistedUni(domainInput);
-        
-        // Process through service
-        Uni<DomainOut> domainOutput = persistedInput
-            .onItem().transformToUni(service::process);
-            
-        // Convert domain to gRPC
-        return domainOutput.onItem().transform(outboundMapper::toDtoToGrpc);
+
+    @Override
+    public Uni<PaymentGrpcOut> remoteProcess(PaymentGrpcIn request) {
+        // Delegates to an inline GrpcReactiveServiceAdapter based on the streaming shape
+        return /* adapter */.remoteProcess(request);
     }
 }
 ```
@@ -115,20 +103,18 @@ The step class acts as a client-side component that:
 ```java
 // Generated class structure
 @ApplicationScoped
-public class ServiceNameStep implements StepOneToOne<DomainIn, DomainOut> {
+public class ServiceNameGrpcClientStep implements StepOneToOne<DomainIn, DomainOut> {
     
     @Inject
     @GrpcClient("service-name")
     StubClass grpcClient;
     
-    public Uni<DomainOut> applyOneToOne(Uni<DomainIn> input) {
-        return input.onItem().transformToUni(domainInput -> {
-            // Convert domain to gRPC
-            GRpcIn grpcInput = convertDomainToGrpc(domainInput);
-            
-            // Call remote service
-            return grpcClient.remoteProcess(grpcInput);
-        });
+    public Uni<DomainOut> applyOneToOne(DomainIn input) {
+        // Convert domain to gRPC
+        GRpcIn grpcInput = convertDomainToGrpc(input);
+
+        // Call remote service
+        return grpcClient.remoteProcess(grpcInput);
     }
 }
 ```
@@ -183,25 +169,22 @@ The annotation processor runs during the `compile` phase:
 ```bash
 # During mvn compile
 [INFO] --- quarkus:3.28.0.CR1:generate-code (default) @ service-module ---
-[INFO] [org.pipelineframework.processor.PipelineProcessor] Generating adapters for annotated services
-[INFO] [org.pipelineframework.processor.PipelineProcessor] Found 3 @PipelineStep annotated services
-[INFO] [org.pipelineframework.processor.PipelineProcessor] Generated ProcessPaymentServiceGrpcService
-[INFO] [org.pipelineframework.processor.PipelineProcessor] Generated ProcessPaymentServiceStep
-[INFO] [org.pipelineframework.processor.PipelineProcessor] Generated SendPaymentServiceGrpcService
-[INFO] [org.pipelineframework.processor.PipelineProcessor] Generated SendPaymentServiceStep
-[INFO] [org.pipelineframework.processor.PipelineProcessor] Generated ProcessAckPaymentServiceGrpcService
-[INFO] [org.pipelineframework.processor.PipelineProcessor] Generated ProcessAckPaymentServiceStep
-[INFO] [org.pipelineframework.processor.PipelineProcessor] Generated step implementations and service adapters
+[INFO] [org.pipelineframework.processor.PipelineStepProcessor] Generating adapters for annotated services
+[INFO] [org.pipelineframework.processor.PipelineStepProcessor] Found 3 @PipelineStep annotated services
+[INFO] [org.pipelineframework.processor.PipelineStepProcessor] Generated ProcessPaymentServiceGrpcService
+[INFO] [org.pipelineframework.processor.PipelineStepProcessor] Generated ProcessPaymentGrpcClientStep
+[INFO] [org.pipelineframework.processor.PipelineStepProcessor] Generated SendPaymentServiceGrpcService
+[INFO] [org.pipelineframework.processor.PipelineStepProcessor] Generated SendPaymentGrpcClientStep
+[INFO] [org.pipelineframework.processor.PipelineStepProcessor] Generated ProcessAckPaymentServiceGrpcService
+[INFO] [org.pipelineframework.processor.PipelineStepProcessor] Generated ProcessAckPaymentGrpcClientStep
+[INFO] [org.pipelineframework.processor.PipelineStepProcessor] Generated step implementations and service adapters
 ```
 
 ### Required gRPC Descriptor Set Generation
 
-The annotation processor resolves gRPC bindings from the protobuf descriptor set, which must be generated by Quarkus.
-Ensure the common module has this property in `common/src/main/resources/application.properties`:
-
-```properties
-quarkus.generate-code.grpc.descriptor-set.generate=true
-```
+The annotation processor resolves gRPC bindings from a protobuf descriptor set. Configure your build to emit a
+descriptor set (for example via Quarkus gRPC codegen) or pass `protobuf.descriptor.file`/`protobuf.descriptor.path`
+to the annotation processor if you have a custom descriptor location.
 
 ## Generated Code Verification
 
@@ -235,10 +218,10 @@ While generated classes are typically not modified directly, you can extend them
 ```java
 // Custom extension of generated step
 @ApplicationScoped
-public class CustomProcessPaymentServiceStep extends ProcessPaymentServiceStep {
+public class CustomProcessPaymentGrpcClientStep extends ProcessPaymentGrpcClientStep {
     
     @Override
-    public Uni<PaymentStatus> applyOneToOne(Uni<PaymentRecord> input) {
+    public Uni<PaymentStatus> applyOneToOne(PaymentRecord input) {
         // Add custom logic before/after calling super
         return super.applyOneToOne(input)
             .onItem().invoke(status -> {
@@ -255,18 +238,11 @@ public class CustomProcessPaymentServiceStep extends ProcessPaymentServiceStep {
 
 ### Customizing Generation
 
-The annotation processor can be customized through annotation parameters:
+Use configuration and transport settings instead of transport-specific annotation fields:
 
-```java
-@PipelineStep(
-    inputType = PaymentRecord.class,
-    outputType = PaymentStatus.class,
-    stepType = StepOneToOne.class,
-    backendType = CustomGrpcReactiveServiceAdapter.class,  // Custom adapter
-    inboundMapper = PaymentRecordInboundMapper.class,
-    outboundMapper = PaymentStatusOutboundMapper.class
-)
-```
+- Set `transport: GRPC` or `transport: REST` in `pipeline.yaml`.
+- Override REST paths with `pipeline.rest.path.<ServiceName>` in `application.properties`.
+- Override cache keys per step with `cacheKeyGenerator` on `@PipelineStep`.
 
 ## Troubleshooting
 

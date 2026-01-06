@@ -101,12 +101,11 @@ Transforms single input to single output:
 @PipelineStep(
     inputType = CustomerInput.class,
     outputType = CustomerOutput.class,
-    stepType = StepOneToOne.class,
-    backendType = GenericGrpcReactiveServiceAdapter.class
+    stepType = StepOneToOne.class
 )
-public class ProcessCustomerStep implements StepOneToOne<CustomerInput, CustomerOutput> {
+public class ProcessCustomerStep implements ReactiveService<CustomerInput, CustomerOutput> {
     @Override
-    public Uni<CustomerOutput> apply(Uni<CustomerInput> input) {
+    public Uni<CustomerOutput> process(CustomerInput input) {
         // Implementation here
     }
 }
@@ -119,12 +118,11 @@ Transforms single input to multiple outputs:
 @PipelineStep(
     inputType = CustomerOutput.class,
     outputType = OrderInput.class,
-    stepType = StepOneToMany.class,
-    backendType = GenericGrpcReactiveServiceAdapter.class
+    stepType = StepOneToMany.class
 )
-public class GenerateOrdersStep implements StepOneToMany<CustomerOutput, OrderInput> {
+public class GenerateOrdersStep implements ReactiveStreamingService<CustomerOutput, OrderInput> {
     @Override
-    public Multi<OrderInput> apply(Uni<CustomerOutput> input) {
+    public Multi<OrderInput> process(CustomerOutput input) {
         // Implementation here
     }
 }
@@ -137,12 +135,11 @@ Aggregates multiple inputs to single output:
 @PipelineStep(
     inputType = OrderInput.class,
     outputType = SummaryOutput.class,
-    stepType = StepManyToOne.class,
-    backendType = GenericGrpcReactiveServiceAdapter.class
+    stepType = StepManyToOne.class
 )
-public class AggregateOrdersStep implements StepManyToOne<OrderInput, SummaryOutput> {
+public class AggregateOrdersStep implements ReactiveStreamingClientService<OrderInput, SummaryOutput> {
     @Override
-    public Uni<SummaryOutput> apply(Multi<OrderInput> input) {
+    public Uni<SummaryOutput> process(Multi<OrderInput> input) {
         // Implementation here
     }
 }
@@ -154,13 +151,12 @@ Performs side effects without changing data:
 ```java
 @PipelineStep(
     inputType = SummaryOutput.class,
-    outputType = SummaryOutput.class,  # Same as input type
-    stepType = StepOneToOne.class,
-    backendType = GenericGrpcReactiveServiceAdapter.class
+    outputType = SummaryOutput.class,  // Same as input type
+    stepType = StepOneToOne.class
 )
-public class LogSummaryStep implements StepOneToOne<SummaryOutput, SummaryOutput> {
+public class LogSummaryStep implements ReactiveService<SummaryOutput, SummaryOutput> {
     @Override
-    public Uni<SummaryOutput> apply(Uni<SummaryOutput> input) {
+    public Uni<SummaryOutput> process(SummaryOutput input) {
         // Side effect implementation, returns same input
     }
 }
@@ -234,7 +230,7 @@ my-pipeline-app/
 - Observability stack is included by default
 
 ### 3. Implement Business Logic
-- Fill in the `apply()` methods in generated service classes
+- Fill in the `process()` methods in generated service classes
 - Use reactive patterns with Uni/Multi as appropriate
 - Add domain-specific logic and validations
 
