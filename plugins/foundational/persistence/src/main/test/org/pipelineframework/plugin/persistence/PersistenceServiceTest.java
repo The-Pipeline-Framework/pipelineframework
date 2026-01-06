@@ -34,10 +34,11 @@ class PersistenceServiceTest {
     }
 
     @Test
-    void process_WithDuplicateKeyFailure_ShouldReturnItem() {
+    void process_WithDuplicateKeyFailureAndIgnorePolicy_ShouldReturnItem() {
         PersistenceManager manager = mock(PersistenceManager.class);
         PersistenceService<TestEntity> service = new PersistenceService<>();
         service.persistenceManager = manager;
+        service.duplicateKeyPolicyValue = "ignore";
 
         TestEntity entity = new TestEntity();
         SQLException duplicate = new SQLException("duplicate key", "23505");
@@ -49,6 +50,27 @@ class PersistenceServiceTest {
 
         assertSame(entity, subscriber.getItem());
         verify(manager).persist(entity);
+    }
+
+    @Test
+    void process_WithDuplicateKeyFailureAndUpsertPolicy_ShouldPersistOrUpdate() {
+        PersistenceManager manager = mock(PersistenceManager.class);
+        PersistenceService<TestEntity> service = new PersistenceService<>();
+        service.persistenceManager = manager;
+        service.duplicateKeyPolicyValue = "upsert";
+
+        TestEntity entity = new TestEntity();
+        SQLException duplicate = new SQLException("duplicate key", "23505");
+        when(manager.persist(entity)).thenReturn(Uni.createFrom().failure(duplicate));
+        when(manager.persistOrUpdate(entity)).thenReturn(Uni.createFrom().item(entity));
+
+        UniAssertSubscriber<TestEntity> subscriber = service.process(entity)
+            .subscribe().withSubscriber(UniAssertSubscriber.create());
+        subscriber.awaitItem();
+
+        assertSame(entity, subscriber.getItem());
+        verify(manager).persist(entity);
+        verify(manager).persistOrUpdate(entity);
     }
 
     @Test
@@ -68,6 +90,26 @@ class PersistenceServiceTest {
         Throwable thrown = subscriber.getFailure();
         assertTrue(thrown instanceof NonRetryableException);
         assertSame(failure, thrown.getCause());
+    }
+
+    @Test
+    void process_WithDuplicateKeyFailureAndDefaultPolicy_ShouldWrapAsNonRetryable() {
+        PersistenceManager manager = mock(PersistenceManager.class);
+        PersistenceService<TestEntity> service = new PersistenceService<>();
+        service.persistenceManager = manager;
+        service.duplicateKeyPolicyValue = "fail";
+
+        TestEntity entity = new TestEntity();
+        SQLException duplicate = new SQLException("duplicate key", "23505");
+        when(manager.persist(entity)).thenReturn(Uni.createFrom().failure(duplicate));
+
+        UniAssertSubscriber<TestEntity> subscriber = service.process(entity)
+            .subscribe().withSubscriber(UniAssertSubscriber.create());
+        subscriber.awaitFailure();
+
+        Throwable thrown = subscriber.getFailure();
+        assertTrue(thrown instanceof NonRetryableException);
+        assertSame(duplicate, thrown.getCause());
     }
 
     @Test

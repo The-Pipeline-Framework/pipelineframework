@@ -65,6 +65,22 @@ public class ReactivePanachePersistenceProvider implements PersistenceProvider<P
                     "Failed to persist entity of type " + entity.getClass().getName(), t));
     }
 
+    @Override
+    public Uni<PanacheEntityBase> persistOrUpdate(PanacheEntityBase entity) {
+        LOG.tracef("Persisting or updating entity of type %s", entity.getClass().getSimpleName());
+
+        return Panache.getSession()
+            .onItem()
+            .transformToUni(session ->
+                session.withTransaction(ignored -> session.merge(entity)))
+            .replaceWith(Uni.createFrom().item(entity))
+            .onFailure()
+            .transform(
+                t ->
+                    new PersistenceException(
+                        "Failed to persist or update entity of type " + entity.getClass().getName(), t));
+    }
+
     /**
      * Checks whether the provider supports the given entity instance.
      *

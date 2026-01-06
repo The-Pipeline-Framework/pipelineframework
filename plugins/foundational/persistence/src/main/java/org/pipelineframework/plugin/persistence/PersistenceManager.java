@@ -99,4 +99,36 @@ public class PersistenceManager {
         LOG.warnf("No persistence provider found for %s", entity.getClass().getName());
         return Uni.createFrom().item(entity);
     }
+
+    /**
+     * Persist or update the given entity using a registered persistence provider that supports it and the current thread context.
+     *
+     * @param <T> the type of entity to persist or update
+     * @param entity the entity to persist or update
+     * @return the persisted entity if a suitable provider handled it, otherwise the original entity; if the input was null the Uni emits `null`
+     */
+    @WithTransaction
+    public <T> Uni<T> persistOrUpdate(T entity) {
+        if (entity == null) {
+            LOG.debug("Entity is null, returning empty Uni");
+            return Uni.createFrom().nullItem();
+        }
+
+        LOG.debugf("Entity to persist or update: %s", entity.getClass().getName());
+        for (PersistenceProvider<?> provider : providers) {
+            if (!provider.supports(entity)) continue;
+
+            // Check if the provider supports the current thread context
+            if (!provider.supportsThreadContext()) continue;
+
+            @SuppressWarnings("unchecked")
+            PersistenceProvider<T> p = (PersistenceProvider<T>) provider;
+            LOG.debugf("About to persist or update with provider: %s", provider.getClass().getName());
+
+            return p.persistOrUpdate(entity);
+        }
+
+        LOG.warnf("No persistence provider found for %s", entity.getClass().getName());
+        return Uni.createFrom().item(entity);
+    }
 }

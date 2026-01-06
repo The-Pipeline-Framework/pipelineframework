@@ -19,6 +19,7 @@ package org.pipelineframework.plugin.persistence;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.pipelineframework.service.ReactiveSideEffectService;
 import org.pipelineframework.step.NonRetryableException;
@@ -29,6 +30,9 @@ import org.pipelineframework.step.NonRetryableException;
  */
 public class PersistenceService<T> implements ReactiveSideEffectService<T> {
     private final Logger logger = Logger.getLogger(PersistenceService.class);
+
+    @ConfigProperty(name = "pipeline.persistence.duplicate-key", defaultValue = "fail")
+    String duplicateKeyPolicyValue;
 
     @Inject
     PersistenceManager persistenceManager;
@@ -52,13 +56,41 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T> {
         }
         return persistenceManager.persist(item)
             .onFailure(this::isDuplicateKeyError)
-            .recoverWithItem(item)
+            .recoverWithUni(failure -> handleDuplicateKey(item, failure))
             .onItem().invoke(result -> logger.debugf("Successfully persisted entity: %s", result != null ? result.getClass().getName() : "null"))
             .onFailure().invoke(failure -> logger.error("Failed to persist entity", failure))
             .onFailure().transform(failure -> isTransientDbError(failure)
                 ? failure
                 : new NonRetryableException("Non-transient persistence error", failure))
             .replaceWith(item); // Return the original item as it was just persisted (side effect)
+    }
+
+    private Uni<T> handleDuplicateKey(T item, Throwable failure) {
+        DuplicateKeyPolicy policy = DuplicateKeyPolicy.fromConfig(duplicateKeyPolicyValue);
+        return switch (policy) {
+            case IGNORE -> Uni.createFrom().item(item);
+            case UPSERT -> persistenceManager.persistOrUpdate(item).replaceWith(item);
+            case FAIL -> Uni.createFrom().failure(failure);
+        };
+    }
+
+    private enum DuplicateKeyPolicy {
+        FAIL,
+        IGNORE,
+        UPSERT;
+
+        static DuplicateKeyPolicy fromConfig(String value) {
+            if (value == null || value.isBlank()) {
+                return FAIL;
+            }
+            String normalized = value.trim().replace('-', '_').toUpperCase();
+            for (DuplicateKeyPolicy policy : values()) {
+                if (policy.name().equals(normalized)) {
+                    return policy;
+                }
+            }
+            return FAIL;
+        }
     }
 
     /**

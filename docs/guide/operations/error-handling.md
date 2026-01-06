@@ -153,7 +153,7 @@ throw new NonRetryableException("Invalid payload");
 
 The persistence plugin applies this automatically:
 
-- Duplicate key errors (SQLState `23505`) are treated as success for replay safety.
+- Duplicate key errors (SQLState `23505`) follow `pipeline.persistence.duplicate-key` (`fail`, `ignore`, `upsert`).
 - Non-transient database errors are wrapped in `NonRetryableException`.
 - Transient connectivity errors are retried according to the step configuration.
 

@@ -78,6 +78,14 @@ Prefix: `pipeline.cache`
 | `pipeline.cache.caffeine.expire-after-access` | duration | none | Expire entries after access for the Caffeine provider. |
 | `pipeline.cache.redis.prefix` | string | `pipeline-cache:` | Key prefix for Redis cache entries. |
 
+### Persistence Configuration
+
+Prefix: `pipeline.persistence`
+
+| Property | Type | Default | Description |
+| --- | --- | --- | --- |
+| `pipeline.persistence.duplicate-key` | string | `fail` | Duplicate key policy for persistence (`fail`, `ignore`, `upsert`). |
+
 ### Pipeline Order
 
 | Property | Type | Default | Description |

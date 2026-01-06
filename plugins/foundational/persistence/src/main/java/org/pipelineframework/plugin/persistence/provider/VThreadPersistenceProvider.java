@@ -81,6 +81,33 @@ public class VThreadPersistenceProvider implements PersistenceProvider<Object> {
     });
   }
 
+  @Override
+  public Uni<Object> persistOrUpdate(Object entity) {
+    if (entity == null) {
+      return Uni.createFrom().failure(new IllegalArgumentException("Cannot persist a null entity"));
+    }
+
+    return Uni.createFrom().item(() -> {
+        if (!entityManagerInstance.isResolvable()) {
+        throw new IllegalStateException("No EntityManager available for VThreadPersistenceProvider");
+        }
+
+        try (EntityManager em = entityManagerInstance.get()) {
+            em.getTransaction().begin();
+            try {
+                em.merge(entity);
+                em.getTransaction().commit();
+            } catch (Exception e) {
+                if (em.getTransaction().isActive()) {
+                    em.getTransaction().rollback();
+                }
+                throw e;
+            }
+            return entity;
+        }
+    });
+  }
+
   /**
    * Identifies the handled entity type for this persistence provider.
    *

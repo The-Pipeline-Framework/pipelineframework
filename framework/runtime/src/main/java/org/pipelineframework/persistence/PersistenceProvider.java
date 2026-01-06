@@ -41,6 +41,18 @@ public interface PersistenceProvider<T> {
     Uni<T> persist(T entity);
 
     /**
+     * Persist or update an entity, if supported by the underlying provider.
+     *
+     * <p>Default implementation delegates to {@link #persist(Object)}.</p>
+     *
+     * @param entity The entity to persist or update
+     * @return A Uni that completes with the persisted or updated entity
+     */
+    default Uni<T> persistOrUpdate(T entity) {
+        return persist(entity);
+    }
+
+    /**
  * Determine whether this provider can handle the given entity instance.
  *
  * @param entity the entity instance to evaluate; its runtime type is used to decide compatibility
