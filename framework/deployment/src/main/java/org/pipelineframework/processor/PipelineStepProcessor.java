@@ -350,7 +350,7 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
                         roleMetadataGenerator.recordClassWithRole(grpcClassName, grpcRole.name());
                         break;
                     case CLIENT_STEP:
-                        if (model.deploymentRole() == DeploymentRole.PLUGIN_SERVER && !pluginHost) {
+                        if (model.deploymentRole() == DeploymentRole.PLUGIN_SERVER && pluginHost) {
                             break;
                         }
                         String clientClassName = model.servicePackage() + PIPELINE_PACKAGE_SUFFIX +
@@ -391,7 +391,7 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
                         roleMetadataGenerator.recordClassWithRole(restClassName, restRole.name());
                         break;
                     case REST_CLIENT_STEP:
-                        if (model.deploymentRole() == DeploymentRole.PLUGIN_SERVER && !pluginHost) {
+                        if (model.deploymentRole() == DeploymentRole.PLUGIN_SERVER && pluginHost) {
                             break;
                         }
                         if (restBinding == null) {
