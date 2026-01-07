@@ -23,11 +23,11 @@ import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.UniAssertSubscriber;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.cache.CacheKey;
-import org.pipelineframework.cache.CacheMissException;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.mockito.Mockito.*;
 
 class CacheServiceTest {
@@ -129,21 +129,20 @@ class CacheServiceTest {
     }
 
     @Test
-    void process_WithSkipIfPresentPolicy_ShouldCacheWhenMissing() throws Exception {
+    void process_WithSkipIfPresentPolicy_ShouldNotCacheWhenMissing() throws Exception {
         CacheManager cacheManager = mock(CacheManager.class);
         CacheService<TestItem> service = new CacheService<>(cacheManager);
         setPolicy(service, "skip-if-present");
 
         TestItem item = new TestItem("id-5");
         when(cacheManager.exists(item.cacheKey())).thenReturn(Uni.createFrom().item(false));
-        when(cacheManager.cache(item)).thenReturn(Uni.createFrom().item(item));
 
         Uni<TestItem> resultUni = service.process(item);
         UniAssertSubscriber<TestItem> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertSame(item, subscriber.getItem());
-        verify(cacheManager).cache(item);
+        verify(cacheManager, never()).cache(any());
     }
 
     @Test
@@ -181,7 +180,7 @@ class CacheServiceTest {
     }
 
     @Test
-    void process_WithRequireCachePolicy_ShouldFailOnMiss() throws Exception {
+    void process_WithRequireCachePolicy_ShouldReturnItemOnMiss() throws Exception {
         CacheManager cacheManager = mock(CacheManager.class);
         CacheService<TestItem> service = new CacheService<>(cacheManager);
         setPolicy(service, "require-cache");
@@ -191,9 +190,10 @@ class CacheServiceTest {
 
         Uni<TestItem> resultUni = service.process(item);
         UniAssertSubscriber<TestItem> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
-        subscriber.awaitFailure();
+        subscriber.awaitItem();
 
-        assertTrue(subscriber.getFailure() instanceof CacheMissException);
+        assertSame(item, subscriber.getItem());
+        verify(cacheManager, never()).cache(any());
     }
 
     @Test

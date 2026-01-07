@@ -180,7 +180,7 @@ class CacheManagerTest {
     private void setConfig(String provider, Optional<Duration> ttl) throws Exception {
         Field providerField = CacheManager.class.getDeclaredField("cacheProvider");
         providerField.setAccessible(true);
-        providerField.set(cacheManager, provider);
+        providerField.set(cacheManager, Optional.ofNullable(provider));
 
         Field ttlField = CacheManager.class.getDeclaredField("cacheTtl");
         ttlField.setAccessible(true);

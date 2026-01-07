@@ -31,7 +31,6 @@ import io.quarkus.redis.datasource.value.ReactiveValueCommands;
 import io.smallrye.mutiny.Uni;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
-import org.pipelineframework.cache.CacheKey;
 import org.pipelineframework.cache.CacheProvider;
 
 /**
@@ -40,7 +39,7 @@ import org.pipelineframework.cache.CacheProvider;
 @ApplicationScoped
 @Unremovable
 @IfBuildProperty(name = "pipeline.cache.provider", stringValue = "redis")
-public class RedisCacheProvider implements CacheProvider<CacheKey> {
+public class RedisCacheProvider implements CacheProvider<Object> {
 
     private static final Logger LOG = Logger.getLogger(RedisCacheProvider.class);
 
@@ -59,17 +58,20 @@ public class RedisCacheProvider implements CacheProvider<CacheKey> {
     }
 
     @Override
-    public Class<CacheKey> type() {
-        return CacheKey.class;
+    public Class<Object> type() {
+        return Object.class;
     }
 
     @Override
-    public Uni<CacheKey> cache(String key, CacheKey value) {
+    public Uni<Object> cache(String key, Object value) {
         return cache(key, value, null);
     }
 
     @Override
-    public Uni<CacheKey> cache(String key, CacheKey value, Duration ttl) {
+    public Uni<Object> cache(String key, Object value, Duration ttl) {
+        if (value == null) {
+            return Uni.createFrom().nullItem();
+        }
         if (key == null || key.isBlank()) {
             LOG.warn("Cache key is null or blank, skipping cache");
             return Uni.createFrom().item(value);
@@ -87,7 +89,7 @@ public class RedisCacheProvider implements CacheProvider<CacheKey> {
     }
 
     @Override
-    public Uni<Optional<CacheKey>> get(String key) {
+    public Uni<Optional<Object>> get(String key) {
         if (key == null || key.isBlank()) {
             return Uni.createFrom().item(Optional.empty());
         }
@@ -138,10 +140,10 @@ public class RedisCacheProvider implements CacheProvider<CacheKey> {
 
     @Override
     public boolean supports(Object item) {
-        return item instanceof CacheKey;
+        return true;
     }
 
-    private Optional<CacheKey> deserialize(String serialized, String key) {
+    private Optional<Object> deserialize(String serialized, String key) {
         if (serialized == null || serialized.isBlank()) {
             return Optional.empty();
         }
@@ -149,11 +151,7 @@ public class RedisCacheProvider implements CacheProvider<CacheKey> {
             CacheEnvelope envelope = jsonb.fromJson(serialized, CacheEnvelope.class);
             Class<?> clazz = Class.forName(envelope.type());
             Object value = jsonb.fromJson(envelope.payload(), clazz);
-            if (value instanceof CacheKey cacheKey) {
-                return Optional.of(cacheKey);
-            }
-            LOG.warnf("Cached value for key %s is not a CacheKey (type=%s)", key, envelope.type());
-            return Optional.empty();
+            return Optional.ofNullable(value);
         } catch (Exception e) {
             LOG.warnf("Failed to deserialize cache entry for key %s: %s", key, e.getMessage());
             return Optional.empty();

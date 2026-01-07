@@ -22,8 +22,8 @@ import io.smallrye.mutiny.Uni;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.pipelineframework.cache.CacheKey;
-import org.pipelineframework.cache.CacheMissException;
-import org.pipelineframework.cache.CachePolicy;
+import org.pipelineframework.cache.CacheStatus;
+import org.pipelineframework.context.PipelineCacheStatusHolder;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.service.ReactiveSideEffectService;
@@ -37,7 +37,7 @@ public class CacheService<T> implements ReactiveSideEffectService<T> {
 
     private final CacheManager cacheManager;
 
-    @ConfigProperty(name = "pipeline.cache.policy", defaultValue = "cache-only")
+    @ConfigProperty(name = "pipeline.cache.policy", defaultValue = "prefer-cache")
     String policyValue;
 
     /**
@@ -64,17 +64,14 @@ public class CacheService<T> implements ReactiveSideEffectService<T> {
 
         PipelineContext context = PipelineContextHolder.get();
         String overridePolicy = context != null ? context.cachePolicy() : null;
-        CachePolicy policy = CachePolicy.fromConfig(overridePolicy != null ? overridePolicy : policyValue);
-
-        if (policy == CachePolicy.BYPASS_CACHE) {
-            return Uni.createFrom().item(item);
+        String policy = overridePolicy != null ? overridePolicy : policyValue;
+        CachePolicy handler = CachePolicy.fromConfig(policy, cacheManager, logger);
+        if (!handler.requiresCacheKey()) {
+            return handler.handle(item, null, key -> key);
         }
 
         if (!(item instanceof CacheKey cacheKey)) {
-            if (policy == CachePolicy.REQUIRE_CACHE) {
-                return Uni.createFrom().failure(new CacheMissException(
-                    "Item type %s does not implement CacheKey".formatted(item.getClass().getName())));
-            }
+            PipelineCacheStatusHolder.set(CacheStatus.MISS);
             logger.warnf("Item type %s does not implement CacheKey, skipping cache", item.getClass().getName());
             return Uni.createFrom().item(item);
         }
@@ -86,42 +83,18 @@ public class CacheService<T> implements ReactiveSideEffectService<T> {
         assert cacheManager != null;
         String key = cacheKey.cacheKey();
         if (key == null || key.isBlank()) {
-            if (policy == CachePolicy.REQUIRE_CACHE) {
-                return Uni.createFrom().failure(new CacheMissException(
-                    "CacheKey is empty for item type %s".formatted(item.getClass().getName())));
-            }
+            PipelineCacheStatusHolder.set(CacheStatus.MISS);
             logger.warnf("CacheKey is empty for item type %s, skipping cache", item.getClass().getName());
             return Uni.createFrom().item(item);
         }
-        if (context != null && context.versionTag() != null && !context.versionTag().isBlank()) {
-            key = context.versionTag() + ":" + key;
-        }
-
-        String finalKey = key;
-        return switch (policy) {
-            case RETURN_CACHED -> cacheManager.get(key)
-                .onItem().transformToUni(cached -> cached
-                    .map(value -> Uni.createFrom().item((T) value))
-                    .orElseGet(() -> cacheManager.cache(item).replaceWith(item)))
-                .onFailure().invoke(failure -> logger.error("Failed to read from cache", failure))
-                .onItem().transform(result -> result != null ? result : item);
-            case SKIP_IF_PRESENT -> cacheManager.exists(key)
-                .onItem().transformToUni(exists -> exists
-                    ? Uni.createFrom().item(item)
-                    : cacheManager.cache(item).replaceWith(item))
-                .onFailure().invoke(failure -> logger.error("Failed to cache item", failure));
-            case REQUIRE_CACHE -> cacheManager.get(key)
-                .onItem().transformToUni(cached -> cached
-                    .map(value -> Uni.createFrom().item((T) value))
-                    .orElseGet(() -> Uni.createFrom().failure(new CacheMissException(
-                        "Cache entry missing for key %s".formatted(finalKey)))))
-                .onFailure().invoke(failure -> logger.error("Failed to read from cache", failure));
-            case BYPASS_CACHE -> Uni.createFrom().item(item);
-            case CACHE_ONLY -> cacheManager.cache(item)
-                .onItem().invoke(result -> logger.debugf("Cached item of type: %s", result != null ? result.getClass().getName() : "null"))
-                .onFailure().invoke(failure -> logger.error("Failed to cache item", failure))
-                .replaceWith(item);
-        };
+        String versionTag = context != null ? context.versionTag() : null;
+        return handler.handle(item, key, rawKey -> withVersionPrefix(rawKey, versionTag));
     }
 
+    private String withVersionPrefix(String key, String versionTag) {
+        if (versionTag == null || versionTag.isBlank()) {
+            return key;
+        }
+        return versionTag + ":" + key;
+    }
 }
