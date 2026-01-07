@@ -19,7 +19,6 @@ package org.pipelineframework.plugin.persistence;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.pipelineframework.service.ReactiveSideEffectService;
 import org.pipelineframework.step.NonRetryableException;
@@ -31,12 +30,11 @@ import org.pipelineframework.step.NonRetryableException;
 public class PersistenceService<T> implements ReactiveSideEffectService<T> {
     private final Logger logger = Logger.getLogger(PersistenceService.class);
 
-    @ConfigProperty(name = "pipeline.persistence.duplicate-key", defaultValue = "fail")
-    String duplicateKeyPolicyValue;
-
     @Inject
     PersistenceManager persistenceManager;
 
+    @Inject
+    PersistenceConfig config;
     @Override
     public Uni<T> process(T item) {
         logger.debugf("PersistenceService.process() called with item: %s (class: %s)",
@@ -66,7 +64,8 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T> {
     }
 
     private Uni<T> handleDuplicateKey(T item, Throwable failure) {
-        DuplicateKeyPolicy policy = DuplicateKeyPolicy.fromConfig(duplicateKeyPolicyValue);
+        String policyValue = config != null ? config.duplicateKey() : null;
+        DuplicateKeyPolicy policy = DuplicateKeyPolicy.fromConfig(policyValue);
         return switch (policy) {
             case IGNORE -> Uni.createFrom().item(item);
             case UPSERT -> persistenceManager.persistOrUpdate(item).replaceWith(item);
@@ -190,23 +189,17 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T> {
         // MySQL-specific connection exceptions (more specific than just checking package name)
         if (throwableClassName.startsWith("com.mysql.cj.exceptions.")) {
             // Check for specific MySQL connection-related exception types
-            if (throwableClassName.contains("CommunicationsException") ||
-                throwableClassName.contains("ConnectionException") ||
-                throwableClassName.contains("MySQLTimeoutException") ||
-                throwableClassName.contains("SSLException")) {
-                return true;
-            }
-            return false; // Only return true for specific connection-related MySQL exceptions
+            return throwableClassName.contains("CommunicationsException") ||
+                    throwableClassName.contains("ConnectionException") ||
+                    throwableClassName.contains("MySQLTimeoutException") ||
+                    throwableClassName.contains("SSLException");// Only return true for specific connection-related MySQL exceptions
         }
 
         // Oracle-specific connection exceptions
         if (throwableClassName.startsWith("oracle.jdbc")) {
             // Check for Oracle connection-related exceptions
-            if (throwableClassName.contains("OracleConnection") ||
-                throwableClassName.contains("SQLRecoverableException")) {
-                return true;
-            }
-            return false; // Only return true for connection-related Oracle exceptions
+            return throwableClassName.contains("OracleConnection") ||
+                    throwableClassName.contains("SQLRecoverableException");// Only return true for connection-related Oracle exceptions
         }
 
         // Microsoft SQL Server exceptions
@@ -218,13 +211,11 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T> {
                 if (message != null) {
                     String lowerMessage = message.toLowerCase();
                     // Common connection-related messages in SQL Server exceptions
-                    if (lowerMessage.contains("connection timed out") ||
-                        lowerMessage.contains("connection reset") ||
-                        lowerMessage.contains("the connection is closed") ||
-                        lowerMessage.contains("tcp provider") ||
-                        lowerMessage.contains("connection was terminated")) {
-                        return true;
-                    }
+                    return lowerMessage.contains("connection timed out") ||
+                            lowerMessage.contains("connection reset") ||
+                            lowerMessage.contains("the connection is closed") ||
+                            lowerMessage.contains("tcp provider") ||
+                            lowerMessage.contains("connection was terminated");
                 }
             }
             return false; // Only return true for connection-related SQL Server exceptions

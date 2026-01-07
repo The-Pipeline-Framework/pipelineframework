@@ -38,7 +38,7 @@ class PersistenceServiceTest {
         PersistenceManager manager = mock(PersistenceManager.class);
         PersistenceService<TestEntity> service = new PersistenceService<>();
         service.persistenceManager = manager;
-        service.duplicateKeyPolicyValue = "ignore";
+        service.config = () -> "ignore";
 
         TestEntity entity = new TestEntity();
         SQLException duplicate = new SQLException("duplicate key", "23505");
@@ -57,7 +57,7 @@ class PersistenceServiceTest {
         PersistenceManager manager = mock(PersistenceManager.class);
         PersistenceService<TestEntity> service = new PersistenceService<>();
         service.persistenceManager = manager;
-        service.duplicateKeyPolicyValue = "upsert";
+        service.config = () -> "upsert";
 
         TestEntity entity = new TestEntity();
         SQLException duplicate = new SQLException("duplicate key", "23505");
@@ -97,7 +97,7 @@ class PersistenceServiceTest {
         PersistenceManager manager = mock(PersistenceManager.class);
         PersistenceService<TestEntity> service = new PersistenceService<>();
         service.persistenceManager = manager;
-        service.duplicateKeyPolicyValue = "fail";
+        service.config = () -> "fail";
 
         TestEntity entity = new TestEntity();
         SQLException duplicate = new SQLException("duplicate key", "23505");
