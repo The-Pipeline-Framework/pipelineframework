@@ -29,7 +29,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Inject;
 
-import io.quarkus.arc.properties.IfBuildProperty;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
@@ -48,7 +47,6 @@ import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
  * the PipelineApplication and the CLI app without duplicating code.
  */
 @ApplicationScoped
-@IfBuildProperty(name = "pipeline-cli.generate-cli", stringValue = "true")
 public class PipelineExecutionService {
 
   private static final Logger LOG = Logger.getLogger(PipelineExecutionService.class);

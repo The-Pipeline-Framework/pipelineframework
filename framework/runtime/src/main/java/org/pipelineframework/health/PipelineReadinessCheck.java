@@ -19,7 +19,6 @@ package org.pipelineframework.health;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import io.quarkus.arc.properties.IfBuildProperty;
 import org.eclipse.microprofile.health.HealthCheck;
 import org.eclipse.microprofile.health.HealthCheckResponse;
 import org.eclipse.microprofile.health.HealthCheckResponseBuilder;
@@ -31,7 +30,6 @@ import org.pipelineframework.PipelineExecutionService;
  */
 @Readiness
 @ApplicationScoped
-@IfBuildProperty(name = "pipeline-cli.generate-cli", stringValue = "true")
 public class PipelineReadinessCheck implements HealthCheck {
 
   @Inject

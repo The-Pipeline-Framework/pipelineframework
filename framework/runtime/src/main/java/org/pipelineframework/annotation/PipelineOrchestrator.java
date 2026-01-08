@@ -25,6 +25,12 @@ import java.lang.annotation.Target;
  * Marker annotation to trigger orchestrator endpoint generation.
  */
 @Target(ElementType.TYPE)
-@Retention(RetentionPolicy.SOURCE)
+@Retention(RetentionPolicy.CLASS)
 public @interface PipelineOrchestrator {
+    /**
+     * Enables CLI generation for the orchestrator.
+     *
+     * @return {@code true} to generate a CLI entrypoint, {@code false} to skip it
+     */
+    boolean generateCli() default true;
 }

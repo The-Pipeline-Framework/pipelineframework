@@ -62,8 +62,6 @@ class PipelineOrderTest {
         @Override
         public Map<String, String> getConfigOverrides() {
             return Map.of(
-                "pipeline-cli.generate-cli",
-                "true",
                 "pipeline.order",
                 "org.pipelineframework.pipeline.order.OrderedStepA," +
                     "org.pipelineframework.pipeline.order.OrderedStepB," +

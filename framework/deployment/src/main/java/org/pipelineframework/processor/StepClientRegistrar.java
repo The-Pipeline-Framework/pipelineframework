@@ -23,10 +23,9 @@ import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
 import io.quarkus.deployment.builditem.FeatureBuildItem;
-import org.jboss.jandex.ClassInfo;
-import org.jboss.jandex.IndexView;
+import org.jboss.jandex.*;
 import org.jboss.logging.Logger;
-import org.pipelineframework.config.PipelineCliAppConfig;
+import org.pipelineframework.annotation.PipelineOrchestrator;
 
 import static org.pipelineframework.processor.PipelineStepProcessor.GRPC_CLIENT_STEP_SUFFIX;
 import static org.pipelineframework.processor.PipelineStepProcessor.REST_CLIENT_STEP_SUFFIX;
@@ -66,9 +65,8 @@ public class StepClientRegistrar {
      */
     @BuildStep
     void registerStepClients(BuildProducer<AdditionalBeanBuildItem> beans,
-                             PipelineCliAppConfig config,
                              CombinedIndexBuildItem combinedIndex) {
-        if (!config.generateCli()) {
+        if (!isCliGenerationEnabled(combinedIndex)) {
             LOG.debug("Client generation disabled; skipping client step registration.");
             return;
         }
@@ -87,5 +85,20 @@ public class StepClientRegistrar {
             beans.produce(AdditionalBeanBuildItem.unremovableOf(ci.name().toString()));
             LOG.infof("Registered step (client) %s", ci.name());
         }
+    }
+
+    private boolean isCliGenerationEnabled(CombinedIndexBuildItem combinedIndex) {
+        DotName annotationName = DotName.createSimple(PipelineOrchestrator.class.getName());
+        java.util.Collection<AnnotationInstance> instances = combinedIndex.getIndex().getAnnotations(annotationName);
+        if (instances == null || instances.isEmpty()) {
+            return false;
+        }
+        for (AnnotationInstance instance : instances) {
+            AnnotationValue value = instance.value("generateCli");
+            if (value == null || value.asBoolean()) {
+                return true;
+            }
+        }
+        return false;
     }
 }

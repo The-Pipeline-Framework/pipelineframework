@@ -16,12 +16,12 @@
 
 package org.pipelineframework.config;
 
-import io.quarkus.arc.properties.IfBuildProperty;
-import io.quarkus.runtime.StartupEvent;
+import java.time.Duration;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
-import java.time.Duration;
+
+import io.quarkus.runtime.StartupEvent;
 import org.jboss.logging.Logger;
 
 /**
@@ -30,7 +30,6 @@ import org.jboss.logging.Logger;
  * (e.g., pipeline.defaults.parallel=false) are properly applied to the PipelineConfig.
  */
 @ApplicationScoped
-@IfBuildProperty(name = "pipeline-cli.generate-cli", stringValue = "true")
 public class PipelineConfigInitializer {
 
     private static final Logger logger = Logger.getLogger(PipelineConfigInitializer.class);

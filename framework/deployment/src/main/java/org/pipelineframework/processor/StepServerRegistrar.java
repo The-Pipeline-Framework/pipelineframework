@@ -21,9 +21,12 @@ import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
 import io.quarkus.deployment.builditem.FeatureBuildItem;
+import org.jboss.jandex.AnnotationInstance;
+import org.jboss.jandex.AnnotationValue;
+import org.jboss.jandex.DotName;
 import org.jboss.jandex.IndexView;
 import org.jboss.logging.Logger;
-import org.pipelineframework.config.PipelineCliAppConfig;
+import org.pipelineframework.annotation.PipelineOrchestrator;
 
 import static org.pipelineframework.processor.PipelineStepProcessor.GRPC_SERVICE_SUFFIX;
 
@@ -62,10 +65,9 @@ public class StepServerRegistrar {
      */
     @BuildStep
     void registerGeneratedGrpcServices(BuildProducer<AdditionalBeanBuildItem> additionalBeans,
-                                  PipelineCliAppConfig config,
                                   CombinedIndexBuildItem combinedIndex) {
 
-        if (config.generateCli()) {
+        if (isCliGenerationEnabled(combinedIndex)) {
             LOG.debug("Client generation enabled; skipping server registration.");
             return;
         }
@@ -79,5 +81,20 @@ public class StepServerRegistrar {
                 LOG.infof("Registering gRPC service: %s", ci.name());
                 additionalBeans.produce(AdditionalBeanBuildItem.unremovableOf(ci.name().toString()));
             });
+    }
+
+    private boolean isCliGenerationEnabled(CombinedIndexBuildItem combinedIndex) {
+        DotName annotationName = DotName.createSimple(PipelineOrchestrator.class.getName());
+        java.util.Collection<AnnotationInstance> instances = combinedIndex.getIndex().getAnnotations(annotationName);
+        if (instances == null || instances.isEmpty()) {
+            return false;
+        }
+        for (AnnotationInstance instance : instances) {
+            AnnotationValue value = instance.value("generateCli");
+            if (value == null || value.asBoolean()) {
+                return true;
+            }
+        }
+        return false;
     }
 }
