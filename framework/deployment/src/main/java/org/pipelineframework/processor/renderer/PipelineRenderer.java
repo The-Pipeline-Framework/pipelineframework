@@ -10,10 +10,10 @@ import org.pipelineframework.processor.ir.PipelineBinding;
  */
 public interface PipelineRenderer<T extends PipelineBinding> {
     /**
- * The generation target produced by this renderer.
- *
- * @return the generation target for this renderer
- */
+     * The generation target produced by this renderer.
+     *
+     * @return the generation target for this renderer
+     */
     GenerationTarget target();
 
     /**

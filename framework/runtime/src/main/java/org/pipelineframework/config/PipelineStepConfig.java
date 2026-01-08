@@ -48,13 +48,13 @@ public interface PipelineStepConfig {
     java.util.List<String> order();
 
     /**
- * Default configuration applied to every pipeline step.
- *
- * When used as global defaults, properties are applied to every step unless a step provides overrides; the
- * `order` property is ignored in the global defaults.
- *
- * @return the StepConfig containing default values for pipeline steps
- */
+     * Default configuration applied to every pipeline step.
+     * <p>
+     * When used as global defaults, properties are applied to every step unless a step provides overrides; the
+     * `order` property is ignored in the global defaults.
+     *
+     * @return the StepConfig containing default values for pipeline steps
+     */
     StepConfig defaults();
 
     /**
