@@ -120,6 +120,9 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
 
         FieldSpec restClientField = FieldSpec.builder(restClientInterface, "restClient")
             .addAnnotation(AnnotationSpec.builder(
+                    ClassName.get("jakarta.inject", "Inject"))
+                .build())
+            .addAnnotation(AnnotationSpec.builder(
                     ClassName.get("org.eclipse.microprofile.rest.client.inject", "RestClient"))
                 .build())
             .build();
