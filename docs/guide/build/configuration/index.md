@@ -21,17 +21,43 @@ The pipeline YAML controls global settings used by the annotation processor.
 If `pipeline-config.yaml` (the template configuration produced by Canvas or the template generator) is present,
 the build can also use it to generate protobuf definitions and orchestrator endpoints at compile time.
 
-### CLI Build Options (Quarkus Build-Time)
+### Orchestrator CLI (Annotation)
 
-Prefix: `pipeline-cli`
+CLI metadata is configured on the orchestrator annotation.
 
-| Property | Type | Default | Description |
+| Annotation Attribute | Type | Default | Description |
 | --- | --- | --- | --- |
-| `pipeline-cli.generate-cli` | boolean | `false` | Enables generation of the CLI entrypoint. |
-| `pipeline-cli.version` | string | `0.9.2` | Framework version embedded in the CLI metadata. |
-| `pipeline-cli.cli-name` | string | none | CLI command name. |
-| `pipeline-cli.cli-description` | string | none | CLI description. |
-| `pipeline-cli.cli-version` | string | none | CLI version override; when unset, use `pipeline-cli.version`. |
+| `generateCli` | boolean | `true` | Enables generation of the orchestrator CLI entrypoint. |
+| `name` | string | `"orchestrator"` | CLI command name. |
+| `description` | string | `"Pipeline Orchestrator CLI"` | CLI command description. |
+| `version` | string | `"1.0.0"` | CLI command version. |
+
+Example:
+
+```java
+@PipelineOrchestrator(
+    generateCli = true,
+    name = "payments-orchestrator",
+    description = "CSV Payments Orchestrator CLI",
+    version = "1.2.0"
+)
+public class OrchestratorMarker {
+}
+```
+
+CLI input expectations:
+- `--input` / `PIPELINE_INPUT` must be a JSON object matching the input DTO.
+- `--input-list` / `PIPELINE_INPUT_LIST` must be a JSON array of input DTO objects.
+
+Examples:
+
+```bash
+./app -i '{"path":"/data/in"}'
+```
+
+```bash
+./app --input-list '[{"path":"/data/a"},{"path":"/data/b"}]'
+```
 
 ### Annotation Processor Options
 
@@ -42,7 +68,7 @@ Pass via `maven-compiler-plugin` with `-A` arguments.
 | `-Apipeline.generatedSourcesDir` | path | none | Base directory for role-specific generated sources. |
 | `-Apipeline.generatedSourcesRoot` | path | none | Legacy alias of `pipeline.generatedSourcesDir`. |
 | `-Apipeline.cache.keyGenerator` | class name | none | Global `CacheKeyGenerator` used for `@CacheResult` when steps don't override it. |
-| `-Apipeline.orchestrator.generate` | boolean | `false` | Generate orchestrator endpoint even without `@PipelineOrchestrator`. |
+| `-Apipeline.orchestrator.generate` | boolean | `false` | Generate orchestrator endpoint even without `@PipelineOrchestrator`. CLI generation still requires the annotation. |
 
 ### REST Path Overrides (Build-Time)
 

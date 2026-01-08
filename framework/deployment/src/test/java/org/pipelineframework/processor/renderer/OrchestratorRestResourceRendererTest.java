@@ -82,7 +82,10 @@ class OrchestratorRestResourceRendererTest {
             "InputType",
             "OutputType",
             inputStreaming,
-            outputStreaming
+            outputStreaming,
+            null,
+            null,
+            null
         );
     }
 

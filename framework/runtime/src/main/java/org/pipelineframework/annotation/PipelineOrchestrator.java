@@ -33,4 +33,25 @@ public @interface PipelineOrchestrator {
      * @return {@code true} to generate a CLI entrypoint, {@code false} to skip it
      */
     boolean generateCli() default true;
+
+    /**
+     * CLI command name.
+     *
+     * @return CLI command name, or empty to use the default
+     */
+    String name() default "";
+
+    /**
+     * CLI command description.
+     *
+     * @return CLI command description, or empty to use the default
+     */
+    String description() default "";
+
+    /**
+     * CLI command version.
+     *
+     * @return CLI command version, or empty to use the default
+     */
+    String version() default "";
 }

@@ -12,7 +12,10 @@ public record OrchestratorBinding(
     String inputTypeName,
     String outputTypeName,
     boolean inputStreaming,
-    boolean outputStreaming
+    boolean outputStreaming,
+    String cliName,
+    String cliDescription,
+    String cliVersion
 ) implements PipelineBinding {
     public String normalizedTransport() {
         if (transport == null) {

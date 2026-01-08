@@ -97,6 +97,7 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
     private RestResourceRenderer restRenderer;
     private OrchestratorGrpcRenderer orchestratorGrpcRenderer;
     private OrchestratorRestResourceRenderer orchestratorRestRenderer;
+    private OrchestratorCliRenderer orchestratorCliRenderer;
     private GrpcBindingResolver bindingResolver;
     private RestBindingResolver restBindingResolver;
     private RoleMetadataGenerator roleMetadataGenerator;
@@ -115,7 +116,7 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
 
     /**
      * Initialises the processor and its helper components using the provided processing environment.
-     *
+     * <p>
      * Initialises the IR extractor, validator, gRPC/client/REST renderers, binding resolvers and
      * the role metadata generator so the processor is ready to perform annotation processing.
      *
@@ -133,6 +134,7 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
         this.restRenderer = new RestResourceRenderer();
         this.orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
         this.orchestratorRestRenderer = new OrchestratorRestResourceRenderer();
+        this.orchestratorCliRenderer = new OrchestratorCliRenderer();
         this.bindingResolver = new GrpcBindingResolver();
         this.restBindingResolver = new RestBindingResolver();
         this.roleMetadataGenerator = new RoleMetadataGenerator(processingEnv);
@@ -217,7 +219,6 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
             }
         }
 
-        java.util.List<PipelineStepModel> models = new java.util.ArrayList<>();
         java.util.List<ResolvedStep> resolvedSteps = new java.util.ArrayList<>();
 
         for (Element annotatedElement : pipelineStepElements) {
@@ -261,7 +262,6 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
             }
 
             ResolvedStep resolvedStep = new ResolvedStep(model, grpcBinding, restBinding);
-            models.add(model);
             resolvedSteps.add(resolvedStep);
         }
 
@@ -308,7 +308,8 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
         }
 
         if (generateOrchestrator) {
-            generateOrchestratorServer(descriptorSet);
+            boolean generateCli = shouldGenerateOrchestratorCli(orchestratorElements);
+            generateOrchestratorServer(descriptorSet, generateCli, orchestratorElements);
         }
 
         return true;
@@ -316,7 +317,7 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
 
     /**
      * Generate Java source artifacts for the given pipeline step model and record their roles.
-     *
+     * <p>
      * For each target enabled on the model this method creates a source file, delegates rendering
      * to the appropriate renderer (gRPC service, client step or REST resource) and records the
      * generated class with the corresponding role in the role metadata generator.
@@ -612,13 +613,15 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
         return "true".equalsIgnoreCase(normalized) || "1".equals(normalized);
     }
 
-    private void generateOrchestratorServer(DescriptorProtos.FileDescriptorSet descriptorSet) {
+    private void generateOrchestratorServer(DescriptorProtos.FileDescriptorSet descriptorSet,
+                                            boolean generateCli,
+                                            java.util.Set<? extends Element> orchestratorElements) {
         if (orchestratorGenerated) {
             return;
         }
         orchestratorGenerated = true;
 
-        OrchestratorBinding binding = buildOrchestratorBinding(pipelineTemplateConfig);
+        OrchestratorBinding binding = buildOrchestratorBinding(pipelineTemplateConfig, orchestratorElements);
         if (binding == null) {
             processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING,
                 "Skipping orchestrator generation because pipeline template config is missing or incomplete.");
@@ -646,13 +649,41 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
                     null,
                     descriptorSet));
             }
+
+            if (generateCli) {
+                DeploymentRole role = DeploymentRole.ORCHESTRATOR_CLIENT;
+                orchestratorCliRenderer.render(binding, new GenerationContext(
+                    processingEnv,
+                    resolveRoleOutputDir(role),
+                    role,
+                    java.util.Set.of(),
+                    null,
+                    descriptorSet));
+            }
         } catch (IOException e) {
             processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR,
                 "Failed to generate orchestrator server: " + e.getMessage());
         }
     }
 
-    private OrchestratorBinding buildOrchestratorBinding(PipelineTemplateConfig config) {
+    private boolean shouldGenerateOrchestratorCli(java.util.Set<? extends Element> orchestratorElements) {
+        if (orchestratorElements == null || orchestratorElements.isEmpty()) {
+            return false;
+        }
+        for (Element element : orchestratorElements) {
+            PipelineOrchestrator annotation = element.getAnnotation(PipelineOrchestrator.class);
+            if (annotation == null) {
+                continue;
+            }
+            if (annotation.generateCli()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private OrchestratorBinding buildOrchestratorBinding(PipelineTemplateConfig config,
+                                                         java.util.Set<? extends Element> orchestratorElements) {
         if (config == null) {
             return null;
         }
@@ -664,8 +695,8 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
         if (basePackage == null || basePackage.isBlank()) {
             return null;
         }
-        PipelineTemplateStep first = steps.get(0);
-        PipelineTemplateStep last = steps.get(steps.size() - 1);
+        PipelineTemplateStep first = steps.getFirst();
+        PipelineTemplateStep last = steps.getLast();
         if (first == null || last == null) {
             return null;
         }
@@ -696,6 +727,11 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
             null
         );
 
+        PipelineOrchestrator orchestratorAnnotation = resolveOrchestratorAnnotation(orchestratorElements);
+        String cliName = orchestratorAnnotation == null ? null : emptyToNull(orchestratorAnnotation.name());
+        String cliDescription = orchestratorAnnotation == null ? null : emptyToNull(orchestratorAnnotation.description());
+        String cliVersion = orchestratorAnnotation == null ? null : emptyToNull(orchestratorAnnotation.version());
+
         return new OrchestratorBinding(
             model,
             basePackage,
@@ -703,8 +739,28 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
             inputType,
             outputType,
             inputStreaming,
-            outputStreaming
+            outputStreaming,
+            cliName,
+            cliDescription,
+            cliVersion
         );
+    }
+
+    private PipelineOrchestrator resolveOrchestratorAnnotation(java.util.Set<? extends Element> orchestratorElements) {
+        if (orchestratorElements == null || orchestratorElements.isEmpty()) {
+            return null;
+        }
+        for (Element element : orchestratorElements) {
+            PipelineOrchestrator annotation = element.getAnnotation(PipelineOrchestrator.class);
+            if (annotation != null) {
+                return annotation;
+            }
+        }
+        return null;
+    }
+
+    private String emptyToNull(String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 
     private StreamingShape streamingShape(boolean inputStreaming, boolean outputStreaming) {

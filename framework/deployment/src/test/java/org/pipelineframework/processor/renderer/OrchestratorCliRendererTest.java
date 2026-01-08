@@ -10,57 +10,56 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.processor.ir.*;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-class OrchestratorGrpcRendererTest {
+class OrchestratorCliRendererTest {
 
     @TempDir
     Path tempDir;
 
     @Test
-    void rendersUnaryGrpcService() throws IOException {
-        OrchestratorBinding binding = buildBinding(false, false);
-        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(false, false);
+    void rendersGrpcCliWithMapper() throws IOException {
+        OrchestratorBinding binding = buildBinding("GRPC");
+        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet();
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
         when(processingEnv.getMessager()).thenReturn(null);
 
-        OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+        OrchestratorCliRenderer renderer = new OrchestratorCliRenderer();
+        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT,
             java.util.Set.of(), null, descriptorSet));
 
-        Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
+        Path generatedSource = tempDir.resolve("com/example/orchestrator/OrchestratorApplication.java");
         String source = Files.readString(generatedSource);
 
-        assertTrue(source.contains("package com.example.orchestrator.service;"));
-        assertTrue(source.contains("@GrpcService"));
-        assertTrue(source.contains("extends MutinyOrchestratorServiceGrpc.OrchestratorServiceImplBase"));
-        assertTrue(source.contains("public Uni<OutputType> run(InputType input)"));
-        assertTrue(source.contains("return pipelineExecutionService.executePipelineUnary("));
+        assertTrue(source.contains("Multi<InputType> inputMulti"));
+        assertTrue(source.contains("InputTypeMapper inputTypeMapper"));
+        assertTrue(source.contains("InputTypeDto.class"));
+        assertTrue(source.contains(".map(inputTypeMapper::toGrpc)"));
     }
 
     @Test
-    void rendersStreamingGrpcService() throws IOException {
-        OrchestratorBinding binding = buildBinding(true, true);
-        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(true, true);
+    void rendersRestCliWithoutMapper() throws IOException {
+        OrchestratorBinding binding = buildBinding("REST");
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
-        when(processingEnv.getMessager()).thenReturn(null);
 
-        OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
-        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
-            java.util.Set.of(), null, descriptorSet));
+        OrchestratorCliRenderer renderer = new OrchestratorCliRenderer();
+        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT,
+            java.util.Set.of(), null, null));
 
-        Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
+        Path generatedSource = tempDir.resolve("com/example/orchestrator/OrchestratorApplication.java");
         String source = Files.readString(generatedSource);
 
-        assertTrue(source.contains("public Multi<OutputType> run(Multi<InputType> input)"));
-        assertTrue(source.contains("return pipelineExecutionService.executePipelineStreaming(input);"));
+        assertTrue(source.contains("Multi<InputTypeDto> inputMulti"));
+        assertTrue(source.contains("InputTypeDto.class"));
+        assertFalse(source.contains("Mapper"));
     }
 
-    private OrchestratorBinding buildBinding(boolean inputStreaming, boolean outputStreaming) {
+    private OrchestratorBinding buildBinding(String transport) {
         PipelineStepModel model = new PipelineStepModel(
             "OrchestratorService",
             "OrchestratorService",
@@ -68,7 +67,7 @@ class OrchestratorGrpcRendererTest {
             com.squareup.javapoet.ClassName.get("com.example.orchestrator.service", "OrchestratorService"),
             null,
             null,
-            streamingShape(inputStreaming, outputStreaming),
+            StreamingShape.UNARY_UNARY,
             java.util.Set.of(GenerationTarget.GRPC_SERVICE),
             ExecutionMode.DEFAULT,
             DeploymentRole.ORCHESTRATOR_CLIENT,
@@ -79,18 +78,18 @@ class OrchestratorGrpcRendererTest {
         return new OrchestratorBinding(
             model,
             "com.example",
-            "GRPC",
+            transport,
             "InputType",
             "OutputType",
-            inputStreaming,
-            outputStreaming,
+            false,
+            false,
             null,
             null,
             null
         );
     }
 
-    private DescriptorProtos.FileDescriptorSet buildDescriptorSet(boolean inputStreaming, boolean outputStreaming) {
+    private DescriptorProtos.FileDescriptorSet buildDescriptorSet() {
         DescriptorProtos.FileDescriptorProto proto = DescriptorProtos.FileDescriptorProto.newBuilder()
             .setName("orchestrator.proto")
             .setPackage("com.example.grpc")
@@ -108,26 +107,11 @@ class OrchestratorGrpcRendererTest {
                 .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
                     .setName("Run")
                     .setInputType(".com.example.grpc.InputType")
-                    .setOutputType(".com.example.grpc.OutputType")
-                    .setClientStreaming(inputStreaming)
-                    .setServerStreaming(outputStreaming)))
+                    .setOutputType(".com.example.grpc.OutputType")))
             .build();
 
         return DescriptorProtos.FileDescriptorSet.newBuilder()
             .addFile(proto)
             .build();
-    }
-
-    private StreamingShape streamingShape(boolean inputStreaming, boolean outputStreaming) {
-        if (inputStreaming && outputStreaming) {
-            return StreamingShape.STREAMING_STREAMING;
-        }
-        if (inputStreaming) {
-            return StreamingShape.STREAMING_UNARY;
-        }
-        if (outputStreaming) {
-            return StreamingShape.UNARY_STREAMING;
-        }
-        return StreamingShape.UNARY_UNARY;
     }
 }

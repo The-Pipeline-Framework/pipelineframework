@@ -13,4 +13,6 @@ public enum GenerationTarget {
     GRPC_SERVICE,
     /** JAX-RS resource */
     REST_RESOURCE,
+    /** Orchestrator CLI entrypoint */
+    ORCHESTRATOR_CLI,
 }
