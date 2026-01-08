@@ -84,6 +84,8 @@ class OrchestratorGrpcRendererTest {
             "OutputType",
             inputStreaming,
             outputStreaming,
+            "ProcessAlphaService",
+            StreamingShape.UNARY_UNARY,
             null,
             null,
             null

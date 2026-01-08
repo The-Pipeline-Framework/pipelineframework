@@ -38,13 +38,10 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         ClassName executionService = ClassName.get("org.pipelineframework", "PipelineExecutionService");
 
         OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
-        var grpcBinding = resolver.resolve(
-            binding.model(),
-            descriptorSet,
-            ORCHESTRATOR_METHOD,
-            binding.inputStreaming(),
-            binding.outputStreaming(),
-            ctx.processingEnv().getMessager());
+        var grpcBinding = safeResolveBinding(binding, descriptorSet, ctx);
+        if (grpcBinding == null) {
+            return;
+        }
 
         GrpcJavaTypeResolver typeResolver = new GrpcJavaTypeResolver();
         var grpcTypes = typeResolver.resolve(grpcBinding, ctx.processingEnv().getMessager());
@@ -99,5 +96,26 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         JavaFile.builder(binding.basePackage() + ".orchestrator.service", service)
             .build()
             .writeTo(ctx.processingEnv().getFiler());
+    }
+
+    private org.pipelineframework.processor.ir.GrpcBinding safeResolveBinding(
+        OrchestratorBinding binding,
+        DescriptorProtos.FileDescriptorSet descriptorSet,
+        GenerationContext ctx
+    ) {
+        try {
+            return new OrchestratorGrpcBindingResolver().resolve(
+                binding.model(),
+                descriptorSet,
+                ORCHESTRATOR_METHOD,
+                binding.inputStreaming(),
+                binding.outputStreaming(),
+                ctx.processingEnv().getMessager());
+        } catch (IllegalStateException e) {
+            ctx.processingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.WARNING,
+                "Skipping orchestrator gRPC generation: " + e.getMessage());
+            return null;
+        }
     }
 }

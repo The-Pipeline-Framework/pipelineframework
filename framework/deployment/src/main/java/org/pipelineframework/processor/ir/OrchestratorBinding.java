@@ -13,6 +13,8 @@ public record OrchestratorBinding(
     String outputTypeName,
     boolean inputStreaming,
     boolean outputStreaming,
+    String firstStepServiceName,
+    StreamingShape firstStepStreamingShape,
     String cliName,
     String cliDescription,
     String cliVersion

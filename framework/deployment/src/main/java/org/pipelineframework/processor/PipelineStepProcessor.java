@@ -221,6 +221,8 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
 
         java.util.List<ResolvedStep> resolvedSteps = new java.util.ArrayList<>();
 
+        boolean allowClientTargets = orchestratorElements != null && !orchestratorElements.isEmpty();
+
         for (Element annotatedElement : pipelineStepElements) {
             if (annotatedElement.getKind() != ElementKind.CLASS) {
                 processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR,
@@ -235,7 +237,7 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
             if (result == null) {
                 continue;
             }
-            PipelineStepModel model = applyTransportTargets(result.model());
+            PipelineStepModel model = applyTransportTargets(result.model(), allowClientTargets);
 
             // Validate the model for semantic consistency
             if (!validator.validate(model, serviceClass)) {
@@ -281,7 +283,7 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
         }
 
         for (ResolvedStep resolvedStep : generationOrder) {
-            PipelineStepModel model = applyTransportTargets(resolvedStep.model());
+            PipelineStepModel model = applyTransportTargets(resolvedStep.model(), allowClientTargets);
             GrpcBinding grpcBinding = rebuildGrpcBinding(resolvedStep.grpcBinding(), model);
             RestBinding restBinding = rebuildRestBinding(resolvedStep.restBinding(), model);
 
@@ -310,6 +312,9 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
         if (generateOrchestrator) {
             boolean generateCli = shouldGenerateOrchestratorCli(orchestratorElements);
             generateOrchestratorServer(descriptorSet, generateCli, orchestratorElements);
+            if (pipelineStepElements.isEmpty()) {
+                generateOrchestratorClientsFromTemplate(descriptorSet);
+            }
         }
 
         return true;
@@ -498,8 +503,8 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
         };
     }
 
-    private PipelineStepModel applyTransportTargets(PipelineStepModel model) {
-        java.util.Set<GenerationTarget> targets = resolveTransportTargets();
+    private PipelineStepModel applyTransportTargets(PipelineStepModel model, boolean allowClientTargets) {
+        java.util.Set<GenerationTarget> targets = resolveTransportTargets(allowClientTargets);
 
         return new PipelineStepModel(
             model.serviceName(),
@@ -516,10 +521,15 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
             model.cacheKeyGenerator());
     }
 
-    private java.util.Set<GenerationTarget> resolveTransportTargets() {
-        return transportMode == TransportMode.REST
-            ? java.util.Set.of(GenerationTarget.REST_RESOURCE, GenerationTarget.REST_CLIENT_STEP)
-            : java.util.Set.of(GenerationTarget.GRPC_SERVICE, GenerationTarget.CLIENT_STEP);
+    private java.util.Set<GenerationTarget> resolveTransportTargets(boolean allowClientTargets) {
+        if (transportMode == TransportMode.REST) {
+            return allowClientTargets
+                ? java.util.Set.of(GenerationTarget.REST_RESOURCE, GenerationTarget.REST_CLIENT_STEP)
+                : java.util.Set.of(GenerationTarget.REST_RESOURCE);
+        }
+        return allowClientTargets
+            ? java.util.Set.of(GenerationTarget.GRPC_SERVICE, GenerationTarget.CLIENT_STEP)
+            : java.util.Set.of(GenerationTarget.GRPC_SERVICE);
     }
 
     private GrpcBinding rebuildGrpcBinding(GrpcBinding binding, PipelineStepModel model) {
@@ -712,6 +722,10 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
             outputStreaming = applyCardinalityToStreaming(step.cardinality(), outputStreaming);
         }
 
+        String firstServiceNameFormatted = formatForClassName(stripProcessPrefix(first.name()));
+        String firstServiceName = "Process" + firstServiceNameFormatted + "Service";
+        StreamingShape firstStreamingShape = streamingShape(first.cardinality());
+
         PipelineStepModel model = new PipelineStepModel(
             ORCHESTRATOR_SERVICE,
             ORCHESTRATOR_SERVICE,
@@ -740,10 +754,165 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
             outputType,
             inputStreaming,
             outputStreaming,
+            firstServiceName,
+            firstStreamingShape,
             cliName,
             cliDescription,
             cliVersion
         );
+    }
+
+    private void generateOrchestratorClientsFromTemplate(DescriptorProtos.FileDescriptorSet descriptorSet) {
+        if (pipelineTemplateConfig == null) {
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING,
+                "Skipping orchestrator client generation because pipeline template config is missing.");
+            return;
+        }
+        java.util.List<PipelineTemplateStep> steps = pipelineTemplateConfig.steps();
+        if (steps == null || steps.isEmpty()) {
+            return;
+        }
+        String basePackage = pipelineTemplateConfig.basePackage();
+        if (basePackage == null || basePackage.isBlank()) {
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING,
+                "Skipping orchestrator client generation because basePackage is missing.");
+            return;
+        }
+
+        java.util.List<PipelineStepModel> clientModels = buildClientModelsFromTemplate(steps, basePackage);
+        for (PipelineStepModel model : clientModels) {
+            GrpcBinding grpcBinding = null;
+            RestBinding restBinding = null;
+            if (model.enabledTargets().contains(GenerationTarget.GRPC_SERVICE)
+                || model.enabledTargets().contains(GenerationTarget.CLIENT_STEP)) {
+                grpcBinding = bindingResolver.resolve(model, descriptorSet);
+            }
+            if (model.enabledTargets().contains(GenerationTarget.REST_RESOURCE)
+                || model.enabledTargets().contains(GenerationTarget.REST_CLIENT_STEP)) {
+                restBinding = restBindingResolver.resolve(model, processingEnv);
+            }
+            try {
+                generateArtifacts(model, grpcBinding, restBinding, descriptorSet);
+            } catch (Exception e) {
+                processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING,
+                    "Failed to generate orchestrator client for '" + model.serviceName() + "': " + e.getMessage());
+            }
+        }
+    }
+
+    private java.util.List<PipelineStepModel> buildClientModelsFromTemplate(
+        java.util.List<PipelineTemplateStep> steps,
+        String basePackage
+    ) {
+        java.util.List<PipelineStepModel> models = new java.util.ArrayList<>();
+        PipelineTemplateStep previous = null;
+        for (int i = 0; i < steps.size(); i++) {
+            PipelineTemplateStep step = steps.get(i);
+            if (step == null || step.name() == null || step.name().isBlank()) {
+                continue;
+            }
+            String serviceNameFormatted = formatForClassName(stripProcessPrefix(step.name()));
+            String serviceName = "Process" + serviceNameFormatted + "Service";
+            String serviceNameForPackage = toServiceName(step.name())
+                .replace("-svc", "")
+                .replace("-", "_");
+            String servicePackage = basePackage + "." + serviceNameForPackage + ".service";
+            ClassName serviceClassName = ClassName.get(servicePackage, serviceName);
+
+            String inputTypeName = step.inputTypeName();
+            if (i > 0 && previous != null) {
+                inputTypeName = previous.outputTypeName();
+            }
+
+            TypeMapping inputMapping = new TypeMapping(
+                ClassName.get(basePackage + ".common.domain", inputTypeName),
+                ClassName.get(basePackage + ".common.mapper", inputTypeName + "Mapper"),
+                true);
+            TypeMapping outputMapping = new TypeMapping(
+                ClassName.get(basePackage + ".common.domain", step.outputTypeName()),
+                ClassName.get(basePackage + ".common.mapper", step.outputTypeName() + "Mapper"),
+                true);
+
+            StreamingShape shape = streamingShape(step.cardinality());
+            java.util.Set<GenerationTarget> targets = transportMode == TransportMode.REST
+                ? java.util.Set.of(GenerationTarget.REST_CLIENT_STEP)
+                : java.util.Set.of(GenerationTarget.CLIENT_STEP);
+
+            PipelineStepModel model = new PipelineStepModel(
+                serviceName,
+                serviceName,
+                servicePackage,
+                serviceClassName,
+                inputMapping,
+                outputMapping,
+                shape,
+                targets,
+                ExecutionMode.DEFAULT,
+                DeploymentRole.ORCHESTRATOR_CLIENT,
+                false,
+                null
+            );
+            models.add(model);
+            previous = step;
+        }
+        return models;
+    }
+
+    private StreamingShape streamingShape(String cardinality) {
+        if ("EXPANSION".equalsIgnoreCase(cardinality)) {
+            return StreamingShape.UNARY_STREAMING;
+        }
+        if ("REDUCTION".equalsIgnoreCase(cardinality)) {
+            return StreamingShape.STREAMING_UNARY;
+        }
+        if ("MANY_TO_MANY".equalsIgnoreCase(cardinality)) {
+            return StreamingShape.STREAMING_STREAMING;
+        }
+        return StreamingShape.UNARY_UNARY;
+    }
+
+    private String toServiceName(String name) {
+        if (name == null || name.isBlank()) {
+            return "";
+        }
+        String replaced = name.replaceAll("[^A-Za-z0-9]", "-").toLowerCase(java.util.Locale.ROOT);
+        String collapsed = replaced.replaceAll("-+", "-");
+        if (collapsed.startsWith("-")) {
+            collapsed = collapsed.substring(1);
+        }
+        if (collapsed.endsWith("-")) {
+            collapsed = collapsed.substring(0, collapsed.length() - 1);
+        }
+        return collapsed + "-svc";
+    }
+
+    private String formatForClassName(String input) {
+        if (input == null || input.isBlank()) {
+            return "";
+        }
+        String[] parts = input.split(" ");
+        StringBuilder builder = new StringBuilder();
+        for (String part : parts) {
+            if (part == null || part.isBlank()) {
+                continue;
+            }
+            String lower = part.toLowerCase(java.util.Locale.ROOT);
+            builder.append(Character.toUpperCase(lower.charAt(0)));
+            if (lower.length() > 1) {
+                builder.append(lower.substring(1));
+            }
+        }
+        return builder.toString();
+    }
+
+    private String stripProcessPrefix(String name) {
+        if (name == null) {
+            return "";
+        }
+        if (name.startsWith("Process ")) {
+            return name.substring("Process ".length());
+        }
+        return name;
     }
 
     private PipelineOrchestrator resolveOrchestratorAnnotation(java.util.Set<? extends Element> orchestratorElements) {
@@ -883,7 +1052,7 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
             .outputMapping(mapping)
             .streamingShape(org.pipelineframework.processor.ir.StreamingShape.UNARY_UNARY)
             .executionMode(org.pipelineframework.processor.ir.ExecutionMode.DEFAULT)
-            .enabledTargets(resolveTransportTargets())
+            .enabledTargets(resolveTransportTargets(false))
             .deploymentRole(DeploymentRole.PLUGIN_SERVER)
             .sideEffect(true)
             .build();

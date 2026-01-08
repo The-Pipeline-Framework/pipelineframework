@@ -83,6 +83,8 @@ class OrchestratorCliRendererTest {
             "OutputType",
             false,
             false,
+            "ProcessAlphaService",
+            StreamingShape.UNARY_UNARY,
             null,
             null,
             null
@@ -103,9 +105,9 @@ class OrchestratorCliRendererTest {
             .addMessageType(DescriptorProtos.DescriptorProto.newBuilder()
                 .setName("OutputType"))
             .addService(DescriptorProtos.ServiceDescriptorProto.newBuilder()
-                .setName("OrchestratorService")
+                .setName("ProcessAlphaService")
                 .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
-                    .setName("Run")
+                    .setName("remoteProcess")
                     .setInputType(".com.example.grpc.InputType")
                     .setOutputType(".com.example.grpc.OutputType")))
             .build();

@@ -7,8 +7,8 @@ import com.google.protobuf.DescriptorProtos;
 import com.squareup.javapoet.*;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.OrchestratorBinding;
+import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.util.GrpcJavaTypeResolver;
-import org.pipelineframework.processor.util.OrchestratorGrpcBindingResolver;
 
 /**
  * Generates an orchestrator CLI application for running pipelines locally.
@@ -16,7 +16,6 @@ import org.pipelineframework.processor.util.OrchestratorGrpcBindingResolver;
 public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBinding> {
 
     private static final String APP_CLASS = "OrchestratorApplication";
-    private static final String ORCHESTRATOR_METHOD = "Run";
 
     @Override
     public GenerationTarget target() {
@@ -233,14 +232,27 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
         if (descriptorSet == null) {
             throw new IllegalStateException("No protobuf descriptor set available for orchestrator CLI generation.");
         }
-        OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
-        var grpcBinding = resolver.resolve(
-            binding.model(),
-            descriptorSet,
-            ORCHESTRATOR_METHOD,
-            binding.inputStreaming(),
-            binding.outputStreaming(),
-            ctx.processingEnv().getMessager());
+        if (binding.firstStepServiceName() == null || binding.firstStepServiceName().isBlank()) {
+            throw new IllegalStateException("Missing first step service name for orchestrator CLI generation.");
+        }
+        PipelineStepModel firstStepModel = new PipelineStepModel(
+            binding.firstStepServiceName(),
+            binding.firstStepServiceName(),
+            binding.basePackage() + ".service",
+            ClassName.get(binding.basePackage() + ".service", binding.firstStepServiceName()),
+            null,
+            null,
+            binding.firstStepStreamingShape(),
+            java.util.Set.of(GenerationTarget.GRPC_SERVICE),
+            org.pipelineframework.processor.ir.ExecutionMode.DEFAULT,
+            org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT,
+            false,
+            null
+        );
+
+        org.pipelineframework.processor.util.GrpcBindingResolver resolver =
+            new org.pipelineframework.processor.util.GrpcBindingResolver();
+        var grpcBinding = resolver.resolve(firstStepModel, descriptorSet);
         GrpcJavaTypeResolver typeResolver = new GrpcJavaTypeResolver();
         var grpcTypes = typeResolver.resolve(grpcBinding, ctx.processingEnv().getMessager());
         if (grpcTypes.grpcParameterType() == null) {
