@@ -87,6 +87,7 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
      * Suffix to append to generated REST resource classes.
      */
     public static final String REST_RESOURCE_SUFFIX = "Resource";
+    private static final String ORCHESTRATOR_SERVICE = "OrchestratorService";
 
     private PipelineStepIRExtractor irExtractor;
     private PipelineStepValidator validator;
@@ -94,7 +95,8 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
     private ClientStepRenderer clientRenderer;
     private RestClientStepRenderer restClientRenderer;
     private RestResourceRenderer restRenderer;
-    private OrchestratorServerRenderer orchestratorRenderer;
+    private OrchestratorGrpcRenderer orchestratorGrpcRenderer;
+    private OrchestratorRestResourceRenderer orchestratorRestRenderer;
     private GrpcBindingResolver bindingResolver;
     private RestBindingResolver restBindingResolver;
     private RoleMetadataGenerator roleMetadataGenerator;
@@ -129,7 +131,8 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
         this.clientRenderer = new ClientStepRenderer(GenerationTarget.CLIENT_STEP);
         this.restClientRenderer = new RestClientStepRenderer();
         this.restRenderer = new RestResourceRenderer();
-        this.orchestratorRenderer = new OrchestratorServerRenderer();
+        this.orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
+        this.orchestratorRestRenderer = new OrchestratorRestResourceRenderer();
         this.bindingResolver = new GrpcBindingResolver();
         this.restBindingResolver = new RestBindingResolver();
         this.roleMetadataGenerator = new RoleMetadataGenerator(processingEnv);
@@ -301,7 +304,7 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
             }
 
             // Generate artifacts based on the resolved bindings
-            generateArtifacts(model, grpcBinding, restBinding);
+            generateArtifacts(model, grpcBinding, restBinding, descriptorSet);
         }
 
         if (generateOrchestrator) {
@@ -322,7 +325,8 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
      * @param grpcBinding gRPC binding information used for gRPC and client generation; may be null if not applicable
      * @param restBinding REST binding information used for REST resource generation; may be null if not applicable
      */
-    private void generateArtifacts(PipelineStepModel model, GrpcBinding grpcBinding, RestBinding restBinding) {
+    private void generateArtifacts(PipelineStepModel model, GrpcBinding grpcBinding, RestBinding restBinding,
+                                   DescriptorProtos.FileDescriptorSet descriptorSet) {
         java.util.Set<String> enabledAspects = pipelineAspects.stream()
             .map(aspect -> aspect.name().toLowerCase())
             .collect(java.util.stream.Collectors.toUnmodifiableSet());
@@ -346,7 +350,8 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
                             resolveRoleOutputDir(grpcRole),
                             grpcRole,
                             enabledAspects,
-                            cacheKeyGenerator));
+                            cacheKeyGenerator,
+                            descriptorSet));
                         roleMetadataGenerator.recordClassWithRole(grpcClassName, grpcRole.name());
                         break;
                     case CLIENT_STEP:
@@ -362,7 +367,8 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
                             resolveRoleOutputDir(clientRole),
                             clientRole,
                             enabledAspects,
-                            cacheKeyGenerator));
+                            cacheKeyGenerator,
+                            descriptorSet));
                         roleMetadataGenerator.recordClassWithRole(clientClassName, clientRole.name());
                         break;
                     case REST_RESOURCE:
@@ -387,7 +393,8 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
                             resolveRoleOutputDir(restRole),
                             restRole,
                             enabledAspects,
-                            cacheKeyGenerator));
+                            cacheKeyGenerator,
+                            descriptorSet));
                         roleMetadataGenerator.recordClassWithRole(restClassName, restRole.name());
                         break;
                     case REST_CLIENT_STEP:
@@ -409,7 +416,8 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
                             resolveRoleOutputDir(restClientRole),
                             restClientRole,
                             enabledAspects,
-                            cacheKeyGenerator));
+                            cacheKeyGenerator,
+                            descriptorSet));
                         roleMetadataGenerator.recordClassWithRole(restClientClassName, restClientRole.name());
                         break;
                 }
@@ -610,23 +618,41 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
         }
         orchestratorGenerated = true;
 
-        OrchestratorServerRenderer.OrchestratorServerModel model =
-            buildOrchestratorModel(pipelineTemplateConfig);
-        if (model == null) {
+        OrchestratorBinding binding = buildOrchestratorBinding(pipelineTemplateConfig);
+        if (binding == null) {
             processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING,
                 "Skipping orchestrator generation because pipeline template config is missing or incomplete.");
             return;
         }
 
         try {
-            orchestratorRenderer.render(model, descriptorSet, processingEnv);
+            String transport = binding.normalizedTransport();
+            if ("REST".equalsIgnoreCase(transport)) {
+                DeploymentRole role = DeploymentRole.REST_SERVER;
+                orchestratorRestRenderer.render(binding, new GenerationContext(
+                    processingEnv,
+                    resolveRoleOutputDir(role),
+                    role,
+                    java.util.Set.of(),
+                    null,
+                    descriptorSet));
+            } else {
+                DeploymentRole role = DeploymentRole.PIPELINE_SERVER;
+                orchestratorGrpcRenderer.render(binding, new GenerationContext(
+                    processingEnv,
+                    resolveRoleOutputDir(role),
+                    role,
+                    java.util.Set.of(),
+                    null,
+                    descriptorSet));
+            }
         } catch (IOException e) {
             processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR,
                 "Failed to generate orchestrator server: " + e.getMessage());
         }
     }
 
-    private OrchestratorServerRenderer.OrchestratorServerModel buildOrchestratorModel(PipelineTemplateConfig config) {
+    private OrchestratorBinding buildOrchestratorBinding(PipelineTemplateConfig config) {
         if (config == null) {
             return null;
         }
@@ -655,7 +681,23 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
             outputStreaming = applyCardinalityToStreaming(step.cardinality(), outputStreaming);
         }
 
-        return new OrchestratorServerRenderer.OrchestratorServerModel(
+        PipelineStepModel model = new PipelineStepModel(
+            ORCHESTRATOR_SERVICE,
+            ORCHESTRATOR_SERVICE,
+            basePackage + ".orchestrator.service",
+            ClassName.get(basePackage + ".orchestrator.service", ORCHESTRATOR_SERVICE),
+            null,
+            null,
+            streamingShape(inputStreaming, outputStreaming),
+            java.util.Set.of(GenerationTarget.GRPC_SERVICE),
+            ExecutionMode.DEFAULT,
+            DeploymentRole.ORCHESTRATOR_CLIENT,
+            false,
+            null
+        );
+
+        return new OrchestratorBinding(
+            model,
             basePackage,
             config.transport(),
             inputType,
@@ -663,6 +705,19 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
             inputStreaming,
             outputStreaming
         );
+    }
+
+    private StreamingShape streamingShape(boolean inputStreaming, boolean outputStreaming) {
+        if (inputStreaming && outputStreaming) {
+            return StreamingShape.STREAMING_STREAMING;
+        }
+        if (inputStreaming) {
+            return StreamingShape.STREAMING_UNARY;
+        }
+        if (outputStreaming) {
+            return StreamingShape.UNARY_STREAMING;
+        }
+        return StreamingShape.UNARY_UNARY;
     }
 
     private boolean isStreamingInputCardinality(String cardinality) {

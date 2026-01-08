@@ -76,10 +76,11 @@ class RestBindingSkipTest {
             "generateArtifacts",
             PipelineStepModel.class,
             GrpcBinding.class,
-            RestBinding.class
+            RestBinding.class,
+            com.google.protobuf.DescriptorProtos.FileDescriptorSet.class
         );
         method.setAccessible(true);
-        method.invoke(processor, model, grpcBinding, null);
+        method.invoke(processor, model, grpcBinding, null, null);
 
         verify(grpcRenderer).render(any(), any());
         verify(clientRenderer).render(any(), any());

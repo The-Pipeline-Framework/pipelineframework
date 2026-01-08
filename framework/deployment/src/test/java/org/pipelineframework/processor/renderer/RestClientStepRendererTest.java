@@ -49,6 +49,7 @@ class RestClientStepRendererTest {
             tempDir,
             DeploymentRole.ORCHESTRATOR_CLIENT,
             java.util.Set.of(),
+            null,
             null);
 
         RestClientStepRenderer renderer = new RestClientStepRenderer();

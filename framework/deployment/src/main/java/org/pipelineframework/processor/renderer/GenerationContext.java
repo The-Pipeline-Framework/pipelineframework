@@ -4,6 +4,7 @@ import java.nio.file.Path;
 import java.util.Set;
 import javax.annotation.processing.ProcessingEnvironment;
 
+import com.google.protobuf.DescriptorProtos;
 import com.squareup.javapoet.ClassName;
 import org.pipelineframework.processor.ir.DeploymentRole;
 
@@ -15,9 +16,11 @@ import org.pipelineframework.processor.ir.DeploymentRole;
  * @param role Gets the deployment role for the artifact being rendered.
  * @param enabledAspects Gets the set of enabled pipeline aspect names.
  * @param cacheKeyGenerator Gets the optional cache key generator class name for generated cache annotations.
+ * @param descriptorSet Gets the optional protobuf descriptor set for gRPC type resolution.
  */
 public record GenerationContext(ProcessingEnvironment processingEnv, Path outputDir, DeploymentRole role,
-                                Set<String> enabledAspects, ClassName cacheKeyGenerator) {
+                                Set<String> enabledAspects, ClassName cacheKeyGenerator,
+                                DescriptorProtos.FileDescriptorSet descriptorSet) {
     /**
      * Creates a new GenerationContext instance.
      */

@@ -44,7 +44,8 @@ class RestResourceRendererTest {
             "/ProcessPaymentStatusReactiveService/remoteProcess");
 
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        GenerationContext context = new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER, java.util.Set.of(), null);
+        GenerationContext context = new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+            java.util.Set.of(), null, null);
 
         RestResourceRenderer renderer = new RestResourceRenderer();
         renderer.render(binding, context);

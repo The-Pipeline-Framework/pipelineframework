@@ -47,7 +47,8 @@ class GrpcServiceAdapterRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         // Create a mock context for the renderer
-        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER, java.util.Set.of(), null);
+        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            java.util.Set.of(), null, null);
 
         // Render the gRPC service adapter - this should not throw an exception
         assertDoesNotThrow(() -> renderer.render(binding, context));
@@ -70,7 +71,8 @@ class GrpcServiceAdapterRendererTest {
         when(processingEnv.getMessager()).thenReturn(null);
 
         // Create a mock context for the renderer
-        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER, java.util.Set.of(), null);
+        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            java.util.Set.of(), null, null);
 
         // Render the gRPC service adapter - this should not throw an exception
         assertDoesNotThrow(() -> renderer.render(binding, context));
@@ -103,7 +105,8 @@ class GrpcServiceAdapterRendererTest {
         when(processingEnv.getFiler()).thenReturn(null);
         when(processingEnv.getMessager()).thenReturn(null);
 
-        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PLUGIN_SERVER, java.util.Set.of(), null);
+        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PLUGIN_SERVER,
+            java.util.Set.of(), null, null);
         renderer.render(binding, context);
 
         Path generated = tempDir.resolve("com/example/pipeline/PersistenceOutputTypeSideEffectGrpcService.java");
