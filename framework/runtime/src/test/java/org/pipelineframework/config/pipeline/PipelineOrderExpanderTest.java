@@ -76,4 +76,28 @@ class PipelineOrderExpanderTest {
 
         assertEquals(baseOrder, PipelineOrderExpander.expand(baseOrder, config, null));
     }
+
+    @Test
+    void usesStepPackageWhenBaseOrderContainsFullClassNames() {
+        PipelineYamlConfig config = new PipelineYamlConfig(
+            "org.example",
+            "REST",
+            List.of(new PipelineYamlStep("Process Crawl", "InFoo", "Foo")),
+            List.of(new PipelineYamlAspect("persistence", true, "GLOBAL", "AFTER_STEP", List.of()))
+        );
+
+        List<String> expanded = PipelineOrderExpander.expand(
+            List.of("org.acme.search.crawl.service.pipeline.ProcessCrawlRestClientStep"),
+            config,
+            null
+        );
+
+        assertEquals(
+            List.of(
+                "org.acme.search.crawl.service.pipeline.ProcessCrawlRestClientStep",
+                "org.acme.search.crawl.service.pipeline.PersistenceFooSideEffectRestClientStep"
+            ),
+            expanded
+        );
+    }
 }

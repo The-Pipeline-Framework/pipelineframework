@@ -48,9 +48,6 @@ public final class PipelineOrderExpander {
         }
 
         String basePackage = resolveBasePackage(baseOrder, config.basePackage());
-        if (basePackage == null || basePackage.isBlank()) {
-            return baseOrder;
-        }
 
         List<String> expanded = new ArrayList<>();
         Set<String> insertedKeys = new HashSet<>();
@@ -77,7 +74,8 @@ public final class PipelineOrderExpander {
                 if (!insertedKeys.add(key)) {
                     continue;
                 }
-                String sideEffectStep = buildSideEffectClientStep(basePackage, aspect.name(), typeName, clientSuffix);
+                String sideEffectStep = buildSideEffectClientStep(
+                    stepClassName, basePackage, aspect.name(), typeName, clientSuffix);
                 expanded.add(sideEffectStep);
                 if (LOG.isDebugEnabled()) {
                     LOG.debugf("Inserted side-effect client step %s before %s", sideEffectStep, stepClassName);
@@ -100,7 +98,8 @@ public final class PipelineOrderExpander {
                 if (!insertedKeys.add(key)) {
                     continue;
                 }
-                String sideEffectStep = buildSideEffectClientStep(basePackage, aspect.name(), typeName, clientSuffix);
+                String sideEffectStep = buildSideEffectClientStep(
+                    stepClassName, basePackage, aspect.name(), typeName, clientSuffix);
                 expanded.add(sideEffectStep);
                 if (LOG.isDebugEnabled()) {
                     LOG.debugf("Inserted side-effect client step %s after %s", sideEffectStep, stepClassName);
@@ -281,13 +280,27 @@ public final class PipelineOrderExpander {
     }
 
     private static String buildSideEffectClientStep(
+        String stepClassName,
         String basePackage,
         String aspectName,
         String outputType,
         String clientSuffix
     ) {
         String className = toPascalCase(aspectName) + outputType + "SideEffect" + clientSuffix;
-        return basePackage + ".service.pipeline." + className;
+        String packageName = null;
+        if (stepClassName != null) {
+            int lastDot = stepClassName.lastIndexOf('.');
+            if (lastDot > 0) {
+                packageName = stepClassName.substring(0, lastDot);
+            }
+        }
+        if (packageName == null || packageName.isBlank()) {
+            if (basePackage == null || basePackage.isBlank()) {
+                return className;
+            }
+            packageName = basePackage + ".service.pipeline";
+        }
+        return packageName + "." + className;
     }
 
     private static String resolveClientStepSuffix(PipelineYamlConfig config) {
