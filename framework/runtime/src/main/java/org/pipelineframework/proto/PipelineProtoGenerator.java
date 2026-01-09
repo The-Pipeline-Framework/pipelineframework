@@ -67,13 +67,25 @@ public class PipelineProtoGenerator {
             ResolvedStep step = resolvedSteps.get(i);
             ResolvedStep previous = i > 0 ? resolvedSteps.get(i - 1) : null;
             String content = renderStepProto(config.basePackage(), step, previous, i == 0, aspectDefinitions);
-            writeProto(resolvedOutput.resolve(step.serviceName() + ".proto"), content);
+            Path protoPath = resolvedOutput.resolve(step.serviceName() + ".proto");
+            writeProto(protoPath, content);
+            System.out.println("[PipelineProtoGenerator] wrote " + protoPath.toAbsolutePath());
+            if (!Files.isRegularFile(protoPath)) {
+                System.out.println("[PipelineProtoGenerator] warning: expected proto file missing at " +
+                    protoPath.toAbsolutePath());
+            }
         }
 
         String transport = config.transport();
         if (transport == null || transport.isBlank() || "GRPC".equalsIgnoreCase(transport)) {
             String content = renderOrchestratorProto(config.basePackage(), resolvedSteps);
-            writeProto(resolvedOutput.resolve(ORCHESTRATOR_PROTO), content);
+            Path protoPath = resolvedOutput.resolve(ORCHESTRATOR_PROTO);
+            writeProto(protoPath, content);
+            System.out.println("[PipelineProtoGenerator] wrote " + protoPath.toAbsolutePath());
+            if (!Files.isRegularFile(protoPath)) {
+                System.out.println("[PipelineProtoGenerator] warning: expected proto file missing at " +
+                    protoPath.toAbsolutePath());
+            }
         }
     }
 

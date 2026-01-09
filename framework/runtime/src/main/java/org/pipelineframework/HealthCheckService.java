@@ -454,6 +454,7 @@ public void checkServerTrusted(java.security.cert.X509Certificate[] certs, Strin
             baseUri.getHost(),
             baseUri.getPort() == -1 ? ("https".equalsIgnoreCase(baseUri.getScheme()) ? 443 : 80) : baseUri.getPort(),
             combinedPath));
+        LOG.info("Checking REST client '" + restClient.configKey() + "' at " + healthUri);
 
         boolean allowInsecureSSL = ConfigProvider.getConfig()
             .getOptionalValue("quarkus.rest-client." + restClient.configKey() + ".allow-insecure-ssl", Boolean.class)
