@@ -10,7 +10,6 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import org.pipelineframework.cache.CacheKey;
 
 
 @Setter
@@ -18,7 +17,7 @@ import org.pipelineframework.cache.CacheKey;
 @Entity
 @NoArgsConstructor
 @AllArgsConstructor
-public class CrawlRequest extends BaseEntity implements Serializable, CacheKey {
+public class CrawlRequest extends BaseEntity implements Serializable {
 
   public UUID docId;
   public String sourceUrl;
@@ -29,17 +28,4 @@ public class CrawlRequest extends BaseEntity implements Serializable, CacheKey {
   @Transient
   public Map<String, String> fetchHeaders;
 
-  @Override
-  public String cacheKey() {
-    if (docId != null) {
-      return docId.toString();
-    }
-    if (id != null) {
-      return id.toString();
-    }
-    if (sourceUrl != null && !sourceUrl.isBlank()) {
-      return sourceUrl;
-    }
-    return "missing-doc-id";
-  }
 }
