@@ -18,9 +18,11 @@ The result is a compiler-style architecture that separates semantic intent from 
 
 The annotation processor follows a multi-phase compiler pipeline:
 
-Annotations -> IR Extraction -> Validation -> Binding -> Rendering
+Annotations -> Discovery -> Semantic Analysis -> Target Resolution -> Binding Construction -> Generation -> Infrastructure
 
 Each phase has a clearly defined responsibility and does not leak concerns into adjacent layers.
+
+This architecture is detailed in the [Compiler Pipeline Architecture](compiler-pipeline-architecture.md) document.
 
 ## 1. Semantic model (intermediate representation)
 
@@ -229,28 +231,23 @@ This architecture is now the foundation for all future Pipeline Framework extens
 
 ```mermaid
 flowchart TD
-    A["@PipelineStep Annotation"] --> B[IR Extraction]
-    B --> C[PipelineStepModel]
-    C --> D[Validation]
-    D --> E0[Aspect Expansion]
-    E0 --> E1[GrpcBindingResolver]
-    E0 --> E2[RestBindingResolver]
-    E1 --> F1[GrpcBinding]
-    E2 --> F2[RestBinding]
+    A["@PipelineStep Annotation"] --> B[Discovery Phase]
+    B --> C[Semantic Analysis Phase]
+    C --> D[Target Resolution Phase]
+    D --> E[Binding Construction Phase]
+    E --> F[Generation Phase]
+    F --> G[Infrastructure Phase]
 
-    F1 -->|GenerationTarget + DeploymentRole| R1[gRPC Renderer]
-    F2 -->|GenerationTarget + DeploymentRole| R2[REST Renderer]
-
-    R1 --> O1[Generated gRPC Artifacts]
-    R2 --> O2[Generated REST Artifacts]
-    R1 --> O3[Generated Plugin Artifacts]
+    G --> H[Generated Artifacts]
 ```
 
 Legend:
 
-- The IR is the single source of truth.
-- Bindings are transport-specific.
-- No renderer mutates the IR.
+- Each phase has a single responsibility.
+- Data flows through the compilation context.
+- No phase mutates semantic models.
+
+For detailed phase architecture, see the [Compiler Pipeline Architecture](compiler-pipeline-architecture.md) document.
 
 ## Build flow (role directories to classifier JARs)
 

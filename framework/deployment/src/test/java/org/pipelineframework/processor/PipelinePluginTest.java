@@ -118,8 +118,8 @@ class PipelinePluginTest {
                 .anyMatch(path -> {
                     try {
                         String content = Files.readString(path);
-                        // Check for expected content indicating it's a REST resource for ProcessTestService
-                        return content.contains("ObservePersistenceStringSideEffectService") &&
+                        // Check for expected content indicating it's a REST resource for the persistence aspect
+                        return content.contains("class PersistenceStringSideEffectResource") &&
                                (content.contains("@Path") || content.contains("@GET") || content.contains("@POST"));
                     } catch (IOException e) {
                         return false;
@@ -141,7 +141,7 @@ class PipelinePluginTest {
                 } catch (IOException e) {
                     // Ignore
                 }
-                throw new AssertionError("REST server files were generated but don't contain expected REST resource content for ProcessTestService");
+                throw new AssertionError("REST server files were generated but don't contain expected REST resource content for the persistence aspect");
             }
         } else {
             throw new AssertionError("No REST server files were generated for regular steps in plugin host");
@@ -242,8 +242,8 @@ class PipelinePluginTest {
                 .anyMatch(path -> {
                     try {
                         String content = Files.readString(path);
-                        // Check for expected content indicating it's a REST resource for ProcessTestService
-                        return content.contains("ObserveCacheStringSideEffectService") &&
+                        // Check for expected content indicating it's a REST resource for the cache aspect
+                        return content.contains("class CacheStringSideEffectResource") &&
                                (content.contains("@Path") || content.contains("@GET") || content.contains("@POST"));
                     } catch (IOException e) {
                         return false;
@@ -265,7 +265,7 @@ class PipelinePluginTest {
                 } catch (IOException e) {
                     // Ignore
                 }
-                throw new AssertionError("REST server files were generated but don't contain expected REST resource content for ProcessTestService");
+                throw new AssertionError("REST server files were generated but don't contain expected REST resource content for the cache aspect");
             }
         } else {
             throw new AssertionError("No REST server files were generated for regular steps in plugin host");

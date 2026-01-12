@@ -6,8 +6,6 @@ import javax.lang.model.element.Modifier;
 import com.squareup.javapoet.*;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
-import org.jboss.resteasy.reactive.RestResponse;
-import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
@@ -58,8 +56,8 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
      * Builds a REST resource class TypeSpec from the given binding.
      *
      * Constructs a public REST resource class populated with JAX-RS and DI annotations,
-     * injected service and optional mapper fields, a logger, a process endpoint tailored
-     * to the service's streaming shape and DTO conversions, and an exception mapper.
+     * injected service and optional mapper fields, a logger, and a process endpoint tailored
+     * to the service's streaming shape and DTO conversions.
      *
      * @param binding the RestBinding that provides the PipelineStepModel, service name,
      *                optional path override and mapping information used to generate the resource
@@ -148,17 +146,6 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             }
         }
 
-        // Add logger field to the resource class
-        FieldSpec loggerField = FieldSpec.builder(
-            ClassName.get("org.jboss.logging", "Logger"),
-            "logger")
-            .addModifiers(Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
-            .initializer("$T.getLogger($L.class)",
-                ClassName.get("org.jboss.logging", "Logger"),
-                resourceClassName)
-            .build();
-        resourceBuilder.addField(loggerField);
-
         // For REST resources, we use appropriate DTO types, not gRPC types
         // The DTO types should be derived from domain types using the same
         // transformation logic as the original getDtoType method would have used
@@ -202,10 +189,6 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         };
 
         resourceBuilder.addMethod(processMethod);
-
-        // Add exception mapper method to handle different types of exceptions
-        MethodSpec exceptionMapperMethod = createExceptionMapperMethod();
-        resourceBuilder.addMethod(exceptionMapperMethod);
 
         return resourceBuilder.build();
     }
@@ -457,11 +440,9 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         if (!model.sideEffect()) {
             return model.serviceClassName();
         }
-        TypeName outputDomainType = model.outboundDomainType();
-        if (outputDomainType == null) {
-            return model.serviceClassName();
-        }
-        return ParameterizedTypeName.get(model.serviceClassName(), outputDomainType);
+        return ClassName.get(
+            model.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
+            model.serviceName());
     }
 
     private MethodSpec createFromDtoMethod(
@@ -493,43 +474,6 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             .returns(outputDtoClassName)
             .addParameter(domainOutputType, "domain")
             .addStatement("return $L.toDto(domain)", outboundMapperFieldName)
-            .build();
-    }
-
-    /**
-     * Map an exception thrown by a resource method to an appropriate RestResponse.
-     *
-     * @return a RestResponse with `BAD_REQUEST` and message "Invalid request" when `ex` is an `IllegalArgumentException`; otherwise a RestResponse with `INTERNAL_SERVER_ERROR` and message "An unexpected error occurred"
-     */
-    private MethodSpec createExceptionMapperMethod() {
-        TypeName responseType = ParameterizedTypeName.get(
-            ClassName.get(RestResponse.class),
-            ClassName.get(String.class));
-        return MethodSpec.methodBuilder("handleException")
-            .addAnnotation(AnnotationSpec.builder(ClassName.get(SuppressWarnings.class))
-                .addMember("value", "$S", "unused")
-                .build())
-            .addAnnotation(AnnotationSpec.builder(ClassName.get(ServerExceptionMapper.class))
-                .build())
-            .addModifiers(Modifier.PUBLIC)
-            .returns(responseType)
-            .addParameter(Exception.class, "ex")
-            .beginControlFlow("if (ex instanceof $T)", IllegalArgumentException.class)
-                .addStatement("logger.warn(\"Invalid request\", ex)")
-                .addStatement("return $T.status($T.Status.BAD_REQUEST, \"Invalid request\")",
-                    ClassName.get(RestResponse.class),
-                    ClassName.get("jakarta.ws.rs.core", "Response"))
-            .nextControlFlow("else if (ex instanceof $T)", RuntimeException.class)
-                .addStatement("logger.error(\"Unexpected error processing request\", ex)")
-                .addStatement("return $T.status($T.Status.INTERNAL_SERVER_ERROR, \"An unexpected error occurred\")",
-                    ClassName.get(RestResponse.class),
-                    ClassName.get("jakarta.ws.rs.core", "Response"))
-            .nextControlFlow("else")
-                .addStatement("logger.error(\"Unexpected error processing request\", ex)")
-                .addStatement("return $T.status($T.Status.INTERNAL_SERVER_ERROR, \"An unexpected error occurred\")",
-                    ClassName.get(RestResponse.class),
-                    ClassName.get("jakarta.ws.rs.core", "Response"))
-            .endControlFlow()
             .build();
     }
 

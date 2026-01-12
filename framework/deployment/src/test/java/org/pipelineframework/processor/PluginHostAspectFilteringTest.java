@@ -1,26 +1,18 @@
 package org.pipelineframework.processor;
 
-import java.lang.reflect.Method;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import javax.annotation.processing.Filer;
-import javax.annotation.processing.Messager;
-import javax.annotation.processing.ProcessingEnvironment;
-import javax.lang.model.SourceVersion;
 
+import com.google.testing.compile.Compilation;
+import com.google.testing.compile.Compiler;
+import com.google.testing.compile.JavaFileObjects;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.pipelineframework.processor.ir.AspectPosition;
-import org.pipelineframework.processor.ir.AspectScope;
-import org.pipelineframework.processor.ir.PipelineAspectModel;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static com.google.testing.compile.CompilationSubject.assertThat;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 class PluginHostAspectFilteringTest {
 
@@ -28,9 +20,9 @@ class PluginHostAspectFilteringTest {
     Path tempDir;
 
     @Test
-    void filtersPluginHostStepsByAnnotatedPluginName() throws Exception {
-        Path pomPath = tempDir.resolve("pom.xml");
-        Files.writeString(pomPath, """
+    void filtersPluginHostStepsByAnnotatedPluginName() throws IOException {
+        Path projectRoot = tempDir;
+        Files.writeString(projectRoot.resolve("pom.xml"), """
             <project>
               <modelVersion>4.0.0</modelVersion>
               <groupId>com.example</groupId>
@@ -39,60 +31,72 @@ class PluginHostAspectFilteringTest {
               <packaging>pom</packaging>
             </project>
             """);
-        Path configDir = tempDir.resolve("config");
-        Files.createDirectories(configDir);
-        Files.writeString(configDir.resolve("pipeline.yaml"), """
+
+        Path moduleDir = projectRoot.resolve("test-module");
+        Path generatedSourcesDir = moduleDir.resolve("target/generated-sources/pipeline");
+        Files.createDirectories(generatedSourcesDir);
+
+        Files.writeString(projectRoot.resolve("pipeline.yaml"), """
+            appName: "Test Pipeline"
             basePackage: "com.example"
+            transport: "REST"
             steps:
-              - inputTypeName: "InType"
-                outputTypeName: "OutType"
+              - name: "Process Test"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "String"
+                outputTypeName: "String"
+            aspects:
+              persistence:
+                enabled: true
+                scope: "GLOBAL"
+                position: "AFTER_STEP"
+                order: 0
+                config:
+                  pluginImplementationClass: "com.example.PersistenceService"
+              cache-invalidate:
+                enabled: true
+                scope: "GLOBAL"
+                position: "AFTER_STEP"
+                order: 1
+                config:
+                  pluginImplementationClass: "com.example.CacheInvalidationService"
             """);
-        Path generatedSourcesRoot = tempDir.resolve("target/generated-sources/pipeline");
-        Files.createDirectories(generatedSourcesRoot);
 
-        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        when(processingEnv.getOptions())
-            .thenReturn(Map.of("pipeline.generatedSourcesDir", generatedSourcesRoot.toString()));
-        when(processingEnv.getMessager()).thenReturn(mock(Messager.class));
-        when(processingEnv.getElementUtils())
-            .thenReturn(mock(javax.lang.model.util.Elements.class));
-        when(processingEnv.getFiler()).thenReturn(mock(Filer.class));
-        when(processingEnv.getSourceVersion()).thenReturn(SourceVersion.RELEASE_21);
+        Compilation compilation = Compiler.javac()
+            .withProcessors(new PipelineStepProcessor())
+            .withOptions("-Apipeline.generatedSourcesDir=" + generatedSourcesDir)
+            .compile(JavaFileObjects.forSourceString(
+                "com.example.PluginHost",
+                """
+                    package com.example;
 
-        PipelineStepProcessor processor = new PipelineStepProcessor();
-        processor.init(processingEnv);
+                    import org.pipelineframework.annotation.PipelinePlugin;
 
-        List<PipelineAspectModel> aspects = List.of(
-            new PipelineAspectModel(
-                "persistence",
-                AspectScope.GLOBAL,
-                AspectPosition.AFTER_STEP,
-                0,
-                Map.of("pluginImplementationClass", "com.example.PersistenceService")),
-            new PipelineAspectModel(
-                "cache-invalidate",
-                AspectScope.GLOBAL,
-                AspectPosition.AFTER_STEP,
-                1,
-                Map.of("pluginImplementationClass", "com.example.CacheInvalidationService"))
-        );
+                    @PipelinePlugin("persistence")
+                    public class PluginHost {
+                    }
+                    """));
 
-        Method method = PipelineStepProcessor.class.getDeclaredMethod(
-            "buildPluginHostSteps",
-            List.class,
-            Set.class
-        );
-        method.setAccessible(true);
-        @SuppressWarnings("unchecked")
-        List<ResolvedStep> steps = (List<ResolvedStep>) method.invoke(
-            processor,
-            aspects,
-            Set.of("persistence")
-        );
+        assertThat(compilation).succeeded();
 
-        assertEquals(1, steps.size());
-        ResolvedStep resolvedStep = steps.get(0);
-        assertEquals("PersistenceOutTypeSideEffect", resolvedStep.model().generatedName());
-        assertTrue(resolvedStep.model().serviceName().startsWith("Observe"));
+        Path restServerDir = generatedSourcesDir.resolve("rest-server");
+        assertTrue(hasGeneratedClass(restServerDir, "PersistenceStringSideEffectResource"));
+        assertFalse(hasGeneratedClass(restServerDir, "CacheInvalidateStringSideEffectResource"));
+    }
+
+    private boolean hasGeneratedClass(Path rootDir, String className) throws IOException {
+        if (!Files.exists(rootDir)) {
+            return false;
+        }
+        try (var stream = Files.walk(rootDir)) {
+            return stream.filter(path -> path.toString().endsWith(".java"))
+                .anyMatch(path -> {
+                    try {
+                        return Files.readString(path).contains("class " + className);
+                    } catch (IOException e) {
+                        return false;
+                    }
+                });
+        }
     }
 }

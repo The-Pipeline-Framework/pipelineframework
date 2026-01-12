@@ -1,27 +1,18 @@
 package org.pipelineframework.processor;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Map;
-import java.util.Set;
-import javax.annotation.processing.Filer;
-import javax.annotation.processing.Messager;
-import javax.annotation.processing.ProcessingEnvironment;
-import javax.lang.model.SourceVersion;
 
-import com.squareup.javapoet.ClassName;
+import com.google.testing.compile.Compilation;
+import com.google.testing.compile.Compiler;
+import com.google.testing.compile.JavaFileObjects;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.pipelineframework.processor.ir.*;
-import org.pipelineframework.processor.renderer.ClientStepRenderer;
-import org.pipelineframework.processor.renderer.GrpcServiceAdapterRenderer;
-import org.pipelineframework.processor.renderer.RestResourceRenderer;
-import org.pipelineframework.processor.util.RoleMetadataGenerator;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static com.google.testing.compile.CompilationSubject.assertThat;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RestBindingSkipTest {
 
@@ -29,67 +20,151 @@ class RestBindingSkipTest {
     Path tempDir;
 
     @Test
-    void generatesGrpcAndClientWhenRestBindingMissing() throws Exception {
-        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        when(processingEnv.getOptions()).thenReturn(Map.of());
-        when(processingEnv.getMessager()).thenReturn(mock(Messager.class));
-        when(processingEnv.getElementUtils())
-            .thenReturn(mock(javax.lang.model.util.Elements.class));
-        when(processingEnv.getFiler()).thenReturn(mock(Filer.class));
-        when(processingEnv.getSourceVersion()).thenReturn(SourceVersion.RELEASE_21);
+    void generatesRestResourcesWhenRestTransportConfigured() throws IOException {
+        Path projectRoot = tempDir;
+        Files.writeString(projectRoot.resolve("pom.xml"), """
+            <project>
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example</groupId>
+              <artifactId>test</artifactId>
+              <version>1.0.0</version>
+              <packaging>pom</packaging>
+            </project>
+            """);
 
-        PipelineStepProcessor processor = new PipelineStepProcessor();
-        processor.init(processingEnv);
+        Path moduleDir = projectRoot.resolve("test-module");
+        Path generatedSourcesDir = moduleDir.resolve("target/generated-sources/pipeline");
+        Files.createDirectories(generatedSourcesDir);
 
-        GrpcServiceAdapterRenderer grpcRenderer = mock(GrpcServiceAdapterRenderer.class);
-        ClientStepRenderer clientRenderer = mock(ClientStepRenderer.class);
-        RestResourceRenderer restRenderer = mock(RestResourceRenderer.class);
-        RoleMetadataGenerator roleMetadataGenerator = mock(RoleMetadataGenerator.class);
+        Files.writeString(projectRoot.resolve("pipeline.yaml"), """
+            appName: "Test Pipeline"
+            basePackage: "com.example"
+            transport: "REST"
+            steps:
+              - name: "Process Foo"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "FooInput"
+                outputTypeName: "FooOutput"
+            """);
 
-        setField(processor, "grpcRenderer", grpcRenderer);
-        setField(processor, "clientRenderer", clientRenderer);
-        setField(processor, "restRenderer", restRenderer);
-        setField(processor, "roleMetadataGenerator", roleMetadataGenerator);
+        Compilation compilation = Compiler.javac()
+            .withProcessors(new PipelineStepProcessor())
+            .withOptions("-Apipeline.generatedSourcesDir=" + generatedSourcesDir)
+            .compile(
+                JavaFileObjects.forSourceString(
+                    "com.example.ProcessFooService",
+                    """
+                        package com.example;
 
-        Path generatedSourcesRoot = tempDir.resolve("target/generated-sources/pipeline");
-        Files.createDirectories(generatedSourcesRoot);
-        setField(processor, "generatedSourcesRoot", generatedSourcesRoot);
-        setField(processor, "pipelineAspects", java.util.List.of());
+                        import io.smallrye.mutiny.Uni;
+                        import org.pipelineframework.annotation.PipelineStep;
+                        import org.pipelineframework.service.ReactiveService;
+                        import org.pipelineframework.step.StepOneToOne;
 
-        PipelineStepModel model = new PipelineStepModel.Builder()
-            .serviceName("ProcessFooService")
-            .generatedName("ProcessFooService")
-            .servicePackage("com.example")
-            .serviceClassName(ClassName.get("com.example", "ProcessFooService"))
-            .streamingShape(StreamingShape.UNARY_UNARY)
-            .executionMode(ExecutionMode.DEFAULT)
-            .enabledTargets(Set.of(
-                GenerationTarget.GRPC_SERVICE,
-                GenerationTarget.CLIENT_STEP,
-                GenerationTarget.REST_RESOURCE))
-            .deploymentRole(DeploymentRole.PIPELINE_SERVER)
-            .build();
+                        @PipelineStep(
+                            inputType = com.example.domain.FooInput.class,
+                            outputType = com.example.domain.FooOutput.class,
+                            stepType = StepOneToOne.class,
+                            inboundMapper = com.example.mapper.FooInputMapper.class,
+                            outboundMapper = com.example.mapper.FooOutputMapper.class
+                        )
+                        public class ProcessFooService implements ReactiveService<com.example.domain.FooInput, com.example.domain.FooOutput> {
+                            @Override
+                            public Uni<com.example.domain.FooOutput> process(com.example.domain.FooInput input) {
+                                return Uni.createFrom().item(input == null ? null : new com.example.domain.FooOutput());
+                            }
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "com.example.domain.FooInput",
+                    """
+                        package com.example.domain;
 
-        GrpcBinding grpcBinding = new GrpcBinding(model, new Object(), new Object());
+                        public class FooInput {
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "com.example.domain.FooOutput",
+                    """
+                        package com.example.domain;
 
-        Method method = PipelineStepProcessor.class.getDeclaredMethod(
-            "generateArtifacts",
-            PipelineStepModel.class,
-            GrpcBinding.class,
-            RestBinding.class,
-            com.google.protobuf.DescriptorProtos.FileDescriptorSet.class
-        );
-        method.setAccessible(true);
-        method.invoke(processor, model, grpcBinding, null, null);
+                        public class FooOutput {
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "com.example.dto.FooInputDto",
+                    """
+                        package com.example.dto;
 
-        verify(grpcRenderer).render(any(), any());
-        verify(clientRenderer).render(any(), any());
-        verify(restRenderer, never()).render(any(), any());
+                        public class FooInputDto {
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "com.example.dto.FooOutputDto",
+                    """
+                        package com.example.dto;
+
+                        public class FooOutputDto {
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "com.example.mapper.FooInputMapper",
+                    """
+                        package com.example.mapper;
+
+                        import com.example.domain.FooInput;
+                        import com.example.dto.FooInputDto;
+
+                        public class FooInputMapper {
+                            public FooInput fromDto(FooInputDto dto) {
+                                return new FooInput();
+                            }
+
+                            public FooInputDto toDto(FooInput domain) {
+                                return new FooInputDto();
+                            }
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "com.example.mapper.FooOutputMapper",
+                    """
+                        package com.example.mapper;
+
+                        import com.example.domain.FooOutput;
+                        import com.example.dto.FooOutputDto;
+
+                        public class FooOutputMapper {
+                            public FooOutput fromDto(FooOutputDto dto) {
+                                return new FooOutput();
+                            }
+
+                            public FooOutputDto toDto(FooOutput domain) {
+                                return new FooOutputDto();
+                            }
+                        }
+                        """));
+
+        assertThat(compilation).succeeded();
+
+        Path restServerDir = generatedSourcesDir.resolve("rest-server");
+        Path grpcServerDir = generatedSourcesDir.resolve("pipeline-server");
+        assertTrue(hasGeneratedClass(restServerDir, "ProcessFooResource"));
+        assertFalse(hasGeneratedClass(grpcServerDir, "ProcessFooGrpcService"));
     }
 
-    private static void setField(Object target, String fieldName, Object value) throws Exception {
-        Field field = target.getClass().getDeclaredField(fieldName);
-        field.setAccessible(true);
-        field.set(target, value);
+    private boolean hasGeneratedClass(Path rootDir, String className) throws IOException {
+        if (!Files.exists(rootDir)) {
+            return false;
+        }
+        try (var stream = Files.walk(rootDir)) {
+            return stream.filter(path -> path.toString().endsWith(".java"))
+                .anyMatch(path -> {
+                    try {
+                        return Files.readString(path).contains("class " + className);
+                    } catch (IOException e) {
+                        return false;
+                    }
+                });
+        }
     }
 }

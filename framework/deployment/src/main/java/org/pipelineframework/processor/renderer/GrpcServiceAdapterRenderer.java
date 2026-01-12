@@ -468,11 +468,9 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         if (!model.sideEffect()) {
             return model.serviceClassName();
         }
-        TypeName outputDomainType = model.outboundDomainType();
-        if (outputDomainType == null) {
-            return model.serviceClassName();
-        }
-        return ParameterizedTypeName.get(model.serviceClassName(), outputDomainType);
+        return ClassName.get(
+            model.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
+            model.serviceName());
     }
 
 }

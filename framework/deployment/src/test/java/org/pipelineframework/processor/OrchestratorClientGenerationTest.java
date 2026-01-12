@@ -1,29 +1,19 @@
 package org.pipelineframework.processor;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
-import java.util.Map;
-import javax.annotation.processing.Filer;
-import javax.annotation.processing.Messager;
-import javax.annotation.processing.ProcessingEnvironment;
-import javax.lang.model.SourceVersion;
+import java.nio.file.Paths;
+import javax.tools.JavaFileObject;
 
-import com.google.protobuf.DescriptorProtos;
+import com.google.testing.compile.Compilation;
+import com.google.testing.compile.Compiler;
+import com.google.testing.compile.JavaFileObjects;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.pipelineframework.config.template.PipelineTemplateConfig;
-import org.pipelineframework.config.template.PipelineTemplateStep;
-import org.pipelineframework.processor.ir.*;
-import org.pipelineframework.processor.renderer.ClientStepRenderer;
-import org.pipelineframework.processor.renderer.RestClientStepRenderer;
-import org.pipelineframework.processor.util.GrpcBindingResolver;
-import org.pipelineframework.processor.util.RestBindingResolver;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static com.google.testing.compile.CompilationSubject.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class OrchestratorClientGenerationTest {
 
@@ -31,156 +21,133 @@ class OrchestratorClientGenerationTest {
     Path tempDir;
 
     @Test
-    void generatesGrpcClientStepsFromTemplate() throws Exception {
-        PipelineStepProcessor processor = new PipelineStepProcessor();
-        ProcessingEnvironment processingEnv = mockProcessingEnv();
-        processor.init(processingEnv);
+    void generatesGrpcClientStepsFromTemplate() throws IOException {
+        Path projectRoot = initProjectRoot();
+        Path moduleDir = projectRoot.resolve("test-module");
+        Path generatedSourcesDir = moduleDir.resolve("target").resolve("generated-sources").resolve("pipeline");
+        Files.createDirectories(generatedSourcesDir);
 
-        setField(processor, "generatedSourcesRoot", tempDir);
-        setField(processor, "pipelineTemplateConfig", sampleConfig("GRPC"));
-        setField(processor, "pipelineAspects", List.of());
-        setField(processor, "transportMode", enumValue(processor, "TransportMode", "GRPC"));
+        Path pipelineYaml = projectRoot.resolve("pipeline.yaml");
+        String pipelineConfig = Files.readString(resourcePath("pipeline-search.yaml"))
+            .replace("transport: \"REST\"", "transport: \"GRPC\"");
+        Files.writeString(pipelineYaml, stripAspectsSection(pipelineConfig));
 
-        GrpcBindingResolver grpcBindingResolver = mock(GrpcBindingResolver.class);
-        when(grpcBindingResolver.resolve(any(), any())).thenReturn(mock(GrpcBinding.class));
-        setField(processor, "bindingResolver", grpcBindingResolver);
+        Compilation compilation = Compiler.javac()
+            .withProcessors(new PipelineStepProcessor())
+            .withOptions(
+                "-Apipeline.generatedSourcesDir=" + generatedSourcesDir,
+                "-Aprotobuf.descriptor.file=" + resourcePath("descriptor_set_search.dsc"))
+            .compile(JavaFileObjects.forSourceString(
+                "org.example.OrchestratorMarker",
+                """
+                    package org.example;
 
-        ClientStepRenderer clientRenderer = mock(ClientStepRenderer.class);
-        setField(processor, "clientRenderer", clientRenderer);
-        RestClientStepRenderer restClientRenderer = mock(RestClientStepRenderer.class);
-        setField(processor, "restClientRenderer", restClientRenderer);
-        setField(processor, "grpcRenderer", mock(org.pipelineframework.processor.renderer.GrpcServiceAdapterRenderer.class));
-        setField(processor, "restRenderer", mock(org.pipelineframework.processor.renderer.RestResourceRenderer.class));
+                    import org.pipelineframework.annotation.PipelineOrchestrator;
 
-        invokeGenerateClients(processor, DescriptorProtos.FileDescriptorSet.getDefaultInstance());
+                    @PipelineOrchestrator
+                    public class OrchestratorMarker {
+                    }
+                    """));
 
-        verify(clientRenderer, times(2)).render(any(), any());
-        verifyNoInteractions(restClientRenderer);
+        assertThat(compilation).succeeded();
+
+        Path orchestratorClientDir = generatedSourcesDir.resolve("orchestrator-client");
+        assertTrue(hasGeneratedClass(orchestratorClientDir, "ProcessCrawlSourceGrpcClientStep"));
+        assertTrue(hasGeneratedClass(orchestratorClientDir, "ProcessIndexDocumentGrpcClientStep"));
     }
 
     @Test
-    void generatesRestClientStepsFromTemplate() throws Exception {
-        PipelineStepProcessor processor = new PipelineStepProcessor();
-        ProcessingEnvironment processingEnv = mockProcessingEnv();
-        processor.init(processingEnv);
+    void generatesRestClientStepsFromTemplate() throws IOException {
+        Path projectRoot = initProjectRoot();
+        Path moduleDir = projectRoot.resolve("test-module");
+        Path generatedSourcesDir = moduleDir.resolve("target").resolve("generated-sources").resolve("pipeline");
+        Files.createDirectories(generatedSourcesDir);
 
-        setField(processor, "generatedSourcesRoot", tempDir);
-        setField(processor, "pipelineTemplateConfig", sampleConfig("REST"));
-        setField(processor, "pipelineAspects", List.of());
-        setField(processor, "transportMode", enumValue(processor, "TransportMode", "REST"));
+        Files.copy(resourcePath("pipeline-search.yaml"), projectRoot.resolve("pipeline.yaml"));
 
-        RestBindingResolver restBindingResolver = mock(RestBindingResolver.class);
-        when(restBindingResolver.resolve(any(), any())).thenReturn(mock(RestBinding.class));
-        setField(processor, "restBindingResolver", restBindingResolver);
+        Compilation compilation = Compiler.javac()
+            .withProcessors(new PipelineStepProcessor())
+            .withOptions("-Apipeline.generatedSourcesDir=" + generatedSourcesDir)
+            .compile(
+                JavaFileObjects.forSourceString(
+                    "org.example.OrchestratorMarker",
+                    """
+                        package org.example;
 
-        RestClientStepRenderer restClientRenderer = mock(RestClientStepRenderer.class);
-        setField(processor, "restClientRenderer", restClientRenderer);
-        ClientStepRenderer clientRenderer = mock(ClientStepRenderer.class);
-        setField(processor, "clientRenderer", clientRenderer);
-        setField(processor, "grpcRenderer", mock(org.pipelineframework.processor.renderer.GrpcServiceAdapterRenderer.class));
-        setField(processor, "restRenderer", mock(org.pipelineframework.processor.renderer.RestResourceRenderer.class));
+                        import org.pipelineframework.annotation.PipelineOrchestrator;
 
-        invokeGenerateClients(processor, DescriptorProtos.FileDescriptorSet.getDefaultInstance());
+                        @PipelineOrchestrator
+                        public class OrchestratorMarker {
+                        }
+                        """),
+                dtoStub("CrawlRequestDto"),
+                dtoStub("RawDocumentDto"),
+                dtoStub("ParsedDocumentDto"),
+                dtoStub("TokenBatchDto"),
+                dtoStub("IndexAckDto"));
 
-        verify(restClientRenderer, times(2)).render(any(), any());
-        verifyNoInteractions(clientRenderer);
+        assertThat(compilation).succeeded();
+
+        Path orchestratorClientDir = generatedSourcesDir.resolve("orchestrator-client");
+        assertTrue(hasGeneratedClass(orchestratorClientDir, "ProcessCrawlSourceRestClientStep"));
+        assertTrue(hasGeneratedClass(orchestratorClientDir, "PersistenceRawDocumentSideEffectRestClientStep"));
     }
 
-    @Test
-    void generatesAspectClientsFromTemplate() throws Exception {
-        PipelineStepProcessor processor = new PipelineStepProcessor();
-        ProcessingEnvironment processingEnv = mockProcessingEnv();
-        processor.init(processingEnv);
-
-        setField(processor, "generatedSourcesRoot", tempDir);
-        setField(processor, "pipelineTemplateConfig", sampleConfig("REST"));
-        setField(processor, "transportMode", enumValue(processor, "TransportMode", "REST"));
-
-        PipelineAspectModel aspect = new PipelineAspectModel(
-            "persistence",
-            AspectScope.GLOBAL,
-            AspectPosition.AFTER_STEP,
-            Map.of("pluginImplementationClass", "org.pipelineframework.plugin.persistence.PersistenceService"));
-        setField(processor, "pipelineAspects", List.of(aspect));
-
-        RestBindingResolver restBindingResolver = mock(RestBindingResolver.class);
-        when(restBindingResolver.resolve(any(), any())).thenReturn(mock(RestBinding.class));
-        setField(processor, "restBindingResolver", restBindingResolver);
-
-        RestClientStepRenderer restClientRenderer = mock(RestClientStepRenderer.class);
-        setField(processor, "restClientRenderer", restClientRenderer);
-        setField(processor, "clientRenderer", mock(ClientStepRenderer.class));
-        setField(processor, "grpcRenderer", mock(org.pipelineframework.processor.renderer.GrpcServiceAdapterRenderer.class));
-        setField(processor, "restRenderer", mock(org.pipelineframework.processor.renderer.RestResourceRenderer.class));
-
-        invokeGenerateClients(processor, DescriptorProtos.FileDescriptorSet.getDefaultInstance());
-
-        verify(restClientRenderer, times(4)).render(any(), any());
+    private Path initProjectRoot() throws IOException {
+        Path projectRoot = tempDir;
+        Files.writeString(projectRoot.resolve("pom.xml"), """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <project xmlns="http://maven.apache.org/POM/4.0.0"
+                     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                     xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+                <modelVersion>4.0.0</modelVersion>
+                <groupId>test</groupId>
+                <artifactId>test-project</artifactId>
+                <version>1.0.0</version>
+                <packaging>pom</packaging>
+            </project>
+            """);
+        return projectRoot;
     }
 
-    private ProcessingEnvironment mockProcessingEnv() throws Exception {
-        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        when(processingEnv.getOptions()).thenReturn(Map.of());
-        when(processingEnv.getMessager()).thenReturn(mock(Messager.class));
-        when(processingEnv.getElementUtils()).thenReturn(mock(javax.lang.model.util.Elements.class));
-        when(processingEnv.getFiler()).thenReturn(mock(Filer.class));
-        when(processingEnv.getSourceVersion()).thenReturn(SourceVersion.RELEASE_21);
-        Files.createDirectories(tempDir);
-        return processingEnv;
+    private Path resourcePath(String name) {
+        return Paths.get(System.getProperty("user.dir"))
+            .resolve("src/test/resources")
+            .resolve(name);
     }
 
-    private PipelineTemplateConfig sampleConfig(String transport) {
-        PipelineTemplateStep step1 = new PipelineTemplateStep(
-            "Process Alpha",
-            "ONE_TO_ONE",
-            "AlphaInput",
-            List.of(),
-            "AlphaOutput",
-            List.of());
-        PipelineTemplateStep step2 = new PipelineTemplateStep(
-            "Process Beta",
-            "ONE_TO_ONE",
-            "BetaInput",
-            List.of(),
-            "BetaOutput",
-            List.of());
-        return new PipelineTemplateConfig(
-            "Sample App",
-            "com.example",
-            transport,
-            List.of(step1, step2),
-            Map.of());
+    private String stripAspectsSection(String yaml) {
+        int index = yaml.indexOf("\naspects:");
+        if (index < 0) {
+            return yaml;
+        }
+        return yaml.substring(0, index + 1);
     }
 
-    private void invokeGenerateClients(PipelineStepProcessor processor,
-                                       DescriptorProtos.FileDescriptorSet descriptorSet) throws Exception {
-        Method method = PipelineStepProcessor.class.getDeclaredMethod(
-            "generateOrchestratorClientsFromTemplate",
-            DescriptorProtos.FileDescriptorSet.class);
-        method.setAccessible(true);
-        method.invoke(processor, descriptorSet);
+    private boolean hasGeneratedClass(Path rootDir, String className) throws IOException {
+        if (!Files.exists(rootDir)) {
+            return false;
+        }
+        try (var stream = Files.walk(rootDir)) {
+            return stream.filter(path -> path.toString().endsWith(".java"))
+                .anyMatch(path -> {
+                    try {
+                        return Files.readString(path).contains("class " + className);
+                    } catch (IOException e) {
+                        return false;
+                    }
+                });
+        }
     }
 
-    private void setField(Object target, String fieldName, Object value) throws Exception {
-        Field field = target.getClass().getDeclaredField(fieldName);
-        field.setAccessible(true);
-        field.set(target, value);
-    }
+    private JavaFileObject dtoStub(String className) {
+        String fqcn = "org.pipelineframework.search.common.dto." + className;
+        String source = """
+            package org.pipelineframework.search.common.dto;
 
-    private Object enumValue(Object target, String enumName, String value) throws Exception {
-        Class<?> enumType = null;
-        for (Class<?> declared : target.getClass().getDeclaredClasses()) {
-            if (declared.isEnum() && declared.getSimpleName().equals(enumName)) {
-                enumType = declared;
-                break;
+            public class %s {
             }
-        }
-        if (enumType == null) {
-            throw new IllegalStateException("Enum " + enumName + " not found.");
-        }
-        @SuppressWarnings("unchecked")
-        Object enumValue = Enum.valueOf((Class<Enum>) enumType, value);
-        return enumValue;
+            """.formatted(className);
+        return JavaFileObjects.forSourceString(fqcn, source);
     }
-
 }
