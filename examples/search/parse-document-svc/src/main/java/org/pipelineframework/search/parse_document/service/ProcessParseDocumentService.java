@@ -9,6 +9,7 @@ import org.jboss.logging.Logger;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.search.common.domain.ParsedDocument;
 import org.pipelineframework.search.common.domain.RawDocument;
+import org.pipelineframework.search.common.util.HashingUtils;
 import org.pipelineframework.service.ReactiveService;
 
 @PipelineStep(
@@ -18,7 +19,7 @@ import org.pipelineframework.service.ReactiveService;
     backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
     inboundMapper = org.pipelineframework.search.common.mapper.RawDocumentMapper.class,
     outboundMapper = org.pipelineframework.search.common.mapper.ParsedDocumentMapper.class,
-    cacheKeyGenerator = org.pipelineframework.cache.DocIdCacheKeyGenerator.class
+    cacheKeyGenerator = org.pipelineframework.search.parse_document.cache.ParseDocumentCacheKeyGenerator.class
 )
 @ApplicationScoped
 @Getter
@@ -40,6 +41,7 @@ public class ProcessParseDocumentService
     output.docId = input.docId;
     output.title = title;
     output.content = content;
+    output.contentHash = HashingUtils.sha256Base64Url(content);
     output.extractedAt = Instant.now();
 
     logger.infof("Parsed doc %s (title=%s, length=%s)", input.docId, title, content.length());

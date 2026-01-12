@@ -28,6 +28,22 @@ Use the Quarkus plugin in IntelliJ IDEA or run with:
 ./mvnw compile quarkus:dev
 ```
 
+## Constructing crawl requests
+
+Use the helper to attach fetch options that affect crawl bytes:
+
+```java
+import org.pipelineframework.search.common.util.CrawlRequestOptions;
+
+CrawlRequest request = CrawlRequestOptions.builder()
+    .fetchMethod("GET")
+    .accept("text/html")
+    .acceptLanguage("en-US")
+    .authScope("tenant-42")
+    .header("X-Client-Hint", "mobile")
+    .build("https://example.test");
+```
+
 ## Architecture
 
 This application follows the pipeline pattern with multiple microservices, each responsible for a specific step in the processing workflow. Services communicate via gRPC, and the orchestrator coordinates the overall pipeline execution.

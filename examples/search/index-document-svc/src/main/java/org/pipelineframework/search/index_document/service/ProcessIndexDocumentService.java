@@ -18,7 +18,7 @@ import org.pipelineframework.service.ReactiveService;
     backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
     inboundMapper = org.pipelineframework.search.common.mapper.TokenBatchMapper.class,
     outboundMapper = org.pipelineframework.search.common.mapper.IndexAckMapper.class,
-    cacheKeyGenerator = org.pipelineframework.cache.DocIdCacheKeyGenerator.class
+    cacheKeyGenerator = org.pipelineframework.search.index_document.cache.IndexDocumentCacheKeyGenerator.class
 )
 @ApplicationScoped
 @Getter

@@ -13,6 +13,7 @@ import org.jboss.logging.Logger;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.search.common.domain.ParsedDocument;
 import org.pipelineframework.search.common.domain.TokenBatch;
+import org.pipelineframework.search.common.util.HashingUtils;
 import org.pipelineframework.service.ReactiveService;
 
 @PipelineStep(
@@ -22,7 +23,7 @@ import org.pipelineframework.service.ReactiveService;
     backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
     inboundMapper = org.pipelineframework.search.common.mapper.ParsedDocumentMapper.class,
     outboundMapper = org.pipelineframework.search.common.mapper.TokenBatchMapper.class,
-    cacheKeyGenerator = org.pipelineframework.cache.DocIdCacheKeyGenerator.class
+    cacheKeyGenerator = org.pipelineframework.search.tokenize_content.cache.TokenizeContentCacheKeyGenerator.class
 )
 @ApplicationScoped
 @Getter
@@ -42,6 +43,7 @@ public class ProcessTokenizeContentService
     TokenBatch output = new TokenBatch();
     output.docId = input.docId;
     output.tokens = tokenized;
+    output.tokensHash = HashingUtils.sha256Base64Url(tokenized);
     output.tokenizedAt = Instant.now();
 
     logger.infof("Tokenized doc %s (%s tokens)", input.docId, countTokens(tokenized));

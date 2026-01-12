@@ -16,6 +16,7 @@ public class RawDocumentDto {
   UUID docId;
   String sourceUrl;
   String rawContent;
+  String rawContentHash;
   Instant fetchedAt;
 
   // Lombok will generate the builder, but Jackson needs to know how to interpret it
