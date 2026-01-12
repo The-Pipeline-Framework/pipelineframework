@@ -12,7 +12,6 @@ import lombok.Value;
 @Builder
 @JsonDeserialize(builder = TokenBatchDto.TokenBatchDtoBuilder.class)
 public class TokenBatchDto {
-  UUID id;
   UUID docId;
   String tokens;
   String tokensHash;

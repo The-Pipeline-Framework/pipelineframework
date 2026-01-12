@@ -12,7 +12,6 @@ import lombok.Value;
 @Builder
 @JsonDeserialize(builder = RawDocumentDto.RawDocumentDtoBuilder.class)
 public class RawDocumentDto {
-  UUID id;
   UUID docId;
   String sourceUrl;
   String rawContent;

@@ -12,7 +12,6 @@ import lombok.Value;
 @Builder
 @JsonDeserialize(builder = IndexAckDto.IndexAckDtoBuilder.class)
 public class IndexAckDto {
-  UUID id;
   UUID docId;
   String indexVersion;
   Instant indexedAt;

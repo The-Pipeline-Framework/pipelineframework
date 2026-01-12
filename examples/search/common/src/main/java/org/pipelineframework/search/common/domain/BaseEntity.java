@@ -17,10 +17,7 @@
 package org.pipelineframework.search.common.domain;
 
 import java.util.UUID;
-import jakarta.persistence.Column;
-import jakarta.persistence.Id;
-import jakarta.persistence.MappedSuperclass;
-import jakarta.persistence.PrePersist;
+import jakarta.persistence.*;
 
 import io.quarkus.hibernate.reactive.panache.PanacheEntityBase;
 import lombok.Getter;
@@ -32,17 +29,14 @@ import lombok.Setter;
 public abstract class BaseEntity extends PanacheEntityBase {
 
   @Id
-  @Column(name = "id", updatable = false, nullable = false)
-  public UUID id;
-
-  public BaseEntity() {
-    id = UUID.randomUUID();
-  }
+  @Column(name = "doc_id", updatable = false, nullable = false)
+  public UUID docId;
 
   @PrePersist
-  protected void ensureId() {
-    if (id == null) {
-      id = UUID.randomUUID();
+  @PreUpdate
+  protected void ensureDocId() {
+    if (docId == null) {
+      throw new IllegalStateException("docId is required");
     }
   }
 }

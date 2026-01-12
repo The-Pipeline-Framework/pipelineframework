@@ -12,7 +12,6 @@ import lombok.Value;
 @Builder
 @JsonDeserialize(builder = ParsedDocumentDto.ParsedDocumentDtoBuilder.class)
 public class ParsedDocumentDto {
-  UUID id;
   UUID docId;
   String title;
   String content;

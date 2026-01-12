@@ -13,7 +13,6 @@ import lombok.Value;
 @Builder
 @JsonDeserialize(builder = CrawlRequestDto.CrawlRequestDtoBuilder.class)
 public class CrawlRequestDto {
-  UUID id;
   UUID docId;
   String sourceUrl;
   String fetchMethod;
