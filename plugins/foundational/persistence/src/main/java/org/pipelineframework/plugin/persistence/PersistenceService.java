@@ -35,6 +35,7 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T> {
 
     @Inject
     PersistenceConfig config;
+
     @Override
     public Uni<T> process(T item) {
         logger.debugf("PersistenceService.process() called with item: %s (class: %s)",
