@@ -86,7 +86,7 @@ class ProcessIndexDocumentResourceTest {
                 .when()
                 .post("/api/v1/process-index-document/process")
                 .then()
-                .statusCode(500);
+                .statusCode(400);
     }
 
     @Test

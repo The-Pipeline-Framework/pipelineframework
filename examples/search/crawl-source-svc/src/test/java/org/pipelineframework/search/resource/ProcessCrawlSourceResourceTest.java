@@ -85,7 +85,7 @@ class ProcessCrawlSourceResourceTest {
                 .when()
                 .post("/api/v1/process-crawl-source/process")
                 .then()
-                .statusCode(500);
+                .statusCode(400);
     }
 
     @Test

@@ -85,7 +85,7 @@ class ProcessTokenizeContentResourceTest {
                 .when()
                 .post("/api/v1/process-tokenize-content/process")
                 .then()
-                .statusCode(500);
+                .statusCode(400);
     }
 
     @Test
