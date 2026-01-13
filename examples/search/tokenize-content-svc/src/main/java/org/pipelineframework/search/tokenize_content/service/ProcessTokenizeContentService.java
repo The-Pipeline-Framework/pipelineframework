@@ -44,6 +44,7 @@ public class ProcessTokenizeContentService
     output.docId = input.docId;
     output.tokens = tokenized;
     output.tokensHash = HashingUtils.sha256Base64Url(tokenized);
+    output.contentHash = input.contentHash;
     output.tokenizedAt = Instant.now();
 
     logger.infof("Tokenized doc %s (%s tokens)", input.docId, countTokens(tokenized));

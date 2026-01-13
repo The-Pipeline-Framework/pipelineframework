@@ -15,6 +15,7 @@ public class TokenBatchDto {
   UUID docId;
   String tokens;
   String tokensHash;
+  String contentHash;
   Instant tokenizedAt;
 
   // Lombok will generate the builder, but Jackson needs to know how to interpret it

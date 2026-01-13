@@ -38,6 +38,7 @@ public class ProcessIndexDocumentService
     IndexAck output = new IndexAck();
     output.docId = input.docId;
     output.indexVersion = indexVersion;
+    output.tokensHash = input.tokensHash;
     output.indexedAt = Instant.now();
     output.success = true;
 

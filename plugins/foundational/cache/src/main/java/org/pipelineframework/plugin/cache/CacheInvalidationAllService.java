@@ -20,7 +20,6 @@ import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
-import org.pipelineframework.cache.CacheKey;
 import org.pipelineframework.cache.PipelineCacheKeyFormat;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
@@ -40,17 +39,6 @@ public class CacheInvalidationAllService<T> implements ReactiveSideEffectService
         if (item == null) {
             return Uni.createFrom().nullItem();
         }
-        if (!(item instanceof CacheKey cacheKey)) {
-            LOG.warnf("Item type %s does not implement CacheKey, skipping invalidation",
-                item.getClass().getName());
-            return Uni.createFrom().item(item);
-        }
-        String key = cacheKey.cacheKey();
-        if (key == null || key.isBlank()) {
-            LOG.warnf("CacheKey is empty for item type %s, skipping invalidation", item.getClass().getName());
-            return Uni.createFrom().item(item);
-        }
-
         PipelineContext context = PipelineContextHolder.get();
         String versionTag = context != null ? context.versionTag() : null;
         String prefix = PipelineCacheKeyFormat.typePrefix(item.getClass(), versionTag);

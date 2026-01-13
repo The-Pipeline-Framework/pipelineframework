@@ -16,6 +16,7 @@ public class TokenBatch extends BaseEntity implements Serializable {
 
   public String tokens;
   public String tokensHash;
+  public String contentHash;
   public Instant tokenizedAt;
 
 }

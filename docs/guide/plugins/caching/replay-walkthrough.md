@@ -13,13 +13,18 @@ The expensive stage is Crawl. We want to re-index with a new tokenizer without r
 
 ## Step 1: Choose cache keys
 
-Each output type implements `CacheKey` using a stable `docId`:
+Define cache key strategies that emit stable keys for each output type:
 
 ```java
-public class ParsedDocument implements CacheKey {
+import java.util.Optional;
+
+public class ParsedDocumentKeyStrategy implements CacheKeyStrategy {
     @Override
-    public String cacheKey() {
-        return docId.toString();
+    public Optional<String> resolveKey(Object item, PipelineContext context) {
+        if (!(item instanceof ParsedDocument doc) || doc.docId == null) {
+            return Optional.empty();
+        }
+        return Optional.of(doc.getClass().getName() + ":" + doc.docId);
     }
 }
 ```
@@ -54,7 +59,7 @@ Now:
 
 `x-pipeline-replay` is currently propagated as a header only; it is not interpreted by the runtime.
 
-Caching happens in the orchestrator client step before the remote call, so the step services remain unchanged.
+Caching happens in the cache plugin side-effect steps, so the step services remain unchanged.
 
 ## Step 4: Fork a new version
 
@@ -73,19 +78,19 @@ This intentionally misses old cache entries and recomputes the pipeline.
 sequenceDiagram
   participant Client
   participant Orchestrator
-  participant Cache
+  participant CachePlugin
   participant Tokenize
   participant Index
 
   Client->>Orchestrator: run with version v1
-  Orchestrator->>Cache: lookup v1:Type:docId (Parse output)
-  Cache-->>Orchestrator: HIT (ParsedDocument)
+  Orchestrator->>CachePlugin: lookup v1:Type:docId (Parse output)
+  CachePlugin-->>Orchestrator: HIT (ParsedDocument)
   Orchestrator->>Tokenize: process(ParsedDocument)
   Tokenize-->>Orchestrator: TokenBatch
-  Orchestrator->>Cache: store v1:Type:docId (TokenBatch)
+  Orchestrator->>CachePlugin: store v1:Type:docId (TokenBatch)
   Orchestrator->>Index: process(TokenBatch)
   Index-->>Orchestrator: IndexAck
-  Orchestrator->>Cache: store v1:Type:docId (IndexAck)
+  Orchestrator->>CachePlugin: store v1:Type:docId (IndexAck)
 ```
 
 ## Header propagation diagram

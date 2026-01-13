@@ -2,7 +2,7 @@
 
 This page covers how to enable caching and configure providers.
 
-## Enable orchestrator-side caching
+## Enable cache plugin
 
 Add the cache aspect in `pipeline.yaml`:
 
@@ -15,7 +15,7 @@ aspects:
     order: 5
 ```
 
-This turns on `@CacheResult` codegen on orchestrator client steps and REST resources. It does not synthesize plugin steps.
+This enables the cache plugin for pipeline steps.
 
 ## Optional plugin host (side-effect mode)
 
@@ -43,65 +43,37 @@ pipeline.cache.caffeine.expire-after-write=PT30M
 
 If only one provider is on the classpath, `pipeline.cache.provider` can be omitted.
 
-## Quarkus cache configuration
+## Cache key strategies
 
-Orchestrator-side caching uses Quarkus Cache. Configure it with `quarkus.cache.*`:
-
-```
-quarkus.cache.caffeine."pipeline-cache".expire-after-write=PT30M
-quarkus.cache.caffeine."pipeline-cache".maximum-size=10000
-```
-
-## Build-time key generator override
-
-If you need a custom `CacheKeyGenerator`, set the annotation processor option:
-
-```
--Apipeline.cache.keyGenerator=com.example.MyCacheKeyGenerator
-```
-
-## Per-step key generator override
-
-Set a cache key generator on an individual step:
+The cache plugin resolves keys via `CacheKeyStrategy` beans. Implement them in your application modules and assign priorities to compose multiple strategies.
 
 ```java
-import org.pipelineframework.annotation.PipelineStep;
-import org.pipelineframework.cache.DocIdCacheKeyGenerator;
+import java.util.Optional;
+import jakarta.enterprise.context.ApplicationScoped;
 
-@PipelineStep(
-    inputType = CrawlRequest.class,
-    outputType = RawDocument.class,
-    cacheKeyGenerator = DocIdCacheKeyGenerator.class
-)
-public class CrawlSourceService {
-}
-```
+import org.pipelineframework.cache.CacheKeyStrategy;
+import org.pipelineframework.context.PipelineContext;
 
-Per-step overrides take precedence over the build-time `-Apipeline.cache.keyGenerator`.
-
-Built-in generators:
-
-- `PipelineCacheKeyGenerator` (default)
-- `DocIdCacheKeyGenerator`
-- `IdCacheKeyGenerator`
-
-These generators read the first method parameter (record accessor, getter, or field) and fall back to the default key format when the property is missing.
-
-## Cache keys
-
-Inputs must implement `CacheKey`:
-
-```java
-import org.pipelineframework.cache.CacheKey;
-
-public class MyInput implements CacheKey {
+@ApplicationScoped
+public class RawDocumentKeyStrategy implements CacheKeyStrategy {
     @Override
-    public String cacheKey() {
-        return id.toString();
+    public Optional<String> resolveKey(Object item, PipelineContext context) {
+        if (!(item instanceof RawDocument document)) {
+            return Optional.empty();
+        }
+        if (document.rawContentHash == null || document.rawContentHash.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(document.getClass().getName() + ":" + document.rawContentHash);
+    }
+
+    @Override
+    public int priority() {
+        return 50;
     }
 }
 ```
 
-TPF prefixes cache keys with the input type so bulk invalidation can target a step by its input type.
+Optional: set `pipeline.cache.keyGenerator` to point at a `CacheKeyGenerator` bean. It will be consulted before the default base-key strategy, which uses `PipelineCacheKeyFormat.baseKey`.
 
 `prefer-cache` and `return-cached` are equivalent; use either name in config or headers.

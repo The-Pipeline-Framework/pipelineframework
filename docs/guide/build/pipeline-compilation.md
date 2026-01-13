@@ -297,7 +297,6 @@ Use configuration and transport settings instead of transport-specific annotatio
 
 - Set `transport: GRPC` or `transport: REST` in `pipeline.yaml`.
 - Override REST paths with `pipeline.rest.path.<ServiceName>` in `application.properties`.
-- Override cache keys per step with `cacheKeyGenerator` on `@PipelineStep`.
 
 ## Troubleshooting
 

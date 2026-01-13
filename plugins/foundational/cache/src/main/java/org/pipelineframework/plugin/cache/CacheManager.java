@@ -28,7 +28,6 @@ import io.quarkus.arc.Unremovable;
 import io.smallrye.mutiny.Uni;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
-import org.pipelineframework.cache.CacheKey;
 import org.pipelineframework.cache.CacheProvider;
 
 /**
@@ -78,27 +77,21 @@ public class CacheManager {
     }
 
     /**
-     * Cache the given item using a registered cache provider that supports it and the current thread context.
+     * Cache the given item using the supplied key and a registered cache provider.
      *
      * @param <T> the type of item to cache
+     * @param key cache key to use
      * @param item the item to cache
      * @return the cached item if a suitable provider handled it, otherwise the original item;
      *         if the input was null the Uni emits `null`
      */
-    public <T> Uni<T> cache(T item) {
+    public <T> Uni<T> cache(String key, T item) {
         if (item == null) {
             LOG.debug("Item is null, returning empty Uni");
             return Uni.createFrom().nullItem();
         }
-
-        if (!(item instanceof CacheKey cacheKey)) {
-            LOG.warnf("Item type %s does not implement CacheKey, skipping cache", item.getClass().getName());
-            return Uni.createFrom().item(item);
-        }
-
-        String key = cacheKey.cacheKey();
         if (key == null || key.isBlank()) {
-            LOG.warnf("CacheKey is empty for item type %s, skipping cache", item.getClass().getName());
+            LOG.warnf("Cache key is empty for item type %s, skipping cache", item.getClass().getName());
             return Uni.createFrom().item(item);
         }
 

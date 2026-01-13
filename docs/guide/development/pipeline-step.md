@@ -15,7 +15,6 @@ The `@PipelineStep` annotation marks a class as a pipeline step and enables auto
 - `outboundMapper`: The outbound mapper class for this pipeline service/step - handles conversion from domain to gRPC types (using MapStruct-based unified Mapper interface)
 - `runOnVirtualThreads`: Whether to offload server processing to virtual threads, i.e. for I/O-bound operations (defaults to `false`)
 - `sideEffect`: Optional plugin service type used to generate side-effect client/server adapters
-- `cacheKeyGenerator`: Optional cache key generator override for orchestrator-side caching
 
 `backendType` is a legacy annotation field and is ignored by the current processor.
 

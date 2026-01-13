@@ -16,6 +16,7 @@ public class ParsedDocumentDto {
   String title;
   String content;
   String contentHash;
+  String rawContentHash;
   Instant extractedAt;
 
   // Lombok will generate the builder, but Jackson needs to know how to interpret it

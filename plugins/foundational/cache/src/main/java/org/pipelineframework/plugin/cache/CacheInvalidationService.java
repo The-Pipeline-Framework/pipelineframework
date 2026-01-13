@@ -20,42 +20,36 @@ import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
-import org.pipelineframework.cache.CacheKey;
 import org.pipelineframework.cache.PipelineCacheKeyFormat;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.service.ReactiveSideEffectService;
 
 /**
- * Side-effect plugin that invalidates cached entries for items implementing CacheKey.
+ * Side-effect plugin that invalidates cached entries using configured cache key strategies.
  */
 public class CacheInvalidationService<T> implements ReactiveSideEffectService<T> {
     private static final Logger LOG = Logger.getLogger(CacheInvalidationService.class);
 
     @Inject
     CacheManager cacheManager;
+    @Inject
+    CacheKeyResolver cacheKeyResolver;
 
     @Override
     public Uni<T> process(T item) {
         if (item == null) {
             return Uni.createFrom().nullItem();
         }
-        if (!(item instanceof CacheKey cacheKey)) {
-            LOG.warnf("Item type %s does not implement CacheKey, skipping invalidation",
+        PipelineContext context = PipelineContextHolder.get();
+        String baseKey = cacheKeyResolver.resolveKey(item, context).orElse(null);
+        if (baseKey == null || baseKey.isBlank()) {
+            LOG.warnf("No cache key strategy matched for item type %s, skipping invalidation",
                 item.getClass().getName());
             return Uni.createFrom().item(item);
         }
-
-        String key = cacheKey.cacheKey();
-        if (key == null || key.isBlank()) {
-            LOG.warnf("CacheKey is empty for item type %s, skipping invalidation", item.getClass().getName());
-            return Uni.createFrom().item(item);
-        }
-
-        PipelineContext context = PipelineContextHolder.get();
-        String baseKey = PipelineCacheKeyFormat.baseKey(item);
         String versionTag = context != null ? context.versionTag() : null;
-        key = PipelineCacheKeyFormat.applyVersionTag(baseKey, versionTag);
+        String key = PipelineCacheKeyFormat.applyVersionTag(baseKey, versionTag);
 
         String key1 = key;
         String key2 = key;

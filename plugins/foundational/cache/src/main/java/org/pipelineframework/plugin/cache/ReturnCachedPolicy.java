@@ -38,7 +38,7 @@ final class ReturnCachedPolicy implements CachePolicy {
         return cacheManager.get(key)
             .onItem().transformToUni(cached -> cached
                 .map(value -> withStatus(CacheStatus.HIT, Uni.createFrom().item((T) value)))
-                .orElseGet(() -> cacheManager.cache(item)
+                .orElseGet(() -> cacheManager.cache(key, item)
                     .replaceWith(item)
                     .onItem().invoke(() -> PipelineCacheStatusHolder.set(CacheStatus.MISS))))
             .onFailure().invoke(failure -> logger.error("Failed to read from cache", failure))

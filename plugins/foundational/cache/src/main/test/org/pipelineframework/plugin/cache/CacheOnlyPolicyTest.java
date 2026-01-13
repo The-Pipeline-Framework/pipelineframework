@@ -41,27 +41,22 @@ class CacheOnlyPolicyTest {
         CacheOnlyPolicy policy = new CacheOnlyPolicy(cacheManager, Logger.getLogger(CacheOnlyPolicy.class));
 
         TestItem item = new TestItem("key-1");
-        when(cacheManager.cache(item)).thenReturn(Uni.createFrom().item(item));
+        when(cacheManager.cache(item.id, item)).thenReturn(Uni.createFrom().item(item));
 
-        Uni<TestItem> result = policy.handle(item, item.cacheKey(), key -> key);
+        Uni<TestItem> result = policy.handle(item, item.id, key -> key);
         UniAssertSubscriber<TestItem> subscriber = result.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertSame(item, subscriber.getItem());
         assertEquals(CacheStatus.WRITE, PipelineCacheStatusHolder.getAndClear());
-        verify(cacheManager).cache(item);
+        verify(cacheManager).cache(item.id, item);
     }
 
-    private static final class TestItem implements org.pipelineframework.cache.CacheKey {
+    private static final class TestItem {
         private final String id;
 
         private TestItem(String id) {
             this.id = id;
-        }
-
-        @Override
-        public String cacheKey() {
-            return id;
         }
     }
 }

@@ -33,7 +33,7 @@ aspects:
       pluginImplementationClass: "org.pipelineframework.plugin.cache.CacheInvalidationService"
 ```
 
-This uses the input item `CacheKey` to invalidate a single entry.
+This uses the configured cache key strategies to invalidate a single entry.
 
 ## Bulk invalidation (by input type)
 

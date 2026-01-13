@@ -25,7 +25,6 @@ import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.UniAssertSubscriber;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.cache.CacheKey;
 import org.pipelineframework.cache.CacheProvider;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -44,18 +43,18 @@ class CacheManagerTest {
 
     @Test
     void cache_WithNullItem_ShouldReturnNull() {
-        Uni<Object> resultUni = cacheManager.cache(null);
+        Uni<Object> resultUni = cacheManager.cache("key-0", null);
         UniAssertSubscriber<Object> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
         assertNull(subscriber.getItem());
     }
 
     @Test
-    void cache_WithNonCacheKey_ShouldReturnSameItem() throws Exception {
+    void cache_WithBlankKey_ShouldReturnSameItem() throws Exception {
         Object item = new Object();
         setProviders(List.of(mock(CacheProvider.class)));
 
-        Uni<Object> resultUni = cacheManager.cache(item);
+        Uni<Object> resultUni = cacheManager.cache(" ", item);
         UniAssertSubscriber<Object> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
@@ -65,44 +64,46 @@ class CacheManagerTest {
     @Test
     void cache_WithSupportedProvider_ShouldUseProvider() throws Exception {
         TestItem item = new TestItem("id-1");
+        String key = "key-1";
         CacheProvider<TestItem> provider = mock(CacheProvider.class);
         when(provider.backend()).thenReturn("memory");
         when(provider.supports(item)).thenReturn(true);
         when(provider.supportsThreadContext()).thenReturn(true);
-        when(provider.cache(eq(item.cacheKey()), eq(item)))
+        when(provider.cache(eq(key), eq(item)))
             .thenReturn(Uni.createFrom().item(item));
 
         setProviders(List.of(provider));
         setConfig("memory", Optional.empty());
 
-        Uni<TestItem> resultUni = cacheManager.cache(item);
+        Uni<TestItem> resultUni = cacheManager.cache(key, item);
         UniAssertSubscriber<TestItem> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertSame(item, subscriber.getItem());
-        verify(provider).cache(eq(item.cacheKey()), eq(item));
+        verify(provider).cache(eq(key), eq(item));
     }
 
     @Test
     void cache_WithTtl_ShouldUseTtlCacheMethod() throws Exception {
         TestItem item = new TestItem("id-2");
+        String key = "key-2";
         CacheProvider<TestItem> provider = mock(CacheProvider.class);
         when(provider.backend()).thenReturn("memory");
         when(provider.supports(item)).thenReturn(true);
         when(provider.supportsThreadContext()).thenReturn(true);
-        when(provider.cache(eq(item.cacheKey()), eq(item), any(Duration.class)))
+        when(provider.cache(eq(key), eq(item), any(Duration.class)))
             .thenReturn(Uni.createFrom().item(item));
 
         setProviders(List.of(provider));
         setConfig("memory", Optional.of(Duration.ofSeconds(1)));
 
-        Uni<TestItem> resultUni = cacheManager.cache(item);
+        Uni<TestItem> resultUni = cacheManager.cache(key, item);
         UniAssertSubscriber<TestItem> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertSame(item, subscriber.getItem());
-        verify(provider).cache(eq(item.cacheKey()), eq(item), any(Duration.class));
-        verify(provider, never()).cache(eq(item.cacheKey()), eq(item));
+        verify(provider).cache(eq(key), eq(item), any(Duration.class));
+        verify(provider, never()).cache(eq(key), eq(item));
     }
 
     @Test
@@ -191,16 +192,11 @@ class CacheManagerTest {
         profileField.set(cacheManager, "test");
     }
 
-    private static final class TestItem implements CacheKey {
+    private static final class TestItem {
         private final String id;
 
         private TestItem(String id) {
             this.id = id;
-        }
-
-        @Override
-        public String cacheKey() {
-            return id;
         }
     }
 }

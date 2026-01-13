@@ -17,6 +17,6 @@ public class ParsedDocument extends BaseEntity implements Serializable {
   public String title;
   public String content;
   public String contentHash;
+  public String rawContentHash;
   public Instant extractedAt;
-
 }

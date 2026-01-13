@@ -31,7 +31,6 @@ import io.quarkus.cache.CaffeineCache;
 import io.smallrye.mutiny.Uni;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
-import org.pipelineframework.cache.CacheKey;
 import org.pipelineframework.cache.CacheProvider;
 
 /**
@@ -40,7 +39,7 @@ import org.pipelineframework.cache.CacheProvider;
 @ApplicationScoped
 @Unremovable
 @IfBuildProperty(name = "pipeline.cache.provider", stringValue = "caffeine")
-public class CaffeineCacheProvider implements CacheProvider<CacheKey> {
+public class CaffeineCacheProvider implements CacheProvider<Object> {
 
     private static final Logger LOG = Logger.getLogger(CaffeineCacheProvider.class);
 
@@ -80,12 +79,12 @@ public class CaffeineCacheProvider implements CacheProvider<CacheKey> {
     }
 
     @Override
-    public Class<CacheKey> type() {
-        return CacheKey.class;
+    public Class<Object> type() {
+        return Object.class;
     }
 
     @Override
-    public Uni<CacheKey> cache(String key, CacheKey value) {
+    public Uni<Object> cache(String key, Object value) {
         if (key == null || key.isBlank()) {
             LOG.warn("Cache key is null or blank, skipping cache");
             return Uni.createFrom().item(value);
@@ -95,7 +94,7 @@ public class CaffeineCacheProvider implements CacheProvider<CacheKey> {
     }
 
     @Override
-    public Uni<CacheKey> cache(String key, CacheKey value, Duration ttl) {
+    public Uni<Object> cache(String key, Object value, Duration ttl) {
         if (ttl != null && !ttl.isZero() && !ttl.isNegative()) {
             caffeineCache.setExpireAfterWrite(ttl);
         }
@@ -103,12 +102,12 @@ public class CaffeineCacheProvider implements CacheProvider<CacheKey> {
     }
 
     @Override
-    public Uni<Optional<CacheKey>> get(String key) {
+    public Uni<Optional<Object>> get(String key) {
         if (key == null || key.isBlank()) {
             return Uni.createFrom().item(Optional.empty());
         }
         return Uni.createFrom().completionStage(caffeineCache.getIfPresent(key))
-            .onItem().transform(item -> Optional.ofNullable((CacheKey) item));
+            .onItem().transform(Optional::ofNullable);
     }
 
     @Override
@@ -140,6 +139,6 @@ public class CaffeineCacheProvider implements CacheProvider<CacheKey> {
 
     @Override
     public boolean supports(Object item) {
-        return item instanceof CacheKey;
+        return true;
     }
 }

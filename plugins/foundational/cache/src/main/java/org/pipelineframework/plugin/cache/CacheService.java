@@ -21,7 +21,6 @@ import jakarta.inject.Inject;
 import io.smallrye.mutiny.Uni;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
-import org.pipelineframework.cache.CacheKey;
 import org.pipelineframework.cache.CacheStatus;
 import org.pipelineframework.context.PipelineCacheStatusHolder;
 import org.pipelineframework.context.PipelineContext;
@@ -36,6 +35,7 @@ public class CacheService<T> implements ReactiveSideEffectService<T> {
     private final Logger logger = Logger.getLogger(CacheService.class);
 
     private final CacheManager cacheManager;
+    private final CacheKeyResolver cacheKeyResolver;
 
     @ConfigProperty(name = "pipeline.cache.policy", defaultValue = "prefer-cache")
     String policyValue;
@@ -46,10 +46,11 @@ public class CacheService<T> implements ReactiveSideEffectService<T> {
      * @param cacheManager a CacheManager object
      */
     @Inject
-    public CacheService(CacheManager cacheManager) {
+    public CacheService(CacheManager cacheManager, CacheKeyResolver cacheKeyResolver) {
         logger.debug("CacheService constructor called with cacheManager: " +
             (cacheManager != null ? cacheManager.getClass().getName() : "null"));
         this.cacheManager = cacheManager;
+        this.cacheKeyResolver = cacheKeyResolver;
     }
 
     @Override
@@ -70,21 +71,15 @@ public class CacheService<T> implements ReactiveSideEffectService<T> {
             return handler.handle(item, null, key -> key);
         }
 
-        if (!(item instanceof CacheKey cacheKey)) {
-            PipelineCacheStatusHolder.set(CacheStatus.MISS);
-            logger.warnf("Item type %s does not implement CacheKey, skipping cache", item.getClass().getName());
-            return Uni.createFrom().item(item);
-        }
-
         logger.debugf("Using cacheManager: %s to cache item of type: %s",
             cacheManager != null ? cacheManager.getClass().getName() : "null",
             item.getClass().getName());
 
         assert cacheManager != null;
-        String key = cacheKey.cacheKey();
+        String key = cacheKeyResolver.resolveKey(item, context).orElse(null);
         if (key == null || key.isBlank()) {
             PipelineCacheStatusHolder.set(CacheStatus.MISS);
-            logger.warnf("CacheKey is empty for item type %s, skipping cache", item.getClass().getName());
+            logger.warnf("No cache key strategy matched for item type %s, skipping cache", item.getClass().getName());
             return Uni.createFrom().item(item);
         }
         String versionTag = context != null ? context.versionTag() : null;

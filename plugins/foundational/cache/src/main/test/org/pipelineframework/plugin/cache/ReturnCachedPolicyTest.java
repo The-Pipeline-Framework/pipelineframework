@@ -46,14 +46,14 @@ class ReturnCachedPolicyTest {
         TestItem cached = new TestItem("key-1");
         when(cacheManager.get("v1:key-1")).thenReturn(Uni.createFrom().item(Optional.of(cached)));
 
-        Uni<TestItem> result = policy.handle(item, item.cacheKey(), key -> "v1:" + key);
+        Uni<TestItem> result = policy.handle(item, item.id, key -> "v1:" + key);
         UniAssertSubscriber<TestItem> subscriber = result.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertSame(cached, subscriber.getItem());
         assertEquals(CacheStatus.HIT, PipelineCacheStatusHolder.getAndClear());
         verify(cacheManager).get("v1:key-1");
-        verify(cacheManager, never()).cache(any());
+        verify(cacheManager, never()).cache(any(), any());
     }
 
     @Test
@@ -63,27 +63,22 @@ class ReturnCachedPolicyTest {
 
         TestItem item = new TestItem("key-2");
         when(cacheManager.get("key-2")).thenReturn(Uni.createFrom().item(Optional.empty()));
-        when(cacheManager.cache(item)).thenReturn(Uni.createFrom().item(item));
+        when(cacheManager.cache(item.id, item)).thenReturn(Uni.createFrom().item(item));
 
-        Uni<TestItem> result = policy.handle(item, item.cacheKey(), key -> key);
+        Uni<TestItem> result = policy.handle(item, item.id, key -> key);
         UniAssertSubscriber<TestItem> subscriber = result.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertSame(item, subscriber.getItem());
         assertEquals(CacheStatus.MISS, PipelineCacheStatusHolder.getAndClear());
-        verify(cacheManager).cache(item);
+        verify(cacheManager).cache(item.id, item);
     }
 
-    private static final class TestItem implements org.pipelineframework.cache.CacheKey {
+    private static final class TestItem {
         private final String id;
 
         private TestItem(String id) {
             this.id = id;
-        }
-
-        @Override
-        public String cacheKey() {
-            return id;
         }
     }
 }

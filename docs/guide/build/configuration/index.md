@@ -67,7 +67,6 @@ Pass via `maven-compiler-plugin` with `-A` arguments.
 | --- | --- | --- | --- |
 | `-Apipeline.generatedSourcesDir` | path | none | Base directory for role-specific generated sources. |
 | `-Apipeline.generatedSourcesRoot` | path | none | Legacy alias of `pipeline.generatedSourcesDir`. |
-| `-Apipeline.cache.keyGenerator` | class name | none | Global `CacheKeyGenerator` used for `@CacheResult` when steps don't override it. |
 | `-Apipeline.orchestrator.generate` | boolean | `false` | Generate orchestrator endpoint even without `@PipelineOrchestrator`. CLI generation still requires the annotation. |
 
 ### REST Path Overrides (Build-Time)

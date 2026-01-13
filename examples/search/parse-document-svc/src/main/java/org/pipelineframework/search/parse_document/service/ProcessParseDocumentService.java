@@ -42,6 +42,7 @@ public class ProcessParseDocumentService
     output.title = title;
     output.content = content;
     output.contentHash = HashingUtils.sha256Base64Url(content);
+    output.rawContentHash = input.rawContentHash;
     output.extractedAt = Instant.now();
 
     logger.infof("Parsed doc %s (title=%s, length=%s)", input.docId, title, content.length());

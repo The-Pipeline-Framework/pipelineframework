@@ -43,13 +43,13 @@ class SkipIfPresentPolicyTest {
         TestItem item = new TestItem("key-1");
         when(cacheManager.exists("key-1")).thenReturn(Uni.createFrom().item(true));
 
-        Uni<TestItem> result = policy.handle(item, item.cacheKey(), key -> key);
+        Uni<TestItem> result = policy.handle(item, item.id, key -> key);
         UniAssertSubscriber<TestItem> subscriber = result.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertSame(item, subscriber.getItem());
         assertEquals(CacheStatus.HIT, PipelineCacheStatusHolder.getAndClear());
-        verify(cacheManager, never()).cache(any());
+        verify(cacheManager, never()).cache(any(), any());
     }
 
     @Test
@@ -60,25 +60,20 @@ class SkipIfPresentPolicyTest {
         TestItem item = new TestItem("key-2");
         when(cacheManager.exists("key-2")).thenReturn(Uni.createFrom().item(false));
 
-        Uni<TestItem> result = policy.handle(item, item.cacheKey(), key -> key);
+        Uni<TestItem> result = policy.handle(item, item.id, key -> key);
         UniAssertSubscriber<TestItem> subscriber = result.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertSame(item, subscriber.getItem());
         assertEquals(CacheStatus.MISS, PipelineCacheStatusHolder.getAndClear());
-        verify(cacheManager, never()).cache(any());
+        verify(cacheManager, never()).cache(any(), any());
     }
 
-    private static final class TestItem implements org.pipelineframework.cache.CacheKey {
+    private static final class TestItem {
         private final String id;
 
         private TestItem(String id) {
             this.id = id;
-        }
-
-        @Override
-        public String cacheKey() {
-            return id;
         }
     }
 }

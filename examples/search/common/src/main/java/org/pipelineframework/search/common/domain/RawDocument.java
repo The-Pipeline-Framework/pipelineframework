@@ -15,6 +15,7 @@ import lombok.Setter;
 public class RawDocument extends BaseEntity implements Serializable {
 
   public String sourceUrl;
+  public String fetchOptions;
   public String rawContent;
   public String rawContentHash;
   public Instant fetchedAt;

@@ -42,7 +42,7 @@ class BypassCachePolicyTest {
 
         TestItem item = new TestItem("key-1");
 
-        Uni<TestItem> result = policy.handle(item, item.cacheKey(), key -> key);
+        Uni<TestItem> result = policy.handle(item, item.id, key -> key);
         UniAssertSubscriber<TestItem> subscriber = result.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
@@ -51,16 +51,11 @@ class BypassCachePolicyTest {
         verifyNoInteractions(cacheManager);
     }
 
-    private static final class TestItem implements org.pipelineframework.cache.CacheKey {
+    private static final class TestItem {
         private final String id;
 
         private TestItem(String id) {
             this.id = id;
-        }
-
-        @Override
-        public String cacheKey() {
-            return id;
         }
     }
 }

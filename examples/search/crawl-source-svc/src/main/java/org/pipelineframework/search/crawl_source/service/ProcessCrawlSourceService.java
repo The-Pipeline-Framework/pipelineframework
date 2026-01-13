@@ -43,6 +43,7 @@ public class ProcessCrawlSourceService
     RawDocument output = new RawDocument();
     output.docId = docId;
     output.sourceUrl = normalizedUrl;
+    output.fetchOptions = fetchOptions;
     output.rawContent = buildRawContent(normalizedUrl, docId);
     output.rawContentHash = HashingUtils.sha256Base64Url(output.rawContent);
     output.fetchedAt = Instant.now();

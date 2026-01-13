@@ -14,6 +14,7 @@ import lombok.Value;
 public class RawDocumentDto {
   UUID docId;
   String sourceUrl;
+  String fetchOptions;
   String rawContent;
   String rawContentHash;
   Instant fetchedAt;

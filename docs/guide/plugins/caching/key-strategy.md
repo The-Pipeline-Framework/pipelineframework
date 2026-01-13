@@ -13,7 +13,7 @@ This page focuses on how to design cache keys for the Search example.
 
 If you use a global `x-pipeline-version`, you can avoid embedding per-step versions in the key. If you do embed per-step versions, keep them aligned with the pipeline version to avoid confusion.
 
-In the Search example, these are implemented as per-step cache key generators in each service module so the key logic can track step-specific inputs (URL options, content hashes, and model/index versions).
+In the Search example, these are implemented as cache key strategies in each service module so the key logic can track step-specific inputs (URL options, content hashes, and model/index versions).
 
 For crawl keys, include only request options that materially change the fetched bytes (HTTP method, Accept/Accept-Language, auth scope, cookies, client hints). Normalize and sort option values so semantically identical requests produce the same key.
 
@@ -30,7 +30,7 @@ To avoid re-hashing in key generators, persist content hash fields (for example 
 - `docId`
 - `docId:version`
 - `customerId:invoiceId`
- - `contentHash:modelVersion`
+- `contentHash:modelVersion`
 
 ## Key stability checklist
 

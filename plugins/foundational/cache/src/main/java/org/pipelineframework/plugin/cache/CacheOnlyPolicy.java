@@ -34,7 +34,13 @@ final class CacheOnlyPolicy implements CachePolicy {
 
     @Override
     public <T> Uni<T> handle(T item, String rawKey, UnaryOperator<String> keyResolver) {
-        return cacheManager.cache(item)
+        String key = keyResolver.apply(rawKey);
+        if (key == null || key.isBlank()) {
+            PipelineCacheStatusHolder.set(CacheStatus.MISS);
+            logger.debug("Cache key is blank, skipping cache");
+            return Uni.createFrom().item(item);
+        }
+        return cacheManager.cache(key, item)
             .onItem().invoke(result -> {
                 PipelineCacheStatusHolder.set(CacheStatus.WRITE);
                 logger.debugf("Cached item of type: %s", result != null ? result.getClass().getName() : "null");

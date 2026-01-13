@@ -14,6 +14,7 @@ import lombok.Value;
 public class IndexAckDto {
   UUID docId;
   String indexVersion;
+  String tokensHash;
   Instant indexedAt;
   Boolean success;
 

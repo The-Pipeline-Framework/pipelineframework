@@ -47,7 +47,7 @@ class RequireCachePolicyTest {
         TestItem cached = new TestItem("key-1");
         when(cacheManager.get("key-1")).thenReturn(Uni.createFrom().item(Optional.of(cached)));
 
-        Uni<TestItem> result = policy.handle(item, item.cacheKey(), key -> key);
+        Uni<TestItem> result = policy.handle(item, item.id, key -> key);
         UniAssertSubscriber<TestItem> subscriber = result.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
@@ -63,7 +63,7 @@ class RequireCachePolicyTest {
         TestItem item = new TestItem("key-2");
         when(cacheManager.get("key-2")).thenReturn(Uni.createFrom().item(Optional.empty()));
 
-        Uni<TestItem> result = policy.handle(item, item.cacheKey(), key -> key);
+        Uni<TestItem> result = policy.handle(item, item.id, key -> key);
         UniAssertSubscriber<TestItem> subscriber = result.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
@@ -71,16 +71,11 @@ class RequireCachePolicyTest {
         assertEquals(CacheStatus.MISS, PipelineCacheStatusHolder.getAndClear());
     }
 
-    private static final class TestItem implements org.pipelineframework.cache.CacheKey {
+    private static final class TestItem {
         private final String id;
 
         private TestItem(String id) {
             this.id = id;
-        }
-
-        @Override
-        public String cacheKey() {
-            return id;
         }
     }
 }

@@ -21,7 +21,6 @@ import java.util.Optional;
 
 import io.smallrye.mutiny.helpers.test.UniAssertSubscriber;
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.cache.CacheKey;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -32,10 +31,10 @@ class InMemoryCacheProviderTest {
         InMemoryCacheProvider provider = new InMemoryCacheProvider();
         TestItem item = new TestItem("id-1");
 
-        provider.cache(item.cacheKey(), item, Duration.ofMillis(10))
+        provider.cache(item.id, item, Duration.ofMillis(10))
             .subscribe().withSubscriber(UniAssertSubscriber.create()).awaitItem();
 
-        Optional<CacheKey> cached = provider.get(item.cacheKey())
+        Optional<Object> cached = provider.get(item.id)
             .subscribe().withSubscriber(UniAssertSubscriber.create())
             .awaitItem()
             .getItem();
@@ -43,7 +42,7 @@ class InMemoryCacheProviderTest {
 
         Thread.sleep(20);
 
-        Optional<CacheKey> expired = provider.get(item.cacheKey())
+        Optional<Object> expired = provider.get(item.id)
             .subscribe().withSubscriber(UniAssertSubscriber.create())
             .awaitItem()
             .getItem();
@@ -57,9 +56,9 @@ class InMemoryCacheProviderTest {
         TestItem itemB = new TestItem("typeA:2");
         TestItem itemC = new TestItem("typeB:1");
 
-        provider.cache(itemA.cacheKey(), itemA).subscribe().withSubscriber(UniAssertSubscriber.create()).awaitItem();
-        provider.cache(itemB.cacheKey(), itemB).subscribe().withSubscriber(UniAssertSubscriber.create()).awaitItem();
-        provider.cache(itemC.cacheKey(), itemC).subscribe().withSubscriber(UniAssertSubscriber.create()).awaitItem();
+        provider.cache(itemA.id, itemA).subscribe().withSubscriber(UniAssertSubscriber.create()).awaitItem();
+        provider.cache(itemB.id, itemB).subscribe().withSubscriber(UniAssertSubscriber.create()).awaitItem();
+        provider.cache(itemC.id, itemC).subscribe().withSubscriber(UniAssertSubscriber.create()).awaitItem();
 
         Boolean removed = provider.invalidateByPrefix("typeA:")
             .subscribe().withSubscriber(UniAssertSubscriber.create())
@@ -67,30 +66,25 @@ class InMemoryCacheProviderTest {
             .getItem();
 
         assertTrue(removed);
-        assertTrue(provider.get(itemA.cacheKey())
+        assertTrue(provider.get(itemA.id)
             .subscribe().withSubscriber(UniAssertSubscriber.create())
             .awaitItem()
             .getItem().isEmpty());
-        assertTrue(provider.get(itemB.cacheKey())
+        assertTrue(provider.get(itemB.id)
             .subscribe().withSubscriber(UniAssertSubscriber.create())
             .awaitItem()
             .getItem().isEmpty());
-        assertTrue(provider.get(itemC.cacheKey())
+        assertTrue(provider.get(itemC.id)
             .subscribe().withSubscriber(UniAssertSubscriber.create())
             .awaitItem()
             .getItem().isPresent());
     }
 
-    private static final class TestItem implements CacheKey {
+    private static final class TestItem {
         private final String id;
 
         private TestItem(String id) {
             this.id = id;
-        }
-
-        @Override
-        public String cacheKey() {
-            return id;
         }
     }
 }
