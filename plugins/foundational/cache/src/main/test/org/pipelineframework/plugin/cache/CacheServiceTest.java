@@ -22,6 +22,7 @@ import java.util.Optional;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.UniAssertSubscriber;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.cache.CacheMissException;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 
@@ -184,7 +185,7 @@ class CacheServiceTest {
     }
 
     @Test
-    void process_WithRequireCachePolicy_ShouldReturnItemOnMiss() throws Exception {
+    void process_WithRequireCachePolicy_ShouldFailOnMiss() throws Exception {
         CacheManager cacheManager = mock(CacheManager.class);
         TestItem item = new TestItem("id-miss");
         CacheKeyResolver cacheKeyResolver = resolverFor(item);
@@ -194,9 +195,9 @@ class CacheServiceTest {
 
         Uni<TestItem> resultUni = service.process(item);
         UniAssertSubscriber<TestItem> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
-        subscriber.awaitItem();
+        subscriber.awaitFailure();
 
-        assertSame(item, subscriber.getItem());
+        subscriber.assertFailedWith(CacheMissException.class);
         verify(cacheManager, never()).cache(any(), any());
     }
 

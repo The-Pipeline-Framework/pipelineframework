@@ -23,6 +23,7 @@ import io.smallrye.mutiny.helpers.test.UniAssertSubscriber;
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.cache.CacheMissException;
 import org.pipelineframework.cache.CacheStatus;
 import org.pipelineframework.context.PipelineCacheStatusHolder;
 
@@ -56,7 +57,7 @@ class RequireCachePolicyTest {
     }
 
     @Test
-    void handle_ReturnsItemOnMiss() {
+    void handle_FailsOnMiss() {
         CacheManager cacheManager = mock(CacheManager.class);
         RequireCachePolicy policy = new RequireCachePolicy(cacheManager, Logger.getLogger(RequireCachePolicy.class));
 
@@ -65,9 +66,9 @@ class RequireCachePolicyTest {
 
         Uni<TestItem> result = policy.handle(item, item.id, key -> key);
         UniAssertSubscriber<TestItem> subscriber = result.subscribe().withSubscriber(UniAssertSubscriber.create());
-        subscriber.awaitItem();
+        subscriber.awaitFailure();
 
-        assertSame(item, subscriber.getItem());
+        subscriber.assertFailedWith(CacheMissException.class);
         assertEquals(CacheStatus.MISS, PipelineCacheStatusHolder.getAndClear());
     }
 
