@@ -22,19 +22,19 @@ import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.csv.common.domain.CsvFolder;
 import org.pipelineframework.csv.common.dto.CsvFolderDto;
-import org.pipelineframework.csv.grpc.InputCsvFileProcessingSvc;
+import org.pipelineframework.csv.grpc.ProcessFolderSvc;
 
 @SuppressWarnings("unused")
 @Mapper(componentModel = "jakarta", uses = {CommonConverters.class}, unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface CsvFolderMapper extends org.pipelineframework.mapper.Mapper<InputCsvFileProcessingSvc.CsvFolder, CsvFolderDto, CsvFolder> {
+public interface CsvFolderMapper extends org.pipelineframework.mapper.Mapper<ProcessFolderSvc.CsvFolder, CsvFolderDto, CsvFolder> {
 
     CsvFolderMapper INSTANCE = Mappers.getMapper( CsvFolderMapper.class );
 
     @Override
     @Mapping(target = "path", qualifiedByName = "stringToPath")
-    CsvFolderDto fromGrpc(InputCsvFileProcessingSvc.CsvFolder grpc);
+    CsvFolderDto fromGrpc(ProcessFolderSvc.CsvFolder grpc);
 
     @Override
     @Mapping(target = "path", qualifiedByName = "pathToString")
-    InputCsvFileProcessingSvc.CsvFolder toGrpc(CsvFolderDto dto);
+    ProcessFolderSvc.CsvFolder toGrpc(CsvFolderDto dto);
 }

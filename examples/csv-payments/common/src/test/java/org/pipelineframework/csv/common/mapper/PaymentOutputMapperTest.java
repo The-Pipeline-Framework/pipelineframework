@@ -16,18 +16,18 @@
 
 package org.pipelineframework.csv.common.mapper;
 
-import static org.junit.jupiter.api.Assertions.*;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.util.Currency;
 import java.util.UUID;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.csv.common.domain.PaymentOutput;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
 import org.pipelineframework.csv.common.dto.PaymentOutputDto;
-import org.pipelineframework.csv.grpc.PaymentStatusSvc;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class PaymentOutputMapperTest {
 
@@ -170,7 +170,7 @@ class PaymentOutputMapperTest {
     //           .build();
 
     //   // When
-    //   PaymentStatusSvc.PaymentOutput grpc = mapper.fromDtoToGrpc(dto);
+    //   ProcessPaymentStatusSvc.PaymentOutput grpc = mapper.fromDtoToGrpc(dto);
 
     //   // Then
     //   assertNotNull(grpc);
@@ -191,8 +191,8 @@ class PaymentOutputMapperTest {
         UUID id = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
 
-        PaymentStatusSvc.PaymentOutput grpc =
-                PaymentStatusSvc.PaymentOutput.newBuilder()
+        ProcessPaymentStatusSvc.PaymentOutput grpc =
+                ProcessPaymentStatusSvc.PaymentOutput.newBuilder()
                         .setId(id.toString())
                         .setCsvId("test-record")
                         .setRecipient("Test Recipient")
@@ -236,7 +236,7 @@ class PaymentOutputMapperTest {
     //   domain.setFee(new BigDecimal("1.50"));
 
     //   // When
-    //   PaymentStatusSvc.PaymentOutput grpc = mapper.toDtoToGrpc(domain);
+    //   ProcessPaymentStatusSvc.PaymentOutput grpc = mapper.toDtoToGrpc(domain);
 
     //   // Then
     //   assertNotNull(grpc);
@@ -257,8 +257,8 @@ class PaymentOutputMapperTest {
         UUID id = UUID.randomUUID();
         UUID conversationId = UUID.randomUUID();
 
-        PaymentStatusSvc.PaymentOutput grpc =
-                PaymentStatusSvc.PaymentOutput.newBuilder()
+        ProcessPaymentStatusSvc.PaymentOutput grpc =
+                ProcessPaymentStatusSvc.PaymentOutput.newBuilder()
                         .setId(id.toString())
                         .setCsvId("test-record")
                         .setRecipient("Test Recipient")

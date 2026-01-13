@@ -16,16 +16,17 @@
 
 package org.pipelineframework.csv.common.mapper;
 
-import static org.junit.jupiter.api.Assertions.*;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.file.Path;
 import java.util.UUID;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.csv.common.domain.CsvPaymentsInputFile;
 import org.pipelineframework.csv.common.dto.CsvPaymentsInputFileDto;
-import org.pipelineframework.csv.grpc.InputCsvFileProcessingSvc;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class CsvPaymentsInputFileMapperTest {
 
@@ -100,7 +101,7 @@ class CsvPaymentsInputFileMapperTest {
                         .build();
 
         // When
-        InputCsvFileProcessingSvc.CsvPaymentsInputFile grpc = mapper.toGrpc(dto);
+        ProcessFolderSvc.CsvPaymentsInputFile grpc = mapper.toGrpc(dto);
 
         // Then
         assertNotNull(grpc);
@@ -114,8 +115,8 @@ class CsvPaymentsInputFileMapperTest {
         // Given
         UUID id = UUID.randomUUID();
 
-        InputCsvFileProcessingSvc.CsvPaymentsInputFile grpc =
-                InputCsvFileProcessingSvc.CsvPaymentsInputFile.newBuilder()
+        ProcessFolderSvc.CsvPaymentsInputFile grpc =
+                ProcessFolderSvc.CsvPaymentsInputFile.newBuilder()
                         .setId(id.toString())
                         .setFilepath("/test/input/file.csv")
                         .setCsvFolderPath("/test/input")
@@ -140,7 +141,7 @@ class CsvPaymentsInputFileMapperTest {
         domain.setCsvFolderPath(Path.of("/test/input"));
 
         // When
-        InputCsvFileProcessingSvc.CsvPaymentsInputFile grpc = mapper.toDtoToGrpc(domain);
+        ProcessFolderSvc.CsvPaymentsInputFile grpc = mapper.toDtoToGrpc(domain);
 
         // Then
         assertNotNull(grpc);
@@ -154,8 +155,8 @@ class CsvPaymentsInputFileMapperTest {
         // Given
         UUID id = UUID.randomUUID();
 
-        InputCsvFileProcessingSvc.CsvPaymentsInputFile grpc =
-                InputCsvFileProcessingSvc.CsvPaymentsInputFile.newBuilder()
+        ProcessFolderSvc.CsvPaymentsInputFile grpc =
+                ProcessFolderSvc.CsvPaymentsInputFile.newBuilder()
                         .setId(id.toString())
                         .setFilepath("/test/input/file.csv")
                         .setCsvFolderPath("/test/input")

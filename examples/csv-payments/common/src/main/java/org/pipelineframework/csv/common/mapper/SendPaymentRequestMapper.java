@@ -35,7 +35,7 @@ import org.pipelineframework.csv.grpc.PaymentsProcessingSvc;
     componentModel = "jakarta",
     uses = {CommonConverters.class, PaymentRecordMapper.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface SendPaymentRequestMapper extends org.pipelineframework.mapper.Mapper<PaymentsProcessingSvc.SendPaymentRequest, SendPaymentRequestMapper.SendPaymentRequest, SendPaymentRequestMapper.SendPaymentRequest> {
+public interface SendPaymentRequestMapper extends org.pipelineframework.mapper.Mapper<.SendPaymentRequest, SendPaymentRequestMapper.SendPaymentRequest, SendPaymentRequestMapper.SendPaymentRequest> {
 
   SendPaymentRequestMapper INSTANCE = Mappers.getMapper( SendPaymentRequestMapper.class );
 

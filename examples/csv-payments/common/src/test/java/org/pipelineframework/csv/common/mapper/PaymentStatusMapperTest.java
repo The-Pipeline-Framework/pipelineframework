@@ -16,19 +16,19 @@
 
 package org.pipelineframework.csv.common.mapper;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.util.Currency;
 import java.util.UUID;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
 import org.pipelineframework.csv.common.dto.PaymentStatusDto;
-import org.pipelineframework.csv.grpc.PaymentsProcessingSvc;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class PaymentStatusMapperTest {
 
@@ -169,7 +169,7 @@ class PaymentStatusMapperTest {
     //           .build();
 
     //   // When
-    //   PaymentsProcessingSvc.PaymentStatus grpc = mapper.toGrpc(dto);
+    //   ProcessAckPaymentSentSvc.PaymentStatus grpc = mapper.toGrpc(dto);
 
     //   // Then
     //   assertNotNull(grpc);
@@ -187,8 +187,8 @@ class PaymentStatusMapperTest {
         UUID id = UUID.randomUUID();
         UUID ackPaymentSentId = UUID.randomUUID();
 
-        PaymentsProcessingSvc.PaymentStatus grpc =
-                PaymentsProcessingSvc.PaymentStatus.newBuilder()
+        ProcessAckPaymentSentSvc.PaymentStatus grpc =
+                ProcessAckPaymentSentSvc.PaymentStatus.newBuilder()
                         .setId(id.toString())
                         .setReference("test-ref")
                         .setStatus("SUCCESS")
@@ -223,7 +223,7 @@ class PaymentStatusMapperTest {
     //   domain.setAckPaymentSentId(UUID.randomUUID());
 
     //   // When
-    //   PaymentsProcessingSvc.PaymentStatus grpc = mapper.toDtoToGrpc(domain);
+    //   ProcessAckPaymentSentSvc.PaymentStatus grpc = mapper.toDtoToGrpc(domain);
 
     //   // Then
     //   assertNotNull(grpc);
@@ -241,8 +241,8 @@ class PaymentStatusMapperTest {
         UUID id = UUID.randomUUID();
         UUID ackPaymentSentId = UUID.randomUUID();
 
-        PaymentsProcessingSvc.PaymentStatus grpc =
-                PaymentsProcessingSvc.PaymentStatus.newBuilder()
+        ProcessAckPaymentSentSvc.PaymentStatus grpc =
+                ProcessAckPaymentSentSvc.PaymentStatus.newBuilder()
                         .setId(id.toString())
                         .setReference("test-ref")
                         .setStatus("SUCCESS")

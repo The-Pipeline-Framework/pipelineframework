@@ -16,14 +16,15 @@
 
 package org.pipelineframework.csv.common.mapper;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 import java.nio.file.Path;
 import java.util.UUID;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.csv.common.domain.CsvPaymentsOutputFile;
-import org.pipelineframework.csv.grpc.OutputCsvFileProcessingSvc;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class CsvPaymentsOutputFileMapperTest {
 
@@ -58,7 +59,7 @@ class CsvPaymentsOutputFileMapperTest {
         domain.setCsvFolderPath(Path.of("/test/output"));
 
         // When
-        OutputCsvFileProcessingSvc.CsvPaymentsOutputFile grpc = mapper.toDtoToGrpc(domain);
+        ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile grpc = mapper.toDtoToGrpc(domain);
 
         // Then
         assertNotNull(grpc);
@@ -72,8 +73,8 @@ class CsvPaymentsOutputFileMapperTest {
         // Given
         UUID id = UUID.randomUUID();
 
-        OutputCsvFileProcessingSvc.CsvPaymentsOutputFile grpc =
-                OutputCsvFileProcessingSvc.CsvPaymentsOutputFile.newBuilder()
+        ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile grpc =
+                ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile.newBuilder()
                         .setId(id.toString())
                         .setFilepath("/test/output/file.csv")
                         .setCsvFolderPath("/test/output")
@@ -92,13 +93,13 @@ class CsvPaymentsOutputFileMapperTest {
     // @Test
     // void testSerializeDeserialize() throws Exception {
     //   // Build a simple DTO-like object for testing
-    //   OutputCsvFileProcessingSvc.CsvPaymentsOutputFile.Builder builder =
-    //       OutputCsvFileProcessingSvc.CsvPaymentsOutputFile.newBuilder()
+    //   ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile.Builder builder =
+    //       ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile.newBuilder()
     //           .setId(UUID.randomUUID().toString())
     //           .setFilepath("/test/output/file.csv")
     //           .setCsvFolderPath("/test/output");
     //
-    //   OutputCsvFileProcessingSvc.CsvPaymentsOutputFile file = builder.build();
+    //   ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile file = builder.build();
 
     //   ObjectMapper mapper = new ObjectMapper();
     //
@@ -106,8 +107,8 @@ class CsvPaymentsOutputFileMapperTest {
     //   String json = mapper.writeValueAsString(file);
 
     //   // Deserialize back
-    //   OutputCsvFileProcessingSvc.CsvPaymentsOutputFile deserialized = mapper.readValue(json,
-    // OutputCsvFileProcessingSvc.CsvPaymentsOutputFile.class);
+    //   ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile deserialized = mapper.readValue(json,
+    // ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile.class);
 
     //   // Assert equality
     //   assertEquals(file, deserialized);

@@ -25,10 +25,8 @@ import jakarta.inject.Inject;
 import io.quarkus.test.junit.QuarkusTest;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
-import org.pipelineframework.csv.grpc.InputCsvFileProcessingSvc;
 import org.pipelineframework.csv.grpc.PaymentsProcessingSvc;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 @QuarkusTest
@@ -56,7 +54,7 @@ class SendPaymentRequestMapperTest {
     void testGrpcToDomain() {
         // Given
         PaymentRecord domainRecord = createTestPaymentRecord();
-        InputCsvFileProcessingSvc.PaymentRecord grpcRecord =
+        ProcessCsvPaymentsInputSvc.PaymentRecord grpcRecord =
                 paymentRecordMapper.toGrpc(paymentRecordMapper.toDto(domainRecord));
         PaymentsProcessingSvc.SendPaymentRequest grpc =
                 PaymentsProcessingSvc.SendPaymentRequest.newBuilder()
@@ -87,7 +85,7 @@ class SendPaymentRequestMapperTest {
     void testGrpcToDomainMapsPaymentRecord() {
         // Given
         PaymentRecord domainRecord = createTestPaymentRecord();
-        InputCsvFileProcessingSvc.PaymentRecord grpcRecord =
+        ProcessCsvPaymentsInputSvc.PaymentRecord grpcRecord =
                 paymentRecordMapper.toGrpc(paymentRecordMapper.toDto(domainRecord));
         PaymentsProcessingSvc.SendPaymentRequest grpc =
                 PaymentsProcessingSvc.SendPaymentRequest.newBuilder()

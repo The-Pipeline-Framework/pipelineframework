@@ -16,19 +16,19 @@
 
 package org.pipelineframework.csv.common.mapper;
 
-import static org.junit.jupiter.api.Assertions.*;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.util.Currency;
 import java.util.UUID;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.dto.AckPaymentSentDto;
-import org.pipelineframework.csv.grpc.PaymentsProcessingSvc;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class AckPaymentSentMapperTest {
 
@@ -152,7 +152,7 @@ class AckPaymentSentMapperTest {
                         .build();
 
         // When
-        PaymentsProcessingSvc.AckPaymentSent grpc = mapper.toGrpc(dto);
+        ProcessSendPaymentRecordSvc.AckPaymentSent grpc = mapper.toGrpc(dto);
 
         // Then
         assertNotNull(grpc);
@@ -170,8 +170,8 @@ class AckPaymentSentMapperTest {
         UUID conversationId = UUID.randomUUID();
         UUID paymentRecordId = UUID.randomUUID();
 
-        PaymentsProcessingSvc.AckPaymentSent grpc =
-                PaymentsProcessingSvc.AckPaymentSent.newBuilder()
+        ProcessSendPaymentRecordSvc.AckPaymentSent grpc =
+                ProcessSendPaymentRecordSvc.AckPaymentSent.newBuilder()
                         .setId(id.toString())
                         .setConversationId(conversationId.toString())
                         .setStatus(200L)
@@ -205,7 +205,7 @@ class AckPaymentSentMapperTest {
         domain.setPaymentRecord(paymentRecord);
 
         // When
-        PaymentsProcessingSvc.AckPaymentSent grpc = mapper.toDtoToGrpc(domain);
+        ProcessSendPaymentRecordSvc.AckPaymentSent grpc = mapper.toDtoToGrpc(domain);
 
         // Then
         assertNotNull(grpc);
@@ -223,8 +223,8 @@ class AckPaymentSentMapperTest {
         UUID conversationId = UUID.randomUUID();
         UUID paymentRecordId = UUID.randomUUID();
 
-        PaymentsProcessingSvc.AckPaymentSent grpc =
-                PaymentsProcessingSvc.AckPaymentSent.newBuilder()
+        ProcessSendPaymentRecordSvc.AckPaymentSent grpc =
+                ProcessSendPaymentRecordSvc.AckPaymentSent.newBuilder()
                         .setId(id.toString())
                         .setConversationId(conversationId.toString())
                         .setStatus(200L)
