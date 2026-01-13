@@ -16,22 +16,16 @@
 
 package org.pipelineframework.csv.orchestrator.service;
 
-import static org.junit.jupiter.api.Assertions.*;
-
-import io.quarkus.test.junit.QuarkusIntegrationTest;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.sql.Connection;
-import java.sql.DatabaseMetaData;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import java.sql.*;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+
+import io.quarkus.test.junit.QuarkusIntegrationTest;
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -41,6 +35,9 @@ import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.lifecycle.Startables;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 @QuarkusIntegrationTest
 class CsvPaymentsEndToEndIT {
@@ -146,14 +143,13 @@ class CsvPaymentsEndToEndIT {
         Path dir = Paths.get(TEST_E2E_DIR);
         Files.createDirectories(dir);
 
-        // Start database first
-        postgresContainer.start();
-
-        // Start all services
-        inputCsvService.start();
-        paymentsProcessingService.start();
-        paymentStatusService.start();
-        outputCsvService.start();
+        Startables.deepStart(java.util.stream.Stream.of(
+            postgresContainer,
+            inputCsvService,
+            paymentsProcessingService,
+            paymentStatusService,
+            outputCsvService
+        )).join();
     }
 
     /**
