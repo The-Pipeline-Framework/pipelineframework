@@ -16,9 +16,6 @@
 
 package org.pipelineframework.csv.service;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.when;
-
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -28,13 +25,16 @@ import org.mockito.MockitoAnnotations;
 import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
 
-class ProcessAckPaymentSentReactiveServiceTest {
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.when;
+
+class ProcessAckPaymentSentServiceTest {
 
     @Mock private PollAckPaymentSentReactiveService pollAckPaymentSentReactiveService;
 
     @Mock private AckPaymentSent ackPaymentSent;
 
-    @InjectMocks private ProcessAckPaymentSentReactiveService processAckPaymentSentReactiveService;
+    @InjectMocks private ProcessAckPaymentSentService processAckPaymentSentReactiveService;
 
     @BeforeEach
     void setUp() {

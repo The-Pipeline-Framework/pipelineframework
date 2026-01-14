@@ -16,16 +16,11 @@
 
 package org.pipelineframework.csv.service;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import java.math.BigDecimal;
+import java.util.UUID;
 
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
-import java.math.BigDecimal;
-import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -33,12 +28,17 @@ import org.mapstruct.factory.Mappers;
 import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
+import org.pipelineframework.csv.common.domain.SendPaymentRequest;
 import org.pipelineframework.csv.common.dto.PaymentRecordDto;
-import org.pipelineframework.csv.common.mapper.*;
 import org.pipelineframework.csv.common.mapper.AckPaymentSentMapper;
 import org.pipelineframework.csv.common.mapper.PaymentRecordMapper;
 import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
-import org.pipelineframework.csv.common.mapper.SendPaymentRequestMapper;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class PaymentProviderServiceMockTest {
 
@@ -67,8 +67,8 @@ class PaymentProviderServiceMockTest {
         PaymentRecordMapper paymentRecordMapper = Mappers.getMapper(PaymentRecordMapper.class);
         PaymentRecord paymentRecord = paymentRecordMapper.fromDto(dtoIn);
 
-        SendPaymentRequestMapper.SendPaymentRequest request =
-                new SendPaymentRequestMapper.SendPaymentRequest()
+        SendPaymentRequest request =
+                new SendPaymentRequest()
                         .setAmount(paymentRecord.getAmount())
                         .setReference(paymentRecord.getRecipient())
                         .setCurrency(paymentRecord.getCurrency())
@@ -110,7 +110,7 @@ class PaymentProviderServiceMockTest {
         // RateLimiter.create(rate) allows the first acquire to pass even if rate is very low.
         // So, we need to acquire it once to exhaust it for subsequent calls.
         paymentProviderServiceMock.sendPayment(
-                new SendPaymentRequestMapper.SendPaymentRequest()
+                new SendPaymentRequest()
                         .setAmount(new BigDecimal("1.00"))
                         .setReference("dummy")
                         .setCurrency(java.util.Currency.getInstance("USD"))
@@ -130,8 +130,8 @@ class PaymentProviderServiceMockTest {
         PaymentRecordMapper paymentRecordMapper = Mappers.getMapper(PaymentRecordMapper.class);
         PaymentRecord paymentRecord = paymentRecordMapper.fromDto(dtoIn);
 
-        SendPaymentRequestMapper.SendPaymentRequest request =
-                new SendPaymentRequestMapper.SendPaymentRequest()
+        SendPaymentRequest request =
+                new SendPaymentRequest()
                         .setAmount(paymentRecord.getAmount())
                         .setReference(paymentRecord.getRecipient())
                         .setCurrency(paymentRecord.getCurrency())
@@ -167,8 +167,8 @@ class PaymentProviderServiceMockTest {
         PaymentRecordMapper paymentRecordMapper = Mappers.getMapper(PaymentRecordMapper.class);
         PaymentRecord paymentRecord = paymentRecordMapper.fromDto(dtoIn);
 
-        SendPaymentRequestMapper.SendPaymentRequest request =
-                new SendPaymentRequestMapper.SendPaymentRequest()
+        SendPaymentRequest request =
+                new SendPaymentRequest()
                         .setAmount(paymentRecord.getAmount())
                         .setReference(paymentRecord.getRecipient())
                         .setCurrency(paymentRecord.getCurrency())

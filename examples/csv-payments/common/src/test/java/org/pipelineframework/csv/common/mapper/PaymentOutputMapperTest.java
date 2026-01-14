@@ -26,6 +26,7 @@ import org.junit.jupiter.api.Test;
 import org.pipelineframework.csv.common.domain.PaymentOutput;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
 import org.pipelineframework.csv.common.dto.PaymentOutputDto;
+import org.pipelineframework.csv.grpc.ProcessPaymentStatusSvc;
 
 import static org.junit.jupiter.api.Assertions.*;
 

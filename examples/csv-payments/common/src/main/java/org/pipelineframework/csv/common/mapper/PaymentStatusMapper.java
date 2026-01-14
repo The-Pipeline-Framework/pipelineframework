@@ -45,6 +45,7 @@ public interface PaymentStatusMapper extends org.pipelineframework.mapper.Mapper
   @Mapping(target = "id", qualifiedByName = "uuidToString")
   @Mapping(target = "fee", qualifiedByName = "bigDecimalToString")
   @Mapping(target = "ackPaymentSentId", qualifiedByName = "uuidToString")
+  @Mapping(target = "ackPaymentSent")
   ProcessAckPaymentSentSvc.PaymentStatus toGrpc(PaymentStatusDto dto);
 
   /**
@@ -57,5 +58,6 @@ public interface PaymentStatusMapper extends org.pipelineframework.mapper.Mapper
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
   @Mapping(target = "fee", qualifiedByName = "stringToBigDecimal")
   @Mapping(target = "ackPaymentSentId", qualifiedByName = "stringToUUID")
+  @Mapping(target = "ackPaymentSent")
   PaymentStatusDto fromGrpc(ProcessAckPaymentSentSvc.PaymentStatus grpcRequest);
 }

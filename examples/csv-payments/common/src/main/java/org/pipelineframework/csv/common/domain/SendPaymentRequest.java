@@ -14,29 +14,30 @@
  * limitations under the License.
  */
 
-package org.pipelineframework.csv.common.dto;
+package org.pipelineframework.csv.common.domain;
 
+import java.io.Serializable;
 import java.math.BigDecimal;
+import java.util.Currency;
 import java.util.UUID;
+import jakarta.persistence.Entity;
 
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
-import lombok.Builder;
-import lombok.Value;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.experimental.Accessors;
 
-@Value
-@Builder
-@JsonDeserialize(builder = PaymentStatusDto.PaymentStatusDtoBuilder.class)
-public class PaymentStatusDto {
-  UUID id;
-  String reference;
-  String status;
-  String message;
-  BigDecimal fee;
-  UUID ackPaymentSentId;
-  AckPaymentSentDto ackPaymentSent;
-
-  // Lombok will generate the builder, but Jackson needs to know how to interpret it
-  @JsonPOJOBuilder(withPrefix = "")
-  public static class PaymentStatusDtoBuilder {}
+@Entity
+@Getter
+@Setter
+@NoArgsConstructor
+@Accessors(chain = true)
+public class SendPaymentRequest extends BaseEntity implements Serializable {
+  private String msisdn;
+  private BigDecimal amount;
+  private Currency currency;
+  private String reference;
+  private String url;
+  private UUID paymentRecordId;
+  private PaymentRecord paymentRecord;
 }

@@ -40,34 +40,34 @@ import org.pipelineframework.service.ReactiveService;
 )
 @ApplicationScoped
 @Getter
-public class ProcessAckPaymentSentReactiveService
+public class ProcessAckPaymentSentService
     implements ReactiveService<AckPaymentSent, PaymentStatus> {
     
-  private static final Logger LOG = Logger.getLogger(ProcessAckPaymentSentReactiveService.class);
+  private static final Logger LOG = Logger.getLogger(ProcessAckPaymentSentService.class);
 
   PollAckPaymentSentService pollAckPaymentSentService;
 
   /**
-   * Create a ProcessAckPaymentSentReactiveService and wire its dependency.
+   * Create a ProcessAckPaymentSentService and wire its dependency.
    *
    * @param pollAckPaymentSentService the service used to process AckPaymentSent messages into PaymentStatus
    */
   @Inject
-  public ProcessAckPaymentSentReactiveService(
+  public ProcessAckPaymentSentService(
           PollAckPaymentSentService pollAckPaymentSentService) {
     this.pollAckPaymentSentService = pollAckPaymentSentService;
-    LOG.debug("ProcessAckPaymentSentReactiveService initialized");
+    LOG.debug("ProcessAckPaymentSentService initialized");
   }
 
   @Override
   public Uni<PaymentStatus> process(AckPaymentSent ackPaymentSent) {
-    LOG.debugf("Processing AckPaymentSent in ProcessAckPaymentSentReactiveService: id=%s, conversationId=%s, paymentRecordId=%s", 
+    LOG.debugf("Processing AckPaymentSent in ProcessAckPaymentSentService: id=%s, conversationId=%s, paymentRecordId=%s", 
         ackPaymentSent.getId(), ackPaymentSent.getConversationId(), ackPaymentSent.getPaymentRecordId());
     
     // Call the service with the new unified method
     Uni<PaymentStatus> result = pollAckPaymentSentService.process(ackPaymentSent);
     
-    LOG.debug("Returning Uni from ProcessAckPaymentSentReactiveService");
+    LOG.debug("Returning Uni from ProcessAckPaymentSentService");
     return result
         .onItem()
         .invoke(paymentStatus -> 
@@ -75,6 +75,6 @@ public class ProcessAckPaymentSentReactiveService
                 paymentStatus.getId(), paymentStatus.getReference(), paymentStatus.getStatus()))
         .onFailure()
         .invoke(failure -> 
-            LOG.errorf(failure, "Failed to process AckPaymentSent in ProcessAckPaymentSentReactiveService"));
+            LOG.errorf(failure, "Failed to process AckPaymentSent in ProcessAckPaymentSentService"));
   }
 }

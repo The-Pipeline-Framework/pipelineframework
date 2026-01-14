@@ -16,6 +16,8 @@
 
 package org.pipelineframework.csv.common.dto;
 
+import java.math.BigDecimal;
+import java.util.Currency;
 import java.util.UUID;
 
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
@@ -25,16 +27,16 @@ import lombok.Value;
 
 @Value
 @Builder
-@JsonDeserialize(builder = AckPaymentSentDto.AckPaymentSentDtoBuilder.class)
-public class AckPaymentSentDto {
-  UUID id;
-  UUID conversationId;
+@JsonDeserialize(builder = SendPaymentRequestDto.SendPaymentRequestDtoBuilder.class)
+public class SendPaymentRequestDto {
+  String msisdn;
+  BigDecimal amount;
+  Currency currency;
+  String reference;
+  String url;
   UUID paymentRecordId;
   PaymentRecordDto paymentRecord;
-  String message;
-  Long status;
 
-  // Lombok will generate the builder, but Jackson needs to know how to interpret it
   @JsonPOJOBuilder(withPrefix = "")
-  public static class AckPaymentSentDtoBuilder {}
+  public static class SendPaymentRequestDtoBuilder {}
 }

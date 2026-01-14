@@ -16,23 +16,25 @@
 
 package org.pipelineframework.csv.service;
 
-import com.google.common.util.concurrent.RateLimiter;
-import io.grpc.Status;
-import io.grpc.StatusRuntimeException;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 import java.math.BigDecimal;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+
+import com.google.common.util.concurrent.RateLimiter;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import lombok.NonNull;
 import org.jboss.logging.Logger;
 import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
+import org.pipelineframework.csv.common.domain.SendPaymentRequest;
 import org.pipelineframework.csv.common.dto.AckPaymentSentDto;
 import org.pipelineframework.csv.common.dto.PaymentStatusDto;
 import org.pipelineframework.csv.common.mapper.AckPaymentSentMapper;
+import org.pipelineframework.csv.common.mapper.PaymentRecordMapper;
 import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
-import org.pipelineframework.csv.common.mapper.SendPaymentRequestMapper;
 
 @SuppressWarnings("UnstableApiUsage")
 @ApplicationScoped
@@ -43,6 +45,7 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
   private final RateLimiter rateLimiter;
   private final long timeoutMillis;
   private final AckPaymentSentMapper ackPaymentSentMapper = AckPaymentSentMapper.INSTANCE;
+  private final PaymentRecordMapper paymentRecordMapper = PaymentRecordMapper.INSTANCE;
   private final PaymentStatusMapper paymentStatusMapper = PaymentStatusMapper.INSTANCE;
 
   @Inject
@@ -58,7 +61,7 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
 
   @Override
   public AckPaymentSent sendPayment(
-      @NonNull SendPaymentRequestMapper.SendPaymentRequest requestMap) {
+      @NonNull SendPaymentRequest requestMap) {
     LOG.debugf("sendPayment called with request: amount=%s, currency=%s, reference=%s, paymentRecordId=%s",
         requestMap.getAmount(), requestMap.getCurrency(), requestMap.getReference(), requestMap.getPaymentRecordId());
         
@@ -82,7 +85,7 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
             .message("OK but this is only a test")
             .conversationId(UUID.randomUUID())
             .paymentRecordId(requestMap.getPaymentRecordId())
-            .paymentRecord(requestMap.getPaymentRecord())
+            .paymentRecord(paymentRecordMapper.toDto(requestMap.getPaymentRecord()))
             .build());
   }
 
@@ -111,7 +114,7 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
             .status("Complete")
             .fee(new BigDecimal("1.01"))
             .message("Mock response")
-            .ackPaymentSent(ackPaymentSent)
+            .ackPaymentSent(ackPaymentSentMapper.toDto(ackPaymentSent))
             .ackPaymentSentId(ackPaymentSent.getId())
             .build());
   }

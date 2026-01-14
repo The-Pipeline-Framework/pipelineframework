@@ -28,18 +28,18 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
-import org.pipelineframework.csv.common.mapper.SendPaymentRequestMapper;
+import org.pipelineframework.csv.common.domain.SendPaymentRequest;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-class ProcessSendPaymentRecordReactiveServiceTest {
+class ProcessSendPaymentRecordServiceTest {
 
     @Mock private PaymentProviderServiceMock paymentProviderServiceMock;
     @Mock private PaymentRecord paymentRecord;
     @Mock private Vertx vertx; // 👈 mock Vertx itself
 
-    @InjectMocks private ProcessSendPaymentRecordReactiveService processSendPaymentRecordReactiveService;
+    @InjectMocks private ProcessSendPaymentRecordService processSendPaymentRecordReactiveService;
 
     @BeforeEach
     void setUp() {
@@ -66,7 +66,7 @@ class ProcessSendPaymentRecordReactiveServiceTest {
         AckPaymentSent expectedAck = new AckPaymentSent();
 
         when(paymentProviderServiceMock.sendPayment(
-                        any(SendPaymentRequestMapper.SendPaymentRequest.class)))
+                        any(SendPaymentRequest.class)))
                 .thenReturn(expectedAck);
 
         // When

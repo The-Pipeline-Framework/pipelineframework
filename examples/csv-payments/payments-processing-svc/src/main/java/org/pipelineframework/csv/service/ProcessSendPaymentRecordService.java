@@ -27,9 +27,9 @@ import org.jboss.logging.MDC;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
+import org.pipelineframework.csv.common.domain.SendPaymentRequest;
 import org.pipelineframework.csv.common.mapper.AckPaymentSentMapper;
 import org.pipelineframework.csv.common.mapper.PaymentRecordMapper;
-import org.pipelineframework.csv.common.mapper.SendPaymentRequestMapper;
 import org.pipelineframework.service.ReactiveService;
 
 @PipelineStep(
@@ -42,7 +42,7 @@ import org.pipelineframework.service.ReactiveService;
 )
 @ApplicationScoped
 @Getter
-public class ProcessSendPaymentRecordReactiveService
+public class ProcessSendPaymentRecordService
     implements ReactiveService<PaymentRecord, AckPaymentSent> {
   private final PaymentProviderServiceMock paymentProviderServiceMock;
 
@@ -50,21 +50,21 @@ public class ProcessSendPaymentRecordReactiveService
   Vertx vertx;
 
   /**
-   * Create a ProcessSendPaymentRecordReactiveService with its required dependencies.
+   * Create a ProcessSendPaymentRecordService with its required dependencies.
    *
    * @param paymentProviderServiceMock the payment provider mock used to perform payment operations
    * @param vertx the Vert.x instance used to offload blocking work to the Vert.x context
    */
   @Inject
-  public ProcessSendPaymentRecordReactiveService(PaymentProviderServiceMock paymentProviderServiceMock, Vertx vertx) {
+  public ProcessSendPaymentRecordService(PaymentProviderServiceMock paymentProviderServiceMock, Vertx vertx) {
     this.paymentProviderServiceMock = paymentProviderServiceMock;
     this.vertx = vertx;
   }
 
   @Override
   public Uni<AckPaymentSent> process(PaymentRecord paymentRecord) {
-    SendPaymentRequestMapper.SendPaymentRequest request =
-        new SendPaymentRequestMapper.SendPaymentRequest()
+    SendPaymentRequest request =
+        new SendPaymentRequest()
             .setAmount(paymentRecord.getAmount())
             .setReference(paymentRecord.getRecipient())
             .setCurrency(paymentRecord.getCurrency())

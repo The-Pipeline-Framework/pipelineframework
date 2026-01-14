@@ -59,7 +59,7 @@ import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
   outboundMapper = CsvPaymentsOutputFileMapper.class
 )
 @ApplicationScoped
-public class ProcessCsvPaymentsOutputFileReactiveService
+public class ProcessCsvPaymentsOutputFileService
     implements ReactiveBidirectionalStreamingService<PaymentOutput, CsvPaymentsOutputFile> {
 
   /**

@@ -44,6 +44,7 @@ public interface PaymentOutputMapper extends org.pipelineframework.mapper.Mapper
   @Mapping(target = "amount", qualifiedByName = "bigDecimalToString")
   @Mapping(target = "currency", qualifiedByName = "currencyToString")
   @Mapping(target = "fee", qualifiedByName = "bigDecimalToString")
+  @Mapping(target = "paymentStatus")
   ProcessPaymentStatusSvc.PaymentOutput toGrpc(PaymentOutputDto dto);
 
   @Override

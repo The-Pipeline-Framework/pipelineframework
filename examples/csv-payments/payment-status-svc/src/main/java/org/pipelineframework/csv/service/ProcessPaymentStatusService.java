@@ -43,12 +43,13 @@ import org.pipelineframework.service.ReactiveService;
 )
 @ApplicationScoped
 @Getter
-public class ProcessPaymentStatusReactiveService
+public class ProcessPaymentStatusService
     implements ReactiveService<PaymentStatus, PaymentOutput> {
 
-  private static final Logger LOGGER = Logger.getLogger(ProcessPaymentStatusReactiveService.class);
+  private static final Logger LOGGER = Logger.getLogger(ProcessPaymentStatusService.class);
 
   PaymentOutputMapper mapper = PaymentOutputMapper.INSTANCE;
+  PaymentStatusMapper paymentStatusMapper = PaymentStatusMapper.INSTANCE;
 
   @Override
   public Uni<PaymentOutput> process(PaymentStatus paymentStatus) {
@@ -60,7 +61,7 @@ public class ProcessPaymentStatusReactiveService
     PaymentOutputDto dto =
         PaymentOutputDto.builder()
             .id(UUID.randomUUID())
-            .paymentStatus(paymentStatus)
+            .paymentStatus(paymentStatusMapper.toDto(paymentStatus))
             .csvId(paymentRecord.getCsvId())
             .recipient(paymentRecord.getRecipient())
             .amount(paymentRecord.getAmount())

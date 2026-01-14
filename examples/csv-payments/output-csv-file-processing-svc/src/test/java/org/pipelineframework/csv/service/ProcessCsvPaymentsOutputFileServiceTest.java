@@ -16,9 +16,6 @@
 
 package org.pipelineframework.csv.service;
 
-import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
-
-import io.smallrye.mutiny.Multi;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.file.Files;
@@ -26,32 +23,35 @@ import java.nio.file.Path;
 import java.util.Currency;
 import java.util.List;
 import java.util.UUID;
+
+import io.smallrye.mutiny.Multi;
 import org.assertj.core.api.AssertionsForClassTypes;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mapstruct.factory.Mappers;
-import org.pipelineframework.csv.common.domain.AckPaymentSent;
-import org.pipelineframework.csv.common.domain.CsvPaymentsOutputFile;
-import org.pipelineframework.csv.common.domain.PaymentOutput;
-import org.pipelineframework.csv.common.domain.PaymentRecord;
-import org.pipelineframework.csv.common.domain.PaymentStatus;
+import org.pipelineframework.csv.common.domain.*;
 import org.pipelineframework.csv.common.dto.PaymentOutputDto;
+import org.pipelineframework.csv.common.dto.PaymentStatusDto;
 import org.pipelineframework.csv.common.mapper.PaymentOutputMapper;
+import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
 
-class ProcessCsvPaymentsOutputFileReactiveServiceTest {
+import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
-    ProcessCsvPaymentsOutputFileReactiveService service;
+class ProcessCsvPaymentsOutputFileServiceTest {
+
+    ProcessCsvPaymentsOutputFileService service;
 
     PaymentOutputMapper mapper = Mappers.getMapper(PaymentOutputMapper.class);
+    PaymentStatusMapper paymentStatusMapper = Mappers.getMapper(PaymentStatusMapper.class);
 
     @TempDir static Path tempDir;
     static Path tempFile;
 
     @BeforeEach
     void setUp() throws IOException {
-        service = new ProcessCsvPaymentsOutputFileReactiveService();
+        service = new ProcessCsvPaymentsOutputFileService();
         tempFile = Files.createFile(tempDir.resolve("test.csv"));
     }
 
@@ -120,6 +120,7 @@ class ProcessCsvPaymentsOutputFileReactiveServiceTest {
         paymentStatus.setAckPaymentSent(ackPaymentSent);
         paymentStatus.setStatus("nada");
         paymentStatus.setMessage("Success");
+        PaymentStatusDto paymentStatusDto = paymentStatusMapper.toDto(paymentStatus);
 
         PaymentOutputDto paymentOutputDto1 =
                 PaymentOutputTestBuilder.aPaymentOutput()
@@ -128,7 +129,7 @@ class ProcessCsvPaymentsOutputFileReactiveServiceTest {
                         .withAmount(new BigDecimal("100.00"))
                         .withCurrency(Currency.getInstance("USD"))
                         .withConversationId(UUID.fromString("abacd5c7-2230-4a24-a665-32a542468ea5"))
-                        .withPaymentStatus(paymentStatus)
+                        .withPaymentStatus(paymentStatusDto)
                         .buildDto();
 
         PaymentOutputDto paymentOutputDto2 =
@@ -138,7 +139,7 @@ class ProcessCsvPaymentsOutputFileReactiveServiceTest {
                         .withAmount(new BigDecimal("450.01"))
                         .withCurrency(Currency.getInstance("GBP"))
                         .withConversationId(UUID.fromString("746ab623-c070-49dd-87fb-ed2f39f2f3cf"))
-                        .withPaymentStatus(paymentStatus)
+                        .withPaymentStatus(paymentStatusDto)
                         .buildDto();
 
         return Multi.createFrom()
@@ -228,6 +229,7 @@ class ProcessCsvPaymentsOutputFileReactiveServiceTest {
         paymentStatus1.setAckPaymentSent(ackPaymentSent1);
         paymentStatus1.setStatus("nada");
         paymentStatus1.setMessage("Success");
+        PaymentStatusDto paymentStatusDto1 = paymentStatusMapper.toDto(paymentStatus1);
 
         PaymentOutputDto paymentOutputDto1 =
                 PaymentOutputTestBuilder.aPaymentOutput()
@@ -236,7 +238,7 @@ class ProcessCsvPaymentsOutputFileReactiveServiceTest {
                         .withAmount(new BigDecimal("100.00"))
                         .withCurrency(Currency.getInstance("USD"))
                         .withConversationId(UUID.fromString("abacd5c7-2230-4a24-a665-32a542468ea5"))
-                        .withPaymentStatus(paymentStatus1)
+                        .withPaymentStatus(paymentStatusDto1)
                         .buildDto();
 
         // Create payment record for second file
@@ -255,6 +257,7 @@ class ProcessCsvPaymentsOutputFileReactiveServiceTest {
         paymentStatus2.setAckPaymentSent(ackPaymentSent2);
         paymentStatus2.setStatus("nada");
         paymentStatus2.setMessage("Success");
+        PaymentStatusDto paymentStatusDto2 = paymentStatusMapper.toDto(paymentStatus2);
 
         PaymentOutputDto paymentOutputDto2 =
                 PaymentOutputTestBuilder.aPaymentOutput()
@@ -263,7 +266,7 @@ class ProcessCsvPaymentsOutputFileReactiveServiceTest {
                         .withAmount(new BigDecimal("450.01"))
                         .withCurrency(Currency.getInstance("GBP"))
                         .withConversationId(UUID.fromString("746ab623-c070-49dd-87fb-ed2f39f2f3cf"))
-                        .withPaymentStatus(paymentStatus2)
+                        .withPaymentStatus(paymentStatusDto2)
                         .buildDto();
 
         return Multi.createFrom()
