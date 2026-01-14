@@ -32,6 +32,8 @@ public class PipelineStepIRExtractor {
 
     /**
      * Result class to return the model from the extractor.
+     *
+     * @param model the extracted pipeline step model
      */
     public record ExtractResult(PipelineStepModel model) {}
 

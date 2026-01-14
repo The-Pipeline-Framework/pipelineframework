@@ -22,6 +22,12 @@ import org.pipelineframework.processor.util.RoleMetadataGenerator;
  */
 public class PipelineGenerationPhase implements PipelineCompilationPhase {
 
+    /**
+     * Creates a new PipelineGenerationPhase.
+     */
+    public PipelineGenerationPhase() {
+    }
+
     @Override
     public String name() {
         return "Pipeline Generation Phase";

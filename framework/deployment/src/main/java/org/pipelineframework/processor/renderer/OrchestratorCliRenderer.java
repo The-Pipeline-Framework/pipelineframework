@@ -15,6 +15,12 @@ import org.pipelineframework.processor.util.GrpcJavaTypeResolver;
  */
 public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBinding> {
 
+    /**
+     * Creates a new OrchestratorCliRenderer.
+     */
+    public OrchestratorCliRenderer() {
+    }
+
     private static final String APP_CLASS = "OrchestratorApplication";
 
     @Override

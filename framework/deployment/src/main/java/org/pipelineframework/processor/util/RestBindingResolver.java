@@ -23,6 +23,12 @@ import org.pipelineframework.processor.ir.RestBinding;
  * </ul>
  */
 public class RestBindingResolver {
+
+    /**
+     * Creates a new RestBindingResolver.
+     */
+    public RestBindingResolver() {
+    }
     private static final String REST_PATH_PREFIX = "pipeline.rest.path.";
     private static final String APPLICATION_PROPERTIES_PATH = "src/main/resources/application.properties";
 

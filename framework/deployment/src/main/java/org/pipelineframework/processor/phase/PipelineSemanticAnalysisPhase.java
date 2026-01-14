@@ -17,6 +17,12 @@ import org.pipelineframework.processor.ir.StreamingShape;
  */
 public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
 
+    /**
+     * Creates a new PipelineSemanticAnalysisPhase.
+     */
+    public PipelineSemanticAnalysisPhase() {
+    }
+
     @Override
     public String name() {
         return "Pipeline Semantic Analysis Phase";

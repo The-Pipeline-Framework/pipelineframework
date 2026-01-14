@@ -13,6 +13,12 @@ import org.pipelineframework.processor.util.RestBindingResolver;
  */
 public class BindingResolutionPhase implements PipelineCompilationPhase {
 
+    /**
+     * Creates a new BindingResolutionPhase.
+     */
+    public BindingResolutionPhase() {
+    }
+
     @Override
     public String name() {
         return "Binding Resolution Phase";

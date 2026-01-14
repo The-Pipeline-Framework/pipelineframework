@@ -20,6 +20,12 @@ import org.pipelineframework.step.StepOneToOne;
  */
 public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
 
+    /**
+     * Creates a new RestClientStepRenderer.
+     */
+    public RestClientStepRenderer() {
+    }
+
     @Override
     public GenerationTarget target() {
         return GenerationTarget.REST_CLIENT_STEP;

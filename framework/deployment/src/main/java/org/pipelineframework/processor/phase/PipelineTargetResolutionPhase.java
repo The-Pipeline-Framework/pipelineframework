@@ -17,6 +17,12 @@ import org.pipelineframework.processor.ir.PipelineStepModel;
  */
 public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
 
+    /**
+     * Creates a new PipelineTargetResolutionPhase.
+     */
+    public PipelineTargetResolutionPhase() {
+    }
+
     @Override
     public String name() {
         return "Pipeline Target Resolution Phase";

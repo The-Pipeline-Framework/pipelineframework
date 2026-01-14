@@ -22,6 +22,11 @@ public class RoleMetadataGenerator {
     private final Map<String, String> classToRoleMap = new HashMap<>();
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
+    /**
+     * Creates a new RoleMetadataGenerator.
+     *
+     * @param processingEnv the processing environment for compiler utilities and messaging
+     */
     public RoleMetadataGenerator(ProcessingEnvironment processingEnv) {
         this.processingEnv = processingEnv;
     }

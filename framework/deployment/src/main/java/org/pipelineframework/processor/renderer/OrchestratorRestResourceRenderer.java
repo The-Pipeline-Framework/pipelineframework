@@ -12,6 +12,12 @@ import org.pipelineframework.processor.ir.OrchestratorBinding;
  */
 public class OrchestratorRestResourceRenderer implements PipelineRenderer<OrchestratorBinding> {
 
+    /**
+     * Creates a new OrchestratorRestResourceRenderer.
+     */
+    public OrchestratorRestResourceRenderer() {
+    }
+
     private static final String RESOURCE_CLASS = "PipelineRunResource";
 
     @Override

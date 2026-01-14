@@ -18,6 +18,12 @@ import org.yaml.snakeyaml.Yaml;
 public class PipelineAspectConfigLoader {
 
     /**
+     * Creates a new PipelineAspectConfigLoader.
+     */
+    public PipelineAspectConfigLoader() {
+    }
+
+    /**
      * Load aspect models from the specified YAML file.
      *
      * @param configPath the pipeline configuration file path

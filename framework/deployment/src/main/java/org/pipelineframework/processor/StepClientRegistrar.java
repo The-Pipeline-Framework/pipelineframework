@@ -27,15 +27,14 @@ import org.jboss.jandex.*;
 import org.jboss.logging.Logger;
 import org.pipelineframework.annotation.PipelineOrchestrator;
 
-import static org.pipelineframework.processor.PipelineStepProcessor.GRPC_CLIENT_STEP_SUFFIX;
-import static org.pipelineframework.processor.PipelineStepProcessor.REST_CLIENT_STEP_SUFFIX;
-
 /**
  * Registers client step classes as additional unremovable beans when CLI client generation is enabled.
  */
 public class StepClientRegistrar {
 
     private static final String FEATURE_NAME = "pipelineframework-steps";
+    private static final String GRPC_CLIENT_STEP_SUFFIX = "GrpcClientStep";
+    private static final String REST_CLIENT_STEP_SUFFIX = "RestClientStep";
     private static final Logger LOG = Logger.getLogger(StepClientRegistrar.class);
 
     /**
@@ -60,7 +59,7 @@ public class StepClientRegistrar {
      * Scans the provided Jandex index for classes whose simple name ends with the configured client step suffix and registers each
      * matching class as an unremovable AdditionalBeanBuildItem when CLI generation is enabled via the supplied configuration.
      *
-     * @param config controls whether CLI-generated clients should be registered
+     * @param beans producer for additional beans registered at build time
      * @param combinedIndex combined Jandex index containing application classes to scan
      */
     @BuildStep
@@ -87,6 +86,12 @@ public class StepClientRegistrar {
         }
     }
 
+    /**
+     * Checks whether CLI-generated clients should be registered based on the orchestrator annotation.
+     *
+     * @param combinedIndex combined Jandex index containing application classes to scan
+     * @return true when CLI generation is enabled
+     */
     private boolean isCliGenerationEnabled(CombinedIndexBuildItem combinedIndex) {
         DotName annotationName = DotName.createSimple(PipelineOrchestrator.class.getName());
         java.util.Collection<AnnotationInstance> instances = combinedIndex.getIndex().getAnnotations(annotationName);

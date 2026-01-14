@@ -15,6 +15,12 @@ import org.pipelineframework.processor.util.OrchestratorGrpcBindingResolver;
  */
 public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBinding> {
 
+    /**
+     * Creates a new OrchestratorGrpcRenderer.
+     */
+    public OrchestratorGrpcRenderer() {
+    }
+
     private static final String GRPC_CLASS = "OrchestratorGrpcService";
     private static final String ORCHESTRATOR_SERVICE = "OrchestratorService";
     private static final String ORCHESTRATOR_METHOD = "Run";

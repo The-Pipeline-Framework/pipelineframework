@@ -9,6 +9,12 @@ import org.pipelineframework.processor.PipelineCompilationPhase;
  */
 public class ConfigurationLoadingPhase implements PipelineCompilationPhase {
 
+    /**
+     * Creates a new ConfigurationLoadingPhase.
+     */
+    public ConfigurationLoadingPhase() {
+    }
+
     @Override
     public String name() {
         return "Configuration Loading Phase";

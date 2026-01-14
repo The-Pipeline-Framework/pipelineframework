@@ -34,6 +34,12 @@ public record GrpcBinding(
         private Object methodDescriptor;
 
         /**
+         * Creates a new GrpcBinding.Builder.
+         */
+        public Builder() {
+        }
+
+        /**
          * Set the PipelineStepModel to be used when building a GrpcBinding.
          *
          * @param model the semantic PipelineStepModel for the binding

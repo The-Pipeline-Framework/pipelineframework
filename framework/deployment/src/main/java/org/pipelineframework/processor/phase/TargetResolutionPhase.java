@@ -9,6 +9,12 @@ import org.pipelineframework.processor.PipelineCompilationPhase;
  */
 public class TargetResolutionPhase implements PipelineCompilationPhase {
 
+    /**
+     * Creates a new TargetResolutionPhase.
+     */
+    public TargetResolutionPhase() {
+    }
+
     @Override
     public String name() {
         return "Target Resolution Phase";

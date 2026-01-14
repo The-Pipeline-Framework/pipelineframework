@@ -34,6 +34,11 @@ public class PipelineCompiler extends AbstractProcessingTool {
 
     private final List<PipelineCompilationPhase> phases;
 
+    /**
+     * Creates a new PipelineCompiler with the ordered compilation phases.
+     *
+     * @param phases the compilation phases to execute in sequence
+     */
     public PipelineCompiler(List<PipelineCompilationPhase> phases) {
         this.phases = phases;
     }

@@ -50,6 +50,12 @@ import com.google.protobuf.DescriptorProtos;
 public class DescriptorFileLocator {
 
     /**
+     * Creates a new DescriptorFileLocator.
+     */
+    public DescriptorFileLocator() {
+    }
+
+    /**
      * Key for annotation processor option specifying the descriptor file path.
      */
     public static final String DESCRIPTOR_PATH_OPTION = "protobuf.descriptor.path";

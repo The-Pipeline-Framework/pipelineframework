@@ -17,9 +17,16 @@ import org.yaml.snakeyaml.Yaml;
 public class PipelineStepConfigLoader {
 
     /**
+     * Creates a new PipelineStepConfigLoader.
+     */
+    public PipelineStepConfigLoader() {
+    }
+
+    /**
      * Minimal step configuration extracted from the pipeline YAML.
      *
      * @param basePackage the configured base package
+     * @param transport the configured transport name
      * @param inputTypes the list of input type names declared in steps
      * @param outputTypes the list of output type names declared in steps
      */

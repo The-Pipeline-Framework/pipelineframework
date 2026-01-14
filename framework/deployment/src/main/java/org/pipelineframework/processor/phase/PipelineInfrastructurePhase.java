@@ -13,6 +13,12 @@ import org.pipelineframework.processor.PipelineCompilationPhase;
  */
 public class PipelineInfrastructurePhase implements PipelineCompilationPhase {
 
+    /**
+     * Creates a new PipelineInfrastructurePhase.
+     */
+    public PipelineInfrastructurePhase() {
+    }
+
     @Override
     public String name() {
         return "Pipeline Infrastructure Phase";

@@ -7,6 +7,8 @@ import org.pipelineframework.processor.ir.PipelineBinding;
 
 /**
  * Interface for pipeline renderers that generate specific artifacts based on PipelineStepModel and transport bindings.
+ *
+ * @param <T> the binding type rendered by this renderer
  */
 public interface PipelineRenderer<T extends PipelineBinding> {
     /**

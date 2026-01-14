@@ -28,6 +28,12 @@ import org.pipelineframework.processor.ir.TypeMapping;
  */
 public class ModelExtractionPhase implements PipelineCompilationPhase {
 
+    /**
+     * Creates a new ModelExtractionPhase.
+     */
+    public ModelExtractionPhase() {
+    }
+
     @Override
     public String name() {
         return "Model Extraction Phase";

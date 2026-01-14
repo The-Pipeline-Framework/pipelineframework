@@ -26,6 +26,12 @@ import org.pipelineframework.processor.ir.PipelineOrchestratorModel;
  */
 public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
 
+    /**
+     * Creates a new PipelineDiscoveryPhase.
+     */
+    public PipelineDiscoveryPhase() {
+    }
+
     @Override
     public String name() {
         return "Pipeline Discovery Phase";

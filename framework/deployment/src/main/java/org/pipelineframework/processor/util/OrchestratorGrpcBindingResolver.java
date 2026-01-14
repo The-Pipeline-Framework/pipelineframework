@@ -15,6 +15,12 @@ import org.pipelineframework.processor.ir.PipelineStepModel;
 public class OrchestratorGrpcBindingResolver {
 
     /**
+     * Creates a new OrchestratorGrpcBindingResolver.
+     */
+    public OrchestratorGrpcBindingResolver() {
+    }
+
+    /**
      * Resolve the orchestrator gRPC binding using the descriptor set.
      *
      * @param model the synthetic model describing the orchestrator service

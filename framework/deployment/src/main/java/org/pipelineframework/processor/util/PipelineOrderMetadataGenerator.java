@@ -24,6 +24,11 @@ public class PipelineOrderMetadataGenerator {
     private final ProcessingEnvironment processingEnv;
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
+    /**
+     * Creates a new PipelineOrderMetadataGenerator.
+     *
+     * @param processingEnv the processing environment for compiler utilities and messaging
+     */
     public PipelineOrderMetadataGenerator(ProcessingEnvironment processingEnv) {
         this.processingEnv = processingEnv;
     }

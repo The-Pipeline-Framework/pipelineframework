@@ -24,6 +24,12 @@ import org.pipelineframework.processor.util.RestBindingResolver;
  */
 public class PipelineBindingConstructionPhase implements PipelineCompilationPhase {
 
+    /**
+     * Creates a new PipelineBindingConstructionPhase.
+     */
+    public PipelineBindingConstructionPhase() {
+    }
+
     @Override
     public String name() {
         return "Pipeline Binding Construction Phase";

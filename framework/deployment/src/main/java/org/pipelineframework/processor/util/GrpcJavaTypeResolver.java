@@ -28,6 +28,12 @@ import org.pipelineframework.processor.ir.GrpcBinding;
 public class GrpcJavaTypeResolver {
 
     /**
+     * Creates a new GrpcJavaTypeResolver.
+     */
+    public GrpcJavaTypeResolver() {
+    }
+
+    /**
      * Resolves the gRPC Java types for a given GrpcBinding.
      *
      * @param binding The pipeline step binding containing the service descriptor
