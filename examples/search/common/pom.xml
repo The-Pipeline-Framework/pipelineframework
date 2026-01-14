@@ -72,10 +72,10 @@
             <artifactId>guava</artifactId>
             <version>32.1.2-jre</version>
         </dependency>
-        <!-- Hibernate Reactive -->
+        <!-- Jakarta Persistence -->
         <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-hibernate-reactive-panache</artifactId>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
         </dependency>
         <!-- gRPC -->
         <dependency>

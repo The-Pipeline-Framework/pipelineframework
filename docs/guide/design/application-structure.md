@@ -31,7 +31,7 @@ my-pipeline-application/
 ├── step-b-svc/
 │   └── src/main/java/...            # Step implementation + mappers
 ├── plugins/
-│   └── persistence/                 # Plugin implementation module(s)
+│   └── custom-plugin/               # Plugin implementation module(s)
 └── persistence-svc/                 # Plugin host service (gRPC)
 ```
 

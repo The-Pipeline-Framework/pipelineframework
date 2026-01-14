@@ -19,14 +19,13 @@ package org.pipelineframework.search.common.domain;
 import java.util.UUID;
 import jakarta.persistence.*;
 
-import io.quarkus.hibernate.reactive.panache.PanacheEntityBase;
 import lombok.Getter;
 import lombok.Setter;
 
 @Setter
 @Getter
 @MappedSuperclass
-public abstract class BaseEntity extends PanacheEntityBase {
+public abstract class BaseEntity {
 
   @Id
   @Column(name = "doc_id", updatable = false, nullable = false)

@@ -31,7 +31,7 @@ The fastest way to get started is using our visual canvas designer:
 - **Cost Efficiency**: Reduced resource consumption with native builds and reactive processing
 - **Scalability**: Each pipeline step can be scaled independently based on demand
 - **gRPC & REST Flexibility**: High-performance gRPC for throughput-intensive tasks, REST for ease of integration
-- **Multiple Persistence Options**: Choose from reactive (Panache) or virtual thread-based persistence models
+- **Multiple Persistence Options**: Choose from reactive (Panache) or traditional/blocking persistence drivers, for multiple database vendors
 - **Rich Step Types**: Support for OneToOne, OneToMany, ManyToOne, ManyToMany, and SideEffect processing patterns
 
 ### Developers

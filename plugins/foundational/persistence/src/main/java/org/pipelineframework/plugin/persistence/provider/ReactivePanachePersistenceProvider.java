@@ -17,11 +17,11 @@
 package org.pipelineframework.plugin.persistence.provider;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.persistence.Entity;
 import jakarta.persistence.PersistenceException;
 
 import io.quarkus.arc.Unremovable;
 import io.quarkus.hibernate.reactive.panache.Panache;
-import io.quarkus.hibernate.reactive.panache.PanacheEntityBase;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.pipelineframework.persistence.PersistenceProvider;
@@ -31,7 +31,7 @@ import org.pipelineframework.persistence.PersistenceProvider;
  */
 @ApplicationScoped
 @Unremovable
-public class ReactivePanachePersistenceProvider implements PersistenceProvider<PanacheEntityBase> {
+public class ReactivePanachePersistenceProvider implements PersistenceProvider<Object> {
 
   private static final Logger LOG = Logger.getLogger(ReactivePanachePersistenceProvider.class);
 
@@ -42,15 +42,15 @@ public class ReactivePanachePersistenceProvider implements PersistenceProvider<P
   }
 
   @Override
-  public Class<PanacheEntityBase> type() {
-    return PanacheEntityBase.class;
+  public Class<Object> type() {
+    return Object.class;
   }
 
   /**
    * Persists a Panache entity using Hibernate Reactive.
    */
   @Override
-  public Uni<PanacheEntityBase> persist(PanacheEntityBase entity) {
+  public Uni<Object> persist(Object entity) {
     LOG.tracef("Persisting entity of type %s", entity.getClass().getSimpleName());
 
     return Panache.getSession()
@@ -66,7 +66,7 @@ public class ReactivePanachePersistenceProvider implements PersistenceProvider<P
     }
 
     @Override
-    public Uni<PanacheEntityBase> persistOrUpdate(PanacheEntityBase entity) {
+    public Uni<Object> persistOrUpdate(Object entity) {
         LOG.tracef("Persisting or updating entity of type %s", entity.getClass().getSimpleName());
 
         return Panache.getSession()
@@ -84,11 +84,11 @@ public class ReactivePanachePersistenceProvider implements PersistenceProvider<P
     /**
      * Checks whether the provider supports the given entity instance.
      *
-     * @return {@code true} if the entity is an instance of {@code PanacheEntityBase}, {@code false} otherwise.
+     * @return {@code true} if the entity class is annotated with {@code jakarta.persistence.Entity}, {@code false} otherwise.
      */
     @Override
     public boolean supports(Object entity) {
-        return entity instanceof PanacheEntityBase;
+        return entity != null && entity.getClass().isAnnotationPresent(Entity.class);
     }
 
     /**

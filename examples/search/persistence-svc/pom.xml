@@ -63,22 +63,6 @@
             <artifactId>quarkus-grpc</artifactId>
         </dependency>
 
-
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-hibernate-orm</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-hibernate-reactive</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-hibernate-reactive-panache</artifactId>
-        </dependency>
-
         <!-- Health check dependency -->
         <dependency>
             <groupId>io.quarkus</groupId>

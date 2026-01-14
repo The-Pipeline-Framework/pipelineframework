@@ -22,14 +22,13 @@ import jakarta.persistence.Id;
 import jakarta.persistence.MappedSuperclass;
 import jakarta.persistence.PrePersist;
 
-import io.quarkus.hibernate.reactive.panache.PanacheEntityBase;
 import lombok.Getter;
 import lombok.Setter;
 
 @Setter
 @Getter
 @MappedSuperclass
-public abstract class BaseEntity extends PanacheEntityBase {
+public abstract class BaseEntity {
 
   @Id
   @Column(name = "id", updatable = false, nullable = false)

@@ -20,14 +20,13 @@ import java.lang.reflect.Field;
 import java.util.List;
 import java.util.stream.Stream;
 import jakarta.enterprise.inject.Instance;
+import jakarta.persistence.Entity;
 
-import io.quarkus.hibernate.reactive.panache.PanacheEntityBase;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.UniAssertSubscriber;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.pipelineframework.persistence.PersistenceProvider;
 import org.pipelineframework.plugin.persistence.provider.ReactivePanachePersistenceProvider;
@@ -96,9 +95,7 @@ class PersistenceManagerTest {
 
     @Test
     void persist_WithSupportedProvider_ShouldUseProvider() {
-        // Since ReactivePanachePersistenceProvider is bound to PanacheEntityBase,
-        // we need to use a PanacheEntityBase entity
-        PanacheEntityBase entity = Mockito.mock(PanacheEntityBase.class);
+        TestEntity entity = new TestEntity();
 
         // Create a mock that extends ReactivePanachePersistenceProvider to pass the instanceof
         // check
@@ -108,7 +105,7 @@ class PersistenceManagerTest {
         when(panacheMockProvider.supportsThreadContext())
                 .thenReturn(true); // For regular threads, it should return true
         when(panacheMockProvider.persist(entity)).thenReturn(Uni.createFrom().item(entity));
-        when(panacheMockProvider.type()).thenReturn(PanacheEntityBase.class); // Need to mock this too
+        when(panacheMockProvider.type()).thenReturn(Object.class);
 
         // Set up the mock instance to use our specific provider
         when(mockProviderInstance.isUnsatisfied()).thenReturn(false);
@@ -117,9 +114,9 @@ class PersistenceManagerTest {
         // Re-initialize the provider list in the PersistenceManager
         reinitializeProviders();
 
-        Uni<PanacheEntityBase> resultUni = persistenceManager.persist(entity);
+        Uni<Object> resultUni = persistenceManager.persist(entity);
 
-        UniAssertSubscriber<PanacheEntityBase> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
+        UniAssertSubscriber<Object> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
         subscriber.awaitItem();
 
         assertSame(entity, subscriber.getItem());
@@ -161,5 +158,9 @@ class PersistenceManagerTest {
         } catch (Exception e) {
             fail("Failed to reinitialize providers list: " + e.getMessage());
         }
+    }
+
+    @Entity
+    static class TestEntity {
     }
 }
