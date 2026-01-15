@@ -202,7 +202,10 @@ public class PipelineExecutionService {
       return startupHealthState.get();
     }
     try {
-      future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+      Boolean result = future.get(timeout.toMillis(), TimeUnit.MILLISECONDS);
+      if (Boolean.TRUE.equals(result) && startupHealthState.get() == StartupHealthState.PENDING) {
+        startupHealthState.set(StartupHealthState.HEALTHY);
+      }
     } catch (TimeoutException e) {
       throw new RuntimeException("Startup health checks are still running.");
     } catch (Exception e) {
@@ -282,7 +285,12 @@ public class PipelineExecutionService {
   private RuntimeException healthCheckFailure() {
     StartupHealthState state = startupHealthState.get();
     if (state == StartupHealthState.PENDING) {
-      return new RuntimeException("Startup health checks are still running.");
+      try {
+        awaitStartupHealth(Duration.ofMinutes(2));
+        return null;
+      } catch (RuntimeException e) {
+        return e;
+      }
     }
     if (state != StartupHealthState.HEALTHY) {
       return new RuntimeException(

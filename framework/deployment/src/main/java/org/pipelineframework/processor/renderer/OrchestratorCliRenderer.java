@@ -37,6 +37,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
         ClassName commandLine = ClassName.get("picocli", "CommandLine");
         ClassName command = ClassName.get("picocli.CommandLine", "Command");
         ClassName option = ClassName.get("picocli.CommandLine", "Option");
+        ClassName duration = ClassName.get("java.time", "Duration");
         ClassName dependent = ClassName.get("jakarta.enterprise.context", "Dependent");
         ClassName inject = ClassName.get("jakarta.inject", "Inject");
         ClassName multi = ClassName.get("io.smallrye.mutiny", "Multi");
@@ -131,6 +132,8 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                     return $T.ExitCode.USAGE;
                 }
 
+                pipelineExecutionService.awaitStartupHealth($T.ofMinutes(2));
+
                 pipelineExecutionService.executePipeline(inputMulti)
                         .collect().asList()
                         .await().indefinitely();
@@ -145,6 +148,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                 inputDtoType,
                 commandLine,
                 commandLine,
+                duration,
                 commandLine)
             .build();
 
