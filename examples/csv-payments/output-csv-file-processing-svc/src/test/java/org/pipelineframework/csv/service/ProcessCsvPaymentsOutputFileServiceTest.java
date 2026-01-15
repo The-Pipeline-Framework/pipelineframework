@@ -30,21 +30,13 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.mapstruct.factory.Mappers;
 import org.pipelineframework.csv.common.domain.*;
-import org.pipelineframework.csv.common.dto.PaymentOutputDto;
-import org.pipelineframework.csv.common.dto.PaymentStatusDto;
-import org.pipelineframework.csv.common.mapper.PaymentOutputMapper;
-import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
 
 import static org.assertj.core.api.AssertionsForInterfaceTypes.assertThat;
 
 class ProcessCsvPaymentsOutputFileServiceTest {
 
     ProcessCsvPaymentsOutputFileService service;
-
-    PaymentOutputMapper mapper = Mappers.getMapper(PaymentOutputMapper.class);
-    PaymentStatusMapper paymentStatusMapper = Mappers.getMapper(PaymentStatusMapper.class);
 
     @TempDir static Path tempDir;
     static Path tempFile;
@@ -120,30 +112,25 @@ class ProcessCsvPaymentsOutputFileServiceTest {
         paymentStatus.setAckPaymentSent(ackPaymentSent);
         paymentStatus.setStatus("nada");
         paymentStatus.setMessage("Success");
-        PaymentStatusDto paymentStatusDto = paymentStatusMapper.toDto(paymentStatus);
+        PaymentOutput paymentOutput1 =
+                buildPaymentOutput(
+                        paymentStatus,
+                        "80e055c9-7dbe-4ef0-ad37-8360eb8d1e3e",
+                        "recipient123",
+                        new BigDecimal("100.00"),
+                        Currency.getInstance("USD"),
+                        UUID.fromString("abacd5c7-2230-4a24-a665-32a542468ea5"));
 
-        PaymentOutputDto paymentOutputDto1 =
-                PaymentOutputTestBuilder.aPaymentOutput()
-                        .withCsvId("80e055c9-7dbe-4ef0-ad37-8360eb8d1e3e")
-                        .withRecipient("recipient123")
-                        .withAmount(new BigDecimal("100.00"))
-                        .withCurrency(Currency.getInstance("USD"))
-                        .withConversationId(UUID.fromString("abacd5c7-2230-4a24-a665-32a542468ea5"))
-                        .withPaymentStatus(paymentStatusDto)
-                        .buildDto();
+        PaymentOutput paymentOutput2 =
+                buildPaymentOutput(
+                        paymentStatus,
+                        "2d8acc5b-8dae-4240-b37c-893318aba63f",
+                        "234recipient",
+                        new BigDecimal("450.01"),
+                        Currency.getInstance("GBP"),
+                        UUID.fromString("746ab623-c070-49dd-87fb-ed2f39f2f3cf"));
 
-        PaymentOutputDto paymentOutputDto2 =
-                PaymentOutputTestBuilder.aPaymentOutput()
-                        .withCsvId("2d8acc5b-8dae-4240-b37c-893318aba63f")
-                        .withRecipient("234recipient")
-                        .withAmount(new BigDecimal("450.01"))
-                        .withCurrency(Currency.getInstance("GBP"))
-                        .withConversationId(UUID.fromString("746ab623-c070-49dd-87fb-ed2f39f2f3cf"))
-                        .withPaymentStatus(paymentStatusDto)
-                        .buildDto();
-
-        return Multi.createFrom()
-                .items(mapper.fromDto(paymentOutputDto1), mapper.fromDto(paymentOutputDto2));
+        return Multi.createFrom().items(paymentOutput1, paymentOutput2);
     }
 
     private Multi<PaymentOutput> getBadMultiPaymentOutput() {
@@ -229,17 +216,14 @@ class ProcessCsvPaymentsOutputFileServiceTest {
         paymentStatus1.setAckPaymentSent(ackPaymentSent1);
         paymentStatus1.setStatus("nada");
         paymentStatus1.setMessage("Success");
-        PaymentStatusDto paymentStatusDto1 = paymentStatusMapper.toDto(paymentStatus1);
-
-        PaymentOutputDto paymentOutputDto1 =
-                PaymentOutputTestBuilder.aPaymentOutput()
-                        .withCsvId("80e055c9-7dbe-4ef0-ad37-8360eb8d1e3e")
-                        .withRecipient("recipient123")
-                        .withAmount(new BigDecimal("100.00"))
-                        .withCurrency(Currency.getInstance("USD"))
-                        .withConversationId(UUID.fromString("abacd5c7-2230-4a24-a665-32a542468ea5"))
-                        .withPaymentStatus(paymentStatusDto1)
-                        .buildDto();
+        PaymentOutput paymentOutput1 =
+                buildPaymentOutput(
+                        paymentStatus1,
+                        "80e055c9-7dbe-4ef0-ad37-8360eb8d1e3e",
+                        "recipient123",
+                        new BigDecimal("100.00"),
+                        Currency.getInstance("USD"),
+                        UUID.fromString("abacd5c7-2230-4a24-a665-32a542468ea5"));
 
         // Create payment record for second file
         Path secondFile = tempDir.resolve("second.csv");
@@ -257,19 +241,35 @@ class ProcessCsvPaymentsOutputFileServiceTest {
         paymentStatus2.setAckPaymentSent(ackPaymentSent2);
         paymentStatus2.setStatus("nada");
         paymentStatus2.setMessage("Success");
-        PaymentStatusDto paymentStatusDto2 = paymentStatusMapper.toDto(paymentStatus2);
+        PaymentOutput paymentOutput2 =
+                buildPaymentOutput(
+                        paymentStatus2,
+                        "2d8acc5b-8dae-4240-b37c-893318aba63f",
+                        "234recipient",
+                        new BigDecimal("450.01"),
+                        Currency.getInstance("GBP"),
+                        UUID.fromString("746ab623-c070-49dd-87fb-ed2f39f2f3cf"));
 
-        PaymentOutputDto paymentOutputDto2 =
-                PaymentOutputTestBuilder.aPaymentOutput()
-                        .withCsvId("2d8acc5b-8dae-4240-b37c-893318aba63f")
-                        .withRecipient("234recipient")
-                        .withAmount(new BigDecimal("450.01"))
-                        .withCurrency(Currency.getInstance("GBP"))
-                        .withConversationId(UUID.fromString("746ab623-c070-49dd-87fb-ed2f39f2f3cf"))
-                        .withPaymentStatus(paymentStatusDto2)
-                        .buildDto();
+        return Multi.createFrom().items(paymentOutput1, paymentOutput2);
+    }
 
-        return Multi.createFrom()
-                .items(mapper.fromDto(paymentOutputDto1), mapper.fromDto(paymentOutputDto2));
+    private PaymentOutput buildPaymentOutput(
+            PaymentStatus paymentStatus,
+            String csvId,
+            String recipient,
+            BigDecimal amount,
+            Currency currency,
+            UUID conversationId) {
+        PaymentOutput output = new PaymentOutput();
+        output.setPaymentStatus(paymentStatus);
+        output.setCsvId(csvId);
+        output.setRecipient(recipient);
+        output.setAmount(amount);
+        output.setCurrency(currency);
+        output.setConversationId(conversationId);
+        output.setStatus(0L);
+        output.setMessage("");
+        output.setFee(null);
+        return output;
     }
 }

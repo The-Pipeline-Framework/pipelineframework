@@ -18,6 +18,7 @@ package org.pipelineframework.csv.service;
 
 import java.util.UUID;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 import lombok.Getter;
@@ -48,8 +49,10 @@ public class ProcessPaymentStatusService
 
   private static final Logger LOGGER = Logger.getLogger(ProcessPaymentStatusService.class);
 
-  PaymentOutputMapper mapper = PaymentOutputMapper.INSTANCE;
-  PaymentStatusMapper paymentStatusMapper = PaymentStatusMapper.INSTANCE;
+  @Inject
+  PaymentOutputMapper mapper;
+  @Inject
+  PaymentStatusMapper paymentStatusMapper;
 
   @Override
   public Uni<PaymentOutput> process(PaymentStatus paymentStatus) {

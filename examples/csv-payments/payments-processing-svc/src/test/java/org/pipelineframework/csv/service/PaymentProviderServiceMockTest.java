@@ -30,26 +30,17 @@ import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
 import org.pipelineframework.csv.common.domain.SendPaymentRequest;
 import org.pipelineframework.csv.common.dto.PaymentRecordDto;
-import org.pipelineframework.csv.common.mapper.AckPaymentSentMapper;
 import org.pipelineframework.csv.common.mapper.PaymentRecordMapper;
-import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 class PaymentProviderServiceMockTest {
 
     PaymentProviderServiceMock paymentProviderServiceMock;
-    private AckPaymentSentMapper ackPaymentSentMapper;
-    private PaymentStatusMapper paymentStatusMapper;
 
     @BeforeEach
     void setUp() {
-        ackPaymentSentMapper = mock(AckPaymentSentMapper.class);
-        paymentStatusMapper = mock(PaymentStatusMapper.class);
     }
 
     @Test
@@ -78,15 +69,6 @@ class PaymentProviderServiceMockTest {
         PaymentProviderConfig config = new FakePaymentProviderConfig();
         PaymentProviderServiceMock paymentProviderServiceMock =
                 new PaymentProviderServiceMock(config);
-
-        new PaymentProviderServiceMock(config);
-        AckPaymentSent testAckPaymentSent =
-                new AckPaymentSent(UUID.randomUUID())
-                        .setStatus(1000L)
-                        .setMessage("OK but this is only a test")
-                        .setPaymentRecordId(paymentRecord.getId())
-                        .setPaymentRecord(paymentRecord);
-        when(ackPaymentSentMapper.fromDto(any())).thenReturn(testAckPaymentSent);
 
         AckPaymentSent ackPaymentSent = paymentProviderServiceMock.sendPayment(request);
 
@@ -221,9 +203,6 @@ class PaymentProviderServiceMockTest {
                         .setAckPaymentSent(testAckPaymentSent)
                         .setAckPaymentSentId(testAckPaymentSent.getId());
 
-        // When
-        when(paymentStatusMapper.fromDto(any())).thenReturn(testPaymentStatus);
-
         PaymentStatus paymentStatus =
                 paymentProviderServiceMock.getPaymentStatus(testAckPaymentSent);
 
@@ -272,9 +251,6 @@ class PaymentProviderServiceMockTest {
                         .setMessage("This is a test")
                         .setAckPaymentSent(testAckPaymentSent)
                         .setAckPaymentSentId(testAckPaymentSent.getId());
-
-        // When
-        when(paymentStatusMapper.fromDto(any())).thenReturn(testPaymentStatus);
 
         // Acquire a permit to ensure the rate limiter is exhausted for subsequent calls
         try {

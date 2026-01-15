@@ -58,6 +58,22 @@ class CsvPaymentsEndToEndIT {
                     .withNetworkAliases("postgres")
                     .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofSeconds(60)));
 
+    static GenericContainer<?> persistenceService =
+            new GenericContainer<>("localhost/csv-payments/persistence-svc:latest")
+                    .withNetwork(network)
+                    .withNetworkAliases("persistence-svc")
+                    .withExposedPorts(8448)
+                    .withEnv("QUARKUS_PROFILE", "test")
+                    .withEnv(
+                            "QUARKUS_DATASOURCE_REACTIVE_URL", "postgresql://postgres:5432/quarkus")
+                    .withEnv("QUARKUS_DATASOURCE_USERNAME", "quarkus")
+                    .withEnv("QUARKUS_DATASOURCE_PASSWORD", "quarkus")
+                    .waitingFor(
+                            Wait.forHttps("/q/health")
+                                    .forPort(8448)
+                                    .allowInsecure()
+                                    .withStartupTimeout(Duration.ofSeconds(60)));
+
     static GenericContainer<?> inputCsvService =
             new GenericContainer<>("localhost/csv-payments/input-csv-file-processing-svc:latest")
                     .withNetwork(network)
@@ -68,10 +84,6 @@ class CsvPaymentsEndToEndIT {
                             BindMode.READ_ONLY)
                     .withExposedPorts(8444)
                     .withEnv("QUARKUS_PROFILE", "test")
-                    .withEnv(
-                            "QUARKUS_DATASOURCE_REACTIVE_URL", "postgresql://postgres:5432/quarkus")
-                    .withEnv("QUARKUS_DATASOURCE_USERNAME", "quarkus")
-                    .withEnv("QUARKUS_DATASOURCE_PASSWORD", "quarkus")
                     .waitingFor(
                             Wait.forHttps("/q/health")
                                     .forPort(8444)
@@ -84,10 +96,6 @@ class CsvPaymentsEndToEndIT {
                     .withNetworkAliases("payments-processing-svc")
                     .withExposedPorts(8445)
                     .withEnv("QUARKUS_PROFILE", "test")
-                    .withEnv(
-                            "QUARKUS_DATASOURCE_REACTIVE_URL", "postgresql://postgres:5432/quarkus")
-                    .withEnv("QUARKUS_DATASOURCE_USERNAME", "quarkus")
-                    .withEnv("QUARKUS_DATASOURCE_PASSWORD", "quarkus")
                     .waitingFor(
                             Wait.forHttps("/q/health")
                                     .forPort(8445)
@@ -100,10 +108,6 @@ class CsvPaymentsEndToEndIT {
                     .withNetworkAliases("payment-status-svc")
                     .withExposedPorts(8446)
                     .withEnv("QUARKUS_PROFILE", "test")
-                    .withEnv(
-                            "QUARKUS_DATASOURCE_REACTIVE_URL", "postgresql://postgres:5432/quarkus")
-                    .withEnv("QUARKUS_DATASOURCE_USERNAME", "quarkus")
-                    .withEnv("QUARKUS_DATASOURCE_PASSWORD", "quarkus")
                     .waitingFor(
                             Wait.forHttps("/q/health")
                                     .forPort(8446)
@@ -120,10 +124,6 @@ class CsvPaymentsEndToEndIT {
                             BindMode.READ_WRITE)
                     .withExposedPorts(8447)
                     .withEnv("QUARKUS_PROFILE", "test")
-                    .withEnv(
-                            "QUARKUS_DATASOURCE_REACTIVE_URL", "postgresql://postgres:5432/quarkus")
-                    .withEnv("QUARKUS_DATASOURCE_USERNAME", "quarkus")
-                    .withEnv("QUARKUS_DATASOURCE_PASSWORD", "quarkus")
                     .waitingFor(
                             Wait.forHttps("/q/health")
                                     .forPort(8447)
@@ -145,6 +145,7 @@ class CsvPaymentsEndToEndIT {
 
         Startables.deepStart(java.util.stream.Stream.of(
             postgresContainer,
+            persistenceService,
             inputCsvService,
             paymentsProcessingService,
             paymentStatusService,
@@ -175,7 +176,8 @@ class CsvPaymentsEndToEndIT {
         createTestCsvFiles();
 
         // Trigger the orchestrator to process the input directory
-        orchestratorTriggerRun(TEST_E2E_TARGET_DIR);
+        String inputDirJson = "{ \"path\": \"" + TEST_E2E_TARGET_DIR + "\" }";
+        orchestratorTriggerRun(inputDirJson);
 
         // Wait for the pipeline to complete
         waitForPipelineComplete();
@@ -219,19 +221,19 @@ class CsvPaymentsEndToEndIT {
                         String.valueOf(inputCsvService.getMappedPort(8444)));
         pb.environment()
                 .put(
-                        "QUARKUS_GRPC_CLIENTS_PROCESS_CSV_PAYMENTS_INPUT_FILE_HOST",
+                        "QUARKUS_GRPC_CLIENTS_PROCESS_CSV_PAYMENTS_INPUT_HOST",
                         inputCsvService.getHost());
         pb.environment()
                 .put(
-                        "QUARKUS_GRPC_CLIENTS_PROCESS_CSV_PAYMENTS_INPUT_FILE_PORT",
+                        "QUARKUS_GRPC_CLIENTS_PROCESS_CSV_PAYMENTS_INPUT_PORT",
                         String.valueOf(inputCsvService.getMappedPort(8444)));
         pb.environment()
                 .put(
-                        "QUARKUS_GRPC_CLIENTS_SEND_PAYMENT_RECORD_HOST",
+                        "QUARKUS_GRPC_CLIENTS_PROCESS_SEND_PAYMENT_RECORD_HOST",
                         paymentsProcessingService.getHost());
         pb.environment()
                 .put(
-                        "QUARKUS_GRPC_CLIENTS_SEND_PAYMENT_RECORD_PORT",
+                        "QUARKUS_GRPC_CLIENTS_PROCESS_SEND_PAYMENT_RECORD_PORT",
                         String.valueOf(paymentsProcessingService.getMappedPort(8445)));
         pb.environment()
                 .put(
@@ -257,6 +259,55 @@ class CsvPaymentsEndToEndIT {
                 .put(
                         "QUARKUS_GRPC_CLIENTS_PROCESS_CSV_PAYMENTS_OUTPUT_FILE_PORT",
                         String.valueOf(outputCsvService.getMappedPort(8447)));
+        pb.environment()
+                .put(
+                        "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT_HOST",
+                        persistenceService.getHost());
+        pb.environment()
+                .put(
+                        "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT_PORT",
+                        String.valueOf(persistenceService.getMappedPort(8448)));
+        pb.environment()
+                .put(
+                        "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT_HOST",
+                        persistenceService.getHost());
+        pb.environment()
+                .put(
+                        "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT_PORT",
+                        String.valueOf(persistenceService.getMappedPort(8448)));
+        pb.environment()
+                .put(
+                        "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT_HOST",
+                        persistenceService.getHost());
+        pb.environment()
+                .put(
+                        "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT_PORT",
+                        String.valueOf(persistenceService.getMappedPort(8448)));
+        pb.environment()
+                .put(
+                        "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT_HOST",
+                        persistenceService.getHost());
+        pb.environment()
+                .put(
+                        "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT_PORT",
+                        String.valueOf(persistenceService.getMappedPort(8448)));
+        pb.environment()
+                .put(
+                        "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT_HOST",
+                        persistenceService.getHost());
+        pb.environment()
+                .put(
+                        "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT_PORT",
+                        String.valueOf(persistenceService.getMappedPort(8448)));
+        pb.environment()
+                .put(
+                        "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT_HOST",
+                        persistenceService.getHost());
+        pb.environment()
+                .put(
+                        "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT_PORT",
+                        String.valueOf(persistenceService.getMappedPort(8448)));
+
 
         pb.inheritIO();
         Process p = pb.start();

@@ -30,11 +30,6 @@ import org.jboss.logging.Logger;
 import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
 import org.pipelineframework.csv.common.domain.SendPaymentRequest;
-import org.pipelineframework.csv.common.dto.AckPaymentSentDto;
-import org.pipelineframework.csv.common.dto.PaymentStatusDto;
-import org.pipelineframework.csv.common.mapper.AckPaymentSentMapper;
-import org.pipelineframework.csv.common.mapper.PaymentRecordMapper;
-import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
 
 @SuppressWarnings("UnstableApiUsage")
 @ApplicationScoped
@@ -44,9 +39,6 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
 
   private final RateLimiter rateLimiter;
   private final long timeoutMillis;
-  private final AckPaymentSentMapper ackPaymentSentMapper = AckPaymentSentMapper.INSTANCE;
-  private final PaymentRecordMapper paymentRecordMapper = PaymentRecordMapper.INSTANCE;
-  private final PaymentStatusMapper paymentStatusMapper = PaymentStatusMapper.INSTANCE;
 
   @Inject
   public PaymentProviderServiceMock(PaymentProviderConfig config) {
@@ -78,15 +70,13 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
     
     LOG.debug("Rate limiter permit acquired successfully");
 
-    return ackPaymentSentMapper.fromDto(
-        AckPaymentSentDto.builder()
-            .id(UUID.randomUUID())
-            .status(1000L)
-            .message("OK but this is only a test")
-            .conversationId(UUID.randomUUID())
-            .paymentRecordId(requestMap.getPaymentRecordId())
-            .paymentRecord(paymentRecordMapper.toDto(requestMap.getPaymentRecord()))
-            .build());
+    AckPaymentSent ackPaymentSent = new AckPaymentSent(UUID.randomUUID());
+    ackPaymentSent.setStatus(1000L);
+    ackPaymentSent.setMessage("OK but this is only a test");
+    ackPaymentSent.setConversationId(UUID.randomUUID());
+    ackPaymentSent.setPaymentRecordId(requestMap.getPaymentRecordId());
+    ackPaymentSent.setPaymentRecord(requestMap.getPaymentRecord());
+    return ackPaymentSent;
   }
 
   @Override
@@ -107,15 +97,14 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
     
     LOG.debug("Rate limiter permit acquired successfully");
 
-    return paymentStatusMapper.fromDto(
-        PaymentStatusDto.builder()
-            .id(UUID.randomUUID())
-            .reference("101")
-            .status("Complete")
-            .fee(new BigDecimal("1.01"))
-            .message("Mock response")
-            .ackPaymentSent(ackPaymentSentMapper.toDto(ackPaymentSent))
-            .ackPaymentSentId(ackPaymentSent.getId())
-            .build());
+    PaymentStatus paymentStatus = new PaymentStatus();
+    paymentStatus.setId(UUID.randomUUID());
+    paymentStatus.setReference("101");
+    paymentStatus.setStatus("Complete");
+    paymentStatus.setFee(new BigDecimal("1.01"));
+    paymentStatus.setMessage("Mock response");
+    paymentStatus.setAckPaymentSent(ackPaymentSent);
+    paymentStatus.setAckPaymentSentId(ackPaymentSent.getId());
+    return paymentStatus;
   }
 }
