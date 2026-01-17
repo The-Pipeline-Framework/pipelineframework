@@ -20,7 +20,16 @@ package org.pipelineframework.config;
  * Pipeline-level parallelism policy for per-item step execution.
  */
 public enum ParallelismPolicy {
+    /**
+     * Always run steps sequentially.
+     */
     SEQUENTIAL,
+    /**
+     * Automatically decide parallelism based on step shape and ordering hints.
+     */
     AUTO,
+    /**
+     * Always run per-item steps in parallel (subject to thread-safety checks).
+     */
     PARALLEL
 }

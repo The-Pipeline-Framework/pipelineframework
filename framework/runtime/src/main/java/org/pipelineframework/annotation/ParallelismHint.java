@@ -30,7 +30,17 @@ import org.pipelineframework.parallelism.ThreadSafety;
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface ParallelismHint {
+    /**
+     * Declares the ordering requirement for this plugin or step.
+     *
+     * @return ordering requirement
+     */
     OrderingRequirement ordering() default OrderingRequirement.RELAXED;
 
+    /**
+     * Declares whether this plugin or step is safe to invoke concurrently.
+     *
+     * @return thread safety declaration
+     */
     ThreadSafety threadSafety() default ThreadSafety.SAFE;
 }

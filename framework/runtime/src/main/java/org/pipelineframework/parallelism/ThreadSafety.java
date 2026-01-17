@@ -20,6 +20,12 @@ package org.pipelineframework.parallelism;
  * Declares whether a step implementation is safe to invoke concurrently.
  */
 public enum ThreadSafety {
+    /**
+     * Safe to invoke concurrently.
+     */
     SAFE,
+    /**
+     * Not safe to invoke concurrently.
+     */
     UNSAFE
 }
