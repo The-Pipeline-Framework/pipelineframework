@@ -16,8 +16,11 @@
 
 package {{basePackage}}.persistence;
 
+import jakarta.enterprise.context.ApplicationScoped;
+
 import org.pipelineframework.annotation.PipelinePlugin;
 
+@ApplicationScoped
 @PipelinePlugin("persistence")
 public final class PersistencePluginHost {
     private PersistencePluginHost() {

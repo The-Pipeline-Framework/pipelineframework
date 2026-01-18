@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-
     <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.pipelineframework</groupId>
+        <artifactId>pipeline-framework-root</artifactId>
+        <version>0.9.2-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
     <groupId>{{basePackage}}</groupId>
     <artifactId>{{artifactId}}</artifactId>
     <!-- version is not needed as it is automatically inherited from the parent-->
@@ -27,19 +34,20 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <enablePreview>true</enablePreview>
-        <quarkus.platform.version>3.29.4</quarkus.platform.version>
+        <quarkus.platform.version>3.30.5</quarkus.platform.version>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <protobuf.version>4.28.2</protobuf.version>
         <grpc.version>1.63.0</grpc.version>
         <version.jandex>3.5.0</version.jandex>
         <mockito.version>5.21.0</mockito.version>
-        <version.pipeline>0.9.2</version.pipeline>
+        <version.pipeline>0.9.2-SNAPSHOT</version.pipeline>
         <spotless.plugin.version>2.44.0</spotless.plugin.version>
         <google-java-format.version>1.25.0</google-java-format.version>
         <surefireArgLine />
         <pipeline.generatedSourcesArg />
         <protobuf.descriptor.fileArg />
+        <pipeline.parallelism>PARALLEL</pipeline.parallelism>
         <!-- Default: don't build containers unless specifically enabled -->
         <quarkus.container-image.build>false</quarkus.container-image.build>
         <quarkus.container-image.registry>localhost</quarkus.container-image.registry>
@@ -67,17 +75,68 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-            <!-- Pipeline Framework Runtime Module -->
-            <dependency>
-                <groupId>org.pipelineframework</groupId>
-                <artifactId>pipelineframework</artifactId>
-                <version>${version.pipeline}</version>
-            </dependency>
         </dependencies>
     </dependencyManagement>
 
     <build>
+        <resources>
+            <resource>
+                <directory>${project.basedir}/src/main/resources</directory>
+            </resource>
+            <resource>
+                <directory>${project.parent.basedir}/target/dev-certs/${project.artifactId}</directory>
+                <filtering>false</filtering>
+            </resource>
+        </resources>
         <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>generate-dev-certs</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>bash</executable>
+                            <arguments>
+                                <argument>${project.basedir}/generate-dev-certs.sh</argument>
+                            </arguments>
+                        </configuration>
+                        <inherited>false</inherited>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-dev-certs</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.parent.basedir}/target/dev-certs/${project.artifactId}</directory>
+                                    <includes>
+                                        <include>server-keystore.jks</include>
+                                        <include>client-truststore.jks</include>
+                                    </includes>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
@@ -321,6 +380,28 @@
                             <goals>
                                 <goal>jandex</goal>
                             </goals>
+                        </execution>
+                        <execution>
+                            <id>make-index-orchestrator-client</id>
+                            <goals>
+                                <goal>jandex</goal>
+                            </goals>
+                            <configuration>
+                                <classesDir>${project.build.directory}/classes-pipeline/orchestrator-client</classesDir>
+                                <indexDir>${project.build.directory}/classes-pipeline/orchestrator-client/META-INF</indexDir>
+                                <processDefaultFileSet>true</processDefaultFileSet>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>make-index-plugin-client</id>
+                            <goals>
+                                <goal>jandex</goal>
+                            </goals>
+                            <configuration>
+                                <classesDir>${project.build.directory}/classes-pipeline/plugin-client</classesDir>
+                                <indexDir>${project.build.directory}/classes-pipeline/plugin-client/META-INF</indexDir>
+                                <processDefaultFileSet>true</processDefaultFileSet>
+                            </configuration>
                         </execution>
                     </executions>
                 </plugin>

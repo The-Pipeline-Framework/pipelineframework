@@ -14,15 +14,19 @@
 # limitations under the License.
 #
 
-quarkus.http.test-port=0
+# Pipeline framework
+quarkus.log.category."org.pipelineframework".level=DEBUG
 
-# Disable OTEL during tests
-quarkus.otel.enabled=false
-quarkus.otel.traces.enabled=false
-quarkus.otel.metrics.enabled=false
-quarkus.otel.logs.enabled=false
-quarkus.otel.sdk.disabled=true
-quarkus.observability.lgtm.enabled=false
+# Enable trace logging for gRPC
+#quarkus.log.category."io.grpc".level=DEBUG
+#quarkus.log.category."io.quarkus.grpc".level=DEBUG
+#quarkus.log.category."io.vertx.grpc".level=DEBUG
+#quarkus.log.category."io.mutiny".level=DEBUG
 
-# Micrometer configuration
-quarkus.micrometer.export.prometheus.enabled=false
+quarkus.log.console.format=%d{HH:mm:ss} %-5p [%c] (%t) %s%e%n
+
+#quarkus.otel.metrics.enabled=true
+#quarkus.otel.metric.export.interval=5
+
+# Suppress unnecessary information
+quarkus.log.category."io.quarkus.opentelemetry.runtime.QuarkusContextStorage".level=WARN

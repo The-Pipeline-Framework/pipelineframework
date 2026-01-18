@@ -15,8 +15,16 @@
 #
 
 # Enable debug logging for pipeline framework
-quarkus.log.category."{{basePackage}}.orchestrator.service".level=DEBUG
+#quarkus.log.category."io.quarkus.arc".level=DEBUG
 quarkus.log.category."org.pipelineframework".level=DEBUG
+
+# Enable trace logging for gRPC
+#quarkus.log.category."io.grpc".level=DEBUG
+#quarkus.log.category."io.quarkus.grpc".level=DEBUG
+
+# Enable trace logging for Mutiny and Vert.x
+#quarkus.log.category."io.vertx".level=DEBUG
+#quarkus.log.category."io.mutiny".level=DEBUG
 
 # Pipeline configuration for development
 pipeline.defaults.retry-limit=5
@@ -28,3 +36,5 @@ quarkus.otel.enabled=false
 quarkus.otel.traces.enabled=false
 quarkus.otel.metrics.enabled=false
 quarkus.otel.logs.enabled=false
+
+quarkus.observability.lgtm.enabled=false

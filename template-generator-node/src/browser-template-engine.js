@@ -189,7 +189,8 @@ class BrowserTemplateEngine {
         }
         const aspectConfig = aspects || {};
         const includePersistenceModule = this.isAspectEnabled(aspectConfig, 'persistence');
-        const includeCacheInvalidationModule = this.isAspectEnabled(aspectConfig, 'cache-invalidate')
+        const includeCacheInvalidationModule = this.isAspectEnabled(aspectConfig, 'cache')
+            || this.isAspectEnabled(aspectConfig, 'cache-invalidate')
             || this.isAspectEnabled(aspectConfig, 'cache-invalidate-all');
         // For sequential pipeline, update input types of steps after the first one
         // to match the output type of the previous step
@@ -330,6 +331,9 @@ class BrowserTemplateEngine {
 
         const hostAllContent = this.render('cache-invalidation-all-plugin-host', { basePackage });
         await fileCallback(`cache-invalidation-svc/src/main/java/${packagePath}/CacheInvalidationAllPluginHost.java`, hostAllContent);
+
+        const cacheHostContent = this.render('cache-plugin-host', { basePackage });
+        await fileCallback(`cache-invalidation-svc/src/main/java/${packagePath}/CachePluginHost.java`, cacheHostContent);
     }
 
     async generateCommonPom(appName, basePackage, fileCallback) {

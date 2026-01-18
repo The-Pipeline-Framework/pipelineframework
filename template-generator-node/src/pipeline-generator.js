@@ -69,8 +69,7 @@ class PipelineGenerator {
                         { name: 'processedAt', type: 'String', protoType: 'string' }
                     ],
                     batchSize: 10,
-                    batchTimeoutMs: 1000,
-                    parallel: false
+                    batchTimeoutMs: 1000
                 },
                 {
                     name: 'Validate Order',
@@ -88,8 +87,7 @@ class PipelineGenerator {
                         { name: 'message', type: 'String', protoType: 'string' }
                     ],
                     batchSize: 10,
-                    batchTimeoutMs: 1000,
-                    parallel: false
+                    batchTimeoutMs: 1000
                 }
             ]
         };
@@ -139,7 +137,9 @@ class PipelineGenerator {
     }
 
     async copyConfig(configPath, outputPath) {
-        const targetPath = path.join(outputPath, 'pipeline-config.yaml');
+        const targetDir = path.join(outputPath, 'config');
+        await fs.ensureDir(targetDir);
+        const targetPath = path.join(targetDir, 'pipeline.yaml');
         await fs.copy(configPath, targetPath);
     }
 
@@ -202,10 +202,6 @@ class PipelineGenerator {
                 processedStep.batchTimeoutMs = 1000; // default from schema
             }
             
-            if (processedStep.parallel === undefined) {
-                processedStep.parallel = false; // default from schema
-            }
-            
             return processedStep;
         });
     }
@@ -222,8 +218,8 @@ class PipelineGenerator {
 
         const namePattern = /^[a-z][a-z0-9-]*$/;
         const moduleOverrides = {
-            'cache-invalidate': 'cache-invalidation',
-            'cache-invalidate-all': 'cache-invalidation'
+            'cache-invalidate': ['cache-invalidation', 'cache'],
+            'cache-invalidate-all': ['cache-invalidation', 'cache']
         };
         for (const [aspectName, aspectConfig] of Object.entries(aspects)) {
             if (!namePattern.test(aspectName) || aspectName.endsWith('-svc')) {
@@ -239,7 +235,13 @@ class PipelineGenerator {
                 const parts = String(pluginImpl).split('.');
                 const packageSegment = parts.length > 1 ? parts[parts.length - 2] : null;
                 const override = moduleOverrides[aspectName];
-                if (packageSegment && packageSegment !== aspectName && packageSegment !== override) {
+                const allowedSegments = new Set([aspectName]);
+                if (Array.isArray(override)) {
+                    override.forEach(value => allowedSegments.add(value));
+                } else if (override) {
+                    allowedSegments.add(override);
+                }
+                if (packageSegment && !allowedSegments.has(packageSegment)) {
                     throw new Error(
                         `Aspect '${aspectName}' must align with the plugin module base name. ` +
                         `The implementation class '${pluginImpl}' suggests '${packageSegment}', so ` +

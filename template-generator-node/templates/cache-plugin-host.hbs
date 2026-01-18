@@ -14,14 +14,15 @@
  * limitations under the License.
  */
 
-package {{basePackage}}.orchestrator.service;
+package {{basePackage}}.cache;
 
-import org.pipelineframework.annotation.PipelineOrchestrator;
+import jakarta.enterprise.context.ApplicationScoped;
 
-@PipelineOrchestrator(
-        generateCli = false
-)
-public final class OrchestratorHost {
-    private OrchestratorHost() {
+import org.pipelineframework.annotation.PipelinePlugin;
+
+@ApplicationScoped
+@PipelinePlugin("cache")
+public final class CachePluginHost {
+    private CachePluginHost() {
     }
 }

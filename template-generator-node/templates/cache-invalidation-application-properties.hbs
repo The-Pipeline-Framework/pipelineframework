@@ -15,10 +15,9 @@
 #
 
 # Vert.x configuration
+quarkus.http.port={{add 8443 portOffset}}
 quarkus.http.ssl-port={{add 8443 portOffset}}
-# REST alternative:
-# quarkus.http.port={{add 8443 portOffset}}
-# quarkus.http.enable-compression=true
+quarkus.http.enable-compression=true
 
 # HTTP/2 REST and gRPC endpoint using SSL with a self-signed cert
 quarkus.grpc.server.use-separate-server=false
@@ -27,15 +26,20 @@ quarkus.http.ssl.certificate.key-store-file=${SERVER_KEYSTORE_PATH:../target/dev
 quarkus.http.ssl.certificate.key-store-password=secret
 quarkus.http.insecure-requests=disabled
 
-# Micrometer configuration
-quarkus.micrometer.export.prometheus.enabled=true
-quarkus.micrometer.export.prometheus.path=/q/metrics
-quarkus.micrometer.binder.http-server.enabled=true
-quarkus.micrometer.binder.http-client.enabled=true
-
 # Docker image
 quarkus.container-image.builder=jib
 quarkus.container-image.registry=localhost
-quarkus.container-image.group={{rootProjectName}}
+quarkus.container-image.group={{basePackageSuffix}}
 quarkus.container-image.name={{serviceName}}
 quarkus.container-image.tag=latest
+
+
+# Cache provider configuration
+pipeline.cache.provider=redis
+%prod.quarkus.redis.hosts=${REDIS_HOSTS:redis://localhost:6379}
+%dev.quarkus.redis.devservices.enabled=true
+%test.quarkus.redis.devservices.enabled=true
+
+# Index the cache plugin for config/annotation scanning
+quarkus.index-dependency."cache-plugin".group-id=org.pipelineframework
+quarkus.index-dependency."cache-plugin".artifact-id=cache-plugin
