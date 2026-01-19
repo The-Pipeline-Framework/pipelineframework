@@ -50,56 +50,6 @@ public class HealthCheckService {
     public HealthCheckService() {
     }
 
-	/**
-	 * Creates an SSLContext that accepts all certificates (insecure).
-	 * <p>
-	 * If building the permissive context fails, returns the platform default SSLContext.
-	 *
-	 * @return an SSLContext that does not validate peer certificates, or the default SSLContext if creation of an insecure context and retrieval of the default SSLContext fail
-	 * @throws RuntimeException if both creation of the insecure context and retrieval of the default SSLContext fail
-	 */
-    private javax.net.ssl.SSLContext createInsecureSslContext() {
-        try {
-            javax.net.ssl.SSLContext sslContext = javax.net.ssl.SSLContext.getInstance("TLS");
-            javax.net.ssl.TrustManager[] trustAllCerts = new javax.net.ssl.TrustManager[] {
-                    new javax.net.ssl.X509TrustManager() {
-                        /**
-                         * List the certificate issuer authorities trusted by this trust manager.
-                         *
-                         * @return an array of trusted CA issuer certificates, or `null` if no specific issuers are defined
-                         */
-                        public java.security.cert.X509Certificate[] getAcceptedIssuers() {
-                            return null;
-                        }
-                        /**
- * Accepts any client certificate chain without performing validation.
- *
- * @param certs the client certificate chain presented during the TLS handshake; may be null or empty
- * @param authType the key exchange algorithm used for authentication (for example "RSA"); ignored
- */
-public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) { }
-                        /**
- * Accepts any X.509 certificate chain without performing validation.
- *
- * @param certs the certificate chain presented by the peer, may be null or empty
- * @param authType the authentication type based on the certificate, typically a key exchange algorithm (e.g. "RSA")
- */
-public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) { }
-                    }
-            };
-            sslContext.init(null, trustAllCerts, new java.security.SecureRandom());
-            return sslContext;
-        } catch (Exception e) {
-            LOG.warn("Failed to create insecure SSL context, proceeding with default", e);
-            try {
-	            return javax.net.ssl.SSLContext.getDefault();
-            } catch (Exception ex) {
-                LOG.error("Failed to get default SSL context", ex);
-                throw new RuntimeException(ex);
-            }
-        }
-    }
-
     /**
      * Creates an SSL context based on the gRPC client's truststore configuration.
      *
@@ -338,20 +288,12 @@ public void checkServerTrusted(java.security.cert.X509Certificate[] certs, Strin
                     .getOptionalValue("quarkus.grpc.clients." + grpcClientName + ".health-path", String.class)
                     .orElse("/q/health");
 
-            // Use a custom SSL context based on service configuration
-            boolean allowInsecureSSL = ConfigProvider.getConfig()
-                    .getOptionalValue("quarkus.grpc.clients." + grpcClientName + ".allow-insecure-ssl", Boolean.class)
-                    .orElse(
-                            ConfigProvider.getConfig()
-                                    .getOptionalValue("quarkus.grpc.clients.allow-insecure-ssl", Boolean.class)
-                                    .orElse(false));
-
             // Construct the health check URL
             String protocol = useTls ? "https" : "http";
             String healthUrl = String.format("%s://%s:%d%s", protocol, host, port, healthPath);
             String locationLabel = host + ":" + port;
             return checkHttpServiceHealth("gRPC", grpcClientName, URI.create(healthUrl), locationLabel,
-                allowInsecureSSL, () -> createSslContextForGrpcClient(grpcClientName));
+                () -> createSslContextForGrpcClient(grpcClientName));
         } catch (Exception e) {
             LOG.info("✗ Error checking health of gRPC client '" + grpcClientName + "' service. Error: " + e.getMessage());
             return false;
@@ -461,14 +403,8 @@ public void checkServerTrusted(java.security.cert.X509Certificate[] certs, Strin
             combinedPath));
         LOG.info("Checking REST client '" + restClient.configKey() + "' at " + healthUri);
 
-        boolean allowInsecureSSL = ConfigProvider.getConfig()
-            .getOptionalValue("quarkus.rest-client." + restClient.configKey() + ".allow-insecure-ssl", Boolean.class)
-            .orElse(
-                ConfigProvider.getConfig()
-                    .getOptionalValue("quarkus.rest-client.allow-insecure-ssl", Boolean.class)
-                    .orElse(false));
         return checkHttpServiceHealth("REST", restClient.configKey(), healthUri, healthUri.toString(),
-            allowInsecureSSL, this::createSslContextFromGlobalTrustStore);
+            this::createSslContextFromGlobalTrustStore);
     }
 
     private boolean checkHttpServiceHealth(
@@ -476,7 +412,6 @@ public void checkServerTrusted(java.security.cert.X509Certificate[] certs, Strin
         String clientName,
         URI healthUri,
         String locationLabel,
-        boolean allowInsecureSSL,
         Supplier<javax.net.ssl.SSLContext> sslContextSupplier
     ) {
         boolean useTls = "https".equalsIgnoreCase(healthUri.getScheme());
@@ -486,11 +421,7 @@ public void checkServerTrusted(java.security.cert.X509Certificate[] certs, Strin
 
         if (useTls) {
             javax.net.ssl.SSLContext sslContext;
-            if (allowInsecureSSL) {
-                LOG.warn("Using insecure SSL context with disabled certificate validation for " + clientType +
-                    " client '" + clientName + "'. This setting MUST NOT be enabled in production!");
-                sslContext = createInsecureSslContext();
-            } else if (sslContextSupplier != null) {
+            if (sslContextSupplier != null) {
                 sslContext = sslContextSupplier.get();
             } else {
                 try {
