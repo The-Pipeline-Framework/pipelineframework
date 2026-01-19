@@ -45,7 +45,7 @@ The Pipeline Framework uses a centralized version management system to ensure co
 
 In the root POM (`pom.xml`):
 ```xml
-<version>0.9.2-SNAPSHOT</version>
+<version>26.1-SNAPSHOT</version>
 ```
 
 All child modules inherit this version through the parent relationship and omit their own `<version>` element entirely.
