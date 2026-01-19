@@ -16,19 +16,21 @@
 
 package org.pipelineframework.csv.common.mapper;
 
-import static org.junit.jupiter.api.Assertions.*;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.util.Currency;
 import java.util.UUID;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.dto.AckPaymentSentDto;
-import org.pipelineframework.csv.grpc.PaymentsProcessingSvc;
+import org.pipelineframework.csv.common.dto.PaymentRecordDto;
+import org.pipelineframework.csv.grpc.ProcessSendPaymentRecordSvc;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class AckPaymentSentMapperTest {
 
@@ -93,6 +95,7 @@ class AckPaymentSentMapperTest {
         domain.setPaymentRecordId(UUID.randomUUID());
 
         PaymentRecord paymentRecord = createTestPaymentRecord();
+        PaymentRecordDto paymentRecordDto = paymentRecordMapper.toDto(paymentRecord);
         domain.setPaymentRecord(paymentRecord);
 
         // When
@@ -105,13 +108,15 @@ class AckPaymentSentMapperTest {
         assertEquals(domain.getStatus(), dto.getStatus());
         assertEquals(domain.getMessage(), dto.getMessage());
         assertEquals(domain.getPaymentRecordId(), dto.getPaymentRecordId());
-        assertEquals(domain.getPaymentRecord(), dto.getPaymentRecord());
+        PaymentRecordDto expectedPaymentRecord = paymentRecordMapper.toDto(paymentRecord);
+        assertEquals(expectedPaymentRecord, dto.getPaymentRecord());
     }
 
     @Test
     void testDtoToDomain() {
         // Given
         PaymentRecord paymentRecord = createTestPaymentRecord();
+        PaymentRecordDto paymentRecordDto = paymentRecordMapper.toDto(paymentRecord);
 
         AckPaymentSentDto dto =
                 AckPaymentSentDto.builder()
@@ -120,7 +125,7 @@ class AckPaymentSentMapperTest {
                         .status(200L)
                         .message("Success")
                         .paymentRecordId(UUID.randomUUID())
-                        .paymentRecord(paymentRecord)
+                        .paymentRecord(paymentRecordDto)
                         .build();
 
         // When
@@ -133,13 +138,15 @@ class AckPaymentSentMapperTest {
         assertEquals(dto.getStatus(), domain.getStatus());
         assertEquals(dto.getMessage(), domain.getMessage());
         assertEquals(dto.getPaymentRecordId(), domain.getPaymentRecordId());
-        assertEquals(dto.getPaymentRecord(), domain.getPaymentRecord());
+        PaymentRecordDto expectedPaymentRecord = paymentRecordMapper.toDto(domain.getPaymentRecord());
+        assertEquals(dto.getPaymentRecord(), expectedPaymentRecord);
     }
 
     @Test
     void testDtoToGrpc() {
         // Given
         PaymentRecord paymentRecord = createTestPaymentRecord();
+        PaymentRecordDto paymentRecordDto = paymentRecordMapper.toDto(paymentRecord);
 
         AckPaymentSentDto dto =
                 AckPaymentSentDto.builder()
@@ -148,11 +155,11 @@ class AckPaymentSentMapperTest {
                         .status(200L)
                         .message("Success")
                         .paymentRecordId(UUID.randomUUID())
-                        .paymentRecord(paymentRecord)
+                        .paymentRecord(paymentRecordDto)
                         .build();
 
         // When
-        PaymentsProcessingSvc.AckPaymentSent grpc = mapper.toGrpc(dto);
+        ProcessSendPaymentRecordSvc.AckPaymentSent grpc = mapper.toGrpc(dto);
 
         // Then
         assertNotNull(grpc);
@@ -170,8 +177,8 @@ class AckPaymentSentMapperTest {
         UUID conversationId = UUID.randomUUID();
         UUID paymentRecordId = UUID.randomUUID();
 
-        PaymentsProcessingSvc.AckPaymentSent grpc =
-                PaymentsProcessingSvc.AckPaymentSent.newBuilder()
+        ProcessSendPaymentRecordSvc.AckPaymentSent grpc =
+                ProcessSendPaymentRecordSvc.AckPaymentSent.newBuilder()
                         .setId(id.toString())
                         .setConversationId(conversationId.toString())
                         .setStatus(200L)
@@ -202,10 +209,11 @@ class AckPaymentSentMapperTest {
         domain.setPaymentRecordId(UUID.randomUUID());
 
         PaymentRecord paymentRecord = createTestPaymentRecord();
+        PaymentRecordDto paymentRecordDto = paymentRecordMapper.toDto(paymentRecord);
         domain.setPaymentRecord(paymentRecord);
 
         // When
-        PaymentsProcessingSvc.AckPaymentSent grpc = mapper.toDtoToGrpc(domain);
+        ProcessSendPaymentRecordSvc.AckPaymentSent grpc = mapper.toDtoToGrpc(domain);
 
         // Then
         assertNotNull(grpc);
@@ -223,8 +231,8 @@ class AckPaymentSentMapperTest {
         UUID conversationId = UUID.randomUUID();
         UUID paymentRecordId = UUID.randomUUID();
 
-        PaymentsProcessingSvc.AckPaymentSent grpc =
-                PaymentsProcessingSvc.AckPaymentSent.newBuilder()
+        ProcessSendPaymentRecordSvc.AckPaymentSent grpc =
+                ProcessSendPaymentRecordSvc.AckPaymentSent.newBuilder()
                         .setId(id.toString())
                         .setConversationId(conversationId.toString())
                         .setStatus(200L)
@@ -253,13 +261,14 @@ class AckPaymentSentMapperTest {
         UUID paymentId = UUID.randomUUID();
 
         PaymentRecord paymentRecord = createTestPaymentRecord();
+        PaymentRecordDto paymentRecordDto = paymentRecordMapper.toDto(paymentRecord);
 
         AckPaymentSentDto dto =
                 AckPaymentSentDto.builder()
                         .id(id)
                         .conversationId(convId)
                         .paymentRecordId(paymentId)
-                        .paymentRecord(paymentRecord)
+                        .paymentRecord(paymentRecordDto)
                         .message("Test message")
                         .status(200L)
                         .build();

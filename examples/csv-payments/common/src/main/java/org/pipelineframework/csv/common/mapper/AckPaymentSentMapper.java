@@ -22,20 +22,21 @@ import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.dto.AckPaymentSentDto;
-import org.pipelineframework.csv.grpc.PaymentsProcessingSvc;
+import org.pipelineframework.csv.grpc.ProcessSendPaymentRecordSvc;
 
 @SuppressWarnings("unused")
 @Mapper(
     componentModel = "jakarta",
     uses = {CommonConverters.class, PaymentRecordMapper.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface AckPaymentSentMapper extends org.pipelineframework.mapper.Mapper<PaymentsProcessingSvc.AckPaymentSent, AckPaymentSentDto, AckPaymentSent> {
+public interface AckPaymentSentMapper extends org.pipelineframework.mapper.Mapper<ProcessSendPaymentRecordSvc.AckPaymentSent, AckPaymentSentDto, AckPaymentSent> {
 
   AckPaymentSentMapper INSTANCE = Mappers.getMapper( AckPaymentSentMapper.class );
 
   // Domain ↔ DTO
   @Override
   @Mapping(target = "id")
+  @Mapping(target = "conversationId")
   @Mapping(target = "paymentRecordId")
   @Mapping(target = "status")
   @Mapping(target = "message")
@@ -44,6 +45,7 @@ public interface AckPaymentSentMapper extends org.pipelineframework.mapper.Mappe
 
   @Override
   @Mapping(target = "id")
+  @Mapping(target = "conversationId")
   @Mapping(target = "paymentRecordId")
   @Mapping(target = "status")
   @Mapping(target = "message")
@@ -53,17 +55,19 @@ public interface AckPaymentSentMapper extends org.pipelineframework.mapper.Mappe
   // DTO ↔ gRPC
   @Override
   @Mapping(target = "id", qualifiedByName = "uuidToString")
+  @Mapping(target = "conversationId", qualifiedByName = "uuidToString")
   @Mapping(target = "paymentRecordId", qualifiedByName = "uuidToString")
   @Mapping(target = "status", qualifiedByName = "longToString")
   @Mapping(target = "message")
   @Mapping(target = "paymentRecord")
-  PaymentsProcessingSvc.AckPaymentSent toGrpc(AckPaymentSentDto dto);
+  ProcessSendPaymentRecordSvc.AckPaymentSent toGrpc(AckPaymentSentDto dto);
 
   @Override
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
+  @Mapping(target = "conversationId", qualifiedByName = "stringToUUID")
   @Mapping(target = "paymentRecordId", qualifiedByName = "stringToUUID")
   @Mapping(target = "status", qualifiedByName = "stringToLong")
   @Mapping(target = "message")
   @Mapping(target = "paymentRecord")
-  AckPaymentSentDto fromGrpc(PaymentsProcessingSvc.AckPaymentSent grpc);
+  AckPaymentSentDto fromGrpc(ProcessSendPaymentRecordSvc.AckPaymentSent grpc);
 }

@@ -71,7 +71,7 @@ public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, Dead
                         this.getClass().getSimpleName(), resultValue);
                 }
             })
-            .onFailure(t -> !(t instanceof NullPointerException))
+            .onFailure(this::shouldRetry)
             .retry()
             .withBackOff(retryWait(), maxBackoff())
             .withJitter(jitter() ? 0.5 : 0.0)

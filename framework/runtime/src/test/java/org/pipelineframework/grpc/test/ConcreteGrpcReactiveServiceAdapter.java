@@ -26,12 +26,11 @@ import org.pipelineframework.service.ReactiveService;
 public class ConcreteGrpcReactiveServiceAdapter
         extends GrpcReactiveServiceAdapter<Object, Object, TestEntity, TestResult> {
 
-    private boolean autoPersist = false;
-
-    public void setAutoPersistence(boolean autoPersist) {
-        this.autoPersist = autoPersist;
-    }
-
+    /**
+     * Provides the ReactiveService implementation used by this adapter for testing.
+     *
+     * @return the ReactiveService handling TestEntity to TestResult operations
+     */
     @Override
     protected ReactiveService<TestEntity, TestResult> getService() {
         return new org.pipelineframework.service.TestReactiveService();
@@ -43,11 +42,10 @@ public class ConcreteGrpcReactiveServiceAdapter
     }
 
     /**
-     * Convert a domain TestResult into its gRPC representation.
+     * Converts a domain TestResult into its gRPC representation.
      *
-     * @param domainOut the domain-level result to convert
-     * @return an Object representing the gRPC response; in this test implementation a newly created
-     *         generic Object
+     * @param domainOut the domain result to convert
+     * @return an Object representing the gRPC response; in this test implementation a new generic Object
      */
     @Override
     protected Object toGrpc(TestResult domainOut) {
@@ -55,16 +53,11 @@ public class ConcreteGrpcReactiveServiceAdapter
     }
 
     /**
-     * Indicates whether automatic persistence is enabled for this adapter.
+     * Convert a gRPC-format input object into a TestEntity.
      *
-     * @return `true` if auto-persistence is enabled, `false` otherwise.
+     * @param grpcIn the gRPC-format input object to convert
+     * @return the resulting TestEntity
      */
-    @Override
-    protected boolean isAutoPersistenceEnabled() {
-        return autoPersist;
-    }
-
-    // Public methods for testing
     public TestEntity testFromGrpc(Object grpcIn) {
         return fromGrpc(grpcIn);
     }

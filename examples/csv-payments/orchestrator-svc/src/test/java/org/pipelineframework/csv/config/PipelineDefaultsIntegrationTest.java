@@ -16,14 +16,15 @@
 
 package org.pipelineframework.csv.config;
 
-import static org.junit.jupiter.api.Assertions.*;
+import jakarta.inject.Inject;
 
 import io.quarkus.test.junit.QuarkusTest;
-import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.config.PipelineStepConfig;
 import org.pipelineframework.config.StepConfig;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @QuarkusTest
 class PipelineDefaultsIntegrationTest {
@@ -41,7 +42,6 @@ class PipelineDefaultsIntegrationTest {
         // Verify inheritance between newStepConfig and defaults
         assertEquals(defaults.retryLimit(), newStepConfig.retryLimit());
         assertEquals(defaults.retryWait(), newStepConfig.retryWait());
-        assertEquals(defaults.parallel(), newStepConfig.parallel());
         assertEquals(defaults.recoverOnFailure(), newStepConfig.recoverOnFailure());
         assertEquals(defaults.maxBackoff(), newStepConfig.maxBackoff());
         assertEquals(defaults.jitter(), newStepConfig.jitter());

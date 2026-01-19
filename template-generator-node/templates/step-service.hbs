@@ -2,7 +2,6 @@ package {{basePackage}}.{{serviceNameForPackage}}.service;
 
 import {{basePackage}}.common.domain.{{inputTypeName}};
 import {{basePackage}}.common.domain.{{outputTypeName}};
-import {{basePackage}}.grpc.{{grpcStubName}};
 import org.pipelineframework.grpc.{{grpcAdapter}};
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.service.{{reactiveServiceInterface}};
@@ -14,21 +13,13 @@ import lombok.Getter;
 import org.jboss.logging.Logger;
 
 @PipelineStep(
-    order = {{order}},
     inputType = {{basePackage}}.common.domain.{{inputTypeName}}.class,
     outputType = {{basePackage}}.common.domain.{{outputTypeName}}.class,
-    inputGrpcType = {{basePackage}}.grpc.{{inputGrpcProtoClassName}}.{{inputTypeName}}.class,
-    outputGrpcType = {{basePackage}}.grpc.{{protoClassName}}.{{outputTypeName}}.class,
     stepType = org.pipelineframework.step.{{stepType}}.class,
     backendType = org.pipelineframework.grpc.{{grpcAdapter}}.class,
-    grpcStub = {{basePackage}}.grpc.{{grpcStubName}}.class,
-    grpcImpl = {{basePackage}}.grpc.{{grpcImplName}}.class,
     inboundMapper = {{basePackage}}.common.mapper.{{inputTypeName}}Mapper.class,
     outboundMapper = {{basePackage}}.common.mapper.{{outputTypeName}}Mapper.class,
-    grpcClient = "{{serviceName}}",
-    autoPersist = true,
-    runOnVirtualThreads = false,
-    debug = true
+    runOnVirtualThreads = false
 )
 @ApplicationScoped
 @Getter

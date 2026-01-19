@@ -19,8 +19,9 @@ package org.pipelineframework.csv.service;
 import java.math.BigDecimal;
 import java.util.Currency;
 import java.util.UUID;
-import org.pipelineframework.csv.common.domain.PaymentStatus;
+
 import org.pipelineframework.csv.common.dto.PaymentOutputDto;
+import org.pipelineframework.csv.common.dto.PaymentStatusDto;
 
 public class PaymentOutputTestBuilder {
 
@@ -29,7 +30,7 @@ public class PaymentOutputTestBuilder {
     private BigDecimal amount = new BigDecimal("100.00");
     private Currency currency = Currency.getInstance("USD");
     private UUID conversationId = UUID.fromString("abacd5c7-2230-4a24-a665-32a542468ea5");
-    private PaymentStatus paymentStatus;
+    private PaymentStatusDto paymentStatus;
 
     public static PaymentOutputTestBuilder aPaymentOutput() {
         return new PaymentOutputTestBuilder();
@@ -60,7 +61,7 @@ public class PaymentOutputTestBuilder {
         return this;
     }
 
-    public PaymentOutputTestBuilder withPaymentStatus(PaymentStatus paymentStatus) {
+    public PaymentOutputTestBuilder withPaymentStatus(PaymentStatusDto paymentStatus) {
         this.paymentStatus = paymentStatus;
         return this;
     }

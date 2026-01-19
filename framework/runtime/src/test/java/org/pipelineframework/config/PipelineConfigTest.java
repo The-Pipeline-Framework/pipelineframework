@@ -16,9 +16,10 @@
 
 package org.pipelineframework.config;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class PipelineConfigTest {
 
@@ -33,8 +34,6 @@ class PipelineConfigTest {
         // Then
         assertNotNull(defaults);
         assertEquals(3, defaults.retryLimit());
-
-        assertFalse(defaults.parallel());
     }
 
     @Test
@@ -43,7 +42,7 @@ class PipelineConfigTest {
         PipelineConfig pipelineConfig = new PipelineConfig();
 
         // When
-        pipelineConfig.profile("test", new StepConfig().retryLimit(5).parallel(true));
+        pipelineConfig.profile("test", new StepConfig().retryLimit(5));
         pipelineConfig.activate("test");
 
         StepConfig activeConfig = pipelineConfig.defaults();
@@ -51,20 +50,18 @@ class PipelineConfigTest {
         // Then
         assertEquals("test", pipelineConfig.activeProfile());
         assertEquals(5, activeConfig.retryLimit());
-        assertTrue(activeConfig.parallel());
     }
 
     @Test
     void testNewStepConfigInheritsDefaults() {
         // Given
         PipelineConfig pipelineConfig = new PipelineConfig();
-        pipelineConfig.defaults().retryLimit(7).parallel(true);
+        pipelineConfig.defaults().retryLimit(7);
 
         // When
         StepConfig stepConfig = pipelineConfig.newStepConfig();
 
         // Then
         assertEquals(7, stepConfig.retryLimit());
-        assertTrue(stepConfig.parallel());
     }
 }

@@ -16,10 +16,11 @@
 
 package org.pipelineframework.config;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 import java.time.Duration;
+
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class ConfigurationIntegrationTest {
 
@@ -33,7 +34,6 @@ class ConfigurationIntegrationTest {
         assertNotNull(defaults);
         assertEquals(3, defaults.retryLimit());
         assertEquals(Duration.ofMillis(2000), defaults.retryWait());
-        assertFalse(defaults.parallel());
 
         assertFalse(defaults.recoverOnFailure());
         assertEquals(Duration.ofSeconds(30), defaults.maxBackoff());
@@ -46,11 +46,10 @@ class ConfigurationIntegrationTest {
         StepConfig config = new StepConfig();
 
         // When
-        config.retryLimit(10).parallel(true);
+        config.retryLimit(10);
 
         // Then
         assertEquals(10, config.retryLimit());
-        assertTrue(config.parallel());
         // Other properties should still use defaults
         assertEquals(Duration.ofMillis(2000), config.retryWait());
         assertFalse(config.recoverOnFailure());
@@ -70,7 +69,6 @@ class ConfigurationIntegrationTest {
         // Then
         assertEquals(5, activeConfig.retryLimit());
         assertEquals(Duration.ofSeconds(1), activeConfig.retryWait());
-        assertFalse(activeConfig.parallel());
         assertFalse(activeConfig.recoverOnFailure());
         assertEquals(Duration.ofSeconds(30), activeConfig.maxBackoff());
         assertFalse(activeConfig.jitter());
@@ -80,7 +78,7 @@ class ConfigurationIntegrationTest {
     void testProfileConfiguration() {
         // Given
         PipelineConfig pipelineConfig = new PipelineConfig();
-        pipelineConfig.profile("custom", new StepConfig().retryLimit(7).parallel(true));
+        pipelineConfig.profile("custom", new StepConfig().retryLimit(7));
         pipelineConfig.activate("custom");
 
         // When
@@ -88,7 +86,6 @@ class ConfigurationIntegrationTest {
 
         // Then
         assertEquals(7, activeConfig.retryLimit()); // from profile
-        assertTrue(activeConfig.parallel()); // from profile
         assertEquals(Duration.ofMillis(2000), activeConfig.retryWait()); // default
     }
 }

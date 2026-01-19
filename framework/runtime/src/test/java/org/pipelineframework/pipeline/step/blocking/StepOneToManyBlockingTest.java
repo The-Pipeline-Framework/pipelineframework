@@ -16,15 +16,16 @@
 
 package org.pipelineframework.pipeline.step.blocking;
 
-import static org.junit.jupiter.api.Assertions.*;
+import java.time.Duration;
+import java.util.List;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.helpers.test.AssertSubscriber;
-import java.time.Duration;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.step.blocking.StepOneToManyBlocking;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class StepOneToManyBlockingTest {
 
@@ -55,18 +56,6 @@ class StepOneToManyBlockingTest {
 
         // Then
         assertEquals(List.of("test-1", "test-2", "test-3"), result);
-    }
-
-    @Test
-    void testDefaultParallel() {
-        // Given
-        TestStepBlocking step = new TestStepBlocking();
-
-        // When
-        boolean parallel = step.parallel();
-
-        // Then
-        assertFalse(parallel);
     }
 
     @Test

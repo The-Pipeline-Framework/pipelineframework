@@ -1,0 +1,7 @@
+{
+  "order": [
+    "org.pipelineframework.pipeline.order.OrderedStepA",
+    "org.pipelineframework.pipeline.order.OrderedStepB",
+    "org.pipelineframework.pipeline.order.OrderedStepA"
+  ]
+}

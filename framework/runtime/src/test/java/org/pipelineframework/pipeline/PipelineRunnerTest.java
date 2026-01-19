@@ -16,20 +16,23 @@
 
 package org.pipelineframework.pipeline;
 
-import static org.junit.jupiter.api.Assertions.*;
-
-import io.quarkus.test.junit.QuarkusTest;
-import io.smallrye.mutiny.Multi;
-import io.smallrye.mutiny.helpers.test.AssertSubscriber;
-import jakarta.inject.Inject;
 import java.time.Duration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import jakarta.inject.Inject;
+
+import io.quarkus.test.junit.QuarkusTest;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.helpers.test.AssertSubscriber;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.PipelineRunner;
+import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.config.StepConfig;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 @QuarkusTest
 class PipelineRunnerTest {
@@ -39,6 +42,11 @@ class PipelineRunnerTest {
 
     @Inject
     PipelineRunner runner;
+
+    @BeforeEach
+    void setSequentialPolicy() {
+        pipelineConfig.parallelism(ParallelismPolicy.SEQUENTIAL);
+    }
 
     @Test
     void testPipelineRunnerCreation() {
@@ -261,5 +269,28 @@ class PipelineRunnerTest {
         // Verify the configuration was applied
         assertEquals(5, step.retryLimit());
         assertEquals(Duration.ofMillis(100), step.retryWait());
+    }
+
+    @Test
+    void testPipelineOrdering() throws Exception {
+        // Create test steps in a specific order
+        TestSteps.TestStepOneToOneBlocking stepB = new TestSteps.TestStepOneToOneBlocking();
+        TestSteps.TestStepOneToMany stepA = new TestSteps.TestStepOneToMany();
+        TestSteps.TestStepManyToMany stepC = new TestSteps.TestStepManyToMany();
+
+        List<Object> originalSteps = List.of(stepB, stepA, stepC);
+
+        // Access the orderSteps method using reflection to test the internal functionality
+        java.lang.reflect.Method orderStepsMethod = PipelineRunner.class.getDeclaredMethod("orderSteps", List.class);
+        orderStepsMethod.setAccessible(true);
+
+        // When no pipeline order is configured, should return original order
+        List<Object> orderedSteps = (List<Object>) orderStepsMethod.invoke(runner, originalSteps);
+
+        // Verify the original order is preserved (no global configuration applied in this test)
+        assertEquals(originalSteps.size(), orderedSteps.size());
+
+        // Check that the same objects are present (just potentially reordered)
+        assertEquals(originalSteps, orderedSteps);
     }
 }

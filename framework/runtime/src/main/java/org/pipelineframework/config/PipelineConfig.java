@@ -16,10 +16,11 @@
 
 package org.pipelineframework.config;
 
-import static java.text.MessageFormat.format;
+import jakarta.enterprise.context.ApplicationScoped;
 
 import io.quarkus.runtime.LaunchMode;
-import jakarta.enterprise.context.ApplicationScoped;
+
+import static java.text.MessageFormat.format;
 
 /**
  * Configuration class for pipeline steps that manages different profiles and their settings.
@@ -29,6 +30,8 @@ public final class PipelineConfig {
 
     private final java.util.Map<String, StepConfig> profiles = new java.util.concurrent.ConcurrentHashMap<>();
     private final java.util.concurrent.atomic.AtomicReference<String> activeProfile = new java.util.concurrent.atomic.AtomicReference<>();
+    private volatile ParallelismPolicy parallelism = ParallelismPolicy.AUTO;
+    private volatile int maxConcurrency = 128;
 
     /**
      * Initialises the PipelineConfig with a default profile and sets the active profile
@@ -107,10 +110,49 @@ public final class PipelineConfig {
                 .retryWait(base.retryWait())
                 .backpressureBufferCapacity(base.backpressureBufferCapacity())
                 .backpressureStrategy(base.backpressureStrategy())
-                .parallel(base.parallel())
                 .recoverOnFailure(base.recoverOnFailure())
                 .maxBackoff(base.maxBackoff())
                 .jitter(base.jitter());
+    }
+
+    /**
+     * Get the pipeline-level parallelism policy.
+     *
+     * @return the configured parallelism policy
+     */
+    public ParallelismPolicy parallelism() {
+        return parallelism;
+    }
+
+    /**
+     * Set the pipeline-level parallelism policy.
+     *
+     * @param policy the policy to use
+     * @return this PipelineConfig instance for method chaining
+     */
+    public PipelineConfig parallelism(ParallelismPolicy policy) {
+        this.parallelism = policy == null ? ParallelismPolicy.AUTO : policy;
+        return this;
+    }
+
+    /**
+     * Get the maximum concurrency for parallel execution.
+     *
+     * @return maximum in-flight items
+     */
+    public int maxConcurrency() {
+        return maxConcurrency;
+    }
+
+    /**
+     * Set the maximum concurrency for parallel execution.
+     *
+     * @param maxConcurrency maximum in-flight items
+     * @return this PipelineConfig instance for method chaining
+     */
+    public PipelineConfig maxConcurrency(int maxConcurrency) {
+        this.maxConcurrency = maxConcurrency;
+        return this;
     }
 
     @Override

@@ -1,0 +1,45 @@
+#
+# Copyright (c) 2023-2025 Mariano Barcia
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Vert.x configuration
+quarkus.http.port={{add 8443 portOffset}}
+quarkus.http.ssl-port={{add 8443 portOffset}}
+quarkus.http.enable-compression=true
+
+# HTTP/2 REST and gRPC endpoint using SSL with a self-signed cert
+quarkus.grpc.server.use-separate-server=false
+quarkus.grpc.server.plain-text=false
+quarkus.http.ssl.certificate.key-store-file=${SERVER_KEYSTORE_PATH:../target/dev-certs/{{serviceName}}/server-keystore.jks}
+quarkus.http.ssl.certificate.key-store-password=secret
+quarkus.http.insecure-requests=disabled
+
+# Docker image
+quarkus.container-image.builder=jib
+quarkus.container-image.registry=localhost
+quarkus.container-image.group={{basePackageSuffix}}
+quarkus.container-image.name={{serviceName}}
+quarkus.container-image.tag=latest
+
+
+# Cache provider configuration
+pipeline.cache.provider=redis
+%prod.quarkus.redis.hosts=${REDIS_HOSTS:redis://localhost:6379}
+%dev.quarkus.redis.devservices.enabled=true
+%test.quarkus.redis.devservices.enabled=true
+
+# Index the cache plugin for config/annotation scanning
+quarkus.index-dependency."cache-plugin".group-id=org.pipelineframework
+quarkus.index-dependency."cache-plugin".artifact-id=cache-plugin

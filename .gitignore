@@ -45,6 +45,7 @@ dependency-reduced-pom.xml
 # VitePress build output and cache
 docs/.vitepress/dist/
 docs/.vitepress/cache/
+docs/node_modules/
 
 # Web UI build output
 web-ui/build/
@@ -60,6 +61,8 @@ web-ui/node_modules/.vite/
 
 # AI Agents
 QWEN.md
+GEMINI.md
+AGENTS.md
 
 # Template generator
 /template-generator-node/test-output/

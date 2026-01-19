@@ -16,15 +16,15 @@
 
 package org.pipelineframework.csv.common.dto;
 
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import java.io.Serializable;
 import java.math.BigDecimal;
 import java.util.Currency;
 import java.util.UUID;
+
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
 import lombok.Builder;
 import lombok.Value;
-import org.pipelineframework.csv.common.domain.PaymentStatus;
 
 @Value
 @Builder
@@ -41,7 +41,7 @@ public class PaymentOutputDto implements Serializable {
   Long status;
   String message;
   BigDecimal fee;
-  PaymentStatus paymentStatus;
+  PaymentStatusDto paymentStatus;
 
   // Lombok will generate the builder, but Jackson needs to know how to interpret it
   @JsonPOJOBuilder(withPrefix = "")

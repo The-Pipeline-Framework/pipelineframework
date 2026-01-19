@@ -13,6 +13,12 @@
       "description": "Base package name for the generated Java code (e.g., com.example)",
       "pattern": "^[a-z][a-z0-9_]*(\\.[a-z0-9_]+)*$"
     },
+    "transport": {
+      "type": "string",
+      "description": "Global transport for generated adapters",
+      "enum": ["GRPC", "REST"],
+      "default": "GRPC"
+    },
     "steps": {
       "type": "array",
       "description": "List of pipeline steps to generate",
@@ -26,7 +32,7 @@
           "cardinality": {
             "type": "string",
             "description": "Cardinality of the step",
-            "enum": ["ONE_TO_ONE", "EXPANSION", "REDUCTION", "SIDE_EFFECT"]
+            "enum": ["ONE_TO_ONE", "EXPANSION", "REDUCTION", "SIDE_EFFECT", "MANY_TO_MANY"]
           },
           "inputTypeName": {
             "type": "string",
@@ -52,6 +58,11 @@
                     {
                       "type": "string",
                       "pattern": "^Map<[A-Z][A-Za-z0-9]*, [A-Z][A-Za-z0-9]*>$"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)*$",
+                      "description": "Custom domain type, including types defined by other steps."
                     }
                   ]
                 },
@@ -65,6 +76,11 @@
                     {
                       "type": "string",
                       "pattern": "^map<[a-z][a-z0-9_]*, [a-z][a-z0-9_]*>$"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)*$",
+                      "description": "Custom message type, including messages defined by other steps."
                     }
                   ]
                 }
@@ -96,6 +112,11 @@
                     {
                       "type": "string",
                       "pattern": "^Map<[A-Z][A-Za-z0-9]*, [A-Z][A-Za-z0-9]*>$"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)*$",
+                      "description": "Custom domain type, including types defined by other steps."
                     }
                   ]
                 },
@@ -109,32 +130,60 @@
                     {
                       "type": "string",
                       "pattern": "^map<[a-z][a-z0-9_]*, [a-z][a-z0-9_]*>$"
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)*$",
+                      "description": "Custom message type, including messages defined by other steps."
                     }
                   ]
                 }
               },
               "required": ["name", "type", "protoType"]
             }
-          },
-          "batchSize": {
-            "type": "integer",
-            "description": "Maximum number of items to collect in a batch before processing begins (default: 10). For REDUCTION steps, set this to a value larger than the expected number of related items to ensure they are processed together.",
-            "minimum": 1,
-            "default": 10
-          },
-          "batchTimeoutMs": {
-            "type": "integer",
-            "description": "Maximum time (in milliseconds) to wait for additional items to accumulate in a batch (default: 1000ms). Even if the batch size hasn't been reached, processing will begin after this timeout expires.",
-            "minimum": 1,
-            "default": 1000
-          },
-          "parallel": {
-            "type": "boolean",
-            "description": "Whether to process items/batches concurrently (default: false)",
-            "default": false
           }
         },
         "required": ["name", "cardinality", "inputTypeName", "inputFields", "outputTypeName", "outputFields"]
+      }
+    },
+    "aspects": {
+      "type": "object",
+      "description": "Pipeline aspects - cross-cutting concerns that apply around pipeline steps. Aspect names must be lower-kebab-case and typically match the plugin module base name (e.g., persistence -> persistence-svc). Cache invalidation aspects (cache-invalidate, cache-invalidate-all) are hosted in cache-invalidation-svc.",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the aspect is enabled",
+            "default": true
+          },
+          "scope": {
+            "type": "string",
+            "description": "Scope of the aspect application",
+            "enum": ["GLOBAL", "STEPS"]
+          },
+          "position": {
+            "type": "string",
+            "description": "Position relative to the step",
+            "enum": ["BEFORE_STEP", "AFTER_STEP"]
+          },
+          "order": {
+            "type": "integer",
+            "description": "Order of application (lower executes closer to the step boundary). Negative values are allowed and execute before zero-valued aspects.",
+            "default": 0
+          },
+          "config": {
+            "type": "object",
+            "description": "Free-form configuration for the aspect",
+            "additionalProperties": true
+          }
+        },
+        "required": ["enabled", "scope", "position"],
+        "additionalProperties": false
       }
     }
   },

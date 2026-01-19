@@ -1,6 +1,7 @@
 FROM registry.access.redhat.com/ubi8/openjdk-21
 
 ENV LANGUAGE='en_GB:en'
+ENV SERVER_KEYSTORE_PATH=/deployments/server-keystore.jks
 
 COPY target/ /deployments/
 

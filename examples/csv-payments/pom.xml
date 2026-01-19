@@ -26,6 +26,7 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
+    <groupId>org.pipelineframework.csv</groupId>
     <artifactId>csv-payments-parent</artifactId>
     <!-- version is not needed as it is automatically inherited from the parent-->
     <packaging>pom</packaging>
@@ -37,6 +38,7 @@
         <module>payments-processing-svc</module>
         <module>payment-status-svc</module>
         <module>output-csv-file-processing-svc</module>
+        <module>persistence-svc</module>
         <module>orchestrator-svc</module>
     </modules>
 
@@ -45,15 +47,18 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <enablePreview>true</enablePreview>
-        <quarkus.platform.version>3.29.4</quarkus.platform.version>
+        <quarkus.platform.version>3.30.5</quarkus.platform.version>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <protobuf.version>4.28.2</protobuf.version>
         <grpc.version>1.63.0</grpc.version>
         <version.jandex>3.5.0</version.jandex>
         <spotless.plugin.version>2.44.0</spotless.plugin.version>
-        <!-- Default: don't build containers unless specifically enabled -->
-        <quarkus.container-image.build>false</quarkus.container-image.build>
+        <surefireArgLine />
+        <pipeline.generatedSourcesArg />
+        <protobuf.descriptor.fileArg />
+        <pipeline.parallelism>PARALLEL</pipeline.parallelism>
+        <quarkus.container-image.build>true</quarkus.container-image.build>
         <quarkus.container-image.registry>localhost</quarkus.container-image.registry>
         <quarkus.container-image.tag>latest</quarkus.container-image.tag>
         <quarkus.container-image.group>csv-payments</quarkus.container-image.group>
@@ -79,20 +84,110 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-            <!-- Pipeline Framework Runtime Module -->
-            <dependency>
-                <groupId>org.pipelineframework</groupId>
-                <artifactId>pipelineframework</artifactId>
-                <version>${version.pipeline}</version>
-            </dependency>
         </dependencies>
     </dependencyManagement>
 
     <build>
+        <resources>
+            <resource>
+                <directory>${project.basedir}/src/main/resources</directory>
+            </resource>
+            <resource>
+                <directory>${project.parent.basedir}/target/dev-certs/${project.artifactId}</directory>
+                <filtering>false</filtering>
+            </resource>
+        </resources>
         <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>generate-dev-certs</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>bash</executable>
+                            <arguments>
+                                <argument>${project.basedir}/generate-dev-certs.sh</argument>
+                            </arguments>
+                        </configuration>
+                        <inherited>false</inherited>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-dev-certs</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.parent.basedir}/target/dev-certs/${project.artifactId}</directory>
+                                    <includes>
+                                        <include>server-keystore.jks</include>
+                                        <include>client-truststore.jks</include>
+                                    </includes>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <id>add-pipeline-generated-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${project.build.directory}/generated-sources/pipeline/orchestrator-client</source>
+                                <source>${project.build.directory}/generated-sources/pipeline/pipeline-server</source>
+                                <source>${project.build.directory}/generated-sources/pipeline/plugin-client</source>
+                                <source>${project.build.directory}/generated-sources/pipeline/plugin-server</source>
+                                <source>${project.build.directory}/generated-sources/pipeline/rest-server</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>add-pipeline-generated-test-sources</id>
+                        <phase>generate-test-sources</phase>
+                        <goals>
+                            <goal>add-test-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${project.build.directory}/generated-sources/pipeline/orchestrator-client</source>
+                                <source>${project.build.directory}/generated-sources/pipeline/pipeline-server</source>
+                                <source>${project.build.directory}/generated-sources/pipeline/plugin-client</source>
+                                <source>${project.build.directory}/generated-sources/pipeline/plugin-server</source>
+                                <source>${project.build.directory}/generated-sources/pipeline/rest-server</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
 
@@ -131,6 +226,96 @@
                             </path>
                         </annotationProcessorPaths>
                     </configuration>
+                    <executions>
+                        <execution>
+                            <id>default-compile</id>
+                            <phase>compile</phase>
+                            <goals>
+                                <goal>compile</goal>
+                            </goals>
+                            <configuration>
+                                <compilerArgs>
+                                    <arg>${pipeline.generatedSourcesArg}</arg>
+                                    <arg>${protobuf.descriptor.fileArg}</arg>
+                                </compilerArgs>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>compile-orchestrator-client</id>
+                            <phase>process-classes</phase>
+                            <goals>
+                                <goal>compile</goal>
+                            </goals>
+                            <configuration>
+                                <proc>none</proc>
+                                <generatedSourcesDirectory>${project.build.directory}/generated-sources/role-compile/orchestrator-client</generatedSourcesDirectory>
+                                <compileSourceRoots>
+                                    <compileSourceRoot>${project.build.directory}/generated-sources/pipeline/orchestrator-client</compileSourceRoot>
+                                </compileSourceRoots>
+                                <outputDirectory>${project.build.directory}/classes-pipeline/orchestrator-client</outputDirectory>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>compile-pipeline-server</id>
+                            <phase>process-classes</phase>
+                            <goals>
+                                <goal>compile</goal>
+                            </goals>
+                            <configuration>
+                                <proc>none</proc>
+                                <generatedSourcesDirectory>${project.build.directory}/generated-sources/role-compile/pipeline-server</generatedSourcesDirectory>
+                                <compileSourceRoots>
+                                    <compileSourceRoot>${project.build.directory}/generated-sources/pipeline/pipeline-server</compileSourceRoot>
+                                </compileSourceRoots>
+                                <outputDirectory>${project.build.directory}/classes-pipeline/pipeline-server</outputDirectory>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>compile-plugin-client</id>
+                            <phase>process-classes</phase>
+                            <goals>
+                                <goal>compile</goal>
+                            </goals>
+                            <configuration>
+                                <proc>none</proc>
+                                <generatedSourcesDirectory>${project.build.directory}/generated-sources/role-compile/plugin-client</generatedSourcesDirectory>
+                                <compileSourceRoots>
+                                    <compileSourceRoot>${project.build.directory}/generated-sources/pipeline/plugin-client</compileSourceRoot>
+                                </compileSourceRoots>
+                                <outputDirectory>${project.build.directory}/classes-pipeline/plugin-client</outputDirectory>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>compile-plugin-server</id>
+                            <phase>process-classes</phase>
+                            <goals>
+                                <goal>compile</goal>
+                            </goals>
+                            <configuration>
+                                <proc>none</proc>
+                                <generatedSourcesDirectory>${project.build.directory}/generated-sources/role-compile/plugin-server</generatedSourcesDirectory>
+                                <compileSourceRoots>
+                                    <compileSourceRoot>${project.build.directory}/generated-sources/pipeline/plugin-server</compileSourceRoot>
+                                </compileSourceRoots>
+                                <outputDirectory>${project.build.directory}/classes-pipeline/plugin-server</outputDirectory>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>compile-rest-server</id>
+                            <phase>process-classes</phase>
+                            <goals>
+                                <goal>compile</goal>
+                            </goals>
+                            <configuration>
+                                <proc>none</proc>
+                                <generatedSourcesDirectory>${project.build.directory}/generated-sources/role-compile/rest-server</generatedSourcesDirectory>
+                                <compileSourceRoots>
+                                    <compileSourceRoot>${project.build.directory}/generated-sources/pipeline/rest-server</compileSourceRoot>
+                                </compileSourceRoots>
+                                <outputDirectory>${project.build.directory}/classes-pipeline/rest-server</outputDirectory>
+                            </configuration>
+                        </execution>
+                    </executions>
                 </plugin>
                 <!-- 
                 The annotation processor automatically handles generation of gRPC services and client steps 
@@ -212,18 +397,63 @@
                     <version>3.4.2</version>
                     <executions>
                         <execution>
-                            <id>make-client-jar</id>
+                            <id>orchestrator-client-jar</id>
                             <phase>package</phase>
                             <goals>
                                 <goal>jar</goal>
                             </goals>
                             <configuration>
-                                <classifier>client</classifier>
-                                <includes>
-                                    <include>**/pipeline/*ClientStep.class</include>
-                                    <include>**/pipeline/*ClientStep$*.class</include>
-                                    <include>META-INF/beans.xml</include>
-                                </includes>
+                                <classifier>orchestrator-client</classifier>
+                                <classesDirectory>${project.build.directory}/classes-pipeline/orchestrator-client</classesDirectory>
+                                <skipIfEmpty>true</skipIfEmpty>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>pipeline-server-jar</id>
+                            <phase>package</phase>
+                            <goals>
+                                <goal>jar</goal>
+                            </goals>
+                            <configuration>
+                                <classifier>pipeline-server</classifier>
+                                <classesDirectory>${project.build.directory}/classes-pipeline/pipeline-server</classesDirectory>
+                                <skipIfEmpty>true</skipIfEmpty>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>plugin-client-jar</id>
+                            <phase>package</phase>
+                            <goals>
+                                <goal>jar</goal>
+                            </goals>
+                            <configuration>
+                                <classifier>plugin-client</classifier>
+                                <classesDirectory>${project.build.directory}/classes-pipeline/plugin-client</classesDirectory>
+                                <skipIfEmpty>true</skipIfEmpty>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>plugin-server-jar</id>
+                            <phase>package</phase>
+                            <goals>
+                                <goal>jar</goal>
+                            </goals>
+                            <configuration>
+                                <classifier>plugin-server</classifier>
+                                <classesDirectory>${project.build.directory}/classes-pipeline/plugin-server</classesDirectory>
+                                <skipIfEmpty>true</skipIfEmpty>
+                            </configuration>
+                        </execution>
+                        <execution>
+                            <id>rest-server-jar</id>
+                            <phase>package</phase>
+                            <goals>
+                                <goal>jar</goal>
+                            </goals>
+                            <configuration>
+                                <classifier>rest-server</classifier>
+                                <classesDirectory>${project.build.directory}/classes-pipeline/rest-server</classesDirectory>
+                                <skipIfEmpty>true</skipIfEmpty>
                             </configuration>
                         </execution>
                     </executions>

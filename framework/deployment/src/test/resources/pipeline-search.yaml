@@ -1,0 +1,144 @@
+appName: "Search Pipeline"
+basePackage: "org.pipelineframework.search"
+transport: "REST"
+steps:
+  - name: "Crawl Source"
+    cardinality: "ONE_TO_ONE"
+    inputTypeName: "CrawlRequest"
+    inputFields:
+      - name: "docId"
+        type: "UUID"
+        protoType: "string"
+      - name: "sourceUrl"
+        type: "String"
+        protoType: "string"
+    outputTypeName: "RawDocument"
+    outputFields:
+      - name: "docId"
+        type: "UUID"
+        protoType: "string"
+      - name: "sourceUrl"
+        type: "String"
+        protoType: "string"
+      - name: "rawContent"
+        type: "String"
+        protoType: "string"
+      - name: "fetchedAt"
+        type: "Instant"
+        protoType: "string"
+  - name: "Parse Document"
+    cardinality: "ONE_TO_ONE"
+    inputTypeName: "RawDocument"
+    inputFields:
+      - name: "docId"
+        type: "UUID"
+        protoType: "string"
+      - name: "sourceUrl"
+        type: "String"
+        protoType: "string"
+      - name: "rawContent"
+        type: "String"
+        protoType: "string"
+      - name: "fetchedAt"
+        type: "Instant"
+        protoType: "string"
+    outputTypeName: "ParsedDocument"
+    outputFields:
+      - name: "docId"
+        type: "UUID"
+        protoType: "string"
+      - name: "title"
+        type: "String"
+        protoType: "string"
+      - name: "content"
+        type: "String"
+        protoType: "string"
+      - name: "extractedAt"
+        type: "Instant"
+        protoType: "string"
+  - name: "Tokenize Content"
+    cardinality: "ONE_TO_ONE"
+    inputTypeName: "ParsedDocument"
+    inputFields:
+      - name: "docId"
+        type: "UUID"
+        protoType: "string"
+      - name: "title"
+        type: "String"
+        protoType: "string"
+      - name: "content"
+        type: "String"
+        protoType: "string"
+      - name: "extractedAt"
+        type: "Instant"
+        protoType: "string"
+    outputTypeName: "TokenBatch"
+    outputFields:
+      - name: "docId"
+        type: "UUID"
+        protoType: "string"
+      - name: "tokens"
+        type: "String"
+        protoType: "string"
+      - name: "tokenizedAt"
+        type: "Instant"
+        protoType: "string"
+  - name: "Index Document"
+    cardinality: "ONE_TO_ONE"
+    inputTypeName: "TokenBatch"
+    inputFields:
+      - name: "docId"
+        type: "UUID"
+        protoType: "string"
+      - name: "tokens"
+        type: "String"
+        protoType: "string"
+      - name: "tokenizedAt"
+        type: "Instant"
+        protoType: "string"
+    outputTypeName: "IndexAck"
+    outputFields:
+      - name: "docId"
+        type: "UUID"
+        protoType: "string"
+      - name: "indexVersion"
+        type: "String"
+        protoType: "string"
+      - name: "indexedAt"
+        type: "Instant"
+        protoType: "string"
+      - name: "success"
+        type: "Boolean"
+        protoType: "bool"
+
+aspects:
+  persistence:
+    enabled: true
+    scope: "GLOBAL"
+    position: "AFTER_STEP"
+    order: 0
+    config:
+      pluginImplementationClass: "org.pipelineframework.plugin.persistence.PersistenceService"
+  cache:
+    enabled: true
+    scope: "GLOBAL"
+    position: "AFTER_STEP"
+    order: 5
+  cache-invalidate:
+    enabled: true
+    scope: "STEPS"
+    position: "BEFORE_STEP"
+    order: -4
+    config:
+      targetSteps:
+        - "ProcessTokenizeContentService"
+      pluginImplementationClass: "org.pipelineframework.plugin.cache.CacheInvalidationService"
+  cache-invalidate-all:
+    enabled: true
+    scope: "STEPS"
+    position: "BEFORE_STEP"
+    order: -5
+    config:
+      targetSteps:
+        - "ProcessParseDocumentService"
+      pluginImplementationClass: "org.pipelineframework.plugin.cache.CacheInvalidationAllService"

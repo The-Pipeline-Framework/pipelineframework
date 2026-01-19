@@ -17,69 +17,61 @@
 package org.pipelineframework.rest;
 
 import io.smallrye.mutiny.Multi;
-import io.smallrye.mutiny.Uni;
-import jakarta.inject.Inject;
-import org.pipelineframework.persistence.PersistenceManager;
 import org.pipelineframework.service.ReactiveStreamingService;
 
 /**
- * Base class for streaming REST resources that provides auto-persistence functionality.
- * 
+ * Base class for streaming REST resources that bridges reactive streaming services to REST endpoints.
+ *
+ * @param <DtoIn> The DTO input type
+ * @param <DtoOut> The DTO output type
  * @param <DomainIn> The domain input type
  * @param <DomainOut> The domain output type
- * @param <DtoOut> The DTO output type
  */
-public abstract class RestReactiveStreamingServiceAdapter<DomainIn, DomainOut, DtoOut> {
-
-    @Inject
-    PersistenceManager persistenceManager;
+public abstract class RestReactiveStreamingServiceAdapter<DtoIn, DtoOut, DomainIn, DomainOut> {
 
     /**
-     * Default constructor for RestReactiveStreamingServiceAdapter.
+     * Initialises a RestReactiveStreamingServiceAdapter instance.
+     *
+     * Provided for subclassing; no initialisation logic is performed.
      */
     public RestReactiveStreamingServiceAdapter() {
     }
-    
 
     /**
- * Provide the reactive streaming service used to process domain inputs into domain outputs.
- *
- * @return the {@link ReactiveStreamingService} instance that processes {@code DomainIn} into {@code DomainOut}
- */
-protected abstract ReactiveStreamingService<DomainIn, DomainOut> getService();
-
-    /**
- * Convert a processed domain object to its corresponding DTO representation.
- *
- * @param domainOut the domain-level result to convert
- * @return the DTO representation of the provided domain object
- */
-protected abstract DtoOut toDto(DomainOut domainOut);
-
-    /**
- * Indicates whether entities are persisted automatically before processing.
- *
- * @return true if entities are persisted automatically before processing, false otherwise
- */
-    protected abstract boolean isAutoPersistenceEnabled();
-
-    /**
-     * Process a single domain object with auto-persistence support.
-     * 
-     * @param domainObject The domain object to process
-     * @return A Multi that emits DTO results
+     * Provides the reactive streaming service that processes domain inputs into domain outputs.
+     *
+     * @return the {@link ReactiveStreamingService} instance that processes {@code DomainIn} into {@code DomainOut}
      */
-    protected Multi<DtoOut> processWithAutoPersistence(DomainIn domainObject) {
-        Uni<DomainIn> persistenceUni = isAutoPersistenceEnabled() 
-            ? persistenceManager.persist(domainObject)
-            : Uni.createFrom().item(domainObject);
-        
-        return persistenceUni
-            .onItem().transformToMulti(persistedEntity -> 
-                getService()
-                    .process(persistedEntity)
-                    .onItem()
-                    .transform(this::toDto)
-            );
+    protected abstract ReactiveStreamingService<DomainIn, DomainOut> getService();
+
+    /**
+     * Convert a REST DTO input into the corresponding domain object.
+     *
+     * @param dtoIn the REST input DTO to convert
+     * @return the domain input produced from the DTO
+     */
+    protected abstract DomainIn fromDto(DtoIn dtoIn);
+
+    /**
+     * Convert a domain output value into its DTO representation.
+     *
+     * @param domainOut the domain-level result produced by the service to convert
+     * @return the DTO representation of the provided domain output
+     */
+    protected abstract DtoOut toDto(DomainOut domainOut);
+
+    /**
+     * Process a REST request through the reactive streaming domain service.
+     *
+     * Converts the REST DTO to a domain input, invokes the streaming service, and converts
+     * each resulting domain output back to a REST DTO.
+     *
+     * @param dtoRequest the incoming REST DTO to process
+     * @return the stream of REST DTO responses corresponding to processed domain outputs
+     */
+    public Multi<DtoOut> remoteProcess(DtoIn dtoRequest) {
+        DomainIn entity = fromDto(dtoRequest);
+        Multi<DomainOut> processedResult = getService().process(entity);
+        return processedResult.onItem().transform(this::toDto);
     }
 }

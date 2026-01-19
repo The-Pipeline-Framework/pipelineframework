@@ -16,18 +16,19 @@
 
 package org.pipelineframework.pipeline;
 
-import static org.junit.jupiter.api.Assertions.*;
+import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.AssertSubscriber;
-import java.time.Duration;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepOneToOne;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PipelineRunnerConcurrencyUnitTest {
 
@@ -52,15 +53,14 @@ class PipelineRunnerConcurrencyUnitTest {
 
     @Test
     void testSequentialProcessingByDefault() {
-        // Given - Default config (parallel = false)
+        // Given
         Multi<String> input = Multi.createFrom().items("item1", "item2", "item3");
 
         TestConcurrentStep step = new TestConcurrentStep();
-        StepConfig stepConfig = new StepConfig();
-        step.initialiseWithConfig(stepConfig);
+        step.initialiseWithConfig(new org.pipelineframework.config.StepConfig());
 
         // When - Use the PipelineRunner's applyOneToOneUnchecked method directly
-        Multi<String> result = (Multi<String>) PipelineRunnerTestHelper.applyOneToOne(step, input);
+        Multi<String> result = (Multi<String>) PipelineRunnerTestHelper.applyOneToOne(step, input, false);
 
         // Then - Should process sequentially
         AssertSubscriber<String> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
@@ -76,16 +76,14 @@ class PipelineRunnerConcurrencyUnitTest {
 
     @Test
     void testConcurrentProcessingWithoutOrderPreservation() {
-        // Given - Concurrent processing with MERGE strategy
+        // Given
         Multi<String> input = Multi.createFrom().items("slow", "fast1", "fast2"); // slow item first
 
         TestConcurrentStep step = new TestConcurrentStep();
-        StepConfig stepConfig = new StepConfig();
-        stepConfig.parallel(true); // Enable concurrency
-        step.initialiseWithConfig(stepConfig);
+        step.initialiseWithConfig(new org.pipelineframework.config.StepConfig());
 
         // When
-        Multi<String> result = (Multi<String>) PipelineRunnerTestHelper.applyOneToOne(step, input);
+        Multi<String> result = (Multi<String>) PipelineRunnerTestHelper.applyOneToOne(step, input, true);
 
         // Then - Should process concurrently, with fast items potentially completing before slow
         // item
@@ -104,16 +102,14 @@ class PipelineRunnerConcurrencyUnitTest {
 
     @Test
     void testBackwardCompatibilityWithParallelFalse() {
-        // Given - parallel = false (default), should process sequentially
+        // Given
         Multi<String> input = Multi.createFrom().items("itemA", "itemB");
 
         TestConcurrentStep step = new TestConcurrentStep();
-        StepConfig stepConfig = new StepConfig();
-        // Don't modify parallel - should use default of false (backward compatibility)
-        step.initialiseWithConfig(stepConfig);
+        step.initialiseWithConfig(new org.pipelineframework.config.StepConfig());
 
         // When
-        Multi<String> result = (Multi<String>) PipelineRunnerTestHelper.applyOneToOne(step, input);
+        Multi<String> result = (Multi<String>) PipelineRunnerTestHelper.applyOneToOne(step, input, false);
 
         // Then - Should work the same as before (backward compatibility maintained)
         AssertSubscriber<String> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(2));
@@ -127,9 +123,9 @@ class PipelineRunnerConcurrencyUnitTest {
 
     // Helper class to access package-private methods for testing
     static class PipelineRunnerTestHelper {
-        public static Object applyOneToOne(Object step, Object current) {
+        public static Object applyOneToOne(Object step, Object current, boolean parallel) {
             return org.pipelineframework.PipelineRunner.applyOneToOneUnchecked(
-                    (org.pipelineframework.step.StepOneToOne<String, String>) step, current);
+                    (org.pipelineframework.step.StepOneToOne<String, String>) step, current, parallel, 128);
         }
     }
 }

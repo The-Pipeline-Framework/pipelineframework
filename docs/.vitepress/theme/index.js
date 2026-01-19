@@ -16,12 +16,19 @@
 
 // .vitepress/theme/index.js
 import DefaultTheme from 'vitepress/theme'
+import {h} from 'vue'
 import './custom.css'
 import Callout from './components/Callout.vue'
 import HeroSection from './components/HeroSection.vue'
+import VersionBadge from './components/VersionBadge.vue'
 
 export default {
   ...DefaultTheme,
+  Layout() {
+    return h(DefaultTheme.Layout, null, {
+      'doc-before': () => h(VersionBadge)
+    })
+  },
   enhanceApp({ app }) {
     // Register custom components
     app.component('Callout', Callout)

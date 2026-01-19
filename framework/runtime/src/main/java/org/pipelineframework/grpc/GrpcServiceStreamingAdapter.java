@@ -16,11 +16,7 @@
 
 package org.pipelineframework.grpc;
 
-import io.quarkus.hibernate.reactive.panache.Panache;
 import io.smallrye.mutiny.Multi;
-import jakarta.inject.Inject;
-import org.jboss.logging.Logger;
-import org.pipelineframework.persistence.PersistenceManager;
 import org.pipelineframework.service.ReactiveStreamingService;
 import org.pipelineframework.service.throwStatusRuntimeExceptionFunction;
 
@@ -34,29 +30,12 @@ import org.pipelineframework.service.throwStatusRuntimeExceptionFunction;
  * @param <DomainIn> the domain input object type
  * @param <DomainOut> the domain output object type
  */
-@SuppressWarnings("LombokSetterMayBeUsed")
-public abstract class GrpcServiceStreamingAdapter<GrpcIn, GrpcOut, DomainIn, DomainOut>
-        extends ReactiveServiceAdapterBase {
+public abstract class GrpcServiceStreamingAdapter<GrpcIn, GrpcOut, DomainIn, DomainOut> {
 
   /**
    * Default constructor for GrpcServiceStreamingAdapter.
    */
   public GrpcServiceStreamingAdapter() {
-  }
-
-  private static final Logger LOG = Logger.getLogger(GrpcServiceStreamingAdapter.class);
-
-  @Inject
-  PersistenceManager persistenceManager;
-  
-  /**
-   * Sets the persistence manager for this adapter.
-   * This method is useful when the adapter is not managed by CDI (e.g., anonymous inner classes).
-   * 
-   * @param persistenceManager the persistence manager to use
-   */
-  public void setPersistenceManager(PersistenceManager persistenceManager) {
-    this.persistenceManager = persistenceManager;
   }
 
   /**
@@ -67,27 +46,23 @@ public abstract class GrpcServiceStreamingAdapter<GrpcIn, GrpcOut, DomainIn, Dom
   protected abstract ReactiveStreamingService<DomainIn, DomainOut> getService();
 
   /**
-   * Converts a gRPC input object to the corresponding domain input object.
+   * Convert a gRPC request object into the domain input representation.
    *
-   * @param grpcIn the gRPC input object to convert
-   * @return the corresponding domain input object
+   * @param grpcIn the gRPC input request message for a single streaming invocation
+   * @return the domain input corresponding to the provided gRPC input
    */
   protected abstract DomainIn fromGrpc(GrpcIn grpcIn);
 
   /**
- * Convert a domain-level output object to its gRPC representation.
- *
- * @param domainOut the domain output to convert
- * @return the corresponding gRPC output
- */
-protected abstract GrpcOut toGrpc(DomainOut domainOut);
+   * Convert a domain-level output object to its gRPC representation.
+   *
+   * @param domainOut the domain output to convert
+   * @return the corresponding gRPC output
+   */
+  protected abstract GrpcOut toGrpc(DomainOut domainOut);
 
   /**
-   * Adapts a gRPC request into the domain stream, processes it and returns a stream of gRPC responses.
-   *
-   * <p>If auto-persistence is enabled the original domain input will be persisted after the stream
-   * completes successfully (the persistence occurs within a transaction). Processing failures are
-   * converted to gRPC status runtime exceptions.
+   * Adapts a gRPC request into the domain stream and returns a stream of gRPC responses.
    *
    * @param grpcRequest the incoming gRPC request to convert into a domain input
    * @return a Multi stream of gRPC responses corresponding to processed domain outputs; failures are mapped to status exceptions
@@ -96,27 +71,7 @@ protected abstract GrpcOut toGrpc(DomainOut domainOut);
     DomainIn entity = fromGrpc(grpcRequest);
     Multi<DomainOut> processedResult = getService().process(entity); // Multi<DomainOut>
 
-    if (!isAutoPersistenceEnabled()) {
-      LOG.debug("Auto-persistence is disabled");
-      return processedResult
-              .onItem().transform(this::toGrpc)
-              .onFailure().transform(new throwStatusRuntimeExceptionFunction());
-    }
-
-    LOG.debug("Auto-persistence is enabled, will persist input after stream completes");
-
     return processedResult
-            // After the stream completes successfully
-            .onCompletion().call(() ->
-                switchToEventLoop().call(() ->
-                    // Panache.withTransaction(...) creates the correct Vert.x context and transaction
-                    Panache.withTransaction(() ->
-                            persistenceManager.persist(entity)
-                                    .replaceWithVoid()
-                    )
-                )
-            )
-            // Continue with the normal outbound transformation
             .onItem().transform(this::toGrpc)
             .onFailure().transform(new throwStatusRuntimeExceptionFunction());
   }

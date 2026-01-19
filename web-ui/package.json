@@ -2,7 +2,7 @@
   "name": "pipeline-template-generator-ui",
   "version": "1.0.0",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "node update-templates.js && vite dev",
     "update-templates": "node update-templates.js",
     "build": "npm run update-templates && node --max-old-space-size=4096 node_modules/vite/bin/vite.js build",
     "build:cloudflare": "npm run update-templates && NODE_OPTIONS='--max-old-space-size=2048 --max-semi-space-size=128' sh -c 'vite build && node -e \"console.log(process.memoryUsage())\"; exit 0'",
@@ -18,6 +18,7 @@
     "@sveltejs/vite-plugin-svelte": "^3.0.0",
     "@tailwindcss/typography": "^0.5.10",
     "autoprefixer": "^10.4.16",
+    "baseline-browser-mapping": "^2.9.15",
     "postcss": "^8.4.31",
     "svelte": "^4.2.7",
     "svelte-check": "^3.6.0",

@@ -16,9 +16,10 @@
 
 package org.pipelineframework.step.blocking;
 
-import io.smallrye.mutiny.Multi;
 import java.util.Collections;
 import java.util.List;
+
+import io.smallrye.mutiny.Multi;
 import org.jboss.logging.Logger;
 import org.pipelineframework.step.Configurable;
 import org.pipelineframework.step.DeadLetterQueue;
@@ -107,7 +108,7 @@ List<O> applyStreamingList(List<I> upstream);
                     }
                 }
             })
-            .onFailure(t -> !(t instanceof NullPointerException)).retry()
+            .onFailure(this::shouldRetry).retry()
             .withBackOff(retryWait(), maxBackoff())
             .withJitter(jitter() ? 0.5 : 0.0)
             .atMost(retryLimit())

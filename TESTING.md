@@ -75,12 +75,12 @@ Effect:
 - Coverage includes only unit + @QuarkusTest
 
 Main branch / Release builds should run with:
-- mvn verify -Pcoverage -Dquarkus.container-image.build=true
+- mvn verify -Pcoverage -Dquarkus.container-image.build=false
 
 Effect:
 - Surefire and Failsafe both run
 - Integration tests run
-- Container images are built as needed
+- Container images are built through docker builds (no Jib on GitHub Actions)
 - Coverage still only from Surefire tests
 
 What not to do:

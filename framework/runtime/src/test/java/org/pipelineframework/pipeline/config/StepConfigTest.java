@@ -16,11 +16,12 @@
 
 package org.pipelineframework.pipeline.config;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 import java.time.Duration;
+
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.StepConfig;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class StepConfigTest {
 
@@ -32,7 +33,6 @@ class StepConfigTest {
         // Then
         assertEquals(3, config.retryLimit());
         assertEquals(Duration.ofMillis(2000), config.retryWait());
-        assertFalse(config.parallel());
         assertFalse(config.recoverOnFailure());
         assertEquals(Duration.ofSeconds(30), config.maxBackoff());
         assertFalse(config.jitter());
@@ -72,19 +72,6 @@ class StepConfigTest {
 
         // When/Then
         assertThrows(NullPointerException.class, () -> config.retryWait(null));
-    }
-
-    @Test
-    void testParallelSetter() {
-        // Given
-        StepConfig config = new StepConfig();
-
-        // When
-        StepConfig result = config.parallel(true);
-
-        // Then
-        assertTrue(config.parallel());
-        assertSame(config, result); // Fluent API
     }
 
     @Test

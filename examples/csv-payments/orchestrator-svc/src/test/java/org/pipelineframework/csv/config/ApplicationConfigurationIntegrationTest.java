@@ -16,13 +16,14 @@
 
 package org.pipelineframework.csv.config;
 
-import static org.junit.jupiter.api.Assertions.*;
+import jakarta.inject.Inject;
 
 import io.quarkus.test.junit.QuarkusTest;
-import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.config.StepConfig;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 @QuarkusTest
 class ApplicationConfigurationIntegrationTest {
@@ -40,7 +41,6 @@ class ApplicationConfigurationIntegrationTest {
         // our test environment may use the interface defaults which are:
         // - retryLimit default: 3
         // - retryWait default: 2000ms (PT2S)
-        // - parallel default: false
         // - recoverOnFailure default: false
         // - maxBackoff default: 30000ms (PT30S)
         // - jitter default: false
@@ -71,7 +71,6 @@ class ApplicationConfigurationIntegrationTest {
         // Check that the new step config inherits the default values
         assertEquals(defaults.retryLimit(), stepConfig.retryLimit());
         assertEquals(defaults.retryWait(), stepConfig.retryWait());
-        assertEquals(defaults.parallel(), stepConfig.parallel());
         assertEquals(defaults.recoverOnFailure(), stepConfig.recoverOnFailure());
         assertEquals(defaults.maxBackoff(), stepConfig.maxBackoff());
         assertEquals(defaults.jitter(), stepConfig.jitter());

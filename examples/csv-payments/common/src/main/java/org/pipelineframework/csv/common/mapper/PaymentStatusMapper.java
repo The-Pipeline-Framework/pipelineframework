@@ -22,14 +22,14 @@ import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
 import org.pipelineframework.csv.common.dto.PaymentStatusDto;
-import org.pipelineframework.csv.grpc.PaymentsProcessingSvc;
+import org.pipelineframework.csv.grpc.ProcessAckPaymentSentSvc;
 
 @SuppressWarnings("unused")
 @Mapper(
     componentModel = "jakarta",
     uses = {CommonConverters.class, AckPaymentSentMapper.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface PaymentStatusMapper extends org.pipelineframework.mapper.Mapper<PaymentsProcessingSvc.PaymentStatus, PaymentStatusDto, PaymentStatus> {
+public interface PaymentStatusMapper extends org.pipelineframework.mapper.Mapper<ProcessAckPaymentSentSvc.PaymentStatus, PaymentStatusDto, PaymentStatus> {
 
   PaymentStatusMapper INSTANCE = Mappers.getMapper( PaymentStatusMapper.class );
 
@@ -45,11 +45,19 @@ public interface PaymentStatusMapper extends org.pipelineframework.mapper.Mapper
   @Mapping(target = "id", qualifiedByName = "uuidToString")
   @Mapping(target = "fee", qualifiedByName = "bigDecimalToString")
   @Mapping(target = "ackPaymentSentId", qualifiedByName = "uuidToString")
-  PaymentsProcessingSvc.PaymentStatus toGrpc(PaymentStatusDto dto);
+  @Mapping(target = "ackPaymentSent")
+  ProcessAckPaymentSentSvc.PaymentStatus toGrpc(PaymentStatusDto dto);
 
+  /**
+   * Converts a gRPC ProcessAckPaymentSentSvc.PaymentStatus message into a PaymentStatusDto.
+   *
+   * @param grpcRequest the gRPC PaymentStatus message to convert
+   * @return the DTO representation of the provided gRPC PaymentStatus
+   */
   @Override
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
   @Mapping(target = "fee", qualifiedByName = "stringToBigDecimal")
   @Mapping(target = "ackPaymentSentId", qualifiedByName = "stringToUUID")
-  PaymentStatusDto fromGrpc(PaymentsProcessingSvc.PaymentStatus grpc);
+  @Mapping(target = "ackPaymentSent")
+  PaymentStatusDto fromGrpc(ProcessAckPaymentSentSvc.PaymentStatus grpcRequest);
 }

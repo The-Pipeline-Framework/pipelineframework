@@ -28,6 +28,17 @@ Use the Quarkus plugin in IntelliJ IDEA or run with:
 ./mvnw compile quarkus:dev
 ```
 
+## Constructing requests
+
+If your first step uses helper builders, you can construct inputs like this:
+
+```java
+import {{optionsImport}};
+
+{{requestTypeName}} request = {{optionsClass}}.builder()
+    .build("https://example.test");
+```
+
 ## Architecture
 
 This application follows the pipeline pattern with multiple microservices, each responsible for a specific step in the processing workflow. Services communicate via gRPC, and the orchestrator coordinates the overall pipeline execution.

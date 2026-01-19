@@ -16,16 +16,17 @@
 
 package org.pipelineframework.pipeline.step;
 
-import static org.junit.jupiter.api.Assertions.*;
+import java.time.Duration;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.AssertSubscriber;
-import java.time.Duration;
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.step.StepSideEffect;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class StepSideEffectTest {
 
@@ -61,18 +62,6 @@ class StepSideEffectTest {
         // Then
         String value = result.await().indefinitely();
         assertEquals("test", value);
-    }
-
-    @Test
-    void testDefaultParallel() {
-        // Given
-        TestStep step = new TestStep();
-
-        // When
-        boolean parallel = step.parallel();
-
-        // Then
-        assertFalse(parallel);
     }
 
     @Test

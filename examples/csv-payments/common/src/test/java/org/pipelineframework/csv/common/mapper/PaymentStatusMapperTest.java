@@ -16,19 +16,21 @@
 
 package org.pipelineframework.csv.common.mapper;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.util.Currency;
 import java.util.UUID;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
+import org.pipelineframework.csv.common.dto.AckPaymentSentDto;
 import org.pipelineframework.csv.common.dto.PaymentStatusDto;
-import org.pipelineframework.csv.grpc.PaymentsProcessingSvc;
+import org.pipelineframework.csv.grpc.ProcessAckPaymentSentSvc;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class PaymentStatusMapperTest {
 
@@ -48,10 +50,16 @@ class PaymentStatusMapperTest {
             commonConvertersField.setAccessible(true);
             commonConvertersField.set(ackPaymentSentMapperImpl, commonConverters);
 
+            PaymentRecordMapperImpl paymentRecordMapperImpl = new PaymentRecordMapperImpl();
+            java.lang.reflect.Field paymentRecordConvertersField =
+                    PaymentRecordMapperImpl.class.getDeclaredField("commonConverters");
+            paymentRecordConvertersField.setAccessible(true);
+            paymentRecordConvertersField.set(paymentRecordMapperImpl, commonConverters);
+
             java.lang.reflect.Field paymentRecordMapperField =
                     AckPaymentSentMapperImpl.class.getDeclaredField("paymentRecordMapper");
             paymentRecordMapperField.setAccessible(true);
-            paymentRecordMapperField.set(ackPaymentSentMapperImpl, new PaymentRecordMapperImpl());
+            paymentRecordMapperField.set(ackPaymentSentMapperImpl, paymentRecordMapperImpl);
 
             ackPaymentSentMapper = ackPaymentSentMapperImpl;
         } catch (Exception e) {
@@ -122,13 +130,15 @@ class PaymentStatusMapperTest {
         assertEquals(domain.getMessage(), dto.getMessage());
         assertEquals(domain.getFee(), dto.getFee());
         assertEquals(domain.getAckPaymentSentId(), dto.getAckPaymentSentId());
-        assertEquals(domain.getAckPaymentSent(), dto.getAckPaymentSent());
+        AckPaymentSentDto expectedAckPaymentSent = ackPaymentSentMapper.toDto(ackPaymentSent);
+        assertEquals(expectedAckPaymentSent, dto.getAckPaymentSent());
     }
 
     @Test
     void testDtoToDomain() {
         // Given
         AckPaymentSent ackPaymentSent = createTestAckPaymentSent();
+        AckPaymentSentDto ackPaymentSentDto = ackPaymentSentMapper.toDto(ackPaymentSent);
 
         PaymentStatusDto dto =
                 PaymentStatusDto.builder()
@@ -138,7 +148,7 @@ class PaymentStatusMapperTest {
                         .message("Payment processed successfully")
                         .fee(new BigDecimal("1.50"))
                         .ackPaymentSentId(UUID.randomUUID())
-                        .ackPaymentSent(ackPaymentSent)
+                        .ackPaymentSent(ackPaymentSentDto)
                         .build();
 
         // When
@@ -152,7 +162,8 @@ class PaymentStatusMapperTest {
         assertEquals(dto.getMessage(), domain.getMessage());
         assertEquals(dto.getFee(), domain.getFee());
         assertEquals(dto.getAckPaymentSentId(), domain.getAckPaymentSentId());
-        assertEquals(dto.getAckPaymentSent(), domain.getAckPaymentSent());
+        AckPaymentSentDto expectedAckPaymentSent = ackPaymentSentMapper.toDto(domain.getAckPaymentSent());
+        assertEquals(dto.getAckPaymentSent(), expectedAckPaymentSent);
     }
 
     // @Test
@@ -169,7 +180,7 @@ class PaymentStatusMapperTest {
     //           .build();
 
     //   // When
-    //   PaymentsProcessingSvc.PaymentStatus grpc = mapper.toGrpc(dto);
+    //   ProcessAckPaymentSentSvc.PaymentStatus grpc = mapper.toGrpc(dto);
 
     //   // Then
     //   assertNotNull(grpc);
@@ -187,8 +198,8 @@ class PaymentStatusMapperTest {
         UUID id = UUID.randomUUID();
         UUID ackPaymentSentId = UUID.randomUUID();
 
-        PaymentsProcessingSvc.PaymentStatus grpc =
-                PaymentsProcessingSvc.PaymentStatus.newBuilder()
+        ProcessAckPaymentSentSvc.PaymentStatus grpc =
+                ProcessAckPaymentSentSvc.PaymentStatus.newBuilder()
                         .setId(id.toString())
                         .setReference("test-ref")
                         .setStatus("SUCCESS")
@@ -223,7 +234,7 @@ class PaymentStatusMapperTest {
     //   domain.setAckPaymentSentId(UUID.randomUUID());
 
     //   // When
-    //   PaymentsProcessingSvc.PaymentStatus grpc = mapper.toDtoToGrpc(domain);
+    //   ProcessAckPaymentSentSvc.PaymentStatus grpc = mapper.toDtoToGrpc(domain);
 
     //   // Then
     //   assertNotNull(grpc);
@@ -241,8 +252,8 @@ class PaymentStatusMapperTest {
         UUID id = UUID.randomUUID();
         UUID ackPaymentSentId = UUID.randomUUID();
 
-        PaymentsProcessingSvc.PaymentStatus grpc =
-                PaymentsProcessingSvc.PaymentStatus.newBuilder()
+        ProcessAckPaymentSentSvc.PaymentStatus grpc =
+                ProcessAckPaymentSentSvc.PaymentStatus.newBuilder()
                         .setId(id.toString())
                         .setReference("test-ref")
                         .setStatus("SUCCESS")

@@ -17,17 +17,13 @@
 package org.pipelineframework.grpc;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
 
 import io.quarkus.test.junit.QuarkusTest;
 import io.smallrye.mutiny.Multi;
-import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
-import org.pipelineframework.persistence.PersistenceManager;
 import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
 import org.pipelineframework.service.throwStatusRuntimeExceptionFunction;
 
@@ -37,9 +33,6 @@ class GrpcServiceBidirectionalStreamingAdapterTest {
     @Mock
     private ReactiveBidirectionalStreamingService<String, String> mockService;
 
-    @Mock
-    private PersistenceManager mockPersistenceManager;
-
     private TestBidirectionalAdapter adapter;
 
     // Test-specific adapter that bypasses Panache transaction for testing
@@ -47,15 +40,10 @@ class GrpcServiceBidirectionalStreamingAdapterTest {
             extends GrpcServiceBidirectionalStreamingAdapter<String, String, String, String> {
 
         private final ReactiveBidirectionalStreamingService<String, String> service;
-        private boolean autoPersist = true;
 
         public TestBidirectionalAdapter(
                 ReactiveBidirectionalStreamingService<String, String> service) {
             this.service = service;
-        }
-
-        public void setAutoPersistence(boolean autoPersist) {
-            this.autoPersist = autoPersist;
         }
 
         @Override
@@ -73,29 +61,14 @@ class GrpcServiceBidirectionalStreamingAdapterTest {
             return "grpc_" + domainOut;
         }
 
-        @Override
-        protected boolean isAutoPersistenceEnabled() {
-            return autoPersist;
-        }
-
         // Override to bypass Panache transaction context requirement for testing
         @Override
         public Multi<String> remoteProcess(Multi<String> grpcRequest) {
             Multi<String> inputDomainStream = grpcRequest.onItem().transform(this::fromGrpc);
 
-            Multi<String> processedStream = getService().process(inputDomainStream);
+            Multi<String> processed = getService().process(inputDomainStream);
 
-            Multi<String> withAutoPersistence = isAutoPersistenceEnabled()
-                    ? processedStream
-                            .onItem()
-                            .call(
-                                    domainItem ->
-                                    // If auto-persistence is enabled, persist each
-                                    // item after processing
-                                    persistenceManager.persist(domainItem))
-                    : processedStream;
-
-            return withAutoPersistence
+            return processed
                     .onItem()
                     .transform(this::toGrpc)
                     .onFailure()
@@ -104,81 +77,9 @@ class GrpcServiceBidirectionalStreamingAdapterTest {
     }
 
     @BeforeEach
-    void setUp() throws Exception {
+    void setUp() {
         MockitoAnnotations.openMocks(this);
         adapter = new TestBidirectionalAdapter(mockService);
-
-        // Inject the mock persistence manager using reflection
-        java.lang.reflect.Field field = GrpcServiceBidirectionalStreamingAdapter.class.getDeclaredField(
-                "persistenceManager");
-        field.setAccessible(true);
-        field.set(adapter, mockPersistenceManager);
-    }
-
-    @Test
-    void testRemoteProcessWithoutAutoPersistence() {
-        adapter.setAutoPersistence(false);
-
-        // Prepare mock service to return a stream of results
-        Multi<String> mockResult = Multi.createFrom().items("result1", "result2");
-        when(mockService.process(any(Multi.class))).thenReturn(mockResult);
-
-        // Mock persistence calls to return the same item
-        when(mockPersistenceManager.persist(any(String.class)))
-                .thenAnswer(
-                        invocation -> io.smallrye.mutiny.Uni.createFrom()
-                                .item(invocation.getArgument(0)));
-
-        // Create input stream
-        Multi<String> input = Multi.createFrom().items("input1", "input2");
-
-        // Execute the test with bypassed transaction mechanism
-        Multi<String> result = adapter.remoteProcess(input);
-
-        // Collect results with blocking wait
-        List<String> results = result.collect().asList().await().indefinitely();
-
-        // Verify results
-        assertEquals(2, results.size());
-        assertTrue(results.contains("grpc_result1"));
-        assertTrue(results.contains("grpc_result2"));
-
-        // Verify persistence was not called
-        verify(mockPersistenceManager, never()).persist(any());
-    }
-
-    @Test
-    void testRemoteProcessWithAutoPersistence() {
-        adapter.setAutoPersistence(true);
-
-        // Prepare mock service to return a stream of results
-        Multi<String> mockResult = Multi.createFrom().items("result1", "result2");
-        when(mockService.process(any(Multi.class))).thenReturn(mockResult);
-
-        // Mock persistence calls to return the same item
-        when(mockPersistenceManager.persist(any(String.class)))
-                .thenAnswer(
-                        invocation -> {
-                            String argument = invocation.getArgument(0);
-                            return io.smallrye.mutiny.Uni.createFrom().item(argument);
-                        });
-
-        // Create input stream
-        Multi<String> input = Multi.createFrom().items("input1", "input2");
-
-        // Execute the test with bypassed transaction mechanism
-        Multi<String> result = adapter.remoteProcess(input);
-
-        // Collect results with blocking wait
-        List<String> results = result.collect().asList().await().indefinitely();
-
-        // Verify results
-        assertEquals(2, results.size());
-        assertTrue(results.contains("grpc_result1"));
-        assertTrue(results.contains("grpc_result2"));
-
-        // Verify persistence was called for each input after transformation
-        verify(mockPersistenceManager, times(2)).persist(any(String.class));
     }
 
     @Test

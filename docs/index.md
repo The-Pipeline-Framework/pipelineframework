@@ -11,7 +11,7 @@ hero:
   actions:
     - theme: brand
       text: Quick Start
-      link: /guide/quick-start
+      link: /guide/getting-started/quick-start
     - theme: alt
       text: View on GitHub
       link: https://github.com/mbarcia/pipelineframework
@@ -65,33 +65,67 @@ The Pipeline Framework is a powerful tool for building reactive pipeline process
 
 ## Getting Started
 
-New to The Pipeline Framework? Start with our [Quick Start](/guide/quick-start) guide to learn the basics using the visual Canvas designer.
+New to The Pipeline Framework? Start with our [Quick Start](/guide/getting-started/quick-start) guide to learn the basics using the visual Canvas designer.
 
 ## Guides
 
 To get started with The Pipeline Framework, explore these guides:
 
-### Getting Started
-- [Getting Started](/guide/getting-started.html): Setting up the framework in your project
-- [Creating Pipeline Steps](/guide/creating-steps.html): Building your first pipeline steps
+### Build Fast
+- [Quick Start](/guide/getting-started/quick-start): Create a pipeline with the Canvas
+- [Business Value](/guide/getting-started/business-value): Speed, ROI, and portability
+- [Canvas Designer Guide](/guide/getting-started/canvas-guide): Deep dive into the visual designer
 
-### Application Development
-- [Application Structure](/guide/application-structure.html): Structuring pipeline applications
-- [Backend Services](/guide/backend-services.html): Creating backend services that implement pipeline steps
-- [Orchestrator Services](/guide/orchestrator-services.html): Building orchestrator services that coordinate pipelines
+### Design
+- [Application Structure](/guide/design/application-structure): Structuring pipeline applications
+- [Common Module Structure](/guide/design/common-module-structure): Shared components and type mappings
+- [Expansion and Reduction](/guide/design/expansion-and-reduction): Cardinality explained for imperative developers
 
-### Advanced Topics
-- [Pipeline Compilation](/guide/pipeline-compilation.html): Understanding how the annotation processor works
-- [Error Handling & DLQ](/guide/error-handling.html): Managing errors and dead letter queues
-- [Observability](/guide/observability.html): Monitoring and observing pipeline applications
+### Build
+- [Pipeline Compilation](/guide/build/pipeline-compilation): How build-time generation works
+- [Configuration Reference](/guide/build/configuration/): Build-time and runtime settings
+- [Dependency Management](/guide/build/dependency-management): Manage build-time and runtime deps
+- [Best Practices](/guide/operations/best-practices): Operational and design guidance
 
-### Reference
-- [Architecture](/reference/architecture.html): Deep dive into the framework architecture
-- [Framework Overview](/FRAMEWORK_OVERVIEW.html): Complete architecture and comparison to original spec
-- [Reference Implementation](/REFERENCE_IMPLEMENTATION.html): Complete implementation guide with examples
-- [YAML Configuration Schema](/YAML_SCHEMA.html): Complete YAML schema documentation
-- [Canvas Designer Guide](/CANVAS_GUIDE.html): Complete Canvas usage guide
-- [Java-Centered Types](/JAVA_CENTERED_TYPES.html): Java-first approach with protobuf mapping
-- [Publishing to Maven Central](/PUBLISHING.html): Guide to releasing and publishing the framework
+### Develop
+- [@PipelineStep Annotation](/guide/development/pipeline-step): Annotation contract and parameters
+- [Code a Step](/guide/development/code-a-step): Implement a step and its mappers
+- [Using Plugins](/guide/development/using-plugins): Apply plugins to pipelines
+- [Mappers and DTOs](/guide/development/mappers-and-dtos): Type conversions and mappings
+- [Dependency Management](/guide/build/dependency-management): Manage build-time and runtime deps
+- [Upgrade Guide](/guide/development/upgrade): Version changes and migrations
+- [Orchestrator Runtime](/guide/development/orchestrator-runtime): Coordinate pipeline execution
+
+### Observe
+- [Observability Overview](/guide/operations/observability/): Metrics, tracing, logs, and security notes
+- [Metrics](/guide/operations/observability/metrics): Instrumentation and dashboards
+- [Tracing](/guide/operations/observability/tracing): Distributed tracing and context propagation
+- [Logging](/guide/operations/observability/logging): Structured logging and levels
+- [Health Checks](/guide/operations/observability/health-checks): Liveness and readiness
+- [Alerting](/guide/operations/observability/alerting): Alerts and noise reduction
+- [Security Notes](/guide/operations/observability/security): Protect telemetry data
+- [Error Handling & DLQ](/guide/operations/error-handling): Managing errors and dead letter queues
+
+### Extend
+- [Writing a Plugin](/guide/plugins/writing-a-plugin): Build your own aspects
+- [Orchestrator Extensions](/guide/development/extension/orchestrator-runtime): Customize orchestration flows
+- [Reactive Service Extensions](/guide/development/extension/reactive-services): Wrap or adapt process() behavior
+- [Client Step Extensions](/guide/development/extension/client-steps): Customize client-side calls
+- [REST Resource Extensions](/guide/development/extension/rest-resources): Extend generated REST resources
+
+### Evolve
+- [Functional Architecture](/guide/evolve/architecture): Architectural decisions and trade-offs
+- [Annotation Processor Architecture](/guide/evolve/annotation-processor-architecture): Build-time IR, bindings, and renderers
+- [Plugins Architecture](/guide/evolve/plugins-architecture): Cross-cutting behavior model
+- [Aspect Semantics](/guide/evolve/aspects/semantics): Aspect expansion rules
+- [Aspect Ordering](/guide/evolve/aspects/ordering): Ordering guarantees and constraints
+- [Aspect Warnings](/guide/evolve/aspects/warnings): Known limitations and caveats
+- [Reference Implementation](/guide/evolve/reference-implementation): End-to-end example and rationale
+- [Template Generator (Reference)](/guide/evolve/template-generator): Automation/CI usage
+- [Publishing](/guide/evolve/publishing): Release and publishing workflow
+- [CI Guidelines](/guide/evolve/ci-guidelines): Build validation and automation
+- [Testing Guidelines](/guide/evolve/testing-guidelines): Coverage and test strategy
+- [Gotchas & Pitfalls](/guide/evolve/gotchas-pitfalls): Known sharp edges
+- [Proto Descriptor Integration](/guide/evolve/protobuf-integration-descriptor-res): Descriptor generation and troubleshooting
 
 This approach reduces boilerplate code and ensures consistency across your pipeline steps.

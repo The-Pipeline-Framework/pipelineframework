@@ -16,8 +16,9 @@
 
 package org.pipelineframework.grpc.test;
 
-import io.smallrye.mutiny.Multi;
 import jakarta.enterprise.context.ApplicationScoped;
+
+import io.smallrye.mutiny.Multi;
 import org.pipelineframework.grpc.GrpcServiceBidirectionalStreamingAdapter;
 import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
 
@@ -25,12 +26,11 @@ import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
 public class ConcreteGrpcBidirectionalStreamingAdapter
         extends GrpcServiceBidirectionalStreamingAdapter<String, String, String, String> {
 
-    private boolean autoPersist = true;
-
-    public void setAutoPersistence(boolean autoPersist) {
-        this.autoPersist = autoPersist;
-    }
-
+    /**
+     * Provide the reactive bidirectional streaming service used by this adapter.
+     *
+     * @return the ReactiveBidirectionalStreamingService instance that processes String stream inputs and produces String stream outputs
+     */
     @Override
     protected ReactiveBidirectionalStreamingService<String, String> getService() {
         return new TestBidirectionalStreamingService();
@@ -53,20 +53,21 @@ public class ConcreteGrpcBidirectionalStreamingAdapter
     }
 
     /**
-     * Indicates whether automatic persistence of streaming messages is enabled.
+     * Exposes the conversion of a gRPC input string to the adapter's domain representation for tests.
      *
-     * @return `true` if automatic persistence is enabled, `false` otherwise.
+     * @param grpcIn the input string in gRPC form
+     * @return the corresponding domain representation of the input
      */
-    @Override
-    protected boolean isAutoPersistenceEnabled() {
-        return autoPersist;
-    }
-
-    // Public methods for testing
     public String testFromGrpc(String grpcIn) {
         return fromGrpc(grpcIn);
     }
 
+    /**
+     * Exposes the conversion of a domain output string to its gRPC representation for tests.
+     *
+     * @param domainOut the domain output string to convert
+     * @return the corresponding gRPC representation of the output
+     */
     public String testToGrpc(String domainOut) {
         return toGrpc(domainOut);
     }

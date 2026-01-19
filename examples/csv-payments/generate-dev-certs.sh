@@ -19,7 +19,9 @@
 # Script to generate development certificates for quarkus:dev
 
 # Create a temporary directory for certificate generation
-CERT_DIR="/tmp/csv-payments-dev-certs"
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CERT_DIR="${ROOT_DIR}/target/dev-certs-tmp"
+OUTPUT_DIR="${ROOT_DIR}/target/dev-certs"
 rm -rf "${CERT_DIR}"
 mkdir -p "${CERT_DIR}"
 
@@ -60,11 +62,13 @@ openssl pkcs12 -export -in "${CERT_DIR}/quarkus-cert.pem" -inkey "${CERT_DIR}/qu
 keytool -import -file "${CERT_DIR}/quarkus-cert.pem" -keystore "${CERT_DIR}/client-truststore.jks" -storepass secret -noprompt -alias server
 
 # Copy certificates to service directories
-for svc in input-csv-file-processing-svc payments-processing-svc payment-status-svc output-csv-file-processing-svc; do
-    cp "${CERT_DIR}/server-keystore.p12" "${svc}/src/main/resources/server-keystore.jks"
+for svc in persistence-svc input-csv-file-processing-svc payments-processing-svc payment-status-svc output-csv-file-processing-svc orchestrator-svc; do
+    mkdir -p "${OUTPUT_DIR}/${svc}"
+    cp "${CERT_DIR}/server-keystore.p12" "${OUTPUT_DIR}/${svc}/server-keystore.jks"
 done
 
-cp "${CERT_DIR}/client-truststore.jks" "orchestrator-svc/src/main/resources/client-truststore.jks"
+mkdir -p "${OUTPUT_DIR}/orchestrator-svc"
+cp "${CERT_DIR}/client-truststore.jks" "${OUTPUT_DIR}/orchestrator-svc/client-truststore.jks"
 
 # Clean up temporary files
 rm -rf "${CERT_DIR}"

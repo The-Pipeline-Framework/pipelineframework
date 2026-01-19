@@ -52,11 +52,6 @@ class ExampleBidirectionalStreamingAdapterTest {
         protected String toGrpc(String domainOut) {
             return "grpc_" + domainOut;
         }
-
-        @Override
-        protected boolean isAutoPersistenceEnabled() {
-            return false;
-        }
     }
 
     @Test

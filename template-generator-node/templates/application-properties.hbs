@@ -1,11 +1,31 @@
-quarkus.http.ssl-port={{#portNumber}}{{add 8443 order}}{{/portNumber}}
+#
+# Copyright (c) 2023-2025 Mariano Barcia
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
-quarkus.hibernate-orm.blocking=false
-quarkus.datasource.jdbc=false
-quarkus.hibernate-orm.packages={{basePackage}}.common.domain
-quarkus.index-dependency."common".group-id={{basePackage}}
-quarkus.index-dependency."common".artifact-id=common
-quarkus.hibernate-orm.enabled=true
+# Vert.x configuration
+quarkus.http.ssl-port={{add 8443 portOffset}}
+# REST alternative:
+# quarkus.http.port={{add 8443 portOffset}}
+# quarkus.http.enable-compression=true
+
+# HTTP/2 REST and gRPC endpoint using SSL with a self-signed cert
+quarkus.grpc.server.use-separate-server=false
+quarkus.grpc.server.plain-text=false
+quarkus.http.ssl.certificate.key-store-file=${SERVER_KEYSTORE_PATH:../target/dev-certs/{{serviceName}}/server-keystore.jks}
+quarkus.http.ssl.certificate.key-store-password=secret
+quarkus.http.insecure-requests=disabled
 
 # Micrometer configuration
 quarkus.micrometer.export.prometheus.enabled=true
@@ -13,16 +33,9 @@ quarkus.micrometer.export.prometheus.path=/q/metrics
 quarkus.micrometer.binder.http-server.enabled=true
 quarkus.micrometer.binder.http-client.enabled=true
 
-# gRPC client configuration for other services
-quarkus.grpc.clients.orchestrator-service.host=localhost
-quarkus.grpc.clients.orchestrator-service.port={{#portNumber}}{{add 8443 order}}{{/portNumber}}
-quarkus.grpc.clients.orchestrator-service.plain-text=false
-quarkus.grpc.clients.orchestrator-service.use-quarkus-grpc-client=true
-quarkus.grpc.clients.orchestrator-service.tls.enabled=true
-
 # Docker image
 quarkus.container-image.builder=jib
 quarkus.container-image.registry=localhost
-quarkus.container-image.group={{basePackage}}
+quarkus.container-image.group={{rootProjectName}}
 quarkus.container-image.name={{serviceName}}
 quarkus.container-image.tag=latest

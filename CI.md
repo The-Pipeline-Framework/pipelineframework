@@ -26,7 +26,7 @@ The project uses three independent workflows:
 
 - `-DskipITs` — Skip integration tests
 - `-DskipNative=true` — Skip native builds
-- `-Dquarkus.container-image.build=true` — Build Jib image
+- `-Dquarkus.container-image.build=false` — Skips building Jib image (but uses Docker build)
 - `-Pcoverage` — Enable coverage for unit tests only
 - `-Pcentral-publishing` — Release mode for Maven Central deploy
 - Avoid mixing `skipTests` and `skipITs`
@@ -65,15 +65,15 @@ flowchart TD
 
 ## 🧩 CLI Flags — TL;DR
 
-| Flag | Meaning | When to Use |
-|------|---------|--------------|
-| `-DskipITs` | Skips `*IT.java` | PRs, fast builds |
-| `-DskipNative=true` | Skips native images | Everything except main |
-| `-Dquarkus.container-image.build=true` | Build Jib images | Full tests on main |
-| `-Pcoverage` | Run coverage on unit tests | PRs, quality gates |
-| `-Pcentral-publishing` | Release signing + GPG + deploy | Only on tags |
-| `-DskipTests` | Skips **all** tests | ⚠️ Avoid — rarely correct |
-| `-Dquarkus.native.enabled=true` | Enables native build | Native matrix stage |
+| Flag                                    | Meaning                                   | When to Use               |
+|-----------------------------------------|-------------------------------------------|---------------------------|
+| `-DskipITs`                             | Skips `*IT.java`                          | PRs, fast builds          |
+| `-DskipNative=true`                     | Skips native images                       | Everything except main    |
+| `-Dquarkus.container-image.build=false` | Skips Jib images (but uses Docker builds) | Full tests on main        |
+| `-Pcoverage`                            | Run coverage on unit tests                | PRs, quality gates        |
+| `-Pcentral-publishing`                  | Release signing + GPG + deploy            | Only on tags              |
+| `-DskipTests`                           | Skips **all** tests                       | ⚠️ Avoid — rarely correct |
+| `-Dquarkus.native.enabled=true`         | Enables native build                      | Native matrix stage       |
 
 ### Golden Rules
 - ❌ **Never** mix `skipTests` + `skipITs`.

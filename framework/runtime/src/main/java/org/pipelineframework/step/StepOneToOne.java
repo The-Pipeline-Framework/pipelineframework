@@ -70,7 +70,7 @@ public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, DeadLe
         .transformToUni(this::applyOneToOne)
 
         // Step 3: Apply retry policy for transient failures
-        .onFailure()
+        .onFailure(this::shouldRetry)
         .retry()
         .withBackOff(retryWait(), maxBackoff())
         .withJitter(jitter() ? 0.5 : 0.0)

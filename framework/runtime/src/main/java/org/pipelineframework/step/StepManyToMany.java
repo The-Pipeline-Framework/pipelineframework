@@ -70,7 +70,7 @@ public interface StepManyToMany<I, O> extends Configurable, ManyToMany<I, O>, De
             }
             return item;
         })
-        .onFailure(t -> !(t instanceof NullPointerException)).retry()
+        .onFailure(this::shouldRetry).retry()
         .withBackOff(retryWait(), maxBackoff())
         .withJitter(jitter() ? 0.5 : 0.0)
         .atMost(retryLimit())

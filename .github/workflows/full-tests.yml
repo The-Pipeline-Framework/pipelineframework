@@ -42,6 +42,14 @@ jobs:
         run: ./mvnw $MAVEN_ARGS clean install -DskipITs=true -DskipNative=true -Dquarkus.container-image.build=false -Dquarkus.package.type=fast-jar
 
       # Build Docker images using docker/build-push-action for all CSV Payments modules
+      - name: Build persistence-svc Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: examples/csv-payments/persistence-svc
+          file: examples/csv-payments/persistence-svc/src/main/docker/Dockerfile.jvm
+          tags: localhost/csv-payments/persistence-svc:latest
+          load: true
+
       - name: Build input-csv-file-processing-svc Docker image
         uses: docker/build-push-action@v6
         with:
@@ -56,7 +64,7 @@ jobs:
           context: examples/csv-payments/payment-status-svc
           file: examples/csv-payments/payment-status-svc/src/main/docker/Dockerfile.jvm
           tags: localhost/csv-payments/payment-status-svc:latest
-          load: true     # important: makes image available to Testcontainers
+          load: true
 
       - name: Build payments-processing-svc Docker image
         uses: docker/build-push-action@v6
@@ -64,7 +72,7 @@ jobs:
           context: examples/csv-payments/payments-processing-svc
           file: examples/csv-payments/payments-processing-svc/src/main/docker/Dockerfile.jvm
           tags: localhost/csv-payments/payments-processing-svc:latest
-          load: true     # important: makes image available to Testcontainers
+          load: true
 
       - name: Build output-csv-file-processing-svc Docker image
         uses: docker/build-push-action@v6
@@ -72,7 +80,7 @@ jobs:
           context: examples/csv-payments/output-csv-file-processing-svc
           file: examples/csv-payments/output-csv-file-processing-svc/src/main/docker/Dockerfile.jvm
           tags: localhost/csv-payments/output-csv-file-processing-svc:latest
-          load: true     # important: makes image available to Testcontainers
+          load: true
 
       - name: Build orchestrator-svc Docker image
         uses: docker/build-push-action@v6
@@ -80,7 +88,7 @@ jobs:
           context: examples/csv-payments/orchestrator-svc
           file: examples/csv-payments/orchestrator-svc/src/main/docker/Dockerfile.jvm
           tags: localhost/csv-payments/orchestrator-svc:latest
-          load: true     # important: makes image available to Testcontainers
+          load: true
 
       - name: Run Integration Tests
         run: ./mvnw $MAVEN_ARGS verify
@@ -127,7 +135,7 @@ jobs:
 
       - name: Full native build
         run: |
-          ./mvnw $MAVEN_ARGS -DskipTests -Dquarkus.native.enabled=true -Pnative package
+          ./mvnw $MAVEN_ARGS -DskipTests -Dquarkus.container-image.build=false -Dquarkus.native.enabled=true -Pnative package
 
       - name: Upload native orchestrator artifact
         uses: actions/upload-artifact@v4
@@ -136,6 +144,16 @@ jobs:
           path: |
             examples/csv-payments/orchestrator-svc/target/*-runner
             examples/csv-payments/orchestrator-svc/target/*-runner.*
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload native persistence artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-persistence-svc
+          path: |
+            examples/csv-payments/persistence-svc/target/*-runner
+            examples/csv-payments/persistence-svc/target/*-runner.*
           retention-days: 7
           if-no-files-found: error
 

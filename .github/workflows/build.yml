@@ -36,7 +36,7 @@ jobs:
           echo "MAVEN_ARGS=-B -T 1 -V -DskipITs -DskipNative=true -Dmaven.test.redirectTestOutputToFile=true" >> $GITHUB_ENV
 
       - name: Build framework (skip tests)
-        run: ./mvnw $MAVEN_ARGS --no-transfer-progress clean install -DskipTests
+        run: ./mvnw $MAVEN_ARGS --no-transfer-progress clean install -DskipTests -Dquarkus.container-image.build=false
 
       - name: Run unit tests with coverage
-        run: ./mvnw $MAVEN_ARGS --no-transfer-progress verify -Pcoverage
+        run: ./mvnw $MAVEN_ARGS --no-transfer-progress verify -Pcoverage -Dquarkus.container-image.build=false

@@ -18,7 +18,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.pipelineframework</groupId>
+        <groupId>org.pipelineframework.csv</groupId>
         <artifactId>csv-payments-parent</artifactId>
         <version>0.9.2-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
@@ -27,7 +27,12 @@
     <artifactId>common</artifactId>
     <!-- version is not needed as it is automatically inherited from the parent-->
 
+    <properties>
+        <generated.proto.dir>${project.build.directory}/generated-sources/proto</generated.proto.dir>
+    </properties>
+
     <dependencies>
+        <!-- Pipeline Framework Runtime Module -->
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>pipelineframework</artifactId>
@@ -92,10 +97,10 @@
             <artifactId>guava</artifactId>
             <version>32.1.2-jre</version>
         </dependency>
-        <!-- Hibernate -->
+        <!-- Jakarta Persistence -->
         <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-hibernate-reactive-panache</artifactId>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
         </dependency>
         <!-- gRPC -->
         <dependency>
@@ -178,12 +183,62 @@
                 <artifactId>maven-compiler-plugin</artifactId>
             </plugin>
             <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>generate-proto-from-config</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>java</goal>
+                        </goals>
+                        <configuration>
+                            <mainClass>org.pipelineframework.proto.PipelineProtoGenerator</mainClass>
+                            <arguments>
+                                <argument>--module-dir=${project.basedir}</argument>
+                                <argument>--output-dir=${generated.proto.dir}</argument>
+                            </arguments>
+                            <addOutputToClasspath>true</addOutputToClasspath>
+                            <classpathScope>compile</classpathScope>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
             </plugin>
             <plugin>
                 <groupId>io.quarkus</groupId>
                 <artifactId>quarkus-maven-plugin</artifactId>
+                <configuration>
+                    <properties>
+                        <!-- Configure the quarkus-grpc extension via the plugin -->
+                        <quarkus.grpc.codegen.proto-directory>${generated.proto.dir}</quarkus.grpc.codegen.proto-directory>
+                        <quarkus.generate-code.grpc.descriptor-set.generate>true</quarkus.generate-code.grpc.descriptor-set.generate>
+                    </properties>
+                </configuration>
+            </plugin>
+            <!-- Add the generated directory to the build source roots -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <id>add-proto-source</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${generated.proto.dir}</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>

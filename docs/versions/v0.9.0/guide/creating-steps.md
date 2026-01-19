@@ -4,21 +4,15 @@ This guide explains how to create your own pipeline steps using The Pipeline Fra
 
 ## Step 1: Create Your Service Class
 
-Create a class that implements one of the step interfaces. Use the `inputGrpcType` and `outputGrpcType` parameters to explicitly specify the gRPC types that should be used in the generated client step interface:
+Create a class that implements one of the step interfaces and annotate it with `@PipelineStep`:
 
 ```java
 @PipelineStep(
-   order = 1,
    inputType = PaymentRecord.class,
    outputType = PaymentStatus.class,
-   inputGrpcType = PaymentsProcessingSvc.PaymentRecord.class,
-   outputGrpcType = PaymentsProcessingSvc.PaymentStatus.class,
    stepType = StepOneToOne.class,
-   grpcStub = MutinyProcessPaymentServiceGrpc.MutinyProcessPaymentServiceStub.class,
-   grpcImpl = MutinyProcessPaymentServiceGrpc.ProcessPaymentServiceImplBase.class,
    inboundMapper = PaymentRecordMapper.class,
-   outboundMapper = PaymentStatusMapper.class,
-   grpcClient = "process-payment"
+   outboundMapper = PaymentStatusMapper.class
 )
 public class ProcessPaymentService implements StepOneToOne<PaymentRecord, PaymentStatus> {
     @Override
@@ -31,8 +25,6 @@ public class ProcessPaymentService implements StepOneToOne<PaymentRecord, Paymen
     }
 }
 ```
-
-The `inputGrpcType` and `outputGrpcType` parameters allow you to explicitly specify the gRPC message types that should be used in the generated client step interfaces. When these parameters are provided, the framework will use these exact types in the generated step implementations instead of trying to infer them from the domain types. This gives you more control over the interface contracts and helps avoid issues where the inferred types don't match the expected gRPC service contract.
 
 ## Step 2: Create Your Mapper Classes
 

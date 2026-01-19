@@ -17,6 +17,12 @@
 const fs = require('fs-extra');
 const path = require('path');
 const Handlebars = require('handlebars');
+let distTemplates = null;
+try {
+    distTemplates = require('../dist/templates');
+} catch (error) {
+    distTemplates = null;
+}
 
 // Register helper for replacing characters in strings
 Handlebars.registerHelper('replace', function(str, find, repl) {
@@ -36,6 +42,36 @@ Handlebars.registerHelper('add', function(a, b) {
 // Register helper for converting to lowercase
 Handlebars.registerHelper('lowercase', function(str) {
     return typeof str === 'string' ? str.toLowerCase() : str;
+});
+
+// Register helper for gRPC side-effect client names derived from aspect + type names
+Handlebars.registerHelper('grpcAspectSideEffectClientName', function(aspectName, typeName) {
+    if (typeof aspectName !== 'string' || !aspectName.trim()) {
+        return '';
+    }
+    if (typeof typeName !== 'string' || !typeName.trim()) {
+        return '';
+    }
+    const base = typeName.trim();
+    const withBoundaryHyphens = base
+        .replace(/([A-Z]+)([A-Z][a-z])/g, '$1-$2')
+        .replace(/([a-z0-9])([A-Z])/g, '$1-$2');
+    return `observe-${aspectName.trim()}-${withBoundaryHyphens.toLowerCase()}-side-effect`;
+});
+
+// Register helper for Observe service names derived from aspect + type names
+Handlebars.registerHelper('observeServiceName', function(aspectName, typeName) {
+    if (typeof aspectName !== 'string' || !aspectName.trim()) {
+        return '';
+    }
+    if (typeof typeName !== 'string' || !typeName.trim()) {
+        return '';
+    }
+    const aspectParts = aspectName.trim().split(/[^A-Za-z0-9]+/).filter(Boolean);
+    const aspectPascal = aspectParts
+        .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+        .join('');
+    return `Observe${aspectPascal}${typeName.trim()}SideEffectService`;
 });
 
 // Register helper for getting the index of an element in an array
@@ -358,6 +394,13 @@ class HandlebarsTemplateEngine {
                 this.compiledTemplates.set(templateName, Handlebars.compile(templateContent));
             }
         }
+        if (distTemplates) {
+            for (const [templateName, templateContent] of Object.entries(distTemplates)) {
+                if (!this.compiledTemplates.has(templateName)) {
+                    this.compiledTemplates.set(templateName, Handlebars.compile(templateContent));
+                }
+            }
+        }
     }
 
     render(templateName, context) {
@@ -368,7 +411,22 @@ class HandlebarsTemplateEngine {
         return template(context);
     }
 
-    async generateApplication(appName, basePackage, steps, outputPath) {
+    async generateApplication(appName, basePackage, steps, aspects, transport, outputPath) {
+        if (typeof aspects === 'string' && outputPath === undefined) {
+            outputPath = aspects;
+            aspects = {};
+            transport = 'GRPC';
+        }
+        if (typeof transport === 'string' && outputPath === undefined) {
+            outputPath = transport;
+            transport = 'GRPC';
+        }
+        const aspectConfig = aspects || {};
+        const transportMode = typeof transport === 'string' && transport.trim() ? transport.trim() : 'GRPC';
+        const includePersistenceModule = this.isAspectEnabled(aspectConfig, 'persistence');
+        const includeCacheInvalidationModule = this.isAspectEnabled(aspectConfig, 'cache-invalidate')
+            || this.isAspectEnabled(aspectConfig, 'cache-invalidate-all');
+        const aspectDefinitions = this.getAspectDefinitions(aspectConfig);
         // For sequential pipeline, update input types of steps after the first one
         // to match the output type of the previous step
         for (let i = 1; i < steps.length; i++) {
@@ -385,27 +443,43 @@ class HandlebarsTemplateEngine {
         await fs.ensureDir(outputPath);
 
         // Generate parent POM
-        await this.generateParentPom(appName, basePackage, steps, outputPath);
+        await this.generateParentPom(
+            appName,
+            basePackage,
+            steps,
+            includePersistenceModule,
+            includeCacheInvalidationModule,
+            outputPath);
 
         // Generate common module
-        await this.generateCommonModule(appName, basePackage, steps, outputPath);
+        await this.generateCommonModule(appName, basePackage, steps, aspectDefinitions, transportMode, outputPath);
 
         // Generate each step service
         for (let i = 0; i < steps.length; i++) {
-            await this.generateStepService(appName, basePackage, steps[i], outputPath, i, steps);
+            await this.generateStepService(appName, basePackage, steps[i], outputPath, i, steps, transportMode);
+        }
+
+        if (includePersistenceModule) {
+            await this.generatePersistenceModule(appName, basePackage, steps, outputPath);
+        }
+
+        if (includeCacheInvalidationModule) {
+            await this.generateCacheInvalidationModule(appName, basePackage, steps, includePersistenceModule, outputPath);
         }
 
         // Generate orchestrator
-        await this.generateOrchestrator(appName, basePackage, steps, outputPath);
-
-        // Generate docker-compose
-        await this.generateDockerCompose(appName, steps, outputPath);
+        await this.generateOrchestrator(
+            appName,
+            basePackage,
+            steps,
+            includePersistenceModule,
+            includeCacheInvalidationModule,
+            aspectDefinitions,
+            transportMode,
+            outputPath);
 
         // Generate utility scripts
         await this.generateUtilityScripts(outputPath);
-
-        // Generate observability configs
-        await this.generateObservabilityConfigs(outputPath);
 
         // Generate mvnw files
         await this.generateMvNWFiles(outputPath);
@@ -414,15 +488,23 @@ class HandlebarsTemplateEngine {
         await this.generateMavenWrapperFiles(outputPath);
 
         // Generate other files
-        await this.generateOtherFiles(appName, outputPath);
+        await this.generateOtherFiles(appName, basePackage, steps, outputPath);
     }
 
-    async generateParentPom(appName, basePackage, steps, outputPath) {
+    async generateParentPom(
+        appName,
+        basePackage,
+        steps,
+        includePersistenceModule,
+        includeCacheInvalidationModule,
+        outputPath) {
         const context = {
             basePackage,
             artifactId: appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-'),
             name: appName,
-            steps
+            steps,
+            includePersistenceModule,
+            includeCacheInvalidationModule
         };
 
         const rendered = this.render('parent-pom', context);
@@ -430,20 +512,21 @@ class HandlebarsTemplateEngine {
         await fs.writeFile(pomPath, rendered);
     }
 
-    async generateCommonModule(appName, basePackage, steps, outputPath) {
+    async generateCommonModule(appName, basePackage, steps, aspectDefinitions, transport, outputPath) {
         const commonPath = path.join(outputPath, 'common');
         await fs.ensureDir(path.join(commonPath, 'src/main/java', this.toPath(basePackage + '.common.domain')));
         await fs.ensureDir(path.join(commonPath, 'src/main/java', this.toPath(basePackage + '.common.dto')));
         await fs.ensureDir(path.join(commonPath, 'src/main/java', this.toPath(basePackage + '.common.mapper')));
-        await fs.ensureDir(path.join(commonPath, 'src/main/proto'));
+        await fs.ensureDir(path.join(commonPath, 'src/main/resources'));
+        const transportMode = typeof transport === 'string' && transport.trim()
+            ? transport.trim().toUpperCase()
+            : 'GRPC';
+        if (transportMode !== 'REST') {
+            await fs.ensureDir(path.join(commonPath, 'src/main/proto'));
+        }
 
         // Generate common POM
-        await this.generateCommonPom(appName, basePackage, commonPath);
-
-        // Generate proto files for each step
-        for (let i = 0; i < steps.length; i++) {
-            await this.generateProtoFile(steps[i], basePackage, commonPath, i, steps);
-        }
+        await this.generateCommonPom(appName, basePackage, commonPath, transportMode);
 
         // Generate entities, DTOs, and mappers for each step
         for (let i = 0; i < steps.length; i++) {
@@ -458,54 +541,90 @@ class HandlebarsTemplateEngine {
 
         // Generate common converters
         await this.generateCommonConverters(basePackage, commonPath);
+
+        // Generate application.properties
+        await this.generateCommonApplicationProperties(commonPath, transportMode);
     }
 
-    async generateCommonPom(appName, basePackage, commonPath) {
+    async generatePersistenceModule(appName, basePackage, steps, outputPath) {
+        const modulePath = path.join(outputPath, 'persistence-svc');
+        const packagePath = this.toPath(basePackage + '.persistence');
+        await fs.ensureDir(path.join(modulePath, 'src/main/java', packagePath));
+        await fs.ensureDir(path.join(modulePath, 'src/main/resources'));
+
+        const rootProjectName = appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-');
+        const pomContent = this.render('persistence-svc-pom', { basePackage, rootProjectName });
+        await fs.writeFile(path.join(modulePath, 'pom.xml'), pomContent);
+
+        const hostContent = this.render('persistence-plugin-host', { basePackage });
+        await fs.writeFile(
+            path.join(modulePath, 'src/main/java', packagePath, 'PersistencePluginHost.java'),
+            hostContent);
+
+        await this.generatePersistenceApplicationProperties(
+            basePackage,
+            rootProjectName,
+            steps.length + 1,
+            modulePath);
+        await this.generateModuleDevProperties(modulePath);
+        await this.generatePersistenceTestProperties(modulePath);
+        await this.generateModuleBeansXml(modulePath);
+        await this.generateStepDockerfile(modulePath);
+        await this.copyBinaryResourceFiles(modulePath, false);
+    }
+
+    async generateCacheInvalidationModule(appName, basePackage, steps, includePersistenceModule, outputPath) {
+        const modulePath = path.join(outputPath, 'cache-invalidation-svc');
+        const packagePath = this.toPath(basePackage + '.cache');
+        await fs.ensureDir(path.join(modulePath, 'src/main/java', packagePath));
+        await fs.ensureDir(path.join(modulePath, 'src/main/resources'));
+
+        const rootProjectName = appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-');
+        const pomContent = this.render('cache-invalidation-svc-pom', { basePackage, rootProjectName });
+        await fs.writeFile(path.join(modulePath, 'pom.xml'), pomContent);
+
+        const hostContent = this.render('cache-invalidation-plugin-host', { basePackage });
+        await fs.writeFile(
+            path.join(modulePath, 'src/main/java', packagePath, 'CacheInvalidationPluginHost.java'),
+            hostContent);
+
+        const hostAllContent = this.render('cache-invalidation-all-plugin-host', { basePackage });
+        await fs.writeFile(
+            path.join(modulePath, 'src/main/java', packagePath, 'CacheInvalidationAllPluginHost.java'),
+            hostAllContent);
+
+        const cacheHostContent = this.render('cache-plugin-host', { basePackage });
+        await fs.writeFile(
+            path.join(modulePath, 'src/main/java', packagePath, 'CachePluginHost.java'),
+            cacheHostContent);
+
+        const baseOffset = steps.length + (includePersistenceModule ? 2 : 1);
+        await this.generateCacheInvalidationApplicationProperties(
+            basePackage,
+            appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-'),
+            baseOffset,
+            modulePath);
+        await this.generateModuleDevProperties(modulePath);
+        await this.generateCacheInvalidationTestProperties(modulePath);
+        await this.generateModuleBeansXml(modulePath);
+        await this.generateStepDockerfile(modulePath);
+        await this.copyBinaryResourceFiles(modulePath, false);
+    }
+
+    async generateCommonPom(appName, basePackage, commonPath, transport) {
+        const transportMode = typeof transport === 'string' && transport.trim()
+            ? transport.trim().toUpperCase()
+            : 'GRPC';
         const context = {
             basePackage,
-            rootProjectName: appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-')
+            rootProjectName: appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-'),
+            isRestTransport: transportMode === 'REST',
+            isGrpcTransport: transportMode !== 'REST'
         };
 
         const rendered = this.render('common-pom', context);
         const pomPath = path.join(commonPath, 'pom.xml');
         await fs.writeFile(pomPath, rendered);
-    }
-
-    async generateProtoFile(step, basePackage, commonPath, stepIndex, allSteps) {
-        // Process input fields to add field numbers
-        if (step.inputFields && Array.isArray(step.inputFields)) {
-            for (let i = 0; i < step.inputFields.length; i++) {
-                step.inputFields[i].fieldNumber = (i + 1).toString();
-            }
-        }
-
-        // Process output fields to add field numbers starting after input fields
-        if (step.outputFields && Array.isArray(step.outputFields)) {
-            const outputStartNumber = (step.inputFields ? step.inputFields.length : 0) + 1;
-            for (let i = 0; i < step.outputFields.length; i++) {
-                step.outputFields[i].fieldNumber = (outputStartNumber + i).toString();
-            }
-        }
-
-        const context = {
-            ...step,
-            basePackage,
-            isExpansion: step.cardinality === 'EXPANSION',
-            isReduction: step.cardinality === 'REDUCTION',
-            isFirstStep: stepIndex === 0,
-            ...(stepIndex > 0 && {
-                previousStepName: allSteps[stepIndex - 1].serviceName,
-                previousStepOutputTypeName: allSteps[stepIndex - 1].outputTypeName
-            }),
-            // Format the service name properly for the proto file
-            serviceNameFormatted: this.formatForClassName(
-                step.name.replace('Process ', '').trim()
-            )
-        };
-
-        const rendered = this.render('proto', context);
-        const protoPath = path.join(commonPath, 'src/main/proto', step.serviceName + '.proto');
-        await fs.writeFile(protoPath, rendered);
     }
 
     async generateDomainClasses(step, basePackage, commonPath, stepIndex) {
@@ -653,7 +772,32 @@ class HandlebarsTemplateEngine {
         await fs.writeFile(convertersPath, rendered);
     }
 
-    async generateStepService(appName, basePackage, step, outputPath, stepIndex, allSteps) {
+    async generateCommonApplicationProperties(commonPath, transport) {
+        const transportMode = typeof transport === 'string' && transport.trim()
+            ? transport.trim().toUpperCase()
+            : 'GRPC';
+        const context = {
+            isRestTransport: transportMode === 'REST',
+            isGrpcTransport: transportMode !== 'REST'
+        };
+        const rendered = this.render('common-application-properties', context);
+        const appPropsPath = path.join(commonPath, 'src/main/resources', 'application.properties');
+        await fs.writeFile(appPropsPath, rendered);
+    }
+
+    async generateUtilityScripts(outputPath) {
+        const context = {};
+        if (this.compiledTemplates.has('up-local')) {
+            const upLocalContent = this.render('up-local', context);
+            await fs.writeFile(path.join(outputPath, 'up-local.sh'), upLocalContent);
+        }
+        if (this.compiledTemplates.has('down-local')) {
+            const downLocalContent = this.render('down-local', context);
+            await fs.writeFile(path.join(outputPath, 'down-local.sh'), downLocalContent);
+        }
+    }
+
+    async generateStepService(appName, basePackage, step, outputPath, stepIndex, allSteps, transport) {
         const safeServiceName = String(step.serviceName || '')
           .toLowerCase()
           .replace(/[^a-z0-9\-_]/g, '');
@@ -669,10 +813,12 @@ class HandlebarsTemplateEngine {
         step.rootProjectName = appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-');
 
         // Generate step POM
-        await this.generateStepPom(step, basePackage, stepPath);
+        await this.generateStepPom(step, basePackage, stepPath, transport);
 
         // Generate the service class
         await this.generateStepServiceClass(appName, basePackage, step, stepPath, stepIndex, allSteps);
+
+        step.portOffset = stepIndex + 1;
 
         // Generate application.properties
         await this.generateApplicationProperties(step, basePackage, stepPath);
@@ -680,18 +826,29 @@ class HandlebarsTemplateEngine {
         // Generate application-dev.properties
         await this.generateApplicationDevProperties(step, basePackage, stepPath);
 
+        // Generate application-test.properties
+        await this.generateApplicationTestProperties(step, basePackage, stepPath);
+
         // Generate beans.xml
         await this.generateBeansXml(step, basePackage, stepPath);
 
-        // Generate Dockerfile
-        await this.generateDockerfile(step.serviceName, stepPath);
+        // Generate Dockerfile.jvm
+        await this.generateStepDockerfile(stepPath);
 
         // Copy binary resource files (e.g., keystore)
-        await this.copyBinaryResourceFiles(stepPath);
+        await this.copyBinaryResourceFiles(stepPath, true);
     }
 
-    async generateStepPom(step, basePackage, stepPath) {
-        const context = { ...step, basePackage };
+    async generateStepPom(step, basePackage, stepPath, transport) {
+        const transportMode = typeof transport === 'string' && transport.trim()
+            ? transport.trim().toUpperCase()
+            : 'GRPC';
+        const context = {
+            ...step,
+            basePackage,
+            isRestTransport: transportMode === 'REST',
+            isGrpcTransport: transportMode !== 'REST'
+        };
         const rendered = this.render('step-pom', context);
         const pomPath = path.join(stepPath, 'pom.xml');
         await fs.writeFile(pomPath, rendered);
@@ -708,17 +865,6 @@ class HandlebarsTemplateEngine {
         const protoClassName = this.formatForProtoClassName(step.serviceName);
         context.protoClassName = protoClassName;
 
-        // Determine the inputGrpcType proto class name based on step position
-        if (stepIndex === 0) {
-            // For the first step, inputGrpcType comes from the same proto file
-            context.inputGrpcProtoClassName = protoClassName;
-        } else {
-            // For subsequent steps, inputGrpcType comes from the previous step's proto file
-            const previousStep = allSteps[stepIndex - 1];
-            const previousProtoClassName = this.formatForProtoClassName(previousStep.serviceName);
-            context.inputGrpcProtoClassName = previousProtoClassName;
-        }
-
         // Use the serviceNameCamel field from the configuration to form the gRPC class names
         const serviceNameCamel = step.serviceNameCamel ?? (step.serviceName || '').replace(/-svc$/, '').replace(/-([a-z])/g, (_, c) => c.toUpperCase());
         // Convert camelCase to PascalCase
@@ -729,14 +875,6 @@ class HandlebarsTemplateEngine {
         // Extract the entity name from the PascalCase service name to match proto service names
         const entityName = this.extractEntityName(serviceNamePascal);
 
-        // For gRPC class names
-        const grpcServiceName = 'MutinyProcess' + entityName + 'ServiceGrpc';
-        const grpcStubName = grpcServiceName + '.MutinyProcess' + entityName + 'ServiceStub';
-        const grpcImplName = grpcServiceName + '.Process' + entityName + 'ServiceImplBase';
-
-        context.grpcServiceName = grpcServiceName;
-        context.grpcStubName = grpcStubName;
-        context.grpcImplName = grpcImplName;
         context.serviceNamePascal = serviceNamePascal;
         context.serviceNameFormatted = step.name;
 
@@ -773,15 +911,86 @@ class HandlebarsTemplateEngine {
         await fs.writeFile(servicePath, rendered);
     }
 
-    async generateOrchestratorApplicationProperties(appName, basePackage, steps, orchPath) {
+    async generateOrchestratorApplicationProperties(
+        appName,
+        basePackage,
+        steps,
+        includePersistenceModule,
+        includeCacheInvalidationModule,
+        aspectDefinitions,
+        transport,
+        orchPath) {
         // Create context for orchestrator properties
-        const context = { appName, basePackage, steps };
+        const context = { appName, basePackage, steps, transport };
+        const transportMode = typeof transport === 'string' && transport.trim()
+            ? transport.trim().toUpperCase()
+            : 'GRPC';
+        context.isRestTransport = transportMode === 'REST';
+        context.isGrpcTransport = !context.isRestTransport;
+        context.serviceName = 'orchestrator-svc';
+        context.clientStepSuffix = transportMode === 'REST'
+            ? 'RestClientStep'
+            : 'GrpcClientStep';
+        context.rootProjectName = appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-');
+        context.includePersistenceModule = includePersistenceModule;
+        context.includeCacheInvalidationModule = includeCacheInvalidationModule;
+        context.hasCacheAspect = (aspectDefinitions || []).some(aspect => aspect.name === 'cache');
+        if (includePersistenceModule) {
+            context.persistencePortOffset = steps.length + 1;
+            const outputTypes = new Set();
+            steps.forEach(step => {
+                if (step.outputTypeName) {
+                    outputTypes.add(step.outputTypeName);
+                }
+            });
+            context.persistenceSideEffectTypes = Array.from(outputTypes);
+            context.persistenceAspectNames = (aspectDefinitions || [])
+                .filter(aspect => aspect.name === 'persistence')
+                .filter(aspect => {
+                    const targets = aspect.enabledTargets || [];
+                    return targets.includes('CLIENT_STEP') || targets.includes('GRPC_SERVICE');
+                })
+                .map(aspect => aspect.name);
+        }
+        if (includeCacheInvalidationModule) {
+            const baseOffset = steps.length + (includePersistenceModule ? 2 : 1);
+            context.cacheInvalidationPortOffset = baseOffset;
+            const inputTypes = new Set();
+            steps.forEach(step => {
+                if (step.inputTypeName) {
+                    inputTypes.add(step.inputTypeName);
+                }
+            });
+            context.cacheInvalidationSideEffectTypes = Array.from(inputTypes);
+            context.cacheInvalidationAspectNames = (aspectDefinitions || [])
+                .filter(aspect => aspect.name.startsWith('cache-invalidate'))
+                .filter(aspect => {
+                    const targets = aspect.enabledTargets || [];
+                    return targets.includes('CLIENT_STEP') || targets.includes('GRPC_SERVICE');
+                })
+                .map(aspect => aspect.name);
+            const outputTypes = new Set();
+            steps.forEach(step => {
+                if (step.outputTypeName) {
+                    outputTypes.add(step.outputTypeName);
+                }
+            });
+            context.cacheSideEffectTypes = Array.from(outputTypes);
+            context.cacheAspectNames = (aspectDefinitions || [])
+                .filter(aspect => aspect.name === 'cache')
+                .filter(aspect => {
+                    const targets = aspect.enabledTargets || [];
+                    return targets.includes('CLIENT_STEP') || targets.includes('GRPC_SERVICE');
+                })
+                .map(aspect => aspect.name);
+        }
         // Process steps to add additional properties for template
         context.steps = steps.map((step, index) => ({
             ...step,
-            order: index + 1,
+            portOffset: index + 1,
             serviceNameForPackage: step.serviceName.replace('-svc', '').replace(/-/g, '_'),
-            serviceNameFormatted: this.formatForProtoClassName(step.serviceName) // This will be 'Process' + entity name
+            serviceNameFormatted: this.formatForProtoClassName(step.serviceName),
+            serviceNameCamel: step.serviceNameCamel
         }));
         const rendered = this.render('orchestrator-application-properties', context);
         const appPropsPath = path.join(orchPath, 'src/main/resources', 'application.properties');
@@ -795,18 +1004,66 @@ class HandlebarsTemplateEngine {
         await fs.writeFile(appDevPropsPath, rendered);
     }
 
-    async generateDockerfile(serviceName, stepPath) {
-        const context = { serviceName };
-        const rendered = this.render('dockerfile', context);
-        const dockerfilePath = path.join(stepPath, 'Dockerfile');
-        await fs.writeFile(dockerfilePath, rendered);
-    }
-
     async generateApplicationProperties(step, basePackage, stepPath) {
         const context = { ...step, basePackage };
         const rendered = this.render('application-properties', context);
         const appPropsPath = path.join(stepPath, 'src/main/resources', 'application.properties');
         await fs.writeFile(appPropsPath, rendered);
+    }
+
+    async generatePersistenceApplicationProperties(basePackage, rootProjectName, portOffset, modulePath) {
+        const context = {
+            basePackage,
+            basePackageSuffix: basePackage.split('.').pop(),
+            rootProjectName,
+            portOffset,
+            serviceName: 'persistence-svc'
+        };
+        const rendered = this.render('persistence-application-properties', context);
+        const appPropsPath = path.join(modulePath, 'src/main/resources', 'application.properties');
+        await fs.writeFile(appPropsPath, rendered);
+    }
+
+    async generateCacheInvalidationApplicationProperties(basePackage, rootProjectName, portOffset, modulePath) {
+        const context = {
+            basePackage,
+            basePackageSuffix: basePackage.split('.').pop(),
+            rootProjectName,
+            portOffset,
+            serviceName: 'cache-invalidation-svc'
+        };
+        const rendered = this.render('cache-invalidation-application-properties', context);
+        const appPropsPath = path.join(modulePath, 'src/main/resources', 'application.properties');
+        await fs.writeFile(appPropsPath, rendered);
+    }
+
+    async generateModuleDevProperties(modulePath) {
+        const rendered = this.render('module-application-dev-properties', {});
+        const appDevPropsPath = path.join(modulePath, 'src/main/resources', 'application-dev.properties');
+        await fs.writeFile(appDevPropsPath, rendered);
+    }
+
+    async generateModuleTestProperties(modulePath, templateName) {
+        const rendered = this.render(templateName, {});
+        const testResourcesPath = path.join(modulePath, 'src/test/resources');
+        await fs.ensureDir(testResourcesPath);
+        const appTestPropsPath = path.join(testResourcesPath, 'application.properties');
+        await fs.writeFile(appTestPropsPath, rendered);
+    }
+
+    async generatePersistenceTestProperties(modulePath) {
+        await this.generateModuleTestProperties(modulePath, 'persistence-application-test-properties');
+    }
+
+    async generateCacheInvalidationTestProperties(modulePath) {
+        await this.generateModuleTestProperties(modulePath, 'cache-invalidation-application-test-properties');
+    }
+
+    async generateModuleBeansXml(modulePath) {
+        const rendered = this.render('module-beans-xml', {}).trimEnd();
+        const beansXmlPath = path.join(modulePath, 'src/main/resources', 'META-INF', 'beans.xml');
+        await fs.ensureDir(path.dirname(beansXmlPath));
+        await fs.writeFile(beansXmlPath, rendered);
     }
 
     async generateApplicationDevProperties(step, basePackage, stepPath) {
@@ -816,15 +1073,39 @@ class HandlebarsTemplateEngine {
         await fs.writeFile(appDevPropsPath, rendered);
     }
 
+    async generateApplicationTestProperties(step, basePackage, stepPath) {
+        const context = { ...step, basePackage };
+        const rendered = this.render('application-test-properties', context);
+        const testResourcesPath = path.join(stepPath, 'src/test/resources');
+        await fs.ensureDir(testResourcesPath);
+        const appTestPropsPath = path.join(testResourcesPath, 'application.properties');
+        await fs.writeFile(appTestPropsPath, rendered);
+    }
+
+    async generateOrchestratorApplicationTestProperties(orchPath) {
+        const rendered = this.render('orchestrator-application-test-properties', {});
+        const testResourcesPath = path.join(orchPath, 'src/test/resources');
+        await fs.ensureDir(testResourcesPath);
+        const appTestPropsPath = path.join(testResourcesPath, 'application.properties');
+        await fs.writeFile(appTestPropsPath, rendered);
+    }
+
     async generateBeansXml(step, basePackage, stepPath) {
         const context = { ...step, basePackage };
-        const rendered = this.render('beans-xml', context);
+        const rendered = this.render('step-beans-xml', context).trimEnd();
         const beansXmlPath = path.join(stepPath, 'src/main/resources', 'META-INF', 'beans.xml');
         await fs.writeFile(beansXmlPath, rendered);
     }
 
+    async generateStepDockerfile(stepPath) {
+        const rendered = this.render('dockerfile-jvm', {});
+        const dockerDir = path.join(stepPath, 'src/main/docker');
+        await fs.ensureDir(dockerDir);
+        await fs.writeFile(path.join(dockerDir, 'Dockerfile.jvm'), rendered);
+    }
+
     // Copy binary files like keystore to the resources directory
-    async copyBinaryResourceFiles(stepPath) {
+    async copyBinaryResourceFiles(stepPath, includeReadme) {
         // This would copy the server-keystore.jks from a default location if available
         const sourceKeystorePath = path.join(__dirname, '../templates/server-keystore.jks');
         const targetKeystorePath = path.join(stepPath, 'src/main/resources', 'server-keystore.jks');
@@ -832,8 +1113,8 @@ class HandlebarsTemplateEngine {
         // Check if source keystore exists before copying
         if (fs.existsSync(sourceKeystorePath)) {
             await fs.copy(sourceKeystorePath, targetKeystorePath);
-        } else {
-            // If the keystore doesn't exist in the templates, create a notice file instead
+        }
+        if (includeReadme) {
             const noticeContent = `# Keystore File Needed
 #
 # This application requires a server-keystore.jks file for SSL/TLS functionality.
@@ -860,9 +1141,8 @@ class HandlebarsTemplateEngine {
         // Check if source truststore exists before copying
         if (fs.existsSync(sourceTruststorePath)) {
             await fs.copy(sourceTruststorePath, targetTruststorePath);
-        } else {
-            // If the truststore doesn't exist in the templates, create a notice file instead
-            const noticeContent = `# Truststore File Needed
+        }
+        const noticeContent = `# Truststore File Needed
 #
 # This application requires a client-truststore.jks file for SSL/TLS client functionality.
 #
@@ -875,40 +1155,74 @@ class HandlebarsTemplateEngine {
 #
 # For production, please use a proper certificate from a trusted CA.
 `;
-            await fs.writeFile(path.join(orchPath, 'src/main/resources', 'truststore-README.txt'), noticeContent);
-        }
+        await fs.writeFile(path.join(orchPath, 'src/main/resources', 'truststore-README.txt'), noticeContent);
     }
 
-    async generateOrchestrator(appName, basePackage, steps, outputPath) {
+    async generateOrchestrator(
+        appName,
+        basePackage,
+        steps,
+        includePersistenceModule,
+        includeCacheInvalidationModule,
+        aspectDefinitions,
+        transport,
+        outputPath) {
         const orchPath = path.join(outputPath, 'orchestrator-svc');
         const classPath = path.join(orchPath, 'src/main/java', this.toPath(basePackage + '.orchestrator.service'));
         await fs.ensureDir(classPath);
         await fs.ensureDir(path.join(orchPath, 'src/main/resources'));
 
         // Generate orchestrator application
-        await this.generateOrchestratorApplication(appName, basePackage, classPath, steps[0].inputTypeName);
+        await this.generateOrchestratorApplication(appName, basePackage, classPath);
 
         // Generate orchestrator POM
-        await this.generateOrchestratorPom(appName, basePackage, orchPath);
+        await this.generateOrchestratorPom(
+            appName,
+            basePackage,
+            includePersistenceModule,
+            includeCacheInvalidationModule,
+            transport,
+            orchPath);
 
         // Generate orchestrator application.properties
-        await this.generateOrchestratorApplicationProperties(appName, basePackage, steps, orchPath);
+        await this.generateOrchestratorApplicationProperties(
+            appName,
+            basePackage,
+            steps,
+            includePersistenceModule,
+            includeCacheInvalidationModule,
+            aspectDefinitions,
+            transport,
+            orchPath);
 
         // Generate orchestrator application-dev.properties
         await this.generateOrchestratorApplicationDevProperties(appName, basePackage, steps, orchPath);
 
-        // Generate Dockerfile
-        await this.generateDockerfile('orchestrator-svc', orchPath);
-
         // Copy orchestrator binary resource files (e.g., truststore)
         await this.copyOrchestratorBinaryResourceFiles(orchPath);
+        await this.generateStepDockerfile(orchPath);
+        await this.copyBinaryResourceFiles(orchPath, false);
+        await this.generateOrchestratorApplicationTestProperties(orchPath);
     }
 
-    async generateOrchestratorPom(appName, basePackage, orchPath) {
+    async generateOrchestratorPom(
+        appName,
+        basePackage,
+        includePersistenceModule,
+        includeCacheInvalidationModule,
+        transport,
+        orchPath) {
+        const transportMode = typeof transport === 'string' && transport.trim()
+            ? transport.trim().toUpperCase()
+            : 'GRPC';
         const context = {
             basePackage,
             artifactId: 'orchestrator-svc',
-            rootProjectName: appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-')
+            rootProjectName: appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-'),
+            includePersistenceModule,
+            includeCacheInvalidationModule,
+            isRestTransport: transportMode === 'REST',
+            isGrpcTransport: transportMode !== 'REST'
         };
 
         const rendered = this.render('orchestrator-pom', context);
@@ -916,16 +1230,14 @@ class HandlebarsTemplateEngine {
         await fs.writeFile(pomPath, rendered);
     }
 
-    async generateOrchestratorApplication(appName, basePackage, classPath, firstInputTypeName) {
+    async generateOrchestratorApplication(appName, basePackage, classPath) {
         const context = {
             appName,
-            basePackage,
-            classPath,
-            firstInputTypeName
+            basePackage
         };
 
         const rendered = this.render('orchestrator-application', context);
-        const mainAppPath = path.join(classPath, 'OrchestratorApplication.java');
+        const mainAppPath = path.join(classPath, 'OrchestratorHost.java');
         await fs.writeFile(mainAppPath, rendered);
     }
 
@@ -974,9 +1286,19 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         await fs.writeFile(path.join(wrapperDir, 'maven-wrapper.properties'), mavenWrapperProperties);
     }
 
-    async generateOtherFiles(appName, outputPath) {
+    async generateOtherFiles(appName, basePackage, steps, outputPath) {
+        const firstInputTypeName = steps && steps.length ? steps[0].inputTypeName : 'Input';
+        const optionsClass = `${firstInputTypeName}Options`;
+
         // Create README
-        const readmeContext = { appName };
+        const readmeContext = {
+            appName,
+            basePackage,
+            rootProjectName: appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-'),
+            optionsImport: `${basePackage}.common.util.${optionsClass}`,
+            requestTypeName: firstInputTypeName,
+            optionsClass
+        };
         const readmeContent = this.render('readme', readmeContext);
         const readmePath = path.join(outputPath, 'README.md');
         await fs.writeFile(readmePath, readmeContent);
@@ -985,6 +1307,13 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         const gitignoreContent = this.render('gitignore', {});
         const gitignorePath = path.join(outputPath, '.gitignore');
         await fs.writeFile(gitignorePath, gitignoreContent);
+
+        // Create formatter config
+        const formatterContent = this.render('quarkus-formatter', {});
+        const formatterDir = path.join(outputPath, 'ide-config');
+        await fs.ensureDir(formatterDir);
+        const formatterPath = path.join(formatterDir, 'quarkus-formatter.xml');
+        await fs.writeFile(formatterPath, formatterContent);
     }
 
     // Utility methods
@@ -1022,6 +1351,42 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
             .join('');
     }
 
+    simpleTypeName(typeName) {
+        if (!typeName || typeof typeName !== 'string') {
+            return '';
+        }
+        const parts = typeName.split('.');
+        return parts[parts.length - 1] || '';
+    }
+
+    computePipelineStreamingShape(steps) {
+        if (!Array.isArray(steps) || steps.length === 0) {
+            return { inputStreaming: false, outputStreaming: false };
+        }
+        const inputStreaming = this.isStreamingInputCardinality(steps[0].cardinality);
+        let outputStreaming = inputStreaming;
+        for (const step of steps) {
+            outputStreaming = this.applyCardinalityToStreaming(step.cardinality, outputStreaming);
+        }
+        return { inputStreaming, outputStreaming };
+    }
+
+    isStreamingInputCardinality(cardinality) {
+        return cardinality === 'REDUCTION' || cardinality === 'MANY_TO_MANY';
+    }
+
+    applyCardinalityToStreaming(cardinality, currentStreaming) {
+        switch (cardinality) {
+            case 'EXPANSION':
+            case 'MANY_TO_MANY':
+                return true;
+            case 'REDUCTION':
+                return false;
+            default:
+                return currentStreaming;
+        }
+    }
+
     extractEntityName(serviceNamePascal) {
         // If it starts with "Process", return everything after "Process"
         if (serviceNamePascal.startsWith('Process')) {
@@ -1029,6 +1394,40 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         }
         // For other cases, we'll default to the whole string
         return serviceNamePascal;
+    }
+
+    isAspectEnabled(aspects, aspectName) {
+        if (!aspects || !Object.prototype.hasOwnProperty.call(aspects, aspectName)) {
+            return false;
+        }
+        const config = aspects[aspectName];
+        return config == null || config.enabled !== false;
+    }
+
+    getAspectDefinitions(aspects) {
+        if (!aspects || typeof aspects !== 'object') {
+            return [];
+        }
+        const definitions = [];
+        for (const [name, config] of Object.entries(aspects)) {
+            if (!this.isAspectEnabled(aspects, name)) {
+                continue;
+            }
+            const position = config && typeof config.position === 'string'
+                ? config.position
+                : 'AFTER_STEP';
+            const enabledTargets = config
+                && config.config
+                && Array.isArray(config.config.enabledTargets)
+                ? config.config.enabledTargets.map(target => String(target))
+                : [];
+            definitions.push({
+                name,
+                position,
+                enabledTargets
+            });
+        }
+        return definitions;
     }
 }
 

@@ -16,14 +16,15 @@
 
 package org.pipelineframework.config;
 
-import static org.junit.jupiter.api.Assertions.*;
+import java.util.Map;
+import jakarta.inject.Inject;
 
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.QuarkusTestProfile;
 import io.quarkus.test.junit.TestProfile;
-import jakarta.inject.Inject;
-import java.util.Map;
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Comprehensive unit tests for PipelineStepConfig configuration mapping interface. Tests the
@@ -50,10 +51,8 @@ class PipelineStepConfigTest {
         PipelineStepConfig.StepConfig defaults = pipelineStepConfig.defaults();
 
         // Then - verify all default values from @WithDefault annotations
-        assertEquals(0, defaults.order(), "Default order should be 0");
         assertEquals(3, defaults.retryLimit(), "Default retryLimit should be 3");
         assertEquals(2000L, defaults.retryWaitMs(), "Default retryWaitMs should be 2000");
-        assertFalse(defaults.parallel(), "Default parallel should be false");
         assertFalse(defaults.recoverOnFailure(), "Default recoverOnFailure should be false");
         assertEquals(30000L, defaults.maxBackoff(), "Default maxBackoff should be 30000");
         assertFalse(defaults.jitter(), "Default jitter should be false");
@@ -93,10 +92,8 @@ class PipelineStepConfigTest {
         @Override
         public Map<String, String> getConfigOverrides() {
             return Map.of(
-                    "pipeline.defaults.order", "200",
                     "pipeline.defaults.retry-limit", "10",
                     "pipeline.defaults.retry-wait-ms", "5000",
-                    "pipeline.defaults.parallel", "true",
                     "pipeline.defaults.recover-on-failure", "true",
                     "pipeline.defaults.max-backoff", "60000",
                     "pipeline.defaults.jitter", "true",
@@ -118,10 +115,8 @@ class PipelineStepConfigTest {
             PipelineStepConfig.StepConfig defaults = pipelineStepConfig.defaults();
 
             // Then - verify custom values are loaded
-            assertEquals(200, defaults.order());
             assertEquals(10, defaults.retryLimit());
             assertEquals(5000L, defaults.retryWaitMs());
-            assertTrue(defaults.parallel());
             assertTrue(defaults.recoverOnFailure());
             assertEquals(60000L, defaults.maxBackoff());
             assertTrue(defaults.jitter());
@@ -135,10 +130,7 @@ class PipelineStepConfigTest {
         @Override
         public Map<String, String> getConfigOverrides() {
             return Map.of(
-                    "pipeline.step.\"com.example.MyStep\".order", "50",
                     "pipeline.step.\"com.example.MyStep\".retry-limit", "7",
-                    "pipeline.step.\"com.example.MyStep\".parallel", "true",
-                    "pipeline.step.\"com.example.AnotherStep\".order", "200",
                     "pipeline.step.\"com.example.AnotherStep\".retry-limit", "15");
         }
     }
@@ -165,12 +157,9 @@ class PipelineStepConfigTest {
                     "Should contain AnotherStep configuration");
 
             PipelineStepConfig.StepConfig myStepConfig = stepMap.get("com.example.MyStep");
-            assertEquals(50, myStepConfig.order());
             assertEquals(7, myStepConfig.retryLimit());
-            assertTrue(myStepConfig.parallel());
 
             PipelineStepConfig.StepConfig anotherStepConfig = stepMap.get("com.example.AnotherStep");
-            assertEquals(200, anotherStepConfig.order());
             assertEquals(15, anotherStepConfig.retryLimit());
         }
 

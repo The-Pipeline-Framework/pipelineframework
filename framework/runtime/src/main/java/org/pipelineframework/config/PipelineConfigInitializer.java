@@ -16,21 +16,20 @@
 
 package org.pipelineframework.config;
 
-import io.quarkus.arc.properties.IfBuildProperty;
-import io.quarkus.runtime.StartupEvent;
+import java.time.Duration;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
-import java.time.Duration;
+
+import io.quarkus.runtime.StartupEvent;
 import org.jboss.logging.Logger;
 
 /**
  * Initializes the PipelineConfig with values from the application configuration.
  * This ensures that the global pipeline defaults defined in application.properties
- * (e.g., pipeline.defaults.parallel=false) are properly applied to the PipelineConfig.
+ * are properly applied to the PipelineConfig.
  */
 @ApplicationScoped
-@IfBuildProperty(name = "pipeline-cli.generate-cli", stringValue = "true")
 public class PipelineConfigInitializer {
 
     private static final Logger logger = Logger.getLogger(PipelineConfigInitializer.class);
@@ -58,7 +57,8 @@ public class PipelineConfigInitializer {
         PipelineStepConfig.StepConfig config = stepConfig.defaults();
 
         logger.info("Initializing pipeline global/default configuration");
-        logger.infof("Parallel: %s", config.parallel());
+        logger.infof("Parallelism policy: %s", stepConfig.parallelism());
+        logger.infof("Max concurrency: %s", stepConfig.maxConcurrency());
         logger.infof("Retry limit: %s", config.retryLimit());
         logger.infof("Retry wait: %s ms", config.retryWaitMs());
         logger.infof("Backpressure buffer capacity: %s", config.backpressureBufferCapacity());
@@ -71,12 +71,14 @@ public class PipelineConfigInitializer {
         StepConfig defaults = pipelineConfig.defaults()
                 .retryLimit(config.retryLimit())
                 .retryWait(Duration.ofMillis(config.retryWaitMs()))
-                .parallel(config.parallel())
                 .recoverOnFailure(config.recoverOnFailure())
                 .maxBackoff(Duration.ofMillis(config.maxBackoff()))
                 .jitter(config.jitter())
                 .backpressureBufferCapacity(config.backpressureBufferCapacity())
                 .backpressureStrategy(config.backpressureStrategy());
+
+        pipelineConfig.parallelism(stepConfig.parallelism());
+        pipelineConfig.maxConcurrency(stepConfig.maxConcurrency());
 
         logger.info("Pipeline configuration loaded from Quarkus config system");
     }

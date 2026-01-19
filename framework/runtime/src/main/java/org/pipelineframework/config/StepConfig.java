@@ -16,12 +16,13 @@
 
 package org.pipelineframework.config;
 
-import io.quarkus.arc.DefaultBean;
-import jakarta.enterprise.context.Dependent;
 import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import jakarta.enterprise.context.Dependent;
+
+import io.quarkus.arc.DefaultBean;
 
 /**
  * Configuration class for pipeline steps that holds various runtime parameters
@@ -43,7 +44,6 @@ public class StepConfig {
     // Mutable fields for runtime configuration (to maintain backward compatibility)
     private final AtomicInteger retryLimit = new AtomicInteger(DEFAULT_RETRY_LIMIT);
     private final AtomicReference<Duration> retryWait = new AtomicReference<>(DEFAULT_RETRY_WAIT);
-    private volatile boolean parallel = false; // Default is sequential processing
     private final AtomicInteger backpressureBufferCapacity = new AtomicInteger(DEFAULT_BACKPRESSURE_BUFFER_CAPACITY);
 
     private volatile boolean recoverOnFailure = false;
@@ -68,7 +68,6 @@ public class StepConfig {
         if (config != null) {
             this.retryLimit.set(config.retryLimit());
             this.retryWait.set(Duration.ofMillis(config.retryWaitMs()));
-            this.parallel = config.parallel();
             this.recoverOnFailure = config.recoverOnFailure();
             this.maxBackoff.set(Duration.ofMillis(config.maxBackoff()));
             this.jitter = config.jitter();
@@ -103,13 +102,6 @@ public class StepConfig {
      * @return the backpressure strategy (default: "BUFFER")
      */
     public String backpressureStrategy() { return backpressureStrategy; }
-
-    /**
- * Indicates whether this step processes items in parallel.
- *
- * @return true if parallel processing is enabled, false otherwise
- */
-    public boolean parallel() { return parallel; }
 
     /**
  * Indicates if failure recovery is enabled.
@@ -163,13 +155,6 @@ public class StepConfig {
         retryWait.set(v);
         return this;
     }
-
-    /**
-     * Sets whether to enable parallel processing for this step
-     * @param v true to enable parallel processing, false for sequential processing
-     * @return this StepConfig instance for method chaining
-     */
-    public StepConfig parallel(boolean v) { parallel = v; return this; }
 
     /**
      * Set the capacity of the backpressure buffer.
@@ -242,15 +227,14 @@ public class StepConfig {
      * Produces a single-line, human-readable summary of this step's configuration.
      *
      * @return a formatted String containing the current values of
-     *         retryLimit, retryWait, parallel, recoverOnFailure, maxBackoff, jitter,
+     *         retryLimit, retryWait, recoverOnFailure, maxBackoff, jitter,
      *         backpressureBufferCapacity and backpressureStrategy
      */
     @Override
     public String toString() {
-        return String.format("StepConfig{retryLimit=%d, retryWait=%s, parallel=%b, recoverOnFailure=%b, maxBackoff=%s, jitter=%b, backpressureBufferCapacity=%d, backpressureStrategy=%s}",
+        return String.format("StepConfig{retryLimit=%d, retryWait=%s, recoverOnFailure=%b, maxBackoff=%s, jitter=%b, backpressureBufferCapacity=%d, backpressureStrategy=%s}",
                 retryLimit(),
                 retryWait(),
-                parallel,
                 recoverOnFailure,
                 maxBackoff(),
                 jitter,

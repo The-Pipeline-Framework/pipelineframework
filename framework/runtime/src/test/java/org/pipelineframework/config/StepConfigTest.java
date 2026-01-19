@@ -16,10 +16,11 @@
 
 package org.pipelineframework.config;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 import java.time.Duration;
+
 import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class StepConfigTest {
 
@@ -31,7 +32,6 @@ class StepConfigTest {
         // Then
         assertEquals(3, config.retryLimit());
         assertEquals(Duration.ofMillis(2000), config.retryWait());
-        assertFalse(config.parallel());
         assertFalse(config.recoverOnFailure());
         assertEquals(Duration.ofSeconds(30), config.maxBackoff());
         assertFalse(config.jitter());
@@ -49,11 +49,6 @@ class StepConfigTest {
             @Override
             public Long retryWaitMs() {
                 return 3000L;
-            }
-
-            @Override
-            public Boolean parallel() {
-                return true;
             }
 
             @Override
@@ -80,11 +75,6 @@ class StepConfigTest {
             public String backpressureStrategy() {
                 return "DROP";
             }
-
-            @Override
-            public Integer order() {
-                return 100;
-            }
         };
 
         // When
@@ -93,7 +83,6 @@ class StepConfigTest {
         // Then
         assertEquals(5, config.retryLimit());
         assertEquals(Duration.ofMillis(3000), config.retryWait());
-        assertTrue(config.parallel());
         assertTrue(config.recoverOnFailure());
         assertEquals(Duration.ofSeconds(60), config.maxBackoff());
         assertTrue(config.jitter());
@@ -135,19 +124,6 @@ class StepConfigTest {
 
         // When/Then
         assertThrows(NullPointerException.class, () -> config.retryWait(null));
-    }
-
-    @Test
-    void testParallelSetter() {
-        // Given
-        StepConfig config = new StepConfig();
-
-        // When
-        StepConfig result = config.parallel(true);
-
-        // Then
-        assertTrue(config.parallel());
-        assertSame(config, result); // Fluent API
     }
 
     @Test
@@ -247,7 +223,6 @@ class StepConfigTest {
         // Then - should have default values
         assertEquals(3, config.retryLimit());
         assertEquals(Duration.ofMillis(2000), config.retryWait());
-        assertFalse(config.parallel());
         assertFalse(config.recoverOnFailure());
         assertEquals(Duration.ofSeconds(30), config.maxBackoff());
         assertFalse(config.jitter());
@@ -455,7 +430,6 @@ class StepConfigTest {
         StepConfig config = new StepConfig()
                 .retryLimit(5)
                 .retryWait(Duration.ofSeconds(3))
-                .parallel(true)
                 .recoverOnFailure(true)
                 .maxBackoff(Duration.ofMinutes(1))
                 .jitter(true)
@@ -468,7 +442,6 @@ class StepConfigTest {
         // Then
         assertTrue(result.contains("retryLimit=5"));
         assertTrue(result.contains("PT3S"));
-        assertTrue(result.contains("parallel=true"));
         assertTrue(result.contains("recoverOnFailure=true"));
         assertTrue(result.contains("PT1M"));
         assertTrue(result.contains("jitter=true"));
@@ -484,7 +457,6 @@ class StepConfigTest {
         // When - chain multiple setters
         StepConfig result = config.retryLimit(10)
                 .retryWait(Duration.ofMillis(500))
-                .parallel(true)
                 .recoverOnFailure(true)
                 .maxBackoff(Duration.ofMinutes(5))
                 .jitter(true)
@@ -495,7 +467,6 @@ class StepConfigTest {
         assertSame(config, result);
         assertEquals(10, config.retryLimit());
         assertEquals(Duration.ofMillis(500), config.retryWait());
-        assertTrue(config.parallel());
         assertTrue(config.recoverOnFailure());
         assertEquals(Duration.ofMinutes(5), config.maxBackoff());
         assertTrue(config.jitter());
@@ -515,11 +486,6 @@ class StepConfigTest {
             @Override
             public Long retryWaitMs() {
                 return 1L;
-            }
-
-            @Override
-            public Boolean parallel() {
-                return false;
             }
 
             @Override
@@ -546,11 +512,6 @@ class StepConfigTest {
             public String backpressureStrategy() {
                 return "BUFFER";
             }
-
-            @Override
-            public Integer order() {
-                return 1;
-            }
         };
 
         // When
@@ -559,7 +520,6 @@ class StepConfigTest {
         // Then
         assertEquals(0, config.retryLimit());
         assertEquals(Duration.ofMillis(1), config.retryWait());
-        assertFalse(config.parallel());
         assertFalse(config.recoverOnFailure());
         assertEquals(Duration.ofMillis(1), config.maxBackoff());
         assertFalse(config.jitter());
@@ -579,11 +539,6 @@ class StepConfigTest {
             @Override
             public Long retryWaitMs() {
                 return Long.MAX_VALUE;
-            }
-
-            @Override
-            public Boolean parallel() {
-                return true;
             }
 
             @Override
@@ -610,11 +565,6 @@ class StepConfigTest {
             public String backpressureStrategy() {
                 return "DROP";
             }
-
-            @Override
-            public Integer order() {
-                return Integer.MAX_VALUE;
-            }
         };
 
         // When
@@ -623,7 +573,6 @@ class StepConfigTest {
         // Then
         assertEquals(Integer.MAX_VALUE, config.retryLimit());
         assertEquals(Duration.ofMillis(Long.MAX_VALUE), config.retryWait());
-        assertTrue(config.parallel());
         assertTrue(config.recoverOnFailure());
         assertEquals(Duration.ofMillis(Long.MAX_VALUE), config.maxBackoff());
         assertTrue(config.jitter());

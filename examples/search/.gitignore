@@ -1,0 +1,52 @@
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+.codeclimate.yml
+
+# Compilation
+*.class
+*.war
+*.jar
+*.ear
+
+# Log files
+*.log
+.log
+
+# IDE
+.idea/
+*.iws
+*.iml
+*.ipr
+*.sw?
+*~
+.#*
+.DS_Store
+.classpath
+.project
+.settings/
+.vscode/
+
+# Temporary files
+.tmp
+temp/
+
+# OS Generated
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Icon?
+Thumbs.db
+
+# Docker
+.docker/
+
+# Generated certificates
+**/server-keystore.jks
+**/client-truststore.jks
+**/quarkus-cert.pem
+**/quarkus-key.pem

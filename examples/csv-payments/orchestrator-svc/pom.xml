@@ -19,7 +19,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>org.pipelineframework</groupId>
+        <groupId>org.pipelineframework.csv</groupId>
         <artifactId>csv-payments-parent</artifactId>
         <version>0.9.2-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
@@ -27,55 +27,16 @@
 
     <artifactId>orchestrator-svc</artifactId>
 
+    <properties>
+        <pipeline.generatedSourcesArg>-Apipeline.generatedSourcesDir=${project.build.directory}/generated-sources/pipeline</pipeline.generatedSourcesArg>
+    </properties>
+
     <dependencies>
-        <!-- Backend service dependencies for pipeline processing -->
+        <!-- Common module -->
         <dependency>
-            <groupId>org.pipelineframework</groupId>
-            <artifactId>input-csv-file-processing-svc</artifactId>
+            <groupId>org.pipelineframework.csv</groupId>
+            <artifactId>common</artifactId>
             <version>${version.pipeline}</version>
-            <classifier>client</classifier>
-            <exclusions>
-                <exclusion>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-grpc-protoc-plugin</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>org.pipelineframework</groupId>
-            <artifactId>payments-processing-svc</artifactId>
-            <version>${version.pipeline}</version>
-            <classifier>client</classifier>
-            <exclusions>
-                <exclusion>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-grpc-protoc-plugin</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>org.pipelineframework</groupId>
-            <artifactId>payment-status-svc</artifactId>
-            <version>${version.pipeline}</version>
-            <classifier>client</classifier>
-            <exclusions>
-                <exclusion>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-grpc-protoc-plugin</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>org.pipelineframework</groupId>
-            <artifactId>output-csv-file-processing-svc</artifactId>
-            <version>${version.pipeline}</version>
-            <classifier>client</classifier>
-            <exclusions>
-                <exclusion>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-grpc-protoc-plugin</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -196,6 +157,29 @@
             <plugin>
                 <groupId>io.smallrye</groupId>
                 <artifactId>jandex-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>merge-orchestrator-client-classes</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.outputDirectory}</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.build.directory}/classes-pipeline/orchestrator-client</directory>
+                                    <filtering>false</filtering>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

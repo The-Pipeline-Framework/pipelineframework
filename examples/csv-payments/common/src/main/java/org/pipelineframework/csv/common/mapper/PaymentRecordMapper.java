@@ -22,14 +22,14 @@ import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.dto.PaymentRecordDto;
-import org.pipelineframework.csv.grpc.InputCsvFileProcessingSvc;
+import org.pipelineframework.csv.grpc.ProcessCsvPaymentsInputSvc;
 
 @SuppressWarnings("unused")
 @Mapper(
     componentModel = "jakarta",
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface PaymentRecordMapper extends org.pipelineframework.mapper.Mapper<InputCsvFileProcessingSvc.PaymentRecord, PaymentRecordDto, PaymentRecord> {
+public interface PaymentRecordMapper extends org.pipelineframework.mapper.Mapper<ProcessCsvPaymentsInputSvc.PaymentRecord, PaymentRecordDto, PaymentRecord> {
 
   PaymentRecordMapper INSTANCE = Mappers.getMapper( PaymentRecordMapper.class );
 
@@ -46,12 +46,12 @@ public interface PaymentRecordMapper extends org.pipelineframework.mapper.Mapper
   @Mapping(target = "amount", qualifiedByName = "bigDecimalToString")
   @Mapping(target = "currency", qualifiedByName = "currencyToString")
   @Mapping(target = "csvPaymentsInputFilePath", qualifiedByName = "pathToString")
-  InputCsvFileProcessingSvc.PaymentRecord toGrpc(PaymentRecordDto dto);
+  ProcessCsvPaymentsInputSvc.PaymentRecord toGrpc(PaymentRecordDto dto);
 
   @Override
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
   @Mapping(target = "amount", qualifiedByName = "stringToBigDecimal")
   @Mapping(target = "currency", qualifiedByName = "stringToCurrency")
   @Mapping(target = "csvPaymentsInputFilePath", qualifiedByName = "stringToPath")
-  PaymentRecordDto fromGrpc(InputCsvFileProcessingSvc.PaymentRecord grpc);
+  PaymentRecordDto fromGrpc(ProcessCsvPaymentsInputSvc.PaymentRecord grpc);
 }

@@ -14,80 +14,14 @@
  * limitations under the License.
  */
 
-package {{basePackage}}.orchestrator;
+package {{basePackage}}.orchestrator.service;
 
-import io.quarkus.runtime.QuarkusApplication;
-import io.smallrye.mutiny.Multi;
-import jakarta.enterprise.context.Dependent;
-import jakarta.inject.Inject;
-import org.pipelineframework.PipelineExecutionService;
-import {{basePackage}}.common.domain.{{firstInputTypeName}};
-import picocli.CommandLine;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import java.util.concurrent.Callable;
+import org.pipelineframework.annotation.PipelineOrchestrator;
 
-/**
- * Main application class for the orchestrator service.
- * This class provides the proper Quarkus integration for the orchestrator CLI.
- */
-@Command(name = "orchestrator", mixinStandardHelpOptions = true, version = "1.0.0",
-         description = "{{appName}} Orchestrator Service")
-@Dependent
-public class OrchestratorApplication implements QuarkusApplication, Callable<Integer> {
-
-    @Option(
-        names = {"-i", "--input"}, 
-        description = "Input value for the pipeline",
-        defaultValue = ""
-    )
-    String input;
-
-    @Inject
-    PipelineExecutionService pipelineExecutionService;
-
-    public static void main(String[] args) {
-        io.quarkus.runtime.Quarkus.run(OrchestratorApplication.class, args);
-    }
-
-    @Override
-    public int run(String... args) {
-        return new CommandLine(this).execute(args);
-    }
-
-    public Integer call() {
-        // Use command line option if provided, otherwise fall back to environment variable
-        String actualInput = input;
-        if (actualInput == null || actualInput.trim().isEmpty()) {
-            actualInput = System.getenv("PIPELINE_INPUT");
-        }
-        
-        if (actualInput == null || actualInput.trim().isEmpty()) {
-            System.err.println("Input parameter is required");
-            return CommandLine.ExitCode.USAGE;
-        }
-        
-        Multi<{{firstInputTypeName}}> inputMulti = getInputMulti(actualInput);
-
-        // Execute the pipeline with the processed input using injected service
-        pipelineExecutionService.executePipeline(inputMulti)
-            .collect().asList()
-            .await().indefinitely();
-
-        System.out.println("Pipeline execution completed");
-        return CommandLine.ExitCode.OK;
-    }
-
-    // This method needs to be implemented by the user after template generation
-    // based on their specific input type and requirements
-    private Multi<{{firstInputTypeName}}> getInputMulti(String input) {
-        // TODO: User needs to implement this method after template generation
-        // Create and return appropriate Multi based on the input and first step requirements
-        // For example:
-        // {{firstInputTypeName}} inputItem = new {{firstInputTypeName}}();
-        // inputItem.setField(input);
-        // return Multi.createFrom().item(inputItem);
-        
-        throw new UnsupportedOperationException("Method getInputMulti needs to be implemented by user after template generation");
+@PipelineOrchestrator(
+        generateCli = false
+)
+public final class OrchestratorHost {
+    private OrchestratorHost() {
     }
 }

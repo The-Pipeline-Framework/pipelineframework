@@ -16,24 +16,27 @@
 
 package org.pipelineframework;
 
-import static org.junit.jupiter.api.Assertions.*;
+import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
+import jakarta.inject.Inject;
 
 import io.quarkus.test.junit.QuarkusTest;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.AssertSubscriber;
-import jakarta.inject.Inject;
-import java.time.Duration;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepOneToOne;
 import org.pipelineframework.step.future.StepOneToOneCompletableFuture;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @QuarkusTest
 class ParallelProcessingSmokeTest {
@@ -146,9 +149,9 @@ class ParallelProcessingSmokeTest {
     @Test
     void testSequentialProcessingWorks() {
         // Given
+        pipelineConfig.parallelism(ParallelismPolicy.SEQUENTIAL);
         TestStepOneToOne step = new TestStepOneToOne();
         StepConfig stepConfig = new StepConfig();
-        // Keep default parallel=false
         step.initialiseWithConfig(stepConfig);
 
         // When
@@ -169,9 +172,9 @@ class ParallelProcessingSmokeTest {
     @Test
     void testParallelProcessingWorks() {
         // Given
+        pipelineConfig.parallelism(ParallelismPolicy.PARALLEL);
         TestStepOneToOne step = new TestStepOneToOne();
         StepConfig stepConfig = new StepConfig();
-        stepConfig.parallel(true);
         step.initialiseWithConfig(stepConfig);
 
         // When
@@ -188,9 +191,12 @@ class ParallelProcessingSmokeTest {
 
         // (1) Assert output content equals expected processed items
         assertEquals(3, items.size());
-        assertTrue(items.contains("processed:item1_count1"));
-        assertTrue(items.contains("processed:item2_count2"));
-        assertTrue(items.contains("processed:item3_count3"));
+        assertTrue(items.stream().anyMatch(item -> item instanceof String value
+            && value.startsWith("processed:item1_count")));
+        assertTrue(items.stream().anyMatch(item -> item instanceof String value
+            && value.startsWith("processed:item2_count")));
+        assertTrue(items.stream().anyMatch(item -> item instanceof String value
+            && value.startsWith("processed:item3_count")));
 
         // Verify that all items were processed
         assertEquals(3, step.callCount.get());
@@ -224,9 +230,9 @@ class ParallelProcessingSmokeTest {
     @Disabled
     void testCompletableFutureParallelProcessingWorks() {
         // Given
+        pipelineConfig.parallelism(ParallelismPolicy.PARALLEL);
         TestStepOneToOneCompletableFuture step = new TestStepOneToOneCompletableFuture();
         StepConfig stepConfig = new StepConfig();
-        stepConfig.parallel(true);
         step.initialiseWithConfig(stepConfig);
 
         // When

@@ -16,8 +16,7 @@
 
 package org.pipelineframework.grpc;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import io.grpc.StatusRuntimeException;
 import io.smallrye.mutiny.Multi;
@@ -29,6 +28,9 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.pipelineframework.service.ReactiveStreamingClientService;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 
 class GrpcServiceClientStreamingAdapterTest {
 
@@ -67,11 +69,6 @@ class GrpcServiceClientStreamingAdapterTest {
             @Override
             protected GrpcOut toGrpc(DomainOut domainOut) {
                 return new GrpcOut();
-            }
-
-            @Override
-            protected boolean isAutoPersistenceEnabled() {
-                return false;
             }
         };
     }
@@ -145,27 +142,27 @@ class GrpcServiceClientStreamingAdapterTest {
         GrpcIn grpcIn1 = new GrpcIn();
         GrpcIn grpcIn2 = new GrpcIn();
         Multi<GrpcIn> grpcRequestStream = Multi.createFrom().items(grpcIn1, grpcIn2);
-        DomainOut domainOut = new DomainOut();
+        AtomicInteger collectedSize = new AtomicInteger();
+        GrpcServiceClientStreamingAdapter<GrpcIn, GrpcOut, DomainIn, DomainOut> verificationAdapter =
+                getGrpcInGrpcOutDomainInDomainOutGrpcServiceClientStreamingAdapter(collectedSize);
 
-        // Create a mock to verify the transformation
-        ReactiveStreamingClientService<DomainIn, DomainOut> verificationService = new ReactiveStreamingClientService<>() {
-            @Override
-            public Uni<DomainOut> process(Multi<DomainIn> inputStream) {
-                // Collect the items to verify transformation
-                return inputStream
-                        .collect()
-                        .asList()
-                        .onItem()
-                        .transform(
-                                list -> {
-                                    // Verify we received the expected number of items
-                                    assertEquals(2, list.size());
-                                    return domainOut;
-                                });
-            }
-        };
+        // When
+        Uni<GrpcOut> resultUni = verificationAdapter.remoteProcess(grpcRequestStream);
 
-        GrpcServiceClientStreamingAdapter<GrpcIn, GrpcOut, DomainIn, DomainOut> verificationAdapter = new GrpcServiceClientStreamingAdapter<>() {
+        // Then
+        UniAssertSubscriber<GrpcOut> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
+        subscriber.awaitItem();
+
+        assertNotNull(subscriber.getItem());
+        assertEquals(2, collectedSize.get());
+    }
+
+    private static GrpcServiceClientStreamingAdapter<GrpcIn, GrpcOut, DomainIn, DomainOut> getGrpcInGrpcOutDomainInDomainOutGrpcServiceClientStreamingAdapter(
+            AtomicInteger collectedSize) {
+        ReactiveStreamingClientService<DomainIn, DomainOut> verificationService =
+                getDomainInDomainOutReactiveStreamingClientService(collectedSize);
+
+        return new GrpcServiceClientStreamingAdapter<>() {
             @Override
             protected ReactiveStreamingClientService<DomainIn, DomainOut> getService() {
                 return verificationService;
@@ -181,21 +178,24 @@ class GrpcServiceClientStreamingAdapterTest {
             protected GrpcOut toGrpc(DomainOut domainOut) {
                 return new GrpcOut();
             }
-
-            @Override
-            protected boolean isAutoPersistenceEnabled() {
-                return false;
-            }
         };
+    }
 
-        // When
-        Uni<GrpcOut> resultUni = verificationAdapter.remoteProcess(grpcRequestStream);
+    private static ReactiveStreamingClientService<DomainIn, DomainOut> getDomainInDomainOutReactiveStreamingClientService(
+            AtomicInteger collectedSize) {
+        DomainOut domainOut = new DomainOut();
 
-        // Then
-        UniAssertSubscriber<GrpcOut> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
-        subscriber.awaitItem();
-
-        assertNotNull(subscriber.getItem());
+        return inputStream -> {
+            return inputStream
+                    .collect()
+                    .asList()
+                    .onItem()
+                    .transform(
+                            list -> {
+                                collectedSize.set(list.size());
+                                return domainOut;
+                            });
+        };
     }
 
     @Test
@@ -225,12 +225,7 @@ class GrpcServiceClientStreamingAdapterTest {
                 toGrpcCalled[0] = true;
                 return new GrpcOut();
             }
-
-            @Override
-            protected boolean isAutoPersistenceEnabled() {
-                return false;
-            }
-        };
+       };
 
         // When
         Uni<GrpcOut> resultUni = trackingAdapter.remoteProcess(grpcRequestStream);
@@ -276,11 +271,6 @@ class GrpcServiceClientStreamingAdapterTest {
             protected GrpcOut toGrpc(DomainOut domainOut) {
                 return new GrpcOut();
             }
-
-            @Override
-            protected boolean isAutoPersistenceEnabled() {
-                return false;
-            }
         };
 
         // When
@@ -323,11 +313,6 @@ class GrpcServiceClientStreamingAdapterTest {
             @Override
             protected GrpcOut toGrpc(DomainOut domainOut) {
                 throw transformationException;
-            }
-
-            @Override
-            protected boolean isAutoPersistenceEnabled() {
-                return false;
             }
         };
 

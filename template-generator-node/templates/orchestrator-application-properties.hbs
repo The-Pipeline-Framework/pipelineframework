@@ -1,7 +1,49 @@
-quarkus.package.main-class={{basePackage}}.orchestrator.OrchestratorApplication
+#
+# Copyright (c) 2023-2025 Mariano Barcia
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
 
-quarkus.hibernate-orm.enabled=false
-quarkus.datasource.jdbc=false
+{{#if isGrpcTransport}}
+# Vert.x configuration
+quarkus.http.host-enabled=false
+
+# REST alternative:
+# quarkus.http.ssl-port=8443
+# quarkus.grpc.server.use-separate-server=false
+# quarkus.grpc.server.plain-text=false
+# quarkus.http.ssl.certificate.key-store-file=${SERVER_KEYSTORE_PATH:../target/dev-certs/orchestrator-svc/server-keystore.jks}
+# quarkus.http.ssl.certificate.key-store-password=secret
+# quarkus.http.insecure-requests=disabled
+# quarkus.http.enable-compression=true
+# quarkus.rest-client.http2=true
+{{/if}}
+
+{{#if isRestTransport}}
+quarkus.http.ssl-port=8443
+
+# Vert.x configuration
+quarkus.grpc.server.use-separate-server=false
+quarkus.grpc.server.plain-text=false
+quarkus.http.ssl.certificate.key-store-file=${SERVER_KEYSTORE_PATH:../target/dev-certs/orchestrator-svc/server-keystore.jks}
+quarkus.http.ssl.certificate.key-store-password=secret
+quarkus.http.insecure-requests=disabled
+quarkus.http.enable-compression=true
+quarkus.rest-client.http2=true
+
+# gRPC alternative:
+# quarkus.http.host-enabled=false
+{{/if}}
 
 # Pipeline Configuration
 pipeline.defaults.retry-limit=10
@@ -9,30 +51,19 @@ pipeline.defaults.retry-wait-ms=500
 pipeline.defaults.recover-on-failure=false
 pipeline.defaults.max-backoff=30000
 pipeline.defaults.jitter=false
-pipeline.defaults.parallel=false
-
-pipeline-cli.generate-cli=true
-pipeline-cli.version=0.9.2
-pipeline-cli.cli-version=0.9.2
-pipeline-cli.cli-description="{{appName}} CLI"
-pipeline-cli.cli-name="{{appName}} Processing System"
-
-# Pipeline step configurations - these define the sequence of processing steps
-# Each step has an order which determines its position in the pipeline
-{{#each steps}}
-pipeline.step."{{../basePackage}}.{{serviceNameForPackage}}.pipeline.{{this.serviceNameFormatted}}ClientStep".order={{this.order}}
-{{#if this.parallel}}
-pipeline.step."{{../basePackage}}.{{serviceNameForPackage}}.pipeline.{{this.serviceNameFormatted}}ClientStep".parallel=true
+{{#if hasCacheAspect}}
+pipeline.cache.policy=prefer-cache
 {{/if}}
-{{/each}}
 
+# Pipeline step configurations - configure specific step properties (without order)
+{{#if isGrpcTransport}}
 {{#each steps}}
 # Talk to {{serviceName}} service
-quarkus.grpc.clients.{{grpcClientName}}.host=localhost
-quarkus.grpc.clients.{{grpcClientName}}.port={{add 8443 order}}
-quarkus.grpc.clients.{{grpcClientName}}.plain-text=false
-quarkus.grpc.clients.{{grpcClientName}}.use-quarkus-grpc-client=true
-quarkus.grpc.clients.{{grpcClientName}}.tls.enabled=true
+quarkus.grpc.clients.process-{{replace serviceNameForPackage "_" "-"}}.host=localhost
+quarkus.grpc.clients.process-{{replace serviceNameForPackage "_" "-"}}.port={{add 8443 portOffset}}
+quarkus.grpc.clients.process-{{replace serviceNameForPackage "_" "-"}}.plain-text=false
+quarkus.grpc.clients.process-{{replace serviceNameForPackage "_" "-"}}.use-quarkus-grpc-client=true
+quarkus.grpc.clients.process-{{replace serviceNameForPackage "_" "-"}}.tls.enabled=true
 {{/each}}
 
 # Talk to orchestrator-svc (self)
@@ -41,21 +72,126 @@ quarkus.grpc.clients.orchestrator-service.port=8443
 quarkus.grpc.clients.orchestrator-service.plain-text=false
 quarkus.grpc.clients.orchestrator-service.use-quarkus-grpc-client=true
 quarkus.grpc.clients.orchestrator-service.tls.enabled=true
+{{#if includePersistenceModule}}
+# Talk to persistence-side-effect services
+{{#each persistenceAspectNames}}
+{{#each ../persistenceSideEffectTypes}}
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.host=localhost
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.port={{add 8443 ../../persistencePortOffset}}
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.plain-text=false
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.use-quarkus-grpc-client=true
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.tls.enabled=true
+{{/each}}
+{{/each}}
+{{/if}}
+{{#if includeCacheInvalidationModule}}
+# Talk to cache side-effect services
+{{#each cacheAspectNames}}
+{{#each ../cacheSideEffectTypes}}
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.host=localhost
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.port={{add 8443 ../../cacheInvalidationPortOffset}}
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.plain-text=false
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.use-quarkus-grpc-client=true
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.tls.enabled=true
+{{/each}}
+{{/each}}
 
-# Vert.x configuration
-# Server endpoints are disabled as the orchestrator is purely a gRPC client
-quarkus.http.host-enabled=false
+# Talk to cache-invalidation side-effect services
+{{#each cacheInvalidationAspectNames}}
+{{#each ../cacheInvalidationSideEffectTypes}}
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.host=localhost
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.port={{add 8443 ../../cacheInvalidationPortOffset}}
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.plain-text=false
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.use-quarkus-grpc-client=true
+quarkus.grpc.clients.{{grpcAspectSideEffectClientName ../../this this}}.tls.enabled=true
+{{/each}}
+{{/each}}
+{{/if}}
 
-# gRPC server configuration
-# Server endpoints are disabled as the orchestrator is purely a gRPC client
-quarkus.grpc.server.use-separate-server=false
-quarkus.grpc.server.port=8450
 # Increase msg size limit for all clients to 32M
 quarkus.grpc.clients.default.max-inbound-message-size=33554432
 
+# REST alternative: configure REST clients and truststores for steps/aspects
+{{#each steps}}
+# quarkus.rest-client.process-{{replace serviceNameForPackage "_" "-"}}.url=https://localhost:{{add 8443 portOffset}}
+{{/each}}
+# quarkus.rest-client.orchestrator-service.url=https://localhost:8443
+# quarkus.rest-client.process-<step>.trust-store=${CLIENT_TRUSTSTORE_PATH:../target/dev-certs/orchestrator-svc/client-truststore.jks}
+# quarkus.rest-client.process-<step>.trust-store-password=secret
+
 # TLS configuration
-quarkus.tls.trust-store.jks.path=client-truststore.jks
+quarkus.tls.trust-store.jks.path=${CLIENT_TRUSTSTORE_PATH:../target/dev-certs/orchestrator-svc/client-truststore.jks}
 quarkus.tls.trust-store.jks.password=secret
+{{/if}}
+
+{{#if isRestTransport}}
+{{#each steps}}
+# Talk to {{serviceName}} service
+quarkus.rest-client.process-{{replace serviceNameForPackage "_" "-"}}.url=https://localhost:{{add 8443 portOffset}}
+{{/each}}
+
+# Talk to orchestrator-svc (self)
+quarkus.rest-client.orchestrator-service.url=https://localhost:8443
+{{#if includePersistenceModule}}
+# Talk to persistence-side-effect services
+{{#each persistenceAspectNames}}
+{{#each ../persistenceSideEffectTypes}}
+quarkus.rest-client.{{grpcAspectSideEffectClientName ../../this this}}.url=https://localhost:{{add 8443 ../../persistencePortOffset}}
+{{/each}}
+{{/each}}
+{{/if}}
+{{#if includeCacheInvalidationModule}}
+# Talk to cache side-effect services
+{{#each cacheAspectNames}}
+{{#each ../cacheSideEffectTypes}}
+quarkus.rest-client.{{grpcAspectSideEffectClientName ../../this this}}.url=https://localhost:{{add 8443 ../../cacheInvalidationPortOffset}}
+{{/each}}
+{{/each}}
+
+# Talk to cache-invalidation side-effect services
+{{#each cacheInvalidationAspectNames}}
+{{#each ../cacheInvalidationSideEffectTypes}}
+quarkus.rest-client.{{grpcAspectSideEffectClientName ../../this this}}.url=https://localhost:{{add 8443 ../../cacheInvalidationPortOffset}}
+{{/each}}
+{{/each}}
+{{/if}}
+
+# REST client truststore configuration
+{{#each steps}}
+quarkus.rest-client.process-{{replace serviceNameForPackage "_" "-"}}.trust-store=${CLIENT_TRUSTSTORE_PATH:../target/dev-certs/orchestrator-svc/client-truststore.jks}
+quarkus.rest-client.process-{{replace serviceNameForPackage "_" "-"}}.trust-store-password=secret
+{{/each}}
+quarkus.rest-client.orchestrator-service.trust-store=${CLIENT_TRUSTSTORE_PATH:../target/dev-certs/orchestrator-svc/client-truststore.jks}
+quarkus.rest-client.orchestrator-service.trust-store-password=secret
+{{#if includePersistenceModule}}
+{{#each persistenceAspectNames}}
+{{#each ../persistenceSideEffectTypes}}
+quarkus.rest-client.{{grpcAspectSideEffectClientName ../../this this}}.trust-store=${CLIENT_TRUSTSTORE_PATH:../target/dev-certs/orchestrator-svc/client-truststore.jks}
+quarkus.rest-client.{{grpcAspectSideEffectClientName ../../this this}}.trust-store-password=secret
+{{/each}}
+{{/each}}
+{{/if}}
+{{#if includeCacheInvalidationModule}}
+{{#each cacheAspectNames}}
+{{#each ../cacheSideEffectTypes}}
+quarkus.rest-client.{{grpcAspectSideEffectClientName ../../this this}}.trust-store=${CLIENT_TRUSTSTORE_PATH:../target/dev-certs/orchestrator-svc/client-truststore.jks}
+quarkus.rest-client.{{grpcAspectSideEffectClientName ../../this this}}.trust-store-password=secret
+{{/each}}
+{{/each}}
+{{#each cacheInvalidationAspectNames}}
+{{#each ../cacheInvalidationSideEffectTypes}}
+quarkus.rest-client.{{grpcAspectSideEffectClientName ../../this this}}.trust-store=${CLIENT_TRUSTSTORE_PATH:../target/dev-certs/orchestrator-svc/client-truststore.jks}
+quarkus.rest-client.{{grpcAspectSideEffectClientName ../../this this}}.trust-store-password=secret
+{{/each}}
+{{/each}}
+{{/if}}
+
+# TLS configuration
+quarkus.tls.trust-store.jks.path=${CLIENT_TRUSTSTORE_PATH:../target/dev-certs/orchestrator-svc/client-truststore.jks}
+quarkus.tls.trust-store.jks.password=secret
+
+# gRPC alternative: configure quarkus.grpc.clients.* entries
+{{/if}}
 
 # Micrometer configuration
 quarkus.micrometer.export.prometheus.enabled=true
@@ -74,6 +210,6 @@ quarkus.otel.logs.enabled=true
 # Docker image
 quarkus.container-image.builder=jib
 quarkus.container-image.registry=localhost
-quarkus.container-image.group={{basePackage}}
+quarkus.container-image.group={{rootProjectName}}
 quarkus.container-image.name={{serviceName}}
 quarkus.container-image.tag=latest

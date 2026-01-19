@@ -15,11 +15,10 @@ The framework allows you to define pipeline steps as simple classes annotated wi
 
 ```java
 @PipelineStep(
-   order = 1,
-   autoPersist = true,
-   debug = true,
-   recoverOnFailure = true,
-   stub = MyGrpc.MyStub.class,
+   inputType = Input.class,
+   outputType = Output.class,
+   stepType = StepOneToOne.class,
+   backendType = MyAdapter.class,
    inboundMapper = FooRequestToDomainMapper.class,
    outboundMapper = DomainToBarResponseMapper.class
 )

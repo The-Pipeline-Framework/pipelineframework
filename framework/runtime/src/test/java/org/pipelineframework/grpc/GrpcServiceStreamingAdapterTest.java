@@ -67,11 +67,6 @@ class GrpcServiceStreamingAdapterTest {
             protected GrpcOut toGrpc(DomainOut domainOut) {
                 return new GrpcOut();
             }
-
-            @Override
-            protected boolean isAutoPersistenceEnabled() {
-                return false;
-            }
         };
     }
 
@@ -120,7 +115,7 @@ class GrpcServiceStreamingAdapterTest {
 
         Throwable failure = subscriber.getFailure();
         assertNotNull(failure);
-        assertTrue(failure instanceof StatusRuntimeException);
+        assertInstanceOf(StatusRuntimeException.class, failure);
         assertTrue(failure.getMessage().contains("Processing failed"));
 
         verify(mockReactiveService).process(any(DomainIn.class));
@@ -152,11 +147,6 @@ class GrpcServiceStreamingAdapterTest {
             @Override
             protected GrpcOut toGrpc(DomainOut domainOut) {
                 return new GrpcOut();
-            }
-
-            @Override
-            protected boolean isAutoPersistenceEnabled() {
-                return false;
             }
         };
 
@@ -196,11 +186,6 @@ class GrpcServiceStreamingAdapterTest {
             protected GrpcOut toGrpc(DomainOut domainOut) {
                 assertNotNull(domainOut);
                 return new GrpcOut();
-            }
-
-            @Override
-            protected boolean isAutoPersistenceEnabled() {
-                return false;
             }
         };
 

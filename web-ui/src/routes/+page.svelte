@@ -28,8 +28,33 @@
   let config = {
     appName: 'My Pipeline App',
     basePackage: 'com.example.mypipeline',
-    steps: []
+    steps: [],
+    aspects: {}
   };
+  const defaultAspectConfigs = {
+    persistence: {
+      enabled: true,
+      scope: 'GLOBAL',
+      position: 'AFTER_STEP',
+      order: 0,
+      config: {
+        pluginImplementationClass: 'org.pipelineframework.plugin.persistence.PersistenceService'
+      }
+    },
+    cache: {
+      enabled: true,
+      scope: 'GLOBAL',
+      position: 'AFTER_STEP',
+      order: 5,
+      config: {
+        pluginImplementationClass: 'org.pipelineframework.plugin.cache.CacheService'
+      }
+    }
+  };
+
+  // State for plugin options
+  let includePersistencePlugin = false;
+  let includeCachePlugin = false;
 
   // State for field forms
   let showInputForm = false;
@@ -68,13 +93,58 @@
     { value: 'ONE_TO_ONE', label: '1-1 (One-to-One)' },
     { value: 'EXPANSION', label: 'Expansion (1-Many)' },
     { value: 'REDUCTION', label: 'Reduction (Many-1)' },
+    { value: 'MANY_TO_MANY', label: 'Many-to-Many (N-M)' },
     { value: 'SIDE_EFFECT', label: 'Side-effect' }
   ];
 
+  function isAspectEnabled(aspects, aspectName) {
+    if (!aspects || !Object.prototype.hasOwnProperty.call(aspects, aspectName)) {
+      return false;
+    }
+    const aspectConfig = aspects[aspectName];
+    return aspectConfig == null || aspectConfig.enabled !== false;
+  }
+
+  function cloneAspectDefaults(aspectName) {
+    const defaults = defaultAspectConfigs[aspectName];
+    if (!defaults) return null;
+    return {
+      ...defaults,
+      config: { ...defaults.config }
+    };
+  }
+
+  function setAspectEnabled(aspectName, enabled) {
+    if (enabled) {
+      const defaults = cloneAspectDefaults(aspectName);
+      if (!defaults) return;
+      const existing = config.aspects?.[aspectName];
+      const merged = existing
+        ? {
+          ...defaults,
+          ...existing,
+          enabled: true,
+          config: { ...defaults.config, ...(existing.config || {}) }
+        }
+        : defaults;
+      config.aspects = { ...(config.aspects || {}), [aspectName]: merged };
+    } else if (config.aspects && config.aspects[aspectName]) {
+      const { [aspectName]: _, ...rest } = config.aspects;
+      config.aspects = rest;
+    }
+    config = { ...config };
+  }
+
+  function syncAspectTogglesFromConfig() {
+    includePersistencePlugin = isAspectEnabled(config.aspects, 'persistence');
+    includeCachePlugin = isAspectEnabled(config.aspects, 'cache');
+  }
+
+  syncAspectTogglesFromConfig();
   
   
   // Function to check if a type is valid (scalar, Enum, or defined in previous steps)
-  function isValidFieldType(type, currentStepIndex) {
+  function isValidFieldType(type, currentStepIndex, stepsOverride = null) {
     // Trim whitespace from type
     type = typeof type === 'string' ? type.trim() : type;
     
@@ -113,9 +183,10 @@
     }
     
     // If not scalar or Enum, check if it's defined in any previous step as an input or output type
-    for (let i = 0; i < currentStepIndex; i++) {
-      const step = config.steps[i];
-      if (step.inputTypeName === type || step.outputTypeName === type) {
+    const stepsToCheck = stepsOverride ?? config.steps;
+    for (let i = 0; i < currentStepIndex && i < stepsToCheck.length; i++) {
+      const step = stepsToCheck[i];
+      if (step && (step.inputTypeName === type || step.outputTypeName === type)) {
         return true;
       }
     }
@@ -533,6 +604,9 @@
         order: s.order
       }))
     };
+    if (config.aspects && Object.keys(config.aspects).length > 0) {
+      minimal.aspects = config.aspects;
+    }
     return dump(minimal, { lineWidth: -1 });
   }
 
@@ -589,12 +663,23 @@
       };
       
       // Generate the complete application using the template engine
-      await templateEngine.generateApplication(
-        config.appName,
-        config.basePackage,
-        [...config.steps], // Use a copy to avoid potential mutation issues
-        fileCallback
-      );
+      const stepsCopy = [...config.steps];
+      if (templateEngine.generateApplication.length >= 5) {
+        await templateEngine.generateApplication(
+          config.appName,
+          config.basePackage,
+          stepsCopy, // Use a copy to avoid potential mutation issues
+          config.aspects,
+          fileCallback
+        );
+      } else {
+        await templateEngine.generateApplication(
+          config.appName,
+          config.basePackage,
+          stepsCopy, // Use a copy to avoid potential mutation issues
+          fileCallback
+        );
+      }
       
       // Generate the YAML configuration and add it to the ZIP
       const yamlContent = generateYamlConfig();
@@ -740,7 +825,7 @@
             throw new Error(`Invalid configuration file: input field ${j+1} in step ${i+1} is missing required properties (name, type, protoType)`);
           }
           // Validate that field.type is a valid Java scalar type or custom message type from a previous step
-          if (!isValidFieldType(field.type, i)) {
+          if (!isValidFieldType(field.type, i, data.steps)) {
             // Additional check to log what specifically is wrong with the type
             console.error(`Invalid field type detected: "${field.type}" in step ${i+1}, input field ${j+1}`);
             console.error(`Type length: ${field.type.length}, ends with: "${field.type.slice(-10)}"`);
@@ -754,7 +839,7 @@
             throw new Error(`Invalid configuration file: output field ${j+1} in step ${i+1} is missing required properties (name, type, protoType)`);
           }
           // Validate that field.type is a valid Java scalar type or custom message type from a previous step
-          if (!isValidFieldType(field.type, i)) {
+          if (!isValidFieldType(field.type, i, data.steps)) {
             // Additional check to log what specifically is wrong with the type
             console.error(`Invalid field type detected: "${field.type}" in step ${i+1}, output field ${j+1}`);
             console.error(`Type length: ${field.type.length}, ends with: "${field.type.slice(-10)}"`);
@@ -770,6 +855,9 @@
               break;
             case 'REDUCTION':
               step.stepType = 'StepManyToOne';
+              break;
+            case 'MANY_TO_MANY':
+              step.stepType = 'StepManyToMany';
               break;
             case 'SIDE_EFFECT':
               step.stepType = 'StepSideEffect';
@@ -788,7 +876,18 @@
         }
       }
       
-      config = data;
+      config = {
+        ...data,
+        aspects: data.aspects || {}
+      };
+      if (!isAspectEnabled(config.aspects, 'persistence')) {
+        delete config.aspects.persistence;
+      }
+      if (!isAspectEnabled(config.aspects, 'cache')) {
+        delete config.aspects.cache;
+      }
+      syncAspectTogglesFromConfig();
+      config = { ...config };
       currentStepIndex = -1;
       showInputForm = false;
     } catch (e) {
@@ -995,6 +1094,26 @@
           bind:value={config.basePackage}
           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
         />
+        <div class="mt-2 flex flex-wrap gap-4 text-sm text-gray-700">
+          <label class="inline-flex items-center">
+            <input
+              type="checkbox"
+              bind:checked={includePersistencePlugin}
+              on:change={() => setAspectEnabled('persistence', includePersistencePlugin)}
+              class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <span class="ml-2">Add persistence plugin</span>
+          </label>
+          <label class="inline-flex items-center">
+            <input
+              type="checkbox"
+              bind:checked={includeCachePlugin}
+              on:change={() => setAspectEnabled('cache', includeCachePlugin)}
+              class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <span class="ml-2">Add cache plugin</span>
+          </label>
+        </div>
       </div>
     </div>
   </div>
@@ -1174,6 +1293,26 @@
               class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               placeholder="com.example.mypipeline"
             />
+            <div class="mt-2 flex flex-wrap gap-4 text-sm text-gray-700">
+              <label class="inline-flex items-center">
+                <input
+                  type="checkbox"
+                  bind:checked={includePersistencePlugin}
+                  on:change={() => setAspectEnabled('persistence', includePersistencePlugin)}
+                  class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span class="ml-2">Add persistence plugin</span>
+              </label>
+              <label class="inline-flex items-center">
+                <input
+                  type="checkbox"
+                  bind:checked={includeCachePlugin}
+                  on:change={() => setAspectEnabled('cache', includeCachePlugin)}
+                  class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <span class="ml-2">Add cache plugin</span>
+              </label>
+            </div>
           </div>
         </div>
         

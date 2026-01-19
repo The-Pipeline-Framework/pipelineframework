@@ -16,24 +16,27 @@
 
 package org.pipelineframework;
 
-import static org.junit.jupiter.api.Assertions.*;
+import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicInteger;
+import jakarta.inject.Inject;
 
 import io.quarkus.test.junit.QuarkusTest;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.AssertSubscriber;
-import jakarta.inject.Inject;
-import java.time.Duration;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepOneToOne;
 import org.pipelineframework.step.blocking.StepOneToOneBlocking;
 import org.pipelineframework.step.future.StepOneToOneCompletableFuture;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @QuarkusTest
 class ConcurrencyVerificationTest {
@@ -124,11 +127,12 @@ class ConcurrencyVerificationTest {
     @Test
     void testSequentialProcessingByDefault() {
         System.out.println("=== Testing Sequential Processing (Default Behavior) ===");
+        pipelineConfig.parallelism(ParallelismPolicy.SEQUENTIAL);
 
-        // Given - Default step config (parallel = false)
+        // Given
         TrackingStepOneToOne step = new TrackingStepOneToOne();
         StepConfig stepConfig = new StepConfig();
-        step.initialiseWithConfig(stepConfig); // defaults: parallel=false
+        step.initialiseWithConfig(stepConfig);
 
         // When
         Multi<String> input = Multi.createFrom().items("item1", "item2", "item3");
@@ -154,11 +158,11 @@ class ConcurrencyVerificationTest {
     @Test
     void testParallelProcessingWithoutOrderPreservation() {
         System.out.println("=== Testing Parallel Processing (No Order Preservation) ===");
+        pipelineConfig.parallelism(ParallelismPolicy.PARALLEL);
 
-        // Given - Enable parallel processing
+        // Given
         TrackingStepOneToOne step = new TrackingStepOneToOne();
         StepConfig stepConfig = new StepConfig();
-        stepConfig.parallel(true);
         step.initialiseWithConfig(stepConfig);
 
         // When - Use items where some are slow to demonstrate concurrent processing
@@ -185,11 +189,11 @@ class ConcurrencyVerificationTest {
     @Test
     void testBlockingStepParallelProcessing() {
         System.out.println("=== Testing Blocking Step Parallel Processing ===");
+        pipelineConfig.parallelism(ParallelismPolicy.PARALLEL);
 
-        // Given - Blocking step with parallel processing enabled
+        // Given
         TrackingStepOneToOneBlocking step = new TrackingStepOneToOneBlocking();
         StepConfig stepConfig = new StepConfig();
-        stepConfig.parallel(true);
         step.initialiseWithConfig(stepConfig);
 
         // When - Use items where some are slow to demonstrate concurrent processing
@@ -215,11 +219,11 @@ class ConcurrencyVerificationTest {
     @Test
     void testCompletableFutureStepParallelProcessing() {
         System.out.println("=== Testing CompletableFuture Step Parallel Processing ===");
+        pipelineConfig.parallelism(ParallelismPolicy.PARALLEL);
 
-        // Given - CompletableFuture step with parallel processing enabled
+        // Given
         TrackingStepOneToOneCompletableFuture step = new TrackingStepOneToOneCompletableFuture();
         StepConfig stepConfig = new StepConfig();
-        stepConfig.parallel(true);
         step.initialiseWithConfig(stepConfig);
 
         // When - Use items where some are slow to demonstrate concurrent processing
@@ -244,12 +248,12 @@ class ConcurrencyVerificationTest {
 
     @Test
     void testBackwardCompatibilityWithParallelFalse() {
-        System.out.println("=== Testing Backward Compatibility with parallel=false ===");
+        System.out.println("=== Testing Sequential Processing with Explicit Policy ===");
+        pipelineConfig.parallelism(ParallelismPolicy.SEQUENTIAL);
 
-        // Given - Explicitly set parallel to false (should behave as before)
+        // Given
         TrackingStepOneToOne step = new TrackingStepOneToOne();
         StepConfig stepConfig = new StepConfig();
-        stepConfig.parallel(false);
         step.initialiseWithConfig(stepConfig);
 
         // When
@@ -266,6 +270,6 @@ class ConcurrencyVerificationTest {
         assertTrue(items.contains("processed:itemB"));
         assertEquals(2, step.callCount.get());
 
-        System.out.println("✓ Backward compatibility with parallel=false verified");
+        System.out.println("✓ Sequential processing verified");
     }
 }

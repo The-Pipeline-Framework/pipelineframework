@@ -6,14 +6,14 @@
 
 The CSV Payments Processing Application is a Quarkus-based microservices system designed to process CSV files containing payment information. It reads payment records from input CSV files, sends them to a mock payment processor, retrieves their final statuses, and generates output CSV files with the processed results.
 
-This application demonstrates modern microservices architecture patterns using gRPC for inter-service communication, reactive programming with Mutiny, and virtual threads for efficient concurrency. It simulates the complexities of real-world asynchronous payment processing systems.
+This application demonstrates modern microservices architecture patterns using gRPC for inter-service communication and reactive programming with Mutiny. It simulates the complexities of real-world asynchronous payment processing systems.
 
 ## Key Features
 
 - **Microservices Architecture**: Modular design with independently deployable services
 - **Reactive Programming**: Non-blocking operations using Mutiny
 - **gRPC Communication**: High-performance service-to-service communication
-- **Virtual Threads**: Efficient concurrency with Project Loom
+- **Virtual Threads**: Optional execution mode for selected steps
 - **Rate Limiting Simulation**: Realistic throttling behavior
 - **Retry Logic**: Automatic retries for transient failures
 - **Parallel Processing**: Concurrent handling of multiple payment records
@@ -43,13 +43,18 @@ The script uses the health endpoints (`/q/health`) of each service to determine 
 ### Port Configuration
 
 The services use the following ports:
+- orchestrator-svc: 8443
 - input-csv-file-processing-svc: 8444
 - payments-processing-svc: 8445
 - payment-status-svc: 8446
 - output-csv-file-processing-svc: 8447
+- persistence-svc: 8448
 
 All services communicate over HTTPS with self-signed certificates.
 
+### Proto Generation
+
+The gRPC protobufs are generated from `examples/csv-payments/config/pipeline.yaml` by `PipelineProtoGenerator` during the `generate-sources` phase and live under `examples/csv-payments/common/target/generated-sources/proto`.
 
 
 ```mermaid
@@ -328,9 +333,9 @@ This script will start all microservices, process a sample CSV file, and verify 
 
 When running the services with HTTPS enabled, self-signed certificates are used for development purposes. To avoid browser security warnings, you need to add these certificates to your system's trusted certificate store.
 
-### Trusting the Existing Certificate
+### Trusting the Development Certificate
 
-The repository already includes a pre-generated certificate (`server-keystore.jks`) that you can trust:
+The build generates a self-signed certificate under `examples/csv-payments/target/dev-certs`. You can trust it by exporting from a running service:
 
 1. **Add the existing certificate to your macOS keychain**:
    ```bash

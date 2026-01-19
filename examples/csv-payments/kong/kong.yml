@@ -10,7 +10,7 @@ services:
         protocols:
           - grpcs
         paths:
-          - /ProcessCsvPaymentsInputFileService/remoteProcess
+          - /ProcessCsvPaymentsInputReactiveService/remoteProcess
           - /ProcessCsvPaymentsInputStreamService/remoteProcess
         strip_path: false
 
@@ -165,7 +165,7 @@ services:
         protocols:
           - grpcs
         paths:
-          - /ProcessCsvPaymentsOutputFileService/remoteProcess
+          - /ProcessCsvPaymentsOutputFileReactiveService/remoteProcess
         strip_path: false
 
   - name: output-csv-file-processing-svc-rest

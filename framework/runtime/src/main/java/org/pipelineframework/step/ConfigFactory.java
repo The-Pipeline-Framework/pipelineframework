@@ -19,6 +19,7 @@ package org.pipelineframework.step;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Inject;
+
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.config.PipelineStepConfig;
 import org.pipelineframework.config.StepConfig;
@@ -66,7 +67,6 @@ public class ConfigFactory {
             // Apply all values from classConfig to the base config, regardless of equality with defaults
             result = result.retryLimit(classConfig.retryLimit());
             result = result.retryWait(java.time.Duration.ofMillis(classConfig.retryWaitMs()));
-            result = result.parallel(classConfig.parallel());
             result = result.recoverOnFailure(classConfig.recoverOnFailure());
             result = result.maxBackoff(java.time.Duration.ofMillis(classConfig.maxBackoff()));
             result = result.jitter(classConfig.jitter());

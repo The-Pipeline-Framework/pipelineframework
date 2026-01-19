@@ -16,13 +16,14 @@
 
 package org.pipelineframework.csv.resource;
 
-import io.smallrye.mutiny.Uni;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
+
+import io.smallrye.mutiny.Uni;
 import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
 import org.pipelineframework.csv.common.dto.AckPaymentSentDto;
@@ -39,8 +40,10 @@ public class PollAckPaymentSentResource {
     @Inject
     PollAckPaymentSentReactiveService service;
 
-    AckPaymentSentMapper ackPaymentSentMapper = AckPaymentSentMapper.INSTANCE;
-    PaymentStatusMapper paymentStatusMapper = PaymentStatusMapper.INSTANCE;
+    @Inject
+    AckPaymentSentMapper ackPaymentSentMapper;
+    @Inject
+    PaymentStatusMapper paymentStatusMapper;
 
     @POST
     @Path("/poll-ack-payment")

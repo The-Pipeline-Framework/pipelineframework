@@ -22,11 +22,11 @@ import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.csv.common.domain.CsvPaymentsInputFile;
 import org.pipelineframework.csv.common.dto.CsvPaymentsInputFileDto;
-import org.pipelineframework.csv.grpc.InputCsvFileProcessingSvc;
+import org.pipelineframework.csv.grpc.ProcessFolderSvc;
 
 @SuppressWarnings("unused")
 @Mapper(componentModel = "jakarta", uses = {CommonConverters.class}, unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface CsvPaymentsInputFileMapper extends org.pipelineframework.mapper.Mapper<InputCsvFileProcessingSvc.CsvPaymentsInputFile, CsvPaymentsInputFileDto, CsvPaymentsInputFile>{
+public interface CsvPaymentsInputFileMapper extends org.pipelineframework.mapper.Mapper<ProcessFolderSvc.CsvPaymentsInputFile, CsvPaymentsInputFileDto, CsvPaymentsInputFile>{
 
   CsvPaymentsInputFileMapper INSTANCE = Mappers.getMapper( CsvPaymentsInputFileMapper.class );
 
@@ -40,11 +40,11 @@ public interface CsvPaymentsInputFileMapper extends org.pipelineframework.mapper
   @Mapping(target = "id", qualifiedByName = "uuidToString")
   @Mapping(target = "filepath", qualifiedByName = "pathToString")
   @Mapping(target = "csvFolderPath", qualifiedByName = "pathToString")
-  InputCsvFileProcessingSvc.CsvPaymentsInputFile toGrpc(CsvPaymentsInputFileDto entity);
+  ProcessFolderSvc.CsvPaymentsInputFile toGrpc(CsvPaymentsInputFileDto entity);
 
   @Override
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
   @Mapping(target = "filepath", qualifiedByName = "stringToPath")
   @Mapping(target = "csvFolderPath", qualifiedByName = "stringToPath")
-  CsvPaymentsInputFileDto fromGrpc(InputCsvFileProcessingSvc.CsvPaymentsInputFile proto);
+  CsvPaymentsInputFileDto fromGrpc(ProcessFolderSvc.CsvPaymentsInputFile proto);
 }

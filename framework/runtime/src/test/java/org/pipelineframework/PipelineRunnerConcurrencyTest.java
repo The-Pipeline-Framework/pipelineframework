@@ -16,22 +16,25 @@
 
 package org.pipelineframework;
 
-import static org.junit.jupiter.api.Assertions.*;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import jakarta.inject.Inject;
 
 import io.quarkus.test.junit.QuarkusTest;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.AssertSubscriber;
-import jakarta.inject.Inject;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepOneToOne;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @QuarkusTest
 class PipelineRunnerConcurrencyTest {
@@ -68,10 +71,11 @@ class PipelineRunnerConcurrencyTest {
 
     @Test
     void testSequentialProcessingByDefault() {
-        // Given - Default step config (parallel = false)
+        // Given
+        pipelineConfig.parallelism(ParallelismPolicy.SEQUENTIAL);
         TestStepOneToOne step = new TestStepOneToOne();
         StepConfig liveConfig = new StepConfig();
-        step.initialiseWithConfig(liveConfig); // defaults: parallel=false
+        step.initialiseWithConfig(liveConfig);
 
         // When
         Multi<String> input = Multi.createFrom().items("item1", "item2", "item3");
@@ -96,9 +100,10 @@ class PipelineRunnerConcurrencyTest {
 
     @Test
     void testConcurrentProcessingWithoutOrderPreservation() {
-        // Given - Enable parallel processing
+        // Given
+        pipelineConfig.parallelism(ParallelismPolicy.PARALLEL);
         TestStepOneToOne step = new TestStepOneToOne();
-        StepConfig liveConfig = new StepConfig().parallel(true);
+        StepConfig liveConfig = new StepConfig();
         step.initialiseWithConfig(liveConfig);
 
         // When - Use items where some are slow to demonstrate concurrent processing
@@ -118,50 +123,5 @@ class PipelineRunnerConcurrencyTest {
         // With parallel processing, output order may not match input order due to timing
         // But all should be processed
         assertEquals(3, step.callCount.get());
-    }
-
-    @Test
-    void testConcurrentProcessingWithOrderPreservation() {
-        // Given - Enable parallel processing
-        TestStepOneToOne step = new TestStepOneToOne();
-        StepConfig liveConfig = new StepConfig().parallel(true);
-        step.initialiseWithConfig(liveConfig);
-
-        // When - Process items with different processing times
-        Multi<String> input = Multi.createFrom().items("slow", "fast1", "fast2");
-        Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step));
-
-        // Then - Should process concurrently but preserve original order
-        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
-        subscriber.awaitItems(3, Duration.ofSeconds(2)).assertCompleted();
-
-        List<Object> items = subscriber.getItems();
-        assertEquals(3, items.size());
-
-        // With parallel processing, order should be preserved
-        assertTrue(items.get(0).toString().contains("slow"));
-        assertTrue(items.get(1).toString().contains("fast1"));
-        assertTrue(items.get(2).toString().contains("fast2"));
-    }
-
-    @Test
-    void testBackwardCompatibilityWithParallelFalse() {
-        // Given - Explicitly set parallel to false (should behave as before)
-        TestStepOneToOne step = new TestStepOneToOne();
-        StepConfig liveConfig = new StepConfig().parallel(false);
-        step.initialiseWithConfig(liveConfig);
-
-        // When
-        Multi<String> input = Multi.createFrom().items("itemA", "itemB");
-        Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step));
-
-        // Then - Should work the same as before (backward compatibility)
-        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(2));
-        subscriber.awaitItems(2, Duration.ofSeconds(5)).assertCompleted();
-
-        List<Object> items = subscriber.getItems();
-        assertEquals(2, items.size());
-        assertTrue(items.contains("processed:itemA"));
-        assertTrue(items.contains("processed:itemB"));
     }
 }

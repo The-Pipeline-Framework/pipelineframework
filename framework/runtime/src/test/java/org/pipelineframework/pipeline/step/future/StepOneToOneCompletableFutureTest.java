@@ -16,16 +16,17 @@
 
 package org.pipelineframework.pipeline.step.future;
 
-import static org.junit.jupiter.api.Assertions.*;
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.AssertSubscriber;
-import java.time.Duration;
-import java.util.concurrent.CompletableFuture;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.step.future.StepOneToOneCompletableFuture;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class StepOneToOneCompletableFutureTest {
 
@@ -57,18 +58,6 @@ class StepOneToOneCompletableFutureTest {
         // Then
         String value = result.join();
         assertEquals("Future processed: test", value);
-    }
-
-    @Test
-    void testDefaultParallel() {
-        // Given
-        TestStepFuture step = new TestStepFuture();
-
-        // When
-        boolean parallel = step.parallel();
-
-        // Then
-        assertFalse(parallel);
     }
 
     @Test

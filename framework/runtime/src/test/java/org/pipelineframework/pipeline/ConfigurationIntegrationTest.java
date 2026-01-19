@@ -16,17 +16,18 @@
 
 package org.pipelineframework.pipeline;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import java.time.Duration;
 
 import io.smallrye.mutiny.Uni;
-import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.PipelineRunner;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.blocking.StepOneToOneBlocking;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class ConfigurationIntegrationTest {
 
@@ -62,7 +63,6 @@ class ConfigurationIntegrationTest {
             StepConfig defaults = pipelineConfig.defaults();
             assertEquals(3, defaults.retryLimit());
             assertEquals(Duration.ofMillis(2000), defaults.retryWait());
-            assertFalse(defaults.parallel());
 
             assertFalse(defaults.recoverOnFailure());
             assertEquals(Duration.ofSeconds(30), defaults.maxBackoff());

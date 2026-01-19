@@ -16,11 +16,12 @@
 
 package org.pipelineframework.csv.common.dto;
 
+import java.util.UUID;
+
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonPOJOBuilder;
-import java.util.UUID;
-import lombok.*;
-import org.pipelineframework.csv.common.domain.PaymentRecord;
+import lombok.Builder;
+import lombok.Value;
 
 @Value
 @Builder
@@ -29,7 +30,7 @@ public class AckPaymentSentDto {
   UUID id;
   UUID conversationId;
   UUID paymentRecordId;
-  PaymentRecord paymentRecord;
+  PaymentRecordDto paymentRecord;
   String message;
   Long status;
 

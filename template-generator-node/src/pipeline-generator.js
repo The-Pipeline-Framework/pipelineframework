@@ -35,8 +35,9 @@ class PipelineGenerator {
      */
     async generateFromConfig(configPath, outputPath) {
         const config = this.loadConfig(configPath);
-        const { appName, basePackage, steps } = config;
-        await this.engine.generateApplication(appName, basePackage, steps, outputPath);
+        const { appName, basePackage, steps, aspects, transport } = config;
+        await this.engine.generateApplication(appName, basePackage, steps, aspects, transport, outputPath);
+        await this.copyConfig(configPath, outputPath);
     }
 
     /**
@@ -48,6 +49,7 @@ class PipelineGenerator {
         const config = {
             appName: 'Sample Pipeline App',
             basePackage: 'com.example.sample',
+            transport: 'GRPC',
             steps: [
                 {
                     name: 'Process Customer',
@@ -67,8 +69,7 @@ class PipelineGenerator {
                         { name: 'processedAt', type: 'String', protoType: 'string' }
                     ],
                     batchSize: 10,
-                    batchTimeoutMs: 1000,
-                    parallel: false
+                    batchTimeoutMs: 1000
                 },
                 {
                     name: 'Validate Order',
@@ -86,8 +87,7 @@ class PipelineGenerator {
                         { name: 'message', type: 'String', protoType: 'string' }
                     ],
                     batchSize: 10,
-                    batchTimeoutMs: 1000,
-                    parallel: false
+                    batchTimeoutMs: 1000
                 }
             ]
         };
@@ -117,6 +117,8 @@ class PipelineGenerator {
             throw new Error(`Configuration validation failed:\n${errorMessages}`);
         }
         
+        this.validateAspectNames(config.aspects);
+
         // Process steps to add missing properties that are normally added by interactive mode
         config.steps = this.processSteps(config.steps);
         
@@ -132,6 +134,13 @@ class PipelineGenerator {
     async saveConfig(config, outputPath) {
         const yamlStr = YAML.dump(config, { lineWidth: -1 });
         await fs.writeFile(outputPath, yamlStr);
+    }
+
+    async copyConfig(configPath, outputPath) {
+        const targetDir = path.join(outputPath, 'config');
+        await fs.ensureDir(targetDir);
+        const targetPath = path.join(targetDir, 'pipeline.yaml');
+        await fs.copy(configPath, targetPath);
     }
 
     /**
@@ -177,11 +186,7 @@ class PipelineGenerator {
                     step.outputTypeName.replace(/.*\./, '') : '';
             }
             
-            processedStep.order = i + 1;
-            
-            if (!processedStep.grpcClientName) {
-                processedStep.grpcClientName = step.name.replace(/[^a-zA-Z0-9]/g, '') + 'Svc';
-            }
+            processedStep.portOffset = i + 1;
             
             // Determine stepType based on cardinality if not already present
             if (!processedStep.stepType) {
@@ -197,12 +202,54 @@ class PipelineGenerator {
                 processedStep.batchTimeoutMs = 1000; // default from schema
             }
             
-            if (processedStep.parallel === undefined) {
-                processedStep.parallel = false; // default from schema
-            }
-            
             return processedStep;
         });
+    }
+
+    /**
+     * Validates aspect names to ensure they map cleanly to Maven module naming.
+     *
+     * @param {object|undefined} aspects The aspects map from the config
+     */
+    validateAspectNames(aspects) {
+        if (!aspects) {
+            return;
+        }
+
+        const namePattern = /^[a-z][a-z0-9-]*$/;
+        const moduleOverrides = {
+            'cache-invalidate': ['cache-invalidation', 'cache'],
+            'cache-invalidate-all': ['cache-invalidation', 'cache']
+        };
+        for (const [aspectName, aspectConfig] of Object.entries(aspects)) {
+            if (!namePattern.test(aspectName) || aspectName.endsWith('-svc')) {
+                throw new Error(
+                    `Aspect name '${aspectName}' must be lower-kebab-case and match the plugin module base name. ` +
+                    `Use '${aspectName.replace(/-svc$/, '')}' and ensure the module is named ` +
+                    `'${aspectName.replace(/-svc$/, '')}-svc'.`
+                );
+            }
+
+            const pluginImpl = aspectConfig?.config?.pluginImplementationClass;
+            if (pluginImpl) {
+                const parts = String(pluginImpl).split('.');
+                const packageSegment = parts.length > 1 ? parts[parts.length - 2] : null;
+                const override = moduleOverrides[aspectName];
+                const allowedSegments = new Set([aspectName]);
+                if (Array.isArray(override)) {
+                    override.forEach(value => allowedSegments.add(value));
+                } else if (override) {
+                    allowedSegments.add(override);
+                }
+                if (packageSegment && !allowedSegments.has(packageSegment)) {
+                    throw new Error(
+                        `Aspect '${aspectName}' must align with the plugin module base name. ` +
+                        `The implementation class '${pluginImpl}' suggests '${packageSegment}', so ` +
+                        `either rename the aspect to '${packageSegment}' or align the module/package names.`
+                    );
+                }
+            }
+        }
     }
 
     /**

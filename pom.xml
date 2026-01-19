@@ -54,7 +54,7 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <enablePreview>true</enablePreview>
-        <quarkus.platform.version>3.29.4</quarkus.platform.version>
+        <quarkus.platform.version>3.30.5</quarkus.platform.version>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.java.source>21</quarkus.java.source>
@@ -62,7 +62,12 @@
         <version.jandex>3.5.0</version.jandex>
         <grpc.version>1.63.0</grpc.version>
         <spotless.plugin.version>2.44.0</spotless.plugin.version>
+        <jakarta.cdi.version>4.0.1</jakarta.cdi.version>
+        <junit.jupiter.version>5.13.4</junit.jupiter.version>
+        <compile.testing.version>0.23.0</compile.testing.version>
+        <mockito.version>5.21.0</mockito.version>
         <surefireArgLine />
+        <pipeline.parallelism>AUTO</pipeline.parallelism>
     </properties>
 
     <modules>
@@ -70,6 +75,10 @@
         <module>framework</module>
         <!-- Example projects -->
         <module>examples/csv-payments</module>
+        <module>examples/search</module>
+        <!-- Plugins -->
+        <module>plugins/foundational/persistence</module>
+        <module>plugins/foundational/cache</module>
     </modules>
 
     <dependencyManagement>
@@ -98,6 +107,9 @@
                         <target>21</target>
                         <release>21</release>
                         <enablePreview>true</enablePreview>
+                        <compilerArgs>
+                            <arg>-Apipeline.parallelism=${pipeline.parallelism}</arg>
+                        </compilerArgs>
                         <annotationProcessorPaths>
                             <!-- lombok must come first -->
                             <path>
@@ -146,6 +158,11 @@
                             <artifactId>asm</artifactId>
                             <version>9.5</version>
                         </dependency>
+                        <dependency>
+                            <groupId>org.mockito</groupId>
+                            <artifactId>mockito-core</artifactId>
+                            <version>${mockito.version}</version>
+                        </dependency>
                     </dependencies>
                     <configuration>
                         <useSystemClassLoader>true</useSystemClassLoader>
@@ -154,7 +171,7 @@
                         <systemPropertyVariables>
                             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         </systemPropertyVariables>
-                        <argLine>${surefireArgLine} --enable-preview -XX:+EnableDynamicAgentLoading</argLine>
+                        <argLine>${surefireArgLine} -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar --enable-preview -XX:+EnableDynamicAgentLoading</argLine>
                     </configuration>
                 </plugin>
 

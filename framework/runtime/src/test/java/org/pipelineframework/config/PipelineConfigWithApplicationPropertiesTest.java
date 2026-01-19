@@ -16,12 +16,14 @@
 
 package org.pipelineframework.config;
 
-import static org.junit.jupiter.api.Assertions.*;
+import jakarta.inject.Inject;
 
 import io.quarkus.test.junit.QuarkusTest;
-import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.step.ConfigFactory;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 @QuarkusTest
 class PipelineConfigWithApplicationPropertiesTest {
@@ -43,7 +45,6 @@ class PipelineConfigWithApplicationPropertiesTest {
         // Using default values as defined in PipelineStepConfig interface:
         // retryLimit default: 3
         // retryWaitMs default: 2000ms (which becomes PT2S duration)
-        // parallel default: false
         // recoverOnFailure default: false
         // maxBackoff default: 30000ms (which becomes PT30S duration)
         // jitter default: false
@@ -55,7 +56,6 @@ class PipelineConfigWithApplicationPropertiesTest {
                 java.time.Duration.ofSeconds(2),
                 defaults.retryWait(),
                 "Default retryWait should be 2 seconds");
-        assertFalse(defaults.parallel(), "Default parallel should be false");
         assertFalse(defaults.recoverOnFailure(), "Default recoverOnFailure should be false");
         assertEquals(
                 java.time.Duration.ofSeconds(30),
@@ -88,10 +88,6 @@ class PipelineConfigWithApplicationPropertiesTest {
                 defaults.retryWait(),
                 newConfig.retryWait(),
                 "newStepConfig should use same retryWait as defaults");
-        assertEquals(
-                defaults.parallel(),
-                newConfig.parallel(),
-                "newStepConfig should use same parallel as defaults");
         assertEquals(
                 defaults.recoverOnFailure(),
                 newConfig.recoverOnFailure(),

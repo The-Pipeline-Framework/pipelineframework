@@ -16,11 +16,7 @@
 
 package org.pipelineframework.grpc;
 
-import io.quarkus.hibernate.reactive.panache.Panache;
 import io.smallrye.mutiny.Uni;
-import jakarta.inject.Inject;
-import org.jboss.logging.Logger;
-import org.pipelineframework.persistence.PersistenceManager;
 import org.pipelineframework.service.ReactiveService;
 import org.pipelineframework.service.throwStatusRuntimeExceptionFunction;
 
@@ -34,8 +30,7 @@ import org.pipelineframework.service.throwStatusRuntimeExceptionFunction;
  * @param <DomainIn> the domain input object type
  * @param <DomainOut> the domain output object type
  */
-@SuppressWarnings("LombokSetterMayBeUsed")
-public abstract class GrpcReactiveServiceAdapter<GrpcIn, GrpcOut, DomainIn, DomainOut> extends ReactiveServiceAdapterBase {
+public abstract class GrpcReactiveServiceAdapter<GrpcIn, GrpcOut, DomainIn, DomainOut> {
 
   /**
    * Default constructor for GrpcReactiveServiceAdapter.
@@ -43,85 +38,44 @@ public abstract class GrpcReactiveServiceAdapter<GrpcIn, GrpcOut, DomainIn, Doma
   public GrpcReactiveServiceAdapter() {
   }
 
-  private static final Logger LOG = Logger.getLogger(GrpcReactiveServiceAdapter.class);
-
-  @Inject
-  PersistenceManager persistenceManager;
-
   /**
-   * Sets the persistence manager for this adapter. This method is useful when the adapter is not
-   * managed by CDI (e.g., anonymous inner classes).
-   *
-   * @param persistenceManager the persistence manager to use
-   */
-  public void setPersistenceManager(PersistenceManager persistenceManager) {
-    this.persistenceManager = persistenceManager;
-  }
-
-  /**
- * Provides the reactive service responsible for processing domain inputs into domain outputs.
+ * Obtain the domain reactive service used to process domain inputs into domain outputs.
  *
- * @return the ReactiveService that processes DomainIn to produce DomainOut.
+ * @return the ReactiveService instance that processes DomainIn into DomainOut
  */
-protected abstract ReactiveService<DomainIn, DomainOut> getService();
+  protected abstract ReactiveService<DomainIn, DomainOut> getService();
 
   /**
- * Convert a gRPC input object into the corresponding domain input representation.
+ * Map a gRPC request message to the corresponding domain-layer input object.
  *
- * @param grpcIn the gRPC input object to convert
- * @return the resulting domain input object
+ * @param grpcIn the incoming gRPC message to convert
+ * @return the domain input object produced from the gRPC message
  */
-protected abstract DomainIn fromGrpc(GrpcIn grpcIn);
+  protected abstract DomainIn fromGrpc(GrpcIn grpcIn);
 
   /**
- * Convert a domain-layer output value into its gRPC representation.
+ * Convert a domain-layer output value to its gRPC representation.
  *
- * @param domainOut the domain-layer result to convert
- * @return the corresponding gRPC output instance
+ * @param domainOut the domain-layer result to convert into a gRPC message
+ * @return the corresponding gRPC output message
  */
-protected abstract GrpcOut toGrpc(DomainOut domainOut);
+  protected abstract GrpcOut toGrpc(DomainOut domainOut);
 
   /**
-   * Process a gRPC request through the reactive domain service and optionally persist the input entity.
+   * Process a gRPC request through the reactive domain service.
    *
-   * Converts the provided gRPC request to a domain input, invokes the underlying reactive service,
-   * and converts the resulting domain output back to a gRPC response. If auto-persistence is enabled,
-   * the input entity is persisted after successful processing within the correct Vert.x event-loop and transaction.
+   * Converts the gRPC request to a domain input, invokes the domain reactive service, and converts the resulting domain output back to a gRPC response.
    *
-   * @param grpcRequest the incoming gRPC request to convert and process
-   * @return the gRPC response message corresponding to the processed domain result
-   * @throws io.grpc.StatusRuntimeException if processing or persistence fails; failures are mapped to an appropriate gRPC status
+   * @param grpcRequest the incoming gRPC request to process
+   * @return the gRPC response corresponding to the processed domain output
    */
   public Uni<GrpcOut> remoteProcess(GrpcIn grpcRequest) {
     DomainIn entity = fromGrpc(grpcRequest);
-    // Panache.withTransaction(...) creates the correct Vert.x context and transaction
-    return Panache.withTransaction(() -> {
-      Uni<DomainOut> processedResult = getService().process(entity);
+    // Process the entity using the domain service
+    Uni<DomainOut> processedResult = getService().process(entity);
 
-      boolean autoPersistenceEnabled = isAutoPersistenceEnabled();
-      Uni<DomainOut> withPersistence = autoPersistenceEnabled
-              ? processedResult.call(ignored ->
-              // guaranteed event-loop
-              switchToEventLoop()
-                  // If auto-persistence is enabled, persist the input entity after successful processing
-                  .call(() -> persistenceManager.persist(entity)
-                          // Apply retry logic for transient database errors similar to streaming adapters
-                          .onFailure(this::isTransientDbError)
-                          .retry().withBackOff(java.time.Duration.ofMillis(200), java.time.Duration.ofSeconds(2)).atMost(3)
-                  )
-              )
-              : processedResult;
-
-      if (!autoPersistenceEnabled) {
-        LOG.debug("Auto-persistence is disabled");
-      } else {
-        LOG.debug("Auto-persistence is enabled, will persist input after successful processing");
-      }
-
-      return withPersistence
-              .onItem().transform(this::toGrpc)
-              .onFailure().transform(new throwStatusRuntimeExceptionFunction());
-    });
+    return processedResult
+            .onItem().transform(this::toGrpc)
+            .onFailure().transform(new throwStatusRuntimeExceptionFunction());
   }
-
 }

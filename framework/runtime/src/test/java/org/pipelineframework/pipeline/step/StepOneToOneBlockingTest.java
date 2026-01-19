@@ -16,17 +16,18 @@
 
 package org.pipelineframework.pipeline.step;
 
-import static org.junit.jupiter.api.Assertions.*;
-
-import io.smallrye.mutiny.Multi;
-import io.smallrye.mutiny.Uni;
-import io.smallrye.mutiny.helpers.test.AssertSubscriber;
 import java.time.Duration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+
+import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.helpers.test.AssertSubscriber;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.step.blocking.StepOneToOneBlocking;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class StepOneToOneBlockingTest {
 
@@ -69,18 +70,6 @@ class StepOneToOneBlockingTest {
 
         // Then
         assertEquals("Processed: test", result);
-    }
-
-    @Test
-    void testDefaultParallel() {
-        // Given
-        TestStepBlocking step = new TestStepBlocking();
-
-        // When
-        boolean parallel = step.parallel();
-
-        // Then
-        assertFalse(parallel);
     }
 
     @Test

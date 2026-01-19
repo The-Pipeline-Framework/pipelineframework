@@ -16,12 +16,13 @@
 
 package org.pipelineframework.config;
 
-import static org.junit.jupiter.api.Assertions.*;
+import jakarta.inject.Inject;
 
 import io.quarkus.test.junit.QuarkusTest;
-import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.step.ConfigFactory;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 @QuarkusTest
 class PipelineConfigSyncTest {
@@ -60,10 +61,6 @@ class PipelineConfigSyncTest {
                 directConfig.retryWait(),
                 factoryConfig.retryWait(),
                 "ConfigFactory should return config with same retryWait as PipelineConfig");
-        assertEquals(
-                directConfig.parallel(),
-                factoryConfig.parallel(),
-                "ConfigFactory should return config with same parallel as PipelineConfig");
         assertEquals(
                 directConfig.recoverOnFailure(),
                 factoryConfig.recoverOnFailure(),

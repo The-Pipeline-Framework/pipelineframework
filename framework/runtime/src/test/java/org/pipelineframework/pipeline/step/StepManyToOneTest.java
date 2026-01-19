@@ -16,13 +16,12 @@
 
 package org.pipelineframework.pipeline.step;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.step.StepManyToOne;
+
+import static org.junit.jupiter.api.Assertions.*;
 
 class StepManyToOneTest {
 
@@ -40,33 +39,6 @@ class StepManyToOneTest {
             // Return an empty StepConfig so the method defaults are not overridden in the
             // apply method
             return new org.pipelineframework.config.StepConfig();
-        }
-
-        @Override
-        public void initialiseWithConfig(org.pipelineframework.config.StepConfig config) {
-            // Use the config provided
-        }
-    }
-
-    static class ConfiguredTestStep implements StepManyToOne<String, String> {
-        private StepConfig config = new StepConfig();
-
-        public ConfiguredTestStep withParallel(boolean parallel) {
-            this.config.parallel(parallel);
-            return this;
-        }
-
-        @Override
-        public Uni<String> applyReduce(Multi<String> input) {
-            return input.collect()
-                    .asList()
-                    .onItem()
-                    .transform(list -> "Reduced: " + String.join(", ", list));
-        }
-
-        @Override
-        public StepConfig effectiveConfig() {
-            return config;
         }
 
         @Override
@@ -108,60 +80,6 @@ class StepManyToOneTest {
     }
 
     @Test
-    void testApplyMethodWithParallelConfig() {
-        // Given
-        ConfiguredTestStep step = new ConfiguredTestStep().withParallel(true);
-        Multi<String> input = Multi.createFrom().items("item1", "item2", "item3", "item4", "item5", "item6");
-
-        // When
-        Uni<String> result = step.apply(input);
-
-        // Then
-        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<String> subscriber = result.subscribe()
-                .withSubscriber(
-                        io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
-        subscriber.awaitItem(java.time.Duration.ofSeconds(5));
-        // All items processed and reduced in one operation
-        subscriber.assertItem("Reduced: item1, item2, item3, item4, item5, item6");
-    }
-
-    @Test
-    void testApplyMethodWithSequentialConfig() {
-        // Given
-        ConfiguredTestStep step = new ConfiguredTestStep().withParallel(false);
-        Multi<String> input = Multi.createFrom().items("item1", "item2", "item3");
-
-        // When
-        Uni<String> result = step.apply(input);
-
-        // Then
-        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<String> subscriber = result.subscribe()
-                .withSubscriber(
-                        io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
-        subscriber.awaitItem(java.time.Duration.ofSeconds(5));
-        // All items processed and reduced in one operation
-        subscriber.assertItem("Reduced: item1, item2, item3");
-    }
-
-    @Test
-    void testApplyMethodUsesConfiguredValues() {
-        // Given - Test that configured values take effect
-        ConfiguredTestStep step = new ConfiguredTestStep().withParallel(false);
-        Multi<String> input = Multi.createFrom().items("item1", "item2", "item3", "item4", "item5", "item6");
-
-        // When
-        Uni<String> result = step.apply(input);
-
-        // Then - Should use configured parallel value (false)
-        io.smallrye.mutiny.helpers.test.UniAssertSubscriber<String> subscriber = result.subscribe()
-                .withSubscriber(
-                        io.smallrye.mutiny.helpers.test.UniAssertSubscriber.create());
-        subscriber.awaitItem(java.time.Duration.ofSeconds(5));
-        // All items are reduced to a single output
-        subscriber.assertItem("Reduced: item1, item2, item3, item4, item5, item6");
-    }
-
-    @Test
     void testDefaultStepConfigValues() {
         // Given
         TestStep step = new TestStep();
@@ -183,7 +101,7 @@ class StepManyToOneTest {
     void testCsvProcessingUseCase_Reduction() {
         // Given - Simulate the CSV processing scenario where we want to process and reduce all
         // related records
-        ConfiguredTestStep step = new ConfiguredTestStep().withParallel(false);
+        TestStep step = new TestStep();
         Multi<String> input = Multi.createFrom()
                 .range(1, 13) // 12 items simulating 12 PaymentOutput records
                 .map(i -> "payment_" + i + "_for_csv_file_X");

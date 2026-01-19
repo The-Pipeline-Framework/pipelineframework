@@ -31,7 +31,7 @@ The fastest way to get started is using our visual canvas designer:
 - **Cost Efficiency**: Reduced resource consumption with native builds and reactive processing
 - **Scalability**: Each pipeline step can be scaled independently based on demand
 - **gRPC & REST Flexibility**: High-performance gRPC for throughput-intensive tasks, REST for ease of integration
-- **Multiple Persistence Options**: Choose from reactive (Panache) or virtual thread-based persistence models
+- **Multiple Persistence Options**: Choose from reactive (Panache) or traditional/blocking persistence drivers, for multiple database vendors
 - **Rich Step Types**: Support for OneToOne, OneToMany, ManyToOne, ManyToMany, and SideEffect processing patterns
 
 ### Developers
@@ -75,9 +75,9 @@ The fastest way to get started is using our visual canvas designer:
 ## 📚 Documentation
 
 - **[Full Documentation](https://pipelineframework.org)** - Complete documentation site
-- **[Getting Started Guide](https://pipelineframework.org/guide/getting-started)** - Step-by-step tutorial
-- **[Canvas Designer Guide](https://pipelineframework.org/CANVAS_GUIDE)** - Visual design tool
-- **[API Reference](https://pipelineframework.org/annotations/pipeline-step)** - Annotation documentation
+- **[Quick Start Guide](https://pipelineframework.org/guide/getting-started/quick-start)** - Step-by-step tutorial
+- **[Canvas Designer Guide](https://pipelineframework.org/guide/getting-started/canvas-guide)** - Visual design tool
+- **[API Reference](https://pipelineframework.org/guide/development/pipeline-step)** - Annotation documentation
 
 ## 🏗️ Architecture
 
@@ -104,16 +104,15 @@ Here's a simple pipeline step implementation:
 
 ```java
 @PipelineStep(
-    order = 1,
     inputType = PaymentRecord.class,
     outputType = PaymentStatus.class,
     stepType = StepOneToOne.class,
-    backendType = GenericGrpcReactiveServiceAdapter.class,
-    autoPersist = true,
+    inboundMapper = PaymentRecordMapper.class,
+    outboundMapper = PaymentStatusMapper.class
 )
 @ApplicationScoped
-public class ProcessPaymentService implements ReactiveStreamingClientService<PaymentRecord, PaymentStatus> {
-    
+public class ProcessPaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
+
     @Override
     public Uni<PaymentStatus> process(PaymentRecord input) {
         // Business logic here
@@ -123,6 +122,25 @@ public class ProcessPaymentService implements ReactiveStreamingClientService<Pay
     }
 }
 ```
+
+## 🔌 Plugin System
+
+The framework now includes a powerful plugin system that enables external components to participate in pipelines as side effect steps with typed gRPC endpoints. Plugins are implemented using simple interfaces without dependencies on DTOs, mappers, or protos.
+
+```java
+@ApplicationScoped
+public class LoggingPlugin implements ReactiveSideEffectService<String> {
+    private static final Logger LOG = Logger.getLogger(LoggingPlugin.class);
+
+    @Override
+    public Uni<String> process(String message) {
+        LOG.info("Processing message: " + message);
+        return Uni.createFrom().voidItem();
+    }
+}
+```
+
+For more information about the plugin system, see the [plugins' documentation](docs/plugins/index.md).
 
 ## Continuous Integration
 See our [CI documentation](CI.md)

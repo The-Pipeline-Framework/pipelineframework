@@ -16,8 +16,9 @@
 
 package org.pipelineframework.step.future;
 
-import io.smallrye.mutiny.Uni;
 import java.util.concurrent.CompletableFuture;
+
+import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.pipelineframework.step.Configurable;
 import org.pipelineframework.step.DeadLetterQueue;
@@ -73,7 +74,7 @@ CompletableFuture<O> applyAsync(I in);
                 return Uni.createFrom().completionStage(future);
             })
             // retry / backoff / jitter
-            .onFailure(t -> !(t instanceof NullPointerException)).retry()
+            .onFailure(this::shouldRetry).retry()
             .withBackOff(retryWait(), maxBackoff())
             .withJitter(jitter() ? 0.5 : 0.0)
             .atMost(retryLimit())

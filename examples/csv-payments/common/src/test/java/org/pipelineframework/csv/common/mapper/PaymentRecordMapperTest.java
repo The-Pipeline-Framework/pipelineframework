@@ -16,18 +16,20 @@
 
 package org.pipelineframework.csv.common.mapper;
 
-import static org.junit.jupiter.api.Assertions.*;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.util.Currency;
 import java.util.UUID;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.dto.PaymentRecordDto;
-import org.pipelineframework.csv.grpc.InputCsvFileProcessingSvc;
+import org.pipelineframework.csv.grpc.ProcessCsvPaymentsInputSvc;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 class PaymentRecordMapperTest {
 
@@ -122,7 +124,7 @@ class PaymentRecordMapperTest {
                         .build();
 
         // When
-        InputCsvFileProcessingSvc.PaymentRecord grpc = mapper.toGrpc(dto);
+        ProcessCsvPaymentsInputSvc.PaymentRecord grpc = mapper.toGrpc(dto);
 
         // Then
         assertNotNull(grpc);
@@ -140,8 +142,8 @@ class PaymentRecordMapperTest {
         // Given
         UUID id = UUID.randomUUID();
 
-        InputCsvFileProcessingSvc.PaymentRecord grpc =
-                InputCsvFileProcessingSvc.PaymentRecord.newBuilder()
+        ProcessCsvPaymentsInputSvc.PaymentRecord grpc =
+                ProcessCsvPaymentsInputSvc.PaymentRecord.newBuilder()
                         .setId(id.toString())
                         .setCsvId("test-record")
                         .setRecipient("Test Recipient")
@@ -169,7 +171,7 @@ class PaymentRecordMapperTest {
         PaymentRecord domain = createTestPaymentRecord();
 
         // When
-        InputCsvFileProcessingSvc.PaymentRecord grpc = mapper.toDtoToGrpc(domain);
+        ProcessCsvPaymentsInputSvc.PaymentRecord grpc = mapper.toDtoToGrpc(domain);
 
         // Then
         assertNotNull(grpc);
@@ -188,8 +190,8 @@ class PaymentRecordMapperTest {
         // Given
         UUID id = UUID.randomUUID();
 
-        InputCsvFileProcessingSvc.PaymentRecord grpc =
-                InputCsvFileProcessingSvc.PaymentRecord.newBuilder()
+        ProcessCsvPaymentsInputSvc.PaymentRecord grpc =
+                ProcessCsvPaymentsInputSvc.PaymentRecord.newBuilder()
                         .setId(id.toString())
                         .setCsvId("test-record")
                         .setRecipient("Test Recipient")

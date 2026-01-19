@@ -14,11 +14,10 @@ The `@PipelineStep` annotation is used to mark a class as a pipeline step. This 
 
 ```java
 @PipelineStep(
-   order = 1,
-   autoPersist = true,
-   debug = true,
-   recoverOnFailure = true,
-   stub = MyGrpc.MyStub.class,
+   inputType = MyInput.class,
+   outputType = MyOutput.class,
+   stepType = StepOneToOne.class,
+   backendType = MyAdapter.class,
    inboundMapper = MyMapper.class,
    outboundMapper = MyMapper.class
 )

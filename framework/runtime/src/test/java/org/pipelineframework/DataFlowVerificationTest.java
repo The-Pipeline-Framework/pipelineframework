@@ -16,21 +16,24 @@
 
 package org.pipelineframework;
 
-import static org.junit.jupiter.api.Assertions.*;
+import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
+import jakarta.inject.Inject;
 
 import io.quarkus.test.junit.QuarkusTest;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.AssertSubscriber;
-import jakarta.inject.Inject;
-import java.time.Duration;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepOneToOne;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @QuarkusTest
 class DataFlowVerificationTest {
@@ -67,6 +70,7 @@ class DataFlowVerificationTest {
     @Test
     void testDataFlowIntegrity() {
         System.out.println("=== Testing Data Flow Integrity ===");
+        pipelineConfig.parallelism(ParallelismPolicy.SEQUENTIAL);
 
         // Create 3 input items
         Multi<String> input = Multi.createFrom().items("item1", "item2", "item3");
@@ -82,9 +86,6 @@ class DataFlowVerificationTest {
 
         StepConfig config2 = new StepConfig();
         step2.initialiseWithConfig(config2);
-
-        System.out.println("Step 1 parallel: " + step1.parallel());
-        System.out.println("Step 2 parallel: " + step2.parallel());
 
         // Run pipeline: input -> step1 -> step2
         Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step1, step2));
@@ -127,6 +128,7 @@ class DataFlowVerificationTest {
     @Test
     void testDataFlowIntegrityWithParallelProcessing() {
         System.out.println("=== Testing Data Flow Integrity with Parallel Processing ===");
+        pipelineConfig.parallelism(ParallelismPolicy.PARALLEL);
 
         // Create 3 input items
         Multi<String> input = Multi.createFrom().items("item1", "item2", "item3");
@@ -136,17 +138,12 @@ class DataFlowVerificationTest {
         TrackingStep step1 = new TrackingStep("Step1_Parallel");
         TrackingStep step2 = new TrackingStep("Step2_Parallel");
 
-        // Initialize steps with parallel processing enabled
+        // Initialize steps
         StepConfig config1 = new StepConfig();
-        config1.parallel(true);
         step1.initialiseWithConfig(config1);
 
         StepConfig config2 = new StepConfig();
-        config2.parallel(true);
         step2.initialiseWithConfig(config2);
-
-        System.out.println("Step 1 parallel: " + step1.parallel());
-        System.out.println("Step 2 parallel: " + step2.parallel());
 
         // Run pipeline: input -> step1 -> step2
         Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step1, step2));

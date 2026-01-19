@@ -16,18 +16,16 @@
 
 package org.pipelineframework.processor;
 
-import static org.pipelineframework.processor.PipelineStepProcessor.CLIENT_STEP_SUFFIX;
+import java.util.List;
 
 import io.quarkus.arc.deployment.AdditionalBeanBuildItem;
 import io.quarkus.deployment.annotations.BuildProducer;
 import io.quarkus.deployment.annotations.BuildStep;
 import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
 import io.quarkus.deployment.builditem.FeatureBuildItem;
-import java.util.List;
-import org.jboss.jandex.ClassInfo;
-import org.jboss.jandex.IndexView;
+import org.jboss.jandex.*;
 import org.jboss.logging.Logger;
-import org.pipelineframework.config.PipelineCliAppConfig;
+import org.pipelineframework.annotation.PipelineOrchestrator;
 
 /**
  * Registers client step classes as additional unremovable beans when CLI client generation is enabled.
@@ -35,6 +33,8 @@ import org.pipelineframework.config.PipelineCliAppConfig;
 public class StepClientRegistrar {
 
     private static final String FEATURE_NAME = "pipelineframework-steps";
+    private static final String GRPC_CLIENT_STEP_SUFFIX = "GrpcClientStep";
+    private static final String REST_CLIENT_STEP_SUFFIX = "RestClientStep";
     private static final Logger LOG = Logger.getLogger(StepClientRegistrar.class);
 
     /**
@@ -55,32 +55,55 @@ public class StepClientRegistrar {
 
     /**
      * Exposes discovered pipeline step client classes as additional unremovable beans when CLI client generation is enabled.
-     *
+     * <p>
      * Scans the provided Jandex index for classes whose simple name ends with the configured client step suffix and registers each
      * matching class as an unremovable AdditionalBeanBuildItem when CLI generation is enabled via the supplied configuration.
      *
-     * @param config controls whether CLI-generated clients should be registered
+     * @param beans producer for additional beans registered at build time
      * @param combinedIndex combined Jandex index containing application classes to scan
      */
     @BuildStep
     void registerStepClients(BuildProducer<AdditionalBeanBuildItem> beans,
-                             PipelineCliAppConfig config,
                              CombinedIndexBuildItem combinedIndex) {
-        if (!config.generateCli()) {
+        if (!isCliGenerationEnabled(combinedIndex)) {
             LOG.debug("Client generation disabled; skipping client step registration.");
             return;
         }
 
         IndexView index = combinedIndex.getIndex();
 
-        // Find all classes ending with "ClientStep"
+        // Find all classes ending with client step suffixes
         List<ClassInfo> classes = index.getKnownClasses().stream()
-                .filter(ci -> ci.name().toString().endsWith(CLIENT_STEP_SUFFIX))
+                .filter(ci -> {
+                    String name = ci.name().toString();
+                    return name.endsWith(GRPC_CLIENT_STEP_SUFFIX) || name.endsWith(REST_CLIENT_STEP_SUFFIX);
+                })
                 .toList();
 
         for (ClassInfo ci : classes) {
             beans.produce(AdditionalBeanBuildItem.unremovableOf(ci.name().toString()));
             LOG.infof("Registered step (client) %s", ci.name());
         }
+    }
+
+    /**
+     * Checks whether CLI-generated clients should be registered based on the orchestrator annotation.
+     *
+     * @param combinedIndex combined Jandex index containing application classes to scan
+     * @return true when CLI generation is enabled
+     */
+    private boolean isCliGenerationEnabled(CombinedIndexBuildItem combinedIndex) {
+        DotName annotationName = DotName.createSimple(PipelineOrchestrator.class.getName());
+        java.util.Collection<AnnotationInstance> instances = combinedIndex.getIndex().getAnnotations(annotationName);
+        if (instances == null || instances.isEmpty()) {
+            return false;
+        }
+        for (AnnotationInstance instance : instances) {
+            AnnotationValue value = instance.value("generateCli");
+            if (value == null || value.asBoolean()) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -17,7 +17,6 @@
 package org.pipelineframework.grpc;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
 
 import io.grpc.StatusRuntimeException;
 import io.quarkus.test.junit.QuarkusTest;
@@ -29,11 +28,7 @@ import org.mockito.ArgumentMatchers;
 import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
-import org.pipelineframework.domain.TestEntity;
-import org.pipelineframework.domain.TestResult;
-import org.pipelineframework.persistence.PersistenceManager;
 import org.pipelineframework.service.ReactiveService;
-import org.pipelineframework.service.TestReactiveService;
 import org.pipelineframework.service.throwStatusRuntimeExceptionFunction;
 
 @QuarkusTest
@@ -41,11 +36,8 @@ class GrpcReactiveServiceAdapterComprehensiveTest {
 
     @Mock
     private ReactiveService<DomainIn, DomainOut> mockReactiveService;
-    @Mock
-    private PersistenceManager mockPersistenceManager;
 
     private GrpcReactiveServiceAdapter<GrpcIn, GrpcOut, DomainIn, DomainOut> unitTestAdapter;
-    private GrpcReactiveServiceAdapter<Object, Object, TestEntity, TestResult> integrationTestAdapter;
 
     // Test-specific adapter that bypasses transaction for unit testing of core logic
     private static class UnitTestGrpcReactiveServiceAdapter
@@ -69,12 +61,6 @@ class GrpcReactiveServiceAdapterComprehensiveTest {
         @Override
         protected GrpcOut toGrpc(DomainOut domainOut) {
             return new GrpcOut();
-        }
-
-        @Override
-        protected boolean isAutoPersistenceEnabled() {
-            // Disable auto-persistence for unit testing
-            return false;
         }
 
         // Override to bypass Panache transaction context requirement for unit tests
@@ -103,73 +89,15 @@ class GrpcReactiveServiceAdapterComprehensiveTest {
     private static class DomainOut {
     }
 
-    private static class TestGrpcRequest {
-    }
-
-    private static class TestGrpcResponse {
-    }
-
     @BeforeEach
-    void setUp() throws Exception {
+    void setUp() {
         MockitoAnnotations.openMocks(this);
 
         // Setup for unit tests (bypasses transaction)
         unitTestAdapter = new UnitTestGrpcReactiveServiceAdapter(mockReactiveService);
-        java.lang.reflect.Field field = GrpcReactiveServiceAdapter.class.getDeclaredField("persistenceManager");
-        field.setAccessible(true);
-        field.set(unitTestAdapter, mockPersistenceManager);
 
         // Setup for integration tests (uses real adapter but with mock service)
-        integrationTestAdapter = new GrpcReactiveServiceAdapter<>() {
-            @Override
-            protected ReactiveService<TestEntity, TestResult> getService() {
-                return new TestReactiveService();
-            }
-
-            @Override
-            protected TestEntity fromGrpc(Object grpcIn) {
-                return new TestEntity("test", "description");
-            }
-
-            @Override
-            protected Object toGrpc(TestResult domainOut) {
-                return new TestGrpcResponse();
-            }
-
-            @Override
-            protected boolean isAutoPersistenceEnabled() {
-                return true;
-            }
-
-            // Override remoteProcess to bypass Panache transaction for testing purposes
-            @Override
-            public Uni<Object> remoteProcess(Object grpcRequest) {
-                TestEntity entity = fromGrpc(grpcRequest);
-
-                Uni<TestResult> processedResult = getService().process(entity);
-
-                Uni<TestResult> withPersistence = isAutoPersistenceEnabled()
-                        ? processedResult
-                                .onItem()
-                                .call(
-                                        ignored ->
-                // If auto-persistence is enabled,
-                // persist the input entity after
-                // successful processing
-                persistenceManager.persist(entity))
-                        : processedResult;
-
-                return withPersistence
-                        .onItem()
-                        .transform(this::toGrpc)
-                        .onFailure()
-                        .transform(new throwStatusRuntimeExceptionFunction());
-            }
-        };
-
-        field = GrpcReactiveServiceAdapter.class.getDeclaredField("persistenceManager");
-        field.setAccessible(true);
-        field.set(integrationTestAdapter, mockPersistenceManager);
+        // Override remoteProcess to bypass Panache transaction for testing purposes
     }
 
     // Unit Test Cases
@@ -208,95 +136,5 @@ class GrpcReactiveServiceAdapterComprehensiveTest {
         assertInstanceOf(StatusRuntimeException.class, failure);
         assertEquals("INTERNAL: Processing failed", failure.getMessage());
         assertEquals(testException.getMessage(), failure.getCause().getMessage());
-    }
-
-    // Integration Test Cases
-    @Test
-    void integrationTest_WithAutoPersistenceEnabled_ShouldCallPersist() {
-        TestGrpcRequest grpcRequest = new TestGrpcRequest();
-        TestEntity entity = new TestEntity("test", "description");
-        TestResult result = new TestResult("Processed: test", "Processed: description");
-
-        // Mock the persistence manager to return the same entity
-        when(mockPersistenceManager.persist(any(TestEntity.class)))
-                .thenReturn(Uni.createFrom().item(entity));
-
-        Uni<Object> resultUni = integrationTestAdapter.remoteProcess(grpcRequest);
-
-        UniAssertSubscriber<Object> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
-        subscriber.awaitItem();
-
-        assertNotNull(subscriber.getItem());
-        verify(mockPersistenceManager).persist(any(TestEntity.class));
-    }
-
-    @Test
-    void integrationTest_WithAutoPersistenceDisabled_ShouldNotCallPersist() {
-        GrpcReactiveServiceAdapter<Object, Object, TestEntity, TestResult> adapterWithoutPersistence = new GrpcReactiveServiceAdapter<>() {
-            @Override
-            protected ReactiveService<TestEntity, TestResult> getService() {
-                return new TestReactiveService();
-            }
-
-            @Override
-            protected TestEntity fromGrpc(Object grpcIn) {
-                return new TestEntity("test", "description");
-            }
-
-            @Override
-            protected Object toGrpc(TestResult domainOut) {
-                return new TestGrpcResponse();
-            }
-
-            @Override
-            protected boolean isAutoPersistenceEnabled() {
-                return false;
-            }
-
-            // Override to bypass Panache transaction for testing purposes
-            @Override
-            public Uni<Object> remoteProcess(Object grpcRequest) {
-                TestEntity entity = fromGrpc(grpcRequest);
-
-                Uni<TestResult> processedResult = getService().process(entity);
-
-                Uni<TestResult> withPersistence = isAutoPersistenceEnabled()
-                        ? processedResult
-                                .onItem()
-                                .call(
-                                        ignored ->
-                // If auto-persistence is
-                // enabled, persist the
-                // input entity after
-                // successful processing
-                persistenceManager.persist(
-                        entity))
-                        : processedResult;
-
-                return withPersistence
-                        .onItem()
-                        .transform(this::toGrpc)
-                        .onFailure()
-                        .transform(new throwStatusRuntimeExceptionFunction());
-            }
-        };
-
-        try {
-            java.lang.reflect.Field field = GrpcReactiveServiceAdapter.class.getDeclaredField("persistenceManager");
-            field.setAccessible(true);
-            field.set(adapterWithoutPersistence, mockPersistenceManager);
-        } catch (Exception e) {
-            fail("Failed to inject mock persistence manager: " + e.getMessage());
-        }
-
-        TestGrpcRequest grpcRequest = new TestGrpcRequest();
-
-        Uni<Object> resultUni = adapterWithoutPersistence.remoteProcess(grpcRequest);
-
-        UniAssertSubscriber<Object> subscriber = resultUni.subscribe().withSubscriber(UniAssertSubscriber.create());
-        subscriber.awaitItem();
-
-        assertNotNull(subscriber.getItem());
-        verify(mockPersistenceManager, never()).persist(any(TestEntity.class));
     }
 }
