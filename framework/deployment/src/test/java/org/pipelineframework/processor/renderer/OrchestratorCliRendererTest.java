@@ -78,7 +78,6 @@ class OrchestratorCliRendererTest {
         return new OrchestratorBinding(
             model,
             "com.example",
-            "example-app",
             transport,
             "InputType",
             "OutputType",

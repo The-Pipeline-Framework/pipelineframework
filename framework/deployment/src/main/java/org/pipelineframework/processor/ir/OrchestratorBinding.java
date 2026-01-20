@@ -7,7 +7,6 @@ import java.util.Locale;
  *
  * @param model the pipeline step model describing the orchestrator entrypoint
  * @param basePackage the base package for generated orchestrator artifacts
- * @param appName the application name from pipeline.yaml
  * @param transport the configured transport name
  * @param inputTypeName the input type name for the orchestrator entrypoint
  * @param outputTypeName the output type name for the orchestrator entrypoint
@@ -22,7 +21,6 @@ import java.util.Locale;
 public record OrchestratorBinding(
     PipelineStepModel model,
     String basePackage,
-    String appName,
     String transport,
     String inputTypeName,
     String outputTypeName,

@@ -85,23 +85,12 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                 .build();
         }
 
-        MethodSpec.Builder mainMethodBuilder = MethodSpec.methodBuilder("main")
+        MethodSpec mainMethod = MethodSpec.methodBuilder("main")
             .addModifiers(Modifier.PUBLIC, Modifier.STATIC)
             .returns(void.class)
-            .addParameter(String[].class, "args");
-
-        if (binding.appName() != null && !binding.appName().isBlank()) {
-            mainMethodBuilder.addStatement(
-                "if (System.getProperty($S) == null) System.setProperty($S, $S)",
-                "quarkus.application.name",
-                "quarkus.application.name",
-                binding.appName());
-        }
-
-        mainMethodBuilder.addStatement(
-            "$T.run($T.class, args)", ClassName.get("io.quarkus.runtime", "Quarkus"), appClassName);
-
-        MethodSpec mainMethod = mainMethodBuilder.build();
+            .addParameter(String[].class, "args")
+            .addStatement("$T.run($T.class, args)", ClassName.get("io.quarkus.runtime", "Quarkus"), appClassName)
+            .build();
 
         MethodSpec runMethod = MethodSpec.methodBuilder("run")
             .addAnnotation(Override.class)
