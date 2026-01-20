@@ -74,7 +74,7 @@ public class NewRelicConfigSource implements ConfigSource {
         values.put("quarkus.otel.metrics.enabled", "true");
         values.put("quarkus.otel.metric.export.interval", "5s");
         values.put("quarkus.otel.traces.sampler", "parentbased_traceidratio");
-        values.put("quarkus.otel.traces.sampler.arg", "0.1");
+        values.put("quarkus.otel.traces.sampler.arg", "0.001");
         values.put("quarkus.otel.exporter.otlp.endpoint", resolveEndpoint());
         values.put("quarkus.otel.exporter.otlp.protocol", "http/protobuf");
         values.put("quarkus.otel.exporter.otlp.compression", "gzip");

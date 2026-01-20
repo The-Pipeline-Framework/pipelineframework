@@ -34,7 +34,7 @@ Enabled settings (defaults):
 - `quarkus.otel.metrics.enabled=true`
 - `quarkus.otel.metric.export.interval=5s`
 - `quarkus.otel.traces.sampler=parentbased_traceidratio`
-- `quarkus.otel.traces.sampler.arg=0.1`
+- `quarkus.otel.traces.sampler.arg=0.001`
 - `quarkus.otel.exporter.otlp.endpoint=${NEW_RELIC_OTLP_ENDPOINT:https://otlp.eu01.nr-data.net:443}`
 - `quarkus.otel.exporter.otlp.protocol=http/protobuf`
 - `quarkus.otel.exporter.otlp.compression=gzip`
