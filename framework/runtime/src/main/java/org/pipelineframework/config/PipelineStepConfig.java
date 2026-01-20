@@ -74,6 +74,13 @@ public interface PipelineStepConfig {
      * @return cache configuration
      */
     CacheConfig cache();
+
+    /**
+     * Telemetry configuration for pipeline observability.
+     *
+     * @return telemetry configuration
+     */
+    TelemetryConfig telemetry();
     
     /**
      * Per-step configuration overrides keyed by each step's fully qualified class name.
@@ -159,6 +166,67 @@ public interface PipelineStepConfig {
          */
         @WithDefault("PT5M")
         Duration startupTimeout();
+    }
+
+    /**
+     * Telemetry configuration for pipeline tracing and metrics.
+     */
+    interface TelemetryConfig {
+        /**
+         * Master switch for pipeline telemetry instrumentation.
+         *
+         * @return true to enable telemetry, false otherwise
+         */
+        @WithDefault("false")
+        Boolean enabled();
+
+        /**
+         * Tracing configuration for pipeline spans.
+         *
+         * @return tracing configuration
+         */
+        TracingConfig tracing();
+
+        /**
+         * Metrics configuration for pipeline counters and histograms.
+         *
+         * @return metrics configuration
+         */
+        MetricsConfig metrics();
+    }
+
+    /**
+     * Tracing configuration for pipeline spans.
+     */
+    interface TracingConfig {
+        /**
+         * Enables tracing spans for pipeline execution.
+         *
+         * @return true to enable tracing spans
+         */
+        @WithDefault("false")
+        Boolean enabled();
+
+        /**
+         * Enables per-item step spans for high-cardinality workloads.
+         *
+         * @return true to create per-item step spans
+         */
+        @WithDefault("false")
+        Boolean perItem();
+    }
+
+    /**
+     * Metrics configuration for pipeline metrics emission.
+     */
+    interface MetricsConfig {
+        /**
+         * Enables metric counters and histograms.
+         *
+         * @return true to emit metrics
+         */
+        @WithDefault("true")
+        Boolean enabled();
     }
 
     /**
