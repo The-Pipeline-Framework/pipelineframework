@@ -4,6 +4,10 @@ This guide explains how The Pipeline Framework's annotation processor works to a
 
 For the architecture overview of the processor, see [Annotation Processor Architecture](../../evolve/annotation-processor-architecture.md)
 
+For a build-phase walkthrough of the generated parent POM, see:
+- [Pipeline Parent POM Lifecycle](pipeline-parent-pom-lifecycle.md)
+- [CSV Payments POM Lifecycle](csv-payments-pom-lifecycle.md)
+
 ## Overview
 
 The Pipeline Framework uses annotation processing to automatically generate the necessary infrastructure for pipeline execution. When you annotate your services with `@PipelineStep`, the framework's annotation processor:

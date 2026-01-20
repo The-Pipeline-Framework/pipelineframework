@@ -39,7 +39,3 @@ pipeline.cache.provider=redis
 %prod.quarkus.redis.hosts=${REDIS_HOSTS:redis://localhost:6379}
 %dev.quarkus.redis.devservices.enabled=true
 %test.quarkus.redis.devservices.enabled=true
-
-# Index the cache plugin for config/annotation scanning
-quarkus.index-dependency."cache-plugin".group-id=org.pipelineframework
-quarkus.index-dependency."cache-plugin".artifact-id=cache-plugin

@@ -8,7 +8,7 @@
     <parent>
         <groupId>org.pipelineframework.search</groupId>
         <artifactId>search-pipeline</artifactId>
-        <version>0.9.2-SNAPSHOT</version>
+        <version>26.1-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -221,8 +221,42 @@
                 <artifactId>spotless-maven-plugin</artifactId>
             </plugin>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+            </plugin>
+            <plugin>
                 <groupId>io.smallrye</groupId>
                 <artifactId>jandex-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>make-index</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jandex</goal>
+                        </goals>
+                        <configuration>
+                            <processDefaultFileSet>false</processDefaultFileSet>
+                            <fileSets>
+                                <fileSet>
+                                    <directory>${project.build.directory}/classes</directory>
+                                    <includes>
+                                        <include>**/*.class</include>
+                                    </includes>
+                                </fileSet>
+                            </fileSets>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>make-jar-index</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>jandex-jar</goal>
+                        </goals>
+                        <configuration>
+                            <jar>${project.build.directory}/${project.build.finalName}.jar</jar>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

@@ -17,6 +17,7 @@
 package org.pipelineframework.rest;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 
 import org.jboss.logging.Logger;
@@ -40,10 +41,14 @@ public class RestExceptionMapper {
     }
 
     /**
-     * Maps pipeline exceptions to REST responses.
+     * Convert exceptions thrown by resources into corresponding HTTP responses.
      *
-     * @param ex the exception thrown by the resource
-     * @return a RestResponse representing the error
+     * Maps recognised pipeline and framework exceptions to specific HTTP status codes:
+     * cache-related exceptions yield 412 Precondition Failed, NotFoundException yields 404 Not Found,
+     * IllegalArgumentException yields 400 Bad Request, and all other exceptions yield 500 Internal Server Error.
+     *
+     * @param ex the exception thrown by a resource or during request processing
+     * @return a RestResponse containing an HTTP status and a human-readable error message
      */
     @ServerExceptionMapper
     public RestResponse<String> handleException(Exception ex) {
@@ -54,6 +59,10 @@ public class RestExceptionMapper {
         if (ex instanceof CachePolicyViolation) {
             LOG.warn("Cache policy violation", ex);
             return RestResponse.status(Response.Status.PRECONDITION_FAILED, ex.getMessage());
+        }
+        if (ex instanceof NotFoundException) {
+            LOG.debug("Request did not match a REST endpoint", ex);
+            return RestResponse.status(Response.Status.NOT_FOUND, "Not Found");
         }
         if (ex instanceof IllegalArgumentException) {
             LOG.warn("Invalid request", ex);
