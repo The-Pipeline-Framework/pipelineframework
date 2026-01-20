@@ -454,6 +454,7 @@
                     <executions>
                         <execution>
                             <id>make-index</id>
+                            <phase>prepare-package</phase>
                             <goals>
                                 <goal>jandex</goal>
                             </goals>

@@ -88,6 +88,12 @@ Plugin: `maven-resources-plugin` (merge-*-classes)
 - This is required for Quarkus packaging and Docker images to expose the
   generated gRPC/REST endpoints at runtime.
 
+Plugin: `jandex-maven-plugin`
+
+- Generates the main and role-specific Jandex indexes after role outputs are merged.
+- Plugin modules ship `META-INF/jandex.idx`, so consuming services do not need
+  `quarkus.index-dependency` for those plugins.
+
 ### package
 
 Plugin: `maven-jar-plugin`

@@ -42,7 +42,7 @@ Plugin: `exec-maven-plugin`
 
 - Executes `generate-dev-certs.sh` once in the parent module only.
 - Output: `examples/csv-payments/target/dev-certs/*`
-- Note: this execution is marked `<inherited>false>`, so it only runs on the
+- Note: this execution is marked `<inherited>false</inherited>`, so it only runs on the
   parent module.
 
 ### process-resources
