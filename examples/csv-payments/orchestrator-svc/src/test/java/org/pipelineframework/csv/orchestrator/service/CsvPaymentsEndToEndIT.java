@@ -24,6 +24,7 @@ import java.sql.*;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import io.quarkus.test.junit.QuarkusIntegrationTest;
 import org.jboss.logging.Logger;
@@ -34,6 +35,7 @@ import org.testcontainers.containers.BindMode;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.Network;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.containers.output.OutputFrame;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.lifecycle.Startables;
 
@@ -161,6 +163,7 @@ class CsvPaymentsEndToEndIT {
                     .withExposedPorts(8447)
                     .withEnv("QUARKUS_PROFILE", "test")
                     .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
+                    .withLogConsumer(containerLog("output-csv-file-processing-svc"))
                     .waitingFor(
                             Wait.forHttps("/q/health")
                                     .forPort(8447)
@@ -188,6 +191,19 @@ class CsvPaymentsEndToEndIT {
             paymentStatusService,
             outputCsvService
         )).join();
+    }
+
+    private static Consumer<OutputFrame> containerLog(String containerName) {
+        return outputFrame -> {
+            if (outputFrame == null) {
+                return;
+            }
+            String message = outputFrame.getUtf8String();
+            if (message == null || message.isBlank()) {
+                return;
+            }
+            LOG.infof("[%s] %s", containerName, message.trim());
+        };
     }
 
     /**
