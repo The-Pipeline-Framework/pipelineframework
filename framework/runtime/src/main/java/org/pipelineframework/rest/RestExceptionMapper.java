@@ -41,10 +41,14 @@ public class RestExceptionMapper {
     }
 
     /**
-     * Maps pipeline exceptions to REST responses.
+     * Convert exceptions thrown by resources into corresponding HTTP responses.
      *
-     * @param ex the exception thrown by the resource
-     * @return a RestResponse representing the error
+     * Maps recognised pipeline and framework exceptions to specific HTTP status codes:
+     * cache-related exceptions yield 412 Precondition Failed, NotFoundException yields 404 Not Found,
+     * IllegalArgumentException yields 400 Bad Request, and all other exceptions yield 500 Internal Server Error.
+     *
+     * @param ex the exception thrown by a resource or during request processing
+     * @return a RestResponse containing an HTTP status and a human-readable error message
      */
     @ServerExceptionMapper
     public RestResponse<String> handleException(Exception ex) {
