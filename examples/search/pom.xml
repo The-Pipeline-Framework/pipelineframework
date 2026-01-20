@@ -462,6 +462,9 @@
                                 <fileSets>
                                     <fileSet>
                                         <directory>${project.build.directory}/classes</directory>
+                                        <includes>
+                                            <include>**/*.class</include>
+                                        </includes>
                                     </fileSet>
                                 </fileSets>
                             </configuration>
@@ -477,6 +480,9 @@
                                 <fileSets>
                                     <fileSet>
                                         <directory>${project.build.directory}/classes-pipeline/orchestrator-client</directory>
+                                        <includes>
+                                            <include>**/*.class</include>
+                                        </includes>
                                     </fileSet>
                                 </fileSets>
                             </configuration>
@@ -492,6 +498,9 @@
                                 <fileSets>
                                     <fileSet>
                                         <directory>${project.build.directory}/classes-pipeline/plugin-client</directory>
+                                        <includes>
+                                            <include>**/*.class</include>
+                                        </includes>
                                     </fileSet>
                                 </fileSets>
                             </configuration>
