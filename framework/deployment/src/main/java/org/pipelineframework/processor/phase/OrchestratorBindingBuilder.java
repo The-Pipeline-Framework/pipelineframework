@@ -83,6 +83,7 @@ class OrchestratorBindingBuilder {
         return new OrchestratorBinding(
             model,
             basePackage,
+            config.appName(),
             config.transport(),
             inputType,
             outputType,

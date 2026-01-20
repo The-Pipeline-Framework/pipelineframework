@@ -78,6 +78,7 @@ class OrchestratorRestResourceRendererTest {
         return new OrchestratorBinding(
             model,
             "com.example",
+            "example-app",
             "REST",
             "InputType",
             "OutputType",

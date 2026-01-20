@@ -79,6 +79,7 @@ class OrchestratorGrpcRendererTest {
         return new OrchestratorBinding(
             model,
             "com.example",
+            "example-app",
             "GRPC",
             "InputType",
             "OutputType",
