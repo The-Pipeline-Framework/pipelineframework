@@ -460,6 +460,14 @@
                             <goals>
                                 <goal>jandex</goal>
                             </goals>
+                            <configuration>
+                                <processDefaultFileSet>false</processDefaultFileSet>
+                                <fileSets>
+                                    <fileSet>
+                                        <directory>${project.build.directory}/classes</directory>
+                                    </fileSet>
+                                </fileSets>
+                            </configuration>
                         </execution>
                         <execution>
                             <id>make-index-orchestrator-client</id>
@@ -467,9 +475,13 @@
                                 <goal>jandex</goal>
                             </goals>
                             <configuration>
-                                <classesDir>${project.build.directory}/classes-pipeline/orchestrator-client</classesDir>
+                                <processDefaultFileSet>false</processDefaultFileSet>
                                 <indexDir>${project.build.directory}/classes-pipeline/orchestrator-client/META-INF</indexDir>
-                                <processDefaultFileSet>true</processDefaultFileSet>
+                                <fileSets>
+                                    <fileSet>
+                                        <directory>${project.build.directory}/classes-pipeline/orchestrator-client</directory>
+                                    </fileSet>
+                                </fileSets>
                             </configuration>
                         </execution>
                         <execution>
@@ -478,9 +490,13 @@
                                 <goal>jandex</goal>
                             </goals>
                             <configuration>
-                                <classesDir>${project.build.directory}/classes-pipeline/plugin-client</classesDir>
+                                <processDefaultFileSet>false</processDefaultFileSet>
                                 <indexDir>${project.build.directory}/classes-pipeline/plugin-client/META-INF</indexDir>
-                                <processDefaultFileSet>true</processDefaultFileSet>
+                                <fileSets>
+                                    <fileSet>
+                                        <directory>${project.build.directory}/classes-pipeline/plugin-client</directory>
+                                    </fileSet>
+                                </fileSets>
                             </configuration>
                         </execution>
                     </executions>

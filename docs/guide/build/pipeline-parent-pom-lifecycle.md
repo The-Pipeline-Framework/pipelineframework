@@ -75,6 +75,11 @@ Plugin: `maven-compiler-plugin` (role compiles)
   - `target/classes-pipeline/plugin-server`
   - `target/classes-pipeline/rest-server`
 
+Plugin: `jandex-maven-plugin`
+
+- Indexes the main classes from `target/classes` and role outputs via file sets.
+- Outputs role-specific indexes to `target/classes-pipeline/*/META-INF/jandex.idx`.
+
 ### prepare-package
 
 Plugin: `maven-resources-plugin` (merge-*-classes)
