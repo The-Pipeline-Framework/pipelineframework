@@ -3,6 +3,12 @@ variable "newrelic_account_id" {
   description = "New Relic account ID."
 }
 
+variable "newrelic_api_key" {
+  type        = string
+  sensitive   = true
+  description = "New Relic user API key."
+}
+
 variable "service_names" {
   type = map(string)
   default = {
