@@ -488,7 +488,13 @@ class HandlebarsTemplateEngine {
         await this.generateMavenWrapperFiles(outputPath);
 
         // Generate other files
-        await this.generateOtherFiles(appName, basePackage, steps, outputPath);
+        await this.generateOtherFiles(
+            appName,
+            basePackage,
+            steps,
+            includePersistenceModule,
+            includeCacheInvalidationModule,
+            outputPath);
     }
 
     async generateParentPom(
@@ -1286,7 +1292,13 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         await fs.writeFile(path.join(wrapperDir, 'maven-wrapper.properties'), mavenWrapperProperties);
     }
 
-    async generateOtherFiles(appName, basePackage, steps, outputPath) {
+    async generateOtherFiles(
+        appName,
+        basePackage,
+        steps,
+        includePersistenceModule,
+        includeCacheInvalidationModule,
+        outputPath) {
         const firstInputTypeName = steps && steps.length ? steps[0].inputTypeName : 'Input';
         const optionsClass = `${firstInputTypeName}Options`;
 
@@ -1314,6 +1326,17 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         await fs.ensureDir(formatterDir);
         const formatterPath = path.join(formatterDir, 'quarkus-formatter.xml');
         await fs.writeFile(formatterPath, formatterContent);
+
+        const certScriptContext = {
+            appName,
+            steps,
+            includePersistenceModule,
+            includeCacheInvalidationModule
+        };
+        const certScriptContent = this.render('generate-dev-certs', certScriptContext);
+        const certScriptPath = path.join(outputPath, 'generate-dev-certs.sh');
+        await fs.writeFile(certScriptPath, certScriptContent);
+        await fs.chmod(certScriptPath, 0o755);
     }
 
     // Utility methods
