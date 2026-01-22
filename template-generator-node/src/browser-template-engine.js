@@ -257,7 +257,12 @@ class BrowserTemplateEngine {
         await this.generateMavenWrapperFiles(fileCallback);
 
         // Generate other files
-        await this.generateOtherFiles(appName, fileCallback);
+        await this.generateOtherFiles(
+            appName,
+            steps,
+            includePersistenceModule,
+            includeCacheInvalidationModule,
+            fileCallback);
     }
 
     async generateParentPom(
@@ -647,7 +652,12 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         await fileCallback('.mvn/wrapper/maven-wrapper.properties', mavenWrapperProperties);
     }
 
-    async generateOtherFiles(appName, fileCallback) {
+    async generateOtherFiles(
+        appName,
+        steps,
+        includePersistenceModule,
+        includeCacheInvalidationModule,
+        fileCallback) {
         // Create README
         const readmeContext = { appName };
         const readmeContent = this.render('readme', readmeContext);
@@ -660,6 +670,15 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         // Create formatter config
         const formatterContent = this.render('quarkus-formatter', {});
         await fileCallback('ide-config/quarkus-formatter.xml', formatterContent);
+
+        const certScriptContext = {
+            appName,
+            steps,
+            includePersistenceModule,
+            includeCacheInvalidationModule
+        };
+        const certScriptContent = this.render('generate-dev-certs', certScriptContext);
+        await fileCallback('generate-dev-certs.sh', certScriptContent);
     }
 
     // Utility methods

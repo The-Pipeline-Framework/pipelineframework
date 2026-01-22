@@ -65,10 +65,12 @@ keytool -import -file "${CERT_DIR}/quarkus-cert.pem" -keystore "${CERT_DIR}/clie
 for svc in cache-invalidation-svc persistence-svc crawl-source-svc index-document-svc parse-document-svc tokenize-content-svc orchestrator-svc; do
     mkdir -p "${OUTPUT_DIR}/${svc}"
     cp "${CERT_DIR}/server-keystore.p12" "${OUTPUT_DIR}/${svc}/server-keystore.jks"
+    chmod 644 "${OUTPUT_DIR}/${svc}/server-keystore.jks"
 done
 
 mkdir -p "${OUTPUT_DIR}/orchestrator-svc"
 cp "${CERT_DIR}/client-truststore.jks" "${OUTPUT_DIR}/orchestrator-svc/client-truststore.jks"
+chmod 644 "${OUTPUT_DIR}/orchestrator-svc/client-truststore.jks"
 
 # Clean up temporary files
 rm -rf "${CERT_DIR}"
