@@ -9,6 +9,18 @@ variable "newrelic_api_key" {
   description = "New Relic user API key."
 }
 
+variable "newrelic_entity_domain" {
+  type        = string
+  default     = "APM"
+  description = "New Relic entity domain for services."
+}
+
+variable "newrelic_entity_type" {
+  type        = string
+  default     = "SERVICE"
+  description = "New Relic entity type for services."
+}
+
 variable "service_names" {
   type = map(string)
   default = {

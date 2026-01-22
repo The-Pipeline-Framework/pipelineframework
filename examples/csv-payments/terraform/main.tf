@@ -1,8 +1,8 @@
 data "newrelic_entity" "services" {
   for_each = var.service_names
   name     = each.value
-  domain   = "APM"
-  type     = "APPLICATION"
+  domain   = var.newrelic_entity_domain
+  type     = var.newrelic_entity_type
 }
 
 locals {
