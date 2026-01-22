@@ -72,3 +72,6 @@ AGENTS.md
 # Maven Release Plugin backup files
 pom.xml.releaseBackup
 /release.properties
+
+# Terraform CLI
+/examples/csv-payments/terraform/.terraform/
