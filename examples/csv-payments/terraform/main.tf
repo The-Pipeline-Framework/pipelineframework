@@ -3,6 +3,7 @@ data "newrelic_entity" "services" {
   name     = each.value
   domain   = var.newrelic_entity_domain
   type     = var.newrelic_entity_type
+  account_id = var.newrelic_account_id
 }
 
 locals {
