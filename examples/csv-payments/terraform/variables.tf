@@ -11,7 +11,7 @@ variable "newrelic_api_key" {
 
 variable "newrelic_entity_domain" {
   type        = string
-  default     = "APM"
+  default     = "EXT"
   description = "New Relic entity domain for services."
 }
 
