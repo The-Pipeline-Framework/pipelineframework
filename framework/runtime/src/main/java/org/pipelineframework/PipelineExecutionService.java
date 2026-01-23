@@ -323,16 +323,17 @@ public class PipelineExecutionService {
         })
         .onCompletion().invoke(() -> {
           watch.stop();
-          RpcMetrics.recordGrpcServer(ORCHESTRATOR_SERVICE, ORCHESTRATOR_METHOD, Status.OK,
-              System.nanoTime() - startTime[0]);
-          ApmCompatibilityMetrics.recordOrchestratorSuccess(durationMillis(startTime[0]));
+          long durationNanos = System.nanoTime() - startTime[0];
+          RpcMetrics.recordGrpcServer(ORCHESTRATOR_SERVICE, ORCHESTRATOR_METHOD, Status.OK, durationNanos);
+          ApmCompatibilityMetrics.recordOrchestratorSuccess(durationNanos / 1_000_000d);
           LOG.infof("✅ PIPELINE FINISHED processing in %s seconds", watch.getTime(TimeUnit.SECONDS));
         })
         .onFailure().invoke(failure -> {
           watch.stop();
+          long durationNanos = System.nanoTime() - startTime[0];
           RpcMetrics.recordGrpcServer(ORCHESTRATOR_SERVICE, ORCHESTRATOR_METHOD, Status.fromThrowable(failure),
-              System.nanoTime() - startTime[0]);
-          ApmCompatibilityMetrics.recordOrchestratorFailure(durationMillis(startTime[0]));
+              durationNanos);
+          ApmCompatibilityMetrics.recordOrchestratorFailure(durationNanos / 1_000_000d);
           LOG.errorf(failure, "❌ PIPELINE FAILED after %s seconds", watch.getTime(TimeUnit.SECONDS));
         });
   }
@@ -347,15 +348,15 @@ public class PipelineExecutionService {
         })
         .onItemOrFailure().invoke((item, failure) -> {
           watch.stop();
+          long durationNanos = System.nanoTime() - startTime[0];
           if (failure == null) {
-            RpcMetrics.recordGrpcServer(ORCHESTRATOR_SERVICE, ORCHESTRATOR_METHOD, Status.OK,
-                System.nanoTime() - startTime[0]);
-            ApmCompatibilityMetrics.recordOrchestratorSuccess(durationMillis(startTime[0]));
+            RpcMetrics.recordGrpcServer(ORCHESTRATOR_SERVICE, ORCHESTRATOR_METHOD, Status.OK, durationNanos);
+            ApmCompatibilityMetrics.recordOrchestratorSuccess(durationNanos / 1_000_000d);
             LOG.infof("✅ PIPELINE FINISHED processing in %s seconds", watch.getTime(TimeUnit.SECONDS));
           } else {
             RpcMetrics.recordGrpcServer(ORCHESTRATOR_SERVICE, ORCHESTRATOR_METHOD, Status.fromThrowable(failure),
-                System.nanoTime() - startTime[0]);
-            ApmCompatibilityMetrics.recordOrchestratorFailure(durationMillis(startTime[0]));
+                durationNanos);
+            ApmCompatibilityMetrics.recordOrchestratorFailure(durationNanos / 1_000_000d);
             LOG.errorf(failure, "❌ PIPELINE FAILED after %s seconds", watch.getTime(TimeUnit.SECONDS));
           }
         });
