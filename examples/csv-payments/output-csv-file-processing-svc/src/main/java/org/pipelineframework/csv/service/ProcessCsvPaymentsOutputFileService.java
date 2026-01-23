@@ -129,16 +129,16 @@ public class ProcessCsvPaymentsOutputFileService
 
                                       return Uni.createFrom().item(file);
                                   } catch (IOException e) {
-                                      logger.errorf("Failed to create output file: %s", inputFile, e);
+                                      logger.errorf(e, "Failed to create output file: %s", inputFile);
                                       return Uni.createFrom().nullItem();
                                   } catch (CsvDataTypeMismatchException e) {
-                                      logger.errorf("CSV data type mismatch: %s", inputFile, e);
+                                      logger.errorf(e, "CSV data type mismatch: %s", inputFile);
                                       return Uni.createFrom().nullItem();
                                   } catch (CsvRequiredFieldEmptyException e) {
-                                      logger.errorf("A required field is empty: %s", inputFile, e);
+                                      logger.errorf(e, "A required field is empty: %s", inputFile);
                                       return Uni.createFrom().nullItem();
                                   } catch (Exception e) {
-                                      logger.errorf("Failed to write output file: %s", inputFile, e);
+                                      logger.errorf(e, "Failed to write output file: %s", inputFile);
                                       return Uni.createFrom().nullItem();
                                   }
                               });

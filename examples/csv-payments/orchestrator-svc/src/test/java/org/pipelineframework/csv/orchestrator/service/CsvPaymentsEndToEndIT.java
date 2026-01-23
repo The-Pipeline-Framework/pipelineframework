@@ -20,9 +20,12 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.sql.*;
 import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -182,6 +185,7 @@ class CsvPaymentsEndToEndIT {
         // Create the test directory if it doesn't exist
         Path dir = Paths.get(TEST_E2E_DIR);
         Files.createDirectories(dir);
+        ensureWritable(dir);
 
         Startables.deepStart(java.util.stream.Stream.of(
             postgresContainer,
@@ -204,6 +208,15 @@ class CsvPaymentsEndToEndIT {
             }
             LOG.infof("[%s] %s", containerName, message.trim());
         };
+    }
+
+    private static void ensureWritable(Path path) {
+        try {
+            Set<PosixFilePermission> perms = PosixFilePermissions.fromString("rwxrwxrwx");
+            Files.setPosixFilePermissions(path, perms);
+        } catch (IOException | UnsupportedOperationException e) {
+            LOG.warnf("Unable to set permissions on %s: %s", path, e.getMessage());
+        }
     }
 
     /**
@@ -431,6 +444,9 @@ class CsvPaymentsEndToEndIT {
             2,Charlie Wilson,250.00,CAD
             """
                         .getBytes());
+
+        ensureWritable(firstFile);
+        ensureWritable(secondFile);
 
         LOG.info("Created test CSV files:");
         try (var files = Files.list(Paths.get(TEST_E2E_DIR))) {
