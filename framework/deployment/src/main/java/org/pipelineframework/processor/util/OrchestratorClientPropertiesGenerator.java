@@ -57,7 +57,7 @@ public class OrchestratorClientPropertiesGenerator {
             return;
         }
 
-        OrchestratorClientModuleMapping mapping = loadModuleMapping();
+        OrchestratorClientModuleMapping mapping = loadModuleMapping(ctx);
         List<PipelineStepModel> orderedBaseSteps = orderBaseSteps(ctx, clientModels);
         List<PipelineStepModel> sideEffects = clientModels.stream()
             .filter(PipelineStepModel::sideEffect)
@@ -89,10 +89,10 @@ public class OrchestratorClientPropertiesGenerator {
             .toList();
     }
 
-    private OrchestratorClientModuleMapping loadModuleMapping() {
+    private OrchestratorClientModuleMapping loadModuleMapping(PipelineCompilationContext ctx) {
         Properties properties = new Properties();
         try {
-            properties = loadApplicationProperties();
+            properties = loadApplicationProperties(ctx);
         } catch (IOException e) {
             processingEnv.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
                 "Failed to read application.properties for module mapping overrides: " + e.getMessage());
@@ -100,9 +100,9 @@ public class OrchestratorClientPropertiesGenerator {
         return OrchestratorClientModuleMapping.fromProperties(properties, processingEnv);
     }
 
-    private Properties loadApplicationProperties() throws IOException {
+    private Properties loadApplicationProperties(PipelineCompilationContext ctx) throws IOException {
         Properties properties = new Properties();
-        for (Path baseDir : getBaseDirectories()) {
+        for (Path baseDir : getBaseDirectories(ctx)) {
             Path propertiesPath = baseDir.resolve("src/main/resources/application.properties");
             if (Files.exists(propertiesPath) && Files.isReadable(propertiesPath)) {
                 try (InputStream input = Files.newInputStream(propertiesPath)) {
@@ -125,8 +125,11 @@ public class OrchestratorClientPropertiesGenerator {
         return properties;
     }
 
-    private Set<Path> getBaseDirectories() {
+    private Set<Path> getBaseDirectories(PipelineCompilationContext ctx) {
         Set<Path> baseDirs = new LinkedHashSet<>();
+        if (ctx != null && ctx.getModuleDir() != null) {
+            baseDirs.add(ctx.getModuleDir());
+        }
         String multiModuleDir = System.getProperty("maven.multiModuleProjectDirectory");
         if (multiModuleDir != null && !multiModuleDir.isBlank()) {
             baseDirs.add(Paths.get(multiModuleDir));
@@ -263,9 +266,11 @@ public class OrchestratorClientPropertiesGenerator {
             writer.append("quarkus.grpc.clients.").append(client.name())
                 .append(".use-quarkus-grpc-client=true\n");
             if (client.tlsConfigurationName() != null) {
+                String tlsDefault = client.tlsConfigurationName();
+                String tlsExpression = "${pipeline.client.tls-configuration-name:" + tlsDefault + "}";
                 writer.append("quarkus.grpc.clients.").append(client.name())
                     .append(".tls-configuration-name=")
-                    .append(client.tlsConfigurationName()).append("\n");
+                    .append(tlsExpression).append("\n");
                 writer.append("quarkus.grpc.clients.").append(client.name())
                     .append(".tls.enabled=true\n");
                 writer.append("quarkus.grpc.clients.").append(client.name())
@@ -293,9 +298,11 @@ public class OrchestratorClientPropertiesGenerator {
             writer.append("quarkus.rest-client.").append(client.name()).append(".url=https://")
                 .append(client.host()).append(":").append(String.valueOf(client.port())).append("\n");
             if (client.tlsConfigurationName() != null) {
+                String tlsDefault = client.tlsConfigurationName();
+                String tlsExpression = "${pipeline.client.tls-configuration-name:" + tlsDefault + "}";
                 writer.append("quarkus.rest-client.").append(client.name())
                     .append(".tls-configuration-name=")
-                    .append(client.tlsConfigurationName()).append("\n");
+                    .append(tlsExpression).append("\n");
             }
         }
     }
