@@ -66,7 +66,7 @@ public final class GrpcClientTracing {
         return Uni.createFrom().deferred(() -> {
             Span span = startSpan(service, method);
             Scope scope = span.makeCurrent();
-            return uni.onItemOrFailure().invoke((item, failure) -> {
+            return uni.onTermination().invoke((item, failure, cancelled) -> {
                 endSpan(span, failure);
                 scope.close();
             });
