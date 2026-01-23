@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import javax.tools.JavaFileObject;
+import javax.tools.StandardLocation;
 
 import com.google.testing.compile.Compilation;
 import com.google.testing.compile.Compiler;
@@ -91,6 +92,59 @@ class OrchestratorClientGenerationTest {
         Path orchestratorClientDir = generatedSourcesDir.resolve("orchestrator-client");
         assertTrue(hasGeneratedClass(orchestratorClientDir, "ProcessCrawlSourceRestClientStep"));
         assertTrue(hasGeneratedClass(orchestratorClientDir, "PersistenceRawDocumentSideEffectRestClientStep"));
+    }
+
+    @Test
+    void generatesOrchestratorClientPropertiesWithModuleOverrides() throws IOException {
+        Path projectRoot = initProjectRoot();
+        Path moduleDir = projectRoot.resolve("test-module");
+        Path generatedSourcesDir = moduleDir.resolve("target").resolve("generated-sources").resolve("pipeline");
+        Path moduleResourcesDir = moduleDir.resolve("src").resolve("main").resolve("resources");
+        Files.createDirectories(generatedSourcesDir);
+        Files.createDirectories(moduleResourcesDir);
+
+        String moduleOverrides = """
+            pipeline.module.search-svc.steps=process-crawl-source,process-parse-document
+            pipeline.client.tls-configuration-name=pipeline-client
+            """;
+        Files.writeString(moduleResourcesDir.resolve("application.properties"), moduleOverrides);
+
+        Path pipelineYaml = projectRoot.resolve("pipeline.yaml");
+        String pipelineConfig = Files.readString(resourcePath("pipeline-search.yaml"))
+            .replace("transport: \"REST\"", "transport: \"GRPC\"");
+        Files.writeString(pipelineYaml, stripAspectsSection(pipelineConfig));
+
+        Compilation compilation = Compiler.javac()
+            .withProcessors(new PipelineStepProcessor())
+            .withOptions(
+                "-Apipeline.generatedSourcesDir=" + generatedSourcesDir,
+                "-Aprotobuf.descriptor.file=" + resourcePath("descriptor_set_search.dsc"))
+            .compile(JavaFileObjects.forSourceString(
+                "org.example.OrchestratorMarker",
+                """
+                    package org.example;
+
+                    import org.pipelineframework.annotation.PipelineOrchestrator;
+
+                    @PipelineOrchestrator
+                    public class OrchestratorMarker {
+                    }
+                    """));
+
+        assertThat(compilation).succeeded();
+
+        JavaFileObject propertiesFile = compilation.generatedFile(
+            StandardLocation.CLASS_OUTPUT,
+            "META-INF/pipeline",
+            "orchestrator-clients.properties").orElseThrow();
+        String propertiesContent = propertiesFile.getCharContent(true).toString();
+
+        assertTrue(propertiesContent.contains(
+            "quarkus.grpc.clients.process-crawl-source.port=8444"));
+        assertTrue(propertiesContent.contains(
+            "quarkus.grpc.clients.process-parse-document.port=8444"));
+        assertTrue(propertiesContent.contains(
+            "tls-configuration-name=${pipeline.client.tls-configuration-name:pipeline-client}"));
     }
 
     private Path initProjectRoot() throws IOException {
