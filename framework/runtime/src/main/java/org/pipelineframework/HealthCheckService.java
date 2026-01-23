@@ -279,9 +279,7 @@ public class HealthCheckService {
             int port = Integer.parseInt(portStr);
 
             // Determine if the service uses HTTPS based on TLS configuration
-            boolean useTls = ConfigProvider.getConfig()
-                    .getOptionalValue("quarkus.grpc.clients." + grpcClientName + ".tls.enabled", Boolean.class)
-                    .orElse(false);
+            boolean useTls = isGrpcClientTlsEnabled(grpcClientName);
 
             // Get health endpoint path from configuration, default to /q/health
             String healthPath = ConfigProvider.getConfig()
@@ -293,7 +291,7 @@ public class HealthCheckService {
             String healthUrl = String.format("%s://%s:%d%s", protocol, host, port, healthPath);
             String locationLabel = host + ":" + port;
             return checkHttpServiceHealth("gRPC", grpcClientName, URI.create(healthUrl), locationLabel,
-                () -> createSslContextForGrpcClient(grpcClientName));
+                () -> resolveGrpcSslContext(grpcClientName));
         } catch (Exception e) {
             LOG.info("✗ Error checking health of gRPC client '" + grpcClientName + "' service. Error: " + e.getMessage());
             return false;
@@ -404,7 +402,7 @@ public class HealthCheckService {
         LOG.info("Checking REST client '" + restClient.configKey() + "' at " + healthUri);
 
         return checkHttpServiceHealth("REST", restClient.configKey(), healthUri, healthUri.toString(),
-            this::createSslContextFromGlobalTrustStore);
+            () -> resolveRestSslContext(restClient));
     }
 
     private boolean checkHttpServiceHealth(
@@ -520,6 +518,165 @@ public class HealthCheckService {
                 LOG.error("Failed to get default SSL context", ex);
                 throw new RuntimeException(ex);
             }
+        }
+    }
+
+    private boolean isGrpcClientTlsEnabled(String grpcClientName) {
+        if (resolveGrpcTlsConfigurationName(grpcClientName) != null) {
+            return true;
+        }
+        return ConfigProvider.getConfig()
+            .getOptionalValue("quarkus.grpc.clients." + grpcClientName + ".tls.enabled", Boolean.class)
+            .orElse(false);
+    }
+
+    private javax.net.ssl.SSLContext resolveGrpcSslContext(String grpcClientName) {
+        String tlsConfigName = resolveGrpcTlsConfigurationName(grpcClientName);
+        if (tlsConfigName != null) {
+            javax.net.ssl.SSLContext tlsContext = createSslContextFromTlsConfigName(tlsConfigName);
+            if (tlsContext != null) {
+                return tlsContext;
+            }
+        }
+        return createSslContextForGrpcClient(grpcClientName);
+    }
+
+    private javax.net.ssl.SSLContext resolveRestSslContext(RestClientInfo restClient) {
+        String tlsConfigName = resolveRestTlsConfigurationName(restClient);
+        if (tlsConfigName != null) {
+            javax.net.ssl.SSLContext tlsContext = createSslContextFromTlsConfigName(tlsConfigName);
+            if (tlsContext != null) {
+                return tlsContext;
+            }
+        }
+        return createSslContextFromGlobalTrustStore();
+    }
+
+    private String resolveGrpcTlsConfigurationName(String grpcClientName) {
+        String directKey = "quarkus.grpc.clients." + grpcClientName + ".tls-configuration-name";
+        String tlsName = ConfigProvider.getConfig()
+            .getOptionalValue(directKey, String.class)
+            .orElse(null);
+        if (tlsName != null && !tlsName.isBlank()) {
+            return tlsName;
+        }
+        return resolvePipelineTlsConfigurationName();
+    }
+
+    private String resolveRestTlsConfigurationName(RestClientInfo restClient) {
+        String key = restClient.configKey();
+        String directKey = "quarkus.rest-client." + key + ".tls-configuration-name";
+        String tlsName = ConfigProvider.getConfig()
+            .getOptionalValue(directKey, String.class)
+            .orElse(null);
+        if (tlsName == null) {
+            String quotedKey = "quarkus.rest-client.\"" + key + "\".tls-configuration-name";
+            tlsName = ConfigProvider.getConfig()
+                .getOptionalValue(quotedKey, String.class)
+                .orElse(null);
+        }
+        if (tlsName != null && !tlsName.isBlank()) {
+            return tlsName;
+        }
+        return resolvePipelineTlsConfigurationName();
+    }
+
+    private String resolvePipelineTlsConfigurationName() {
+        String tlsName = ConfigProvider.getConfig()
+            .getOptionalValue("pipeline.client.tls-configuration-name", String.class)
+            .orElse(null);
+        return tlsName != null && !tlsName.isBlank() ? tlsName : null;
+    }
+
+    private javax.net.ssl.SSLContext createSslContextFromTlsConfigName(String tlsConfigName) {
+        if (tlsConfigName == null || tlsConfigName.isBlank()) {
+            return null;
+        }
+        try {
+            Boolean trustAll = getTlsConfigValue(tlsConfigName, "trust-all", Boolean.class);
+            if (Boolean.TRUE.equals(trustAll)) {
+                return createTrustAllSslContext();
+            }
+
+            String trustStorePath = getTlsConfigValue(tlsConfigName, "trust-store.jks.path", String.class);
+            if (trustStorePath == null || trustStorePath.isBlank()) {
+                trustStorePath = getTlsConfigValue(tlsConfigName, "trust-store.path", String.class);
+            }
+            if (trustStorePath == null || trustStorePath.isBlank()) {
+                return null;
+            }
+
+            String trustStorePassword = getTlsConfigValue(tlsConfigName, "trust-store.jks.password", String.class);
+            if (trustStorePassword == null || trustStorePassword.isBlank()) {
+                trustStorePassword = getTlsConfigValue(tlsConfigName, "trust-store.password", String.class);
+            }
+            if (trustStorePassword == null || trustStorePassword.isBlank()) {
+                trustStorePassword = "secret";
+            }
+
+            InputStream trustStoreStream = getTrustStoreStream(trustStorePath);
+            if (trustStoreStream == null) {
+                LOG.warn("Truststore file not found: " + trustStorePath);
+                return null;
+            }
+
+            javax.net.ssl.TrustManagerFactory tmf = javax.net.ssl.TrustManagerFactory.getInstance(
+                javax.net.ssl.TrustManagerFactory.getDefaultAlgorithm());
+
+            String keyStoreType = determineKeyStoreType(trustStorePath);
+            java.security.KeyStore ts = java.security.KeyStore.getInstance(keyStoreType);
+            try (trustStoreStream) {
+                ts.load(trustStoreStream, trustStorePassword.toCharArray());
+            }
+            tmf.init(ts);
+
+            javax.net.ssl.SSLContext sslContext = javax.net.ssl.SSLContext.getInstance("TLS");
+            sslContext.init(null, tmf.getTrustManagers(), null);
+            return sslContext;
+        } catch (Exception e) {
+            LOG.warn("Failed to create SSL context from TLS config '" + tlsConfigName + "'", e);
+            return null;
+        }
+    }
+
+    private <T> T getTlsConfigValue(String tlsConfigName, String suffix, Class<T> type) {
+        String directKey = "quarkus.tls." + tlsConfigName + "." + suffix;
+        T value = ConfigProvider.getConfig()
+            .getOptionalValue(directKey, type)
+            .orElse(null);
+        if (value != null) {
+            return value;
+        }
+        String quotedKey = "quarkus.tls.\"" + tlsConfigName + "\"." + suffix;
+        return ConfigProvider.getConfig()
+            .getOptionalValue(quotedKey, type)
+            .orElse(null);
+    }
+
+    private javax.net.ssl.SSLContext createTrustAllSslContext() {
+        try {
+            javax.net.ssl.TrustManager[] trustAll = new javax.net.ssl.TrustManager[] {
+                new javax.net.ssl.X509TrustManager() {
+                    @Override
+                    public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                        return new java.security.cert.X509Certificate[0];
+                    }
+
+                    @Override
+                    public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {
+                    }
+
+                    @Override
+                    public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {
+                    }
+                }
+            };
+            javax.net.ssl.SSLContext sslContext = javax.net.ssl.SSLContext.getInstance("TLS");
+            sslContext.init(null, trustAll, new java.security.SecureRandom());
+            return sslContext;
+        } catch (Exception e) {
+            LOG.warn("Failed to create trust-all SSL context", e);
+            return null;
         }
     }
 

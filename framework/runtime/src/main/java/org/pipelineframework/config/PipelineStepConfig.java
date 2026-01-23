@@ -17,6 +17,7 @@
 package org.pipelineframework.config;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -86,6 +87,21 @@ public interface PipelineStepConfig {
     Map<String, StepConfig> step();
 
     /**
+     * Module overrides used for orchestrator client wiring.
+     *
+     * @return module overrides keyed by module name
+     */
+    @WithName("module")
+    Map<String, ModuleConfig> module();
+
+    /**
+     * Client wiring defaults for generated orchestrator clients.
+     *
+     * @return client wiring defaults
+     */
+    ClientConfig client();
+
+    /**
      * Configuration for individual pipeline steps, allowing per-step override of global defaults.
      */
     interface StepConfig {
@@ -146,6 +162,60 @@ public interface PipelineStepConfig {
          */
         @WithDefault("BUFFER")
         String backpressureStrategy();
+    }
+
+    /**
+     * Module configuration used for orchestrator client wiring.
+     */
+    interface ModuleConfig {
+        /**
+         * Host for all services in the module.
+         *
+         * @return host name
+         */
+        Optional<String> host();
+
+        /**
+         * Port for all services in the module.
+         *
+         * @return port
+         */
+        Optional<Integer> port();
+
+        /**
+         * Client names assigned to the module.
+         *
+         * @return client names
+         */
+        Optional<List<String>> steps();
+
+        /**
+         * Aspect names assigned to the module.
+         *
+         * @return aspect names
+         */
+        Optional<List<String>> aspects();
+    }
+
+    /**
+     * Client wiring defaults for generated orchestrator clients.
+     */
+    interface ClientConfig {
+        /**
+         * Base port used when assigning per-module offsets.
+         *
+         * @return base port
+         */
+        @WithName("base-port")
+        Optional<Integer> basePort();
+
+        /**
+         * TLS registry configuration name applied to generated clients.
+         *
+         * @return TLS configuration name
+         */
+        @WithName("tls-configuration-name")
+        Optional<String> tlsConfigurationName();
     }
 
     /**
