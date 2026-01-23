@@ -38,6 +38,7 @@ quarkus.micrometer.binder.jvm=true
 quarkus.otel.exporter.otlp.protocol=http/protobuf
 quarkus.otel.exporter.otlp.compression=gzip
 quarkus.otel.exporter.otlp.metrics.temporality.preference=delta
+# The following defaults only apply when OpenTelemetry is enabled (for example via NEW_RELIC_LICENSE_KEY).
 quarkus.otel.traces.enabled=true
 quarkus.otel.metrics.enabled=true
 quarkus.otel.metric.export.interval=${QUARKUS_OTEL_METRIC_EXPORT_INTERVAL:15s}
