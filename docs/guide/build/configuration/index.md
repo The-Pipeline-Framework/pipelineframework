@@ -63,10 +63,10 @@ Examples:
 
 Pass via `maven-compiler-plugin` with `-A` arguments.
 
-| Option | Type | Default | Description |
-| --- | --- | --- | --- |
-| `-Apipeline.generatedSourcesDir` | path | none | Base directory for role-specific generated sources. |
-| `-Apipeline.generatedSourcesRoot` | path | none | Legacy alias of `pipeline.generatedSourcesDir`. |
+| Option                             | Type    | Default | Description                                                                                                        |
+|------------------------------------|---------|---------|--------------------------------------------------------------------------------------------------------------------|
+| `-Apipeline.generatedSourcesDir`   | path    | none    | Base directory for role-specific generated sources.                                                                |
+| `-Apipeline.generatedSourcesRoot`  | path    | none    | Legacy alias of `pipeline.generatedSourcesDir`.                                                                    |
 | `-Apipeline.orchestrator.generate` | boolean | `false` | Generate orchestrator endpoint even without `@PipelineOrchestrator`. CLI generation still requires the annotation. |
 
 ### REST Path Overrides (Build-Time)
@@ -81,6 +81,45 @@ The annotation processor reads `src/main/resources/application.properties` durin
 ## Runtime Configuration
 
 Prefix: `pipeline`
+
+### Orchestrator Client Wiring (Generated)
+
+The annotation processor generates default client wiring for orchestrators at build time.
+Generated values have lower priority than explicit `application.properties` settings or environment variables.
+
+To override routing or ports, set the following in `application.properties`:
+
+| Property                                 | Type   | Default | Description                                       |
+|------------------------------------------|--------|---------|---------------------------------------------------|
+| `pipeline.module.<module>.host`          | string | none    | Host for a module (applies to all its services).  |
+| `pipeline.module.<module>.port`          | int    | none    | Port for a module (applies to all its services).  |
+| `pipeline.module.<module>.steps`         | list   | none    | Comma/space-separated client names to assign.     |
+| `pipeline.module.<module>.aspects`       | list   | none    | Aspect names to assign (e.g. `persistence`).      |
+| `pipeline.client.base-port`              | int    | `8443`  | Base port used when assigning per-module offsets. |
+| `pipeline.client.tls-configuration-name` | string | none    | TLS registry name for generated clients.          |
+
+Client names follow the same conventions as generated adapters:
+- regular steps: `process-<service>` (for example `ProcessPaymentService` → `process-payment`)
+- synthetic steps: `observe-<aspect>-<type>-side-effect` (for example `persistence` + `PaymentRecord`)
+
+About modules:
+- A module is a deployment/runtime group for one or more services (for example, `payments-processing-svc` hosting multiple steps).
+- Use module overrides when multiple services share the same runtime or when legacy layouts bundle steps together (like `csv-payments`).
+- Avoid module overrides if you want the default 1‑step‑per‑module layout; in that case, only override individual clients as needed.
+
+Avoiding drift:
+- Keep server ports and orchestrator client ports aligned by sourcing them from the same `pipeline.module.<module>.port` or shared environment variables.
+- If you override a client endpoint directly, verify the corresponding server listens on the same host/port (especially when TLS is enabled).
+
+If you need to override a single client endpoint, set the Quarkus property directly:
+
+```properties
+quarkus.grpc.clients.<client>.host=host
+quarkus.grpc.clients.<client>.port=8444
+quarkus.grpc.clients.<client>.tls-configuration-name=pipeline-client
+quarkus.rest-client.<client>.url=https://host:8444
+quarkus.rest-client.<client>.tls-configuration-name=pipeline-client
+```
 
 ### REST Client Endpoints
 
@@ -112,19 +151,19 @@ Prefix: `pipeline.cache`
 
 Prefix: `pipeline.persistence`
 
-| Property                             | Type   | Default | Description                                                        |
-|--------------------------------------|--------|---------|--------------------------------------------------------------------|
-| `pipeline.persistence.duplicate-key` | string | `fail`  | Duplicate key policy for persistence (`fail`, `ignore`, `upsert`). |
-| `pipeline.persistence.provider.class` | string | none | Fully-qualified persistence provider class name to lock selection at runtime. |
+| Property                              | Type   | Default | Description                                                                   |
+|---------------------------------------|--------|---------|-------------------------------------------------------------------------------|
+| `pipeline.persistence.duplicate-key`  | string | `fail`  | Duplicate key policy for persistence (`fail`, `ignore`, `upsert`).            |
+| `pipeline.persistence.provider.class` | string | none    | Fully-qualified persistence provider class name to lock selection at runtime. |
 
 ### Pipeline Execution
 
 Prefix: `pipeline`
 
-| Property                   | Type    | Default | Description                                                                 |
-|----------------------------|---------|---------|-----------------------------------------------------------------------------|
-| `pipeline.parallelism`     | string  | `AUTO`  | Parallelism policy: `SEQUENTIAL`, `AUTO`, or `PARALLEL`.                    |
-| `pipeline.max-concurrency` | integer | `128`   | Maximum in-flight items when parallel execution is enabled.                |
+| Property                   | Type    | Default | Description                                                 |
+|----------------------------|---------|---------|-------------------------------------------------------------|
+| `pipeline.parallelism`     | string  | `AUTO`  | Parallelism policy: `SEQUENTIAL`, `AUTO`, or `PARALLEL`.    |
+| `pipeline.max-concurrency` | integer | `128`   | Maximum in-flight items when parallel execution is enabled. |
 
 ### Global Defaults
 
@@ -144,9 +183,9 @@ Prefix: `pipeline.defaults`
 
 These are build-time options passed to the annotation processor (not runtime config).
 
-| Option                                | Type   | Default | Description                                                                 |
-|---------------------------------------|--------|---------|-----------------------------------------------------------------------------|
-| `pipeline.provider.class.<name>`      | string | none    | Provider class name to validate ordering/thread-safety hints (e.g. `pipeline.provider.class.cache=...`). |
+| Option                           | Type   | Default | Description                                                                                              |
+|----------------------------------|--------|---------|----------------------------------------------------------------------------------------------------------|
+| `pipeline.provider.class.<name>` | string | none    | Provider class name to validate ordering/thread-safety hints (e.g. `pipeline.provider.class.cache=...`). |
 
 ### Per-Step Overrides
 

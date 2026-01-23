@@ -10,6 +10,7 @@ import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.ir.*;
 import org.pipelineframework.processor.renderer.*;
+import org.pipelineframework.processor.util.OrchestratorClientPropertiesGenerator;
 import org.pipelineframework.processor.util.PipelineOrderMetadataGenerator;
 import org.pipelineframework.processor.util.RoleMetadataGenerator;
 
@@ -120,6 +121,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 PipelineOrderMetadataGenerator orderMetadataGenerator =
                     new PipelineOrderMetadataGenerator(ctx.getProcessingEnv());
                 orderMetadataGenerator.writeOrderMetadata(ctx);
+                OrchestratorClientPropertiesGenerator clientPropertiesGenerator =
+                    new OrchestratorClientPropertiesGenerator(ctx.getProcessingEnv());
+                clientPropertiesGenerator.writeClientProperties(ctx);
             }
         } catch (Exception e) {
             // Log the error but don't fail the entire compilation

@@ -1,1 +1,2 @@
 org.pipelineframework.telemetry.NewRelicConfigSource
+org.pipelineframework.config.OrchestratorClientConfigSource
