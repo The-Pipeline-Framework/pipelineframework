@@ -37,7 +37,6 @@ public final class BackpressureBufferMetrics {
     private static final AttributeKey<String> STEP_CLASS = AttributeKey.stringKey("tpf.step.class");
     private static final String TELEMETRY_ENABLED_KEY = "pipeline.telemetry.enabled";
     private static final String METRICS_ENABLED_KEY = "pipeline.telemetry.metrics.enabled";
-    private static final Meter METER = GlobalOpenTelemetry.getMeter("org.pipelineframework");
     private static final ConcurrentMap<String, AtomicLong> QUEUED_BY_STEP = new ConcurrentHashMap<>();
     private static final ConcurrentMap<String, AtomicLong> CAPACITY_BY_STEP = new ConcurrentHashMap<>();
     private static final AtomicBoolean GAUGES_REGISTERED = new AtomicBoolean(false);
@@ -95,12 +94,13 @@ public final class BackpressureBufferMetrics {
         if (!GAUGES_REGISTERED.compareAndSet(false, true)) {
             return;
         }
-        METER.gaugeBuilder("tpf.step.buffer.queued")
+        Meter meter = GlobalOpenTelemetry.getMeter("org.pipelineframework");
+        meter.gaugeBuilder("tpf.step.buffer.queued")
             .setDescription("Queued items in the backpressure buffer per step")
             .setUnit("items")
             .ofLongs()
             .buildWithCallback(BackpressureBufferMetrics::recordQueuedGauge);
-        METER.gaugeBuilder("tpf.step.buffer.capacity")
+        meter.gaugeBuilder("tpf.step.buffer.capacity")
             .setDescription("Configured backpressure buffer capacity per step")
             .setUnit("items")
             .ofLongs()
@@ -129,7 +129,9 @@ public final class BackpressureBufferMetrics {
                 .orElse(false);
             return enabled && metrics;
         } catch (Exception ignored) {
-            return false;
+            boolean enabled = Boolean.parseBoolean(System.getProperty(TELEMETRY_ENABLED_KEY, "false"));
+            boolean metrics = Boolean.parseBoolean(System.getProperty(METRICS_ENABLED_KEY, "false"));
+            return enabled && metrics;
         }
     }
 

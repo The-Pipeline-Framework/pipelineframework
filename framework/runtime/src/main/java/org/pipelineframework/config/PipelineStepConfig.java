@@ -155,9 +155,9 @@ public interface PipelineStepConfig {
         /**
          * Configures the capacity of the backpressure buffer for this pipeline step.
          *
-         * @return the buffer capacity in number of items; default is 1024
+         * @return the buffer capacity in number of items; default is 128
          */
-        @WithDefault("1024")
+        @WithDefault("128")
         Integer backpressureBufferCapacity();
 
         /**
