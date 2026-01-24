@@ -14,6 +14,12 @@ public final class OrchestratorClientNaming {
     private OrchestratorClientNaming() {
     }
 
+    /**
+     * Build the orchestrator client name for a pipeline step model.
+     *
+     * @param model step model
+     * @return client name or {@code null} when unavailable
+     */
     public static String clientNameForModel(PipelineStepModel model) {
         if (model == null) {
             return null;
@@ -31,6 +37,12 @@ public final class OrchestratorClientNaming {
         return "process-" + toKebabCase(baseName);
     }
 
+    /**
+     * Resolve the aspect name for a side-effect step model.
+     *
+     * @param model step model
+     * @return aspect name in kebab case
+     */
     public static String resolveAspectName(PipelineStepModel model) {
         if (model == null) {
             return "aspect";
@@ -56,6 +68,12 @@ public final class OrchestratorClientNaming {
         return toKebabCase(trimmed);
     }
 
+    /**
+     * Resolve the side-effect type name from the model input mapping.
+     *
+     * @param model step model
+     * @return simple type name used for side-effect naming
+     */
     public static String resolveSideEffectTypeName(PipelineStepModel model) {
         if (model == null || model.inputMapping() == null) {
             return "payload";
@@ -63,6 +81,12 @@ public final class OrchestratorClientNaming {
         return simpleTypeName(model.inputMapping().domainType());
     }
 
+    /**
+     * Strip standard prefixes/suffixes from a service name.
+     *
+     * @param serviceName raw service name
+     * @return base service name
+     */
     public static String baseServiceName(String serviceName) {
         if (serviceName == null) {
             return "";
@@ -77,6 +101,12 @@ public final class OrchestratorClientNaming {
         return trimmed;
     }
 
+    /**
+     * Convert a camel-case or snake-case token to kebab-case.
+     *
+     * @param value input value
+     * @return kebab-case value
+     */
     public static String toKebabCase(String value) {
         if (value == null || value.isBlank()) {
             return "";

@@ -116,6 +116,7 @@ public final class AnnotationProcessingUtils {
     /**
      * Obtain an enum member value from an annotation, returning a provided fallback when absent or not resolvable.
      *
+     * @param <T> enum type
      * @param annotation   the annotation mirror to read the member from
      * @param memberName   the simple name of the annotation member to look up
      * @param enumType     the enum class to resolve values for

@@ -109,6 +109,22 @@ public record PipelineStepModel(
         this.threadSafety = threadSafety != null ? threadSafety : ThreadSafety.SAFE;
     }
 
+    /**
+     * Create a pipeline step model with default ordering and thread-safety hints.
+     *
+     * @param serviceName service name from the step class
+     * @param generatedName generated service name for adapters
+     * @param servicePackage base service package
+     * @param serviceClassName service class name
+     * @param inputMapping input type mapping
+     * @param outputMapping output type mapping
+     * @param streamingShape streaming shape for the step
+     * @param enabledTargets generation targets to render
+     * @param executionMode execution mode
+     * @param deploymentRole deployment role
+     * @param sideEffect whether this step is a side-effect plugin
+     * @param cacheKeyGenerator optional cache key generator class
+     */
     public PipelineStepModel(String serviceName,
             String generatedName,
             String servicePackage,

@@ -37,6 +37,13 @@ public class OrchestratorClientModuleMapping {
         this.tlsConfigurationName = tlsConfigurationName;
     }
 
+    /**
+     * Build a module mapping from application properties provided to the annotation processor.
+     *
+     * @param properties raw application properties
+     * @param env processing environment used for warnings
+     * @return resolved module mapping
+     */
     public static OrchestratorClientModuleMapping fromProperties(Properties properties, ProcessingEnvironment env) {
         Map<String, ModuleConfig> modules = new LinkedHashMap<>();
         Map<String, String> stepToModule = new LinkedHashMap<>();
@@ -118,6 +125,12 @@ public class OrchestratorClientModuleMapping {
         );
     }
 
+    /**
+     * Resolve module hosts/ports using the provided module ordering and base port.
+     *
+     * @param moduleOrder ordered module names
+     * @return mapping with resolved module endpoints
+     */
     public OrchestratorClientModuleMapping withResolvedModules(List<String> moduleOrder) {
         Map<String, ModuleConfig> resolved = new LinkedHashMap<>(modules);
         for (int i = 0; i < moduleOrder.size(); i++) {
@@ -130,6 +143,12 @@ public class OrchestratorClientModuleMapping {
         return new OrchestratorClientModuleMapping(resolved, stepToModule, aspectToModule, basePort, tlsConfigurationName);
     }
 
+    /**
+     * Determine the module name for a pipeline step model.
+     *
+     * @param model step model
+     * @return resolved module name or {@code null} when unavailable
+     */
     public String resolveModuleName(PipelineStepModel model) {
         String clientName = OrchestratorClientNaming.clientNameForModel(model);
         if (clientName != null) {
@@ -160,6 +179,12 @@ public class OrchestratorClientModuleMapping {
         return OrchestratorClientNaming.toKebabCase(baseName) + "-svc";
     }
 
+    /**
+     * Build the client configuration for a pipeline step model.
+     *
+     * @param model step model
+     * @return client configuration or {@code null} when unmapped
+     */
     public ClientConfig clientConfig(PipelineStepModel model) {
         String clientName = OrchestratorClientNaming.clientNameForModel(model);
         if (clientName == null) {
@@ -230,12 +255,27 @@ public class OrchestratorClientModuleMapping {
         mapping.put(key, moduleName);
     }
 
+    /**
+     * Module host/port configuration derived from properties.
+     *
+     * @param name module name
+     * @param host module host (nullable)
+     * @param port module port (nullable)
+     */
     public record ModuleConfig(String name, String host, Integer port) {
         public ModuleConfig(String name) {
             this(name, null, null);
         }
     }
 
+    /**
+     * Client wiring details for an orchestrator step.
+     *
+     * @param name client name
+     * @param host module host
+     * @param port module port
+     * @param tlsConfigurationName optional TLS configuration name
+     */
     public record ClientConfig(String name, String host, int port, String tlsConfigurationName) {
     }
 }
