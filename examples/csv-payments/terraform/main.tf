@@ -191,7 +191,7 @@ resource "newrelic_service_level" "items_per_min" {
 
     good_events {
       from  = "Span"
-      where = "service.name = '${local.services.orchestrator.name}' AND name = 'tpf.pipeline.run' AND tpf.item.count > 0 AND tpf.items.per_min >= 12000"
+      where = "service.name = '${local.services.orchestrator.name}' AND name = 'tpf.pipeline.run' AND tpf.item.count > 0 AND tpf.items.per_min >= 6000"
     }
   }
 
