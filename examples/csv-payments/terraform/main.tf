@@ -119,19 +119,19 @@ resource "newrelic_service_level" "orchestrator_availability" {
 resource "newrelic_service_level" "row_latency" {
   guid        = local.services.orchestrator.guid
   name        = "Item latency (core steps)"
-  description = "Approx per-item latency from core step duration metrics."
+  description = "Share of core-step gRPC spans under 1s."
 
   events {
     account_id = var.newrelic_account_id
 
     valid_events {
-      from  = "Metric"
-      where = "metricName = 'tpf.step.duration' AND ${local.core_step_name_filter}"
+      from  = "Span"
+      where = "span.kind = 'server' AND rpc.system = 'grpc' AND ${local.core_step_name_filter}"
     }
 
     good_events {
-      from  = "Metric"
-      where = "metricName = 'tpf.step.duration' AND ${local.core_step_name_filter} AND (tpf.step.duration.sum / tpf.step.duration.count) < 1000"
+      from  = "Span"
+      where = "span.kind = 'server' AND rpc.system = 'grpc' AND ${local.core_step_name_filter} AND duration < 1"
     }
   }
 
@@ -149,19 +149,19 @@ resource "newrelic_service_level" "row_latency" {
 resource "newrelic_service_level" "item_avg_latency" {
   guid        = local.services.orchestrator.guid
   name        = "Downstream RPC latency (orchestrator)"
-  description = "Orchestrator gRPC client latency under the threshold."
+  description = "Orchestrator gRPC client spans under 2s."
 
   events {
     account_id = var.newrelic_account_id
 
     valid_events {
-      from  = "Metric"
-      where = "service.name = '${local.services.orchestrator.name}' AND metricName = 'grpc.client.processing.duration'"
+      from  = "Span"
+      where = "service.name = '${local.services.orchestrator.name}' AND span.kind = 'client' AND rpc.system = 'grpc'"
     }
 
     good_events {
-      from  = "Metric"
-      where = "service.name = '${local.services.orchestrator.name}' AND metricName = 'grpc.client.processing.duration' AND (grpc.client.processing.duration.sum / grpc.client.processing.duration.count) < 2000"
+      from  = "Span"
+      where = "service.name = '${local.services.orchestrator.name}' AND span.kind = 'client' AND rpc.system = 'grpc' AND duration < 2"
     }
   }
 
@@ -271,19 +271,19 @@ resource "newrelic_service_level" "step_latency" {
   for_each    = local.core_step_services
   guid        = each.value.guid
   name        = "RPC latency"
-  description = "Share of gRPC requests under 1s for ${each.value.name}."
+  description = "Share of gRPC spans under 1s for ${each.value.name}."
 
   events {
     account_id = var.newrelic_account_id
 
     valid_events {
-      from  = "Metric"
-      where = "service.name = '${each.value.name}' AND metricName = 'rpc.server.duration'"
+      from  = "Span"
+      where = "service.name = '${each.value.name}' AND span.kind = 'server' AND rpc.system = 'grpc'"
     }
 
     good_events {
-      from  = "Metric"
-      where = "service.name = '${each.value.name}' AND metricName = 'rpc.server.duration' AND (rpc.server.duration.sum / rpc.server.duration.count) < 1000"
+      from  = "Span"
+      where = "service.name = '${each.value.name}' AND span.kind = 'server' AND rpc.system = 'grpc' AND duration < 1"
     }
   }
 
