@@ -96,11 +96,19 @@ resource "newrelic_service_level" "orchestrator_availability" {
 
     valid_events {
       from  = "Metric"
+      select {
+        function  = "COUNT"
+        attribute = "tpf.slo.rpc.client.total"
+      }
       where = "service.name = '${local.services.orchestrator.name}' AND metricName = 'tpf.slo.rpc.client.total'"
     }
 
     good_events {
       from  = "Metric"
+      select {
+        function  = "COUNT"
+        attribute = "tpf.slo.rpc.client.good"
+      }
       where = "service.name = '${local.services.orchestrator.name}' AND metricName = 'tpf.slo.rpc.client.good'"
     }
   }
@@ -126,11 +134,19 @@ resource "newrelic_service_level" "row_latency" {
 
     valid_events {
       from  = "Metric"
+      select {
+        function  = "COUNT"
+        attribute = "tpf.slo.rpc.server.latency.total"
+      }
       where = "metricName = 'tpf.slo.rpc.server.latency.total' AND ${local.core_step_name_filter}"
     }
 
     good_events {
       from  = "Metric"
+      select {
+        function  = "COUNT"
+        attribute = "tpf.slo.rpc.server.latency.good"
+      }
       where = "metricName = 'tpf.slo.rpc.server.latency.good' AND ${local.core_step_name_filter}"
     }
   }
@@ -156,11 +172,19 @@ resource "newrelic_service_level" "item_avg_latency" {
 
     valid_events {
       from  = "Metric"
+      select {
+        function  = "COUNT"
+        attribute = "tpf.slo.rpc.client.latency.total"
+      }
       where = "service.name = '${local.services.orchestrator.name}' AND metricName = 'tpf.slo.rpc.client.latency.total'"
     }
 
     good_events {
       from  = "Metric"
+      select {
+        function  = "COUNT"
+        attribute = "tpf.slo.rpc.client.latency.good"
+      }
       where = "service.name = '${local.services.orchestrator.name}' AND metricName = 'tpf.slo.rpc.client.latency.good'"
     }
   }
@@ -186,11 +210,19 @@ resource "newrelic_service_level" "items_per_min" {
 
     valid_events {
       from  = "Metric"
+      select {
+        function  = "COUNT"
+        attribute = "tpf.slo.item.throughput.total"
+      }
       where = "service.name = '${local.services.orchestrator.name}' AND metricName = 'tpf.slo.item.throughput.total'"
     }
 
     good_events {
       from  = "Metric"
+      select {
+        function  = "COUNT"
+        attribute = "tpf.slo.item.throughput.good"
+      }
       where = "service.name = '${local.services.orchestrator.name}' AND metricName = 'tpf.slo.item.throughput.good'"
     }
   }
@@ -216,11 +248,19 @@ resource "newrelic_service_level" "item_success_rate" {
 
     valid_events {
       from  = "Metric"
+      select {
+        function  = "COUNT"
+        attribute = "tpf.slo.rpc.server.total"
+      }
       where = "metricName = 'tpf.slo.rpc.server.total' AND ${local.core_step_name_filter}"
     }
 
     good_events {
       from  = "Metric"
+      select {
+        function  = "COUNT"
+        attribute = "tpf.slo.rpc.server.good"
+      }
       where = "metricName = 'tpf.slo.rpc.server.good' AND ${local.core_step_name_filter}"
     }
   }
@@ -247,11 +287,19 @@ resource "newrelic_service_level" "step_reliability" {
 
     valid_events {
       from  = "Metric"
+      select {
+        function  = "COUNT"
+        attribute = "tpf.slo.rpc.server.total"
+      }
       where = "service.name = '${each.value.name}' AND metricName = 'tpf.slo.rpc.server.total'"
     }
 
     good_events {
       from  = "Metric"
+      select {
+        function  = "COUNT"
+        attribute = "tpf.slo.rpc.server.good"
+      }
       where = "service.name = '${each.value.name}' AND metricName = 'tpf.slo.rpc.server.good'"
     }
   }
@@ -278,11 +326,19 @@ resource "newrelic_service_level" "step_latency" {
 
     valid_events {
       from  = "Metric"
+      select {
+        function  = "COUNT"
+        attribute = "tpf.slo.rpc.server.latency.total"
+      }
       where = "service.name = '${each.value.name}' AND metricName = 'tpf.slo.rpc.server.latency.total'"
     }
 
     good_events {
       from  = "Metric"
+      select {
+        function  = "COUNT"
+        attribute = "tpf.slo.rpc.server.latency.good"
+      }
       where = "service.name = '${each.value.name}' AND metricName = 'tpf.slo.rpc.server.latency.good'"
     }
   }
