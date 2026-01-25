@@ -173,6 +173,8 @@ Prefix: `pipeline.telemetry`
 |-------------------------------|--------|---------|--------------------------------------------------------------------|
 | `pipeline.telemetry.item-input-type` | string | none    | Fully-qualified input type used to define the item boundary.   |
 | `pipeline.telemetry.item-output-type` | string | none    | Fully-qualified output type used to define the item boundary.   |
+| `pipeline.telemetry.slo.rpc-latency-ms` | number | `1000` | RPC latency threshold (ms) used to emit SLO counters. |
+| `pipeline.telemetry.slo.item-throughput-per-min` | number | `1000` | Item throughput threshold (items/min) used to emit SLO counters. |
 
 ### Global Defaults
 

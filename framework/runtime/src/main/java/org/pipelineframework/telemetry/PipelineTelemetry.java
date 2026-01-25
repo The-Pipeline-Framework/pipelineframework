@@ -70,6 +70,8 @@ public class PipelineTelemetry {
     private final LongCounter pipelineRunErrorCounter;
     private final LongCounter itemProducedCounter;
     private final LongCounter itemConsumedCounter;
+    private final LongCounter sloItemThroughputTotal;
+    private final LongCounter sloItemThroughputGood;
     private final LongCounter stepErrorCounter;
     private final DoubleHistogram pipelineRunDuration;
     private final DoubleHistogram stepDuration;
@@ -113,6 +115,14 @@ public class PipelineTelemetry {
                 .setDescription("Items consumed at the configured item boundary")
                 .setUnit("items")
                 .build();
+            this.sloItemThroughputTotal = meter.counterBuilder("tpf.slo.item.throughput.total")
+                .setDescription("Total item throughput evaluations")
+                .setUnit("1")
+                .build();
+            this.sloItemThroughputGood = meter.counterBuilder("tpf.slo.item.throughput.good")
+                .setDescription("Item throughput evaluations meeting the threshold")
+                .setUnit("1")
+                .build();
             this.stepErrorCounter = meter.counterBuilder("tpf.step.errors")
                 .setDescription("Pipeline step errors")
                 .setUnit("1")
@@ -140,6 +150,8 @@ public class PipelineTelemetry {
             this.pipelineRunErrorCounter = null;
             this.itemProducedCounter = null;
             this.itemConsumedCounter = null;
+            this.sloItemThroughputTotal = null;
+            this.sloItemThroughputGood = null;
             this.stepErrorCounter = null;
             this.pipelineRunDuration = null;
             this.stepDuration = null;
@@ -186,6 +198,8 @@ public class PipelineTelemetry {
             new AtomicLong(),
             new AtomicLong(),
             new LongAdder(),
+            new LongAdder(),
+            new LongAdder(),
             new LongAdder());
     }
 
@@ -209,10 +223,31 @@ public class PipelineTelemetry {
      * @return instrumented input
      */
     public <T> Multi<T> instrumentItemConsumed(Class<?> stepClass, Multi<T> input) {
+        return instrumentItemConsumed(stepClass, null, input);
+    }
+
+    /**
+     * Instrument a consumer step to count items consumed at the configured item boundary.
+     *
+     * @param stepClass step class
+     * @param runContext run context
+     * @param input step input
+     * @param <T> item type
+     * @return instrumented input
+     */
+    public <T> Multi<T> instrumentItemConsumed(
+        Class<?> stepClass,
+        RunContext runContext,
+        Multi<T> input) {
         if (!metricsEnabled || !isConsumer(stepClass)) {
             return input;
         }
-        return input.onItem().invoke(item -> itemConsumedCounter.add(1, boundaryAttributes(stepClass, true)));
+        return input.onItem().invoke(item -> {
+            itemConsumedCounter.add(1, boundaryAttributes(stepClass, true));
+            if (runContext != null && runContext.enabled()) {
+                runContext.itemsConsumed().add(1);
+            }
+        });
     }
 
     /**
@@ -224,10 +259,31 @@ public class PipelineTelemetry {
      * @return instrumented input
      */
     public <T> Uni<T> instrumentItemConsumed(Class<?> stepClass, Uni<T> input) {
+        return instrumentItemConsumed(stepClass, null, input);
+    }
+
+    /**
+     * Instrument a consumer step to count items consumed at the configured item boundary.
+     *
+     * @param stepClass step class
+     * @param runContext run context
+     * @param input step input
+     * @param <T> item type
+     * @return instrumented input
+     */
+    public <T> Uni<T> instrumentItemConsumed(
+        Class<?> stepClass,
+        RunContext runContext,
+        Uni<T> input) {
         if (!metricsEnabled || !isConsumer(stepClass)) {
             return input;
         }
-        return input.onItem().invoke(item -> itemConsumedCounter.add(1, boundaryAttributes(stepClass, true)));
+        return input.onItem().invoke(item -> {
+            itemConsumedCounter.add(1, boundaryAttributes(stepClass, true));
+            if (runContext != null && runContext.enabled()) {
+                runContext.itemsConsumed().add(1);
+            }
+        });
     }
 
     /**
@@ -239,10 +295,31 @@ public class PipelineTelemetry {
      * @return instrumented output
      */
     public <T> Multi<T> instrumentItemProduced(Class<?> stepClass, Multi<T> output) {
+        return instrumentItemProduced(stepClass, null, output);
+    }
+
+    /**
+     * Instrument a producer step to count items emitted at the configured item boundary.
+     *
+     * @param stepClass step class
+     * @param runContext run context
+     * @param output step output
+     * @param <T> item type
+     * @return instrumented output
+     */
+    public <T> Multi<T> instrumentItemProduced(
+        Class<?> stepClass,
+        RunContext runContext,
+        Multi<T> output) {
         if (!metricsEnabled || !isProducer(stepClass)) {
             return output;
         }
-        return output.onItem().invoke(item -> itemProducedCounter.add(1, boundaryAttributes(stepClass, false)));
+        return output.onItem().invoke(item -> {
+            itemProducedCounter.add(1, boundaryAttributes(stepClass, false));
+            if (runContext != null && runContext.enabled()) {
+                runContext.itemsProduced().add(1);
+            }
+        });
     }
 
     /**
@@ -254,10 +331,31 @@ public class PipelineTelemetry {
      * @return instrumented output
      */
     public <T> Uni<T> instrumentItemProduced(Class<?> stepClass, Uni<T> output) {
+        return instrumentItemProduced(stepClass, null, output);
+    }
+
+    /**
+     * Instrument a producer step to count items emitted at the configured item boundary.
+     *
+     * @param stepClass step class
+     * @param runContext run context
+     * @param output step output
+     * @param <T> item type
+     * @return instrumented output
+     */
+    public <T> Uni<T> instrumentItemProduced(
+        Class<?> stepClass,
+        RunContext runContext,
+        Uni<T> output) {
         if (!metricsEnabled || !isProducer(stepClass)) {
             return output;
         }
-        return output.onItem().invoke(item -> itemProducedCounter.add(1, boundaryAttributes(stepClass, false)));
+        return output.onItem().invoke(item -> {
+            itemProducedCounter.add(1, boundaryAttributes(stepClass, false));
+            if (runContext != null && runContext.enabled()) {
+                runContext.itemsProduced().add(1);
+            }
+        });
     }
 
     /**
@@ -376,6 +474,7 @@ public class PipelineTelemetry {
             if (failure != null) {
                 pipelineRunErrorCounter.add(1, runContext.attributes());
             }
+            recordThroughputSlo(runContext, durationMs);
         }
         if (tracingEnabled && runContext.span() != null) {
             long samples = runContext.inflightSamples().sum();
@@ -426,6 +525,22 @@ public class PipelineTelemetry {
         measurement.record(maxConcurrency.get());
     }
 
+    private void recordThroughputSlo(RunContext runContext, double durationMs) {
+        if (sloItemThroughputTotal == null || sloItemThroughputGood == null || itemBoundary == null) {
+            return;
+        }
+        if (durationMs <= 0) {
+            return;
+        }
+        long consumed = runContext.itemsConsumed().sum();
+        double itemsPerMinute = consumed / (durationMs / 60_000d);
+        Attributes attributes = boundaryAttributes(itemBoundary.consumerStep(), itemBoundary.itemInputType());
+        sloItemThroughputTotal.add(1, attributes);
+        if (itemsPerMinute >= TelemetrySloConfig.itemThroughputPerMinute()) {
+            sloItemThroughputGood.add(1, attributes);
+        }
+    }
+
     private boolean isProducer(Class<?> stepClass) {
         return itemBoundary != null
             && stepClass != null
@@ -446,6 +561,13 @@ public class PipelineTelemetry {
         return Attributes.of(
             STEP_CLASS, stepClass.getName(),
             STEP_PARENT, resolveStepParent(stepClass.getName()),
+            ITEM_TYPE, itemType);
+    }
+
+    private Attributes boundaryAttributes(String stepClassName, String itemType) {
+        return Attributes.of(
+            STEP_CLASS, stepClassName,
+            STEP_PARENT, resolveStepParent(stepClassName),
             ITEM_TYPE, itemType);
     }
 
@@ -504,7 +626,9 @@ public class PipelineTelemetry {
         AtomicLong inflightCurrent,
         AtomicLong inflightMax,
         LongAdder inflightSamples,
-        LongAdder inflightSum) {
+        LongAdder inflightSum,
+        LongAdder itemsConsumed,
+        LongAdder itemsProduced) {
 
         static RunContext disabled() {
             return new RunContext(
@@ -515,6 +639,8 @@ public class PipelineTelemetry {
                 false,
                 new AtomicLong(),
                 new AtomicLong(),
+                new LongAdder(),
+                new LongAdder(),
                 new LongAdder(),
                 new LongAdder());
         }

@@ -64,9 +64,11 @@ public final class GrpcClientTracing {
             return uni;
         }
         return Uni.createFrom().deferred(() -> {
+            long startNanos = System.nanoTime();
             Span span = startSpan(service, method);
             Scope scope = span.makeCurrent();
             return uni.onTermination().invoke((item, failure, cancelled) -> {
+                recordClientMetrics(service, method, failure, startNanos);
                 endSpan(span, failure);
                 scope.close();
             });
@@ -87,11 +89,13 @@ public final class GrpcClientTracing {
             return multi;
         }
         return Multi.createFrom().deferred(() -> {
+            long startNanos = System.nanoTime();
             Span span = startSpan(service, method);
             Scope scope = span.makeCurrent();
             AtomicReference<Throwable> failureRef = new AtomicReference<>();
             return multi.onFailure().invoke(failureRef::set)
                 .onTermination().invoke(() -> {
+                    recordClientMetrics(service, method, failureRef.get(), startNanos);
                     endSpan(span, failureRef.get());
                     scope.close();
                 });
@@ -127,6 +131,14 @@ public final class GrpcClientTracing {
         }
         span.setAttribute(RPC_GRPC_STATUS, (long) statusCode.value());
         span.end();
+    }
+
+    private static void recordClientMetrics(String service, String method, Throwable failure, long startNanos) {
+        Status.Code statusCode = Status.Code.OK;
+        if (failure != null) {
+            statusCode = Status.fromThrowable(failure).getCode();
+        }
+        RpcMetrics.recordGrpcClient(service, method, statusCode, System.nanoTime() - startNanos);
     }
 
     private static boolean shouldForceSample(String service) {
