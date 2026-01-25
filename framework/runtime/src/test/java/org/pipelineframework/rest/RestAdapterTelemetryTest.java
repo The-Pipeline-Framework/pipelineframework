@@ -60,10 +60,10 @@ class RestAdapterTelemetryTest {
                 .await().indefinitely();
 
             Collection<MetricData> metrics = metricReader.collectAllMetrics();
-            assertTrue(hasMetric(metrics, "rpc.server.requests"));
-            assertTrue(hasMetric(metrics, "tpf.slo.rpc.server.total"));
-            assertTrue(hasHttpSystem(metrics));
-            assertTrue(hasMetric(metrics, "tpf.slo.rpc.client.total"));
+            assertTrue(hasMetric(metrics, "rpc.server.requests"), "Missing rpc.server.requests metric");
+            assertTrue(hasMetric(metrics, "tpf.slo.rpc.server.total"), "Missing tpf.slo.rpc.server.total metric");
+            assertTrue(hasHttpSystem(metrics), "Missing rpc.system=http attribute");
+            assertTrue(hasMetric(metrics, "tpf.slo.rpc.client.total"), "Missing tpf.slo.rpc.client.total metric");
         } finally {
             meterProvider.shutdown();
             GlobalOpenTelemetry.resetForTest();

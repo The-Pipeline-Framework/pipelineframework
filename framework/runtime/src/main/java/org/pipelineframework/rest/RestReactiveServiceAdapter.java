@@ -29,6 +29,8 @@ import org.pipelineframework.service.ReactiveService;
  */
 public abstract class RestReactiveServiceAdapter<DtoIn, DtoOut, DomainIn, DomainOut> {
 
+    private volatile String cachedServiceName;
+
     /**
      * Default constructor for RestReactiveServiceAdapter.
      */
@@ -50,11 +52,16 @@ public abstract class RestReactiveServiceAdapter<DtoIn, DtoOut, DomainIn, Domain
      * @return the service name
      */
     protected String getServiceName() {
+        String name = cachedServiceName;
+        if (name != null) {
+            return name;
+        }
         Class<?> serviceClass = getService().getClass();
-        String name = serviceClass.getSimpleName();
+        name = serviceClass.getSimpleName();
         if (name.contains("_Subclass") && serviceClass.getSuperclass() != null) {
             name = serviceClass.getSuperclass().getSimpleName();
         }
+        cachedServiceName = name;
         return name;
     }
 

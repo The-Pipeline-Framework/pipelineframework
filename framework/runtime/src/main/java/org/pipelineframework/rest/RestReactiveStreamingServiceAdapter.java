@@ -16,8 +16,11 @@
 
 package org.pipelineframework.rest;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 import io.smallrye.mutiny.Multi;
 import org.pipelineframework.service.ReactiveStreamingService;
+import org.pipelineframework.telemetry.HttpMetrics;
 
 /**
  * Base class for streaming REST resources that bridges reactive streaming services to REST endpoints.
@@ -28,6 +31,8 @@ import org.pipelineframework.service.ReactiveStreamingService;
  * @param <DomainOut> The domain output type
  */
 public abstract class RestReactiveStreamingServiceAdapter<DtoIn, DtoOut, DomainIn, DomainOut> {
+
+    private volatile String cachedServiceName;
 
     /**
      * Initialises a RestReactiveStreamingServiceAdapter instance.
@@ -50,11 +55,16 @@ public abstract class RestReactiveStreamingServiceAdapter<DtoIn, DtoOut, DomainI
      * @return the service name
      */
     protected String getServiceName() {
+        String name = cachedServiceName;
+        if (name != null) {
+            return name;
+        }
         Class<?> serviceClass = getService().getClass();
-        String name = serviceClass.getSimpleName();
+        name = serviceClass.getSimpleName();
         if (name.contains("_Subclass") && serviceClass.getSuperclass() != null) {
             name = serviceClass.getSuperclass().getSimpleName();
         }
+        cachedServiceName = name;
         return name;
     }
 
@@ -88,12 +98,12 @@ public abstract class RestReactiveStreamingServiceAdapter<DtoIn, DtoOut, DomainI
         String serviceName = getServiceName();
         DomainIn entity = fromDto(dtoRequest);
         Multi<DomainOut> processedResult = getService().process(entity);
-        java.util.concurrent.atomic.AtomicReference<Throwable> failureRef = new java.util.concurrent.atomic.AtomicReference<>();
+        AtomicReference<Throwable> failureRef = new AtomicReference<>();
         return processedResult
             .onFailure().invoke(failureRef::set)
             .onItem().transform(this::toDto)
             .onTermination().invoke(() ->
-                org.pipelineframework.telemetry.HttpMetrics.recordHttpServer(
+                HttpMetrics.recordHttpServer(
                     serviceName, "process", failureRef.get(), startNanos));
     }
 }

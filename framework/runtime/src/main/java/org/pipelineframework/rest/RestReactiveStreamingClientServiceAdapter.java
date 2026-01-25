@@ -30,6 +30,8 @@ import org.pipelineframework.service.ReactiveStreamingClientService;
  */
 public abstract class RestReactiveStreamingClientServiceAdapter<DtoIn, DtoOut, DomainIn, DomainOut> {
 
+    private volatile String cachedServiceName;
+
     /**
      * Default constructor for RestReactiveStreamingClientServiceAdapter.
      */
@@ -49,11 +51,16 @@ public abstract class RestReactiveStreamingClientServiceAdapter<DtoIn, DtoOut, D
      * @return the service name
      */
     protected String getServiceName() {
+        String name = cachedServiceName;
+        if (name != null) {
+            return name;
+        }
         Class<?> serviceClass = getService().getClass();
-        String name = serviceClass.getSimpleName();
+        name = serviceClass.getSimpleName();
         if (name.contains("_Subclass") && serviceClass.getSuperclass() != null) {
             name = serviceClass.getSuperclass().getSimpleName();
         }
+        cachedServiceName = name;
         return name;
     }
 

@@ -61,9 +61,9 @@ class HttpMetricsTest {
             boolean hasSloTotals = metrics.stream()
                 .anyMatch(metric -> "tpf.slo.rpc.server.total".equals(metric.getName()));
 
-            assertTrue(hasHttpSystem);
-            assertTrue(hasService);
-            assertTrue(hasSloTotals);
+            assertTrue(hasHttpSystem, "Expected rpc.system=http attribute on rpc.server.requests");
+            assertTrue(hasService, "Expected rpc.service=ProcessPaymentStatusService attribute");
+            assertTrue(hasSloTotals, "Expected tpf.slo.rpc.server.total metric to be present");
         } finally {
             meterProvider.shutdown();
             GlobalOpenTelemetry.resetForTest();

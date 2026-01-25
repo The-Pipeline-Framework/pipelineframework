@@ -128,12 +128,7 @@ public final class HttpMetrics {
         ensureInitialized();
         double durationMs = durationNanos / 1_000_000.0;
         double thresholdMs = TelemetrySloConfig.rpcLatencyMs();
-        Attributes attributes = Attributes.builder()
-            .put(RPC_SYSTEM, "http")
-            .put(RPC_SERVICE, service)
-            .put(RPC_METHOD, method)
-            .put(HTTP_STATUS, (long) statusCode)
-            .build();
+        Attributes attributes = buildAttributes(service, method, statusCode);
         serverRequests.add(1, attributes);
         serverResponses.add(1, attributes);
         serverDuration.record(durationMs, attributes);
@@ -154,12 +149,7 @@ public final class HttpMetrics {
         ensureInitialized();
         double durationMs = durationNanos / 1_000_000.0;
         double thresholdMs = TelemetrySloConfig.rpcLatencyMs();
-        Attributes attributes = Attributes.builder()
-            .put(RPC_SYSTEM, "http")
-            .put(RPC_SERVICE, service)
-            .put(RPC_METHOD, method)
-            .put(HTTP_STATUS, (long) statusCode)
-            .build();
+        Attributes attributes = buildAttributes(service, method, statusCode);
         sloClientTotal.add(1, attributes);
         if (statusCode < 400) {
             sloClientGood.add(1, attributes);
@@ -178,6 +168,15 @@ public final class HttpMetrics {
             return web.getResponse() != null ? web.getResponse().getStatus() : 500;
         }
         return 500;
+    }
+
+    private static Attributes buildAttributes(String service, String method, int statusCode) {
+        return Attributes.builder()
+            .put(RPC_SYSTEM, "http")
+            .put(RPC_SERVICE, service)
+            .put(RPC_METHOD, method)
+            .put(HTTP_STATUS, (long) statusCode)
+            .build();
     }
 
     private static void ensureInitialized() {
@@ -204,7 +203,7 @@ public final class HttpMetrics {
         }
     }
 
-    public static void resetForTest() {
+    public static synchronized void resetForTest() {
         meter = null;
         serverRequests = null;
         serverResponses = null;

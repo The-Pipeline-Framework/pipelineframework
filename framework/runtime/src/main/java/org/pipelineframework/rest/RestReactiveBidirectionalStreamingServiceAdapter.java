@@ -16,8 +16,11 @@
 
 package org.pipelineframework.rest;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 import io.smallrye.mutiny.Multi;
 import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
+import org.pipelineframework.telemetry.HttpMetrics;
 
 /**
  * Base adapter for REST resources that accept and return streaming DTOs.
@@ -28,6 +31,8 @@ import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
  * @param <DomainOut> The domain output type
  */
 public abstract class RestReactiveBidirectionalStreamingServiceAdapter<DtoIn, DtoOut, DomainIn, DomainOut> {
+
+    private volatile String cachedServiceName;
 
     /**
      * Default constructor for RestReactiveBidirectionalStreamingServiceAdapter.
@@ -48,11 +53,16 @@ public abstract class RestReactiveBidirectionalStreamingServiceAdapter<DtoIn, Dt
      * @return the service name
      */
     protected String getServiceName() {
+        String name = cachedServiceName;
+        if (name != null) {
+            return name;
+        }
         Class<?> serviceClass = getService().getClass();
-        String name = serviceClass.getSimpleName();
+        name = serviceClass.getSimpleName();
         if (name.contains("_Subclass") && serviceClass.getSuperclass() != null) {
             name = serviceClass.getSuperclass().getSimpleName();
         }
+        cachedServiceName = name;
         return name;
     }
 
@@ -86,12 +96,12 @@ public abstract class RestReactiveBidirectionalStreamingServiceAdapter<DtoIn, Dt
         String serviceName = getServiceName();
         Multi<DomainIn> domainStream = dtoRequests.onItem().transform(this::fromDto);
         Multi<DomainOut> processedResult = getService().process(domainStream);
-        java.util.concurrent.atomic.AtomicReference<Throwable> failureRef = new java.util.concurrent.atomic.AtomicReference<>();
+        AtomicReference<Throwable> failureRef = new AtomicReference<>();
         return processedResult
             .onFailure().invoke(failureRef::set)
             .onItem().transform(this::toDto)
             .onTermination().invoke(() ->
-                org.pipelineframework.telemetry.HttpMetrics.recordHttpServer(
+                HttpMetrics.recordHttpServer(
                     serviceName, "process", failureRef.get(), startNanos));
     }
 }
