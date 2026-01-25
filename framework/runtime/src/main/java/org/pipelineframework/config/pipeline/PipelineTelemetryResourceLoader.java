@@ -55,14 +55,16 @@ public final class PipelineTelemetryResourceLoader {
                 return Optional.empty();
             }
             Map<?, ?> data = MAPPER.readValue(streamToRead, Map.class);
-            String itemType = valueAsString(data.get("itemType"));
+            String itemInputType = valueAsString(data.get("itemInputType"));
+            String itemOutputType = valueAsString(data.get("itemOutputType"));
             String producerStep = valueAsString(data.get("producerStep"));
             String consumerStep = valueAsString(data.get("consumerStep"));
             Map<String, String> stepParents = mapOf(data.get("stepParents"));
-            if (itemType == null || itemType.isBlank()) {
+            if (itemInputType == null || itemInputType.isBlank()
+                || itemOutputType == null || itemOutputType.isBlank()) {
                 return Optional.empty();
             }
-            return Optional.of(new ItemBoundary(itemType, producerStep, consumerStep, stepParents));
+            return Optional.of(new ItemBoundary(itemInputType, itemOutputType, producerStep, consumerStep, stepParents));
         } catch (Exception e) {
             throw new IllegalStateException("Failed to read pipeline telemetry resource.", e);
         }
@@ -86,12 +88,14 @@ public final class PipelineTelemetryResourceLoader {
     /**
      * Item-boundary metadata resolved at build time.
      *
-     * @param itemType configured item type
-     * @param producerStep step class that produces the item type
-     * @param consumerStep step class that consumes the item type
+     * @param itemInputType configured input item type
+     * @param itemOutputType configured output item type
+     * @param producerStep step class that produces the output item type
+     * @param consumerStep step class that consumes the input item type
      */
     public record ItemBoundary(
-        String itemType,
+        String itemInputType,
+        String itemOutputType,
         String producerStep,
         String consumerStep,
         Map<String, String> stepParents) {

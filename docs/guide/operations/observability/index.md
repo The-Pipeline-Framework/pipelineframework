@@ -31,7 +31,11 @@ Operationally, you use observability to validate both:
 You can also define a canonical "item" type for telemetry:
 
 ```properties
-pipeline.telemetry.item-type=com.example.domain.PaymentRecord
+pipeline.telemetry.item-input-type=com.example.domain.PaymentRecord
+pipeline.telemetry.item-output-type=com.example.domain.PaymentOutput
+
+# The input type maps to the first step that consumes that type.
+# The output type maps to the last step that produces that type.
 ```
 
 TPF infers the producer (first step emitting the type) and consumer (first step accepting it) from the compiled pipeline

@@ -212,7 +212,7 @@ public class PipelineTelemetry {
         if (!metricsEnabled || !isConsumer(stepClass)) {
             return input;
         }
-        return input.onItem().invoke(item -> itemConsumedCounter.add(1, boundaryAttributes(stepClass)));
+        return input.onItem().invoke(item -> itemConsumedCounter.add(1, boundaryAttributes(stepClass, true)));
     }
 
     /**
@@ -227,7 +227,7 @@ public class PipelineTelemetry {
         if (!metricsEnabled || !isConsumer(stepClass)) {
             return input;
         }
-        return input.onItem().invoke(item -> itemConsumedCounter.add(1, boundaryAttributes(stepClass)));
+        return input.onItem().invoke(item -> itemConsumedCounter.add(1, boundaryAttributes(stepClass, true)));
     }
 
     /**
@@ -242,7 +242,7 @@ public class PipelineTelemetry {
         if (!metricsEnabled || !isProducer(stepClass)) {
             return output;
         }
-        return output.onItem().invoke(item -> itemProducedCounter.add(1, boundaryAttributes(stepClass)));
+        return output.onItem().invoke(item -> itemProducedCounter.add(1, boundaryAttributes(stepClass, false)));
     }
 
     /**
@@ -257,7 +257,7 @@ public class PipelineTelemetry {
         if (!metricsEnabled || !isProducer(stepClass)) {
             return output;
         }
-        return output.onItem().invoke(item -> itemProducedCounter.add(1, boundaryAttributes(stepClass)));
+        return output.onItem().invoke(item -> itemProducedCounter.add(1, boundaryAttributes(stepClass, false)));
     }
 
     /**
@@ -438,14 +438,15 @@ public class PipelineTelemetry {
             && stepClass.getName().equals(itemBoundary.consumerStep());
     }
 
-    private Attributes boundaryAttributes(Class<?> stepClass) {
+    private Attributes boundaryAttributes(Class<?> stepClass, boolean consumed) {
         if (itemBoundary == null) {
             return stepAttributes(stepClass);
         }
+        String itemType = consumed ? itemBoundary.itemInputType() : itemBoundary.itemOutputType();
         return Attributes.of(
             STEP_CLASS, stepClass.getName(),
             STEP_PARENT, resolveStepParent(stepClass.getName()),
-            ITEM_TYPE, itemBoundary.itemType());
+            ITEM_TYPE, itemType);
     }
 
     private Attributes stepAttributes(Class<?> stepClass) {

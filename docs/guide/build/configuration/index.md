@@ -171,7 +171,8 @@ Prefix: `pipeline.telemetry`
 
 | Property                      | Type   | Default | Description                                                        |
 |-------------------------------|--------|---------|--------------------------------------------------------------------|
-| `pipeline.telemetry.item-type` | string | none    | Fully-qualified type used to define the canonical item boundary.   |
+| `pipeline.telemetry.item-input-type` | string | none    | Fully-qualified input type used to define the item boundary.   |
+| `pipeline.telemetry.item-output-type` | string | none    | Fully-qualified output type used to define the item boundary.   |
 
 ### Global Defaults
 

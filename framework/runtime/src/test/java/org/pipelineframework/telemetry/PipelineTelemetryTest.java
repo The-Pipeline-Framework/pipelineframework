@@ -244,7 +244,12 @@ class PipelineTelemetryTest {
         }
 
         @Override
-        public Optional<String> itemType() {
+        public Optional<String> itemInputType() {
+            return Optional.empty();
+        }
+
+        @Override
+        public Optional<String> itemOutputType() {
             return Optional.empty();
         }
 

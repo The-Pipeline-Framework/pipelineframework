@@ -675,7 +675,7 @@
       ],
       "title": "Domain Item Throughput",
       "type": "timeseries",
-      "description": "Items per second at the configured item boundary (producer vs consumer). It will ONLY display data if a boundary step is selected (see pipeline.telemetry.item-type).",
+      "description": "Items per second at the configured item boundary (producer vs consumer). It will ONLY display data if a boundary step is selected (see pipeline.telemetry.item-input-type and pipeline.telemetry.item-output-type).",
       "minInterval": "10s"
     },
     {

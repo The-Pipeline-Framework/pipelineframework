@@ -27,7 +27,8 @@ import org.pipelineframework.processor.ir.TypeMapping;
 public class PipelineTelemetryMetadataGenerator {
 
     private static final String RESOURCE_PATH = "META-INF/pipeline/telemetry.json";
-    private static final String ITEM_TYPE_KEY = "pipeline.telemetry.item-type";
+    private static final String ITEM_INPUT_TYPE_KEY = "pipeline.telemetry.item-input-type";
+    private static final String ITEM_OUTPUT_TYPE_KEY = "pipeline.telemetry.item-output-type";
 
     private final ProcessingEnvironment processingEnv;
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
@@ -51,10 +52,6 @@ public class PipelineTelemetryMetadataGenerator {
         if (!ctx.isOrchestratorGenerated()) {
             return;
         }
-        String itemType = loadItemType(ctx);
-        if (itemType == null || itemType.isBlank()) {
-            return;
-        }
         List<PipelineStepModel> models = filterClientModels(ctx);
         if (models.isEmpty()) {
             return;
@@ -66,14 +63,23 @@ public class PipelineTelemetryMetadataGenerator {
             return;
         }
         List<PipelineStepModel> ordered = orderBaseSteps(ctx, baseModels);
-        String producer = findProducerStep(ordered, itemType, ctx.isTransportModeGrpc());
-        String consumer = findConsumerStep(ordered, itemType, ctx.isTransportModeGrpc(), producer);
+        ItemTypes itemTypes = resolveItemTypes(ctx, ordered);
+        if (itemTypes == null || itemTypes.inputType() == null || itemTypes.outputType() == null) {
+            return;
+        }
+        String consumer = findConsumerStep(ordered, itemTypes.inputType(), ctx.isTransportModeGrpc());
+        String producer = findProducerStep(ordered, itemTypes.outputType(), ctx.isTransportModeGrpc());
         Map<String, String> stepParents = resolveStepParents(ctx, ordered);
         if (producer == null && consumer == null) {
             return;
         }
 
-        TelemetryMetadata metadata = new TelemetryMetadata(itemType, producer, consumer, stepParents);
+        TelemetryMetadata metadata = new TelemetryMetadata(
+            itemTypes.inputType(),
+            itemTypes.outputType(),
+            producer,
+            consumer,
+            stepParents);
         StringWriter writer = new StringWriter();
         writer.write(gson.toJson(metadata));
 
@@ -95,7 +101,7 @@ public class PipelineTelemetryMetadataGenerator {
             .toList();
     }
 
-    private String loadItemType(PipelineCompilationContext ctx) {
+    private String loadItemInputType(PipelineCompilationContext ctx) {
         Properties properties = new Properties();
         try {
             properties = loadApplicationProperties(ctx);
@@ -103,8 +109,50 @@ public class PipelineTelemetryMetadataGenerator {
             processingEnv.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
                 "Failed to read application.properties for telemetry item type: " + e.getMessage());
         }
-        String raw = properties.getProperty(ITEM_TYPE_KEY);
+        String raw = properties.getProperty(ITEM_INPUT_TYPE_KEY);
         return raw == null ? null : raw.trim();
+    }
+
+    private String loadItemOutputType(PipelineCompilationContext ctx) {
+        Properties properties = new Properties();
+        try {
+            properties = loadApplicationProperties(ctx);
+        } catch (IOException e) {
+            processingEnv.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                "Failed to read application.properties for telemetry item type: " + e.getMessage());
+        }
+        String raw = properties.getProperty(ITEM_OUTPUT_TYPE_KEY);
+        return raw == null ? null : raw.trim();
+    }
+
+    private ItemTypes resolveItemTypes(PipelineCompilationContext ctx, List<PipelineStepModel> ordered) {
+        String configuredInput = loadItemInputType(ctx);
+        String configuredOutput = loadItemOutputType(ctx);
+        if ((configuredInput != null && !configuredInput.isBlank())
+            && (configuredOutput != null && !configuredOutput.isBlank())) {
+            return new ItemTypes(configuredInput, configuredOutput);
+        }
+        if (ordered == null || ordered.isEmpty()) {
+            return null;
+        }
+        String inferredInput = configuredInput;
+        String inferredOutput = configuredOutput;
+        PipelineStepModel first = ordered.get(0);
+        if (inferredInput == null || inferredInput.isBlank()) {
+            if (first.inputMapping() != null && first.inputMapping().domainType() != null) {
+                inferredInput = first.inputMapping().domainType().toString();
+            }
+        }
+        PipelineStepModel last = ordered.get(ordered.size() - 1);
+        if (inferredOutput == null || inferredOutput.isBlank()) {
+            if (last.outputMapping() != null && last.outputMapping().domainType() != null) {
+                inferredOutput = last.outputMapping().domainType().toString();
+            }
+        }
+        if (inferredInput == null || inferredInput.isBlank() || inferredOutput == null || inferredOutput.isBlank()) {
+            return null;
+        }
+        return new ItemTypes(inferredInput, inferredOutput);
     }
 
     private Properties loadApplicationProperties(PipelineCompilationContext ctx) throws IOException {
@@ -215,12 +263,19 @@ public class PipelineTelemetryMetadataGenerator {
     }
 
     private String findProducerStep(List<PipelineStepModel> ordered, String itemType, boolean grpcTransport) {
+        String lastMatch = null;
         for (PipelineStepModel model : ordered) {
             if (matchesType(model.outputMapping(), itemType)) {
-                return resolveClientStepClassName(model, grpcTransport);
+                lastMatch = resolveClientStepClassName(model, grpcTransport);
             }
         }
-        return null;
+        if (lastMatch != null) {
+            return lastMatch;
+        }
+        if (ordered == null || ordered.isEmpty()) {
+            return null;
+        }
+        return resolveClientStepClassName(ordered.get(ordered.size() - 1), grpcTransport);
     }
 
     private Map<String, String> resolveStepParents(PipelineCompilationContext ctx, List<PipelineStepModel> orderedBase) {
@@ -285,32 +340,16 @@ public class PipelineTelemetryMetadataGenerator {
     private String findConsumerStep(
         List<PipelineStepModel> ordered,
         String itemType,
-        boolean grpcTransport,
-        String producerStep) {
-        if (producerStep != null) {
-            boolean afterProducer = false;
-            String lastAfterProducer = null;
-            for (PipelineStepModel model : ordered) {
-                String stepClass = resolveClientStepClassName(model, grpcTransport);
-                if (stepClass.equals(producerStep)) {
-                    afterProducer = true;
-                    continue;
-                }
-                if (afterProducer) {
-                    lastAfterProducer = stepClass;
-                }
-            }
-            if (lastAfterProducer != null) {
-                return lastAfterProducer;
-            }
-        }
-        String lastMatch = null;
+        boolean grpcTransport) {
         for (PipelineStepModel model : ordered) {
             if (matchesType(model.inputMapping(), itemType)) {
-                lastMatch = resolveClientStepClassName(model, grpcTransport);
+                return resolveClientStepClassName(model, grpcTransport);
             }
         }
-        return lastMatch;
+        if (ordered == null || ordered.isEmpty()) {
+            return null;
+        }
+        return resolveClientStepClassName(ordered.get(0), grpcTransport);
     }
 
     private boolean matchesType(TypeMapping mapping, String itemType) {
@@ -327,9 +366,15 @@ public class PipelineTelemetryMetadataGenerator {
     }
 
     private record TelemetryMetadata(
-        String itemType,
+        String itemInputType,
+        String itemOutputType,
         String producerStep,
         String consumerStep,
         Map<String, String> stepParents) {
+    }
+
+    private record ItemTypes(
+        String inputType,
+        String outputType) {
     }
 }
