@@ -549,23 +549,24 @@ public class PipelineTelemetry {
     private boolean isProducer(Class<?> stepClass) {
         return itemBoundary != null
             && stepClass != null
-            && stepClass.getName().equals(itemBoundary.producerStep());
+            && resolveStepClassName(stepClass).equals(itemBoundary.producerStep());
     }
 
     private boolean isConsumer(Class<?> stepClass) {
         return itemBoundary != null
             && stepClass != null
-            && stepClass.getName().equals(itemBoundary.consumerStep());
+            && resolveStepClassName(stepClass).equals(itemBoundary.consumerStep());
     }
 
     private Attributes boundaryAttributes(Class<?> stepClass, boolean consumed) {
         if (itemBoundary == null) {
             return stepAttributes(stepClass);
         }
+        String stepName = resolveStepClassName(stepClass);
         String itemType = consumed ? itemBoundary.itemInputType() : itemBoundary.itemOutputType();
         return Attributes.of(
-            STEP_CLASS, stepClass.getName(),
-            STEP_PARENT, resolveStepParent(stepClass.getName()),
+            STEP_CLASS, stepName,
+            STEP_PARENT, resolveStepParent(stepName),
             ITEM_TYPE, itemType);
     }
 
@@ -574,6 +575,17 @@ public class PipelineTelemetry {
             STEP_CLASS, stepClassName,
             STEP_PARENT, resolveStepParent(stepClassName),
             ITEM_TYPE, itemType);
+    }
+
+    private String resolveStepClassName(Class<?> stepClass) {
+        if (stepClass == null) {
+            return null;
+        }
+        String name = stepClass.getName();
+        if ((name.contains("_Subclass") || name.contains("$$")) && stepClass.getSuperclass() != null) {
+            return stepClass.getSuperclass().getName();
+        }
+        return name;
     }
 
     private Attributes stepAttributes(Class<?> stepClass) {
