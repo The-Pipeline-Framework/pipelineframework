@@ -449,8 +449,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                     ClassName.get("io.grpc", "Status"),
                     ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
                     model.serviceName(),
-                    "remoteProcess",
-                    ClassName.get("io.grpc", "Status"));
+                    "remoteProcess");
 
         // Add @RunOnVirtualThread annotation if the property is enabled
         if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
