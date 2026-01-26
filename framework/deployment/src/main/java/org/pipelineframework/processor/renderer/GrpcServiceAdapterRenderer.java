@@ -188,15 +188,12 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                                 outputDomainTypeUnary),
                         inlineAdapter)
                 .addStatement("long startTime = System.nanoTime()")
-                .addStatement("$T<$T> failureRef = new $T<>()",
-                    ClassName.get(java.util.concurrent.atomic.AtomicReference.class),
-                    ClassName.get(Throwable.class),
-                    ClassName.get(java.util.concurrent.atomic.AtomicReference.class))
                 .addCode("""
                     return adapter.remoteProcess($N)
-                        .onFailure().invoke(failureRef::set)
-                        .onTermination().invoke(() -> {
-                            $T status = failureRef.get() == null ? $T.OK : $T.fromThrowable(failureRef.get());
+                        .onTermination().invoke((failure, cancelled) -> {
+                            $T status = cancelled ? $T.CANCELLED
+                                : failure != null ? $T.fromThrowable(failure)
+                                : $T.OK;
                             $T.recordGrpcServer($S, $S, status, System.nanoTime() - startTime);
                         });
                     """,
@@ -269,15 +266,12 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                                 outputDomainTypeUnaryStreaming),
                         inlineAdapter)
                 .addStatement("long startTime = System.nanoTime()")
-                .addStatement("$T<$T> failureRef = new $T<>()",
-                    ClassName.get(java.util.concurrent.atomic.AtomicReference.class),
-                    ClassName.get(Throwable.class),
-                    ClassName.get(java.util.concurrent.atomic.AtomicReference.class))
                 .addCode("""
                     return adapter.remoteProcess($N)
-                        .onFailure().invoke(failureRef::set)
-                        .onTermination().invoke(() -> {
-                            $T status = failureRef.get() == null ? $T.OK : $T.fromThrowable(failureRef.get());
+                        .onTermination().invoke((failure, cancelled) -> {
+                            $T status = cancelled ? $T.CANCELLED
+                                : failure != null ? $T.fromThrowable(failure)
+                                : $T.OK;
                             $T.recordGrpcServer($S, $S, status, System.nanoTime() - startTime);
                         });
                     """,
@@ -352,19 +346,17 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                                 outputDomainTypeStreamingUnary),
                         inlineAdapter)
                 .addStatement("long startTime = System.nanoTime()")
-                .addStatement("$T<$T> failureRef = new $T<>()",
-                    ClassName.get(java.util.concurrent.atomic.AtomicReference.class),
-                    ClassName.get(Throwable.class),
-                    ClassName.get(java.util.concurrent.atomic.AtomicReference.class))
                 .addCode("""
                     return adapter.remoteProcess($N)
-                        .onFailure().invoke(failureRef::set)
-                        .onTermination().invoke(() -> {
-                            $T status = failureRef.get() == null ? $T.OK : $T.fromThrowable(failureRef.get());
+                        .onTermination().invoke((failure, cancelled) -> {
+                            $T status = cancelled ? $T.CANCELLED
+                                : failure != null ? $T.fromThrowable(failure)
+                                : $T.OK;
                             $T.recordGrpcServer($S, $S, status, System.nanoTime() - startTime);
                         });
                     """,
                     "request",
+                    ClassName.get("io.grpc", "Status"),
                     ClassName.get("io.grpc", "Status"),
                     ClassName.get("io.grpc", "Status"),
                     ClassName.get("io.grpc", "Status"),
@@ -431,19 +423,17 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                                 outputDomainTypeStreamingStreaming),
                         inlineAdapterStreaming)
                 .addStatement("long startTime = System.nanoTime()")
-                .addStatement("$T<$T> failureRef = new $T<>()",
-                    ClassName.get(java.util.concurrent.atomic.AtomicReference.class),
-                    ClassName.get(Throwable.class),
-                    ClassName.get(java.util.concurrent.atomic.AtomicReference.class))
                 .addCode("""
                     return adapter.remoteProcess($N)
-                        .onFailure().invoke(failureRef::set)
-                        .onTermination().invoke(() -> {
-                            $T status = failureRef.get() == null ? $T.OK : $T.fromThrowable(failureRef.get());
+                        .onTermination().invoke((failure, cancelled) -> {
+                            $T status = cancelled ? $T.CANCELLED
+                                : failure != null ? $T.fromThrowable(failure)
+                                : $T.OK;
                             $T.recordGrpcServer($S, $S, status, System.nanoTime() - startTime);
                         });
                     """,
                     "request",
+                    ClassName.get("io.grpc", "Status"),
                     ClassName.get("io.grpc", "Status"),
                     ClassName.get("io.grpc", "Status"),
                     ClassName.get("io.grpc", "Status"),

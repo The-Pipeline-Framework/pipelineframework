@@ -16,7 +16,7 @@
 
 package org.pipelineframework.rest;
 
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CancellationException;
 
 import io.smallrye.mutiny.Multi;
 import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
@@ -96,12 +96,14 @@ public abstract class RestReactiveBidirectionalStreamingServiceAdapter<DtoIn, Dt
         String serviceName = getServiceName();
         Multi<DomainIn> domainStream = dtoRequests.onItem().transform(this::fromDto);
         Multi<DomainOut> processedResult = getService().process(domainStream);
-        AtomicReference<Throwable> failureRef = new AtomicReference<>();
         return processedResult
-            .onFailure().invoke(failureRef::set)
             .onItem().transform(this::toDto)
-            .onTermination().invoke(() ->
+            .onTermination().invoke((failure, cancelled) -> {
+                Throwable resolved = cancelled
+                    ? new CancellationException("HTTP server call cancelled")
+                    : failure;
                 HttpMetrics.recordHttpServer(
-                    serviceName, "process", failureRef.get(), startNanos));
+                    serviceName, "process", resolved, startNanos);
+            });
     }
 }

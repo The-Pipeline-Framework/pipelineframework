@@ -16,7 +16,7 @@
 
 package org.pipelineframework.telemetry;
 
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.CancellationException;
 import jakarta.ws.rs.WebApplicationException;
 
 import io.opentelemetry.api.GlobalOpenTelemetry;
@@ -69,8 +69,10 @@ public final class HttpMetrics {
         }
         return Uni.createFrom().deferred(() -> {
             long startNanos = System.nanoTime();
-            return uni.onItemOrFailure().invoke((item, failure) ->
-                recordHttpClient(service, method, failure, startNanos));
+            return uni.onTermination().invoke((item, failure, cancelled) -> {
+                Throwable resolved = cancelled ? new CancellationException("HTTP client call cancelled") : failure;
+                recordHttpClient(service, method, resolved, startNanos);
+            });
         });
     }
 
@@ -89,9 +91,10 @@ public final class HttpMetrics {
         }
         return Multi.createFrom().deferred(() -> {
             long startNanos = System.nanoTime();
-            AtomicReference<Throwable> failureRef = new AtomicReference<>();
-            return multi.onFailure().invoke(failureRef::set)
-                .onTermination().invoke(() -> recordHttpClient(service, method, failureRef.get(), startNanos));
+            return multi.onTermination().invoke((failure, cancelled) -> {
+                Throwable resolved = cancelled ? new CancellationException("HTTP client call cancelled") : failure;
+                recordHttpClient(service, method, resolved, startNanos);
+            });
         });
     }
 
@@ -163,6 +166,9 @@ public final class HttpMetrics {
     private static int resolveStatus(Throwable failure) {
         if (failure == null) {
             return 200;
+        }
+        if (failure instanceof CancellationException) {
+            return 499;
         }
         if (failure instanceof WebApplicationException web) {
             return web.getResponse() != null ? web.getResponse().getStatus() : 500;

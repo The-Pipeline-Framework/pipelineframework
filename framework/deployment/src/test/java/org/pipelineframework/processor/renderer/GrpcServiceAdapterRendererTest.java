@@ -54,8 +54,8 @@ class GrpcServiceAdapterRendererTest {
         String source = readGeneratedService("TestService");
         assertTrue(source.contains("onTermination().invoke"),
             "Expected onTermination handler for gRPC server metrics");
-        assertTrue(source.contains("failureRef"),
-            "Expected failureRef tracking for gRPC server metrics");
+        assertTrue(source.contains("Status.CANCELLED"),
+            "Expected cancellation handling for gRPC server metrics");
     }
     
     @Test
@@ -82,8 +82,8 @@ class GrpcServiceAdapterRendererTest {
         String source = readGeneratedService("TestService");
         assertTrue(source.contains("onTermination().invoke"),
             "Expected onTermination handler for gRPC server metrics");
-        assertTrue(source.contains("failureRef"),
-            "Expected failureRef tracking for gRPC server metrics");
+        assertTrue(source.contains("Status.CANCELLED"),
+            "Expected cancellation handling for gRPC server metrics");
     }
 
     @Test
@@ -108,8 +108,8 @@ class GrpcServiceAdapterRendererTest {
         String source = readGeneratedService("TestService");
         assertTrue(source.contains("onTermination().invoke"),
             "Expected onTermination handler for gRPC server metrics");
-        assertTrue(source.contains("failureRef"),
-            "Expected failureRef tracking for gRPC server metrics");
+        assertTrue(source.contains("Status.CANCELLED"),
+            "Expected cancellation handling for gRPC server metrics");
     }
 
     @Test
@@ -134,8 +134,8 @@ class GrpcServiceAdapterRendererTest {
         String source = readGeneratedService("TestService");
         assertTrue(source.contains("onTermination().invoke"),
             "Expected onTermination handler for gRPC server metrics");
-        assertTrue(source.contains("failureRef"),
-            "Expected failureRef tracking for gRPC server metrics");
+        assertTrue(source.contains("Status.CANCELLED"),
+            "Expected cancellation handling for gRPC server metrics");
     }
 
     @Test
@@ -175,6 +175,8 @@ class GrpcServiceAdapterRendererTest {
         assertTrue(source.contains("return service"));
         assertTrue(source.contains("onTermination().invoke"),
             "Expected onTermination handler for gRPC server metrics");
+        assertTrue(source.contains("Status.CANCELLED"),
+            "Expected cancellation handling for gRPC server metrics");
     }
 
     private TypeMapping createTypeMapping(String simpleName) {

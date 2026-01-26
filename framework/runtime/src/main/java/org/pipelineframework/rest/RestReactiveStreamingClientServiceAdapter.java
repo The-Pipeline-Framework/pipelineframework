@@ -16,6 +16,8 @@
 
 package org.pipelineframework.rest;
 
+import java.util.concurrent.CancellationException;
+
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.service.ReactiveStreamingClientService;
@@ -96,8 +98,12 @@ public abstract class RestReactiveStreamingClientServiceAdapter<DtoIn, DtoOut, D
         Uni<DomainOut> processedResult = getService().process(domainStream);
         return processedResult
             .onItem().transform(this::toDto)
-            .onItemOrFailure().invoke((item, failure) ->
+            .onTermination().invoke((item, failure, cancelled) -> {
+                Throwable resolved = cancelled
+                    ? new CancellationException("HTTP server call cancelled")
+                    : failure;
                 org.pipelineframework.telemetry.HttpMetrics.recordHttpServer(
-                    serviceName, "process", failure, startNanos));
+                    serviceName, "process", resolved, startNanos);
+            });
     }
 }
