@@ -58,6 +58,9 @@ Prometheus exports these as `*_items` because the unit is set to `items`.
 Note: `tpf.step.*` metrics represent step executions (not domain items). Use the
 `tpf.item.*` counters when you want throughput for a specific domain type.
 
+Note: New Relic dimensional metrics treat `tpf.slo.item.throughput.*` as event-counted counters, so
+SLOs should use `COUNT` (not `SUM`) over `metricName = 'tpf.slo.item.throughput.total|good'`.
+
 Aspect position note: AFTER_STEP observes the output of each step. This captures every boundary
 except the very first input boundary (before the pipeline starts). Conversely, BEFORE_STEP captures
 every boundary except the final output boundary (after the pipeline completes). Use two aspects if
