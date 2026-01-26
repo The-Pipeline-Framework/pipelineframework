@@ -149,7 +149,66 @@ class PipelineTelemetryTest {
         }
     }
 
-    static final class DummyStep {
+    @Test
+    void resolvesConsumerAndProducerStepForProxyClasses() {
+        InMemorySpanExporter exporter = InMemorySpanExporter.create();
+        SdkTracerProvider tracerProvider = SdkTracerProvider.builder()
+            .addSpanProcessor(SimpleSpanProcessor.create(exporter))
+            .build();
+        InMemoryMetricReader metricReader = InMemoryMetricReader.create();
+        SdkMeterProvider meterProvider = SdkMeterProvider.builder()
+            .registerMetricReader(metricReader)
+            .build();
+        OpenTelemetrySdk sdk = OpenTelemetrySdk.builder()
+            .setTracerProvider(tracerProvider)
+            .setMeterProvider(meterProvider)
+            .build();
+        GlobalOpenTelemetry.resetForTest();
+        GlobalOpenTelemetry.set(sdk);
+
+        try {
+            PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
+            PipelineTelemetry.RunContext runContext =
+                telemetry.startRun(Multi.createFrom().items(1, 2), 1, ParallelismPolicy.AUTO, 4);
+
+            Multi<Integer> consumed = telemetry.instrumentItemConsumed(
+                DummyStep$$Proxy.class, runContext, Multi.createFrom().items(1, 2));
+            consumed.collect().asList().await().indefinitely();
+
+            Multi<Integer> produced = telemetry.instrumentItemProduced(
+                DummyStep$$Proxy.class, runContext, Multi.createFrom().items(3, 4));
+            produced.collect().asList().await().indefinitely();
+
+            Collection<MetricData> metrics = metricReader.collectAllMetrics();
+            MetricData consumedMetric = metrics.stream()
+                .filter(metric -> "tpf.item.consumed".equals(metric.getName()))
+                .findFirst()
+                .orElseThrow();
+            MetricData producedMetric = metrics.stream()
+                .filter(metric -> "tpf.item.produced".equals(metric.getName()))
+                .findFirst()
+                .orElseThrow();
+
+            String stepClass = DummyStep.class.getName();
+            AttributeKey<String> stepKey = AttributeKey.stringKey("tpf.step.class");
+
+            assertTrue(consumedMetric.getLongSumData().getPoints().stream()
+                .anyMatch(point -> stepClass.equals(point.getAttributes().get(stepKey))),
+                "Expected consumed metric for resolved step class");
+            assertTrue(producedMetric.getLongSumData().getPoints().stream()
+                .anyMatch(point -> stepClass.equals(point.getAttributes().get(stepKey))),
+                "Expected produced metric for resolved step class");
+        } finally {
+            tracerProvider.shutdown();
+            meterProvider.shutdown();
+            GlobalOpenTelemetry.resetForTest();
+        }
+    }
+
+    static class DummyStep {
+    }
+
+    static final class DummyStep$$Proxy extends DummyStep {
     }
 
     static final class TestPipelineStepConfig implements PipelineStepConfig {

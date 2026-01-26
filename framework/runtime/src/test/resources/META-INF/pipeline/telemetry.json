@@ -1,0 +1,7 @@
+{
+  "itemInputType": "com.example.InputType",
+  "itemOutputType": "com.example.OutputType",
+  "producerStep": "org.pipelineframework.telemetry.PipelineTelemetryTest$DummyStep",
+  "consumerStep": "org.pipelineframework.telemetry.PipelineTelemetryTest$DummyStep",
+  "stepParents": {}
+}
