@@ -50,8 +50,12 @@ class GrpcServiceAdapterRendererTest {
         var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, null);
 
-        // Render the gRPC service adapter - this should not throw an exception
         assertDoesNotThrow(() -> renderer.render(binding, context));
+        String source = readGeneratedService("TestService");
+        assertTrue(source.contains("onTermination().invoke"),
+            "Expected onTermination handler for gRPC server metrics");
+        assertTrue(source.contains("Status.CANCELLED"),
+            "Expected cancellation handling for gRPC server metrics");
     }
     
     @Test
@@ -74,8 +78,64 @@ class GrpcServiceAdapterRendererTest {
         var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
             java.util.Set.of(), null, null);
 
-        // Render the gRPC service adapter - this should not throw an exception
         assertDoesNotThrow(() -> renderer.render(binding, context));
+        String source = readGeneratedService("TestService");
+        assertTrue(source.contains("onTermination().invoke"),
+            "Expected onTermination handler for gRPC server metrics");
+        assertTrue(source.contains("Status.CANCELLED"),
+            "Expected cancellation handling for gRPC server metrics");
+    }
+
+    @Test
+    void testRenderStreamingUnaryGrpcServiceAdapter() {
+        PipelineStepModel model = createModel(StreamingShape.STREAMING_UNARY);
+
+        Descriptors.FileDescriptor fileDescriptor = buildFileDescriptor();
+        Descriptors.ServiceDescriptor serviceDescriptor = fileDescriptor.findServiceByName("TestService");
+        Descriptors.MethodDescriptor methodDescriptor = serviceDescriptor.findMethodByName("remoteProcess");
+        GrpcBinding binding = new GrpcBinding(model, serviceDescriptor, methodDescriptor);
+
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getElementUtils()).thenReturn(null);
+        when(processingEnv.getTypeUtils()).thenReturn(null);
+        when(processingEnv.getFiler()).thenReturn(null);
+        when(processingEnv.getMessager()).thenReturn(null);
+
+        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            java.util.Set.of(), null, null);
+
+        assertDoesNotThrow(() -> renderer.render(binding, context));
+        String source = readGeneratedService("TestService");
+        assertTrue(source.contains("onTermination().invoke"),
+            "Expected onTermination handler for gRPC server metrics");
+        assertTrue(source.contains("Status.CANCELLED"),
+            "Expected cancellation handling for gRPC server metrics");
+    }
+
+    @Test
+    void testRenderStreamingStreamingGrpcServiceAdapter() {
+        PipelineStepModel model = createModel(StreamingShape.STREAMING_STREAMING);
+
+        Descriptors.FileDescriptor fileDescriptor = buildFileDescriptor();
+        Descriptors.ServiceDescriptor serviceDescriptor = fileDescriptor.findServiceByName("TestService");
+        Descriptors.MethodDescriptor methodDescriptor = serviceDescriptor.findMethodByName("remoteProcess");
+        GrpcBinding binding = new GrpcBinding(model, serviceDescriptor, methodDescriptor);
+
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getElementUtils()).thenReturn(null);
+        when(processingEnv.getTypeUtils()).thenReturn(null);
+        when(processingEnv.getFiler()).thenReturn(null);
+        when(processingEnv.getMessager()).thenReturn(null);
+
+        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            java.util.Set.of(), null, null);
+
+        assertDoesNotThrow(() -> renderer.render(binding, context));
+        String source = readGeneratedService("TestService");
+        assertTrue(source.contains("onTermination().invoke"),
+            "Expected onTermination handler for gRPC server metrics");
+        assertTrue(source.contains("Status.CANCELLED"),
+            "Expected cancellation handling for gRPC server metrics");
     }
 
     @Test
@@ -109,11 +169,14 @@ class GrpcServiceAdapterRendererTest {
             java.util.Set.of(), null, null);
         renderer.render(binding, context);
 
-        Path generated = tempDir.resolve("com/example/pipeline/PersistenceOutputTypeSideEffectGrpcService.java");
-        String source = Files.readString(generated);
+        String source = readGeneratedService("PersistenceOutputTypeSideEffect");
         assertTrue(source.contains("ObserveOutputTypeSideEffectService service"));
         assertTrue(source.contains("protected ObserveOutputTypeSideEffectService getService()"));
         assertTrue(source.contains("return service"));
+        assertTrue(source.contains("onTermination().invoke"),
+            "Expected onTermination handler for gRPC server metrics");
+        assertTrue(source.contains("Status.CANCELLED"),
+            "Expected cancellation handling for gRPC server metrics");
     }
 
     private TypeMapping createTypeMapping(String simpleName) {
@@ -135,6 +198,15 @@ class GrpcServiceAdapterRendererTest {
             .executionMode(ExecutionMode.DEFAULT)
             .enabledTargets(java.util.Set.of(GenerationTarget.GRPC_SERVICE))
             .build();
+    }
+
+    private String readGeneratedService(String baseName) {
+        Path generated = tempDir.resolve("com/example/pipeline/" + baseName + "GrpcService.java");
+        try {
+            return Files.readString(generated);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read generated gRPC service: " + generated, e);
+        }
     }
 
     private Descriptors.FileDescriptor buildFileDescriptor() {

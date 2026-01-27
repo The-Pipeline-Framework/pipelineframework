@@ -9,7 +9,7 @@ Observability in The Pipeline Framework is designed for distributed pipelines: y
 3. **Logging**: Structured logs with correlation identifiers
 4. **Health Checks**: Liveness/readiness for orchestration
 5. **Alerting**: Dashboards and alert rules tuned for pipeline behavior
-6. **Parallelism**: In-flight and buffer depth gauges plus run-level throughput attributes
+6. **Parallelism**: In-flight and buffer depth gauges plus run-level parallelism attributes
 
 ## Concurrency, Backpressure, and Scalability
 
@@ -27,6 +27,27 @@ Operationally, you use observability to validate both:
 - `tpf.step.inflight` should stay near (but not pinned at) the configured max concurrency for I/O-heavy steps.
 - `tpf.step.buffer.queued` should spike during bursts but should not stay flat and high; sustained growth means the
   downstream is too slow or the buffer is too small.
+
+You can also define a canonical "item" type for telemetry:
+
+```properties
+pipeline.telemetry.item-input-type=com.example.domain.PaymentRecord
+pipeline.telemetry.item-output-type=com.example.domain.PaymentOutput
+
+# The input type maps to the first step that consumes that type.
+# The output type maps to the last step that produces that type.
+```
+
+TPF maps the input type to the first step that consumes it and the output type to the last step that produces it, then
+emits `tpf.item.consumed` and `tpf.item.produced` counters for that boundary.
+
+Aspect position note: AFTER_STEP observes the output of each step. This captures every boundary
+except the very first input boundary (before the pipeline starts). Conversely, BEFORE_STEP captures
+every boundary except the final output boundary (after the pipeline completes). Use two aspects if
+you need complete boundary coverage.
+
+TPF also emits SLO-ready counters (under `tpf.slo.*`) using the thresholds configured via:
+`pipeline.telemetry.slo.rpc-latency-ms` and `pipeline.telemetry.slo.item-throughput-per-min`.
 
 ### Retry amplification: what it looks like
 

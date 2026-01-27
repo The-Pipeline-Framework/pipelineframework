@@ -16,6 +16,8 @@
 
 package org.pipelineframework.rest;
 
+import java.util.concurrent.CancellationException;
+
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.service.ReactiveStreamingClientService;
@@ -30,6 +32,8 @@ import org.pipelineframework.service.ReactiveStreamingClientService;
  */
 public abstract class RestReactiveStreamingClientServiceAdapter<DtoIn, DtoOut, DomainIn, DomainOut> {
 
+    private volatile String cachedServiceName;
+
     /**
      * Default constructor for RestReactiveStreamingClientServiceAdapter.
      */
@@ -42,6 +46,25 @@ public abstract class RestReactiveStreamingClientServiceAdapter<DtoIn, DtoOut, D
      * @return the {@link ReactiveStreamingClientService} instance that processes {@code DomainIn} into {@code DomainOut}
      */
     protected abstract ReactiveStreamingClientService<DomainIn, DomainOut> getService();
+
+    /**
+     * Resolve the service name used for telemetry attributes.
+     *
+     * @return the service name
+     */
+    protected String getServiceName() {
+        String name = cachedServiceName;
+        if (name != null) {
+            return name;
+        }
+        Class<?> serviceClass = getService().getClass();
+        name = serviceClass.getSimpleName();
+        if (name.contains("_Subclass") && serviceClass.getSuperclass() != null) {
+            name = serviceClass.getSuperclass().getSimpleName();
+        }
+        cachedServiceName = name;
+        return name;
+    }
 
     /**
      * Convert a REST DTO input into the corresponding domain object.
@@ -69,8 +92,18 @@ public abstract class RestReactiveStreamingClientServiceAdapter<DtoIn, DtoOut, D
      * @return the REST DTO response corresponding to the processed domain output
      */
     public Uni<DtoOut> remoteProcess(Multi<DtoIn> dtoRequests) {
+        long startNanos = System.nanoTime();
+        String serviceName = getServiceName();
         Multi<DomainIn> domainStream = dtoRequests.onItem().transform(this::fromDto);
         Uni<DomainOut> processedResult = getService().process(domainStream);
-        return processedResult.onItem().transform(this::toDto);
+        return processedResult
+            .onItem().transform(this::toDto)
+            .onTermination().invoke((item, failure, cancelled) -> {
+                Throwable resolved = cancelled
+                    ? new CancellationException("HTTP server call cancelled")
+                    : failure;
+                org.pipelineframework.telemetry.HttpMetrics.recordHttpServer(
+                    serviceName, "process", resolved, startNanos);
+            });
     }
 }

@@ -76,6 +76,6 @@ class RestClientStepRendererTest {
         assertTrue(stepSource.contains("@RestClient"));
         assertTrue(stepSource.contains("ProcessPaymentStatusRestClient restClient;"));
         assertTrue(stepSource.contains("public Uni<PaymentOutputDto> applyOneToOne(PaymentStatusDto input)"));
-        assertTrue(stepSource.contains("return this.restClient.process(input)"));
+        assertTrue(stepSource.contains("HttpMetrics.instrumentClient"));
     }
 }

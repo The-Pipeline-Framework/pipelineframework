@@ -34,6 +34,8 @@ import io.opentelemetry.sdk.trace.SdkTracerProvider;
 import io.opentelemetry.sdk.trace.data.SpanData;
 import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
 import io.smallrye.mutiny.Multi;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineStepConfig;
@@ -42,14 +44,19 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class PipelineTelemetryTest {
 
-    @Test
-    void recordsRunAttributesForParallelismAndBackpressure() {
-        InMemorySpanExporter exporter = InMemorySpanExporter.create();
-        SdkTracerProvider tracerProvider = SdkTracerProvider.builder()
+    private InMemorySpanExporter exporter;
+    private SdkTracerProvider tracerProvider;
+    private InMemoryMetricReader metricReader;
+    private SdkMeterProvider meterProvider;
+
+    @BeforeEach
+    void setUp() {
+        exporter = InMemorySpanExporter.create();
+        tracerProvider = SdkTracerProvider.builder()
             .addSpanProcessor(SimpleSpanProcessor.create(exporter))
             .build();
-        InMemoryMetricReader metricReader = InMemoryMetricReader.create();
-        SdkMeterProvider meterProvider = SdkMeterProvider.builder()
+        metricReader = InMemoryMetricReader.create();
+        meterProvider = SdkMeterProvider.builder()
             .registerMetricReader(metricReader)
             .build();
         OpenTelemetrySdk sdk = OpenTelemetrySdk.builder()
@@ -58,102 +65,191 @@ class PipelineTelemetryTest {
             .build();
         GlobalOpenTelemetry.resetForTest();
         GlobalOpenTelemetry.set(sdk);
+    }
 
-        try {
-            PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
-            Multi<Integer> input = Multi.createFrom().items(1, 2, 3);
-            PipelineTelemetry.RunContext runContext =
-                telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+    @AfterEach
+    void tearDown() {
+        tracerProvider.shutdown();
+        meterProvider.shutdown();
+        GlobalOpenTelemetry.resetForTest();
+    }
 
-            Multi<Integer> instrumented = (Multi<Integer>) telemetry.instrumentInput(input, runContext);
-            Multi<Integer> stepped =
-                telemetry.instrumentStepMulti(DummyStep.class, instrumented, runContext, true);
-            Multi<Integer> completed =
-                (Multi<Integer>) telemetry.instrumentRunCompletion(stepped, runContext);
+    @Test
+    void recordsRunAttributesForParallelismAndBackpressure() {
+        PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
+        Multi<Integer> input = Multi.createFrom().items(1, 2, 3);
+        PipelineTelemetry.RunContext runContext =
+            telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
 
-            completed.collect().asList().await().indefinitely();
+        Multi<Integer> instrumented = (Multi<Integer>) telemetry.instrumentInput(input, runContext);
+        Multi<Integer> stepped =
+            telemetry.instrumentStepMulti(DummyStep.class, instrumented, runContext, true);
+        Multi<Integer> completed =
+            (Multi<Integer>) telemetry.instrumentRunCompletion(stepped, runContext);
 
-            List<SpanData> spans = exporter.getFinishedSpanItems();
-            SpanData runSpan = spans.stream()
-                .filter(span -> "tpf.pipeline.run".equals(span.getName()))
-                .findFirst()
-                .orElseThrow();
-            Attributes attributes = runSpan.getAttributes();
+        completed.collect().asList().await().indefinitely();
 
-            assertNotNull(attributes.get(AttributeKey.longKey("tpf.item.count")));
-            assertNotNull(attributes.get(AttributeKey.doubleKey("tpf.item.avg_ms")));
-            assertNotNull(attributes.get(AttributeKey.doubleKey("tpf.items.per_min")));
-            assertNotNull(attributes.get(AttributeKey.longKey("tpf.parallel.max_in_flight")));
-            assertNotNull(attributes.get(AttributeKey.doubleKey("tpf.parallel.avg_in_flight")));
+        List<SpanData> spans = exporter.getFinishedSpanItems();
+        SpanData runSpan = spans.stream()
+            .filter(span -> "tpf.pipeline.run".equals(span.getName()))
+            .findFirst()
+            .orElseThrow();
+        Attributes attributes = runSpan.getAttributes();
 
-            assertTrue(attributes.get(AttributeKey.longKey("tpf.item.count")) >= 3L);
-            assertTrue(attributes.get(AttributeKey.longKey("tpf.parallel.max_in_flight")) >= 1L);
-        } finally {
-            tracerProvider.shutdown();
-            meterProvider.shutdown();
-            GlobalOpenTelemetry.resetForTest();
-        }
+        assertNotNull(attributes.get(AttributeKey.longKey("tpf.parallel.max_in_flight")));
+        assertNotNull(attributes.get(AttributeKey.doubleKey("tpf.parallel.avg_in_flight")));
+
+        assertTrue(attributes.get(AttributeKey.longKey("tpf.parallel.max_in_flight")) >= 1L);
     }
 
     @Test
     void exposesStepInflightGauge() {
-        InMemorySpanExporter exporter = InMemorySpanExporter.create();
-        SdkTracerProvider tracerProvider = SdkTracerProvider.builder()
-            .addSpanProcessor(SimpleSpanProcessor.create(exporter))
-            .build();
-        InMemoryMetricReader metricReader = InMemoryMetricReader.create();
-        SdkMeterProvider meterProvider = SdkMeterProvider.builder()
-            .registerMetricReader(metricReader)
-            .build();
-        OpenTelemetrySdk sdk = OpenTelemetrySdk.builder()
-            .setTracerProvider(tracerProvider)
-            .setMeterProvider(meterProvider)
-            .build();
-        GlobalOpenTelemetry.resetForTest();
-        GlobalOpenTelemetry.set(sdk);
+        PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
+        Multi<Integer> input = Multi.createFrom().items(1, 2);
+        PipelineTelemetry.RunContext runContext =
+            telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
 
-        try {
-            PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
-            Multi<Integer> input = Multi.createFrom().items(1, 2);
-            PipelineTelemetry.RunContext runContext =
-                telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+        Multi<Integer> instrumented = (Multi<Integer>) telemetry.instrumentInput(input, runContext);
+        Multi<Integer> stepped =
+            telemetry.instrumentStepMulti(DummyStep.class, instrumented, runContext, true);
+        Multi<Integer> completed =
+            (Multi<Integer>) telemetry.instrumentRunCompletion(stepped, runContext);
 
-            Multi<Integer> instrumented = (Multi<Integer>) telemetry.instrumentInput(input, runContext);
-            Multi<Integer> stepped =
-                telemetry.instrumentStepMulti(DummyStep.class, instrumented, runContext, true);
-            Multi<Integer> completed =
-                (Multi<Integer>) telemetry.instrumentRunCompletion(stepped, runContext);
+        completed.collect().asList().await().indefinitely();
 
-            completed.collect().asList().await().indefinitely();
+        Collection<MetricData> metrics = metricReader.collectAllMetrics();
+        MetricData inflight = metrics.stream()
+            .filter(metric -> "tpf.step.inflight".equals(metric.getName()))
+            .findFirst()
+            .orElseThrow();
+        MetricData maxConcurrency = metrics.stream()
+            .filter(metric -> "tpf.pipeline.max_concurrency".equals(metric.getName()))
+            .findFirst()
+            .orElseThrow();
 
-            Collection<MetricData> metrics = metricReader.collectAllMetrics();
-            MetricData inflight = metrics.stream()
-                .filter(metric -> "tpf.step.inflight".equals(metric.getName()))
-                .findFirst()
-                .orElseThrow();
-            MetricData maxConcurrency = metrics.stream()
-                .filter(metric -> "tpf.pipeline.max_concurrency".equals(metric.getName()))
-                .findFirst()
-                .orElseThrow();
-
-            String stepClass = DummyStep.class.getName();
-            assertEquals(1, inflight.getLongGaugeData().getPoints().stream()
-                .filter(point -> stepClass.equals(point.getAttributes()
-                    .get(AttributeKey.stringKey("tpf.step.class"))))
-                .count());
-            long maxValue = maxConcurrency.getLongGaugeData().getPoints().stream()
-                .findFirst()
-                .orElseThrow()
-                .getValue();
-            assertEquals(4L, maxValue);
-        } finally {
-            tracerProvider.shutdown();
-            meterProvider.shutdown();
-            GlobalOpenTelemetry.resetForTest();
-        }
+        String stepClass = DummyStep.class.getName();
+        assertEquals(1, inflight.getLongGaugeData().getPoints().stream()
+            .filter(point -> stepClass.equals(point.getAttributes()
+                .get(AttributeKey.stringKey("tpf.step.class"))))
+            .count());
+        long maxValue = maxConcurrency.getLongGaugeData().getPoints().stream()
+            .findFirst()
+            .orElseThrow()
+            .getValue();
+        assertEquals(4L, maxValue);
     }
 
-    static final class DummyStep {
+    @Test
+    void resolvesConsumerAndProducerStepForProxyClasses() {
+        PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
+        PipelineTelemetry.RunContext runContext =
+            telemetry.startRun(Multi.createFrom().items(1, 2), 1, ParallelismPolicy.AUTO, 4);
+
+        Multi<Integer> consumed = telemetry.instrumentItemConsumed(
+            DummyStep$$Proxy.class, runContext, Multi.createFrom().items(1, 2));
+        consumed.collect().asList().await().indefinitely();
+
+        Multi<Integer> produced = telemetry.instrumentItemProduced(
+            DummyStep_ClientProxy.class, runContext, Multi.createFrom().items(3, 4));
+        produced.collect().asList().await().indefinitely();
+
+        Collection<MetricData> metrics = metricReader.collectAllMetrics();
+        MetricData consumedMetric = metrics.stream()
+            .filter(metric -> "tpf.item.consumed".equals(metric.getName()))
+            .findFirst()
+            .orElseThrow();
+        MetricData producedMetric = metrics.stream()
+            .filter(metric -> "tpf.item.produced".equals(metric.getName()))
+            .findFirst()
+            .orElseThrow();
+
+        String stepClass = DummyStep.class.getName();
+        AttributeKey<String> stepKey = AttributeKey.stringKey("tpf.step.class");
+
+        assertTrue(consumedMetric.getLongSumData().getPoints().stream()
+            .anyMatch(point -> stepClass.equals(point.getAttributes().get(stepKey))),
+            "Expected consumed metric for resolved step class");
+        assertTrue(producedMetric.getLongSumData().getPoints().stream()
+            .anyMatch(point -> stepClass.equals(point.getAttributes().get(stepKey))),
+            "Expected produced metric for resolved step class");
+    }
+
+    @Test
+    void recordsItemSuccessSloFromConsumedAndProducedCounts() {
+        PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
+        PipelineTelemetry.RunContext runContext =
+            telemetry.startRun(Multi.createFrom().items(1, 2, 3), 1, ParallelismPolicy.AUTO, 4);
+
+        Multi<Integer> consumed = telemetry.instrumentItemConsumed(
+            DummyStep.class, runContext, Multi.createFrom().items(1, 2, 3));
+        consumed.collect().asList().await().indefinitely();
+
+        Multi<Integer> produced = telemetry.instrumentItemProduced(
+            DummyStep.class, runContext, Multi.createFrom().items(1, 2));
+        produced.collect().asList().await().indefinitely();
+
+        Multi<Integer> completed = (Multi<Integer>) telemetry.instrumentRunCompletion(
+            Multi.createFrom().item(1), runContext);
+        completed.collect().asList().await().indefinitely();
+
+        Collection<MetricData> metrics = metricReader.collectAllMetrics();
+        MetricData total = metrics.stream()
+            .filter(metric -> "tpf.slo.item.success.total".equals(metric.getName()))
+            .findFirst()
+            .orElseThrow();
+        MetricData good = metrics.stream()
+            .filter(metric -> "tpf.slo.item.success.good".equals(metric.getName()))
+            .findFirst()
+            .orElseThrow();
+
+        long totalValue = total.getLongSumData().getPoints().stream()
+            .findFirst()
+            .orElseThrow()
+            .getValue();
+        long goodValue = good.getLongSumData().getPoints().stream()
+            .findFirst()
+            .orElseThrow()
+            .getValue();
+
+        assertEquals(3L, totalValue, "Expected total items to match consumed count");
+        assertEquals(2L, goodValue, "Expected good items to match produced count");
+    }
+
+    @Test
+    void normalizesStepAttributesForProxyClasses() {
+        PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
+        Multi<Integer> input = Multi.createFrom().items(1, 2);
+        PipelineTelemetry.RunContext runContext =
+            telemetry.startRun(input, 1, ParallelismPolicy.AUTO, 4);
+
+        Multi<Integer> instrumented = (Multi<Integer>) telemetry.instrumentInput(input, runContext);
+        Multi<Integer> stepped =
+            telemetry.instrumentStepMulti(DummyStep$$Proxy.class, instrumented, runContext, true);
+        Multi<Integer> completed =
+            (Multi<Integer>) telemetry.instrumentRunCompletion(stepped, runContext);
+
+        completed.collect().asList().await().indefinitely();
+
+        Collection<MetricData> metrics = metricReader.collectAllMetrics();
+        MetricData stepDurationMetric = metrics.stream()
+            .filter(metric -> "tpf.step.duration".equals(metric.getName()))
+            .findFirst()
+            .orElseThrow();
+
+        String resolved = DummyStep.class.getName();
+        AttributeKey<String> stepKey = AttributeKey.stringKey("tpf.step.class");
+        assertTrue(stepDurationMetric.getHistogramData().getPoints().stream()
+            .anyMatch(point -> resolved.equals(point.getAttributes().get(stepKey))),
+            "Expected step duration metric to use normalized step class");
+    }
+
+    static class DummyStep {
+    }
+
+    static final class DummyStep$$Proxy extends DummyStep {
+    }
+
+    static final class DummyStep_ClientProxy extends DummyStep {
     }
 
     static final class TestPipelineStepConfig implements PipelineStepConfig {
@@ -245,6 +341,16 @@ class PipelineTelemetryTest {
         @Override
         public Boolean enabled() {
             return true;
+        }
+
+        @Override
+        public Optional<String> itemInputType() {
+            return Optional.empty();
+        }
+
+        @Override
+        public Optional<String> itemOutputType() {
+            return Optional.empty();
         }
 
         @Override

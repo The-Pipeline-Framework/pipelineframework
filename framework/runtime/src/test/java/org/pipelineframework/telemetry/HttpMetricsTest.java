@@ -18,7 +18,6 @@ package org.pipelineframework.telemetry;
 
 import java.util.Collection;
 
-import io.grpc.Status;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.sdk.OpenTelemetrySdk;
@@ -29,10 +28,10 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class RpcMetricsTest {
+class HttpMetricsTest {
 
     @Test
-    void recordsGrpcServerMetrics() {
+    void recordsHttpServerMetrics() {
         InMemoryMetricReader metricReader = InMemoryMetricReader.create();
         SdkMeterProvider meterProvider = SdkMeterProvider.builder()
             .registerMetricReader(metricReader)
@@ -42,27 +41,29 @@ class RpcMetricsTest {
             .build();
         GlobalOpenTelemetry.resetForTest();
         GlobalOpenTelemetry.set(sdk);
-        RpcMetrics.resetForTest();
+        HttpMetrics.resetForTest();
 
         try {
-            RpcMetrics.recordGrpcServer("ProcessPaymentStatusService", "remoteProcess", Status.Code.OK, 1_000_000);
+            long startNanos = System.nanoTime();
+            HttpMetrics.recordHttpServer("ProcessPaymentStatusService", "process", null, startNanos);
 
             Collection<MetricData> metrics = metricReader.collectAllMetrics();
             MetricData requests = metrics.stream()
                 .filter(metric -> "rpc.server.requests".equals(metric.getName()))
                 .findFirst()
                 .orElseThrow();
-            boolean hasSloTotals = metrics.stream()
-                .anyMatch(metric -> "tpf.slo.rpc.server.total".equals(metric.getName()));
-            boolean hasSloLatency = metrics.stream()
-                .anyMatch(metric -> "tpf.slo.rpc.server.latency.total".equals(metric.getName()));
-
+            boolean hasHttpSystem = requests.getLongSumData().getPoints().stream()
+                .anyMatch(point -> "http".equals(
+                    point.getAttributes().get(AttributeKey.stringKey("rpc.system"))));
             boolean hasService = requests.getLongSumData().getPoints().stream()
                 .anyMatch(point -> "ProcessPaymentStatusService".equals(
                     point.getAttributes().get(AttributeKey.stringKey("rpc.service"))));
-            assertTrue(hasService);
-            assertTrue(hasSloTotals);
-            assertTrue(hasSloLatency);
+            boolean hasSloTotals = metrics.stream()
+                .anyMatch(metric -> "tpf.slo.rpc.server.total".equals(metric.getName()));
+
+            assertTrue(hasHttpSystem, "Expected rpc.system=http attribute on rpc.server.requests");
+            assertTrue(hasService, "Expected rpc.service=ProcessPaymentStatusService attribute");
+            assertTrue(hasSloTotals, "Expected tpf.slo.rpc.server.total metric to be present");
         } finally {
             meterProvider.shutdown();
             GlobalOpenTelemetry.resetForTest();

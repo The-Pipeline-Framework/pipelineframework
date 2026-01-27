@@ -161,7 +161,11 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                     .addModifiers(Modifier.PUBLIC)
                     .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputDto))
                     .addParameter(inputDto, "input");
-                applyOneToOneMethod.addStatement("return this.restClient.process(input)");
+                applyOneToOneMethod.addStatement(
+                    "return $T.instrumentClient($S, $S, this.restClient.process(input))",
+                    ClassName.get("org.pipelineframework.telemetry", "HttpMetrics"),
+                    model.serviceName(),
+                    "process");
                 clientStepBuilder.addMethod(applyOneToOneMethod.build());
             }
             case UNARY_STREAMING -> {
@@ -172,7 +176,11 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                     .addModifiers(Modifier.PUBLIC)
                     .returns(ParameterizedTypeName.get(ClassName.get(Multi.class), outputDto))
                     .addParameter(inputDto, "input")
-                    .addStatement("return this.restClient.process(input)")
+                    .addStatement(
+                        "return $T.instrumentClient($S, $S, this.restClient.process(input))",
+                        ClassName.get("org.pipelineframework.telemetry", "HttpMetrics"),
+                        model.serviceName(),
+                        "process")
                     .build();
                 clientStepBuilder.addMethod(applyOneToManyMethod);
             }
@@ -184,7 +192,11 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                     .addModifiers(Modifier.PUBLIC)
                     .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputDto))
                     .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class), inputDto), "inputs")
-                    .addStatement("return this.restClient.process(inputs)")
+                    .addStatement(
+                        "return $T.instrumentClient($S, $S, this.restClient.process(inputs))",
+                        ClassName.get("org.pipelineframework.telemetry", "HttpMetrics"),
+                        model.serviceName(),
+                        "process")
                     .build();
                 clientStepBuilder.addMethod(applyBatchMultiMethod);
             }
@@ -196,7 +208,11 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                     .addModifiers(Modifier.PUBLIC)
                     .returns(ParameterizedTypeName.get(ClassName.get(Multi.class), outputDto))
                     .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class), inputDto), "inputs")
-                    .addStatement("return this.restClient.process(inputs)")
+                    .addStatement(
+                        "return $T.instrumentClient($S, $S, this.restClient.process(inputs))",
+                        ClassName.get("org.pipelineframework.telemetry", "HttpMetrics"),
+                        model.serviceName(),
+                        "process")
                     .build();
                 clientStepBuilder.addMethod(applyTransformMethod);
             }

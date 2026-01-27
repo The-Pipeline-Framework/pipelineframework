@@ -165,6 +165,19 @@ Prefix: `pipeline`
 | `pipeline.parallelism`     | string  | `AUTO`  | Parallelism policy: `SEQUENTIAL`, `AUTO`, or `PARALLEL`.    |
 | `pipeline.max-concurrency` | integer | `128`   | Per-step maximum in-flight items when parallel execution is enabled. |
 
+### Telemetry
+
+Prefix: `pipeline.telemetry`
+
+| Property                      | Type   | Default | Description                                                        |
+|-------------------------------|--------|---------|--------------------------------------------------------------------|
+| `pipeline.telemetry.item-input-type` | string | none    | Fully-qualified input type used to define the item boundary (build-time only — requires rebuild to take effect). |
+| `pipeline.telemetry.item-output-type` | string | none    | Fully-qualified output type used to define the item boundary (build-time only — requires rebuild to take effect). |
+| `pipeline.telemetry.slo.rpc-latency-ms` | number | `1000` | RPC latency threshold (ms) used to emit SLO counters. |
+| `pipeline.telemetry.slo.item-throughput-per-min` | number | `1000` | Item throughput threshold (items/min) used to emit SLO counters. |
+
+Item boundary types are compiled into telemetry metadata; runtime changes do not apply unless you rebuild the project.
+
 ### Global Defaults
 
 Prefix: `pipeline.defaults`

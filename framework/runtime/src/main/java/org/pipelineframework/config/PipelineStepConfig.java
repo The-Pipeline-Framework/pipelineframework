@@ -251,6 +251,22 @@ public interface PipelineStepConfig {
         Boolean enabled();
 
         /**
+         * Fully-qualified input type used to define the item boundary for telemetry.
+         *
+         * @return configured input item type, if any
+         */
+        @WithName("item-input-type")
+        Optional<String> itemInputType();
+
+        /**
+         * Fully-qualified output type used to define the item boundary for telemetry.
+         *
+         * @return configured output item type, if any
+         */
+        @WithName("item-output-type")
+        Optional<String> itemOutputType();
+
+        /**
          * Tracing configuration for pipeline spans.
          *
          * @return tracing configuration

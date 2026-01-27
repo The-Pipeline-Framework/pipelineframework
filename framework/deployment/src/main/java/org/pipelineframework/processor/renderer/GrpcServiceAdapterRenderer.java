@@ -190,19 +190,21 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 .addStatement("long startTime = System.nanoTime()")
                 .addCode("""
                     return adapter.remoteProcess($N)
-                        .onItem().invoke(item -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime))
-                        .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
-                            System.nanoTime() - startTime));
+                        .onTermination().invoke((item, failure, cancelled) -> {
+                            $T status = cancelled ? $T.CANCELLED
+                                : failure != null ? $T.fromThrowable(failure)
+                                : $T.OK;
+                            $T.recordGrpcServer($S, $S, status, System.nanoTime() - startTime);
+                        });
                     """,
                     "request",
-                    ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
-                    model.serviceName(),
-                    "remoteProcess",
+                    ClassName.get("io.grpc", "Status"),
+                    ClassName.get("io.grpc", "Status"),
+                    ClassName.get("io.grpc", "Status"),
                     ClassName.get("io.grpc", "Status"),
                     ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
                     model.serviceName(),
-                    "remoteProcess",
-                    ClassName.get("io.grpc", "Status"));
+                    "remoteProcess");
 
         // Add @RunOnVirtualThread annotation if the property is enabled
         if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
@@ -267,19 +269,21 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 .addStatement("long startTime = System.nanoTime()")
                 .addCode("""
                     return adapter.remoteProcess($N)
-                        .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
-                            System.nanoTime() - startTime))
-                        .onCompletion().invoke(() -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime));
+                        .onTermination().invoke((failure, cancelled) -> {
+                            $T status = cancelled ? $T.CANCELLED
+                                : failure != null ? $T.fromThrowable(failure)
+                                : $T.OK;
+                            $T.recordGrpcServer($S, $S, status, System.nanoTime() - startTime);
+                        });
                     """,
                     "request",
-                    ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
-                    model.serviceName(),
-                    "remoteProcess",
+                    ClassName.get("io.grpc", "Status"),
+                    ClassName.get("io.grpc", "Status"),
+                    ClassName.get("io.grpc", "Status"),
                     ClassName.get("io.grpc", "Status"),
                     ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
                     model.serviceName(),
-                    "remoteProcess",
-                    ClassName.get("io.grpc", "Status"));
+                    "remoteProcess");
 
         // Add @RunOnVirtualThread annotation if the property is enabled
         if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
@@ -346,19 +350,21 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 .addStatement("long startTime = System.nanoTime()")
                 .addCode("""
                     return adapter.remoteProcess($N)
-                        .onItem().invoke(item -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime))
-                        .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
-                            System.nanoTime() - startTime));
+                        .onTermination().invoke((item, failure, cancelled) -> {
+                            $T status = cancelled ? $T.CANCELLED
+                                : failure != null ? $T.fromThrowable(failure)
+                                : $T.OK;
+                            $T.recordGrpcServer($S, $S, status, System.nanoTime() - startTime);
+                        });
                     """,
                     "request",
-                    ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
-                    model.serviceName(),
-                    "remoteProcess",
+                    ClassName.get("io.grpc", "Status"),
+                    ClassName.get("io.grpc", "Status"),
+                    ClassName.get("io.grpc", "Status"),
                     ClassName.get("io.grpc", "Status"),
                     ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
                     model.serviceName(),
-                    "remoteProcess",
-                    ClassName.get("io.grpc", "Status"));
+                    "remoteProcess");
 
         // Add @RunOnVirtualThread annotation if the property is enabled
         if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
@@ -421,19 +427,21 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 .addStatement("long startTime = System.nanoTime()")
                 .addCode("""
                     return adapter.remoteProcess($N)
-                        .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
-                            System.nanoTime() - startTime))
-                        .onCompletion().invoke(() -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime));
+                        .onTermination().invoke((failure, cancelled) -> {
+                            $T status = cancelled ? $T.CANCELLED
+                                : failure != null ? $T.fromThrowable(failure)
+                                : $T.OK;
+                            $T.recordGrpcServer($S, $S, status, System.nanoTime() - startTime);
+                        });
                     """,
                     "request",
-                    ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
-                    model.serviceName(),
-                    "remoteProcess",
+                    ClassName.get("io.grpc", "Status"),
+                    ClassName.get("io.grpc", "Status"),
+                    ClassName.get("io.grpc", "Status"),
                     ClassName.get("io.grpc", "Status"),
                     ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
                     model.serviceName(),
-                    "remoteProcess",
-                    ClassName.get("io.grpc", "Status"));
+                    "remoteProcess");
 
         // Add @RunOnVirtualThread annotation if the property is enabled
         if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
