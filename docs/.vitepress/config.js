@@ -163,11 +163,11 @@ export default withMermaid(
       },
       
       socialLinks: [
-        { icon: 'github', link: 'https://github.com/mbarcia/pipelineframework' }
+        { icon: 'github', link: 'https://github.com/The-Pipeline-Framework/pipelineframework' }
       ],
 
       editLink: {
-        pattern: 'https://github.com/mbarcia/pipelineframework/edit/main/docs/:path',
+        pattern: 'https://github.com/The-Pipeline-Framework/pipelineframework/edit/main/docs/:path',
         text: 'Edit this page'
       }
 
