@@ -210,6 +210,7 @@ public final class HttpMetrics {
     }
 
     public static synchronized void resetForTest() {
+        // Test-only helper to clear cached meters/counters.
         meter = null;
         serverRequests = null;
         serverResponses = null;

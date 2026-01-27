@@ -92,6 +92,7 @@ public final class PipelineTelemetryResourceLoader {
      * @param itemOutputType configured output item type
      * @param producerStep step class that produces the output item type
      * @param consumerStep step class that consumes the input item type
+     * @param stepParents mapping of plugin steps to their parent step classes
      */
     public record ItemBoundary(
         String itemInputType,

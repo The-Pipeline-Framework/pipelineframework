@@ -263,6 +263,11 @@ public class OrchestratorClientModuleMapping {
      * @param port module port (nullable)
      */
     public record ModuleConfig(String name, String host, Integer port) {
+        /**
+         * Create a module config with only a name, leaving host and port unset.
+         *
+         * @param name module name
+         */
         public ModuleConfig(String name) {
             this(name, null, null);
         }

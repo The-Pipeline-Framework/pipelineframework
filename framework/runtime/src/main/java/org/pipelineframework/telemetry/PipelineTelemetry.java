@@ -674,6 +674,8 @@ public class PipelineTelemetry {
      * @param inflightMax max in-flight item count
      * @param inflightSamples number of in-flight samples taken
      * @param inflightSum sum of in-flight samples
+     * @param itemsConsumed number of items consumed at the boundary
+     * @param itemsProduced number of items produced at the boundary
      */
     public record RunContext(
         Context context,

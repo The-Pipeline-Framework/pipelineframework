@@ -330,7 +330,6 @@ public class PipelineRunner implements AutoCloseable {
         return applyOneToOneUnchecked(step, current, false, DEFAULT_MAX_CONCURRENCY, null, null);
     }
 
-    @SuppressWarnings({"unchecked"})
     /**
      * Apply a one-to-one step to a Uni or Multi input with optional parallelism and telemetry.
      *
@@ -344,6 +343,7 @@ public class PipelineRunner implements AutoCloseable {
      * @param <O> output type
      * @return transformed Uni or Multi
      */
+    @SuppressWarnings({"unchecked"})
     public static <I, O> Object applyOneToOneUnchecked(
         StepOneToOne<I, O> step,
         Object current,
