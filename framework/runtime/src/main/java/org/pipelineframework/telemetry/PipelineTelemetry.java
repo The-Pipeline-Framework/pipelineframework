@@ -635,6 +635,9 @@ public class PipelineTelemetry {
     }
 
     private Attributes stepAttributes(String stepClassName) {
+        if (stepClassName == null) {
+            return Attributes.empty();
+        }
         return Attributes.of(
             STEP_CLASS, stepClassName,
             STEP_PARENT, resolveStepParent(stepClassName));
