@@ -21,13 +21,13 @@
     <parent>
         <groupId>org.pipelineframework</groupId>
         <artifactId>framework-parent</artifactId>
-        <version>26.2.3-SNAPSHOT</version>
+        <version>26.2.3</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <groupId>org.pipelineframework</groupId>
     <artifactId>pipelineframework</artifactId>
-    <version>26.2.3-SNAPSHOT</version>
+    <version>26.2.3</version>
     <!-- version is not needed as it is automatically inherited from the parent-->
 
     <name>The Pipeline Framework Extension (Runtime)</name>
@@ -53,7 +53,7 @@
         <connection>scm:git:https://github.com/The-Pipeline-Framework/pipelineframework.git</connection>
         <developerConnection>scm:git:git@github.com:The-Pipeline-Framework/pipelineframework.git</developerConnection>
         <url>https://github.com/The-Pipeline-Framework/pipelineframework</url>
-        <tag>v26.2.2</tag>
+        <tag>v26.2.3</tag>
     </scm>
 
     <dependencyManagement>
