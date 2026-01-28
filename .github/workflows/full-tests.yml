@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'framework/**'
+      - 'examples/**'
+      - 'pom.xml'
+      - '.github/workflows/full-tests.yml'
 
 env:
   MAVEN_OPTS: -Xmx1g -Xms512m

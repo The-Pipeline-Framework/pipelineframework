@@ -6,6 +6,11 @@ concurrency:
 
 on:
   pull_request:
+    paths:
+      - 'framework/**'
+      - 'examples/**'
+      - 'pom.xml'
+      - '.github/workflows/build.yml'
 
 env:
   MAVEN_OPTS: -Xmx1g -Xms512m
