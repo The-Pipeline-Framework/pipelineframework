@@ -22,7 +22,7 @@
     <parent>
         <groupId>org.pipelineframework.search</groupId>
         <artifactId>search-pipeline</artifactId>
-        <version>26.2.3</version>
+        <version>26.2.4-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
