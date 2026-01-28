@@ -3,7 +3,7 @@
 [![Maven Central](https://img.shields.io/maven-central/v/org.pipelineframework/pipelineframework.svg?label=Maven%20Central)](https://search.maven.org/search?q=g:%22org.pipelineframework%22%20AND%20a:%22pipelineframework%22)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Java 21+](https://img.shields.io/badge/Java-21+-brightgreen.svg)](https://adoptium.net/)
-[![Quarkus](https://img.shields.io/badge/Quarkus-3.29.4-orange)](https://quarkus.io)
+[![Quarkus](https://img.shields.io/badge/Quarkus-3.30.5-orange)](https://quarkus.io)
 [![CodeRabbit](https://img.shields.io/coderabbit/prs/github/The-Pipeline-Framework/pipelineframework?label=CodeRabbit&color=purple
 )](https://coderabbit.ai)
 
