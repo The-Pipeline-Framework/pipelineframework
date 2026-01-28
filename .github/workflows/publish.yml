@@ -28,12 +28,12 @@ jobs:
           gpg-passphrase: GPG_PASSPHRASE
 
       - name: Build framework for release
-        run: ./mvnw -B -pl framework -am clean install -Pcentral-publishing -DskipTests --no-transfer-progress
+        run: ./mvnw -B -pl framework,framework/runtime,framework/deployment -am clean install -Pcentral-publishing -DskipTests --no-transfer-progress
         env:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
       - name: Deploy to Maven Central
-        run: ./mvnw -B -pl framework -am deploy -Pcentral-publishing -DskipTests -U
+        run: ./mvnw -B -pl framework,framework/runtime,framework/deployment -am deploy -Pcentral-publishing -DskipTests -U
         env:
           CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
           CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
