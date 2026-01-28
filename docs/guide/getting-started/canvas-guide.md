@@ -47,7 +47,6 @@ Visit https://app.pipelineframework.org in your web browser.
 ### Field Synchronization
 - Connected steps automatically synchronize their field definitions
 - Changes to fields in one step propagate to connected steps
-- Type mismatches and field synchronization are handled automatically
 - Most type conversions are handled automatically by MapStruct (primitives, UUID, BigDecimal, Java time types, etc.)
 - Specialized types (Currency, AtomicInteger, AtomicLong, `List<String>`) use custom converters
 

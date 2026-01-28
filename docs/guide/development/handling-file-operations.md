@@ -50,6 +50,9 @@ public class ProcessFileRestResource {
     
     @Inject
     ProcessFileReactiveService domainService;
+
+    @Inject
+    InputTypeMapper inputTypeMapper;
     
     @POST
     @Path("/process-download")
@@ -71,23 +74,23 @@ public class ProcessFileRestResource {
         String fileName = filePath.getFileName().toString();
         
         StreamingOutput output = outputStream -> {
-            try {
-                Files.copy(filePath, outputStream);
-            } finally {
-                // Clean up the temporary file after streaming
-                try {
-                    Files.deleteIfExists(filePath);
-                } catch (IOException e) {
-                    LOG.warn("Failed to delete temporary file: {}", filePath, e);
-                }
-            }
+            Files.copy(filePath, outputStream);
         };
         
         return Uni.createFrom().item(
             Response.ok(output)
                 .header("Content-Disposition", "attachment; filename=\"" + fileName + "\"")
                 .header("Content-Type", "text/csv")
-                .build());
+                .build())
+            .onTermination().invoke(() -> cleanupTempFile(filePath));
+    }
+
+    private void cleanupTempFile(java.nio.file.Path filePath) {
+        try {
+            Files.deleteIfExists(filePath);
+        } catch (IOException e) {
+            LOG.warn("Failed to delete temporary file: {}", filePath, e);
+        }
     }
 }
 ```
@@ -123,7 +126,7 @@ public class CustomFileProcessingResource {
     @POST
     @Path("/download")
     @Produces(MediaType.APPLICATION_OCTET_STREAM)
-    public Uni<Response> downloadFile(List<PaymentOutputDto> request) {
+    public Uni<Response> downloadFile(List<InputTypeDto> request) {
         // Use the same domain service for processing
         // Add file download specific logic
     }
@@ -169,6 +172,14 @@ public class FileDownloadService {
 ### 4. Testing Strategy
 - Generated resources come with basic functionality that's automatically tested
 - Custom resources for file operations will need additional test coverage
+
+### 5. Security Considerations
+- Validate and sanitize file paths to prevent path traversal in custom file operations
+- Enforce authorization checks before any file access or streaming begins
+- Normalize file names to remove special characters and path components
+- Enforce maximum file size limits and disk quota checks for uploads and temp files
+- Validate or scan file content for malicious payloads before persistence or streaming
+- Use secure temporary file creation with strict permissions and safe locations, and clean up via the same resource management patterns described above
 
 ## Best Practices
 

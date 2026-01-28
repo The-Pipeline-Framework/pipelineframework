@@ -39,7 +39,7 @@ my-pipeline-application/
 
 At build time, the annotation processor generates role-specific sources into:
 
-```
+```text
 target/generated-sources/pipeline/<role>
 ```
 
@@ -70,4 +70,3 @@ graph TB
 - [Common Module Structure](/guide/design/common-module-structure)
 - [Configuration Reference](/guide/build/configuration/)
 - [Orchestrator Runtime](/guide/development/orchestrator-runtime)
-

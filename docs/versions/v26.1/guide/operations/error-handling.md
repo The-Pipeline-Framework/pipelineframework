@@ -231,7 +231,7 @@ The DLQ mechanism captures failed items for later inspection and reprocessing.
 
 ### DLQ Configuration
 
-DLQ/recovery is configured at runtime, not via @PipelineStep. Use StepConfig or application.properties (see Configuration Reference and Runtime Configuration below) for the exact settings.
+DLQ/recovery is configured at runtime, not via @PipelineStep. Use StepConfig or application.properties (see Configuration Reference below) for the exact settings.
 
 ### Persistence Dependencies
 

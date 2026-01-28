@@ -70,12 +70,12 @@ flowchart TD
 Consider a pipeline with two steps and a global persistence aspect applied AFTER each step:
 
 Before aspect application:
-```
+```text
 Order -> ValidateOrder -> ValidatedOrder -> ProcessPayment -> PaymentResult
 ```
 
 After aspect application:
-```
+```text
 Order -> ValidateOrder -> PersistValidation -> ProcessPayment -> PersistPayment -> PaymentResult
 ```
 

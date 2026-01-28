@@ -37,4 +37,4 @@ For step shapes and how to reason about expansion vs. reduction, see
 
 ## Server Execution Strategy
 
-Service-side execution (event loop vs. blocking or virtual threads) affects throughput for I/O heavy steps. See [@PipelineStep Annotation](/versions/v26.1/guide/development/pipeline-step) for service-side execution options.
+Service-side execution (event loop vs. blocking or virtual threads) affects throughput for I/O-heavy steps. See [@PipelineStep Annotation](/versions/v26.1/guide/development/pipeline-step) for service-side execution options.

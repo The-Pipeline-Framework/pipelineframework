@@ -3,7 +3,7 @@
 This guide shows how to implement a pipeline step service and the supporting mappers.
 
 <Callout type="tip" title="Canvas First">
-Use the Canvas designer at <a href="https://app.pipelineframework.org" target="_blank">https://app.pipelineframework.org</a> for the fastest path, then refine the generated services in code.
+Use the Canvas designer at <a href="https://app.pipelineframework.org" target="_blank" rel="noopener noreferrer">https://app.pipelineframework.org</a> for the fastest path, then refine the generated services in code.
 </Callout>
 
 ## 1) Pick the Service Interface

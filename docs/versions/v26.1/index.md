@@ -11,7 +11,7 @@ hero:
   actions:
     - theme: brand
       text: Quick Start
-      link: /guide/getting-started/quick-start
+      link: /versions/v26.1/guide/getting-started/quick-start
     - theme: alt
       text: View on GitHub
       link: https://github.com/The-Pipeline-Framework/pipelineframework

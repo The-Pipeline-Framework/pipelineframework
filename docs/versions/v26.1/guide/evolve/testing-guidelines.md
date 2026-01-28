@@ -76,7 +76,7 @@ Main branch / Release builds should run with:
 Effect:
 - Surefire and Failsafe both run
 - Integration tests run
-- Container images are built (but via docker build, as Jib fails on GitHub Actions)
+- Container images are built via docker build; Jib is supported on GitHub Actions but requires registry credentials
 - Coverage still only from Surefire tests
 
 What not to do:
