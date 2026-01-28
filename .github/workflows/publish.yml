@@ -26,7 +26,7 @@ jobs:
           gpg-passphrase: GPG_PASSPHRASE
 
       - name: Build framework for release
-        run: ./mvnw -B -f framework/pom.xml clean install -Pcentral-publishing -DskipTests
+        run: ./mvnw -B -f framework/pom.xml clean install -Pcentral-publishing -DskipTests --no-transfer-progress
         env:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
 
