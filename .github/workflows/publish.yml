@@ -35,14 +35,14 @@ jobs:
           OSSRH_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
           OSSRH_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-        run: ./mvnw -B -f framework/pom.xml clean install -Pcentral-publishing -DskipTests -Dgpg.passphrase=${{ secrets.GPG_PASSPHRASE }}
+        run: ./mvnw -B -f framework/pom.xml clean install -Pcentral-publishing -DskipTests -Dgpg.passphrase="$GPG_PASSPHRASE"
 
       - name: Deploy to Maven Central
         env:
           OSSRH_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
           OSSRH_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-        run: ./mvnw -B -f framework/pom.xml deploy -Pcentral-publishing -DskipTests -U -Dgpg.passphrase=${{ secrets.GPG_PASSPHRASE }}
+        run: ./mvnw -B -f framework/pom.xml deploy -Pcentral-publishing -DskipTests -U -Dgpg.passphrase="$GPG_PASSPHRASE"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
