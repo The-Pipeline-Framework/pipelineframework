@@ -26,7 +26,7 @@ The project uses three independent workflows:
 
 - `-DskipITs` — Skip integration tests
 - `-DskipNative=true` — Skip native builds
-- `-Dquarkus.container-image.build=false` — Skips building Jib image (but uses Docker build)
+- `-Dquarkus.container-image.build=false` — Skips building Jib image
 - `-Pcoverage` — Enable coverage for unit tests only
 - `-Pcentral-publishing` — Release mode for Maven Central deploy
 - Avoid mixing `skipTests` and `skipITs`
