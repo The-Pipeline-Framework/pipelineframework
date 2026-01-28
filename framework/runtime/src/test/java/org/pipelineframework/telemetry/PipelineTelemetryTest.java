@@ -289,7 +289,6 @@ class PipelineTelemetryTest {
         }
     }
 
-    static final class DummyStep {
     static final class DummyStep$$Proxy extends DummyStep {
     }
 

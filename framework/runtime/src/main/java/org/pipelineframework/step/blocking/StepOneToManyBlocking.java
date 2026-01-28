@@ -83,6 +83,7 @@ List<O> applyList(I in);
             })
             .onFailure(this::shouldRetry)
             .invoke(t -> PipelineTelemetry.recordRetry(this.getClass()))
+            .onFailure(this::shouldRetry)
             .retry()
             .withBackOff(retryWait(), maxBackoff())
             .withJitter(jitter() ? 0.5 : 0.0)

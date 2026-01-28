@@ -347,6 +347,7 @@ public class PipelineExecutionService {
     AtomicBoolean logged = new AtomicBoolean(false);
     return Multi.createFrom().emitter(emitter -> {
       AtomicReference<Cancellable> cancellableRef = new AtomicReference<>();
+      AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>();
       ScheduledFuture<?> future = killSwitchExecutor.scheduleAtFixedRate(() -> {
         telemetry.retryAmplificationTrigger().ifPresent(trigger -> {
           if (!logged.compareAndSet(false, true)) {
@@ -360,16 +361,25 @@ public class PipelineExecutionService {
               cancellable.cancel();
             }
           } else {
-            future.cancel(false);
+            ScheduledFuture<?> scheduled = futureRef.get();
+            if (scheduled != null) {
+              scheduled.cancel(false);
+            }
           }
         });
       }, interval.toMillis(), interval.toMillis(), TimeUnit.MILLISECONDS);
+      futureRef.set(future);
       Cancellable cancellable = multi.subscribe().with(
           emitter::emit,
           emitter::fail,
           emitter::complete);
       cancellableRef.set(cancellable);
-      emitter.onTermination(() -> future.cancel(false));
+      emitter.onTermination(() -> {
+        ScheduledFuture<?> scheduled = futureRef.get();
+        if (scheduled != null) {
+          scheduled.cancel(false);
+        }
+      });
     });
   }
 
@@ -382,6 +392,7 @@ public class PipelineExecutionService {
     AtomicBoolean logged = new AtomicBoolean(false);
     return Uni.createFrom().emitter(emitter -> {
       AtomicReference<Cancellable> cancellableRef = new AtomicReference<>();
+      AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>();
       ScheduledFuture<?> future = killSwitchExecutor.scheduleAtFixedRate(() -> {
         telemetry.retryAmplificationTrigger().ifPresent(trigger -> {
           if (!logged.compareAndSet(false, true)) {
@@ -395,21 +406,36 @@ public class PipelineExecutionService {
               cancellable.cancel();
             }
           } else {
-            future.cancel(false);
+            ScheduledFuture<?> scheduled = futureRef.get();
+            if (scheduled != null) {
+              scheduled.cancel(false);
+            }
           }
         });
       }, interval.toMillis(), interval.toMillis(), TimeUnit.MILLISECONDS);
+      futureRef.set(future);
       Cancellable cancellable = uni.subscribe().with(
           item -> {
-            future.cancel(false);
+            ScheduledFuture<?> scheduled = futureRef.get();
+            if (scheduled != null) {
+              scheduled.cancel(false);
+            }
             emitter.complete(item);
           },
           failure -> {
-            future.cancel(false);
+            ScheduledFuture<?> scheduled = futureRef.get();
+            if (scheduled != null) {
+              scheduled.cancel(false);
+            }
             emitter.fail(failure);
           });
       cancellableRef.set(cancellable);
-      emitter.onTermination(() -> future.cancel(false));
+      emitter.onTermination(() -> {
+        ScheduledFuture<?> scheduled = futureRef.get();
+        if (scheduled != null) {
+          scheduled.cancel(false);
+        }
+      });
     });
   }
 

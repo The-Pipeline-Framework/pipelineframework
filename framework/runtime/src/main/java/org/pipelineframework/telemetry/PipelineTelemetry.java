@@ -826,14 +826,15 @@ public class PipelineTelemetry {
         if (tracingEnabled && runContext != null && runContext.span() != null) {
             runContext.span().addEvent(
                 "tpf.kill_switch.triggered",
-                Attributes.of(
-                    KILL_SWITCH_TRIGGERED, true,
-                    KILL_SWITCH_REASON, RETRY_AMPLIFICATION_REASON,
-                    KILL_SWITCH_STEP, trigger.step(),
-                    KILL_SWITCH_INFLIGHT_SLOPE, trigger.inflightSlope(),
-                    KILL_SWITCH_RETRY_RATE, trigger.retryRate(),
-                    KILL_SWITCH_INFLIGHT_SLOPE_THRESHOLD, trigger.inflightSlopeThreshold(),
-                    KILL_SWITCH_RETRY_RATE_THRESHOLD, trigger.retryRateThreshold()));
+                Attributes.builder()
+                    .put(KILL_SWITCH_TRIGGERED, true)
+                    .put(KILL_SWITCH_REASON, RETRY_AMPLIFICATION_REASON)
+                    .put(KILL_SWITCH_STEP, trigger.step())
+                    .put(KILL_SWITCH_INFLIGHT_SLOPE, trigger.inflightSlope())
+                    .put(KILL_SWITCH_RETRY_RATE, trigger.retryRate())
+                    .put(KILL_SWITCH_INFLIGHT_SLOPE_THRESHOLD, trigger.inflightSlopeThreshold())
+                    .put(KILL_SWITCH_RETRY_RATE_THRESHOLD, trigger.retryRateThreshold())
+                    .build());
         }
     }
 
