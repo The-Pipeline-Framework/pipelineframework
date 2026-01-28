@@ -145,3 +145,17 @@ Plugin: `maven-failsafe-plugin`
 If a gRPC/REST endpoint 404s in a container but works in dev mode, it typically
 means the role classes were compiled but not merged into `target/classes` before
 packaging.
+
+## Build switches (properties, not profiles)
+
+We avoid profiles for core lifecycle behavior; CI and release flows toggle behavior via
+properties instead. Common flags you will see in workflows:
+
+- `-DskipTests`, `-DskipITs` — skip unit/integration tests
+- `-DskipNative` — skip native builds
+- `-Dquarkus.container-image.build` — enable/disable image builds
+
+For publishing, a release-only flattening step is enabled via a property to satisfy
+Central validation without affecting normal builds:
+
+- `-Dtpf.flatten.skip=false` — enable POM flattening only during publish

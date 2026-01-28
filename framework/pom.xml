@@ -67,6 +67,7 @@
         <version.jandex>3.5.0</version.jandex>
         <grpc.version>1.75.0</grpc.version>
         <maven.deploy.skip>false</maven.deploy.skip>
+        <tpf.flatten.skip>true</tpf.flatten.skip>
         <surefireArgLine />
     </properties>
 
@@ -154,6 +155,32 @@
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+                <version>1.6.0</version>
+                <configuration>
+                    <skip>${tpf.flatten.skip}</skip>
+                    <updatePomFile>true</updatePomFile>
+                    <flattenMode>resolveDependencies</flattenMode>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>flatten</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>flatten</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>flatten-clean</id>
+                        <phase>clean</phase>
+                        <goals>
+                            <goal>clean</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
             <!-- Versions Maven Plugin for consistent version management across modules -->
             <plugin>
