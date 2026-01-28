@@ -43,6 +43,7 @@ jobs:
       - name: Full clean verify (framework + examples)
         run: |
           ./mvnw $MAVEN_ARGS clean verify \
+          -Pcoverage \
           -DskipNative=true \
           -Dquarkus.package.type=fast-jar \
           -Dquarkus.container-image.build=true \
@@ -72,9 +73,6 @@ jobs:
       - name: Generate JaCoCo aggregate report
         if: github.event_name != 'pull_request'
         run: |
-          # Build with coverage profile enabled to collect coverage data from unit tests only
-          ./mvnw $MAVEN_ARGS clean verify -Pcoverage -DskipITs -DskipNative=true -Dquarkus.package.type=fast-jar -Dquarkus.container-image.build=false
-
           # Generate an aggregated report (this will aggregate across all modules that produced coverage data)
           ./mvnw $MAVEN_ARGS org.jacoco:jacoco-maven-plugin:report-aggregate
 
