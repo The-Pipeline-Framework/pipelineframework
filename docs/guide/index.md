@@ -76,11 +76,14 @@ The framework lets you define pipeline steps as simple classes annotated with `@
 
 ### Evolve
 - [Functional Architecture](/guide/evolve/architecture): Core concepts and architectural patterns
+- [TPF and DDD Alignment](/guide/evolve/ddd-alignment): DDD mapping, gaps, and planned work
+- [Application Design Spectrum](/guide/evolve/design-spectrum): Good vs bad designs and mitigations
 - [Annotation Processor Architecture](/guide/evolve/annotation-processor-architecture): Build-time IR, bindings, and renderers
 - [Plugins Architecture](/guide/evolve/plugins-architecture): Cross-cutting behavior model
 - [Aspect Semantics](/guide/evolve/aspects/semantics): Aspect expansion rules
 - [Aspect Ordering](/guide/evolve/aspects/ordering): Ordering guarantees and constraints
 - [Aspect Warnings](/guide/evolve/aspects/warnings): Known limitations and caveats
+- [Roadmap: Checkpoint Pipelines vs FTGO](/guide/evolve/roadmap): Pessimistic architecture notes and open risks
 - [Reference Implementation](/guide/evolve/reference-implementation): End-to-end example and rationale
 - [Template Generator (Reference)](/guide/evolve/template-generator): Automation/CI usage
 - [Publishing](/guide/evolve/publishing): Release and publishing workflow
