@@ -67,6 +67,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         OrchestratorGrpcRenderer orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
         OrchestratorRestResourceRenderer orchestratorRestRenderer = new OrchestratorRestResourceRenderer();
         OrchestratorCliRenderer orchestratorCliRenderer = new OrchestratorCliRenderer();
+        OrchestratorIngestClientRenderer orchestratorIngestClientRenderer = new OrchestratorIngestClientRenderer();
 
         // Initialize role metadata generator
         RoleMetadataGenerator roleMetadataGenerator = new RoleMetadataGenerator(ctx.getProcessingEnv());
@@ -109,6 +110,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     orchestratorGrpcRenderer,
                     orchestratorRestRenderer,
                     orchestratorCliRenderer,
+                    orchestratorIngestClientRenderer,
                     roleMetadataGenerator,
                     cacheKeyGenerator
                 );
@@ -399,6 +401,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
      * @param orchestratorGrpcRenderer gRPC orchestrator renderer
      * @param orchestratorRestRenderer REST orchestrator renderer
      * @param orchestratorCliRenderer CLI orchestrator renderer
+     * @param orchestratorIngestClientRenderer ingest client renderer
      * @param roleMetadataGenerator role metadata generator
      * @param cacheKeyGenerator cache key generator
      */
@@ -409,6 +412,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             OrchestratorGrpcRenderer orchestratorGrpcRenderer,
             OrchestratorRestResourceRenderer orchestratorRestRenderer,
             OrchestratorCliRenderer orchestratorCliRenderer,
+            OrchestratorIngestClientRenderer orchestratorIngestClientRenderer,
             RoleMetadataGenerator roleMetadataGenerator,
             ClassName cacheKeyGenerator) {
         // Get orchestrator binding from context
@@ -442,6 +446,17 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             if (generateCli) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT;
                 orchestratorCliRenderer.render(binding, new GenerationContext(
+                    ctx.getProcessingEnv(),
+                    resolveRoleOutputDir(ctx, role),
+                    role,
+                    java.util.Set.of(),
+                    cacheKeyGenerator,
+                    descriptorSet));
+            }
+
+            if (!"REST".equalsIgnoreCase(binding.normalizedTransport())) {
+                org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT;
+                orchestratorIngestClientRenderer.render(binding, new GenerationContext(
                     ctx.getProcessingEnv(),
                     resolveRoleOutputDir(ctx, role),
                     role,
