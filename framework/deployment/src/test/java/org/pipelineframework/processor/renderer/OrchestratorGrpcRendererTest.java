@@ -39,6 +39,7 @@ class OrchestratorGrpcRendererTest {
         assertTrue(source.contains("extends MutinyOrchestratorServiceGrpc.OrchestratorServiceImplBase"));
         assertTrue(source.contains("public Uni<OutputType> run(InputType input)"));
         assertTrue(source.contains("executePipelineUnary"));
+        assertTrue(source.contains("public Multi<OutputType> ingest(Multi<InputType> input)"));
     }
 
     @Test
@@ -58,6 +59,7 @@ class OrchestratorGrpcRendererTest {
 
         assertTrue(source.contains("public Multi<OutputType> run(Multi<InputType> input)"));
         assertTrue(source.contains("executePipelineStreaming"));
+        assertTrue(source.contains("public Multi<OutputType> ingest(Multi<InputType> input)"));
     }
 
     private OrchestratorBinding buildBinding(boolean inputStreaming, boolean outputStreaming) {
@@ -112,7 +114,13 @@ class OrchestratorGrpcRendererTest {
                     .setInputType(".com.example.grpc.InputType")
                     .setOutputType(".com.example.grpc.OutputType")
                     .setClientStreaming(inputStreaming)
-                    .setServerStreaming(outputStreaming)))
+                    .setServerStreaming(outputStreaming))
+                .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
+                    .setName("Ingest")
+                    .setInputType(".com.example.grpc.InputType")
+                    .setOutputType(".com.example.grpc.OutputType")
+                    .setClientStreaming(true)
+                    .setServerStreaming(true)))
             .build();
 
         return DescriptorProtos.FileDescriptorSet.newBuilder()

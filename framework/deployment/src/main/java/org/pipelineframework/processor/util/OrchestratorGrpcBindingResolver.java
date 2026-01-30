@@ -168,9 +168,15 @@ public class OrchestratorGrpcBindingResolver {
                 "Method '" + methodName + "' not found in orchestrator service");
         }
         if (serviceDescriptor.getMethods().size() > 1 && messager != null) {
-            messager.printMessage(
-                Diagnostic.Kind.WARNING,
-                "Multiple RPCs found in orchestrator service; only '" + methodName + "' is used.");
+            Set<String> allowed = Set.of("Run", "Ingest");
+            boolean hasUnexpected = serviceDescriptor.getMethods().stream()
+                .map(Descriptors.MethodDescriptor::getName)
+                .anyMatch(name -> !allowed.contains(name));
+            if (hasUnexpected) {
+                messager.printMessage(
+                    Diagnostic.Kind.WARNING,
+                    "Multiple RPCs found in orchestrator service; only '" + methodName + "' is used.");
+            }
         }
         return found;
     }

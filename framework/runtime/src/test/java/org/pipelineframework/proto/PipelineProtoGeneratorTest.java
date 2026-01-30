@@ -106,5 +106,6 @@ class PipelineProtoGeneratorTest {
         assertTrue(orchestratorProto.contains("import \"process-bar-svc.proto\";"));
         assertTrue(orchestratorProto.contains("service OrchestratorService"));
         assertTrue(orchestratorProto.contains("rpc Run (FooInput) returns (stream BarOutput);"));
+        assertTrue(orchestratorProto.contains("rpc Ingest (stream FooInput) returns (stream BarOutput);"));
     }
 }

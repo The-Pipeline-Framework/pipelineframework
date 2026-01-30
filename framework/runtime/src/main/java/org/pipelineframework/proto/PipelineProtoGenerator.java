@@ -371,6 +371,11 @@ public class PipelineProtoGenerator {
         }
         builder.append(last.outputTypeName());
         builder.append(");\n");
+        builder.append("  rpc Ingest (stream ")
+            .append(first.inputTypeName())
+            .append(") returns (stream ")
+            .append(last.outputTypeName())
+            .append(");\n");
         builder.append("}\n");
         return builder.toString();
     }

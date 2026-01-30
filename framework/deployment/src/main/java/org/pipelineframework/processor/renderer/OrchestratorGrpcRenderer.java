@@ -24,6 +24,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
     private static final String GRPC_CLASS = "OrchestratorGrpcService";
     private static final String ORCHESTRATOR_SERVICE = "OrchestratorService";
     private static final String ORCHESTRATOR_METHOD = "Run";
+    private static final String ORCHESTRATOR_INGEST_METHOD = "Ingest";
 
     @Override
     public GenerationTarget target() {
@@ -159,12 +160,36 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
                 ClassName.get("io.grpc", "Status"));
         }
 
+        MethodSpec ingestMethod = MethodSpec.methodBuilder("ingest")
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(ParameterizedTypeName.get(multi, outputType))
+            .addParameter(ParameterizedTypeName.get(multi, inputType), "input")
+            .addStatement("long startTime = System.nanoTime()")
+            .addCode("""
+                return pipelineExecutionService.<$T>executePipelineStreaming(input)
+                    .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
+                        System.nanoTime() - startTime))
+                    .onCompletion().invoke(() -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime));
+                """,
+                outputType,
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_INGEST_METHOD,
+                ClassName.get("io.grpc", "Status"),
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_INGEST_METHOD,
+                ClassName.get("io.grpc", "Status"))
+            .build();
+
         TypeSpec service = TypeSpec.classBuilder(GRPC_CLASS)
             .addModifiers(Modifier.PUBLIC)
             .addAnnotation(grpcServiceAnnotation)
             .superclass(implBase)
             .addField(executionField)
             .addMethod(runMethod.build())
+            .addMethod(ingestMethod)
             .build();
 
         JavaFile.builder(binding.basePackage() + ".orchestrator.service", service)
