@@ -393,6 +393,25 @@ class SearchPipelineEndToEndIT {
         assertRedisKeyState(key, false, "Expected ParsedDocument cache entry to be removed by replay invalidation");
     }
 
+    @Test
+    void preferCacheShouldAvoidRecrawlOnWarmCache() throws Exception {
+        String version = "recrawl-" + UUID.randomUUID();
+        String input = "https://example.com/" + version;
+
+        ProcessResult warm = orchestratorTriggerRun(input, "prefer-cache", version, false);
+        assertExitSuccess(warm, "Expected prefer-cache warm run to succeed");
+
+        int fetchedBefore = countCrawlFetchesFor(input);
+
+        ProcessResult replay = orchestratorTriggerRun(input, "prefer-cache", version, false);
+        assertExitSuccess(replay, "Expected prefer-cache replay run to succeed");
+
+        int fetchedAfter = countCrawlFetchesFor(input);
+        assertTrue(fetchedAfter == fetchedBefore,
+            "Expected cache hit to avoid re-crawling; crawl fetch count changed from "
+                + fetchedBefore + " to " + fetchedAfter);
+    }
+
     private ProcessResult orchestratorTriggerRun(
         String input,
         String cachePolicy,
@@ -507,6 +526,21 @@ class SearchPipelineEndToEndIT {
         return "Title: Example content for " + sourceUrl + "\n"
             + "DocId: " + docId + "\n"
             + "Body: This is a simulated crawl result with headers, metadata, and content.";
+    }
+
+    private int countCrawlFetchesFor(String input) {
+        String marker = "Fetched " + input + " (";
+        String logs = crawlService.getLogs();
+        if (logs == null || logs.isBlank()) {
+            return 0;
+        }
+        int count = 0;
+        int index = 0;
+        while ((index = logs.indexOf(marker, index)) >= 0) {
+            count++;
+            index += marker.length();
+        }
+        return count;
     }
 
     private HttpClient insecureHttpClient() throws Exception {
