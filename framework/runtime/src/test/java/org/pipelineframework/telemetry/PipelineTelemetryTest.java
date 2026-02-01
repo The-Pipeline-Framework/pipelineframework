@@ -39,6 +39,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineStepConfig;
+import org.pipelineframework.telemetry.RetryAmplificationGuardMode;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -443,8 +444,8 @@ class PipelineTelemetryTest {
         }
 
         @Override
-        public String mode() {
-            return "fail-fast";
+        public RetryAmplificationGuardMode mode() {
+            return RetryAmplificationGuardMode.FAIL_FAST;
         }
     }
 

@@ -39,6 +39,9 @@ import io.grpc.Status;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
+import io.smallrye.mutiny.operators.multi.AbstractMultiOperator;
+import io.smallrye.mutiny.operators.multi.MultiOperatorProcessor;
+import io.smallrye.mutiny.subscription.MultiSubscriber;
 import io.smallrye.mutiny.subscription.Cancellable;
 import lombok.Getter;
 import org.apache.commons.lang3.time.StopWatch;
@@ -344,43 +347,7 @@ public class PipelineExecutionService {
     }
     Duration interval = telemetry.retryAmplificationCheckInterval();
     RetryAmplificationGuardMode mode = telemetry.retryAmplificationMode();
-    AtomicBoolean logged = new AtomicBoolean(false);
-    return Multi.createFrom().emitter(emitter -> {
-      AtomicReference<Cancellable> cancellableRef = new AtomicReference<>();
-      AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>();
-      ScheduledFuture<?> future = killSwitchExecutor.scheduleAtFixedRate(() -> {
-        telemetry.retryAmplificationTrigger().ifPresent(trigger -> {
-          if (!logged.compareAndSet(false, true)) {
-            return;
-          }
-          logRetryAmplificationTrigger(trigger, mode);
-          if (mode == RetryAmplificationGuardMode.FAIL_FAST) {
-            emitter.fail(PipelineKillSwitchException.retryAmplification(trigger));
-            Cancellable cancellable = cancellableRef.get();
-            if (cancellable != null) {
-              cancellable.cancel();
-            }
-          } else {
-            ScheduledFuture<?> scheduled = futureRef.get();
-            if (scheduled != null) {
-              scheduled.cancel(false);
-            }
-          }
-        });
-      }, interval.toMillis(), interval.toMillis(), TimeUnit.MILLISECONDS);
-      futureRef.set(future);
-      Cancellable cancellable = multi.subscribe().with(
-          emitter::emit,
-          emitter::fail,
-          emitter::complete);
-      cancellableRef.set(cancellable);
-      emitter.onTermination(() -> {
-        ScheduledFuture<?> scheduled = futureRef.get();
-        if (scheduled != null) {
-          scheduled.cancel(false);
-        }
-      });
-    });
+    return multi.plug(upstream -> new RetryAmplificationGuardMulti<>(upstream, interval, mode));
   }
 
   private <T> Uni<T> attachRetryAmplificationGuard(Uni<T> uni) {
@@ -437,6 +404,91 @@ public class PipelineExecutionService {
         }
       });
     });
+  }
+
+  private final class RetryAmplificationGuardMulti<T> extends AbstractMultiOperator<T, T> {
+    private final Duration interval;
+    private final RetryAmplificationGuardMode mode;
+
+    private RetryAmplificationGuardMulti(
+        Multi<? extends T> upstream,
+        Duration interval,
+        RetryAmplificationGuardMode mode) {
+      super(upstream);
+      this.interval = interval;
+      this.mode = mode;
+    }
+
+    @Override
+    public void subscribe(MultiSubscriber<? super T> downstream) {
+      RetryAmplificationProcessor<T> processor =
+          new RetryAmplificationProcessor<>(downstream, interval, mode);
+      upstream().subscribe(processor);
+    }
+  }
+
+  private final class RetryAmplificationProcessor<T> extends MultiOperatorProcessor<T, T> {
+    private final RetryAmplificationGuardMode mode;
+    private final AtomicBoolean logged;
+    private final ScheduledFuture<?> future;
+
+    private RetryAmplificationProcessor(
+        MultiSubscriber<? super T> downstream,
+        Duration interval,
+        RetryAmplificationGuardMode mode) {
+      super(downstream);
+      this.mode = mode;
+      this.logged = new AtomicBoolean(false);
+      this.future = killSwitchExecutor.scheduleAtFixedRate(
+          this::checkGuard,
+          interval.toMillis(),
+          interval.toMillis(),
+          TimeUnit.MILLISECONDS);
+    }
+
+    @Override
+    public void onItem(T item) {
+      if (!isDone()) {
+        downstream.onItem(item);
+      }
+    }
+
+    @Override
+    public void onFailure(Throwable failure) {
+      cancelFuture();
+      super.onFailure(failure);
+    }
+
+    @Override
+    public void onCompletion() {
+      cancelFuture();
+      super.onCompletion();
+    }
+
+    @Override
+    public void cancel() {
+      cancelFuture();
+      super.cancel();
+    }
+
+    private void checkGuard() {
+      telemetry.retryAmplificationTrigger().ifPresent(trigger -> {
+        if (!logged.compareAndSet(false, true)) {
+          return;
+        }
+        logRetryAmplificationTrigger(trigger, mode);
+        cancelFuture();
+        if (mode == RetryAmplificationGuardMode.FAIL_FAST) {
+          failAndCancel(PipelineKillSwitchException.retryAmplification(trigger));
+        }
+      });
+    }
+
+    private void cancelFuture() {
+      if (future != null) {
+        future.cancel(false);
+      }
+    }
   }
 
   private void logRetryAmplificationTrigger(

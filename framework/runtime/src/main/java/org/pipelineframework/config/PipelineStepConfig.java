@@ -23,8 +23,10 @@ import java.util.Optional;
 
 import io.quarkus.arc.Unremovable;
 import io.smallrye.config.ConfigMapping;
+import io.smallrye.config.WithConverter;
 import io.smallrye.config.WithDefault;
 import io.smallrye.config.WithName;
+import org.pipelineframework.telemetry.RetryAmplificationGuardMode;
 
 /**
  * Configuration mapping for pipeline steps, supporting both global defaults
@@ -343,10 +345,11 @@ public interface PipelineStepConfig {
         /**
          * Guard behavior when triggered.
          *
-         * @return mode ("fail-fast" or "log-only")
+         * @return guard mode
          */
         @WithDefault("fail-fast")
-        String mode();
+        @WithConverter(RetryAmplificationGuardModeConverter.class)
+        RetryAmplificationGuardMode mode();
     }
 
     /**

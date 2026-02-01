@@ -147,8 +147,9 @@ public class PipelineTelemetry {
         this.retryRateThreshold = guardConfig != null && guardConfig.retryRateThreshold() != null
             ? guardConfig.retryRateThreshold()
             : 5d;
-        this.retryAmplificationMode = RetryAmplificationGuardMode.fromConfig(
-            guardConfig != null ? guardConfig.mode() : null);
+        this.retryAmplificationMode = guardConfig != null && guardConfig.mode() != null
+            ? guardConfig.mode()
+            : RetryAmplificationGuardMode.FAIL_FAST;
         this.retryAmplificationSampleInterval = resolveSampleInterval(this.retryAmplificationWindow);
         this.retryAmplificationScheduler = retryAmplificationEnabled
             ? Executors.newSingleThreadScheduledExecutor(runnable -> {
@@ -763,10 +764,13 @@ public class PipelineTelemetry {
         if (stepClass == null || !(metricsEnabled || retryAmplificationEnabled)) {
             return;
         }
-        String step = stepClass.getName();
+        String step = resolveStepClassName(stepClass);
+        if (step == null) {
+            return;
+        }
         retryByStep.computeIfAbsent(step, key -> new LongAdder()).increment();
         if (metricsEnabled) {
-            stepRetryCounter.add(1, Attributes.of(STEP_CLASS, step));
+            stepRetryCounter.add(1, stepAttributes(step));
         }
     }
 
