@@ -339,6 +339,16 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 }
             }
         }
+        if (built.size() < descriptorSet.getFileCount()) {
+            List<String> unresolved = new ArrayList<>();
+            for (DescriptorProtos.FileDescriptorProto fileProto : descriptorSet.getFileList()) {
+                String fileName = fileProto.getName();
+                if (!built.containsKey(fileName)) {
+                    unresolved.add(fileName);
+                }
+            }
+            LOG.warnf("Protobuf descriptor resolution incomplete; unresolved files: %s", unresolved);
+        }
         return built;
     }
 
