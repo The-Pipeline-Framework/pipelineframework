@@ -66,8 +66,9 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     private TypeSpec buildRestResourceClass(RestBinding binding, GenerationContext ctx) {
         org.pipelineframework.processor.ir.DeploymentRole role = ctx.role();
         PipelineStepModel model = binding.model();
+        boolean cachePluginSideEffect = isCachePluginSideEffect(model);
         boolean cacheSideEffect = isCacheSideEffect(model);
-        if (!cacheSideEffect) {
+        if (!cacheSideEffect && !cachePluginSideEffect) {
             validateRestMappings(model);
         }
 
@@ -453,6 +454,15 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     }
 
     private boolean isCacheSideEffect(PipelineStepModel model) {
+        if (model == null || !model.sideEffect() || model.serviceClassName() == null) {
+            return false;
+        }
+        return model.streamingShape() == org.pipelineframework.processor.ir.StreamingShape.UNARY_UNARY
+            && "org.pipelineframework.plugin.cache.CacheService".equals(
+                model.serviceClassName().canonicalName());
+    }
+
+    private boolean isCachePluginSideEffect(PipelineStepModel model) {
         if (model == null || !model.sideEffect() || model.serviceClassName() == null) {
             return false;
         }
