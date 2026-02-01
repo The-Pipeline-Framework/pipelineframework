@@ -356,10 +356,22 @@ public class PipelineRunner implements AutoCloseable {
         if (cacheReaders == null) {
             return null;
         }
-        PipelineCacheReader reader = cacheReaders.stream().findFirst().orElse(null);
-        if (reader == null || cacheKeyStrategies == null) {
+        List<PipelineCacheReader> readers = cacheReaders.stream()
+            .sorted(Comparator.comparing(cacheReader -> cacheReader.getClass().getName()))
+            .toList();
+        if (readers.isEmpty() || cacheKeyStrategies == null) {
             return null;
         }
+        if (readers.size() > 1) {
+            String readerNames = String.join(
+                ", ",
+                readers.stream().map(cacheReader -> cacheReader.getClass().getName()).toList());
+            logger.warnf(
+                "Multiple PipelineCacheReader beans found (%s). Using %s based on class name ordering.",
+                readerNames,
+                readers.get(0).getClass().getName());
+        }
+        PipelineCacheReader reader = readers.get(0);
         List<CacheKeyStrategy> ordered = cacheKeyStrategies.stream()
             .sorted(Comparator.comparingInt(CacheKeyStrategy::priority).reversed())
             .toList();
