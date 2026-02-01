@@ -31,9 +31,17 @@ public class RedisHostsValidator {
     @ConfigProperty(name = "quarkus.redis.hosts")
     Optional<String> redisHosts;
 
+    /**
+     * Validates that the `quarkus.redis.hosts` configuration is provided when running in production.
+     *
+     * Throws an exception if the active profile equals "prod" (case-insensitive) and the Redis hosts value is missing or blank.
+     *
+     * @throws IllegalStateException if the active profile is "prod" and `quarkus.redis.hosts` is absent or empty
+     */
     @PostConstruct
     void validate() {
-        boolean isProd = ConfigUtils.isProfileActive("prod");
+        java.util.List<String> profiles = ConfigUtils.getProfiles();
+        boolean isProd = profiles.contains("prod");
         boolean isBlankOrMissing = redisHosts.map(String::isBlank).orElse(true);
         if (isProd && isBlankOrMissing) {
             throw new IllegalStateException(
