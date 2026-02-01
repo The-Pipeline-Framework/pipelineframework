@@ -247,11 +247,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         if (descriptorSet == null) {
             return built;
         }
-        int iterations = 0;
         boolean progress = true;
         while (built.size() < descriptorSet.getFileCount() && progress) {
             progress = false;
-            iterations++;
             for (DescriptorProtos.FileDescriptorProto fileProto : descriptorSet.getFileList()) {
                 String fileName = fileProto.getName();
                 if (built.containsKey(fileName)) {
