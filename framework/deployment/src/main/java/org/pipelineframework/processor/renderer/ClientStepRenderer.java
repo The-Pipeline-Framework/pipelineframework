@@ -64,15 +64,14 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
     }
 
     /**
-     * Build the JavaPoet TypeSpec for a gRPC client pipeline step corresponding to the given binding.
-     * <p>
-     * The produced TypeSpec represents a public ConfigurableStep subclass annotated for CDI and Quarkus,
-     * optionally containing a gRPC client field, implementing the pipeline step interface appropriate
-     * to the model's streaming shape, and providing the corresponding apply* method that delegates to
-     * the gRPC client.
+     * Constructs a JavaPoet TypeSpec for a gRPC client pipeline step tailored to the given binding and generation context.
      *
-     * @param binding  the gRPC binding describing the service, model and generated-class naming
-     * @param messager the annotation processing Messager used during gRPC type resolution
+     * The produced TypeSpec is a public ConfigurableStep subclass annotated for CDI and Quarkus, implements the pipeline
+     * step interface that corresponds to the model's streaming shape, may include an injected gRPC stub field, and
+     * provides the appropriate apply* method(s) and cache-related overrides when required by the model.
+     *
+     * @param binding the gRPC binding describing the service, model, and generated-class naming
+     * @param ctx the generation context supplying the processing environment and deployment role
      * @return the generated TypeSpec describing the client step class
      */
     private TypeSpec buildClientStepClass(GrpcBinding binding, GenerationContext ctx) {

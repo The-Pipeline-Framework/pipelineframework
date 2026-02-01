@@ -22,7 +22,9 @@ package org.pipelineframework.cache;
 public interface CacheKeyTarget {
 
     /**
-     * @return the output type whose cache key should be used for pre-read.
-     */
+ * The output type whose cache key should be used for pre-reading.
+ *
+ * @return the Class object representing the output type used for cache key pre-reading
+ */
     Class<?> cacheKeyTargetType();
 }

@@ -24,17 +24,17 @@ import com.google.protobuf.Message;
 public interface ProtobufMessageParser {
 
     /**
-     * Fully qualified class name of the protobuf message.
-     *
-     * @return message type name
-     */
+ * The fully qualified class name of the protobuf message.
+ *
+ * @return the fully qualified protobuf message class name
+ */
     String type();
 
     /**
-     * Parse the protobuf payload into a message instance.
-     *
-     * @param bytes serialized protobuf bytes
-     * @return parsed message
-     */
+ * Parses the provided protobuf payload into a Message instance.
+ *
+ * @param bytes the serialized protobuf bytes
+ * @return the parsed protobuf Message instance
+ */
     Message parseFrom(byte[] bytes);
 }
