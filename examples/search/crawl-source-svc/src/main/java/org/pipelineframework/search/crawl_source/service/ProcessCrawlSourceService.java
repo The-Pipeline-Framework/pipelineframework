@@ -10,6 +10,7 @@ import org.jboss.logging.Logger;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.search.common.domain.CrawlRequest;
 import org.pipelineframework.search.common.domain.RawDocument;
+import org.pipelineframework.search.common.util.FetchOptionsNormalizer;
 import org.pipelineframework.search.common.util.HashingUtils;
 import org.pipelineframework.service.ReactiveService;
 

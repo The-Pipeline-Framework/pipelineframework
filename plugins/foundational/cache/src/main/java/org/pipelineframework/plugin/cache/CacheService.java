@@ -56,6 +56,13 @@ public class CacheService<T> implements ReactiveSideEffectService<T>, Parallelis
         this.cacheKeyResolver = cacheKeyResolver;
     }
 
+    /**
+     * Process an item through the configured cache policy and return the cached or original item.
+     *
+     * Determines the effective cache policy (from the pipeline context or configuration), resolves a cache key when the policy requires one, and applies the policy to produce the result. If no cache key is resolved, a cache miss is recorded and caching is skipped.
+     *
+     * @return a Uni emitting the cached item when available and applicable; emits the original item if caching is skipped or no cached value exists; emits null if the provided item was null
+     */
     @Override
     public Uni<T> process(T item) {
         logger.debugf("CacheService.process() called with item: %s (class: %s)",
@@ -79,7 +86,7 @@ public class CacheService<T> implements ReactiveSideEffectService<T>, Parallelis
             item.getClass().getName());
 
         assert cacheManager != null;
-        String key = cacheKeyResolver.resolveKey(item, context).orElse(null);
+        String key = cacheKeyResolver.resolveKey(item, context, item.getClass()).orElse(null);
         if (key == null || key.isBlank()) {
             PipelineCacheStatusHolder.set(CacheStatus.MISS);
             logger.warnf("No cache key strategy matched for item type %s, skipping cache", item.getClass().getName());
