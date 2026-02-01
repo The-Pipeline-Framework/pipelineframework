@@ -26,12 +26,12 @@ import org.pipelineframework.context.PipelineContext;
 public interface CacheKeyStrategy {
 
     /**
-     * Resolve a cache key for the given item.
-     *
-     * @param item the item to resolve a key for
-     * @param context the current pipeline context
-     * @return an optional cache key
-     */
+ * Resolves a cache key for the provided item using the pipeline context.
+ *
+ * @param item the object for which to resolve a cache key
+ * @param context the current pipeline context used during resolution
+ * @return an Optional containing the resolved cache key, or empty if no key could be determined
+ */
     Optional<String> resolveKey(Object item, PipelineContext context);
 
     /**

@@ -52,6 +52,16 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
         clientStepFile.writeTo(ctx.outputDir());
     }
 
+    /**
+     * Builds a JavaPoet TypeSpec for a REST client interface corresponding to the given RestBinding.
+     *
+     * The generated interface is public, annotated with REST client registration, client header factory and a cache-status
+     * response filter, and is rooted at the binding's REST path. It declares a `process` method whose signature matches
+     * the pipeline step's streaming shape and DTO types.
+     *
+     * @param binding the RestBinding that provides the pipeline model, DTO type information, and optional path override
+     * @return a TypeSpec representing the generated REST client interface
+     */
     private TypeSpec buildRestClientInterface(RestBinding binding) {
         PipelineStepModel model = binding.model();
         validateRestMappings(model);
@@ -109,6 +119,19 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
         return interfaceBuilder.build();
     }
 
+    /**
+     * Builds a TypeSpec for a REST client step class corresponding to the provided binding.
+     *
+     * The generated class is a public ConfigurableStep subclass that wires an injected REST client,
+     * applies parallelism and role annotations, conditionally implements cache-related interfaces,
+     * and exposes step entry points that forward PipelineContext header values (versionTag, replayMode,
+     * cachePolicy) to the REST client's `process` method for the model's streaming shape.
+     *
+     * @param binding the RestBinding containing the PipelineStepModel and service package information
+     * @param ctx the GenerationContext providing generation-time metadata (for example, the DeploymentRole)
+     * @param restClientInterfaceName simple name of the previously generated REST client interface to reference
+     * @return a TypeSpec describing the generated REST client step class
+     */
     private TypeSpec buildRestClientStepClass(RestBinding binding, GenerationContext ctx, String restClientInterfaceName) {
         PipelineStepModel model = binding.model();
         DeploymentRole role = ctx.role();
@@ -269,6 +292,14 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
         return clientStepBuilder.build();
     }
 
+    /**
+     * Builds a MethodSpec for a REST client `process` method that accepts three pipeline header parameters
+     * (`versionTag`, `replayMode`, `cachePolicy`) and an input DTO, and returns a `Uni` of the output DTO.
+     *
+     * @param inputDto  the DTO type used as the method's request entity
+     * @param outputDto the DTO type used as the method's response entity
+     * @return          a MethodSpec for the abstract `process` REST method (POST /process) returning `Uni<outputDto>`
+     */
     private MethodSpec buildUnaryUnaryMethod(TypeName inputDto, TypeName outputDto) {
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("process")
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST")).build())
@@ -284,6 +315,15 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
         return methodBuilder.build();
     }
 
+    /**
+     * Declares the REST endpoint for a unary-to-streaming operation: accepts a single input DTO and produces a stream of output DTOs.
+     *
+     * @param versionTag pipeline version tag header value
+     * @param replayMode replay mode header value
+     * @param cachePolicy cache policy header value
+     * @param inputDto the input DTO to process
+     * @return a Multi that emits output DTOs produced by processing the input DTO
+     */
     private MethodSpec buildUnaryStreamingMethod(TypeName inputDto, TypeName outputDto) {
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("process")
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST")).build())
@@ -302,6 +342,15 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
         return methodBuilder.build();
     }
 
+    /**
+     * Declares the REST client's streaming-to-unary process operation.
+     *
+     * @param versionTag the pipeline version tag passed via header
+     * @param replayMode the replay mode flag passed via header
+     * @param cachePolicy the cache policy passed via header
+     * @param inputDtos a stream of input DTOs to be processed
+     * @return a Uni that emits the single output DTO produced from the streamed inputs
+     */
     private MethodSpec buildStreamingUnaryMethod(TypeName inputDto, TypeName outputDto) {
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("process")
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST")).build())
@@ -318,6 +367,15 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
         return methodBuilder.build();
     }
 
+    /**
+     * Builds a MethodSpec for an abstract REST client method representing a streaming-request, streaming-response
+     * "process" endpoint annotated for NDJSON and JSON stream element type.
+     *
+     * @param inputDto  the DTO type used for each inbound stream element
+     * @param outputDto the DTO type used for each outbound stream element
+     * @return a MethodSpec for a public abstract `process` method that accepts `versionTag`, `replayMode`, `cachePolicy`
+     *         header parameters and a `Multi<inputDto>` named `inputDtos`, returning `Multi<outputDto>`
+     */
     private MethodSpec buildStreamingStreamingMethod(TypeName inputDto, TypeName outputDto) {
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("process")
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST")).build())
@@ -342,6 +400,19 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
         return methodBuilder.build();
     }
 
+    /**
+     * Builds a ParameterSpec for a `String` parameter annotated with `@HeaderParam` that references
+     * the appropriate `PipelineContextHeaders` constant for the given logical header name.
+     *
+     * Recognized mappings:
+     * - "versionTag" -> `PipelineContextHeaders.VERSION`
+     * - "replayMode" -> `PipelineContextHeaders.REPLAY`
+     * - "cachePolicy" -> `PipelineContextHeaders.CACHE_POLICY`
+     * Unrecognized names default to `PipelineContextHeaders.VERSION`.
+     *
+     * @param name the logical header name to map (e.g., "versionTag", "replayMode", "cachePolicy")
+     * @return a `ParameterSpec` for a `String` parameter named `name` annotated with `@HeaderParam` whose value is the mapped `PipelineContextHeaders` constant
+     */
     private ParameterSpec headerParam(String name) {
         String headerConst = switch (name) {
             case "versionTag" -> "VERSION";

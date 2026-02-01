@@ -34,11 +34,23 @@ public class PipelineCacheReaderAdapter implements PipelineCacheReader {
     @Inject
     CacheManager cacheManager;
 
+    /**
+     * Retrieve the cached value associated with the given key.
+     *
+     * @param key the cache key
+     * @return an Optional containing the cached value if present, otherwise an empty Optional
+     */
     @Override
     public Uni<Optional<Object>> get(String key) {
         return cacheManager.get(key);
     }
 
+    /**
+     * Check whether a cached value exists for the specified key.
+     *
+     * @param key the cache key to check for presence
+     * @return `true` if a value is cached for the given key, `false` otherwise
+     */
     @Override
     public Uni<Boolean> exists(String key) {
         return cacheManager.exists(key);
