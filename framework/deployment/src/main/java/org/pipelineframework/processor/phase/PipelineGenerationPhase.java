@@ -1,12 +1,7 @@
 package org.pipelineframework.processor.phase;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
@@ -229,7 +224,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 try {
                     return $T.parseFrom(bytes);
                 } catch ($T e) {
-                    throw new RuntimeException(e);
+                    throw new RuntimeException("Failed to parse " + type(), e);
                 }
                 """,
                 messageType,
