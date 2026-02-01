@@ -78,6 +78,9 @@ public class CrawlCacheKeyStrategy implements CacheKeyStrategy {
    */
   @Override
   public boolean supportsTarget(Class<?> targetType) {
-    return targetType == RawDocument.class || targetType == RawDocumentDto.class;
+    return targetType == RawDocument.class
+        || targetType == RawDocumentDto.class
+        || targetType == CrawlRequest.class
+        || targetType == CrawlRequestDto.class;
   }
 }
