@@ -14,29 +14,27 @@
  * limitations under the License.
  */
 
-package org.pipelineframework.domain;
+package org.pipelineframework.cache;
 
-public class TestEntity {
+import com.google.protobuf.Message;
 
-    // Getters and setters
-    private String name;
-    private String description;
+/**
+ * Supplies a non-reflective protobuf parser for a specific message type.
+ */
+public interface ProtobufMessageParser {
 
-    public TestEntity() {
-        super();
-    }
+    /**
+     * Fully qualified class name of the protobuf message.
+     *
+     * @return message type name
+     */
+    String type();
 
-    public TestEntity(String name, String description) {
-        super();
-        this.name = name;
-        this.description = description;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public String getDescription() {
-        return description;
-    }
+    /**
+     * Parse the protobuf payload into a message instance.
+     *
+     * @param bytes serialized protobuf bytes
+     * @return parsed message
+     */
+    Message parseFrom(byte[] bytes);
 }

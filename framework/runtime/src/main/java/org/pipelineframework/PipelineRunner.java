@@ -19,16 +19,28 @@ package org.pipelineframework;
 import java.text.MessageFormat;
 import java.util.*;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 
 import io.quarkus.arc.Unremovable;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.pipelineframework.annotation.ParallelismHint;
+import org.pipelineframework.cache.CacheKeyTarget;
+import org.pipelineframework.cache.CacheReadBypass;
+import org.pipelineframework.cache.CachePolicy;
 import org.pipelineframework.cache.CachePolicyEnforcer;
+import org.pipelineframework.cache.CachePolicyViolation;
+import org.pipelineframework.cache.CacheStatus;
+import org.pipelineframework.cache.PipelineCacheReader;
+import org.pipelineframework.cache.CacheKeyStrategy;
 import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineConfig;
+import org.pipelineframework.context.PipelineCacheStatusHolder;
+import org.pipelineframework.context.PipelineContext;
+import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ParallelismHints;
 import org.pipelineframework.parallelism.ThreadSafety;
@@ -77,6 +89,15 @@ public class PipelineRunner implements AutoCloseable {
     @Inject
     PipelineTelemetry telemetry;
 
+    @Inject
+    Instance<CacheKeyStrategy> cacheKeyStrategies;
+
+    @Inject
+    Instance<PipelineCacheReader> cacheReaders;
+
+    @ConfigProperty(name = "pipeline.cache.policy", defaultValue = "prefer-cache")
+    String cachePolicyDefault;
+
     /**
      * Default constructor for PipelineRunner.
      */
@@ -112,6 +133,8 @@ public class PipelineRunner implements AutoCloseable {
             telemetry.startRun(current, orderedSteps.size(), parallelismPolicy, maxConcurrency);
         current = telemetry.instrumentInput(current, telemetryContext);
 
+        PipelineContext contextSnapshot = PipelineContextHolder.get();
+        CacheReadSupport cacheReadSupport = buildCacheReadSupport();
         for (Object step : orderedSteps) {
             if (step == null) {
                 logger.warn("Warning: Found null step in configuration, skipping...");
@@ -132,25 +155,25 @@ public class PipelineRunner implements AutoCloseable {
                 case StepOneToOne stepOneToOne -> {
                     boolean parallel = shouldParallelize(stepOneToOne, parallelismPolicy, StepParallelismType.ONE_TO_ONE);
                     current = applyOneToOneUnchecked(
-                        stepOneToOne, current, parallel, maxConcurrency, telemetry, telemetryContext);
+                        stepOneToOne, current, parallel, maxConcurrency, telemetry, telemetryContext, cacheReadSupport, contextSnapshot);
                 }
                 case StepOneToOneCompletableFuture stepFuture -> {
                     boolean parallel = shouldParallelize(stepFuture, parallelismPolicy, StepParallelismType.ONE_TO_ONE_FUTURE);
                     current = applyOneToOneFutureUnchecked(
-                        stepFuture, current, parallel, maxConcurrency, telemetry, telemetryContext);
+                        stepFuture, current, parallel, maxConcurrency, telemetry, telemetryContext, contextSnapshot);
                 }
                 case StepOneToMany stepOneToMany -> {
                     boolean parallel = shouldParallelize(stepOneToMany, parallelismPolicy, StepParallelismType.ONE_TO_MANY);
                     current = applyOneToManyUnchecked(
-                        stepOneToMany, current, parallel, maxConcurrency, telemetry, telemetryContext);
+                        stepOneToMany, current, parallel, maxConcurrency, telemetry, telemetryContext, contextSnapshot);
                 }
                 case StepOneToManyBlocking stepOneToManyBlocking -> {
                     boolean parallel = shouldParallelize(stepOneToManyBlocking, parallelismPolicy, StepParallelismType.ONE_TO_MANY_BLOCKING);
                     current = applyOneToManyBlockingUnchecked(
-                        stepOneToManyBlocking, current, parallel, maxConcurrency, telemetry, telemetryContext);
+                        stepOneToManyBlocking, current, parallel, maxConcurrency, telemetry, telemetryContext, contextSnapshot);
                 }
-                case ManyToOne manyToOne -> current = applyManyToOneUnchecked(manyToOne, current, telemetry, telemetryContext);
-                case StepManyToMany manyToMany -> current = applyManyToManyUnchecked(manyToMany, current, telemetry, telemetryContext);
+                case ManyToOne manyToOne -> current = applyManyToOneUnchecked(manyToOne, current, telemetry, telemetryContext, contextSnapshot);
+                case StepManyToMany manyToMany -> current = applyManyToManyUnchecked(manyToMany, current, telemetry, telemetryContext, contextSnapshot);
                 default -> logger.errorf("Step not recognised: %s", step.getClass().getName());
             }
         }
@@ -315,6 +338,23 @@ public class PipelineRunner implements AutoCloseable {
         return stepType.autoCandidate();
     }
 
+    private CacheReadSupport buildCacheReadSupport() {
+        if (cacheReaders == null) {
+            return null;
+        }
+        PipelineCacheReader reader = cacheReaders.stream().findFirst().orElse(null);
+        if (reader == null || cacheKeyStrategies == null) {
+            return null;
+        }
+        List<CacheKeyStrategy> ordered = cacheKeyStrategies.stream()
+            .sorted(Comparator.comparingInt(CacheKeyStrategy::priority).reversed())
+            .toList();
+        if (ordered.isEmpty()) {
+            return null;
+        }
+        return new CacheReadSupport(reader, ordered, cachePolicyDefault);
+    }
+
     /**
      * Apply a one-to-one pipeline step to the provided reactive stream and produce the transformed stream.
      *
@@ -327,7 +367,7 @@ public class PipelineRunner implements AutoCloseable {
      */
     @SuppressWarnings({"unchecked"})
     public static <I, O> Object applyOneToOneUnchecked(StepOneToOne<I, O> step, Object current) {
-        return applyOneToOneUnchecked(step, current, false, DEFAULT_MAX_CONCURRENCY, null, null);
+        return applyOneToOneUnchecked(step, current, false, DEFAULT_MAX_CONCURRENCY, null, null, null, null);
     }
 
     /**
@@ -350,14 +390,19 @@ public class PipelineRunner implements AutoCloseable {
         boolean parallel,
         int maxConcurrency,
         PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext) {
+        PipelineTelemetry.RunContext telemetryContext,
+        CacheReadSupport cacheReadSupport,
+        PipelineContext contextSnapshot) {
         if (current instanceof Uni<?>) {
             Uni<I> input = (Uni<I>) current;
             if (telemetry != null) {
                 input = telemetry.instrumentItemConsumed(step.getClass(), telemetryContext, input);
             }
-            Uni<O> result = step.apply(input)
-                .onItem().transformToUni(CachePolicyEnforcer::enforce);
+            Uni<O> result = input
+                .onItem()
+                .transformToUni(item -> applyOneToOneWithCache(step, item, cacheReadSupport, contextSnapshot))
+                .onItem()
+                .transformToUni(item -> CachePolicyEnforcer.enforce(item));
             if (telemetry == null) {
                 return result;
             }
@@ -373,7 +418,7 @@ public class PipelineRunner implements AutoCloseable {
                 return multi
                     .onItem()
                     .transformToUni(item -> {
-                        Uni<O> result = step.apply(Uni.createFrom().item(item))
+                        Uni<O> result = applyOneToOneWithCache(step, item, cacheReadSupport, contextSnapshot)
                             .onItem().transformToUni(CachePolicyEnforcer::enforce);
                         if (telemetry == null) {
                             return result;
@@ -387,7 +432,7 @@ public class PipelineRunner implements AutoCloseable {
                 return multi
                     .onItem()
                     .transformToUni(item -> {
-                        Uni<O> result = step.apply(Uni.createFrom().item(item))
+                        Uni<O> result = applyOneToOneWithCache(step, item, cacheReadSupport, contextSnapshot)
                             .onItem().transformToUni(CachePolicyEnforcer::enforce);
                         if (telemetry == null) {
                             return result;
@@ -402,6 +447,133 @@ public class PipelineRunner implements AutoCloseable {
         }
     }
 
+    private static <I, O> Uni<O> applyOneToOneWithCache(
+        StepOneToOne<I, O> step,
+        I item,
+        CacheReadSupport cacheReadSupport,
+        PipelineContext contextSnapshot) {
+        if (cacheReadSupport == null) {
+            return withPipelineContext(contextSnapshot, () -> step.apply(Uni.createFrom().item(item)));
+        }
+        if (step instanceof CacheReadBypass) {
+            return withPipelineContext(contextSnapshot, () -> step.apply(Uni.createFrom().item(item)));
+        }
+        CachePolicy policy = cacheReadSupport.resolvePolicy(contextSnapshot);
+        if (!cacheReadSupport.shouldRead(policy)) {
+            return withPipelineContext(contextSnapshot, () -> step.apply(Uni.createFrom().item(item)));
+        }
+        Class<?> targetType = null;
+        if (step instanceof CacheKeyTarget cacheKeyTarget) {
+            targetType = cacheKeyTarget.cacheKeyTargetType();
+        }
+        Optional<String> resolvedKey = cacheReadSupport.resolveKey(item, contextSnapshot, targetType);
+        if (resolvedKey.isEmpty()) {
+            return withPipelineContext(contextSnapshot, () -> step.apply(Uni.createFrom().item(item)));
+        }
+        String key = cacheReadSupport.withVersionPrefix(resolvedKey.get(), contextSnapshot);
+        return cacheReadSupport.reader.get(key)
+            .onItem().transformToUni(cached -> {
+                if (cached.isPresent()) {
+                    PipelineCacheStatusHolder.set(CacheStatus.HIT);
+                    @SuppressWarnings("unchecked")
+                    O value = (O) cached.get();
+                    return Uni.createFrom().item(value);
+                }
+                if (policy == CachePolicy.REQUIRE_CACHE) {
+                    return Uni.createFrom().failure(new CachePolicyViolation(
+                        "Cache policy REQUIRE_CACHE failed for key: " + key));
+                }
+                return withPipelineContext(contextSnapshot, () -> step.apply(Uni.createFrom().item(item)));
+            });
+    }
+
+    private static <T> T withPipelineContext(
+        PipelineContext context,
+        java.util.function.Supplier<T> supplier) {
+        if (context == null) {
+            return supplier.get();
+        }
+        PipelineContext previous = PipelineContextHolder.get();
+        PipelineContextHolder.set(context);
+        try {
+            return supplier.get();
+        } finally {
+            if (previous != null) {
+                PipelineContextHolder.set(previous);
+            } else {
+                PipelineContextHolder.clear();
+            }
+        }
+    }
+
+    static final class CacheReadSupport {
+        private final PipelineCacheReader reader;
+        private final List<CacheKeyStrategy> strategies;
+        private final String defaultPolicy;
+        CacheReadSupport(PipelineCacheReader reader, List<CacheKeyStrategy> strategies, String defaultPolicy) {
+            this.reader = reader;
+            this.strategies = strategies;
+            this.defaultPolicy = defaultPolicy;
+        }
+
+        Optional<String> resolveKey(Object item, PipelineContext context) {
+            return resolveKey(item, context, null);
+        }
+
+        Optional<String> resolveKey(Object item, PipelineContext context, Class<?> targetType) {
+            if (item == null) {
+                return Optional.empty();
+            }
+            if (targetType != null) {
+                for (CacheKeyStrategy strategy : strategies) {
+                    if (!strategy.supportsTarget(targetType)) {
+                        continue;
+                    }
+                    Optional<String> resolved = strategy.resolveKey(item, context);
+                    if (resolved.isPresent()) {
+                        String key = resolved.get();
+                        if (!key.isBlank()) {
+                            return Optional.of(key.trim());
+                        }
+                    }
+                }
+            }
+            for (CacheKeyStrategy strategy : strategies) {
+                Optional<String> resolved = strategy.resolveKey(item, context);
+                if (resolved.isPresent()) {
+                    String key = resolved.get();
+                    if (!key.isBlank()) {
+                        return Optional.of(key.trim());
+                    }
+                }
+            }
+            return Optional.empty();
+        }
+
+        CachePolicy resolvePolicy(PipelineContext context) {
+            String policy = context != null ? context.cachePolicy() : defaultPolicy;
+            return CachePolicy.fromConfig(policy);
+        }
+
+        boolean shouldRead(CachePolicy policy) {
+            if (policy == null) {
+                return false;
+            }
+            return policy == CachePolicy.RETURN_CACHED || policy == CachePolicy.REQUIRE_CACHE;
+        }
+
+        String withVersionPrefix(String key, PipelineContext context) {
+            if (context == null) {
+                return key;
+            }
+            String versionTag = context.versionTag();
+            if (versionTag == null || versionTag.isBlank()) {
+                return key;
+            }
+            return versionTag + ":" + key;
+        }
+    }
+
     @SuppressWarnings("unchecked")
     private static <I, O> Object applyOneToOneFutureUnchecked(
         StepOneToOneCompletableFuture<I, O> step,
@@ -409,13 +581,15 @@ public class PipelineRunner implements AutoCloseable {
         boolean parallel,
         int maxConcurrency,
         PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext) {
+        PipelineTelemetry.RunContext telemetryContext,
+        PipelineContext contextSnapshot) {
         if (current instanceof Uni<?>) {
             Uni<I> input = (Uni<I>) current;
             if (telemetry != null) {
                 input = telemetry.instrumentItemConsumed(step.getClass(), telemetryContext, input);
             }
-            Uni<O> result = step.apply(input);
+            Uni<I> finalInput = input;
+            Uni<O> result = withPipelineContext(contextSnapshot, () -> step.apply(finalInput));
             if (telemetry == null) {
                 return result;
             }
@@ -430,7 +604,8 @@ public class PipelineRunner implements AutoCloseable {
                 return multi
                     .onItem()
                     .transformToUni(item -> {
-                        Uni<O> result = step.apply(Uni.createFrom().item(item));
+                        Uni<O> result = withPipelineContext(contextSnapshot,
+                            () -> step.apply(Uni.createFrom().item(item)));
                         if (telemetry == null) {
                             return result;
                         }
@@ -442,7 +617,8 @@ public class PipelineRunner implements AutoCloseable {
                 return multi
                     .onItem()
                     .transformToUni(item -> {
-                        Uni<O> result = step.apply(Uni.createFrom().item(item));
+                        Uni<O> result = withPipelineContext(contextSnapshot,
+                            () -> step.apply(Uni.createFrom().item(item)));
                         if (telemetry == null) {
                             return result;
                         }
@@ -463,13 +639,15 @@ public class PipelineRunner implements AutoCloseable {
         boolean parallel,
         int maxConcurrency,
         PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext) {
+        PipelineTelemetry.RunContext telemetryContext,
+        PipelineContext contextSnapshot) {
         if (current instanceof Uni<?>) {
             Uni<I> input = (Uni<I>) current;
             if (telemetry != null) {
                 input = telemetry.instrumentItemConsumed(step.getClass(), telemetryContext, input);
             }
-            Multi<O> result = step.apply(input);
+            Uni<I> finalInput = input;
+            Multi<O> result = withPipelineContext(contextSnapshot, () -> step.apply(finalInput));
             if (telemetry == null) {
                 return result;
             }
@@ -485,7 +663,8 @@ public class PipelineRunner implements AutoCloseable {
                 return multi
                     .onItem()
                     .transformToMulti(item -> {
-                        Multi<O> result = step.apply(Uni.createFrom().item(item));
+                        Multi<O> result = withPipelineContext(contextSnapshot,
+                            () -> step.apply(Uni.createFrom().item(item)));
                         if (telemetry == null) {
                             return result;
                         }
@@ -502,7 +681,8 @@ public class PipelineRunner implements AutoCloseable {
                 return multi
                     .onItem()
                     .transformToMulti(item -> {
-                        Multi<O> result = step.apply(Uni.createFrom().item(item));
+                        Multi<O> result = withPipelineContext(contextSnapshot,
+                            () -> step.apply(Uni.createFrom().item(item)));
                         if (telemetry == null) {
                             return result;
                         }
@@ -523,13 +703,15 @@ public class PipelineRunner implements AutoCloseable {
         boolean parallel,
         int maxConcurrency,
         PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext) {
+        PipelineTelemetry.RunContext telemetryContext,
+        PipelineContext contextSnapshot) {
         if (current instanceof Uni<?>) {
             Uni<I> input = (Uni<I>) current;
             if (telemetry != null) {
                 input = telemetry.instrumentItemConsumed(step.getClass(), telemetryContext, input);
             }
-            Multi<O> result = step.apply(input);
+            Uni<I> finalInput = input;
+            Multi<O> result = withPipelineContext(contextSnapshot, () -> step.apply(finalInput));
             if (telemetry == null) {
                 return result;
             }
@@ -545,7 +727,8 @@ public class PipelineRunner implements AutoCloseable {
                 return multi
                     .onItem()
                     .transformToMulti(item -> {
-                        Multi<O> result = step.apply(Uni.createFrom().item(item));
+                        Multi<O> result = withPipelineContext(contextSnapshot,
+                            () -> step.apply(Uni.createFrom().item(item)));
                         if (telemetry == null) {
                             return result;
                         }
@@ -562,7 +745,8 @@ public class PipelineRunner implements AutoCloseable {
                 return multi
                     .onItem()
                     .transformToMulti(item -> {
-                        Multi<O> result = step.apply(Uni.createFrom().item(item));
+                        Multi<O> result = withPipelineContext(contextSnapshot,
+                            () -> step.apply(Uni.createFrom().item(item)));
                         if (telemetry == null) {
                             return result;
                         }
@@ -581,13 +765,15 @@ public class PipelineRunner implements AutoCloseable {
         ManyToOne<I, O> step,
         Object current,
         PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext) {
+        PipelineTelemetry.RunContext telemetryContext,
+        PipelineContext contextSnapshot) {
         if (current instanceof Multi<?>) {
             Multi<I> input = (Multi<I>) current;
             if (telemetry != null) {
                 input = telemetry.instrumentItemConsumed(step.getClass(), telemetryContext, input);
             }
-            Uni<O> result = step.apply(input);
+            Multi<I> finalInput = input;
+            Uni<O> result = withPipelineContext(contextSnapshot, () -> step.apply(finalInput));
             if (telemetry == null) {
                 return result;
             }
@@ -599,7 +785,8 @@ public class PipelineRunner implements AutoCloseable {
             if (telemetry != null) {
                 input = telemetry.instrumentItemConsumed(step.getClass(), telemetryContext, input);
             }
-            Uni<O> result = step.apply(input.toMulti());
+            Multi<I> finalInput = input.toMulti();
+            Uni<O> result = withPipelineContext(contextSnapshot, () -> step.apply(finalInput));
             if (telemetry == null) {
                 return result;
             }
@@ -615,14 +802,16 @@ public class PipelineRunner implements AutoCloseable {
         StepManyToMany<I, O> step,
         Object current,
         PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext) {
+        PipelineTelemetry.RunContext telemetryContext,
+        PipelineContext contextSnapshot) {
         if (current instanceof Uni<?>) {
             // Single async source — convert to Multi and process
             Uni<I> input = (Uni<I>) current;
             if (telemetry != null) {
                 input = telemetry.instrumentItemConsumed(step.getClass(), telemetryContext, input);
             }
-            Multi<O> result = step.apply(input.toMulti());
+            Multi<I> finalInput = input.toMulti();
+            Multi<O> result = withPipelineContext(contextSnapshot, () -> step.apply(finalInput));
             if (telemetry == null) {
                 return result;
             }
@@ -635,7 +824,8 @@ public class PipelineRunner implements AutoCloseable {
             if (telemetry != null) {
                 input = telemetry.instrumentItemConsumed(step.getClass(), telemetryContext, input);
             }
-            Multi<O> result = step.apply(input);
+            Multi<I> finalInput = input;
+            Multi<O> result = withPipelineContext(contextSnapshot, () -> step.apply(finalInput));
             if (telemetry == null) {
                 return result;
             }

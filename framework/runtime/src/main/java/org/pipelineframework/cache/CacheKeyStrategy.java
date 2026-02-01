@@ -35,6 +35,20 @@ public interface CacheKeyStrategy {
     Optional<String> resolveKey(Object item, PipelineContext context);
 
     /**
+     * Indicates whether this strategy targets the given output type.
+     *
+     * <p>This is used to disambiguate strategies when pre-reading caches for a
+     * specific step output type. Default is {@code false} so existing strategies
+     * are only considered when no targeted strategy matches.</p>
+     *
+     * @param targetType expected output type for the cache entry
+     * @return true if this strategy should be preferred for the target type
+     */
+    default boolean supportsTarget(Class<?> targetType) {
+        return false;
+    }
+
+    /**
      * Strategy priority; higher values run first.
      *
      * @return priority order

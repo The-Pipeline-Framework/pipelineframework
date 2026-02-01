@@ -14,29 +14,13 @@
  * limitations under the License.
  */
 
-package org.pipelineframework.domain;
+package org.pipelineframework.cache;
 
-public class TestEntity {
-
-    // Getters and setters
-    private String name;
-    private String description;
-
-    public TestEntity() {
-        super();
-    }
-
-    public TestEntity(String name, String description) {
-        super();
-        this.name = name;
-        this.description = description;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public String getDescription() {
-        return description;
-    }
+/**
+ * Marker interface for steps that must bypass cache reads.
+ *
+ * <p>Use this for side-effect-only steps so cache pre-reads do not skip the
+ * execution of the step.</p>
+ */
+public interface CacheReadBypass {
 }

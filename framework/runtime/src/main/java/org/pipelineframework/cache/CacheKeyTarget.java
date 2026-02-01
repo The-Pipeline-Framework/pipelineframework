@@ -14,29 +14,15 @@
  * limitations under the License.
  */
 
-package org.pipelineframework.domain;
+package org.pipelineframework.cache;
 
-public class TestEntity {
+/**
+ * Marker interface for steps that can expose the cache target type.
+ */
+public interface CacheKeyTarget {
 
-    // Getters and setters
-    private String name;
-    private String description;
-
-    public TestEntity() {
-        super();
-    }
-
-    public TestEntity(String name, String description) {
-        super();
-        this.name = name;
-        this.description = description;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public String getDescription() {
-        return description;
-    }
+    /**
+     * @return the output type whose cache key should be used for pre-read.
+     */
+    Class<?> cacheKeyTargetType();
 }
