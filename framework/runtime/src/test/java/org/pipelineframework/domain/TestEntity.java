@@ -16,9 +16,6 @@
 
 package org.pipelineframework.domain;
 
-import lombok.Getter;
-
-@Getter
 public class TestEntity {
 
     // Getters and setters
@@ -29,9 +26,33 @@ public class TestEntity {
         super();
     }
 
+    /**
+     * Constructs a TestEntity with the given name and description.
+     *
+     * @param name the entity's name
+     * @param description a short description of the entity
+     */
     public TestEntity(String name, String description) {
         super();
         this.name = name;
         this.description = description;
+    }
+
+    /**
+     * Retrieves the entity's name.
+     *
+     * @return the name of the entity, or {@code null} if not set
+     */
+    public String getName() {
+        return name;
+    }
+
+    /**
+     * Gets the entity's description.
+     *
+     * @return the description value, or null if not set
+     */
+    public String getDescription() {
+        return description;
     }
 }
