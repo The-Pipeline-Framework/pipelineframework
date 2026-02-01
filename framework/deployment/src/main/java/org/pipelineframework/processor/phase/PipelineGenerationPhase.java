@@ -221,7 +221,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 String parserPackage = messageType.packageName().isBlank()
                     ? "pipeline"
                     : messageType.packageName() + ".pipeline";
-                String parserName = "Proto" + String.join("", messageType.simpleNames()) + "Parser";
+                String parserName = "Proto" + String.join("_", messageType.simpleNames()) + "Parser";
                 String fqcn = parserPackage + "." + parserName;
                 if (generated.add(fqcn)) {
                     TypeSpec parserClass = buildParserClass(messageType, parserName);
