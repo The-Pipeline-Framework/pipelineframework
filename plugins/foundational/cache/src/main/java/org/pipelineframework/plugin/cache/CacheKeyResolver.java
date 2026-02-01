@@ -57,6 +57,7 @@ public class CacheKeyResolver {
                 }
             }
         }
+        // Graceful degradation: if no strategy explicitly supports the target type, try all strategies
         for (CacheKeyStrategy strategy : ordered) {
             Optional<String> resolved = strategy.resolveKey(item, context);
             if (resolved.isPresent()) {
