@@ -41,7 +41,7 @@ public class RedisHostsValidator {
     @PostConstruct
     void validate() {
         java.util.List<String> profiles = ConfigUtils.getProfiles();
-        boolean isProd = profiles.contains("prod");
+        boolean isProd = profiles.stream().anyMatch(profile -> "prod".equalsIgnoreCase(profile));
         boolean isBlankOrMissing = redisHosts.map(String::isBlank).orElse(true);
         if (isProd && isBlankOrMissing) {
             throw new IllegalStateException(
