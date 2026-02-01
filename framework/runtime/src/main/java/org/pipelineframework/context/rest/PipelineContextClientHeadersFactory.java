@@ -16,6 +16,7 @@
 
 package org.pipelineframework.context.rest;
 
+import java.util.List;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.core.MultivaluedMap;
 
@@ -97,15 +98,23 @@ public class PipelineContextClientHeadersFactory implements ClientHeadersFactory
         if (headers == null || name == null) {
             return null;
         }
-        String value = headers.getFirst(name);
-        if (value != null && !value.isBlank()) {
-            return value;
+        List<String> directValues = headers.get(name);
+        if (directValues != null) {
+            for (String candidate : directValues) {
+                if (candidate != null && !candidate.isBlank()) {
+                    return candidate;
+                }
+            }
         }
         for (String key : headers.keySet()) {
             if (key != null && key.equalsIgnoreCase(name)) {
-                String candidate = headers.getFirst(key);
-                if (candidate != null && !candidate.isBlank()) {
-                    return candidate;
+                List<String> values = headers.get(key);
+                if (values != null) {
+                    for (String candidate : values) {
+                        if (candidate != null && !candidate.isBlank()) {
+                            return candidate;
+                        }
+                    }
                 }
             }
         }
