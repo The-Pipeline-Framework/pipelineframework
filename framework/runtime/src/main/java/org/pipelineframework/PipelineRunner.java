@@ -463,6 +463,10 @@ public class PipelineRunner implements AutoCloseable {
         }
         Optional<String> resolvedKey = cacheReadSupport.resolveKey(item, contextSnapshot, targetType);
         if (resolvedKey.isEmpty()) {
+            if (policy == CachePolicy.REQUIRE_CACHE) {
+                return withPipelineContext(contextSnapshot, () -> Uni.createFrom().failure(
+                    new IllegalStateException("Cache key required but could not be resolved")));
+            }
             return withPipelineContext(contextSnapshot, () -> step.apply(Uni.createFrom().item(item)));
         }
         String key = cacheReadSupport.withVersionPrefix(resolvedKey.get(), contextSnapshot);

@@ -44,10 +44,12 @@ public class CacheKeyResolver {
             .sorted(Comparator.comparingInt(CacheKeyStrategy::priority).reversed())
             .toList();
         if (targetType != null) {
+            boolean hasSupportingStrategy = false;
             for (CacheKeyStrategy strategy : ordered) {
                 if (!strategy.supportsTarget(targetType)) {
                     continue;
                 }
+                hasSupportingStrategy = true;
                 Optional<String> resolved = strategy.resolveKey(item, context);
                 if (resolved.isPresent()) {
                     String key = resolved.get();
@@ -55,6 +57,9 @@ public class CacheKeyResolver {
                         return Optional.of(key.trim());
                     }
                 }
+            }
+            if (hasSupportingStrategy) {
+                return Optional.empty();
             }
         }
         // Graceful degradation: if no strategy explicitly supports the target type, try all strategies

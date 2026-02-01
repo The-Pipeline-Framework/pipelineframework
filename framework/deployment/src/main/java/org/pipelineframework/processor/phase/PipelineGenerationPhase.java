@@ -9,6 +9,7 @@ import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.TypeSpec;
+import org.jboss.logging.Logger;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.ir.*;
@@ -26,6 +27,8 @@ import org.pipelineframework.processor.util.RoleMetadataGenerator;
  * This phase contains no JavaPoet logic, no decisions, and no binding construction.
  */
 public class PipelineGenerationPhase implements PipelineCompilationPhase {
+
+    private static final Logger LOG = Logger.getLogger(PipelineGenerationPhase.class);
 
     /**
      * Creates a new PipelineGenerationPhase.
@@ -602,23 +605,38 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     new org.pipelineframework.processor.util.GrpcJavaTypeResolver();
                 var grpcTypes = resolver.resolve(grpcBinding);
                 if (grpcTypes != null && grpcTypes.grpcParameterType() != null && grpcTypes.grpcReturnType() != null) {
-                    String inputName = null;
-                    String outputName = null;
                     Object methodDescriptorObj = grpcBinding.methodDescriptor();
                     if (methodDescriptorObj instanceof com.google.protobuf.Descriptors.MethodDescriptor methodDescriptor) {
-                        inputName = methodDescriptor.getInputType().getName();
-                        outputName = methodDescriptor.getOutputType().getName();
-                    }
-                    String serviceName = model.serviceName();
-                    if (inputName != null && serviceName != null && serviceName.contains(inputName)) {
-                        return grpcTypes.grpcParameterType();
-                    }
-                    if (outputName != null && serviceName != null && serviceName.contains(outputName)) {
-                        return grpcTypes.grpcReturnType();
+                        String inputFullName = methodDescriptor.getInputType().getFullName();
+                        String outputFullName = methodDescriptor.getOutputType().getFullName();
+                        String inputName = methodDescriptor.getInputType().getName();
+                        String outputName = methodDescriptor.getOutputType().getName();
+                        String observedTypeName = observedType != null ? observedType.toString() : null;
+
+                        if (observedTypeName != null) {
+                            if (observedTypeName.equals(inputFullName) || observedTypeName.endsWith("." + inputName)) {
+                                return grpcTypes.grpcParameterType();
+                            }
+                            if (observedTypeName.equals(outputFullName) || observedTypeName.endsWith("." + outputName)) {
+                                return grpcTypes.grpcReturnType();
+                            }
+                        }
+
+                        String serviceName = model.serviceName();
+                        if (serviceName != null) {
+                            if (serviceName.equals(inputFullName) || serviceName.equals(inputName)) {
+                                return grpcTypes.grpcParameterType();
+                            }
+                            if (serviceName.equals(outputFullName) || serviceName.equals(outputName)) {
+                                return grpcTypes.grpcReturnType();
+                            }
+                        }
                     }
                     return grpcTypes.grpcReturnType();
                 }
-            } catch (Exception ignored) {
+            } catch (ClassCastException | NullPointerException | IllegalStateException e) {
+                LOG.warnf(e, "Failed to resolve observed gRPC type for %s; falling back to domain type",
+                    model.serviceName());
                 return observedType;
             }
         }
@@ -645,13 +663,13 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             int lastDot = dtoTypeStr.lastIndexOf('.');
             String packageName = lastDot > 0 ? dtoTypeStr.substring(0, lastDot) : "";
             String simpleName = lastDot > 0 ? dtoTypeStr.substring(lastDot + 1) : dtoTypeStr;
-            String dtoSimpleName = simpleName + "Dto";
+            String dtoSimpleName = simpleName.endsWith("Dto") ? simpleName : simpleName + "Dto";
             return com.squareup.javapoet.ClassName.get(packageName, dtoSimpleName);
         }
         int lastDot = domainTypeStr.lastIndexOf('.');
         String packageName = lastDot > 0 ? domainTypeStr.substring(0, lastDot) : "";
         String simpleName = lastDot > 0 ? domainTypeStr.substring(lastDot + 1) : domainTypeStr;
-        String dtoSimpleName = simpleName + "Dto";
+        String dtoSimpleName = simpleName.endsWith("Dto") ? simpleName : simpleName + "Dto";
         return com.squareup.javapoet.ClassName.get(packageName, dtoSimpleName);
     }
 

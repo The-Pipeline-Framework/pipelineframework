@@ -44,6 +44,19 @@ class CacheKeyResolverTest {
         assertEquals("fallback", resolved.get());
     }
 
+    @Test
+    void returnsEmptyWhenTargetedStrategyOptsOut() {
+        CacheKeyResolver resolver = new CacheKeyResolver();
+        resolver.strategies = new FixedInstance<>(List.of(
+            new FallbackStrategy(),
+            new EmptyTargetedStrategy()
+        ));
+
+        Optional<String> resolved = resolver.resolveKey("input", new PipelineContext("v1", null, null), String.class);
+
+        assertTrue(resolved.isEmpty());
+    }
+
     static final class TargetedStrategy implements CacheKeyStrategy {
         @Override
         public Optional<String> resolveKey(Object item, PipelineContext context) {
@@ -70,6 +83,18 @@ class CacheKeyResolverTest {
         @Override
         public int priority() {
             return 5;
+        }
+    }
+
+    static final class EmptyTargetedStrategy implements CacheKeyStrategy {
+        @Override
+        public Optional<String> resolveKey(Object item, PipelineContext context) {
+            return Optional.empty();
+        }
+
+        @Override
+        public boolean supportsTarget(Class<?> targetType) {
+            return targetType == String.class;
         }
     }
 
