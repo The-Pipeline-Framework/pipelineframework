@@ -59,26 +59,26 @@ public class CacheKeyResolver {
             .sorted(Comparator.comparingInt(CacheKeyStrategy::priority).reversed())
             .toList();
         if (targetType != null) {
-            boolean hasSupportingStrategy = false;
-            for (CacheKeyStrategy strategy : ordered) {
-                if (!strategy.supportsTarget(targetType)) {
-                    continue;
-                }
-                hasSupportingStrategy = true;
-                Optional<String> resolved = strategy.resolveKey(item, context);
+            List<CacheKeyStrategy> supporting = ordered.stream()
+                .filter(strategy -> strategy.supportsTarget(targetType))
+                .toList();
+            if (!supporting.isEmpty()) {
+                Optional<String> resolved = resolveFromStrategies(supporting, item, context);
                 if (resolved.isPresent()) {
-                    String key = resolved.get();
-                    if (!key.isBlank()) {
-                        return Optional.of(key.trim());
-                    }
+                    return resolved;
                 }
-            }
-            if (hasSupportingStrategy) {
                 return Optional.empty();
             }
         }
         // Graceful degradation: if no strategy explicitly supports the target type, try all strategies
-        for (CacheKeyStrategy strategy : ordered) {
+        return resolveFromStrategies(ordered, item, context);
+    }
+
+    private Optional<String> resolveFromStrategies(
+        List<CacheKeyStrategy> strategies,
+        Object item,
+        PipelineContext context) {
+        for (CacheKeyStrategy strategy : strategies) {
             Optional<String> resolved = strategy.resolveKey(item, context);
             if (resolved.isPresent()) {
                 String key = resolved.get();
