@@ -21,8 +21,8 @@ import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import io.quarkus.runtime.Startup;
+import io.quarkus.runtime.configuration.ConfigUtils;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-import io.quarkus.runtime.configuration.ProfileManager;
 
 @Startup
 @ApplicationScoped
@@ -33,9 +33,9 @@ public class RedisHostsValidator {
 
     @PostConstruct
     void validate() {
-        String activeProfile = ProfileManager.getActiveProfile();
+        boolean isProd = ConfigUtils.isProfileActive("prod");
         boolean isBlankOrMissing = redisHosts.map(String::isBlank).orElse(true);
-        if ("prod".equalsIgnoreCase(activeProfile) && isBlankOrMissing) {
+        if (isProd && isBlankOrMissing) {
             throw new IllegalStateException(
                 "Missing required config: quarkus.redis.hosts (set REDIS_HOSTS in production).");
         }
