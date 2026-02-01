@@ -1,8 +1,5 @@
 package org.pipelineframework;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -10,14 +7,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.cache.CacheKeyStrategy;
-import org.pipelineframework.cache.CachePolicyViolation;
-import org.pipelineframework.cache.CacheKeyTarget;
-import org.pipelineframework.cache.CacheReadBypass;
-import org.pipelineframework.cache.PipelineCacheReader;
+import org.pipelineframework.cache.*;
+import org.pipelineframework.context.PipelineCacheStatusHolder;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepOneToOne;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class PipelineRunnerCacheReadTest {
 
@@ -143,6 +140,28 @@ class PipelineRunnerCacheReadTest {
         String value = ((Uni<String>) result).await().indefinitely();
         assertEquals("computed-input", value);
         assertEquals(1, step.calls.get());
+    }
+
+    @Test
+    void cachePolicyEnforcementUsesContextSnapshot() {
+        CountingStep step = new CountingStep();
+        PipelineContext context = new PipelineContext("v1", null, "require-cache");
+        PipelineCacheStatusHolder.set(CacheStatus.MISS);
+        try {
+            Object result = PipelineRunner.applyOneToOneUnchecked(
+                step,
+                Uni.createFrom().item("input"),
+                false,
+                128,
+                null,
+                null,
+                null,
+                context);
+
+            assertThrows(CachePolicyViolation.class, () -> ((Uni<String>) result).await().indefinitely());
+        } finally {
+            PipelineCacheStatusHolder.clear();
+        }
     }
 
     static class CountingStep extends ConfigurableStep implements StepOneToOne<String, String> {

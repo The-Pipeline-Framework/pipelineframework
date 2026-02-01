@@ -183,11 +183,14 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         // Create the process method based on service type (determined from streaming shape)
         MethodSpec processMethod = switch (model.streamingShape()) {
             case UNARY_STREAMING -> createReactiveStreamingServiceProcessMethod(
-                    inputDtoClassName, outputDtoClassName, model, inboundMapperFieldName, outboundMapperFieldName);
+                    inputDtoClassName, outputDtoClassName, model, inboundMapperFieldName, outboundMapperFieldName,
+                    cachePluginSideEffect);
             case STREAMING_UNARY -> createReactiveStreamingClientServiceProcessMethod(
-                    inputDtoClassName, outputDtoClassName, model, inboundMapperFieldName, outboundMapperFieldName);
+                    inputDtoClassName, outputDtoClassName, model, inboundMapperFieldName, outboundMapperFieldName,
+                    cachePluginSideEffect);
             case STREAMING_STREAMING -> createReactiveBidirectionalStreamingServiceProcessMethod(
-                    inputDtoClassName, outputDtoClassName, model, inboundMapperFieldName, outboundMapperFieldName);
+                    inputDtoClassName, outputDtoClassName, model, inboundMapperFieldName, outboundMapperFieldName,
+                    cachePluginSideEffect);
             default -> createReactiveServiceProcessMethod(
                     inputDtoClassName, outputDtoClassName, model, ctx, inboundMapperFieldName, outboundMapperFieldName, cacheSideEffect);
         };
@@ -267,8 +270,11 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             PipelineStepModel model,
             String inboundMapperFieldName,
-            String outboundMapperFieldName) {
-        validateRestMappings(model);
+            String outboundMapperFieldName,
+            boolean skipValidation) {
+        if (!skipValidation) {
+            validateRestMappings(model);
+        }
 
         TypeName multiOutputDto = ParameterizedTypeName.get(ClassName.get(Multi.class), outputDtoClassName);
 
@@ -318,8 +324,11 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             PipelineStepModel model,
             String inboundMapperFieldName,
-            String outboundMapperFieldName) {
-        validateRestMappings(model);
+            String outboundMapperFieldName,
+            boolean skipValidation) {
+        if (!skipValidation) {
+            validateRestMappings(model);
+        }
 
         TypeName multiInputDto = ParameterizedTypeName.get(ClassName.get(Multi.class), inputDtoClassName);
         TypeName uniOutputDto = ParameterizedTypeName.get(ClassName.get(Uni.class), outputDtoClassName);
@@ -362,8 +371,11 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             PipelineStepModel model,
             String inboundMapperFieldName,
-            String outboundMapperFieldName) {
-        validateRestMappings(model);
+            String outboundMapperFieldName,
+            boolean skipValidation) {
+        if (!skipValidation) {
+            validateRestMappings(model);
+        }
 
         TypeName multiInputDto = ParameterizedTypeName.get(ClassName.get(Multi.class), inputDtoClassName);
         TypeName multiOutputDto = ParameterizedTypeName.get(ClassName.get(Multi.class), outputDtoClassName);

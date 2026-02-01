@@ -28,14 +28,7 @@ import io.smallrye.mutiny.Uni;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.pipelineframework.annotation.ParallelismHint;
-import org.pipelineframework.cache.CacheKeyTarget;
-import org.pipelineframework.cache.CacheReadBypass;
-import org.pipelineframework.cache.CachePolicy;
-import org.pipelineframework.cache.CachePolicyEnforcer;
-import org.pipelineframework.cache.CachePolicyViolation;
-import org.pipelineframework.cache.CacheStatus;
-import org.pipelineframework.cache.PipelineCacheReader;
-import org.pipelineframework.cache.CacheKeyStrategy;
+import org.pipelineframework.cache.*;
 import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.context.PipelineCacheStatusHolder;
@@ -402,7 +395,7 @@ public class PipelineRunner implements AutoCloseable {
                 .onItem()
                 .transformToUni(item -> applyOneToOneWithCache(step, item, cacheReadSupport, contextSnapshot))
                 .onItem()
-                .transformToUni(item -> CachePolicyEnforcer.enforce(item));
+                .transformToUni(item -> withPipelineContext(contextSnapshot, () -> CachePolicyEnforcer.enforce(item)));
             if (telemetry == null) {
                 return result;
             }
@@ -419,7 +412,8 @@ public class PipelineRunner implements AutoCloseable {
                     .onItem()
                     .transformToUni(item -> {
                         Uni<O> result = applyOneToOneWithCache(step, item, cacheReadSupport, contextSnapshot)
-                            .onItem().transformToUni(CachePolicyEnforcer::enforce);
+                            .onItem().transformToUni(enforced ->
+                                withPipelineContext(contextSnapshot, () -> CachePolicyEnforcer.enforce(enforced)));
                         if (telemetry == null) {
                             return result;
                         }
@@ -433,7 +427,8 @@ public class PipelineRunner implements AutoCloseable {
                     .onItem()
                     .transformToUni(item -> {
                         Uni<O> result = applyOneToOneWithCache(step, item, cacheReadSupport, contextSnapshot)
-                            .onItem().transformToUni(CachePolicyEnforcer::enforce);
+                            .onItem().transformToUni(enforced ->
+                                withPipelineContext(contextSnapshot, () -> CachePolicyEnforcer.enforce(enforced)));
                         if (telemetry == null) {
                             return result;
                         }
