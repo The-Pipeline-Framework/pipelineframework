@@ -492,7 +492,10 @@ public class PipelineRunner implements AutoCloseable {
             return withPipelineContext(contextSnapshot, () -> step.apply(Uni.createFrom().item(item)));
         }
         if (step instanceof CacheReadBypass) {
-            return withPipelineContext(contextSnapshot, () -> step.apply(Uni.createFrom().item(item)));
+            return withPipelineContext(contextSnapshot, () -> {
+                PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
+                return step.apply(Uni.createFrom().item(item));
+            });
         }
         CachePolicy policy = cacheReadSupport.resolvePolicy(contextSnapshot);
         if (!cacheReadSupport.shouldRead(policy)) {
@@ -508,7 +511,10 @@ public class PipelineRunner implements AutoCloseable {
                 return withPipelineContext(contextSnapshot, () -> Uni.createFrom().failure(
                     new IllegalStateException("Cache key required but could not be resolved")));
             }
-            return withPipelineContext(contextSnapshot, () -> step.apply(Uni.createFrom().item(item)));
+            return withPipelineContext(contextSnapshot, () -> {
+                PipelineCacheStatusHolder.set(CacheStatus.MISS);
+                return step.apply(Uni.createFrom().item(item));
+            });
         }
         String key = cacheReadSupport.withVersionPrefix(resolvedKey.get(), contextSnapshot);
         return cacheReadSupport.reader.get(key)
@@ -523,7 +529,10 @@ public class PipelineRunner implements AutoCloseable {
                     return Uni.createFrom().failure(new CachePolicyViolation(
                         "Cache policy REQUIRE_CACHE failed for key: " + key));
                 }
-                return withPipelineContext(contextSnapshot, () -> step.apply(Uni.createFrom().item(item)));
+                return withPipelineContext(contextSnapshot, () -> {
+                    PipelineCacheStatusHolder.set(CacheStatus.MISS);
+                    return step.apply(Uni.createFrom().item(item));
+                });
             });
     }
 
