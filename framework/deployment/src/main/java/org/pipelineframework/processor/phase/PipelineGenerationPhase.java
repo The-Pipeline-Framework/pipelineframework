@@ -407,6 +407,10 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             return fileDescriptor.getOptions().getJavaOuterClassname();
         }
         String fileName = fileDescriptor.getName();
+        int slashIndex = Math.max(fileName.lastIndexOf('/'), fileName.lastIndexOf('\\'));
+        if (slashIndex >= 0 && slashIndex + 1 < fileName.length()) {
+            fileName = fileName.substring(slashIndex + 1);
+        }
         if (fileName.endsWith(".proto")) {
             fileName = fileName.substring(0, fileName.length() - 6);
         }
