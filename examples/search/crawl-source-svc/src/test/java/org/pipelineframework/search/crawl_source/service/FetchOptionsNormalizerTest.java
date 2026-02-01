@@ -3,6 +3,7 @@ package org.pipelineframework.search.crawl_source.service;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.search.common.domain.CrawlRequest;
 import org.pipelineframework.search.common.util.CrawlRequestOptions;
+import org.pipelineframework.search.common.util.FetchOptionsNormalizer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;

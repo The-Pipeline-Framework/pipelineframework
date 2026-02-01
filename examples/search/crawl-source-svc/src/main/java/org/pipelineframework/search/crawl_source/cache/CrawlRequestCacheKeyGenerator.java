@@ -9,7 +9,8 @@ import org.pipelineframework.cache.PipelineCacheKeyFormat;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.search.common.domain.CrawlRequest;
-import org.pipelineframework.search.crawl_source.service.FetchOptionsNormalizer;
+import org.pipelineframework.search.common.domain.RawDocument;
+import org.pipelineframework.search.common.util.FetchOptionsNormalizer;
 
 @ApplicationScoped
 @Unremovable
@@ -41,7 +42,7 @@ public class CrawlRequestCacheKeyGenerator implements CacheKeyGenerator {
 
     String fetchOptions = FetchOptionsNormalizer.normalize(request);
     StringBuilder key = new StringBuilder();
-    key.append(request.getClass().getName()).append(":").append(sourceUrl);
+    key.append(RawDocument.class.getName()).append(":").append(sourceUrl);
     if (fetchOptions != null) {
       key.append("|").append(fetchOptions);
     }

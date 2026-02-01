@@ -6,7 +6,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 import io.quarkus.arc.Unremovable;
 import org.pipelineframework.cache.CacheKeyStrategy;
 import org.pipelineframework.context.PipelineContext;
+import org.pipelineframework.search.common.domain.ParsedDocument;
 import org.pipelineframework.search.common.domain.TokenBatch;
+import org.pipelineframework.search.common.dto.ParsedDocumentDto;
 import org.pipelineframework.search.common.dto.TokenBatchDto;
 
 @ApplicationScoped
@@ -19,6 +21,10 @@ public class TokenizeCacheKeyStrategy implements CacheKeyStrategy {
     if (item instanceof TokenBatch batch) {
       contentHash = batch.contentHash;
     } else if (item instanceof TokenBatchDto dto) {
+      contentHash = dto.getContentHash();
+    } else if (item instanceof ParsedDocument document) {
+      contentHash = document.contentHash;
+    } else if (item instanceof ParsedDocumentDto dto) {
       contentHash = dto.getContentHash();
     } else {
       return Optional.empty();
@@ -33,6 +39,11 @@ public class TokenizeCacheKeyStrategy implements CacheKeyStrategy {
   @Override
   public int priority() {
     return 60;
+  }
+
+  @Override
+  public boolean supportsTarget(Class<?> targetType) {
+    return targetType == TokenBatch.class || targetType == TokenBatchDto.class;
   }
 
   private String resolveModelVersion() {

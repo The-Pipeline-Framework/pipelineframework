@@ -1,4 +1,4 @@
-package org.pipelineframework.search.crawl_source.service;
+package org.pipelineframework.search.common.util;
 
 import java.util.Locale;
 import java.util.Map;
@@ -6,6 +6,7 @@ import java.util.StringJoiner;
 import java.util.TreeMap;
 
 import org.pipelineframework.search.common.domain.CrawlRequest;
+import org.pipelineframework.search.common.dto.CrawlRequestDto;
 
 public final class FetchOptionsNormalizer {
 
@@ -16,14 +17,39 @@ public final class FetchOptionsNormalizer {
     if (request == null) {
       return null;
     }
+    return normalize(
+        request.fetchMethod,
+        request.accept,
+        request.acceptLanguage,
+        request.authScope,
+        request.fetchHeaders);
+  }
 
+  public static String normalize(CrawlRequestDto request) {
+    if (request == null) {
+      return null;
+    }
+    return normalize(
+        request.getFetchMethod(),
+        request.getAccept(),
+        request.getAcceptLanguage(),
+        request.getAuthScope(),
+        request.getFetchHeaders());
+  }
+
+  public static String normalize(
+      String fetchMethod,
+      String accept,
+      String acceptLanguage,
+      String authScope,
+      Map<String, String> fetchHeaders) {
     StringJoiner joiner = new StringJoiner("|");
-    add(joiner, "method", normalizeMethod(request.fetchMethod));
-    add(joiner, "accept", normalizeToken(request.accept));
-    add(joiner, "acceptLanguage", normalizeToken(request.acceptLanguage));
-    add(joiner, "authScope", normalizeToken(request.authScope));
+    add(joiner, "method", normalizeMethod(fetchMethod));
+    add(joiner, "accept", normalizeToken(accept));
+    add(joiner, "acceptLanguage", normalizeToken(acceptLanguage));
+    add(joiner, "authScope", normalizeToken(authScope));
 
-    String headers = normalizeHeaders(request.fetchHeaders);
+    String headers = normalizeHeaders(fetchHeaders);
     add(joiner, "headers", headers);
 
     String normalized = joiner.toString();
