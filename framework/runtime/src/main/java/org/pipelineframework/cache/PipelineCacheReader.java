@@ -26,18 +26,18 @@ import io.smallrye.mutiny.Uni;
 public interface PipelineCacheReader {
 
     /**
-     * Retrieve a cached entry by key if supported.
-     *
-     * @param key cache key
-     * @return the cached item if present
-     */
+ * Retrieve the cached value associated with the given key.
+ *
+ * @param key the cache key to fetch
+ * @return an Optional containing the cached object if present, or an empty Optional if not found
+ */
     Uni<Optional<Object>> get(String key);
 
     /**
-     * Determine if the cache contains the given key.
-     *
-     * @param key cache key
-     * @return true if the key exists, false otherwise
-     */
+ * Determines whether a cache entry exists for the given key.
+ *
+ * @param key the cache key to check
+ * @return {@code true} if the key exists, {@code false} otherwise
+ */
     Uni<Boolean> exists(String key);
 }

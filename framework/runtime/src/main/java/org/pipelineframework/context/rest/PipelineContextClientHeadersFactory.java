@@ -33,11 +33,26 @@ import org.pipelineframework.context.PipelineContextHolder;
 public class PipelineContextClientHeadersFactory implements ClientHeadersFactory {
 
     /**
-     * Creates a new PipelineContextClientHeadersFactory.
+     * Creates a PipelineContextClientHeadersFactory used to propagate pipeline context headers to outgoing REST client requests.
+     *
+     * This constructor performs no side effects during initialization.
      */
     public PipelineContextClientHeadersFactory() {
     }
 
+    /**
+     * Propagates pipeline context headers (VERSION, REPLAY, CACHE_POLICY) from incoming request headers
+     * to the provided client outgoing headers, using the current PipelineContext as a fallback.
+     *
+     * If a header is present (case-insensitive) in incomingHeaders its value is forwarded; if absent,
+     * the corresponding value is taken from PipelineContextHolder.get() when available. Only non-blank
+     * values are written into clientOutgoingHeaders.
+     *
+     * @param incomingHeaders      the incoming request headers to read values from; may be null
+     * @param clientOutgoingHeaders the outgoing client headers to update; if null, it is returned unchanged
+     * @return the clientOutgoingHeaders map after any propagated headers have been set, or null if
+     *         clientOutgoingHeaders was null
+     */
     @Override
     public MultivaluedMap<String, String> update(
             MultivaluedMap<String, String> incomingHeaders,
@@ -70,6 +85,14 @@ public class PipelineContextClientHeadersFactory implements ClientHeadersFactory
         return clientOutgoingHeaders;
     }
 
+    /**
+     * Retrieve the first non-blank value for the given header name from the provided headers,
+     * matching the header name case-insensitively.
+     *
+     * @param headers the map of header names to values; may be null
+     * @param name the header name to look up; may be null
+     * @return the first non-blank value for the header if found, otherwise null
+     */
     private String headerValue(MultivaluedMap<String, String> headers, String name) {
         if (headers == null || name == null) {
             return null;
@@ -89,6 +112,14 @@ public class PipelineContextClientHeadersFactory implements ClientHeadersFactory
         return null;
     }
 
+    /**
+     * Sets the header in the provided map only when the given value is non-null and contains
+     * at least one non-whitespace character.
+     *
+     * @param headers the headers map to modify
+     * @param name the header name to set
+     * @param value the header value to write when present (ignored if null or only whitespace)
+     */
     private void putIfPresent(
             MultivaluedMap<String, String> headers,
             String name,

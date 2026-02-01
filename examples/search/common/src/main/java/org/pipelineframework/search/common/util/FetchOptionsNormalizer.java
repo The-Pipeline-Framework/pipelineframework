@@ -13,6 +13,12 @@ public final class FetchOptionsNormalizer {
   private FetchOptionsNormalizer() {
   }
 
+  /**
+   * Builds a normalized string representation of the fetch/crawl options contained in the given request.
+   *
+   * @param request the request whose fetch options should be normalized; may be {@code null}
+   * @return {@code null} if {@code request} is {@code null} or all normalized option parts are blank; otherwise a pipe-delimited string of normalized option key/value pairs (including a canonical, ordered representation of headers)
+   */
   public static String normalize(CrawlRequest request) {
     if (request == null) {
       return null;
@@ -25,6 +31,12 @@ public final class FetchOptionsNormalizer {
         request.fetchHeaders);
   }
 
+  /**
+   * Builds a canonical string representation of fetch/fetching options from the given CrawlRequestDto.
+   *
+   * @param request the DTO containing fetch options (fetchMethod, accept, acceptLanguage, authScope, fetchHeaders); may be null
+   * @return `null` if {@code request} is null or if all normalized parts are blank; otherwise a pipe-delimited string of normalized options (method, accept, acceptLanguage, authScope, headers)
+   */
   public static String normalize(CrawlRequestDto request) {
     if (request == null) {
       return null;
@@ -37,6 +49,16 @@ public final class FetchOptionsNormalizer {
         request.getFetchHeaders());
   }
 
+  /**
+   * Builds a canonical, pipe-delimited string representation of fetch/crawl options from the provided values.
+   *
+   * @param fetchMethod    the HTTP fetch method (e.g., "GET", "POST"); will be normalized to a canonical form
+   * @param accept         the Accept header value to include in the representation
+   * @param acceptLanguage the Accept-Language header value to include in the representation
+   * @param authScope      the authentication scope value to include in the representation
+   * @param fetchHeaders   map of header names to values to include; header names and values are normalized before inclusion
+   * @return               the normalized options string, or `null` if all provided inputs are blank or null
+   */
   public static String normalize(
       String fetchMethod,
       String accept,

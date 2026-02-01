@@ -72,6 +72,13 @@ public class RedisCacheProvider implements CacheProvider<Object> {
     public RedisCacheProvider() {
     }
 
+    /**
+     * Initializes the mapping of protobuf message type names to their parsers after dependency injection.
+     *
+     * If no parser instances are provided, the map is set empty. Otherwise, null parsers and parsers
+     * with null or blank type names are ignored; for duplicate type names the first discovered parser
+     * is retained.
+     */
     @PostConstruct
     void initParsers() {
         if (protobufParsers == null) {
@@ -86,6 +93,11 @@ public class RedisCacheProvider implements CacheProvider<Object> {
                 (existing, ignored) -> existing));
     }
 
+    /**
+     * The cache value type handled by this provider.
+     *
+     * @return the Class object representing the provider's value type (Object.class)
+     */
     @Override
     public Class<Object> type() {
         return Object.class;
@@ -96,6 +108,14 @@ public class RedisCacheProvider implements CacheProvider<Object> {
         return cache(key, value, null);
     }
 
+    /**
+     * Stores the provided value in Redis under the configured prefix and given key, optionally setting an expiration.
+     *
+     * @param key   the cache key (without prefix); if null or blank the cache operation is skipped and the original value is returned
+     * @param value the value to cache; if null no caching is performed and `null` is returned
+     * @param ttl   optional time-to-live for the entry; if null, zero, or negative the entry is stored without expiration
+     * @return      the original value passed to the method, or `null` if the provided value was `null`
+     */
     @Override
     public Uni<Object> cache(String key, Object value, Duration ttl) {
         if (value == null) {
@@ -172,11 +192,26 @@ public class RedisCacheProvider implements CacheProvider<Object> {
         return true;
     }
 
+    /**
+     * Indicates the thread-safety level of this cache provider.
+     *
+     * @return the thread-safety level: {@link ThreadSafety#SAFE}
+     */
     @Override
     public ThreadSafety threadSafety() {
         return ThreadSafety.SAFE;
     }
 
+    /**
+     * Deserialize a stored cache entry string into its original object.
+     *
+     * <p>Supports entries encoded as JSON or as protobuf payloads wrapped in a CacheEnvelope.
+     *
+     * @param serialized the JSON representation of a CacheEnvelope containing the value's type, payload, and encoding
+     * @param key        the cache key associated with this entry (used for logging context)
+     * @return           an Optional containing the deserialized value if successful; `Optional.empty()` if the input is blank,
+     *                   the encoding is unsupported, a required protobuf parser is not registered, or deserialization fails
+     */
     Optional<Object> deserialize(String serialized, String key) {
         if (serialized == null || serialized.isBlank()) {
             return Optional.empty();
@@ -206,6 +241,15 @@ public class RedisCacheProvider implements CacheProvider<Object> {
         }
     }
 
+    /**
+     * Create a CacheEnvelope JSON string for the given value, encoding Protobuf messages as Base64.
+     *
+     * If the value is a Protobuf `Message`, its binary form is Base64-encoded and the envelope's `encoding` is `"protobuf"`.
+     * Otherwise the value is serialized to a JSON payload and the envelope's `encoding` is `"json"`.
+     *
+     * @param value the object to serialize (may be a Protobuf `Message` or any POJO)
+     * @return a JSON string representing the CacheEnvelope (contains `type`, `payload`, and `encoding`), or {@code null} if serialization fails
+     */
     String serialize(Object value) {
         try {
             if (value instanceof com.google.protobuf.Message message) {

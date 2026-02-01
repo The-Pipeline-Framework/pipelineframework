@@ -32,10 +32,25 @@ public class CacheKeyResolver {
     @Inject
     Instance<CacheKeyStrategy> strategies;
 
+    /**
+     * Resolves a cache key for the given item using the registered CacheKeyStrategy instances.
+     *
+     * @param item    the object for which to resolve a cache key
+     * @param context the pipeline context provided to strategies during resolution
+     * @return an Optional containing the resolved, trimmed cache key if one is found and non-blank, otherwise an empty Optional
+     */
     public Optional<String> resolveKey(Object item, PipelineContext context) {
         return resolveKey(item, context, null);
     }
 
+    /**
+     * Resolve a cache key for the given item and pipeline context, optionally preferring strategies that support a specific target type.
+     *
+     * @param item the object to derive a cache key from
+     * @param context the pipeline context passed to strategies during resolution
+     * @param targetType if non-null, only strategies that declare support for this target type are attempted first; if at least one such strategy exists but none produce a non-blank key, an empty result is returned; if no strategy declares support, resolution falls back to trying all strategies
+     * @return an Optional containing the trimmed cache key when a non-blank key is produced, or Optional.empty() otherwise
+     */
     public Optional<String> resolveKey(Object item, PipelineContext context, Class<?> targetType) {
         if (item == null) {
             return Optional.empty();
