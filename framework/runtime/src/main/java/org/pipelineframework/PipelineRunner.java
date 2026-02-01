@@ -357,7 +357,8 @@ public class PipelineRunner implements AutoCloseable {
             return null;
         }
         List<PipelineCacheReader> readers = cacheReaders.stream()
-            .sorted(Comparator.comparing(cacheReader -> cacheReader.getClass().getName()))
+            .sorted(Comparator.comparingInt(PipelineCacheReader::priority).reversed()
+                .thenComparing(cacheReader -> cacheReader.getClass().getName()))
             .toList();
         if (readers.isEmpty() || cacheKeyStrategies == null) {
             return null;
@@ -365,9 +366,11 @@ public class PipelineRunner implements AutoCloseable {
         if (readers.size() > 1) {
             String readerNames = String.join(
                 ", ",
-                readers.stream().map(cacheReader -> cacheReader.getClass().getName()).toList());
+                readers.stream()
+                    .map(cacheReader -> cacheReader.getClass().getName() + "(priority=" + cacheReader.priority() + ")")
+                    .toList());
             logger.warnf(
-                "Multiple PipelineCacheReader beans found (%s). Using %s based on class name ordering.",
+                "Multiple PipelineCacheReader beans found (%s). Using %s based on priority ordering.",
                 readerNames,
                 readers.get(0).getClass().getName());
         }
@@ -532,10 +535,12 @@ public class PipelineRunner implements AutoCloseable {
         return cacheReadSupport.reader.get(key)
             .onItem().transformToUni(cached -> {
                 if (cached.isPresent()) {
-                    PipelineCacheStatusHolder.set(CacheStatus.HIT);
-                    @SuppressWarnings("unchecked")
-                    O value = (O) cached.get();
-                    return Uni.createFrom().item(value);
+                    return withPipelineContext(contextSnapshot, () -> {
+                        PipelineCacheStatusHolder.set(CacheStatus.HIT);
+                        @SuppressWarnings("unchecked")
+                        O value = (O) cached.get();
+                        return Uni.createFrom().item(value);
+                    });
                 }
                 if (policy == CachePolicy.REQUIRE_CACHE) {
                     return Uni.createFrom().failure(new CachePolicyViolation(
@@ -619,11 +624,13 @@ public class PipelineRunner implements AutoCloseable {
             if (item == null) {
                 return Optional.empty();
             }
+            boolean foundSupporting = false;
             if (targetType != null) {
                 for (CacheKeyStrategy strategy : strategies) {
                     if (!strategy.supportsTarget(targetType)) {
                         continue;
                     }
+                    foundSupporting = true;
                     Optional<String> resolved = strategy.resolveKey(item, context);
                     if (resolved.isPresent()) {
                         String key = resolved.get();
@@ -631,6 +638,9 @@ public class PipelineRunner implements AutoCloseable {
                             return Optional.of(key.trim());
                         }
                     }
+                }
+                if (foundSupporting) {
+                    return Optional.empty();
                 }
             }
             for (CacheKeyStrategy strategy : strategies) {
