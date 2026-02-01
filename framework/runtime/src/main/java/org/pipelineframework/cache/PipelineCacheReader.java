@@ -40,4 +40,13 @@ public interface PipelineCacheReader {
  * @return {@code true} if the key exists, {@code false} otherwise
  */
     Uni<Boolean> exists(String key);
+
+    /**
+     * Reader priority; higher values are preferred when multiple readers are present.
+     *
+     * @return priority order
+     */
+    default int priority() {
+        return 0;
+    }
 }
