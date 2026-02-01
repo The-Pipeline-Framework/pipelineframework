@@ -34,21 +34,27 @@ public class CrawlCacheKeyStrategy implements CacheKeyStrategy {
   public Optional<String> resolveKey(Object item, PipelineContext context) {
     String sourceUrl;
     String fetchOptions;
-    if (item instanceof RawDocument document) {
-      sourceUrl = document.sourceUrl;
-      fetchOptions = document.fetchOptions;
-    } else if (item instanceof RawDocumentDto dto) {
-      sourceUrl = dto.getSourceUrl();
-      fetchOptions = dto.getFetchOptions();
-    } else if (item instanceof CrawlRequest request) {
-      sourceUrl = request.sourceUrl;
-      fetchOptions = FetchOptionsNormalizer.normalize(request);
-    } else if (item instanceof CrawlRequestDto dto) {
-      sourceUrl = dto.getSourceUrl();
-      fetchOptions = FetchOptionsNormalizer.normalize(dto);
-    } else {
-      return Optional.empty();
-    }
+      switch (item) {
+          case RawDocument document -> {
+              sourceUrl = document.sourceUrl;
+              fetchOptions = document.fetchOptions;
+          }
+          case RawDocumentDto dto -> {
+              sourceUrl = dto.getSourceUrl();
+              fetchOptions = dto.getFetchOptions();
+          }
+          case CrawlRequest request -> {
+              sourceUrl = request.sourceUrl;
+              fetchOptions = FetchOptionsNormalizer.normalize(request);
+          }
+          case CrawlRequestDto dto -> {
+              sourceUrl = dto.getSourceUrl();
+              fetchOptions = FetchOptionsNormalizer.normalize(dto);
+          }
+          case null, default -> {
+              return Optional.empty();
+          }
+      }
     if (sourceUrl == null || sourceUrl.isBlank()) {
       return Optional.empty();
     }
@@ -74,7 +80,8 @@ public class CrawlCacheKeyStrategy implements CacheKeyStrategy {
    * Indicates whether this strategy can compute cache keys for the given target type.
    *
    * @param targetType the target class to check support for
-   * @return `true` if the target type is {@code RawDocument} or {@code RawDocumentDto}, `false` otherwise
+   * @return `true` if the target type is {@code RawDocument}, {@code RawDocumentDto}, {@code CrawlRequest},
+   *         or {@code CrawlRequestDto}, `false` otherwise
    */
   @Override
   public boolean supportsTarget(Class<?> targetType) {
