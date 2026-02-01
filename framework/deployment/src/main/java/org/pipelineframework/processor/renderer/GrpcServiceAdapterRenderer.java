@@ -166,11 +166,16 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         // Create the inline adapter
         TypeSpec inlineAdapter = inlineAdapterBuilder(binding, grpcAdapterClassName, messager);
 
-        TypeName inputDomainTypeUnary = model.inboundDomainType();
-        TypeName outputDomainTypeUnary = model.outboundDomainType();
+        boolean cacheSideEffect = isCacheSideEffect(model);
+        TypeName inputDomainTypeUnary = cacheSideEffect
+            ? grpcTypes.grpcParameterType()
+            : model.inboundDomainType();
+        TypeName outputDomainTypeUnary = cacheSideEffect
+            ? grpcTypes.grpcReturnType()
+            : model.outboundDomainType();
 
         // Validate that required domain types are available
-        if (inputDomainTypeUnary == null || outputDomainTypeUnary == null) {
+        if (!cacheSideEffect && (inputDomainTypeUnary == null || outputDomainTypeUnary == null)) {
             throw new IllegalStateException("Missing required domain parameter or return type for service: " + binding.serviceName());
         }
 
@@ -245,11 +250,16 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         // Create the inline adapter
         TypeSpec inlineAdapter = inlineAdapterBuilder(binding, grpcAdapterClassName, messager);
 
-        TypeName inputDomainTypeUnaryStreaming = model.inboundDomainType();
-        TypeName outputDomainTypeUnaryStreaming = model.outboundDomainType();
+        boolean cacheSideEffect = isCacheSideEffect(model);
+        TypeName inputDomainTypeUnaryStreaming = cacheSideEffect
+            ? grpcTypes.grpcParameterType()
+            : model.inboundDomainType();
+        TypeName outputDomainTypeUnaryStreaming = cacheSideEffect
+            ? grpcTypes.grpcReturnType()
+            : model.outboundDomainType();
 
         // Validate that required domain types are available
-        if (inputDomainTypeUnaryStreaming == null || outputDomainTypeUnaryStreaming == null) {
+        if (!cacheSideEffect && (inputDomainTypeUnaryStreaming == null || outputDomainTypeUnaryStreaming == null)) {
             throw new IllegalStateException("Missing required domain parameter or return type for service: " + binding.serviceName());
         }
 
@@ -325,11 +335,16 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         // Create the inline adapter
         TypeSpec inlineAdapter = inlineAdapterBuilder(binding, grpcAdapterClassName, messager);
 
-        TypeName inputDomainTypeStreamingUnary = model.inboundDomainType();
-        TypeName outputDomainTypeStreamingUnary = model.outboundDomainType();
+        boolean cacheSideEffect = isCacheSideEffect(model);
+        TypeName inputDomainTypeStreamingUnary = cacheSideEffect
+            ? grpcTypes.grpcParameterType()
+            : model.inboundDomainType();
+        TypeName outputDomainTypeStreamingUnary = cacheSideEffect
+            ? grpcTypes.grpcReturnType()
+            : model.outboundDomainType();
 
         // Validate that required domain types are available
-        if (inputDomainTypeStreamingUnary == null || outputDomainTypeStreamingUnary == null) {
+        if (!cacheSideEffect && (inputDomainTypeStreamingUnary == null || outputDomainTypeStreamingUnary == null)) {
             throw new IllegalStateException("Missing required domain parameter or return type for service: " + binding.serviceName());
         }
 
@@ -402,11 +417,16 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         // Create the inline adapter
         TypeSpec inlineAdapterStreaming = inlineAdapterBuilder(binding, grpcAdapterClassName, messager);
 
-        TypeName inputDomainTypeStreamingStreaming = model.inboundDomainType();
-        TypeName outputDomainTypeStreamingStreaming = model.outboundDomainType();
+        boolean cacheSideEffect = isCacheSideEffect(model);
+        TypeName inputDomainTypeStreamingStreaming = cacheSideEffect
+            ? grpcTypes.grpcParameterType()
+            : model.inboundDomainType();
+        TypeName outputDomainTypeStreamingStreaming = cacheSideEffect
+            ? grpcTypes.grpcReturnType()
+            : model.outboundDomainType();
 
         // Validate that required domain types are available
-        if (inputDomainTypeStreamingStreaming == null || outputDomainTypeStreamingStreaming == null) {
+        if (!cacheSideEffect && (inputDomainTypeStreamingStreaming == null || outputDomainTypeStreamingStreaming == null)) {
             throw new IllegalStateException("Missing required domain parameter or return type for service: " + binding.serviceName());
         }
 
@@ -478,16 +498,17 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
 
         TypeName inputGrpcType = grpcTypes.grpcParameterType(); // Get the correct input gRPC type
         TypeName outputGrpcType = grpcTypes.grpcReturnType(); // Get the correct output gRPC type
-        TypeName inputDomainType = model.inboundDomainType();
-        TypeName outputDomainType = model.outboundDomainType();
+        boolean cacheSideEffect = isCacheSideEffect(model);
+        TypeName inputDomainType = cacheSideEffect ? inputGrpcType : model.inboundDomainType();
+        TypeName outputDomainType = cacheSideEffect ? outputGrpcType : model.outboundDomainType();
 
         // Validate that required domain types are available
-        if (inputDomainType == null || outputDomainType == null) {
+        if (!cacheSideEffect && (inputDomainType == null || outputDomainType == null)) {
             throw new IllegalStateException("Missing required domain parameter or return type for service: " + binding.serviceName());
         }
 
-        boolean hasInboundMapper = model.inputMapping().hasMapper();
-        boolean hasOutboundMapper = model.outputMapping().hasMapper();
+        boolean hasInboundMapper = !cacheSideEffect && model.inputMapping().hasMapper();
+        boolean hasOutboundMapper = !cacheSideEffect && model.outputMapping().hasMapper();
 
         MethodSpec.Builder fromGrpcMethodBuilder = MethodSpec.methodBuilder("fromGrpc")
                 .addAnnotation(Override.class)
@@ -539,6 +560,14 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         return ClassName.get(
             model.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
             model.serviceName());
+    }
+
+    private boolean isCacheSideEffect(PipelineStepModel model) {
+        if (model == null || !model.sideEffect() || model.serviceClassName() == null) {
+            return false;
+        }
+        return "org.pipelineframework.plugin.cache.CacheService".equals(
+            model.serviceClassName().canonicalName());
     }
 
 }

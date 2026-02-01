@@ -78,10 +78,22 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                 ClassName.get("org.eclipse.microprofile.rest.client.inject", "RegisterRestClient"))
             .addMember("configKey", "$S", toRestClientName(model.serviceName()))
             .build();
+        AnnotationSpec registerClientHeaders = AnnotationSpec.builder(
+                ClassName.get("org.eclipse.microprofile.rest.client.annotation", "RegisterClientHeaders"))
+            .addMember("value", "$T.class",
+                ClassName.get("org.pipelineframework.context.rest", "PipelineContextClientHeadersFactory"))
+            .build();
+        AnnotationSpec registerCacheStatusFilter = AnnotationSpec.builder(
+                ClassName.get("org.eclipse.microprofile.rest.client.annotation", "RegisterProvider"))
+            .addMember("value", "$T.class",
+                ClassName.get("org.pipelineframework.context.rest", "PipelineCacheStatusClientResponseFilter"))
+            .build();
 
         TypeSpec.Builder interfaceBuilder = TypeSpec.interfaceBuilder(interfaceName)
             .addModifiers(Modifier.PUBLIC)
             .addAnnotation(registerRestClient)
+            .addAnnotation(registerClientHeaders)
+            .addAnnotation(registerCacheStatusFilter)
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Path"))
                 .addMember("value", "$S", basePath)
                 .build());
@@ -129,6 +141,9 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                     ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role"),
                     role.name())
                 .build());
+        if (model.sideEffect()) {
+            clientStepBuilder.addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheReadBypass"));
+        }
 
         TypeName restClientInterface = ClassName.get(
             binding.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
@@ -154,15 +169,30 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
 
         switch (model.streamingShape()) {
             case UNARY_UNARY -> {
+                clientStepBuilder.addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheKeyTarget"));
                 clientStepBuilder.addSuperinterface(ParameterizedTypeName.get(
                     ClassName.get(StepOneToOne.class), inputDto, outputDto));
+                MethodSpec cacheKeyTargetMethod = MethodSpec.methodBuilder("cacheKeyTargetType")
+                    .addAnnotation(Override.class)
+                    .addModifiers(Modifier.PUBLIC)
+                    .returns(ParameterizedTypeName.get(ClassName.get(Class.class),
+                        WildcardTypeName.subtypeOf(Object.class)))
+                    .addStatement("return $T.class", outputDto)
+                    .build();
+                clientStepBuilder.addMethod(cacheKeyTargetMethod);
                 MethodSpec.Builder applyOneToOneMethod = MethodSpec.methodBuilder("applyOneToOne")
                     .addAnnotation(Override.class)
                     .addModifiers(Modifier.PUBLIC)
                     .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputDto))
-                    .addParameter(inputDto, "input");
+                    .addParameter(inputDto, "input")
+                    .addStatement("$T context = $T.get()",
+                        ClassName.get("org.pipelineframework.context", "PipelineContext"),
+                        ClassName.get("org.pipelineframework.context", "PipelineContextHolder"))
+                    .addStatement("String versionTag = context != null ? context.versionTag() : null")
+                    .addStatement("String replayMode = context != null ? context.replayMode() : null")
+                    .addStatement("String cachePolicy = context != null ? context.cachePolicy() : null");
                 applyOneToOneMethod.addStatement(
-                    "return $T.instrumentClient($S, $S, this.restClient.process(input))",
+                    "return $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, input))",
                     ClassName.get("org.pipelineframework.telemetry", "HttpMetrics"),
                     model.serviceName(),
                     "process");
@@ -176,8 +206,14 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                     .addModifiers(Modifier.PUBLIC)
                     .returns(ParameterizedTypeName.get(ClassName.get(Multi.class), outputDto))
                     .addParameter(inputDto, "input")
+                    .addStatement("$T context = $T.get()",
+                        ClassName.get("org.pipelineframework.context", "PipelineContext"),
+                        ClassName.get("org.pipelineframework.context", "PipelineContextHolder"))
+                    .addStatement("String versionTag = context != null ? context.versionTag() : null")
+                    .addStatement("String replayMode = context != null ? context.replayMode() : null")
+                    .addStatement("String cachePolicy = context != null ? context.cachePolicy() : null")
                     .addStatement(
-                        "return $T.instrumentClient($S, $S, this.restClient.process(input))",
+                        "return $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, input))",
                         ClassName.get("org.pipelineframework.telemetry", "HttpMetrics"),
                         model.serviceName(),
                         "process")
@@ -192,8 +228,14 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                     .addModifiers(Modifier.PUBLIC)
                     .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputDto))
                     .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class), inputDto), "inputs")
+                    .addStatement("$T context = $T.get()",
+                        ClassName.get("org.pipelineframework.context", "PipelineContext"),
+                        ClassName.get("org.pipelineframework.context", "PipelineContextHolder"))
+                    .addStatement("String versionTag = context != null ? context.versionTag() : null")
+                    .addStatement("String replayMode = context != null ? context.replayMode() : null")
+                    .addStatement("String cachePolicy = context != null ? context.cachePolicy() : null")
                     .addStatement(
-                        "return $T.instrumentClient($S, $S, this.restClient.process(inputs))",
+                        "return $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, inputs))",
                         ClassName.get("org.pipelineframework.telemetry", "HttpMetrics"),
                         model.serviceName(),
                         "process")
@@ -208,8 +250,14 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                     .addModifiers(Modifier.PUBLIC)
                     .returns(ParameterizedTypeName.get(ClassName.get(Multi.class), outputDto))
                     .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class), inputDto), "inputs")
+                    .addStatement("$T context = $T.get()",
+                        ClassName.get("org.pipelineframework.context", "PipelineContext"),
+                        ClassName.get("org.pipelineframework.context", "PipelineContextHolder"))
+                    .addStatement("String versionTag = context != null ? context.versionTag() : null")
+                    .addStatement("String replayMode = context != null ? context.replayMode() : null")
+                    .addStatement("String cachePolicy = context != null ? context.cachePolicy() : null")
                     .addStatement(
-                        "return $T.instrumentClient($S, $S, this.restClient.process(inputs))",
+                        "return $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, inputs))",
                         ClassName.get("org.pipelineframework.telemetry", "HttpMetrics"),
                         model.serviceName(),
                         "process")
@@ -222,19 +270,22 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
     }
 
     private MethodSpec buildUnaryUnaryMethod(TypeName inputDto, TypeName outputDto) {
-        return MethodSpec.methodBuilder("process")
+        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("process")
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST")).build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Path"))
                 .addMember("value", "$S", "/process")
                 .build())
             .addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)
             .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputDto))
-            .addParameter(inputDto, "inputDto")
-            .build();
+            .addParameter(headerParam("versionTag"))
+            .addParameter(headerParam("replayMode"))
+            .addParameter(headerParam("cachePolicy"))
+            .addParameter(inputDto, "inputDto");
+        return methodBuilder.build();
     }
 
     private MethodSpec buildUnaryStreamingMethod(TypeName inputDto, TypeName outputDto) {
-        return MethodSpec.methodBuilder("process")
+        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("process")
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST")).build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Path"))
                 .addMember("value", "$S", "/process")
@@ -244,25 +295,31 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                 .build())
             .addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)
             .returns(ParameterizedTypeName.get(ClassName.get(Multi.class), outputDto))
-            .addParameter(inputDto, "inputDto")
-            .build();
+            .addParameter(headerParam("versionTag"))
+            .addParameter(headerParam("replayMode"))
+            .addParameter(headerParam("cachePolicy"))
+            .addParameter(inputDto, "inputDto");
+        return methodBuilder.build();
     }
 
     private MethodSpec buildStreamingUnaryMethod(TypeName inputDto, TypeName outputDto) {
-        return MethodSpec.methodBuilder("process")
+        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("process")
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST")).build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Path"))
                 .addMember("value", "$S", "/process")
                 .build())
             .addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)
             .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputDto))
+            .addParameter(headerParam("versionTag"))
+            .addParameter(headerParam("replayMode"))
+            .addParameter(headerParam("cachePolicy"))
             .addParameter(ParameterSpec.builder(
-                ParameterizedTypeName.get(ClassName.get(Multi.class), inputDto), "inputDtos").build())
-            .build();
+                ParameterizedTypeName.get(ClassName.get(Multi.class), inputDto), "inputDtos").build());
+        return methodBuilder.build();
     }
 
     private MethodSpec buildStreamingStreamingMethod(TypeName inputDto, TypeName outputDto) {
-        return MethodSpec.methodBuilder("process")
+        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("process")
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST")).build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Path"))
                 .addMember("value", "$S", "/process")
@@ -278,7 +335,25 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                 .build())
             .addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)
             .returns(ParameterizedTypeName.get(ClassName.get(Multi.class), outputDto))
-            .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class), inputDto), "inputDtos")
+            .addParameter(headerParam("versionTag"))
+            .addParameter(headerParam("replayMode"))
+            .addParameter(headerParam("cachePolicy"))
+            .addParameter(ParameterizedTypeName.get(ClassName.get(Multi.class), inputDto), "inputDtos");
+        return methodBuilder.build();
+    }
+
+    private ParameterSpec headerParam(String name) {
+        String headerConst = switch (name) {
+            case "versionTag" -> "VERSION";
+            case "replayMode" -> "REPLAY";
+            case "cachePolicy" -> "CACHE_POLICY";
+            default -> "VERSION";
+        };
+        return ParameterSpec.builder(String.class, name)
+            .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "HeaderParam"))
+                .addMember("value", "$T." + headerConst,
+                    ClassName.get("org.pipelineframework.context", "PipelineContextHeaders"))
+                .build())
             .build();
     }
 

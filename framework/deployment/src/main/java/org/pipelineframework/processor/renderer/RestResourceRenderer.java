@@ -66,7 +66,10 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     private TypeSpec buildRestResourceClass(RestBinding binding, GenerationContext ctx) {
         org.pipelineframework.processor.ir.DeploymentRole role = ctx.role();
         PipelineStepModel model = binding.model();
-        validateRestMappings(model);
+        boolean cacheSideEffect = isCacheSideEffect(model);
+        if (!cacheSideEffect) {
+            validateRestMappings(model);
+        }
 
         String serviceClassName = model.generatedName();
 
@@ -107,7 +110,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         TypeName outboundMapperType = null;
         boolean inboundMapperAdded = false;
 
-        if (model.inputMapping().hasMapper()) {
+        if (!cacheSideEffect && model.inputMapping().hasMapper()) {
             inboundMapperType = model.inputMapping().mapperType();
             String inboundMapperSimpleName = inboundMapperType.toString().substring(
                 inboundMapperType.toString().lastIndexOf('.') + 1);
@@ -123,7 +126,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             inboundMapperAdded = true;
         }
 
-        if (model.outputMapping().hasMapper()) {
+        if (!cacheSideEffect && model.outputMapping().hasMapper()) {
             outboundMapperType = model.outputMapping().mapperType();
             String outboundMapperSimpleName = outboundMapperType.toString().substring(
                 outboundMapperType.toString().lastIndexOf('.') + 1);
@@ -156,12 +159,12 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             ? convertDomainToDtoType(model.outboundDomainType())
             : ClassName.OBJECT;
 
-        TypeName domainInputType = model.inboundDomainType() != null
-            ? model.inboundDomainType()
-            : ClassName.OBJECT;
-        TypeName domainOutputType = model.outboundDomainType() != null
-            ? model.outboundDomainType()
-            : ClassName.OBJECT;
+        TypeName domainInputType = cacheSideEffect
+            ? inputDtoClassName
+            : (model.inboundDomainType() != null ? model.inboundDomainType() : ClassName.OBJECT);
+        TypeName domainOutputType = cacheSideEffect
+            ? outputDtoClassName
+            : (model.outboundDomainType() != null ? model.outboundDomainType() : ClassName.OBJECT);
 
         ClassName adapterClass = resolveRestAdapterClass(model);
         TypeName adapterType = ParameterizedTypeName.get(
@@ -172,9 +175,9 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             domainOutputType);
         resourceBuilder.superclass(adapterType);
 
-        resourceBuilder.addMethod(createGetServiceMethod(model));
-        resourceBuilder.addMethod(createFromDtoMethod(model, inputDtoClassName, inboundMapperFieldName));
-        resourceBuilder.addMethod(createToDtoMethod(model, outputDtoClassName, outboundMapperFieldName));
+        resourceBuilder.addMethod(createGetServiceMethod(model, domainInputType, domainOutputType));
+        resourceBuilder.addMethod(createFromDtoMethod(model, inputDtoClassName, inboundMapperFieldName, cacheSideEffect));
+        resourceBuilder.addMethod(createToDtoMethod(model, outputDtoClassName, outboundMapperFieldName, cacheSideEffect));
 
         // Create the process method based on service type (determined from streaming shape)
         MethodSpec processMethod = switch (model.streamingShape()) {
@@ -185,7 +188,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             case STREAMING_STREAMING -> createReactiveBidirectionalStreamingServiceProcessMethod(
                     inputDtoClassName, outputDtoClassName, model, inboundMapperFieldName, outboundMapperFieldName);
             default -> createReactiveServiceProcessMethod(
-                    inputDtoClassName, outputDtoClassName, model, ctx, inboundMapperFieldName, outboundMapperFieldName);
+                    inputDtoClassName, outputDtoClassName, model, ctx, inboundMapperFieldName, outboundMapperFieldName, cacheSideEffect);
         };
 
         resourceBuilder.addMethod(processMethod);
@@ -212,8 +215,11 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             PipelineStepModel model,
             GenerationContext ctx,
             String inboundMapperFieldName,
-            String outboundMapperFieldName) {
-        validateRestMappings(model);
+            String outboundMapperFieldName,
+            boolean cacheSideEffect) {
+        if (!cacheSideEffect) {
+            validateRestMappings(model);
+        }
 
         TypeName uniOutputDto = ParameterizedTypeName.get(ClassName.get(Uni.class), outputDtoClassName);
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("process")
@@ -226,13 +232,17 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             .returns(uniOutputDto)
             .addParameter(inputDtoClassName, "inputDto");
 
-        TypeName domainInputType = model.inboundDomainType() != null
-            ? model.inboundDomainType()
-            : ClassName.OBJECT;
-        methodBuilder.addStatement("$T inputDomain = $L.fromDto(inputDto)",
-            domainInputType, inboundMapperFieldName);
-        methodBuilder.addStatement("return domainService.process(inputDomain).map(output -> $L.toDto(output))",
-            outboundMapperFieldName);
+        if (cacheSideEffect) {
+            methodBuilder.addStatement("return domainService.process(inputDto)");
+        } else {
+            TypeName domainInputType = model.inboundDomainType() != null
+                ? model.inboundDomainType()
+                : ClassName.OBJECT;
+            methodBuilder.addStatement("$T inputDomain = $L.fromDto(inputDto)",
+                domainInputType, inboundMapperFieldName);
+            methodBuilder.addStatement("return domainService.process(inputDomain).map(output -> $L.toDto(output))",
+                outboundMapperFieldName);
+        }
 
         // Add @RunOnVirtualThread annotation if the property is enabled
         if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
@@ -402,13 +412,10 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         };
     }
 
-    private MethodSpec createGetServiceMethod(PipelineStepModel model) {
-        TypeName domainInputType = model.inboundDomainType() != null
-            ? model.inboundDomainType()
-            : ClassName.OBJECT;
-        TypeName domainOutputType = model.outboundDomainType() != null
-            ? model.outboundDomainType()
-            : ClassName.OBJECT;
+    private MethodSpec createGetServiceMethod(
+            PipelineStepModel model,
+            TypeName domainInputType,
+            TypeName domainOutputType) {
         TypeName serviceType = switch (model.streamingShape()) {
             case UNARY_STREAMING -> ParameterizedTypeName.get(
                 ClassName.get("org.pipelineframework.service", "ReactiveStreamingService"),
@@ -445,36 +452,54 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             model.serviceName());
     }
 
+    private boolean isCacheSideEffect(PipelineStepModel model) {
+        if (model == null || !model.sideEffect() || model.serviceClassName() == null) {
+            return false;
+        }
+        return "org.pipelineframework.plugin.cache.CacheService".equals(
+            model.serviceClassName().canonicalName());
+    }
+
     private MethodSpec createFromDtoMethod(
             PipelineStepModel model,
             TypeName inputDtoClassName,
-            String inboundMapperFieldName) {
-        TypeName domainInputType = model.inboundDomainType() != null
-            ? model.inboundDomainType()
-            : ClassName.OBJECT;
-        return MethodSpec.methodBuilder("fromDto")
+            String inboundMapperFieldName,
+            boolean cacheSideEffect) {
+        TypeName domainInputType = cacheSideEffect
+            ? inputDtoClassName
+            : (model.inboundDomainType() != null ? model.inboundDomainType() : ClassName.OBJECT);
+        MethodSpec.Builder builder = MethodSpec.methodBuilder("fromDto")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PROTECTED)
             .returns(domainInputType)
-            .addParameter(inputDtoClassName, "dto")
-            .addStatement("return $L.fromDto(dto)", inboundMapperFieldName)
-            .build();
+            .addParameter(inputDtoClassName, "dto");
+        if (cacheSideEffect) {
+            builder.addStatement("return dto");
+        } else {
+            builder.addStatement("return $L.fromDto(dto)", inboundMapperFieldName);
+        }
+        return builder.build();
     }
 
     private MethodSpec createToDtoMethod(
             PipelineStepModel model,
             TypeName outputDtoClassName,
-            String outboundMapperFieldName) {
-        TypeName domainOutputType = model.outboundDomainType() != null
-            ? model.outboundDomainType()
-            : ClassName.OBJECT;
-        return MethodSpec.methodBuilder("toDto")
+            String outboundMapperFieldName,
+            boolean cacheSideEffect) {
+        TypeName domainOutputType = cacheSideEffect
+            ? outputDtoClassName
+            : (model.outboundDomainType() != null ? model.outboundDomainType() : ClassName.OBJECT);
+        MethodSpec.Builder builder = MethodSpec.methodBuilder("toDto")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PROTECTED)
             .returns(outputDtoClassName)
-            .addParameter(domainOutputType, "domain")
-            .addStatement("return $L.toDto(domain)", outboundMapperFieldName)
-            .build();
+            .addParameter(domainOutputType, "domain");
+        if (cacheSideEffect) {
+            builder.addStatement("return domain");
+        } else {
+            builder.addStatement("return $L.toDto(domain)", outboundMapperFieldName);
+        }
+        return builder.build();
     }
 
     /**

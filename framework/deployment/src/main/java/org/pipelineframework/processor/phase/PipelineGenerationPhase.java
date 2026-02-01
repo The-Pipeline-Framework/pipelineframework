@@ -1,11 +1,19 @@
 package org.pipelineframework.processor.phase;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.List;
 import java.util.Set;
 
 import com.google.protobuf.DescriptorProtos;
+import com.google.protobuf.Descriptors;
 import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.JavaFile;
+import com.squareup.javapoet.MethodSpec;
+import com.squareup.javapoet.TypeSpec;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.ir.*;
@@ -98,6 +106,10 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             );
         }
 
+        if (ctx.isTransportModeGrpc() && descriptorSet != null) {
+            generateProtobufParsers(ctx, descriptorSet);
+        }
+
         // Generate orchestrator artifacts if needed
         if (ctx.isOrchestratorGenerated()) {
             OrchestratorBinding orchestratorBinding = (OrchestratorBinding) bindingsMap.get("orchestrator");
@@ -141,6 +153,195 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         }
     }
 
+    private void generateProtobufParsers(
+            PipelineCompilationContext ctx,
+            DescriptorProtos.FileDescriptorSet descriptorSet) {
+        Map<String, Descriptors.FileDescriptor> fileDescriptors = buildFileDescriptors(descriptorSet);
+        if (fileDescriptors.isEmpty()) {
+            return;
+        }
+        org.pipelineframework.processor.ir.DeploymentRole role = ctx.isPluginHost()
+            ? org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER
+            : org.pipelineframework.processor.ir.DeploymentRole.PIPELINE_SERVER;
+        java.nio.file.Path outputDir = resolveRoleOutputDir(ctx, role);
+        Set<String> generated = new HashSet<>();
+
+        for (Descriptors.FileDescriptor fileDescriptor : fileDescriptors.values()) {
+            for (Descriptors.Descriptor descriptor : fileDescriptor.getMessageTypes()) {
+                collectAndGenerateParser(ctx, descriptor, outputDir, generated);
+            }
+        }
+    }
+
+    private void collectAndGenerateParser(
+            PipelineCompilationContext ctx,
+            Descriptors.Descriptor descriptor,
+            java.nio.file.Path outputDir,
+            Set<String> generated) {
+        if (descriptor == null) {
+            return;
+        }
+        if (!descriptor.getOptions().getMapEntry()) {
+            ClassName messageType = resolveMessageClassName(descriptor);
+            if (messageType != null) {
+                String parserPackage = messageType.packageName().isBlank()
+                    ? "pipeline"
+                    : messageType.packageName() + ".pipeline";
+                String parserName = "Proto" + String.join("", messageType.simpleNames()) + "Parser";
+                String fqcn = parserPackage + "." + parserName;
+                if (generated.add(fqcn)) {
+                    TypeSpec parserClass = buildParserClass(messageType, parserName);
+                    try {
+                        JavaFile.builder(parserPackage, parserClass).build().writeTo(outputDir);
+                    } catch (IOException e) {
+                        if (ctx.getProcessingEnv() != null) {
+                            ctx.getProcessingEnv().getMessager().printMessage(
+                                javax.tools.Diagnostic.Kind.WARNING,
+                                "Failed to generate protobuf parser for '" + messageType + "': " + e.getMessage());
+                        }
+                    }
+                }
+            }
+        }
+        for (Descriptors.Descriptor nested : descriptor.getNestedTypes()) {
+            collectAndGenerateParser(ctx, nested, outputDir, generated);
+        }
+    }
+
+    private TypeSpec buildParserClass(ClassName messageType, String parserName) {
+        ClassName parserInterface = ClassName.get("org.pipelineframework.cache", "ProtobufMessageParser");
+        ClassName messageBase = ClassName.get("com.google.protobuf", "Message");
+        ClassName invalidProto = ClassName.get("com.google.protobuf", "InvalidProtocolBufferException");
+
+        MethodSpec typeMethod = MethodSpec.methodBuilder("type")
+            .addAnnotation(Override.class)
+            .addModifiers(javax.lang.model.element.Modifier.PUBLIC)
+            .returns(String.class)
+            .addStatement("return $S", messageType.toString())
+            .build();
+
+        MethodSpec parseMethod = MethodSpec.methodBuilder("parseFrom")
+            .addAnnotation(Override.class)
+            .addModifiers(javax.lang.model.element.Modifier.PUBLIC)
+            .returns(messageBase)
+            .addParameter(byte[].class, "bytes")
+            .addCode("""
+                try {
+                    return $T.parseFrom(bytes);
+                } catch ($T e) {
+                    throw new RuntimeException(e);
+                }
+                """,
+                messageType,
+                invalidProto)
+            .build();
+
+        return TypeSpec.classBuilder(parserName)
+            .addModifiers(javax.lang.model.element.Modifier.PUBLIC)
+            .addAnnotation(ClassName.get("jakarta.enterprise.context", "ApplicationScoped"))
+            .addAnnotation(ClassName.get("io.quarkus.arc", "Unremovable"))
+            .addSuperinterface(parserInterface)
+            .addMethod(typeMethod)
+            .addMethod(parseMethod)
+            .build();
+    }
+
+    private Map<String, Descriptors.FileDescriptor> buildFileDescriptors(
+            DescriptorProtos.FileDescriptorSet descriptorSet) {
+        Map<String, Descriptors.FileDescriptor> built = new HashMap<>();
+        if (descriptorSet == null) {
+            return built;
+        }
+        int iterations = 0;
+        boolean progress = true;
+        while (built.size() < descriptorSet.getFileCount() && progress) {
+            progress = false;
+            iterations++;
+            for (DescriptorProtos.FileDescriptorProto fileProto : descriptorSet.getFileList()) {
+                String fileName = fileProto.getName();
+                if (built.containsKey(fileName)) {
+                    continue;
+                }
+                boolean depsReady = true;
+                for (String dependency : fileProto.getDependencyList()) {
+                    if (!built.containsKey(dependency)) {
+                        depsReady = false;
+                        break;
+                    }
+                }
+                if (!depsReady) {
+                    continue;
+                }
+                try {
+                    List<Descriptors.FileDescriptor> dependencies = new ArrayList<>();
+                    for (String dependency : fileProto.getDependencyList()) {
+                        dependencies.add(built.get(dependency));
+                    }
+                    Descriptors.FileDescriptor[] depsArray = dependencies.toArray(new Descriptors.FileDescriptor[0]);
+                    Descriptors.FileDescriptor fileDescriptor = Descriptors.FileDescriptor.buildFrom(fileProto, depsArray);
+                    built.put(fileName, fileDescriptor);
+                    progress = true;
+                } catch (Descriptors.DescriptorValidationException ignored) {
+                    // Skip invalid descriptors; warnings are emitted by binding resolver.
+                }
+            }
+        }
+        return built;
+    }
+
+    private ClassName resolveMessageClassName(Descriptors.Descriptor descriptor) {
+        if (descriptor == null) {
+            return null;
+        }
+        Descriptors.FileDescriptor fileDescriptor = descriptor.getFile();
+        String javaPkg = fileDescriptor.getOptions().hasJavaPackage()
+            ? fileDescriptor.getOptions().getJavaPackage()
+            : fileDescriptor.getPackage();
+
+        List<String> nesting = new ArrayList<>();
+        Descriptors.Descriptor current = descriptor;
+        while (current != null) {
+            nesting.add(0, current.getName());
+            current = current.getContainingType();
+        }
+
+        if (fileDescriptor.getOptions().getJavaMultipleFiles()) {
+            String outer = nesting.get(0);
+            String[] nested = nesting.size() > 1
+                ? nesting.subList(1, nesting.size()).toArray(new String[0])
+                : new String[0];
+            return ClassName.get(javaPkg, outer, nested);
+        }
+
+        String outerClass = deriveOuterClassName(fileDescriptor);
+        List<String> full = new ArrayList<>();
+        full.add(outerClass);
+        full.addAll(nesting);
+        String[] nested = full.subList(1, full.size()).toArray(new String[0]);
+        return ClassName.get(javaPkg, full.get(0), nested);
+    }
+
+    private String deriveOuterClassName(Descriptors.FileDescriptor fileDescriptor) {
+        if (fileDescriptor.getOptions().hasJavaOuterClassname()) {
+            return fileDescriptor.getOptions().getJavaOuterClassname();
+        }
+        String fileName = fileDescriptor.getName();
+        if (fileName.endsWith(".proto")) {
+            fileName = fileName.substring(0, fileName.length() - 6);
+        }
+        String[] parts = fileName.split("[^a-zA-Z0-9]+");
+        StringBuilder sb = new StringBuilder();
+        for (String part : parts) {
+            if (!part.isEmpty()) {
+                sb.append(Character.toUpperCase(part.charAt(0)));
+                if (part.length() > 1) {
+                    sb.append(part.substring(1));
+                }
+            }
+        }
+        return sb.toString();
+    }
+
     /**
      * Generate artifacts for the given pipeline step model using the provided bindings and renderers.
      * 
@@ -180,7 +381,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                         break;
                     }
                     if (model.sideEffect() && model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER) {
-                        generateSideEffectBean(ctx, model, org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER);
+                        generateSideEffectBean(ctx, model, org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER, grpcBinding);
                     }
                     String grpcClassName = model.servicePackage() + ".pipeline." +
                             model.generatedName() + "GrpcService";
@@ -215,7 +416,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                         break;
                     }
                     if (model.sideEffect() && model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER) {
-                        generateSideEffectBean(ctx, model, org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER);
+                        generateSideEffectBean(ctx, model, org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER, grpcBinding);
                     }
                     if (restBinding == null) {
                         ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
@@ -271,17 +472,13 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
     private void generateSideEffectBean(
             PipelineCompilationContext ctx,
             PipelineStepModel model,
-            org.pipelineframework.processor.ir.DeploymentRole role) {
+            org.pipelineframework.processor.ir.DeploymentRole role,
+            GrpcBinding grpcBinding) {
         if (model == null || model.serviceClassName() == null) {
             return;
         }
 
-        com.squareup.javapoet.TypeName observedType = model.outboundDomainType() != null
-            ? model.outboundDomainType()
-            : model.inboundDomainType();
-        if (observedType == null) {
-            observedType = com.squareup.javapoet.ClassName.OBJECT;
-        }
+        com.squareup.javapoet.TypeName observedType = resolveObservedType(model, role, grpcBinding);
 
         com.squareup.javapoet.TypeName parentType = com.squareup.javapoet.ParameterizedTypeName.get(
             model.serviceClassName(), observedType);
@@ -388,6 +585,81 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             }
         }
         return constructors.get(0);
+    }
+
+    private com.squareup.javapoet.TypeName resolveObservedType(
+            PipelineStepModel model,
+            org.pipelineframework.processor.ir.DeploymentRole role,
+            GrpcBinding grpcBinding) {
+        com.squareup.javapoet.TypeName observedType = model.outboundDomainType() != null
+            ? model.outboundDomainType()
+            : model.inboundDomainType();
+        if (observedType == null) {
+            return com.squareup.javapoet.ClassName.OBJECT;
+        }
+        if (!isCachePlugin(model)) {
+            return observedType;
+        }
+        if (role == org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER) {
+            return convertDomainToDtoType(observedType);
+        }
+        if (role == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER && grpcBinding != null) {
+            try {
+                org.pipelineframework.processor.util.GrpcJavaTypeResolver resolver =
+                    new org.pipelineframework.processor.util.GrpcJavaTypeResolver();
+                var grpcTypes = resolver.resolve(grpcBinding);
+                if (grpcTypes != null && grpcTypes.grpcParameterType() != null && grpcTypes.grpcReturnType() != null) {
+                    String inputName = null;
+                    String outputName = null;
+                    Object methodDescriptorObj = grpcBinding.methodDescriptor();
+                    if (methodDescriptorObj instanceof com.google.protobuf.Descriptors.MethodDescriptor methodDescriptor) {
+                        inputName = methodDescriptor.getInputType().getName();
+                        outputName = methodDescriptor.getOutputType().getName();
+                    }
+                    String serviceName = model.serviceName();
+                    if (inputName != null && serviceName != null && serviceName.contains(inputName)) {
+                        return grpcTypes.grpcParameterType();
+                    }
+                    if (outputName != null && serviceName != null && serviceName.contains(outputName)) {
+                        return grpcTypes.grpcReturnType();
+                    }
+                    return grpcTypes.grpcReturnType();
+                }
+            } catch (Exception ignored) {
+                return observedType;
+            }
+        }
+        return observedType;
+    }
+
+    private boolean isCachePlugin(PipelineStepModel model) {
+        if (model == null || model.serviceClassName() == null) {
+            return false;
+        }
+        String name = model.serviceClassName().canonicalName();
+        return "org.pipelineframework.plugin.cache.CacheService".equals(name);
+    }
+
+    private com.squareup.javapoet.TypeName convertDomainToDtoType(com.squareup.javapoet.TypeName domainType) {
+        if (domainType == null) {
+            return com.squareup.javapoet.ClassName.OBJECT;
+        }
+        String domainTypeStr = domainType.toString();
+        String dtoTypeStr = domainTypeStr
+            .replace(".domain.", ".dto.")
+            .replace(".service.", ".dto.");
+        if (!dtoTypeStr.equals(domainTypeStr)) {
+            int lastDot = dtoTypeStr.lastIndexOf('.');
+            String packageName = lastDot > 0 ? dtoTypeStr.substring(0, lastDot) : "";
+            String simpleName = lastDot > 0 ? dtoTypeStr.substring(lastDot + 1) : dtoTypeStr;
+            String dtoSimpleName = simpleName + "Dto";
+            return com.squareup.javapoet.ClassName.get(packageName, dtoSimpleName);
+        }
+        int lastDot = domainTypeStr.lastIndexOf('.');
+        String packageName = lastDot > 0 ? domainTypeStr.substring(0, lastDot) : "";
+        String simpleName = lastDot > 0 ? domainTypeStr.substring(lastDot + 1) : domainTypeStr;
+        String dtoSimpleName = simpleName + "Dto";
+        return com.squareup.javapoet.ClassName.get(packageName, dtoSimpleName);
     }
 
     /**

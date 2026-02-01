@@ -107,7 +107,10 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
                         .addMember("value", "$T.$L",
                             ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role"),
                             role.name())
-                        .build());
+                .build());
+        if (model.sideEffect()) {
+            clientStepBuilder.addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheReadBypass"));
+        }
 
         // Add gRPC client field with @GrpcClient annotation
         TypeName grpcClientType = resolveGrpcStubType(binding, messager);
@@ -138,9 +141,18 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
         switch (model.streamingShape()) {
             case UNARY_UNARY:
                 stepInterface = ClassName.get(StepOneToOne.class);
+                clientStepBuilder.addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheKeyTarget"));
                 clientStepBuilder.addSuperinterface(ParameterizedTypeName.get(stepInterface,
                         inputGrpcType,
                         outputGrpcType));
+                MethodSpec cacheKeyTargetMethod = MethodSpec.methodBuilder("cacheKeyTargetType")
+                        .addAnnotation(Override.class)
+                        .addModifiers(Modifier.PUBLIC)
+                        .returns(ParameterizedTypeName.get(ClassName.get(Class.class),
+                            WildcardTypeName.subtypeOf(Object.class)))
+                        .addStatement("return $T.class", outputGrpcType)
+                        .build();
+                clientStepBuilder.addMethod(cacheKeyTargetMethod);
                 break;
             case UNARY_STREAMING:
                 stepInterface = ClassName.get("org.pipelineframework.step", "StepOneToMany");
