@@ -17,11 +17,16 @@
 package org.pipelineframework.plugin.cache.provider;
 
 import java.time.Duration;
+import java.util.Base64;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
-import jakarta.json.bind.Jsonb;
-import jakarta.json.bind.JsonbBuilder;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.quarkus.arc.Unremovable;
 import io.quarkus.arc.properties.IfBuildProperty;
@@ -35,6 +40,7 @@ import org.pipelineframework.annotation.ParallelismHint;
 import org.pipelineframework.cache.CacheProvider;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
+import org.pipelineframework.cache.ProtobufMessageParser;
 
 /**
  * Redis-based cache provider using the Quarkus Redis client.
@@ -53,12 +59,31 @@ public class RedisCacheProvider implements CacheProvider<Object> {
     @Inject
     ReactiveRedisDataSource redis;
 
-    private final Jsonb jsonb = JsonbBuilder.create();
+    @Inject
+    Instance<ProtobufMessageParser> protobufParsers;
+
+    @Inject
+    ObjectMapper objectMapper;
+    private Map<String, ProtobufMessageParser> protobufParserByType = Map.of();
 
     /**
      * Default constructor for RedisCacheProvider.
      */
     public RedisCacheProvider() {
+    }
+
+    @PostConstruct
+    void initParsers() {
+        if (protobufParsers == null) {
+            protobufParserByType = Map.of();
+            return;
+        }
+        protobufParserByType = protobufParsers.stream()
+            .filter(parser -> parser != null && parser.type() != null && !parser.type().isBlank())
+            .collect(Collectors.toUnmodifiableMap(
+                ProtobufMessageParser::type,
+                Function.identity(),
+                (existing, ignored) -> existing));
     }
 
     @Override
@@ -83,7 +108,7 @@ public class RedisCacheProvider implements CacheProvider<Object> {
 
         String fullKey = keyPrefix + key;
         ReactiveValueCommands<String, String> values = redis.value(String.class);
-        String serialized = jsonb.toJson(new CacheEnvelope(value.getClass().getName(), jsonb.toJson(value)));
+        String serialized = serialize(value);
 
         if (ttl == null || ttl.isZero() || ttl.isNegative()) {
             return values.set(fullKey, serialized).replaceWith(value);
@@ -152,21 +177,49 @@ public class RedisCacheProvider implements CacheProvider<Object> {
         return ThreadSafety.SAFE;
     }
 
-    private Optional<Object> deserialize(String serialized, String key) {
+    Optional<Object> deserialize(String serialized, String key) {
         if (serialized == null || serialized.isBlank()) {
             return Optional.empty();
         }
         try {
-            CacheEnvelope envelope = jsonb.fromJson(serialized, CacheEnvelope.class);
+            CacheEnvelope envelope = objectMapper.readValue(serialized, CacheEnvelope.class);
             Class<?> clazz = Class.forName(envelope.type());
-            Object value = jsonb.fromJson(envelope.payload(), clazz);
-            return Optional.ofNullable(value);
+            String encoding = envelope.encoding();
+            if (encoding == null || encoding.isBlank() || "json".equalsIgnoreCase(encoding)) {
+                Object value = objectMapper.readValue(envelope.payload(), clazz);
+                return Optional.ofNullable(value);
+            }
+            if ("protobuf".equalsIgnoreCase(encoding)) {
+                byte[] bytes = Base64.getDecoder().decode(envelope.payload());
+                ProtobufMessageParser parser = protobufParserByType.get(envelope.type());
+                if (parser == null) {
+                    LOG.warnf("No protobuf parser registered for type %s, skipping cache entry for key %s",
+                        envelope.type(), key);
+                    return Optional.empty();
+                }
+                return Optional.ofNullable(parser.parseFrom(bytes));
+            }
+            return Optional.empty();
         } catch (Exception e) {
             LOG.warnf("Failed to deserialize cache entry for key %s: %s", key, e.getMessage());
             return Optional.empty();
         }
     }
 
-    public static record CacheEnvelope(String type, String payload) {
+    String serialize(Object value) {
+        try {
+            if (value instanceof com.google.protobuf.Message message) {
+                String payload = Base64.getEncoder().encodeToString(message.toByteArray());
+                return objectMapper.writeValueAsString(new CacheEnvelope(value.getClass().getName(), payload, "protobuf"));
+            }
+            String payload = objectMapper.writeValueAsString(value);
+            return objectMapper.writeValueAsString(new CacheEnvelope(value.getClass().getName(), payload, "json"));
+        } catch (Exception e) {
+            LOG.warnf("Failed to serialize cache entry for type %s: %s", value.getClass().getName(), e.getMessage());
+            return null;
+        }
+    }
+
+    public static record CacheEnvelope(String type, String payload, String encoding) {
     }
 }

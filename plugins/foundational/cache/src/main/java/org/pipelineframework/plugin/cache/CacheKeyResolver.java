@@ -33,12 +33,30 @@ public class CacheKeyResolver {
     Instance<CacheKeyStrategy> strategies;
 
     public Optional<String> resolveKey(Object item, PipelineContext context) {
+        return resolveKey(item, context, null);
+    }
+
+    public Optional<String> resolveKey(Object item, PipelineContext context, Class<?> targetType) {
         if (item == null) {
             return Optional.empty();
         }
         List<CacheKeyStrategy> ordered = strategies.stream()
             .sorted(Comparator.comparingInt(CacheKeyStrategy::priority).reversed())
             .toList();
+        if (targetType != null) {
+            for (CacheKeyStrategy strategy : ordered) {
+                if (!strategy.supportsTarget(targetType)) {
+                    continue;
+                }
+                Optional<String> resolved = strategy.resolveKey(item, context);
+                if (resolved.isPresent()) {
+                    String key = resolved.get();
+                    if (!key.isBlank()) {
+                        return Optional.of(key.trim());
+                    }
+                }
+            }
+        }
         for (CacheKeyStrategy strategy : ordered) {
             Optional<String> resolved = strategy.resolveKey(item, context);
             if (resolved.isPresent()) {

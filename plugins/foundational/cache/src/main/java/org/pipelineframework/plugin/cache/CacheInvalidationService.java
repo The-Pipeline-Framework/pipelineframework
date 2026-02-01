@@ -48,7 +48,7 @@ public class CacheInvalidationService<T> implements ReactiveSideEffectService<T>
         if (!shouldInvalidate(context)) {
             return Uni.createFrom().item(item);
         }
-        String baseKey = cacheKeyResolver.resolveKey(item, context).orElse(null);
+        String baseKey = cacheKeyResolver.resolveKey(item, context, item.getClass()).orElse(null);
         if (baseKey == null || baseKey.isBlank()) {
             LOG.warnf("No cache key strategy matched for item type %s, skipping invalidation",
                 item.getClass().getName());

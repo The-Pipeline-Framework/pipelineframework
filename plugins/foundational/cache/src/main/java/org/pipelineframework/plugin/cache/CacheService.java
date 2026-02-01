@@ -79,7 +79,7 @@ public class CacheService<T> implements ReactiveSideEffectService<T>, Parallelis
             item.getClass().getName());
 
         assert cacheManager != null;
-        String key = cacheKeyResolver.resolveKey(item, context).orElse(null);
+        String key = cacheKeyResolver.resolveKey(item, context, item.getClass()).orElse(null);
         if (key == null || key.isBlank()) {
             PipelineCacheStatusHolder.set(CacheStatus.MISS);
             logger.warnf("No cache key strategy matched for item type %s, skipping cache", item.getClass().getName());
