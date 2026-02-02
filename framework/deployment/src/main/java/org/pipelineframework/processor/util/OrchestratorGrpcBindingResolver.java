@@ -13,7 +13,10 @@ import org.pipelineframework.processor.ir.PipelineStepModel;
  * Resolves gRPC bindings for the orchestrator service using compiled protobuf descriptors.
  */
 public class OrchestratorGrpcBindingResolver {
-    private static final Set<String> ALLOWED_METHODS = Set.of("Run", "Ingest", "Subscribe");
+    private static final Set<String> ALLOWED_METHODS = Set.of(
+        OrchestratorRpcConstants.RUN_METHOD,
+        OrchestratorRpcConstants.INGEST_METHOD,
+        OrchestratorRpcConstants.SUBSCRIBE_METHOD);
 
     /**
      * Creates a new OrchestratorGrpcBindingResolver.

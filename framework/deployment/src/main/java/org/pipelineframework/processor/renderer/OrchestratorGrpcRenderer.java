@@ -46,6 +46,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         ClassName multi = ClassName.get("io.smallrye.mutiny", "Multi");
         ClassName executionService = ClassName.get("org.pipelineframework", "PipelineExecutionService");
         ClassName outputBus = ClassName.get("org.pipelineframework", "PipelineOutputBus");
+        ClassName pipelineContextHolder = ClassName.get("org.pipelineframework.context", "PipelineContextHolder");
 
         OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
         var grpcBinding = safeResolveBinding(binding, descriptorSet, ctx);
@@ -199,7 +200,28 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
             .addModifiers(Modifier.PUBLIC)
             .returns(ParameterizedTypeName.get(multi, outputType))
             .addParameter(ClassName.get("com.google.protobuf", "Empty"), "request")
-            .addStatement("return pipelineOutputBus.stream($T.class)", outputType)
+            .addStatement("long startTime = System.nanoTime()")
+            .beginControlFlow("if ($T.get() == null)", pipelineContextHolder)
+            .addStatement("return $T.createFrom().failure(new $T($S))",
+                multi,
+                ClassName.get(IllegalStateException.class),
+                "Missing pipeline context for subscribe request")
+            .endControlFlow()
+            .addCode("""
+                return pipelineOutputBus.stream($T.class)
+                    .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
+                        System.nanoTime() - startTime))
+                    .onCompletion().invoke(() -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime));
+                """,
+                outputType,
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_SUBSCRIBE_METHOD,
+                ClassName.get("io.grpc", "Status"),
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_SUBSCRIBE_METHOD,
+                ClassName.get("io.grpc", "Status"))
             .build();
 
         TypeSpec service = TypeSpec.classBuilder(GRPC_CLASS)

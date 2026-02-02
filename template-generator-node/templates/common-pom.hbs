@@ -158,29 +158,6 @@
                 <artifactId>maven-compiler-plugin</artifactId>
             </plugin>
             <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>3.5.0</version>
-                <executions>
-                    <execution>
-                        <id>generate-proto-from-config</id>
-                        <phase>generate-sources</phase>
-                        <goals>
-                            <goal>java</goal>
-                        </goals>
-                        <configuration>
-                            <mainClass>org.pipelineframework.proto.PipelineProtoGenerator</mainClass>
-                            <arguments>
-                                <argument>--module-dir=${project.basedir}</argument>
-                                <argument>--output-dir=${generated.proto.dir}</argument>
-                            </arguments>
-                            <addOutputToClasspath>true</addOutputToClasspath>
-                            <classpathScope>compile</classpathScope>
-                        </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>
                 <version>3.6.1</version>
@@ -201,6 +178,29 @@
                                     <outputDirectory>${generated.proto.dir}</outputDirectory>
                                 </artifactItem>
                             </artifactItems>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>generate-proto-from-config</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>java</goal>
+                        </goals>
+                        <configuration>
+                            <mainClass>org.pipelineframework.proto.PipelineProtoGenerator</mainClass>
+                            <arguments>
+                                <argument>--module-dir=${project.basedir}</argument>
+                                <argument>--output-dir=${generated.proto.dir}</argument>
+                            </arguments>
+                            <addOutputToClasspath>true</addOutputToClasspath>
+                            <classpathScope>compile</classpathScope>
                         </configuration>
                     </execution>
                 </executions>

@@ -42,6 +42,14 @@ public class OrchestratorIngestClientRenderer {
 
         GrpcJavaTypeResolver typeResolver = new GrpcJavaTypeResolver();
         var grpcTypes = typeResolver.resolve(grpcBinding, ctx.processingEnv().getMessager());
+        if (grpcTypes == null) {
+            if (ctx.processingEnv() != null && ctx.processingEnv().getMessager() != null) {
+                ctx.processingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.WARNING,
+                    "Skipping orchestrator ingest client generation: could not resolve gRPC types.");
+            }
+            return;
+        }
 
         ClassName stubType = grpcTypes.stub();
         ClassName inputType = grpcTypes.grpcParameterType();
@@ -66,8 +74,7 @@ public class OrchestratorIngestClientRenderer {
         MethodSpec subscribeMethod = MethodSpec.methodBuilder("subscribe")
             .addModifiers(Modifier.PUBLIC)
             .returns(ParameterizedTypeName.get(ClassName.get(Multi.class), outputType))
-            .addStatement("return grpcClient.subscribe($T.getDefaultInstance())",
-                ClassName.get("com.google.protobuf", "Empty"))
+            .addStatement("return grpcClient.subscribe($T.getDefaultInstance())", inputType)
             .build();
 
         TypeSpec client = TypeSpec.classBuilder(CLIENT_CLASS)

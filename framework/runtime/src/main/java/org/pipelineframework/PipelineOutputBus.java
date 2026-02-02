@@ -17,10 +17,11 @@
 package org.pipelineframework;
 
 import java.util.concurrent.SubmissionPublisher;
+import jakarta.annotation.PreDestroy;
+import jakarta.enterprise.context.ApplicationScoped;
 
 import io.quarkus.arc.Unremovable;
 import io.smallrye.mutiny.Multi;
-import jakarta.enterprise.context.ApplicationScoped;
 import org.jboss.logging.Logger;
 
 /**
@@ -76,6 +77,7 @@ public class PipelineOutputBus implements AutoCloseable {
     }
 
     @Override
+    @PreDestroy
     public void close() {
         publisher.close();
     }

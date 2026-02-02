@@ -180,7 +180,7 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 - **Schema drift**: handoff DTO versioning can break compatibility without strict rules. (See Pain-point matrix #6; Addressed in Near-Term Design Work: Build-Time Checks)
 - **Temporal coupling**: downstream slowness collapses upstream throughput. (See Pain-point matrix #7)
 - **Hotspot steps**: a single heavy step can dominate latency and throughput.
-- **Backpressure deadlocks**: mismatched demand signaling can stall a chain. (See Pain-point matrix #7; Addressed in Near-Term Design Work: Connector Policy)
+- **Backpressure deadlocks**: mismatched demand signalling can stall a chain. (See Pain-point matrix #7; Addressed in Near-Term Design Work: Connector Policy)
 - **Implicit retries**: connector retries can trigger duplicate side effects. (See Pain-point matrix #4; Addressed in Near-Term Design Work: Connector Policy)
 - **Observability blind spots**: reference-based tracing needs reliable lookup. (See Pain-point matrix #5; Addressed in Near-Term Design Work: TraceEnvelope)
 - **Fan-out/fan-in complexity**: ordering and timeout handling become tricky. (See Pain-point matrix #8)

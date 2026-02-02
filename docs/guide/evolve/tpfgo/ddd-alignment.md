@@ -5,7 +5,7 @@ This guide summarizes how TPF aligns with DDD concepts today, where it diverges,
 ## Executive Summary
 
 - **TPF aligns with DDD at the use-case level**: a pipeline is closest to an application service.
-- **TPF diverges at the aggregate level**: instead of a single aggregate with multiple tables, TPF uses a progression of immutable aggregate states, each stored in its own table.
+- **TPF diverges at the aggregate level**: instead of a single aggregate with multiple tables, TPF uses a progression of immutable aggregate states, each of which is stored in its own table.
 - **DDD layering is possible but not enforced**: it depends on how steps are written.
 - **Cross-context orchestration is compatible** but needs explicit contracts and backpressure-aware piping.
 
