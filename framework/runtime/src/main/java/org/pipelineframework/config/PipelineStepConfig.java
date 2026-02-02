@@ -334,15 +334,6 @@ public interface PipelineStepConfig {
         Double inflightSlopeThreshold();
 
         /**
-         * Threshold for retry rate (retries per second).
-         *
-         * @return retry rate threshold
-         */
-        @WithName("retry-rate-threshold")
-        @WithDefault("5")
-        Double retryRateThreshold();
-
-        /**
          * Guard behavior when triggered.
          *
          * @return guard mode
@@ -350,6 +341,15 @@ public interface PipelineStepConfig {
         @WithDefault("fail-fast")
         @WithConverter(RetryAmplificationGuardModeConverter.class)
         RetryAmplificationGuardMode mode();
+
+        /**
+         * Number of consecutive samples that must exceed the threshold before triggering.
+         *
+         * @return consecutive sample count
+         */
+        @WithName("sustain-samples")
+        @WithDefault("3")
+        Integer sustainSamples();
     }
 
     /**

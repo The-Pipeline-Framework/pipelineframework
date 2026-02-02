@@ -42,13 +42,13 @@ public class PipelineKillSwitchException extends RuntimeException {
 
     public static PipelineKillSwitchException retryAmplification(RetryAmplificationGuard.Trigger trigger) {
         String message = String.format(
-            "Retry amplification guard triggered for step %s (inflight slope %.2f > %.2f, retry rate %.2f > %.2f) over %s",
+            "Retry amplification guard triggered for step %s (inflight slope %.2f > %.2f, retry rate %.2f) over %s (sustain samples %d)",
             trigger.step(),
             trigger.inflightSlope(),
             trigger.inflightSlopeThreshold(),
             trigger.retryRate(),
-            trigger.retryRateThreshold(),
-            trigger.window());
+            trigger.window(),
+            trigger.sustainSamples());
         return new PipelineKillSwitchException(message, "retry_amplification", trigger.step());
     }
 }

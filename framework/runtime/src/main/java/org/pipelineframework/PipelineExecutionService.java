@@ -501,13 +501,13 @@ public class PipelineExecutionService {
       RetryAmplificationGuardMode mode) {
     String action = mode == RetryAmplificationGuardMode.FAIL_FAST ? "aborting" : "logging";
     LOG.errorf(
-        "Retry amplification guard triggered for step %s (inflight slope %.2f > %.2f, retry rate %.2f > %.2f) over %s; %s pipeline run.",
+        "Retry amplification guard triggered for step %s (inflight slope %.2f > %.2f, retry rate %.2f) over %s (sustain samples %d); %s pipeline run.",
         trigger.step(),
         trigger.inflightSlope(),
         trigger.inflightSlopeThreshold(),
         trigger.retryRate(),
-        trigger.retryRateThreshold(),
         trigger.window(),
+        trigger.sustainSamples(),
         action);
   }
 

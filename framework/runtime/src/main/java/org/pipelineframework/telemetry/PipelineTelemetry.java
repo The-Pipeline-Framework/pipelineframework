@@ -26,6 +26,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.LongAdder;
@@ -79,8 +80,8 @@ public class PipelineTelemetry {
         AttributeKey.doubleKey("tpf.kill_switch.retry_rate");
     private static final AttributeKey<Double> KILL_SWITCH_INFLIGHT_SLOPE_THRESHOLD =
         AttributeKey.doubleKey("tpf.kill_switch.inflight_slope_threshold");
-    private static final AttributeKey<Double> KILL_SWITCH_RETRY_RATE_THRESHOLD =
-        AttributeKey.doubleKey("tpf.kill_switch.retry_rate_threshold");
+    private static final AttributeKey<Long> KILL_SWITCH_SUSTAIN_SAMPLES =
+        AttributeKey.longKey("tpf.kill_switch.sustain_samples");
     private static final String RETRY_AMPLIFICATION_REASON = "retry_amplification";
 
     private final boolean enabled;
@@ -90,7 +91,7 @@ public class PipelineTelemetry {
     private final boolean retryAmplificationEnabled;
     private final Duration retryAmplificationWindow;
     private final double inflightSlopeThreshold;
-    private final double retryRateThreshold;
+    private final int retryAmplificationSustainSamples;
     private final RetryAmplificationGuardMode retryAmplificationMode;
     private final Duration retryAmplificationSampleInterval;
     private final ScheduledExecutorService retryAmplificationScheduler;
@@ -142,9 +143,9 @@ public class PipelineTelemetry {
         this.inflightSlopeThreshold = guardConfig != null && guardConfig.inflightSlopeThreshold() != null
             ? guardConfig.inflightSlopeThreshold()
             : 10d;
-        this.retryRateThreshold = guardConfig != null && guardConfig.retryRateThreshold() != null
-            ? guardConfig.retryRateThreshold()
-            : 5d;
+        this.retryAmplificationSustainSamples = guardConfig != null && guardConfig.sustainSamples() != null
+            ? Math.max(1, guardConfig.sustainSamples())
+            : 3;
         this.retryAmplificationMode = guardConfig != null && guardConfig.mode() != null
             ? guardConfig.mode()
             : RetryAmplificationGuardMode.FAIL_FAST;
@@ -835,7 +836,7 @@ public class PipelineTelemetry {
                     .put(KILL_SWITCH_INFLIGHT_SLOPE, trigger.inflightSlope())
                     .put(KILL_SWITCH_RETRY_RATE, trigger.retryRate())
                     .put(KILL_SWITCH_INFLIGHT_SLOPE_THRESHOLD, trigger.inflightSlopeThreshold())
-                    .put(KILL_SWITCH_RETRY_RATE_THRESHOLD, trigger.retryRateThreshold())
+                    .put(KILL_SWITCH_SUSTAIN_SAMPLES, (long) trigger.sustainSamples())
                     .build());
         }
     }
@@ -845,6 +846,7 @@ public class PipelineTelemetry {
         private final Deque<RetryAmplificationGuard.Sample> samples;
         private final AtomicLong retryBaseline;
         private final AtomicReference<RetryAmplificationGuard.Trigger> trigger;
+        private final AtomicInteger consecutiveBreaches;
         private ScheduledFuture<?> future;
 
         private RetryAmplificationMonitor(RunContext runContext) {
@@ -852,6 +854,7 @@ public class PipelineTelemetry {
             this.samples = new ArrayDeque<>();
             this.retryBaseline = new AtomicLong(-1L);
             this.trigger = new AtomicReference<>();
+            this.consecutiveBreaches = new AtomicInteger();
         }
 
         void start() {
@@ -898,9 +901,17 @@ public class PipelineTelemetry {
                 trimSamples(samples);
                 snapshot = new ArrayDeque<>(samples);
             }
-            retryAmplificationGuard
-                .evaluate("global", snapshot, retryAmplificationWindow, inflightSlopeThreshold, retryRateThreshold)
-                .ifPresent(this::trigger);
+            java.util.Optional<RetryAmplificationGuard.Trigger> candidate = retryAmplificationGuard
+                .evaluate("global", snapshot, retryAmplificationWindow, inflightSlopeThreshold,
+                    retryAmplificationSustainSamples);
+            if (candidate.isPresent()) {
+                int streak = consecutiveBreaches.incrementAndGet();
+                if (streak >= retryAmplificationSustainSamples) {
+                    trigger(candidate.get());
+                }
+            } else {
+                consecutiveBreaches.set(0);
+            }
         }
 
         private void trigger(RetryAmplificationGuard.Trigger triggerInfo) {

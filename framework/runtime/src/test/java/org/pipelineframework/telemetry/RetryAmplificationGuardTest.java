@@ -28,7 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RetryAmplificationGuardTest {
 
     @Test
-    void triggersWhenSlopeAndRetryRateExceedThresholds() {
+    void triggersWhenSlopeExceedsThreshold() {
         RetryAmplificationGuard guard = new RetryAmplificationGuard();
         Deque<RetryAmplificationGuard.Sample> samples = new ArrayDeque<>();
         long start = 0L;
@@ -40,25 +40,25 @@ class RetryAmplificationGuardTest {
             samples,
             Duration.ofSeconds(30),
             10d,
-            5d).isPresent();
+            3).isPresent();
 
         assertTrue(triggered);
     }
 
     @Test
-    void doesNotTriggerWhenRetryRateBelowThreshold() {
+    void doesNotTriggerWhenSlopeBelowThreshold() {
         RetryAmplificationGuard guard = new RetryAmplificationGuard();
         Deque<RetryAmplificationGuard.Sample> samples = new ArrayDeque<>();
         long start = 0L;
         samples.add(new RetryAmplificationGuard.Sample(start, 100, 0));
-        samples.add(new RetryAmplificationGuard.Sample(start + Duration.ofSeconds(30).toNanos(), 500, 50));
+        samples.add(new RetryAmplificationGuard.Sample(start + Duration.ofSeconds(30).toNanos(), 200, 50));
 
         boolean triggered = guard.evaluate(
             "com.example.Step",
             samples,
             Duration.ofSeconds(30),
             10d,
-            5d).isPresent();
+            3).isPresent();
 
         assertFalse(triggered);
     }

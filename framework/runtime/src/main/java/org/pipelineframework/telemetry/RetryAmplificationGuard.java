@@ -42,26 +42,25 @@ public final class RetryAmplificationGuard {
      * @param inflightSlope computed inflight slope (items/sec)
      * @param retryRate computed retry rate (retries/sec)
      * @param inflightSlopeThreshold inflight slope threshold
-     * @param retryRateThreshold retry rate threshold
      * @param window evaluation window
+     * @param sustainSamples consecutive samples required to trigger
      */
     public record Trigger(
         String step,
         double inflightSlope,
         double retryRate,
         double inflightSlopeThreshold,
-        double retryRateThreshold,
-        Duration window) {
+        Duration window,
+        int sustainSamples) {
     }
 
     /**
-     * Evaluate retry amplification for a step based on sampled data.
+     * Evaluate inflight growth for a step based on sampled data.
      *
      * @param step step class name
      * @param samples sampled values (oldest to newest)
      * @param window evaluation window
      * @param inflightSlopeThreshold inflight slope threshold
-     * @param retryRateThreshold retry rate threshold
      * @return trigger metadata when thresholds are exceeded
      */
     public Optional<Trigger> evaluate(
@@ -69,7 +68,7 @@ public final class RetryAmplificationGuard {
         Deque<Sample> samples,
         Duration window,
         double inflightSlopeThreshold,
-        double retryRateThreshold) {
+        int sustainSamples) {
         if (samples == null || samples.size() < 2 || window == null) {
             return Optional.empty();
         }
@@ -89,14 +88,14 @@ public final class RetryAmplificationGuard {
         double seconds = durationNanos / 1_000_000_000d;
         double inflightSlope = (last.inflight() - first.inflight()) / seconds;
         double retryRate = (last.retries() - first.retries()) / seconds;
-        if (inflightSlope > inflightSlopeThreshold && retryRate > retryRateThreshold) {
+        if (inflightSlope > inflightSlopeThreshold) {
             return Optional.of(new Trigger(
                 step,
                 inflightSlope,
                 retryRate,
                 inflightSlopeThreshold,
-                retryRateThreshold,
-                window));
+                window,
+                sustainSamples));
         }
         return Optional.empty();
     }

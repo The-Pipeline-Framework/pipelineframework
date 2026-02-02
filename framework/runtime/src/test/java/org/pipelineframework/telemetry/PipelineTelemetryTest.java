@@ -439,13 +439,13 @@ class PipelineTelemetryTest {
         }
 
         @Override
-        public Double retryRateThreshold() {
-            return 5d;
+        public RetryAmplificationGuardMode mode() {
+            return RetryAmplificationGuardMode.FAIL_FAST;
         }
 
         @Override
-        public RetryAmplificationGuardMode mode() {
-            return RetryAmplificationGuardMode.FAIL_FAST;
+        public Integer sustainSamples() {
+            return 3;
         }
     }
 
