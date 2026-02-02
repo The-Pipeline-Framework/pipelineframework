@@ -24,7 +24,7 @@ In practical terms: it looks for **runaway inflight growth** that persists, not 
 
 The guard triggers when:
 
-```
+```text
 inflight_slope > inflight_slope_threshold
 for sustain-samples consecutive samples
 ```
