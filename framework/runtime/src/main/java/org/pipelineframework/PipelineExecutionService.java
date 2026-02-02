@@ -364,27 +364,6 @@ public class PipelineExecutionService {
     return Uni.createFrom().emitter(emitter -> {
       AtomicReference<Cancellable> cancellableRef = new AtomicReference<>();
       AtomicReference<ScheduledFuture<?>> futureRef = new AtomicReference<>();
-      ScheduledFuture<?> future = killSwitchExecutor.scheduleAtFixedRate(() -> {
-        telemetry.retryAmplificationTrigger().ifPresent(trigger -> {
-          if (!logged.compareAndSet(false, true)) {
-            return;
-          }
-          logRetryAmplificationTrigger(trigger, mode);
-          if (mode == RetryAmplificationGuardMode.FAIL_FAST) {
-            emitter.fail(PipelineKillSwitchException.retryAmplification(trigger));
-            Cancellable cancellable = cancellableRef.get();
-            if (cancellable != null) {
-              cancellable.cancel();
-            }
-          } else {
-            ScheduledFuture<?> scheduled = futureRef.get();
-            if (scheduled != null) {
-              scheduled.cancel(false);
-            }
-          }
-        });
-      }, interval.toMillis(), interval.toMillis(), TimeUnit.MILLISECONDS);
-      futureRef.set(future);
       Cancellable cancellable = uni.subscribe().with(
           item -> {
             ScheduledFuture<?> scheduled = futureRef.get();
@@ -401,6 +380,27 @@ public class PipelineExecutionService {
             emitter.fail(failure);
           });
       cancellableRef.set(cancellable);
+      ScheduledFuture<?> future = killSwitchExecutor.scheduleAtFixedRate(() -> {
+        telemetry.retryAmplificationTrigger().ifPresent(trigger -> {
+          if (!logged.compareAndSet(false, true)) {
+            return;
+          }
+          logRetryAmplificationTrigger(trigger, mode);
+          if (mode == RetryAmplificationGuardMode.FAIL_FAST) {
+            emitter.fail(PipelineKillSwitchException.retryAmplification(trigger));
+            Cancellable active = cancellableRef.get();
+            if (active != null) {
+              active.cancel();
+            }
+          } else {
+            ScheduledFuture<?> scheduled = futureRef.get();
+            if (scheduled != null) {
+              scheduled.cancel(false);
+            }
+          }
+        });
+      }, interval.toMillis(), interval.toMillis(), TimeUnit.MILLISECONDS);
+      futureRef.set(future);
       emitter.onTermination(() -> {
         ScheduledFuture<?> scheduled = futureRef.get();
         if (scheduled != null) {

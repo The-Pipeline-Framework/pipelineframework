@@ -63,10 +63,10 @@ true downstream throughput.
 
 ### Retry amplification guard
 
-TPF can detect sustained retry amplification and abort a run when configured. The guard evaluates per-step inflight
-growth alongside retry rate over a rolling window. When it triggers, the run span records an event with
-`tpf.kill_switch.triggered=true` and `tpf.kill_switch.reason=retry_amplification`, and the metric
-`tpf.pipeline.kill_switch.triggered` increments.
+TPF can detect sustained inflight growth and abort a run when configured. The guard evaluates global inflight slope
+over a rolling window and triggers once the threshold is exceeded for a sustained number of samples. When it triggers,
+the run span records an event with `tpf.kill_switch.triggered=true` and `tpf.kill_switch.reason=retry_amplification`,
+and the metric `tpf.pipeline.kill_switch.triggered` increments.
 
 Use the following metrics to observe the signal:
 - `tpf.step.inflight` (in-flight growth)
@@ -78,6 +78,7 @@ Use the following metrics to observe the signal:
 - [Tracing](/guide/operations/observability/tracing)
 - [Logging](/guide/operations/observability/logging)
 - [Health Checks](/guide/operations/observability/health-checks)
+- [Kill Switches](/guide/operations/kill-switches)
 - [Alerting](/guide/operations/observability/alerting)
 - [Security Notes](/guide/operations/observability/security)
 
