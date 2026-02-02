@@ -136,19 +136,32 @@ public class PipelineTelemetry {
         this.tracingEnabled = enabled && Boolean.TRUE.equals(telemetry.tracing().enabled());
         this.perItemSpans = tracingEnabled && Boolean.TRUE.equals(telemetry.tracing().perItem());
         this.metricsEnabled = enabled && Boolean.TRUE.equals(telemetry.metrics().enabled());
-        this.retryAmplificationEnabled = guardConfig != null && Boolean.TRUE.equals(guardConfig.enabled());
-        this.retryAmplificationWindow = guardConfig != null && guardConfig.window() != null
-            ? guardConfig.window()
-            : Duration.ofSeconds(30);
-        this.inflightSlopeThreshold = guardConfig != null && guardConfig.inflightSlopeThreshold() != null
-            ? guardConfig.inflightSlopeThreshold()
-            : 10d;
-        this.retryAmplificationSustainSamples = guardConfig != null && guardConfig.sustainSamples() != null
-            ? Math.max(1, guardConfig.sustainSamples())
-            : 3;
-        this.retryAmplificationMode = guardConfig != null && guardConfig.mode() != null
-            ? guardConfig.mode()
-            : RetryAmplificationGuardMode.FAIL_FAST;
+        Duration window = guardConfig != null ? guardConfig.window() : null;
+        if (window == null || window.isZero() || window.isNegative()) {
+            window = Duration.ofSeconds(30);
+        }
+        Double inflightThreshold = guardConfig != null ? guardConfig.inflightSlopeThreshold() : null;
+        if (inflightThreshold == null || inflightThreshold <= 0d) {
+            inflightThreshold = 10d;
+        }
+        Integer sustainSamples = guardConfig != null ? guardConfig.sustainSamples() : null;
+        if (sustainSamples == null || sustainSamples <= 0) {
+            sustainSamples = 3;
+        }
+        RetryAmplificationGuardMode mode = guardConfig != null ? guardConfig.mode() : null;
+        if (mode == null) {
+            mode = RetryAmplificationGuardMode.FAIL_FAST;
+        }
+        boolean enabled = guardConfig != null && Boolean.TRUE.equals(guardConfig.enabled())
+            && inflightThreshold > 0d
+            && sustainSamples > 0
+            && !window.isZero()
+            && !window.isNegative();
+        this.retryAmplificationEnabled = enabled;
+        this.retryAmplificationWindow = window;
+        this.inflightSlopeThreshold = inflightThreshold;
+        this.retryAmplificationSustainSamples = sustainSamples;
+        this.retryAmplificationMode = mode;
         this.retryAmplificationSampleInterval = resolveSampleInterval(this.retryAmplificationWindow);
         this.retryAmplificationScheduler = retryAmplificationEnabled
             ? Executors.newSingleThreadScheduledExecutor(runnable -> {
@@ -812,6 +825,7 @@ public class PipelineTelemetry {
         if (retryAmplificationScheduler != null) {
             retryAmplificationScheduler.shutdownNow();
         }
+        ACTIVE.compareAndSet(this, null);
     }
 
     private Duration resolveSampleInterval(Duration window) {
