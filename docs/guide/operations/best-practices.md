@@ -81,6 +81,8 @@ Mitigations:
 - Lower per-step concurrency on the third-party step.
 - Increase retry wait/backoff to reduce retry pressure.
 - Align the demand pacer with the downstream throughput.
+- Consider enabling the retry amplification guard in `log-only` mode first, then switch to `fail-fast`
+  once you have stable thresholds for inflight slope and retry rate.
 
 ```mermaid
 flowchart LR

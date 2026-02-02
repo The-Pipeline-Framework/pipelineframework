@@ -16,12 +16,21 @@
 
 package org.pipelineframework.telemetry;
 
+import java.time.Duration;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.atomic.LongAdder;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -59,11 +68,33 @@ public class PipelineTelemetry {
         AttributeKey.longKey("tpf.parallel.max_in_flight");
     private static final AttributeKey<Double> PARALLEL_AVG_IN_FLIGHT =
         AttributeKey.doubleKey("tpf.parallel.avg_in_flight");
+    private static final AttributeKey<Boolean> KILL_SWITCH_TRIGGERED =
+        AttributeKey.booleanKey("tpf.kill_switch.triggered");
+    private static final AttributeKey<String> KILL_SWITCH_REASON =
+        AttributeKey.stringKey("tpf.kill_switch.reason");
+    private static final AttributeKey<String> KILL_SWITCH_STEP =
+        AttributeKey.stringKey("tpf.kill_switch.step");
+    private static final AttributeKey<Double> KILL_SWITCH_INFLIGHT_SLOPE =
+        AttributeKey.doubleKey("tpf.kill_switch.inflight_slope");
+    private static final AttributeKey<Double> KILL_SWITCH_RETRY_RATE =
+        AttributeKey.doubleKey("tpf.kill_switch.retry_rate");
+    private static final AttributeKey<Double> KILL_SWITCH_INFLIGHT_SLOPE_THRESHOLD =
+        AttributeKey.doubleKey("tpf.kill_switch.inflight_slope_threshold");
+    private static final AttributeKey<Long> KILL_SWITCH_SUSTAIN_SAMPLES =
+        AttributeKey.longKey("tpf.kill_switch.sustain_samples");
+    private static final String RETRY_AMPLIFICATION_REASON = "retry_amplification";
 
     private final boolean enabled;
     private final boolean metricsEnabled;
     private final boolean tracingEnabled;
     private final boolean perItemSpans;
+    private final boolean retryAmplificationEnabled;
+    private final Duration retryAmplificationWindow;
+    private final double inflightSlopeThreshold;
+    private final int retryAmplificationSustainSamples;
+    private final RetryAmplificationGuardMode retryAmplificationMode;
+    private final Duration retryAmplificationSampleInterval;
+    private final ScheduledExecutorService retryAmplificationScheduler;
     private final Tracer tracer;
     private final Meter meter;
     private final LongCounter pipelineRunCounter;
@@ -75,12 +106,18 @@ public class PipelineTelemetry {
     private final LongCounter sloItemSuccessTotal;
     private final LongCounter sloItemSuccessGood;
     private final LongCounter stepErrorCounter;
+    private final LongCounter stepRetryCounter;
+    private final LongCounter killSwitchCounter;
     private final DoubleHistogram pipelineRunDuration;
     private final DoubleHistogram stepDuration;
     private final ConcurrentMap<String, AtomicLong> inflightByStep;
+    private final ConcurrentMap<String, LongAdder> retryByStep;
     private final AtomicLong maxConcurrency;
     private final PipelineTelemetryResourceLoader.ItemBoundary itemBoundary;
     private final Map<String, String> stepParents;
+    private final RetryAmplificationGuard retryAmplificationGuard;
+    private final AtomicReference<RetryAmplificationMonitor> activeRetryAmplificationMonitor;
+    private static final AtomicReference<PipelineTelemetry> ACTIVE = new AtomicReference<>();
 
     /**
      * Create a telemetry helper from the configured pipeline settings.
@@ -90,16 +127,59 @@ public class PipelineTelemetry {
     @Inject
     public PipelineTelemetry(PipelineStepConfig stepConfig) {
         PipelineStepConfig.TelemetryConfig telemetry = stepConfig.telemetry();
+        PipelineStepConfig.RetryAmplificationGuardConfig guardConfig = null;
+        PipelineStepConfig.KillSwitchConfig killSwitchConfig = stepConfig.killSwitch();
+        if (killSwitchConfig != null) {
+            guardConfig = killSwitchConfig.retryAmplification();
+        }
         this.enabled = telemetry != null && Boolean.TRUE.equals(telemetry.enabled());
         this.tracingEnabled = enabled && Boolean.TRUE.equals(telemetry.tracing().enabled());
         this.perItemSpans = tracingEnabled && Boolean.TRUE.equals(telemetry.tracing().perItem());
         this.metricsEnabled = enabled && Boolean.TRUE.equals(telemetry.metrics().enabled());
+        Duration window = guardConfig != null ? guardConfig.window() : null;
+        if (window == null || window.isZero() || window.isNegative()) {
+            window = Duration.ofSeconds(30);
+        }
+        Double inflightThreshold = guardConfig != null ? guardConfig.inflightSlopeThreshold() : null;
+        if (inflightThreshold == null || inflightThreshold <= 0d) {
+            inflightThreshold = 10d;
+        }
+        Integer sustainSamples = guardConfig != null ? guardConfig.sustainSamples() : null;
+        if (sustainSamples == null || sustainSamples <= 0) {
+            sustainSamples = 3;
+        }
+        RetryAmplificationGuardMode mode = guardConfig != null ? guardConfig.mode() : null;
+        if (mode == null) {
+            mode = RetryAmplificationGuardMode.FAIL_FAST;
+        }
+        boolean guardEnabled = guardConfig != null && Boolean.TRUE.equals(guardConfig.enabled())
+            && inflightThreshold > 0d
+            && sustainSamples > 0
+            && !window.isZero()
+            && !window.isNegative();
+        this.retryAmplificationEnabled = guardEnabled;
+        this.retryAmplificationWindow = window;
+        this.inflightSlopeThreshold = inflightThreshold;
+        this.retryAmplificationSustainSamples = sustainSamples;
+        this.retryAmplificationMode = mode;
+        this.retryAmplificationSampleInterval = resolveSampleInterval(this.retryAmplificationWindow);
+        this.retryAmplificationScheduler = retryAmplificationEnabled
+            ? Executors.newSingleThreadScheduledExecutor(runnable -> {
+                Thread thread = new Thread(runnable, "tpf-retry-amplification-guard");
+                thread.setDaemon(true);
+                return thread;
+            })
+            : null;
         this.tracer = GlobalOpenTelemetry.getTracer("org.pipelineframework");
         this.meter = GlobalOpenTelemetry.getMeter("org.pipelineframework");
         this.inflightByStep = new ConcurrentHashMap<>();
+        this.retryByStep = new ConcurrentHashMap<>();
         this.maxConcurrency = new AtomicLong();
         this.itemBoundary = PipelineTelemetryResourceLoader.loadItemBoundary().orElse(null);
         this.stepParents = itemBoundary != null ? itemBoundary.stepParents() : Map.of();
+        this.retryAmplificationGuard = new RetryAmplificationGuard();
+        this.activeRetryAmplificationMonitor = new AtomicReference<>();
+        ACTIVE.set(this);
         if (metricsEnabled) {
             this.pipelineRunCounter = meter.counterBuilder("tpf.pipeline.run.count")
                 .setDescription("Pipeline runs")
@@ -137,6 +217,14 @@ public class PipelineTelemetry {
                 .setDescription("Pipeline step errors")
                 .setUnit("1")
                 .build();
+            this.stepRetryCounter = meter.counterBuilder("tpf.step.retry.count")
+                .setDescription("Pipeline step retries")
+                .setUnit("1")
+                .build();
+            this.killSwitchCounter = meter.counterBuilder("tpf.pipeline.kill_switch.triggered")
+                .setDescription("Pipeline kill switch triggers")
+                .setUnit("1")
+                .build();
             this.pipelineRunDuration = meter.histogramBuilder("tpf.pipeline.run.duration")
                 .setDescription("Pipeline run duration")
                 .setUnit("ms")
@@ -165,6 +253,8 @@ public class PipelineTelemetry {
             this.sloItemSuccessTotal = null;
             this.sloItemSuccessGood = null;
             this.stepErrorCounter = null;
+            this.stepRetryCounter = null;
+            this.killSwitchCounter = null;
             this.pipelineRunDuration = null;
             this.stepDuration = null;
         }
@@ -180,7 +270,7 @@ public class PipelineTelemetry {
      * @return telemetry run context
      */
     public RunContext startRun(Object input, int stepCount, ParallelismPolicy policy, int maxConcurrency) {
-        if (!enabled) {
+        if (!enabled && !retryAmplificationEnabled) {
             return RunContext.disabled();
         }
         boolean multiInput = input instanceof Multi<?>;
@@ -201,18 +291,20 @@ public class PipelineTelemetry {
                 .startSpan();
             context = context.with(span);
         }
-        return new RunContext(
+        RunContext runContext = new RunContext(
             context,
             span,
             System.nanoTime(),
             attributes,
-            enabled,
+            enabled || retryAmplificationEnabled,
             new AtomicLong(),
             new AtomicLong(),
             new LongAdder(),
             new LongAdder(),
             new LongAdder(),
             new LongAdder());
+        startRetryAmplificationMonitor(runContext);
+        return runContext;
     }
 
     /**
@@ -480,6 +572,7 @@ public class PipelineTelemetry {
         if (!runContext.enabled()) {
             return;
         }
+        stopRetryAmplificationMonitor();
         if (metricsEnabled) {
             double durationMs = nanosToMillis(runContext.startNanos());
             pipelineRunDuration.record(durationMs, runContext.attributes());
@@ -506,7 +599,7 @@ public class PipelineTelemetry {
         runContext.inflightSamples().increment();
         runContext.inflightSum().add(current);
         runContext.inflightMax().accumulateAndGet(current, Math::max);
-        if (metricsEnabled) {
+        if (metricsEnabled || retryAmplificationEnabled) {
             inflightByStep
                 .computeIfAbsent(stepClass.getName(), key -> new AtomicLong())
                 .incrementAndGet();
@@ -520,7 +613,7 @@ public class PipelineTelemetry {
         long current = runContext.inflightCurrent().decrementAndGet();
         runContext.inflightSamples().increment();
         runContext.inflightSum().add(Math.max(current, 0));
-        if (metricsEnabled) {
+        if (metricsEnabled || retryAmplificationEnabled) {
             AtomicLong currentStep = inflightByStep.get(stepClass.getName());
             if (currentStep != null) {
                 currentStep.updateAndGet(value -> Math.max(0, value - 1));
@@ -647,6 +740,71 @@ public class PipelineTelemetry {
         return stepParents.getOrDefault(stepClassName, stepClassName);
     }
 
+    /**
+     * Record a retry for a step.
+     *
+     * @param stepClass step class
+     */
+    public static void recordRetry(Class<?> stepClass) {
+        PipelineTelemetry telemetry = ACTIVE.get();
+        if (telemetry != null) {
+            telemetry.recordRetryInternal(stepClass);
+        }
+    }
+
+    public boolean retryAmplificationGuardEnabled() {
+        return retryAmplificationEnabled;
+    }
+
+    public RetryAmplificationGuardMode retryAmplificationMode() {
+        return retryAmplificationMode;
+    }
+
+    public Duration retryAmplificationCheckInterval() {
+        return retryAmplificationSampleInterval;
+    }
+
+    public java.util.Optional<RetryAmplificationGuard.Trigger> retryAmplificationTrigger() {
+        RetryAmplificationMonitor monitor = activeRetryAmplificationMonitor.get();
+        if (monitor == null) {
+            return java.util.Optional.empty();
+        }
+        return monitor.triggered();
+    }
+
+    private void recordRetryInternal(Class<?> stepClass) {
+        if (stepClass == null || !(metricsEnabled || retryAmplificationEnabled)) {
+            return;
+        }
+        String step = resolveStepClassName(stepClass);
+        if (step == null) {
+            return;
+        }
+        retryByStep.computeIfAbsent(step, key -> new LongAdder()).increment();
+        if (metricsEnabled) {
+            stepRetryCounter.add(1, stepAttributes(step));
+        }
+    }
+
+    private void startRetryAmplificationMonitor(RunContext runContext) {
+        if (!retryAmplificationEnabled || retryAmplificationScheduler == null || runContext == null) {
+            return;
+        }
+        RetryAmplificationMonitor monitor = new RetryAmplificationMonitor(runContext);
+        RetryAmplificationMonitor previous = activeRetryAmplificationMonitor.getAndSet(monitor);
+        if (previous != null) {
+            previous.stop();
+        }
+        monitor.start();
+    }
+
+    private void stopRetryAmplificationMonitor() {
+        RetryAmplificationMonitor monitor = activeRetryAmplificationMonitor.getAndSet(null);
+        if (monitor != null) {
+            monitor.stop();
+        }
+    }
+
     private void endSpan(Span span, Throwable failure) {
         if (span == null) {
             return;
@@ -660,6 +818,131 @@ public class PipelineTelemetry {
 
     private double nanosToMillis(long startNanos) {
         return (System.nanoTime() - startNanos) / 1_000_000d;
+    }
+
+    @PreDestroy
+    void shutdownRetryAmplificationScheduler() {
+        if (retryAmplificationScheduler != null) {
+            retryAmplificationScheduler.shutdownNow();
+        }
+        ACTIVE.compareAndSet(this, null);
+    }
+
+    private Duration resolveSampleInterval(Duration window) {
+        long windowMillis = window == null ? 30_000L : Math.max(1_000L, window.toMillis());
+        long intervalMillis = Math.max(1_000L, Math.min(windowMillis / 6, 5_000L));
+        return Duration.ofMillis(intervalMillis);
+    }
+
+    private void recordKillSwitchTriggered(RunContext runContext, RetryAmplificationGuard.Trigger trigger) {
+        if (metricsEnabled && killSwitchCounter != null) {
+            killSwitchCounter.add(1, Attributes.of(
+                KILL_SWITCH_REASON, RETRY_AMPLIFICATION_REASON,
+                KILL_SWITCH_STEP, trigger.step()));
+        }
+        if (tracingEnabled && runContext != null && runContext.span() != null) {
+            runContext.span().addEvent(
+                "tpf.kill_switch.triggered",
+                Attributes.builder()
+                    .put(KILL_SWITCH_TRIGGERED, true)
+                    .put(KILL_SWITCH_REASON, RETRY_AMPLIFICATION_REASON)
+                    .put(KILL_SWITCH_STEP, trigger.step())
+                    .put(KILL_SWITCH_INFLIGHT_SLOPE, trigger.inflightSlope())
+                    .put(KILL_SWITCH_RETRY_RATE, trigger.retryRate())
+                    .put(KILL_SWITCH_INFLIGHT_SLOPE_THRESHOLD, trigger.inflightSlopeThreshold())
+                    .put(KILL_SWITCH_SUSTAIN_SAMPLES, (long) trigger.sustainSamples())
+                    .build());
+        }
+    }
+
+    private final class RetryAmplificationMonitor {
+        private final RunContext runContext;
+        private final Deque<RetryAmplificationGuard.Sample> samples;
+        private final AtomicLong retryBaseline;
+        private final AtomicReference<RetryAmplificationGuard.Trigger> trigger;
+        private final AtomicInteger consecutiveBreaches;
+        private ScheduledFuture<?> future;
+
+        private RetryAmplificationMonitor(RunContext runContext) {
+            this.runContext = runContext;
+            this.samples = new ArrayDeque<>();
+            this.retryBaseline = new AtomicLong(-1L);
+            this.trigger = new AtomicReference<>();
+            this.consecutiveBreaches = new AtomicInteger();
+        }
+
+        void start() {
+            future = retryAmplificationScheduler.scheduleAtFixedRate(
+                this::sample,
+                0L,
+                retryAmplificationSampleInterval.toMillis(),
+                TimeUnit.MILLISECONDS);
+        }
+
+        void stop() {
+            if (future != null) {
+                future.cancel(false);
+            }
+        }
+
+        java.util.Optional<RetryAmplificationGuard.Trigger> triggered() {
+            return java.util.Optional.ofNullable(trigger.get());
+        }
+
+        private void sample() {
+            if (trigger.get() != null) {
+                return;
+            }
+            long now = System.nanoTime();
+            long inflight = 0L;
+            for (AtomicLong inflightCount : inflightByStep.values()) {
+                inflight += inflightCount.get();
+            }
+            long retries = 0L;
+            for (LongAdder retryCount : retryByStep.values()) {
+                retries += retryCount.sum();
+            }
+            long baseline = retryBaseline.get();
+            if (baseline < 0L) {
+                retryBaseline.compareAndSet(-1L, retries);
+                baseline = retryBaseline.get();
+            }
+            long relativeRetries = Math.max(0L, retries - baseline);
+
+            Deque<RetryAmplificationGuard.Sample> snapshot;
+            synchronized (samples) {
+                samples.addLast(new RetryAmplificationGuard.Sample(now, inflight, relativeRetries));
+                trimSamples(samples);
+                snapshot = new ArrayDeque<>(samples);
+            }
+            java.util.Optional<RetryAmplificationGuard.Trigger> candidate = retryAmplificationGuard
+                .evaluate("global", snapshot, retryAmplificationWindow, inflightSlopeThreshold,
+                    retryAmplificationSustainSamples);
+            if (candidate.isPresent()) {
+                int streak = consecutiveBreaches.incrementAndGet();
+                if (streak >= retryAmplificationSustainSamples) {
+                    trigger(candidate.get());
+                }
+            } else {
+                consecutiveBreaches.set(0);
+            }
+        }
+
+        private void trigger(RetryAmplificationGuard.Trigger triggerInfo) {
+            if (!trigger.compareAndSet(null, triggerInfo)) {
+                return;
+            }
+            recordKillSwitchTriggered(runContext, triggerInfo);
+            stop();
+        }
+
+        private void trimSamples(Deque<RetryAmplificationGuard.Sample> deque) {
+            int maxSamples = Math.max(2, (int) (retryAmplificationWindow.toMillis()
+                / Math.max(1L, retryAmplificationSampleInterval.toMillis())) + 2);
+            while (deque.size() > maxSamples) {
+                deque.removeFirst();
+            }
+        }
     }
 
     /**
