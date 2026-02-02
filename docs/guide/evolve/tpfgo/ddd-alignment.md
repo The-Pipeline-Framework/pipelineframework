@@ -1,6 +1,6 @@
 # TPF and DDD Alignment (Current + Future)
 
-This guide summarizes how TPF aligns with DDD concepts today, where it diverges, and what we intend to improve. It captures the key ideas from the checkpoint-pipeline discussion so newcomers can quickly orient themselves.
+This guide summarizes how TPF aligns with DDD concepts today, where it diverges, and what we intend to improve. It captures the key ideas from the [checkpoint-pipeline discussion](/guide/evolve/tpfgo/roadmap) so newcomers can quickly orient themselves.
 
 ## Executive Summary
 
@@ -15,7 +15,7 @@ This guide summarizes how TPF aligns with DDD concepts today, where it diverges,
 - **Domain operation**: a business behavior on an aggregate or domain service (invariants live here).
 - **Aggregate**: consistency boundary in the domain model.
 - **Bounded context**: boundary where a model and language are consistent.
-- **Cross-context orchestration**: communication across bounded contexts (typically async).
+- **Cross-context orchestration**: communication across bounded contexts (typically async in traditional DDD; TPF may prefer synchronous piping where practical - see §5 and the discussion below).
 
 ## TPF Mapping to DDD
 
@@ -64,13 +64,13 @@ This guide summarizes how TPF aligns with DDD concepts today, where it diverges,
 TPF favors **linear or tree-like** flows where possible:
 
 - **Linear/tree workflows** are easier to reason about and preserve pipeline semantics.
-- **DAG workflows** introduce joins, fan-in, and potential feedback loops, which complicate ordering, timeouts, and backpressure.
+- **DAG (directed acyclic graph) workflows** introduce joins, fan-in, and potential feedback loops, which complicate ordering, timeouts, and backpressure.
 
 The checkpoint model works best when pipelines are composed in a tree-like fashion, with explicit handoff contracts at each edge.
 
 ## Decision as Checkpoint (rule of thumb)
 
-Rather than introducing a special "decision step," a decision can be modeled as a **checkpoint boundary**:
+Rather than introducing a special **decision step**, a decision can be modeled as a **checkpoint boundary**:
 
 - End the current pipeline at the decision.
 - Start one pipeline per outcome branch.
@@ -86,18 +86,18 @@ TPF does not treat autonomy as a default good. In a single business with a unifi
 - **Sync piping** is preferred between pipelines when practical.
 - **Eventual consistency** is only accepted when explicitly chosen.
 
-This differs from FTGO's default assumption of async sagas and autonomy-first boundaries.
+This differs from FTGO (Food To Go, from Chris Richardson's Microservices Patterns) default assumptions of async sagas and autonomy-first boundaries.
 
 ## CreateOrder / ApproveOrder Examples (FTGO mapping)
 
 **CreateOrder**
-- TPF pipeline steps: OrderRequestProcess -> OrderCreate -> OrderReady
+- TPF pipeline steps: `OrderRequestProcess` -> `OrderCreate` -> `OrderReady`
 - Each step persists its own immutable state.
 - The pipeline output is the checkpoint, not a mutable aggregate.
 
 **ApproveOrder**
 - A separate pipeline that consumes the checkpoint and produces a new immutable state.
-- If approval fails, it is operational unless modeled as a business pipeline.
+- If not explicitly modeled as a business pipeline step, an approval failure is treated as an operational concern (handled via retries, alerts, monitoring, etc.), whereas modeling it as a business pipeline makes it part of the business workflow and subject to business rules and compensating actions.
 
 ## DDD Layering in TPF
 
@@ -116,11 +116,11 @@ TPF does not enforce layering. A suggested discipline:
 ## Planned Directions
 
 - **Handoff contracts** between pipelines (explicit, build-validated).
-- **Traceability**: built-in lineage tracking (TraceEnvelope).
+- **Traceability**: built-in lineage tracking (`TraceEnvelope`, a planned runtime wrapper that carries a payload plus a reference to the previous item for lineage).
 - **Backpressure contracts** across piped pipelines.
 - **Error sink** as a first-class runtime component.
 - **Workflow constraints**: optional guidance to keep pipelines linear or tree-like by default.
 - **Design diagnostics**: flag risky patterns (e.g., implicit DAG joins, unbounded buffering).
-- **Workflow fan-out**: allow sub-pipelines to branch from a step with explicit branch policies.
+- **Workflow fan-out**: allow sub-pipelines to branch from a step with explicit branch policies; fan-out implies controlled tree-like branching only (no joins/merges that would create general DAG topologies).
 - **Observers vs taps**: distinguish stable checkpoint observers from mid-step taps with weak guarantees.
 - **Remote subscription trigger**: orchestrators accept streaming input for pipeline-to-pipeline chaining.

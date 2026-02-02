@@ -11,6 +11,7 @@ import io.smallrye.mutiny.Multi;
 import org.pipelineframework.processor.ir.OrchestratorBinding;
 import org.pipelineframework.processor.util.GrpcJavaTypeResolver;
 import org.pipelineframework.processor.util.OrchestratorGrpcBindingResolver;
+import org.pipelineframework.processor.util.OrchestratorRpcConstants;
 
 /**
  * Generates a gRPC ingest client for orchestrator services.
@@ -18,7 +19,7 @@ import org.pipelineframework.processor.util.OrchestratorGrpcBindingResolver;
 public class OrchestratorIngestClientRenderer {
 
     private static final String CLIENT_CLASS = "OrchestratorIngestClient";
-    private static final String ORCHESTRATOR_INGEST_METHOD = "Ingest";
+    private static final String ORCHESTRATOR_INGEST_METHOD = OrchestratorRpcConstants.INGEST_METHOD;
 
     /**
      * Render the ingest client for the orchestrator binding.
@@ -34,13 +35,10 @@ public class OrchestratorIngestClientRenderer {
         }
 
         OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
-        var grpcBinding = resolver.resolve(
-            binding.model(),
-            descriptorSet,
-            ORCHESTRATOR_INGEST_METHOD,
-            true,
-            true,
-            ctx.processingEnv().getMessager());
+        var grpcBinding = safeResolveBinding(binding, descriptorSet, ctx);
+        if (grpcBinding == null) {
+            return;
+        }
 
         GrpcJavaTypeResolver typeResolver = new GrpcJavaTypeResolver();
         var grpcTypes = typeResolver.resolve(grpcBinding, ctx.processingEnv().getMessager());
@@ -65,16 +63,47 @@ public class OrchestratorIngestClientRenderer {
             .addStatement("return grpcClient.ingest(input)")
             .build();
 
+        MethodSpec subscribeMethod = MethodSpec.methodBuilder("subscribe")
+            .addModifiers(Modifier.PUBLIC)
+            .returns(ParameterizedTypeName.get(ClassName.get(Multi.class), outputType))
+            .addStatement("return grpcClient.subscribe($T.getDefaultInstance())",
+                ClassName.get("com.google.protobuf", "Empty"))
+            .build();
+
         TypeSpec client = TypeSpec.classBuilder(CLIENT_CLASS)
             .addModifiers(Modifier.PUBLIC)
             .addAnnotation(ClassName.get("jakarta.enterprise.context", "Dependent"))
             .addAnnotation(ClassName.get(Unremovable.class))
             .addField(grpcClientField)
             .addMethod(ingestMethod)
+            .addMethod(subscribeMethod)
             .build();
 
         JavaFile.builder(binding.basePackage() + ".orchestrator.client", client)
             .build()
             .writeTo(ctx.processingEnv().getFiler());
+    }
+
+    private org.pipelineframework.processor.ir.GrpcBinding safeResolveBinding(
+        OrchestratorBinding binding,
+        DescriptorProtos.FileDescriptorSet descriptorSet,
+        GenerationContext ctx
+    ) {
+        try {
+            return new OrchestratorGrpcBindingResolver().resolve(
+                binding.model(),
+                descriptorSet,
+                ORCHESTRATOR_INGEST_METHOD,
+                true,
+                true,
+                ctx.processingEnv().getMessager());
+        } catch (IllegalStateException e) {
+            if (ctx.processingEnv() != null && ctx.processingEnv().getMessager() != null) {
+                ctx.processingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.WARNING,
+                    "Skipping orchestrator ingest client generation: " + e.getMessage());
+            }
+            return null;
+        }
     }
 }

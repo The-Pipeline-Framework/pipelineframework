@@ -843,7 +843,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
 
         try {
             String transport = binding.normalizedTransport();
-            if ("REST".equalsIgnoreCase(transport)) {
+            boolean rest = "REST".equalsIgnoreCase(transport);
+            if (rest) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER;
                 orchestratorRestRenderer.render(binding, new GenerationContext(
                     ctx.getProcessingEnv(),
@@ -874,7 +875,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     descriptorSet));
             }
 
-            if (!"REST".equalsIgnoreCase(binding.normalizedTransport())) {
+            if (!rest) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT;
                 orchestratorIngestClientRenderer.render(binding, new GenerationContext(
                     ctx.getProcessingEnv(),

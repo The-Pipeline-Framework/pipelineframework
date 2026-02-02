@@ -36,7 +36,10 @@ class OrchestratorRestResourceRendererTest {
         assertTrue(source.contains("@ApplicationScoped"));
         assertTrue(source.contains("@Path(\"/run\")"));
         assertTrue(source.contains("public Uni<OutputTypeDto> run(InputTypeDto input)"));
-        assertTrue(source.contains("return pipelineExecutionService.executePipelineUnary("));
+        assertTrue(source.contains("executePipelineUnary"));
+        assertTrue(source.contains("pipelineOutputBus"));
+        assertTrue(source.contains("@Path(\"/ingest\")"));
+        assertTrue(source.contains("@Path(\"/subscribe\")"));
     }
 
     @Test
@@ -56,7 +59,9 @@ class OrchestratorRestResourceRendererTest {
         assertTrue(source.contains("@Produces(\"application/x-ndjson\")"));
         assertTrue(source.contains("@RestStreamElementType(\"application/json\")"));
         assertTrue(source.contains("public Multi<OutputTypeDto> run(Multi<InputTypeDto> input)"));
-        assertTrue(source.contains("return pipelineExecutionService.executePipelineStreaming(input);"));
+        assertTrue(source.contains("executePipelineStreaming"));
+        assertTrue(source.contains("@Path(\"/ingest\")"));
+        assertTrue(source.contains("@Path(\"/subscribe\")"));
     }
 
     private OrchestratorBinding buildBinding(boolean inputStreaming, boolean outputStreaming) {

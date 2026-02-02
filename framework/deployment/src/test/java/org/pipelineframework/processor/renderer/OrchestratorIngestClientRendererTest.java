@@ -25,7 +25,7 @@ class OrchestratorIngestClientRendererTest {
         DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet();
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
-        when(processingEnv.getMessager()).thenReturn(null);
+        when(processingEnv.getMessager()).thenReturn(mock(javax.annotation.processing.Messager.class));
 
         OrchestratorIngestClientRenderer renderer = new OrchestratorIngestClientRenderer();
         renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT,
@@ -38,6 +38,7 @@ class OrchestratorIngestClientRendererTest {
         assertTrue(source.contains("@GrpcClient(\"orchestrator\")"));
         assertTrue(source.contains("public Multi<OutputType> ingest(Multi<InputType> input)"));
         assertTrue(source.contains("return grpcClient.ingest(input);"));
+        assertTrue(source.contains("public Multi<OutputType> subscribe("));
     }
 
     private OrchestratorBinding buildBinding() {
@@ -96,6 +97,12 @@ class OrchestratorIngestClientRendererTest {
                     .setInputType(".com.example.grpc.InputType")
                     .setOutputType(".com.example.grpc.OutputType")
                     .setClientStreaming(true)
+                    .setServerStreaming(true))
+                .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
+                    .setName("Subscribe")
+                    .setInputType(".com.example.grpc.InputType")
+                    .setOutputType(".com.example.grpc.OutputType")
+                    .setClientStreaming(false)
                     .setServerStreaming(true)))
             .build();
 

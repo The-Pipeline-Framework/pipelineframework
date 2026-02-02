@@ -76,14 +76,11 @@ The framework lets you define pipeline steps as simple classes annotated with `@
 
 ### Evolve
 - [Functional Architecture](/guide/evolve/architecture): Core concepts and architectural patterns
-- [TPF and DDD Alignment](/guide/evolve/ddd-alignment): DDD mapping, gaps, and planned work
-- [Application Design Spectrum](/guide/evolve/design-spectrum): Good vs bad designs and mitigations
 - [Annotation Processor Architecture](/guide/evolve/annotation-processor-architecture): Build-time IR, bindings, and renderers
 - [Plugins Architecture](/guide/evolve/plugins-architecture): Cross-cutting behavior model
 - [Aspect Semantics](/guide/evolve/aspects/semantics): Aspect expansion rules
 - [Aspect Ordering](/guide/evolve/aspects/ordering): Ordering guarantees and constraints
 - [Aspect Warnings](/guide/evolve/aspects/warnings): Known limitations and caveats
-- [Roadmap: Checkpoint Pipelines vs FTGO](/guide/evolve/roadmap): Pessimistic architecture notes and open risks
 - [Reference Implementation](/guide/evolve/reference-implementation): End-to-end example and rationale
 - [Template Generator (Reference)](/guide/evolve/template-generator): Automation/CI usage
 - [Publishing](/guide/evolve/publishing): Release and publishing workflow
@@ -91,5 +88,12 @@ The framework lets you define pipeline steps as simple classes annotated with `@
 - [Testing Guidelines](/guide/evolve/testing-guidelines): Coverage and test strategy
 - [Gotchas & Pitfalls](/guide/evolve/gotchas-pitfalls): Known sharp edges
 - [Proto Descriptor Integration](/guide/evolve/protobuf-integration-descriptor-res): Descriptor generation and troubleshooting
+
+
+### TPFGo
+- [Reference Guide](/guide/evolve/tpfgo/): Grouped notes for the reference architecture
+- [TPF and DDD Alignment](/guide/evolve/tpfgo/ddd-alignment): DDD mapping, gaps, and planned work
+- [Application Design Spectrum](/guide/evolve/tpfgo/design-spectrum): Good vs bad designs and mitigations
+- [Roadmap: Checkpoint Pipelines vs FTGO](/guide/evolve/tpfgo/roadmap): Pessimistic architecture notes and open risks
 
 This approach reduces boilerplate and keeps pipeline code consistent and portable.

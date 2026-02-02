@@ -358,6 +358,7 @@ public class PipelineProtoGenerator {
                 .append(last.serviceName())
                 .append(".proto\";\n");
         }
+        builder.append("import \"google/protobuf/empty.proto\";\n");
         builder.append('\n');
         builder.append("service OrchestratorService {\n");
         builder.append("  rpc Run (");
@@ -374,6 +375,9 @@ public class PipelineProtoGenerator {
         builder.append("  rpc Ingest (stream ")
             .append(first.inputTypeName())
             .append(") returns (stream ")
+            .append(last.outputTypeName())
+            .append(");\n");
+        builder.append("  rpc Subscribe (google.protobuf.Empty) returns (stream ")
             .append(last.outputTypeName())
             .append(");\n");
         builder.append("}\n");

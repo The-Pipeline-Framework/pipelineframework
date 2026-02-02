@@ -12,6 +12,8 @@ import org.pipelineframework.processor.ir.StreamingShape;
  * as those are now resolved at render time by the GrpcJavaTypeResolver.
  */
 public class GrpcBindingResolver {
+    private static final org.jboss.logging.Logger logger =
+        org.jboss.logging.Logger.getLogger(GrpcBindingResolver.class);
 
     /**
      * Default constructor for GrpcBindingResolver.
@@ -146,21 +148,20 @@ public class GrpcBindingResolver {
             }
         }
 
-        // Check if all files were built
         if (builtFileDescriptors.size() != descriptorSet.getFileCount()) {
-            // Identify which files couldn't be built
             java.util.Set<String> builtFiles = builtFileDescriptors.keySet();
             java.util.Set<String> allFiles = new java.util.HashSet<>();
             for (DescriptorProtos.FileDescriptorProto fileProto : descriptorSet.getFileList()) {
                 allFiles.add(fileProto.getName());
             }
-
             allFiles.removeAll(builtFiles);
             String unbuiltFiles = String.join(", ", allFiles);
-
-            throw new IllegalStateException(
-                String.format("Build error for step '%s': Could not resolve all file descriptor dependencies after %d iterations. Built: %d, Expected: %d. Unbuilt files: [%s]",
-                    stepModel.serviceName(), iterations, builtFileDescriptors.size(), descriptorSet.getFileCount(), unbuiltFiles));
+            String message = String.format(
+                "Build error for step '%s': Could not resolve all file descriptor dependencies after %d iterations. " +
+                    "Built: %d, Expected: %d. Unbuilt files: [%s]",
+                stepModel.serviceName(), iterations, builtFileDescriptors.size(), descriptorSet.getFileCount(), unbuiltFiles);
+            logger.warn(message);
+            throw new IllegalStateException(message);
         }
 
         // Now look for the service in all built file descriptors

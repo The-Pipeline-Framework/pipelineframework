@@ -3,15 +3,15 @@
 This guide captures the ongoing architectural exploration of checkpoint-style pipelines as an alternative to FTGO's saga-first model. It is written for the engineer who just entered the meeting room: quick context, core principles, and the risks we are explicitly tracking. The goal is to be intentionally pessimistic: list what can go wrong, what we believe is already covered, and what still needs design work.
 
 For broader context, see:
-- [TPF and DDD Alignment](/guide/evolve/ddd-alignment)
-- [Application Design Spectrum](/guide/evolve/design-spectrum)
+- [TPF and DDD Alignment](/guide/evolve/tpfgo/ddd-alignment)
+- [Application Design Spectrum](/guide/evolve/tpfgo/design-spectrum)
 
 ## TL;DR (why this exists)
 
 - We want a **better-than-FTGO** architecture that avoids rollbacks and avoids hiding domain decisions in ops.
 - We treat a pipeline as a **checkpoint**: when it finishes, the state is valid and stable.
 - We prefer **sync, reactive piping** between pipelines (backpressure preserved) over async fan-out.
-- We accept that failures are **operational** unless the business explicitly models an unhappy path.
+- We treat failures as **operational** errors; business unhappy paths are modeled as explicit pipelines.
 - We assume a **single tech stack** and a single leadership/business, so "autonomy for its own sake" is not a goal.
 
 ## Working Model (current stance)
@@ -45,8 +45,8 @@ For broader context, see:
 
 ```mermaid
 flowchart LR
-  A[OrderRequestProcess\npersist OrderRequest + LineItem] --> B[OrderCreate\npersist InitialOrder]
-  B --> C[OrderReady\npersist ReadyOrder]
+  A[OrderRequestProcess] --> B[OrderCreate]
+  B --> C[OrderReady]
   C --> D((Checkpoint))
 ```
 
@@ -66,10 +66,9 @@ flowchart LR
 ### 3) Failure handling separation
 
 ```mermaid
-flowchart LR;
-  X[Step Failure] --> E[Error Sink];
-  X --> U[Business Unhappy Pipeline];
-  E --> U;
+flowchart LR
+  X[Step Failure] --> E[Error Sink]
+  E --> R[Ops Remediation Pipeline]
 ```
 
 ### 4) Workflow fan-out (pipeline as workflow)
@@ -87,9 +86,9 @@ flowchart LR
 ### 5) Observers vs mid-step taps
 
 ```mermaid
-flowchart LR;
-  M[Mid-Step Output] --> T[Observer Tap];
-  C[Checkpoint Output] --> O[Observer Pipeline];
+flowchart LR
+  M[Mid-Step Output] --> T[Observer Tap]
+  C[Checkpoint Output] --> O[Observer Pipeline]
 ```
 
 ### 6) Lifecycle evolution (early vs mature)
@@ -114,7 +113,7 @@ Steps (each step persists its own type):
 - `OrderCreate` -> `InitialOrder`
 - `OrderReady` -> `ReadyOrder`
 
-**Outcome**: if the pipeline completes, `ReadyOrder` is valid and stable. No rollback. If a failure occurs, it goes to the error sink unless it has been explicitly classified as a business unhappy path, in which case it is routed to a dedicated unhappy pipeline.
+**Outcome**: if the pipeline completes, `ReadyOrder` is valid and stable. No rollback. If a failure occurs, it goes to the error sink; optional ops remediation pipelines can be attached for automation.
 
 ## Pain-Point Matrix
 
@@ -132,17 +131,17 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 
 3) **Partial progress across pipelines**
 - **Problem**: Pipeline A completes, Pipeline B fails.
-- **Stance**: Treated as an ops failure; A's checkpoint remains valid. Optional ops pipelines may handle remediation.
+- **Stance**: Treated as an ops failure; A's checkpoint remains valid. Optional ops pipelines may handle remediation. **Blocking for cross-pipeline sync composition** until an ops remediation pattern is defined. Action: define an ops remediation pipeline pattern for partial-progress recovery.
 - **Status**: OPEN
 
 4) **Idempotency / duplicate handoff**
 - **Problem**: Connector retries can duplicate downstream processing.
-- **Stance**: Needs a connector-level idempotency key and de-dup policy.
+- **Stance**: Needs a connector-level idempotency key and de-dup policy. **Blocking for cross-pipeline sync composition** until the connector policy is defined. Action: define connector-level retry keys and de-dup semantics.
 - **Status**: OPEN
 
 5) **Traceability / lineage**
 - **Problem**: Track the lineage of items through steps and pipelines.
-- **Stance**: Implement "russian doll" tracing in the runtime (TraceEnvelope with previous-item reference or inline payload).
+- **Stance**: Implement "Russian doll" tracing in the runtime (TraceEnvelope with previous-item reference or inline payload).
 - **Status**: PROPOSED
 
 6) **Type compatibility between pipelines**
@@ -152,7 +151,7 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 
 7) **Backpressure across pipelines**
 - **Problem**: Piping should preserve backpressure end-to-end.
-- **Stance**: Needs a connector policy that propagates demand (no unbounded buffers).
+- **Stance**: Needs a connector policy that propagates demand (no unbounded buffers). **Blocking for cross-pipeline sync composition** until end-to-end demand signalling is defined. Action: specify end-to-end demand signalling and buffer limits.
 - **Status**: OPEN
 
 8) **Branching outputs (multi-out steps)**
@@ -177,21 +176,22 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 
 ## Additional Risks (forward-looking)
 
-- **Cross-pipeline atomicity illusion**: sync chaining can look atomic while still being partial.
-- **Schema drift**: handoff DTO versioning can break compatibility without strict rules.
-- **Temporal coupling**: downstream slowness collapses upstream throughput.
+- **Cross-pipeline atomicity illusion**: sync chaining can look atomic while still being partial. (See Pain-point matrix #3)
+- **Schema drift**: handoff DTO versioning can break compatibility without strict rules. (See Pain-point matrix #6; Addressed in Near-Term Design Work: Build-Time Checks)
+- **Temporal coupling**: downstream slowness collapses upstream throughput. (See Pain-point matrix #7)
 - **Hotspot steps**: a single heavy step can dominate latency and throughput.
-- **Backpressure deadlocks**: mismatched demand signaling can stall a chain.
-- **Implicit retries**: connector retries can trigger duplicate side effects.
-- **Observability blind spots**: reference-based tracing needs reliable lookup.
-- **Fan-out/fan-in complexity**: ordering and timeout handling become tricky.
+- **Backpressure deadlocks**: mismatched demand signaling can stall a chain. (See Pain-point matrix #7; Addressed in Near-Term Design Work: Connector Policy)
+- **Implicit retries**: connector retries can trigger duplicate side effects. (See Pain-point matrix #4; Addressed in Near-Term Design Work: Connector Policy)
+- **Observability blind spots**: reference-based tracing needs reliable lookup. (See Pain-point matrix #5; Addressed in Near-Term Design Work: TraceEnvelope)
+- **Fan-out/fan-in complexity**: ordering and timeout handling become tricky. (See Pain-point matrix #8)
 - **Distributed time assumptions**: ordering based on timestamps becomes ambiguous.
-- **Policy leakage into ops**: domain obligations can get pushed into SLOs if not modeled.
+- **Policy leakage into ops**: domain obligations can get pushed into SLOs if not modeled. (See Pain-point matrix #2)
 
 ## Near-Term Design Work
 
 - **Error Sink**: define a runtime error sink interface with a default StdErrSink and optional gRPC/REST sink service.
-- **Connector Policy**: define backpressure strategy and idempotency guarantees.
+- **Connector Backpressure Policy**: define demand propagation, buffer limits, and flow control. (Pain-point #7, Owner: TBD, Acceptance: documented policy + tests)
+- **Connector Idempotency Policy**: define de-duplication, retry keys, and exactly-once semantics. (Pain-point #4, Owner: TBD, Acceptance: documented policy + tests)
 - **TraceEnvelope**: add optional tracing that wraps step output with previous-item linkage.
 - **Build-Time Checks**: verify pipeline-to-pipeline handoff type compatibility.
 
@@ -202,7 +202,6 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 - How should the tracing store be configured (inline vs reference)?
 - Should the pipeline definition expose a formal "checkpoint contract"?
 - How should multi-out decisions be modeled (discriminated envelopes vs explicit pipelines)?
-- How should business exceptions be declared and propagated across steps?
 
 ## Intended Outcome
 

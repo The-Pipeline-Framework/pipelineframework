@@ -9,6 +9,7 @@ import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.OrchestratorBinding;
 import org.pipelineframework.processor.util.GrpcJavaTypeResolver;
 import org.pipelineframework.processor.util.OrchestratorGrpcBindingResolver;
+import org.pipelineframework.processor.util.OrchestratorRpcConstants;
 
 /**
  * Generates gRPC orchestrator service based on pipeline configuration.
@@ -23,8 +24,9 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
 
     private static final String GRPC_CLASS = "OrchestratorGrpcService";
     private static final String ORCHESTRATOR_SERVICE = "OrchestratorService";
-    private static final String ORCHESTRATOR_METHOD = "Run";
-    private static final String ORCHESTRATOR_INGEST_METHOD = "Ingest";
+    private static final String ORCHESTRATOR_METHOD = OrchestratorRpcConstants.RUN_METHOD;
+    private static final String ORCHESTRATOR_INGEST_METHOD = OrchestratorRpcConstants.INGEST_METHOD;
+    private static final String ORCHESTRATOR_SUBSCRIBE_METHOD = OrchestratorRpcConstants.SUBSCRIBE_METHOD;
 
     @Override
     public GenerationTarget target() {
@@ -43,6 +45,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         ClassName uni = ClassName.get("io.smallrye.mutiny", "Uni");
         ClassName multi = ClassName.get("io.smallrye.mutiny", "Multi");
         ClassName executionService = ClassName.get("org.pipelineframework", "PipelineExecutionService");
+        ClassName outputBus = ClassName.get("org.pipelineframework", "PipelineOutputBus");
 
         OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
         var grpcBinding = safeResolveBinding(binding, descriptorSet, ctx);
@@ -69,6 +72,9 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         FieldSpec executionField = FieldSpec.builder(executionService, "pipelineExecutionService", Modifier.PRIVATE)
             .addAnnotation(inject)
             .build();
+        FieldSpec outputBusField = FieldSpec.builder(outputBus, "pipelineOutputBus", Modifier.PRIVATE)
+            .addAnnotation(inject)
+            .build();
 
         MethodSpec.Builder runMethod = MethodSpec.methodBuilder("run")
             .addAnnotation(Override.class)
@@ -90,6 +96,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
             if (binding.inputStreaming()) {
                 runMethod.addCode("""
                     return pipelineExecutionService.<$T>executePipeline$L(input)
+                        .onItem().invoke(pipelineOutputBus::publish)
                         .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
                             System.nanoTime() - startTime))
                         .onCompletion().invoke(() -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime));
@@ -107,6 +114,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
             } else {
                 runMethod.addCode("""
                     return pipelineExecutionService.<$T>executePipeline$L($T.createFrom().item(input))
+                        .onItem().invoke(pipelineOutputBus::publish)
                         .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
                             System.nanoTime() - startTime))
                         .onCompletion().invoke(() -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime));
@@ -126,6 +134,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         } else if (binding.inputStreaming()) {
             runMethod.addCode("""
                 return pipelineExecutionService.<$T>executePipeline$L(input)
+                    .onItem().invoke(pipelineOutputBus::publish)
                     .onItem().invoke(item -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime))
                     .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
                         System.nanoTime() - startTime));
@@ -143,6 +152,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         } else {
             runMethod.addCode("""
                 return pipelineExecutionService.<$T>executePipeline$L($T.createFrom().item(input))
+                    .onItem().invoke(pipelineOutputBus::publish)
                     .onItem().invoke(item -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime))
                     .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
                         System.nanoTime() - startTime));
@@ -168,6 +178,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
             .addStatement("long startTime = System.nanoTime()")
             .addCode("""
                 return pipelineExecutionService.<$T>executePipelineStreaming(input)
+                    .onItem().invoke(pipelineOutputBus::publish)
                     .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
                         System.nanoTime() - startTime))
                     .onCompletion().invoke(() -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime));
@@ -183,13 +194,23 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
                 ClassName.get("io.grpc", "Status"))
             .build();
 
+        MethodSpec subscribeMethod = MethodSpec.methodBuilder("subscribe")
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(ParameterizedTypeName.get(multi, outputType))
+            .addParameter(ClassName.get("com.google.protobuf", "Empty"), "request")
+            .addStatement("return pipelineOutputBus.stream($T.class)", outputType)
+            .build();
+
         TypeSpec service = TypeSpec.classBuilder(GRPC_CLASS)
             .addModifiers(Modifier.PUBLIC)
             .addAnnotation(grpcServiceAnnotation)
             .superclass(implBase)
             .addField(executionField)
+            .addField(outputBusField)
             .addMethod(runMethod.build())
             .addMethod(ingestMethod)
+            .addMethod(subscribeMethod)
             .build();
 
         JavaFile.builder(binding.basePackage() + ".orchestrator.service", service)

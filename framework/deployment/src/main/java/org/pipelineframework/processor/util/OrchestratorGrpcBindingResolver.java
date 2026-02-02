@@ -13,6 +13,7 @@ import org.pipelineframework.processor.ir.PipelineStepModel;
  * Resolves gRPC bindings for the orchestrator service using compiled protobuf descriptors.
  */
 public class OrchestratorGrpcBindingResolver {
+    private static final Set<String> ALLOWED_METHODS = Set.of("Run", "Ingest", "Subscribe");
 
     /**
      * Creates a new OrchestratorGrpcBindingResolver.
@@ -168,10 +169,9 @@ public class OrchestratorGrpcBindingResolver {
                 "Method '" + methodName + "' not found in orchestrator service");
         }
         if (serviceDescriptor.getMethods().size() > 1 && messager != null) {
-            Set<String> allowed = Set.of("Run", "Ingest");
             boolean hasUnexpected = serviceDescriptor.getMethods().stream()
                 .map(Descriptors.MethodDescriptor::getName)
-                .anyMatch(name -> !allowed.contains(name));
+                .anyMatch(name -> !ALLOWED_METHODS.contains(name));
             if (hasUnexpected) {
                 messager.printMessage(
                     Diagnostic.Kind.WARNING,
