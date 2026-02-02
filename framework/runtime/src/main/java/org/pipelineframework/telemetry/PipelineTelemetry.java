@@ -152,12 +152,12 @@ public class PipelineTelemetry {
         if (mode == null) {
             mode = RetryAmplificationGuardMode.FAIL_FAST;
         }
-        boolean enabled = guardConfig != null && Boolean.TRUE.equals(guardConfig.enabled())
+        boolean guardEnabled = guardConfig != null && Boolean.TRUE.equals(guardConfig.enabled())
             && inflightThreshold > 0d
             && sustainSamples > 0
             && !window.isZero()
             && !window.isNegative();
-        this.retryAmplificationEnabled = enabled;
+        this.retryAmplificationEnabled = guardEnabled;
         this.retryAmplificationWindow = window;
         this.inflightSlopeThreshold = inflightThreshold;
         this.retryAmplificationSustainSamples = sustainSamples;

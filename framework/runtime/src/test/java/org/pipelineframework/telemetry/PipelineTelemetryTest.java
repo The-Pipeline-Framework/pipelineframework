@@ -249,45 +249,24 @@ class PipelineTelemetryTest {
 
     @Test
     void recordsStepRetryCounter() {
-        InMemorySpanExporter exporter = InMemorySpanExporter.create();
-        SdkTracerProvider tracerProvider = SdkTracerProvider.builder()
-            .addSpanProcessor(SimpleSpanProcessor.create(exporter))
-            .build();
-        InMemoryMetricReader metricReader = InMemoryMetricReader.create();
-        SdkMeterProvider meterProvider = SdkMeterProvider.builder()
-            .registerMetricReader(metricReader)
-            .build();
-        OpenTelemetrySdk sdk = OpenTelemetrySdk.builder()
-            .setTracerProvider(tracerProvider)
-            .setMeterProvider(meterProvider)
-            .build();
-        GlobalOpenTelemetry.resetForTest();
-        GlobalOpenTelemetry.set(sdk);
+        PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
+        PipelineTelemetry.recordRetry(DummyStep.class);
+        PipelineTelemetry.recordRetry(DummyStep.class);
 
-        try {
-            PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
-            PipelineTelemetry.recordRetry(DummyStep.class);
-            PipelineTelemetry.recordRetry(DummyStep.class);
+        Collection<MetricData> metrics = metricReader.collectAllMetrics();
+        MetricData retryMetric = metrics.stream()
+            .filter(metric -> "tpf.step.retry.count".equals(metric.getName()))
+            .findFirst()
+            .orElseThrow();
 
-            Collection<MetricData> metrics = metricReader.collectAllMetrics();
-            MetricData retryMetric = metrics.stream()
-                .filter(metric -> "tpf.step.retry.count".equals(metric.getName()))
-                .findFirst()
-                .orElseThrow();
-
-            String stepClass = DummyStep.class.getName();
-            long value = retryMetric.getLongSumData().getPoints().stream()
-                .filter(point -> stepClass.equals(point.getAttributes()
-                    .get(AttributeKey.stringKey("tpf.step.class"))))
-                .findFirst()
-                .orElseThrow()
-                .getValue();
-            assertEquals(2L, value);
-        } finally {
-            tracerProvider.shutdown();
-            meterProvider.shutdown();
-            GlobalOpenTelemetry.resetForTest();
-        }
+        String stepClass = DummyStep.class.getName();
+        long value = retryMetric.getLongSumData().getPoints().stream()
+            .filter(point -> stepClass.equals(point.getAttributes()
+                .get(AttributeKey.stringKey("tpf.step.class"))))
+            .findFirst()
+            .orElseThrow()
+            .getValue();
+        assertEquals(2L, value);
     }
 
     static final class DummyStep$$Proxy extends DummyStep {

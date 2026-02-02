@@ -61,6 +61,7 @@ public final class RetryAmplificationGuard {
      * @param samples sampled values (oldest to newest)
      * @param window evaluation window
      * @param inflightSlopeThreshold inflight slope threshold
+     * @param sustainSamples consecutive samples required to trigger
      * @return trigger metadata when thresholds are exceeded
      */
     public Optional<Trigger> evaluate(
