@@ -39,6 +39,7 @@ class OrchestratorIngestClientRendererTest {
         assertTrue(source.contains("public Multi<OutputType> ingest(Multi<InputType> input)"));
         assertTrue(source.contains("return grpcClient.ingest(input);"));
         assertTrue(source.contains("public Multi<OutputType> subscribe("));
+        assertTrue(source.contains("return grpcClient.subscribe(SubscribeInputType.getDefaultInstance())"));
     }
 
     private OrchestratorBinding buildBinding() {
@@ -85,6 +86,8 @@ class OrchestratorIngestClientRendererTest {
             .addMessageType(DescriptorProtos.DescriptorProto.newBuilder()
                 .setName("InputType"))
             .addMessageType(DescriptorProtos.DescriptorProto.newBuilder()
+                .setName("SubscribeInputType"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder()
                 .setName("OutputType"))
             .addService(DescriptorProtos.ServiceDescriptorProto.newBuilder()
                 .setName("OrchestratorService")
@@ -100,7 +103,7 @@ class OrchestratorIngestClientRendererTest {
                     .setServerStreaming(true))
                 .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
                     .setName("Subscribe")
-                    .setInputType(".com.example.grpc.InputType")
+                    .setInputType(".com.example.grpc.SubscribeInputType")
                     .setOutputType(".com.example.grpc.OutputType")
                     .setClientStreaming(false)
                     .setServerStreaming(true)))

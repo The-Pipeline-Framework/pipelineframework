@@ -20,6 +20,7 @@ public class OrchestratorIngestClientRenderer {
 
     private static final String CLIENT_CLASS = "OrchestratorIngestClient";
     private static final String ORCHESTRATOR_INGEST_METHOD = OrchestratorRpcConstants.INGEST_METHOD;
+    private static final String ORCHESTRATOR_SUBSCRIBE_METHOD = OrchestratorRpcConstants.SUBSCRIBE_METHOD;
 
     /**
      * Render the ingest client for the orchestrator binding.
@@ -35,14 +36,14 @@ public class OrchestratorIngestClientRenderer {
         }
 
         OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
-        var grpcBinding = safeResolveBinding(binding, descriptorSet, ctx);
-        if (grpcBinding == null) {
+        var ingestBinding = safeResolveBinding(binding, descriptorSet, ctx, ORCHESTRATOR_INGEST_METHOD, true, true);
+        if (ingestBinding == null) {
             return;
         }
 
         GrpcJavaTypeResolver typeResolver = new GrpcJavaTypeResolver();
-        var grpcTypes = typeResolver.resolve(grpcBinding, ctx.processingEnv().getMessager());
-        if (grpcTypes == null) {
+        var ingestTypes = typeResolver.resolve(ingestBinding, ctx.processingEnv().getMessager());
+        if (ingestTypes == null) {
             if (ctx.processingEnv() != null && ctx.processingEnv().getMessager() != null) {
                 ctx.processingEnv().getMessager().printMessage(
                     javax.tools.Diagnostic.Kind.WARNING,
@@ -51,11 +52,16 @@ public class OrchestratorIngestClientRenderer {
             return;
         }
 
-        ClassName stubType = grpcTypes.stub();
-        ClassName inputType = grpcTypes.grpcParameterType();
-        ClassName outputType = grpcTypes.grpcReturnType();
+        ClassName stubType = ingestTypes.stub();
+        ClassName inputType = ingestTypes.grpcParameterType();
+        ClassName outputType = ingestTypes.grpcReturnType();
         if (stubType == null || inputType == null || outputType == null) {
             throw new IllegalStateException("Failed to resolve orchestrator ingest client types from descriptors.");
+        }
+
+        ClassName subscribeInputType = resolveSubscribeInputType(binding, descriptorSet, ctx, typeResolver, outputType);
+        if (subscribeInputType == null) {
+            return;
         }
 
         FieldSpec grpcClientField = FieldSpec.builder(stubType, "grpcClient", Modifier.PRIVATE)
@@ -74,7 +80,7 @@ public class OrchestratorIngestClientRenderer {
         MethodSpec subscribeMethod = MethodSpec.methodBuilder("subscribe")
             .addModifiers(Modifier.PUBLIC)
             .returns(ParameterizedTypeName.get(ClassName.get(Multi.class), outputType))
-            .addStatement("return grpcClient.subscribe($T.getDefaultInstance())", inputType)
+            .addStatement("return grpcClient.subscribe($T.getDefaultInstance())", subscribeInputType)
             .build();
 
         TypeSpec client = TypeSpec.classBuilder(CLIENT_CLASS)
@@ -94,15 +100,18 @@ public class OrchestratorIngestClientRenderer {
     private org.pipelineframework.processor.ir.GrpcBinding safeResolveBinding(
         OrchestratorBinding binding,
         DescriptorProtos.FileDescriptorSet descriptorSet,
-        GenerationContext ctx
+        GenerationContext ctx,
+        String methodName,
+        boolean inputStreaming,
+        boolean outputStreaming
     ) {
         try {
             return new OrchestratorGrpcBindingResolver().resolve(
                 binding.model(),
                 descriptorSet,
-                ORCHESTRATOR_INGEST_METHOD,
-                true,
-                true,
+                methodName,
+                inputStreaming,
+                outputStreaming,
                 ctx.processingEnv().getMessager());
         } catch (IllegalStateException e) {
             if (ctx.processingEnv() != null && ctx.processingEnv().getMessager() != null) {
@@ -112,5 +121,42 @@ public class OrchestratorIngestClientRenderer {
             }
             return null;
         }
+    }
+
+    private ClassName resolveSubscribeInputType(
+        OrchestratorBinding binding,
+        DescriptorProtos.FileDescriptorSet descriptorSet,
+        GenerationContext ctx,
+        GrpcJavaTypeResolver typeResolver,
+        ClassName outputType
+    ) {
+        var subscribeBinding = safeResolveBinding(binding, descriptorSet, ctx,
+            ORCHESTRATOR_SUBSCRIBE_METHOD, false, true);
+        if (subscribeBinding == null) {
+            return null;
+        }
+
+        var subscribeTypes = typeResolver.resolve(subscribeBinding, ctx.processingEnv().getMessager());
+        if (subscribeTypes == null) {
+            if (ctx.processingEnv() != null && ctx.processingEnv().getMessager() != null) {
+                ctx.processingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.WARNING,
+                    "Skipping orchestrator ingest client generation: could not resolve subscribe types.");
+            }
+            return null;
+        }
+
+        ClassName subscribeInputType = subscribeTypes.grpcParameterType();
+        ClassName subscribeOutputType = subscribeTypes.grpcReturnType();
+        if (subscribeInputType == null || subscribeOutputType == null) {
+            throw new IllegalStateException("Failed to resolve orchestrator subscribe client types from descriptors.");
+        }
+        if (!subscribeOutputType.equals(outputType) && ctx.processingEnv() != null
+            && ctx.processingEnv().getMessager() != null) {
+            ctx.processingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.WARNING,
+                "Subscribe output type differs from ingest output type; using ingest output type in client.");
+        }
+        return subscribeInputType;
     }
 }
