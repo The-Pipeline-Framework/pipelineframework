@@ -23,6 +23,7 @@ import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.pipelineframework.step.Configurable;
 import org.pipelineframework.step.DeadLetterQueue;
+import org.pipelineframework.telemetry.PipelineTelemetry;
 import org.pipelineframework.step.functional.OneToMany;
 
 /**
@@ -80,7 +81,10 @@ List<O> applyList(I in);
                     }
                 });
             })
-            .onFailure(this::shouldRetry).retry()
+            .onFailure(this::shouldRetry)
+            .invoke(t -> PipelineTelemetry.recordRetry(this.getClass()))
+            .onFailure(this::shouldRetry)
+            .retry()
             .withBackOff(retryWait(), maxBackoff())
             .withJitter(jitter() ? 0.5 : 0.0)
             .atMost(retryLimit())

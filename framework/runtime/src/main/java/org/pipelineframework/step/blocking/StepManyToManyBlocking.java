@@ -25,6 +25,7 @@ import org.pipelineframework.step.Configurable;
 import org.pipelineframework.step.DeadLetterQueue;
 import org.pipelineframework.step.functional.ManyToMany;
 import org.pipelineframework.telemetry.BackpressureBufferMetrics;
+import org.pipelineframework.telemetry.PipelineTelemetry;
 
 /**
  * Imperative variant of StepManyToMany that works with Lists instead of Multi.
@@ -110,7 +111,10 @@ List<O> applyStreamingList(List<I> upstream);
                     }
                 }
             })
-            .onFailure(this::shouldRetry).retry()
+            .onFailure(this::shouldRetry)
+            .invoke(t -> PipelineTelemetry.recordRetry(this.getClass()))
+            .onFailure(this::shouldRetry)
+            .retry()
             .withBackOff(retryWait(), maxBackoff())
             .withJitter(jitter() ? 0.5 : 0.0)
             .atMost(retryLimit())
