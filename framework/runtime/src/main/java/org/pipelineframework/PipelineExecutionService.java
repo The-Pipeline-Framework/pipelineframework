@@ -482,7 +482,6 @@ public class PipelineExecutionService {
           if (isDone()) {
             return;
           }
-          cancelUpstream();
           super.onFailure(PipelineKillSwitchException.retryAmplification(trigger));
         }
       });
