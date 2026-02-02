@@ -202,6 +202,33 @@ The Maven Release Plugin provides a complete automated solution that handles ver
 
 **Note**: The `mvn release:perform` step is not used in this setup since deployment is handled by GitHub Actions when a tag is pushed.
 
+## Important Publishing Details (Central Validation)
+
+### Publishing scope
+
+The publish workflow deploys only the framework artifacts (parent, runtime, deployment) and skips examples:
+
+- Maven runs from the repo root with `-pl framework,framework/runtime,framework/deployment -am`.
+- The root POM is included in the reactor but is **not deployed** (`maven.deploy.skip=true` in the root, overridden to false in `framework/pom.xml`).
+
+Note: Publishing the `framework-parent` artifact is expected. It is the BOM/parent POM that consumers import for dependency management, so it will appear in Maven Central autocomplete results.
+
+### Flattening at publish time (property-gated)
+
+Central validation requires resolved dependency versions. We avoid profiles for core behavior and enable flattening only during publish using a property:
+
+- Default: `-Dtpf.flatten.skip=true` (skip flatten during normal builds)
+- Publish: `-Dtpf.flatten.skip=false` (flatten only for release)
+
+This keeps local builds clean while producing Central-compliant POMs.
+
+### Tag immutability
+
+Release tags are treated as immutable. If a publish fails after a tag is created, you generally **cannot** reuse the same tag:
+
+- Create a new patch tag (e.g., `v26.2.1`, `v26.2.2`) for retries.
+- If repo rules allow, tags can be created from the GitHub UI as part of a release draft.
+
 ### When to Use the Versions Plugin Approach
 
 Use this manual approach only when you need fine-grained control or the Release Plugin is not available:

@@ -46,11 +46,14 @@ pipeline.cache.caffeine.maximum-size=10000
 pipeline.cache.caffeine.expire-after-write=PT30M
 ```
 
-If only one provider is on the classpath, `pipeline.cache.provider` can be omitted. If a provider does
-not declare hints, the framework assumes `RELAXED` ordering and `SAFE` thread safety and emits warnings.
-To lock a specific
-provider for production, set `pipeline.cache.provider.class` to its fully-qualified class name. For
-build-time validation, pass `-Apipeline.provider.class.cache=<fqcn>` to the annotation processor.
+`pipeline.cache.provider` is a **build-time** switch: the provider bean is only included in the application
+when this property is set during build (for example in `application.properties`). Setting it only as a
+runtime environment variable is not sufficient.
+
+If a provider does not declare hints, the framework assumes `RELAXED` ordering and `SAFE` thread safety
+and emits warnings. To lock a specific provider for production, set `pipeline.cache.provider.class` to
+its fully-qualified class name. For build-time validation, pass `-Apipeline.provider.class.cache=<fqcn>`
+to the annotation processor.
 
 ## Cache key strategies
 
@@ -79,6 +82,41 @@ public class RawDocumentKeyStrategy implements CacheKeyStrategy {
     @Override
     public int priority() {
         return 50;
+    }
+}
+```
+
+### Targeted strategies for pre-read
+
+When the runner performs cache pre-read, it can prefer strategies that declare an expected output
+type using `supportsTarget(Class<?> targetType)`. This is useful when the same input can produce
+multiple outputs or when the orchestrator works with DTOs or gRPC types instead of domain models.
+
+```java
+import java.util.Optional;
+import jakarta.enterprise.context.ApplicationScoped;
+
+import org.pipelineframework.cache.CacheKeyStrategy;
+import org.pipelineframework.context.PipelineContext;
+import org.pipelineframework.search.common.dto.ParsedDocumentDto;
+import org.pipelineframework.search.common.domain.ParsedDocument;
+
+@ApplicationScoped
+public class ParseCacheKeyStrategy implements CacheKeyStrategy {
+    @Override
+    public Optional<String> resolveKey(Object item, PipelineContext context) {
+        if (item instanceof ParsedDocument doc && doc.rawContentHash != null) {
+            return Optional.of(ParsedDocument.class.getName() + ":" + doc.rawContentHash);
+        }
+        if (item instanceof ParsedDocumentDto dto && dto.getRawContentHash() != null) {
+            return Optional.of(ParsedDocument.class.getName() + ":" + dto.getRawContentHash());
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    public boolean supportsTarget(Class<?> targetType) {
+        return targetType == ParsedDocument.class || targetType == ParsedDocumentDto.class;
     }
 }
 ```

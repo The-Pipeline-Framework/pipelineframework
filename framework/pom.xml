@@ -21,13 +21,13 @@
     <parent>
         <groupId>org.pipelineframework</groupId>
         <artifactId>pipeline-framework-root</artifactId>
-        <version>26.2.4-SNAPSHOT</version>
+        <version>26.2.5-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <groupId>org.pipelineframework</groupId>
     <artifactId>framework-parent</artifactId>
-    <version>26.2.4-SNAPSHOT</version>
+    <version>26.2.5-SNAPSHOT</version>
     <!-- version is not needed as it is automatically inherited from the parent-->
     <packaging>pom</packaging>
     <name>The Pipeline Framework (Parent)</name>
