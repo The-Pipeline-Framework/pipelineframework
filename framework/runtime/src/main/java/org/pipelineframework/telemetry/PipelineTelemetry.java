@@ -19,8 +19,6 @@ package org.pipelineframework.telemetry;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -844,15 +842,15 @@ public class PipelineTelemetry {
 
     private final class RetryAmplificationMonitor {
         private final RunContext runContext;
-        private final ConcurrentMap<String, Deque<RetryAmplificationGuard.Sample>> samplesByStep;
-        private final ConcurrentMap<String, Long> retryBaselineByStep;
+        private final Deque<RetryAmplificationGuard.Sample> samples;
+        private final AtomicLong retryBaseline;
         private final AtomicReference<RetryAmplificationGuard.Trigger> trigger;
         private ScheduledFuture<?> future;
 
         private RetryAmplificationMonitor(RunContext runContext) {
             this.runContext = runContext;
-            this.samplesByStep = new ConcurrentHashMap<>();
-            this.retryBaselineByStep = new ConcurrentHashMap<>();
+            this.samples = new ArrayDeque<>();
+            this.retryBaseline = new AtomicLong(-1L);
             this.trigger = new AtomicReference<>();
         }
 
@@ -879,31 +877,30 @@ public class PipelineTelemetry {
                 return;
             }
             long now = System.nanoTime();
-            Set<String> steps = new HashSet<>(inflightByStep.keySet());
-            steps.addAll(retryByStep.keySet());
-            for (String step : steps) {
-                long inflight = 0L;
-                AtomicLong inflightCount = inflightByStep.get(step);
-                if (inflightCount != null) {
-                    inflight = inflightCount.get();
-                }
-                LongAdder retryCount = retryByStep.get(step);
-                long retries = retryCount != null ? retryCount.sum() : 0L;
-                long baseline = retryBaselineByStep.computeIfAbsent(step, key -> retries);
-                long relativeRetries = Math.max(0L, retries - baseline);
-
-                Deque<RetryAmplificationGuard.Sample> deque =
-                    samplesByStep.computeIfAbsent(step, key -> new ArrayDeque<>());
-                Deque<RetryAmplificationGuard.Sample> snapshot;
-                synchronized (deque) {
-                    deque.addLast(new RetryAmplificationGuard.Sample(now, inflight, relativeRetries));
-                    trimSamples(deque);
-                    snapshot = new ArrayDeque<>(deque);
-                }
-                retryAmplificationGuard
-                    .evaluate(step, snapshot, retryAmplificationWindow, inflightSlopeThreshold, retryRateThreshold)
-                    .ifPresent(this::trigger);
+            long inflight = 0L;
+            for (AtomicLong inflightCount : inflightByStep.values()) {
+                inflight += inflightCount.get();
             }
+            long retries = 0L;
+            for (LongAdder retryCount : retryByStep.values()) {
+                retries += retryCount.sum();
+            }
+            long baseline = retryBaseline.get();
+            if (baseline < 0L) {
+                retryBaseline.compareAndSet(-1L, retries);
+                baseline = retryBaseline.get();
+            }
+            long relativeRetries = Math.max(0L, retries - baseline);
+
+            Deque<RetryAmplificationGuard.Sample> snapshot;
+            synchronized (samples) {
+                samples.addLast(new RetryAmplificationGuard.Sample(now, inflight, relativeRetries));
+                trimSamples(samples);
+                snapshot = new ArrayDeque<>(samples);
+            }
+            retryAmplificationGuard
+                .evaluate("global", snapshot, retryAmplificationWindow, inflightSlopeThreshold, retryRateThreshold)
+                .ifPresent(this::trigger);
         }
 
         private void trigger(RetryAmplificationGuard.Trigger triggerInfo) {
