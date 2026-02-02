@@ -23,8 +23,10 @@ import java.util.Optional;
 
 import io.quarkus.arc.Unremovable;
 import io.smallrye.config.ConfigMapping;
+import io.smallrye.config.WithConverter;
 import io.smallrye.config.WithDefault;
 import io.smallrye.config.WithName;
+import org.pipelineframework.telemetry.RetryAmplificationGuardMode;
 
 /**
  * Configuration mapping for pipeline steps, supporting both global defaults
@@ -82,6 +84,14 @@ public interface PipelineStepConfig {
      * @return telemetry configuration
      */
     TelemetryConfig telemetry();
+
+    /**
+     * Kill switch configuration for pipeline safety guards.
+     *
+     * @return kill switch configuration
+     */
+    @WithName("kill-switch")
+    KillSwitchConfig killSwitch();
     
     /**
      * Per-step configuration overrides keyed by each step's fully qualified class name.
@@ -279,6 +289,67 @@ public interface PipelineStepConfig {
          * @return metrics configuration
          */
         MetricsConfig metrics();
+    }
+
+    /**
+     * Kill switch configuration for pipeline execution guards.
+     */
+    interface KillSwitchConfig {
+        /**
+         * Retry amplification guard configuration.
+         *
+         * @return retry amplification guard configuration
+         */
+        @WithName("retry-amplification")
+        RetryAmplificationGuardConfig retryAmplification();
+    }
+
+    /**
+     * Retry amplification guard configuration.
+     */
+    interface RetryAmplificationGuardConfig {
+        /**
+         * Enables retry amplification detection.
+         *
+         * @return true to enable the guard
+         */
+        @WithDefault("false")
+        Boolean enabled();
+
+        /**
+         * Window used to evaluate sustained growth.
+         *
+         * @return evaluation window duration
+         */
+        @WithDefault("PT30S")
+        Duration window();
+
+        /**
+         * Threshold for in-flight slope (items per second).
+         *
+         * @return in-flight slope threshold
+         */
+        @WithName("inflight-slope-threshold")
+        @WithDefault("10")
+        Double inflightSlopeThreshold();
+
+        /**
+         * Guard behavior when triggered.
+         *
+         * @return guard mode
+         */
+        @WithDefault("fail-fast")
+        @WithConverter(RetryAmplificationGuardModeConverter.class)
+        RetryAmplificationGuardMode mode();
+
+        /**
+         * Number of consecutive samples that must exceed the threshold before triggering.
+         *
+         * @return consecutive sample count
+         */
+        @WithName("sustain-samples")
+        @WithDefault("3")
+        Integer sustainSamples();
     }
 
     /**

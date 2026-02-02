@@ -88,7 +88,7 @@ class CacheManagerTest {
         TestItem item = new TestItem("id-1a");
         String key = "key-1a";
         RecordingProvider providerA = new RecordingProvider("a");
-        RecordingProvider providerB = new RecordingProvider("b");
+        RecordingProvider providerB = new RecordingProvider("b") { };
 
         setProviders(List.of(providerA, providerB));
         setConfig("memory", Optional.empty());
@@ -230,7 +230,7 @@ class CacheManagerTest {
         }
     }
 
-    private static final class RecordingProvider implements CacheProvider<TestItem> {
+    private static class RecordingProvider implements CacheProvider<TestItem> {
         private final String backend;
         private boolean used;
 

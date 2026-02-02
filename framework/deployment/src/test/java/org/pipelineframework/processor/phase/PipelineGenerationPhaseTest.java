@@ -21,6 +21,8 @@ import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
 
+import com.google.protobuf.DescriptorProtos;
+import com.google.protobuf.Descriptors;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -83,5 +85,24 @@ class PipelineGenerationPhaseTest {
         // Execute the phase with an empty context (no models)
         // This should not throw exceptions and should handle the empty case gracefully
         assertDoesNotThrow(() -> phase.execute(context));
+    }
+
+    @Test
+    void derivesOuterClassNameFromProtoPath() throws Exception {
+        PipelineGenerationPhase phase = new PipelineGenerationPhase();
+        DescriptorProtos.FileDescriptorProto fileProto = DescriptorProtos.FileDescriptorProto.newBuilder()
+            .setName("proto/search/baz.proto")
+            .build();
+        Descriptors.FileDescriptor descriptor = Descriptors.FileDescriptor.buildFrom(
+            fileProto,
+            new Descriptors.FileDescriptor[0]);
+
+        java.lang.reflect.Method method = PipelineGenerationPhase.class.getDeclaredMethod(
+            "deriveOuterClassName",
+            Descriptors.FileDescriptor.class);
+        method.setAccessible(true);
+
+        String outer = (String) method.invoke(phase, descriptor);
+        assertEquals("Baz", outer);
     }
 }

@@ -20,6 +20,7 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.pipelineframework.step.functional.OneToMany;
+import org.pipelineframework.telemetry.PipelineTelemetry;
 import org.pipelineframework.telemetry.BackpressureBufferMetrics;
 
 /**
@@ -74,7 +75,10 @@ public interface StepOneToMany<I, O> extends OneToMany<I, O>, Configurable, Dead
                 return o;
             });
         })
-        .onFailure(this::shouldRetry).retry()
+        .onFailure(this::shouldRetry)
+        .invoke(t -> PipelineTelemetry.recordRetry(this.getClass()))
+        .onFailure(this::shouldRetry)
+        .retry()
         .withBackOff(retryWait(), maxBackoff())
         .withJitter(jitter() ? 0.5 : 0.0)
         .atMost(retryLimit())

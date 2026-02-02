@@ -53,20 +53,25 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-     * Builds a REST resource class TypeSpec from the given binding.
+     * Build a JAX-RS REST resource TypeSpec for the provided RestBinding and generation context.
      *
-     * Constructs a public REST resource class populated with JAX-RS and DI annotations,
-     * injected service and optional mapper fields, a logger, and a process endpoint tailored
-     * to the service's streaming shape and DTO conversions.
+     * The generated class is a public REST resource annotated with @Path and a generated-role
+     * annotation, contains an injected domain service and optional mapper fields, extends the
+     * appropriate REST adapter, and includes DTO conversion and a process endpoint matching the
+     * service's streaming shape.
      *
-     * @param binding the RestBinding that provides the PipelineStepModel, service name,
-     *                optional path override and mapping information used to generate the resource
-     * @return the generated TypeSpec representing the REST resource class
+     * @param binding the RestBinding containing the PipelineStepModel, service name, optional path override, and mapping info
+     * @param ctx the GenerationContext providing deployment role and output configuration
+     * @return a TypeSpec representing the generated REST resource class
      */
     private TypeSpec buildRestResourceClass(RestBinding binding, GenerationContext ctx) {
         org.pipelineframework.processor.ir.DeploymentRole role = ctx.role();
         PipelineStepModel model = binding.model();
-        validateRestMappings(model);
+        boolean cachePluginSideEffect = isCachePluginSideEffect(model);
+        boolean cacheSideEffect = isCacheSideEffect(model);
+        if (!cacheSideEffect && !cachePluginSideEffect) {
+            validateRestMappings(model);
+        }
 
         String serviceClassName = model.generatedName();
 
@@ -107,7 +112,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         TypeName outboundMapperType = null;
         boolean inboundMapperAdded = false;
 
-        if (model.inputMapping().hasMapper()) {
+        if (!cacheSideEffect && model.inputMapping().hasMapper()) {
             inboundMapperType = model.inputMapping().mapperType();
             String inboundMapperSimpleName = inboundMapperType.toString().substring(
                 inboundMapperType.toString().lastIndexOf('.') + 1);
@@ -123,7 +128,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             inboundMapperAdded = true;
         }
 
-        if (model.outputMapping().hasMapper()) {
+        if (!cacheSideEffect && model.outputMapping().hasMapper()) {
             outboundMapperType = model.outputMapping().mapperType();
             String outboundMapperSimpleName = outboundMapperType.toString().substring(
                 outboundMapperType.toString().lastIndexOf('.') + 1);
@@ -156,12 +161,12 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             ? convertDomainToDtoType(model.outboundDomainType())
             : ClassName.OBJECT;
 
-        TypeName domainInputType = model.inboundDomainType() != null
-            ? model.inboundDomainType()
-            : ClassName.OBJECT;
-        TypeName domainOutputType = model.outboundDomainType() != null
-            ? model.outboundDomainType()
-            : ClassName.OBJECT;
+        TypeName domainInputType = cacheSideEffect
+            ? inputDtoClassName
+            : (model.inboundDomainType() != null ? model.inboundDomainType() : ClassName.OBJECT);
+        TypeName domainOutputType = cacheSideEffect
+            ? outputDtoClassName
+            : (model.outboundDomainType() != null ? model.outboundDomainType() : ClassName.OBJECT);
 
         ClassName adapterClass = resolveRestAdapterClass(model);
         TypeName adapterType = ParameterizedTypeName.get(
@@ -172,20 +177,23 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             domainOutputType);
         resourceBuilder.superclass(adapterType);
 
-        resourceBuilder.addMethod(createGetServiceMethod(model));
-        resourceBuilder.addMethod(createFromDtoMethod(model, inputDtoClassName, inboundMapperFieldName));
-        resourceBuilder.addMethod(createToDtoMethod(model, outputDtoClassName, outboundMapperFieldName));
+        resourceBuilder.addMethod(createGetServiceMethod(model, domainInputType, domainOutputType));
+        resourceBuilder.addMethod(createFromDtoMethod(model, inputDtoClassName, inboundMapperFieldName, cacheSideEffect));
+        resourceBuilder.addMethod(createToDtoMethod(model, outputDtoClassName, outboundMapperFieldName, cacheSideEffect));
 
         // Create the process method based on service type (determined from streaming shape)
         MethodSpec processMethod = switch (model.streamingShape()) {
             case UNARY_STREAMING -> createReactiveStreamingServiceProcessMethod(
-                    inputDtoClassName, outputDtoClassName, model, inboundMapperFieldName, outboundMapperFieldName);
+                    inputDtoClassName, outputDtoClassName, model, inboundMapperFieldName, outboundMapperFieldName,
+                    cachePluginSideEffect);
             case STREAMING_UNARY -> createReactiveStreamingClientServiceProcessMethod(
-                    inputDtoClassName, outputDtoClassName, model, inboundMapperFieldName, outboundMapperFieldName);
+                    inputDtoClassName, outputDtoClassName, model, inboundMapperFieldName, outboundMapperFieldName,
+                    cachePluginSideEffect);
             case STREAMING_STREAMING -> createReactiveBidirectionalStreamingServiceProcessMethod(
-                    inputDtoClassName, outputDtoClassName, model, inboundMapperFieldName, outboundMapperFieldName);
+                    inputDtoClassName, outputDtoClassName, model, inboundMapperFieldName, outboundMapperFieldName,
+                    cachePluginSideEffect);
             default -> createReactiveServiceProcessMethod(
-                    inputDtoClassName, outputDtoClassName, model, ctx, inboundMapperFieldName, outboundMapperFieldName);
+                    inputDtoClassName, outputDtoClassName, model, ctx, inboundMapperFieldName, outboundMapperFieldName, cacheSideEffect);
         };
 
         resourceBuilder.addMethod(processMethod);
@@ -194,26 +202,32 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-     * Create the REST POST "process" method for a unary reactive service endpoint.
-     *
-     * The generated method is a public POST handler at path "/process" that accepts an input DTO,
-     * delegates to the adapter's remoteProcess method, and returns a Uni of output DTOs.
-     *
-     * @param inputDtoClassName           the DTO type used as the method parameter
-     * @param outputDtoClassName          the DTO type produced by the method
-     * @param model                       the pipeline step model used to determine domain types and execution mode
-     * @param ctx                         generation context carrying enabled aspects and deployment role
-     * @param inboundMapperFieldName      name of the injected inbound mapper field used to convert DTO to domain
-     * @param outboundMapperFieldName     name of the injected outbound mapper field used to convert domain to DTO
-     * @return                            a MethodSpec for the generated REST "process" method that returns a `Uni` of the output DTO
-     */
+         * Create the REST POST handler for the step's unary reactive "process" endpoint.
+         *
+         * The generated method is a public POST endpoint at path "/process". When `cacheSideEffect`
+         * is true the method forwards the incoming DTO directly to the domain service; when false
+         * it converts the incoming DTO to a domain value using the inbound mapper and converts the
+         * service result back to a DTO using the outbound mapper.
+         *
+         * @param inputDtoClassName       the DTO type used as the method parameter
+         * @param outputDtoClassName      the DTO type produced by the method
+         * @param model                   the pipeline step model that provides execution metadata and domain types
+         * @param ctx                     the generation context carrying enabled aspects and deployment role
+         * @param inboundMapperFieldName  name of the injected inbound mapper field used to convert DTO to domain (used when `cacheSideEffect` is false)
+         * @param outboundMapperFieldName name of the injected outbound mapper field used to convert domain to DTO (used when `cacheSideEffect` is false)
+         * @param cacheSideEffect         if true, bypass mapping and pass DTOs directly to/from the domain service
+         * @return                        a MethodSpec representing a POST "/process" handler that returns a `Uni` of the output DTO
+         */
     private MethodSpec createReactiveServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             PipelineStepModel model,
             GenerationContext ctx,
             String inboundMapperFieldName,
-            String outboundMapperFieldName) {
-        validateRestMappings(model);
+            String outboundMapperFieldName,
+            boolean cacheSideEffect) {
+        if (!cacheSideEffect) {
+            validateRestMappings(model);
+        }
 
         TypeName uniOutputDto = ParameterizedTypeName.get(ClassName.get(Uni.class), outputDtoClassName);
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("process")
@@ -226,13 +240,17 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             .returns(uniOutputDto)
             .addParameter(inputDtoClassName, "inputDto");
 
-        TypeName domainInputType = model.inboundDomainType() != null
-            ? model.inboundDomainType()
-            : ClassName.OBJECT;
-        methodBuilder.addStatement("$T inputDomain = $L.fromDto(inputDto)",
-            domainInputType, inboundMapperFieldName);
-        methodBuilder.addStatement("return domainService.process(inputDomain).map(output -> $L.toDto(output))",
-            outboundMapperFieldName);
+        if (cacheSideEffect) {
+            methodBuilder.addStatement("return domainService.process(inputDto)");
+        } else {
+            TypeName domainInputType = model.inboundDomainType() != null
+                ? model.inboundDomainType()
+                : ClassName.OBJECT;
+            methodBuilder.addStatement("$T inputDomain = $L.fromDto(inputDto)",
+                domainInputType, inboundMapperFieldName);
+            methodBuilder.addStatement("return domainService.process(inputDomain).map(output -> $L.toDto(output))",
+                outboundMapperFieldName);
+        }
 
         // Add @RunOnVirtualThread annotation if the property is enabled
         if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
@@ -245,19 +263,21 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     /**
      * Exposes a POST /process endpoint that accepts a single input DTO and returns a JSON stream of output DTOs.
      *
-     * @param inputDtoClassName           the DTO type accepted by the endpoint
-     * @param outputDtoClassName          the DTO type emitted by the returned stream
-     * @param model                       pipeline step model used to determine domain types and execution mode
-     * @param inboundMapperFieldName      name of the injected inbound mapper field used to convert the input DTO to the domain type
-     * @param outboundMapperFieldName     name of the injected outbound mapper field used to convert domain outputs to DTOs
-     * @return                            a `Multi` that emits output DTO instances converted from the service's domain outputs
+     * @param model                   the pipeline step model that provides domain types and execution mode
+     * @param inboundMapperFieldName  name of the injected inbound mapper used to convert the input DTO to the domain type
+     * @param outboundMapperFieldName name of the injected outbound mapper used to convert domain outputs to DTOs
+     * @param skipValidation          when true, skips validation of REST mappings before generating mapping calls
+     * @return                        a `Multi` that emits output DTO instances produced from the service's domain outputs
      */
     private MethodSpec createReactiveStreamingServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             PipelineStepModel model,
             String inboundMapperFieldName,
-            String outboundMapperFieldName) {
-        validateRestMappings(model);
+            String outboundMapperFieldName,
+            boolean skipValidation) {
+        if (!skipValidation) {
+            validateRestMappings(model);
+        }
 
         TypeName multiOutputDto = ParameterizedTypeName.get(ClassName.get(Multi.class), outputDtoClassName);
 
@@ -291,24 +311,31 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-     * Builds the reactive client-streaming "process" JAX-RS method for the generated REST resource.
+     * Builds the reactive client-streaming JAX-RS "process" method for this REST resource.
      *
      * The generated method is a public POST endpoint at path "/process" that accepts a Multi of input DTOs,
-     * delegates processing to the adapter's remoteProcess method, and returns a Uni of output DTOs.
+     * maps each input DTO to a domain object using the inbound mapper, delegates processing to the domain service,
+     * maps the domain result to an output DTO using the outbound mapper, and returns a Uni of output DTOs.
+     * If skipValidation is false, REST mappings are validated before generation. If the model's execution mode is
+     * VIRTUAL_THREADS, the method will be annotated to run on virtual threads.
      *
-     * @param inputDtoClassName    the TypeName used for individual input DTOs
-     * @param outputDtoClassName   the TypeName used for the output DTO
-     * @param model                the pipeline step model that influences method generation (for example execution mode)
-     * @param inboundMapperFieldName  the name of the injected inbound mapper field used to convert DTOs to domain objects
-     * @param outboundMapperFieldName the name of the injected outbound mapper field used to convert domain objects to DTOs
-     * @return                     a MethodSpec representing the generated "process" method
+     * @param inputDtoClassName        the TypeName used for individual input DTOs
+     * @param outputDtoClassName       the TypeName used for the output DTO
+     * @param model                    the pipeline step model; influences validation and execution-mode annotation
+     * @param inboundMapperFieldName   the injected inbound mapper field name used to convert DTOs to domain objects
+     * @param outboundMapperFieldName  the injected outbound mapper field name used to convert domain objects to DTOs
+     * @param skipValidation           if true, skips validateRestMappings(model) during generation
+     * @return                         a MethodSpec representing the generated "process" method
      */
     private MethodSpec createReactiveStreamingClientServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             PipelineStepModel model,
             String inboundMapperFieldName,
-            String outboundMapperFieldName) {
-        validateRestMappings(model);
+            String outboundMapperFieldName,
+            boolean skipValidation) {
+        if (!skipValidation) {
+            validateRestMappings(model);
+        }
 
         TypeName multiInputDto = ParameterizedTypeName.get(ClassName.get(Multi.class), inputDtoClassName);
         TypeName uniOutputDto = ParameterizedTypeName.get(ClassName.get(Uni.class), outputDtoClassName);
@@ -340,19 +367,23 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     /**
      * Exposes a bidirectional streaming POST endpoint at "/process" that accepts a stream of input DTOs and returns a stream of output DTOs.
      *
-     * @param inputDtoClassName      the DTO type for incoming stream elements
-     * @param outputDtoClassName     the DTO type for outgoing stream elements
-     * @param model                  the pipeline step model that influences streaming shape and execution mode; if the execution mode is VIRTUAL_THREADS the generated method will be annotated with `@RunOnVirtualThread`
-     * @param inboundMapperFieldName name of the injected mapper field used to convert incoming DTOs to domain objects
+     * @param inputDtoClassName       the DTO type of incoming stream elements
+     * @param outputDtoClassName      the DTO type of outgoing stream elements
+     * @param model                   pipeline step model; if its execution mode is VIRTUAL_THREADS the generated method is annotated with `@RunOnVirtualThread`
+     * @param inboundMapperFieldName  name of the injected mapper field used to convert incoming DTOs to domain objects
      * @param outboundMapperFieldName name of the injected mapper field used to convert domain outputs to DTOs
-     * @return                       a `Multi` of output DTO instances produced by mapping the domain service's outputs to DTOs
+     * @param skipValidation          if true, REST mapping validation is skipped for this method
+     * @return                        a `Multi` of output DTO instances produced from the domain service's outputs
      */
     private MethodSpec createReactiveBidirectionalStreamingServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             PipelineStepModel model,
             String inboundMapperFieldName,
-            String outboundMapperFieldName) {
-        validateRestMappings(model);
+            String outboundMapperFieldName,
+            boolean skipValidation) {
+        if (!skipValidation) {
+            validateRestMappings(model);
+        }
 
         TypeName multiInputDto = ParameterizedTypeName.get(ClassName.get(Multi.class), inputDtoClassName);
         TypeName multiOutputDto = ParameterizedTypeName.get(ClassName.get(Multi.class), outputDtoClassName);
@@ -389,6 +420,12 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         return methodBuilder.build();
     }
 
+    /**
+     * Selects the REST reactive adapter class corresponding to the model's streaming shape.
+     *
+     * @param model the pipeline step model whose streaming shape determines the adapter
+     * @return the ClassName of the matching REST reactive adapter
+     */
     private ClassName resolveRestAdapterClass(PipelineStepModel model) {
         return switch (model.streamingShape()) {
             case UNARY_STREAMING -> ClassName.get(
@@ -402,13 +439,18 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         };
     }
 
-    private MethodSpec createGetServiceMethod(PipelineStepModel model) {
-        TypeName domainInputType = model.inboundDomainType() != null
-            ? model.inboundDomainType()
-            : ClassName.OBJECT;
-        TypeName domainOutputType = model.outboundDomainType() != null
-            ? model.outboundDomainType()
-            : ClassName.OBJECT;
+    /**
+     * Builds the protected `getService()` method that returns the appropriately parameterized reactive service type for the pipeline step.
+     *
+     * @param model the pipeline step model whose streaming shape determines the specific reactive service interface
+     * @param domainInputType the domain-level input type used to parameterize the returned service
+     * @param domainOutputType the domain-level output type used to parameterize the returned service
+     * @return the service instance typed to the reactive service interface matching the step's streaming shape and parameterized with the provided domain input and output types
+     */
+    private MethodSpec createGetServiceMethod(
+            PipelineStepModel model,
+            TypeName domainInputType,
+            TypeName domainOutputType) {
         TypeName serviceType = switch (model.streamingShape()) {
             case UNARY_STREAMING -> ParameterizedTypeName.get(
                 ClassName.get("org.pipelineframework.service", "ReactiveStreamingService"),
@@ -436,6 +478,12 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             .build();
     }
 
+    /**
+     * Determine which service class should be injected for the pipeline step.
+     *
+     * @param model the pipeline step model used to resolve the service type
+     * @return the service class to use: the model's declared service class when the step is not a side effect, otherwise the service class located in the pipeline package derived from the model's service package and service name
+     */
     private TypeName resolveServiceType(PipelineStepModel model) {
         if (!model.sideEffect()) {
             return model.serviceClassName();
@@ -445,36 +493,99 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             model.serviceName());
     }
 
+    /**
+     * Determines whether the given pipeline step model represents a cache-based side effect
+     * that uses the framework CacheService and expects a unary-to-unary streaming shape.
+     *
+     * @param model the pipeline step model to inspect
+     * @return `true` if the model is a side effect backed by `org.pipelineframework.plugin.cache.CacheService`
+     *         and its streaming shape is `UNARY_UNARY`, `false` otherwise
+     */
+    private boolean isCacheSideEffect(PipelineStepModel model) {
+        if (model == null || !model.sideEffect() || model.serviceClassName() == null) {
+            return false;
+        }
+        return model.streamingShape() == org.pipelineframework.processor.ir.StreamingShape.UNARY_UNARY
+            && "org.pipelineframework.plugin.cache.CacheService".equals(
+                model.serviceClassName().canonicalName());
+    }
+
+    /**
+     * Determines whether the given pipeline step model represents a cache plugin side-effect.
+     *
+     * @param model the pipeline step model to inspect; may be null
+     * @return `true` if the model is a side-effect and its service class is
+     *         `org.pipelineframework.plugin.cache.CacheService`, `false` otherwise
+     */
+    private boolean isCachePluginSideEffect(PipelineStepModel model) {
+        if (model == null || !model.sideEffect() || model.serviceClassName() == null) {
+            return false;
+        }
+        return "org.pipelineframework.plugin.cache.CacheService".equals(
+            model.serviceClassName().canonicalName());
+    }
+
+    /**
+     * Converts an input DTO into the step's domain input value.
+     *
+     * If `cacheSideEffect` is true, the DTO is returned unchanged; otherwise the inbound mapper
+     * referenced by `inboundMapperFieldName` is used to perform the conversion.
+     *
+     * @param model the pipeline step model providing domain type metadata
+     * @param inputDtoClassName the compile-time type of the incoming DTO parameter
+     * @param inboundMapperFieldName the name of the injected inbound mapper field to call when mapping
+     * @param cacheSideEffect when true, skip mapping and pass the DTO through as the domain input
+     * @return the domain input value derived from `dto`, or the original `dto` when `cacheSideEffect` is true
+     */
     private MethodSpec createFromDtoMethod(
             PipelineStepModel model,
             TypeName inputDtoClassName,
-            String inboundMapperFieldName) {
-        TypeName domainInputType = model.inboundDomainType() != null
-            ? model.inboundDomainType()
-            : ClassName.OBJECT;
-        return MethodSpec.methodBuilder("fromDto")
+            String inboundMapperFieldName,
+            boolean cacheSideEffect) {
+        TypeName domainInputType = cacheSideEffect
+            ? inputDtoClassName
+            : (model.inboundDomainType() != null ? model.inboundDomainType() : ClassName.OBJECT);
+        MethodSpec.Builder builder = MethodSpec.methodBuilder("fromDto")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PROTECTED)
             .returns(domainInputType)
-            .addParameter(inputDtoClassName, "dto")
-            .addStatement("return $L.fromDto(dto)", inboundMapperFieldName)
-            .build();
+            .addParameter(inputDtoClassName, "dto");
+        if (cacheSideEffect) {
+            builder.addStatement("return dto");
+        } else {
+            builder.addStatement("return $L.fromDto(dto)", inboundMapperFieldName);
+        }
+        return builder.build();
     }
 
+    /**
+     * Convert a domain object into its outbound DTO.
+     *
+     * @param model the pipeline step metadata used to determine domain/outbound types
+     * @param outputDtoClassName the DTO type returned by this method
+     * @param outboundMapperFieldName the name of the injected outbound mapper field to use when mapping is required
+     * @param cacheSideEffect if `true`, the method returns the input value unchanged; if `false`, the method delegates to the outbound mapper
+     * @return the outbound DTO corresponding to the given domain object
+     */
     private MethodSpec createToDtoMethod(
             PipelineStepModel model,
             TypeName outputDtoClassName,
-            String outboundMapperFieldName) {
-        TypeName domainOutputType = model.outboundDomainType() != null
-            ? model.outboundDomainType()
-            : ClassName.OBJECT;
-        return MethodSpec.methodBuilder("toDto")
+            String outboundMapperFieldName,
+            boolean cacheSideEffect) {
+        TypeName domainOutputType = cacheSideEffect
+            ? outputDtoClassName
+            : (model.outboundDomainType() != null ? model.outboundDomainType() : ClassName.OBJECT);
+        MethodSpec.Builder builder = MethodSpec.methodBuilder("toDto")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PROTECTED)
             .returns(outputDtoClassName)
-            .addParameter(domainOutputType, "domain")
-            .addStatement("return $L.toDto(domain)", outboundMapperFieldName)
-            .build();
+            .addParameter(domainOutputType, "domain");
+        if (cacheSideEffect) {
+            builder.addStatement("return domain");
+        } else {
+            builder.addStatement("return $L.toDto(domain)", outboundMapperFieldName);
+        }
+        return builder.build();
     }
 
     /**

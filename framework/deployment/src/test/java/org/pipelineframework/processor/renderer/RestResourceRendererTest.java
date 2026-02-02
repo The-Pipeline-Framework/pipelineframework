@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.processor.ir.*;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
@@ -65,6 +66,40 @@ class RestResourceRendererTest {
         assertTrue(source.contains("public Uni<PaymentOutputDto> process(PaymentStatusDto inputDto)"));
         assertTrue(source.contains("PaymentStatus inputDomain = paymentStatusMapper.fromDto(inputDto);"));
         assertTrue(source.contains("return domainService.process(inputDomain).map(output -> paymentOutputMapper.toDto(output));"));
+    }
+
+    @Test
+    void rendersStreamingCacheSideEffectWithoutMappers() {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("ObserveCacheSomethingSideEffectService")
+            .servicePackage("org.pipelineframework.cache.service")
+            .serviceClassName(ClassName.get(
+                "org.pipelineframework.plugin.cache",
+                "CacheService"))
+            .streamingShape(StreamingShape.UNARY_STREAMING)
+            .executionMode(ExecutionMode.DEFAULT)
+            .sideEffect(true)
+            .inputMapping(new TypeMapping(
+                ClassName.get("com.example.domain", "InputType"),
+                null,
+                false))
+            .outputMapping(new TypeMapping(
+                ClassName.get("com.example.domain", "OutputType"),
+                null,
+                false))
+            .enabledTargets(java.util.Set.of(GenerationTarget.REST_RESOURCE))
+            .build();
+
+        RestBinding binding = new RestBinding(
+            model,
+            "/ObserveCacheSomethingSideEffectService/remoteProcess");
+
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        GenerationContext context = new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+            java.util.Set.of(), null, null);
+
+        RestResourceRenderer renderer = new RestResourceRenderer();
+        assertDoesNotThrow(() -> renderer.render(binding, context));
     }
 
 }

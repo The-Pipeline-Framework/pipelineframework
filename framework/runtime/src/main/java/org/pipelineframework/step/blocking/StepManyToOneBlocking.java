@@ -26,6 +26,7 @@ import org.pipelineframework.step.Configurable;
 import org.pipelineframework.step.DeadLetterQueue;
 import org.pipelineframework.step.functional.ManyToOne;
 import org.pipelineframework.telemetry.BackpressureBufferMetrics;
+import org.pipelineframework.telemetry.PipelineTelemetry;
 
 /**
  * N -> 1 (imperative)
@@ -150,7 +151,10 @@ public interface StepManyToOneBlocking<I, O> extends Configurable, ManyToOne<I, 
                     }
                 }
             })
-            .onFailure(this::shouldRetry).retry()
+            .onFailure(this::shouldRetry)
+            .invoke(t -> PipelineTelemetry.recordRetry(this.getClass()))
+            .onFailure(this::shouldRetry)
+            .retry()
             .withBackOff(retryWait(), maxBackoff())
             .withJitter(jitter() ? 0.5 : 0.0)
             .atMost(retryLimit());

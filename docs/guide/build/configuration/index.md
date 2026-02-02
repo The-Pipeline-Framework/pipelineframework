@@ -178,6 +178,18 @@ Prefix: `pipeline.telemetry`
 
 Item boundary types are compiled into telemetry metadata; runtime changes do not apply unless you rebuild the project.
 
+### Kill Switches
+
+Prefix: `pipeline.kill-switch`
+
+| Property                                                              | Type     | Default     | Description                                   |
+|-----------------------------------------------------------------------|----------|-------------|-----------------------------------------------|
+| `pipeline.kill-switch.retry-amplification.enabled`                    | boolean  | `false`     | Enable retry amplification guard.             |
+| `pipeline.kill-switch.retry-amplification.window`                     | duration | `PT30S`     | Evaluation window for sustained inflight growth. |
+| `pipeline.kill-switch.retry-amplification.inflight-slope-threshold`   | double   | `10`        | Inflight slope threshold (items/sec).         |
+| `pipeline.kill-switch.retry-amplification.mode`                       | string   | `fail-fast` | Guard behavior (`fail-fast` or `log-only`).   |
+| `pipeline.kill-switch.retry-amplification.sustain-samples`            | integer  | `3`         | Consecutive samples above the threshold required to trigger. |
+
 ### Global Defaults
 
 Prefix: `pipeline.defaults`

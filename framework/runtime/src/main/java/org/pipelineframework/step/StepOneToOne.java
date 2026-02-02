@@ -19,6 +19,7 @@ package org.pipelineframework.step;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.pipelineframework.step.functional.OneToOne;
+import org.pipelineframework.telemetry.PipelineTelemetry;
 
 /**
  * Interface for one-to-one pipeline steps that transform a single input item to a single output
@@ -70,6 +71,8 @@ public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, DeadLe
         .transformToUni(this::applyOneToOne)
 
         // Step 3: Apply retry policy for transient failures
+        .onFailure(this::shouldRetry)
+        .invoke(t -> PipelineTelemetry.recordRetry(this.getClass()))
         .onFailure(this::shouldRetry)
         .retry()
         .withBackOff(retryWait(), maxBackoff())

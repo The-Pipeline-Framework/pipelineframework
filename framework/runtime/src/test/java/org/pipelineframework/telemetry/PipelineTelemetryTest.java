@@ -39,6 +39,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineStepConfig;
+import org.pipelineframework.telemetry.RetryAmplificationGuardMode;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -246,6 +247,28 @@ class PipelineTelemetryTest {
     static class DummyStep {
     }
 
+    @Test
+    void recordsStepRetryCounter() {
+        PipelineTelemetry telemetry = new PipelineTelemetry(new TestPipelineStepConfig());
+        PipelineTelemetry.recordRetry(DummyStep.class);
+        PipelineTelemetry.recordRetry(DummyStep.class);
+
+        Collection<MetricData> metrics = metricReader.collectAllMetrics();
+        MetricData retryMetric = metrics.stream()
+            .filter(metric -> "tpf.step.retry.count".equals(metric.getName()))
+            .findFirst()
+            .orElseThrow();
+
+        String stepClass = DummyStep.class.getName();
+        long value = retryMetric.getLongSumData().getPoints().stream()
+            .filter(point -> stepClass.equals(point.getAttributes()
+                .get(AttributeKey.stringKey("tpf.step.class"))))
+            .findFirst()
+            .orElseThrow()
+            .getValue();
+        assertEquals(2L, value);
+    }
+
     static final class DummyStep$$Proxy extends DummyStep {
     }
 
@@ -255,6 +278,7 @@ class PipelineTelemetryTest {
     static final class TestPipelineStepConfig implements PipelineStepConfig {
         private final StepConfig defaults = new TestStepConfig();
         private final TelemetryConfig telemetry = new TestTelemetryConfig();
+        private final KillSwitchConfig killSwitch = new TestKillSwitchConfig();
 
         @Override
         public StepConfig defaults() {
@@ -312,6 +336,11 @@ class PipelineTelemetryTest {
         }
 
         @Override
+        public KillSwitchConfig killSwitch() {
+            return killSwitch;
+        }
+
+        @Override
         public Map<String, StepConfig> step() {
             return Map.of();
         }
@@ -361,6 +390,41 @@ class PipelineTelemetryTest {
         @Override
         public PipelineStepConfig.MetricsConfig metrics() {
             return () -> true;
+        }
+    }
+
+    static final class TestKillSwitchConfig implements PipelineStepConfig.KillSwitchConfig {
+        @Override
+        public PipelineStepConfig.RetryAmplificationGuardConfig retryAmplification() {
+            return new TestRetryAmplificationGuardConfig();
+        }
+    }
+
+    static final class TestRetryAmplificationGuardConfig
+        implements PipelineStepConfig.RetryAmplificationGuardConfig {
+        @Override
+        public Boolean enabled() {
+            return false;
+        }
+
+        @Override
+        public Duration window() {
+            return Duration.ofSeconds(30);
+        }
+
+        @Override
+        public Double inflightSlopeThreshold() {
+            return 10d;
+        }
+
+        @Override
+        public RetryAmplificationGuardMode mode() {
+            return RetryAmplificationGuardMode.FAIL_FAST;
+        }
+
+        @Override
+        public Integer sustainSamples() {
+            return 3;
         }
     }
 

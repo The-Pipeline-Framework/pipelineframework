@@ -9,7 +9,8 @@ import org.pipelineframework.cache.PipelineCacheKeyFormat;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.search.common.domain.CrawlRequest;
-import org.pipelineframework.search.crawl_source.service.FetchOptionsNormalizer;
+import org.pipelineframework.search.common.domain.RawDocument;
+import org.pipelineframework.search.common.util.FetchOptionsNormalizer;
 
 @ApplicationScoped
 @Unremovable
@@ -24,6 +25,12 @@ public class CrawlRequestCacheKeyGenerator implements CacheKeyGenerator {
     return PipelineCacheKeyFormat.applyVersionTag(baseKey, versionTag);
   }
 
+  /**
+   * Builds the base cache key from method parameters, preferring a CrawlRequest's source URL and fetch options when present.
+   *
+   * @param methodParams the method's invocation parameters; if empty returns "no-params". If the first parameter is a CrawlRequest with a non-blank sourceUrl, that sourceUrl and any normalized fetch options are used to form the key; otherwise a generic key is derived from all parameters.
+   * @return `no-params` when no parameters; otherwise a base key string. When derived from a CrawlRequest the format is "<fully-qualified RawDocument class name>:<normalizedSourceUrl>" optionally followed by "|<fetchOptions>".
+   */
   private String buildBaseKey(Object... methodParams) {
     if (methodParams == null || methodParams.length == 0) {
       return "no-params";
@@ -41,7 +48,7 @@ public class CrawlRequestCacheKeyGenerator implements CacheKeyGenerator {
 
     String fetchOptions = FetchOptionsNormalizer.normalize(request);
     StringBuilder key = new StringBuilder();
-    key.append(request.getClass().getName()).append(":").append(sourceUrl);
+    key.append(RawDocument.class.getName()).append(":").append(sourceUrl);
     if (fetchOptions != null) {
       key.append("|").append(fetchOptions);
     }
