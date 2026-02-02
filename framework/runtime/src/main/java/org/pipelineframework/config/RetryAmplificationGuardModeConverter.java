@@ -18,7 +18,7 @@ package org.pipelineframework.config;
 
 import java.util.Locale;
 
-import io.smallrye.config.Converter;
+import org.eclipse.microprofile.config.spi.Converter;
 import org.pipelineframework.telemetry.RetryAmplificationGuardMode;
 
 /**

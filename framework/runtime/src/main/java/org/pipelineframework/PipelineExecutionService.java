@@ -223,6 +223,10 @@ public class PipelineExecutionService {
     return startupHealthState.get();
   }
 
+  public String getStartupHealthError() {
+    return startupHealthError;
+  }
+
   /**
    * Block until startup health checks complete, or throw if they fail or time out.
    *
@@ -479,7 +483,8 @@ public class PipelineExecutionService {
         logRetryAmplificationTrigger(trigger, mode);
         cancelFuture();
         if (mode == RetryAmplificationGuardMode.FAIL_FAST) {
-          failAndCancel(PipelineKillSwitchException.retryAmplification(trigger));
+          cancelUpstream();
+          super.onFailure(PipelineKillSwitchException.retryAmplification(trigger));
         }
       });
     }
