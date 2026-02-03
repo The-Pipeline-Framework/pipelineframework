@@ -41,9 +41,11 @@ public class PipelineOutputBus implements AutoCloseable {
     private final SubmissionPublisher<Object> publisher = new SubmissionPublisher<>();
 
     /**
-     * Publish a new item to subscribers.
+     * Publish an object to live subscribers.
      *
-     * @param item item to publish
+     * Null values are ignored and a warning is logged when a null is provided.
+     *
+     * @param item the object to publish to subscribers
      */
     public void publish(Object item) {
         if (item == null) {
@@ -53,16 +55,21 @@ public class PipelineOutputBus implements AutoCloseable {
         publisher.submit(item);
     }
 
+    /**
+     * Create a Mutiny Multi backed by the internal SubmissionPublisher.
+     *
+     * @return a Multi that emits items published to the internal SubmissionPublisher
+     */
     private Multi<Object> stream() {
         return Multi.createFrom().publisher(publisher);
     }
 
     /**
-     * Subscribe to the live output stream with type checks.
+     * Subscribe to the live output stream and receive only items assignable to the given type.
      *
-     * @param type expected output type
-     * @param <T> expected output type
-     * @return live Multi of output items
+     * @param type the class of items to subscribe to
+     * @param <T> the expected output type
+     * @return a Multi that emits items of the specified type
      */
     public <T> Multi<T> stream(Class<T> type) {
         return stream()
@@ -72,6 +79,12 @@ public class PipelineOutputBus implements AutoCloseable {
             .transform(type::cast);
     }
 
+    /**
+     * Closes the output bus and releases its underlying publisher resources.
+     *
+     * <p>This signals completion to any live subscribers by closing the internal publisher
+     * and frees associated resources used for publishing.</p>
+     */
     @Override
     @PreDestroy
     public void close() {

@@ -28,11 +28,28 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
     private static final String ORCHESTRATOR_INGEST_METHOD = OrchestratorRpcConstants.INGEST_METHOD;
     private static final String ORCHESTRATOR_SUBSCRIBE_METHOD = OrchestratorRpcConstants.SUBSCRIBE_METHOD;
 
+    /**
+     * Specifies the generation target for this renderer.
+     *
+     * @return the GenerationTarget for a gRPC service
+     */
     @Override
     public GenerationTarget target() {
         return GenerationTarget.GRPC_SERVICE;
     }
 
+    /**
+     * Generates and emits a gRPC orchestrator service class based on the provided binding and generation context.
+     *
+     * The generated service implements the orchestrator RPCs (run, ingest, subscribe), injects pipeline
+     * execution and output bus dependencies, and wires telemetry for RPC metrics. Generation is skipped
+     * if the binding cannot be resolved against the provided protobuf descriptors.
+     *
+     * @param binding the orchestrator binding describing RPC names, streaming modes, and package information
+     * @param ctx the generation context providing descriptor sets, processing environment, and filer
+     * @throws IOException if writing the generated Java file fails
+     * @throws IllegalStateException if no protobuf descriptor set is available or required gRPC message types cannot be resolved
+     */
     @Override
     public void render(OrchestratorBinding binding, GenerationContext ctx) throws IOException {
         DescriptorProtos.FileDescriptorSet descriptorSet = ctx.descriptorSet();

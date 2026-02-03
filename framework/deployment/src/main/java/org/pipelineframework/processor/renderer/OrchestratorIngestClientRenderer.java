@@ -23,11 +23,15 @@ public class OrchestratorIngestClientRenderer {
     private static final String ORCHESTRATOR_SUBSCRIBE_METHOD = OrchestratorRpcConstants.SUBSCRIBE_METHOD;
 
     /**
-     * Render the ingest client for the orchestrator binding.
+     * Generate the orchestrator gRPC ingest client class and write it to the binding's client package.
      *
-     * @param binding orchestrator binding
-     * @param ctx generation context
-     * @throws IOException when writing the output fails
+     * Resolves protobuf descriptors and gRPC types for the binding, constructs a CDI-managed client
+     * containing a GrpcClient field and public `ingest` and `subscribe` methods, and writes the
+     * generated Java file to the package derived from the binding's base package.
+     *
+     * @param binding the orchestrator binding to generate the client for
+     * @param ctx the generation context providing descriptor set and processing environment
+     * @throws IOException if writing the generated Java file fails
      */
     public void render(OrchestratorBinding binding, GenerationContext ctx) throws IOException {
         DescriptorProtos.FileDescriptorSet descriptorSet = ctx.descriptorSet();
@@ -96,6 +100,17 @@ public class OrchestratorIngestClientRenderer {
             .writeTo(ctx.processingEnv().getFiler());
     }
 
+    /**
+     * Attempts to resolve the gRPC binding for the specified orchestrator method and returns the resolved binding when successful.
+     *
+     * @param binding the orchestrator binding configuration to resolve against
+     * @param descriptorSet the protobuf descriptor set used for resolving service and message types
+     * @param ctx the generation context providing processing utilities and a Messager for diagnostics
+     * @param methodName the RPC method name to resolve (e.g., ingest or subscribe)
+     * @param inputStreaming whether the RPC's input is a stream
+     * @param outputStreaming whether the RPC's output is a stream
+     * @return the resolved {@code GrpcBinding}, or {@code null} if resolution failed; when resolution fails an informative WARNING diagnostic is emitted if a Messager is available
+     */
     private org.pipelineframework.processor.ir.GrpcBinding safeResolveBinding(
         OrchestratorBinding binding,
         DescriptorProtos.FileDescriptorSet descriptorSet,
@@ -122,6 +137,17 @@ public class OrchestratorIngestClientRenderer {
         }
     }
 
+    /**
+     * Resolve the gRPC input type for the orchestrator subscribe method and ensure its output matches the provided ingest output type.
+     *
+     * @param binding the orchestrator binding to inspect
+     * @param descriptorSet the protobuf descriptor set used for type resolution
+     * @param ctx the generation context (provides processing environment and messager)
+     * @param typeResolver the resolver used to map gRPC bindings to Java types
+     * @param outputType the expected ingest output type to validate against the subscribe output type
+     * @return the subscribe method's gRPC input type, or `null` if the subscribe binding or its types could not be resolved or the output types do not match
+     * @throws IllegalStateException if subscribe types are resolved but one or more core types are missing
+     */
     private ClassName resolveSubscribeInputType(
         OrchestratorBinding binding,
         DescriptorProtos.FileDescriptorSet descriptorSet,

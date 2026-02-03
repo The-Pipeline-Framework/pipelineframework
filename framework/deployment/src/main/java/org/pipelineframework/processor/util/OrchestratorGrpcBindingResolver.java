@@ -152,6 +152,15 @@ public class OrchestratorGrpcBindingResolver {
         return builtFileDescriptors;
     }
 
+    /**
+     * Locate the RPC method descriptor with the given name in the provided service descriptor.
+     *
+     * @param serviceDescriptor the service descriptor to search
+     * @param methodName the RPC method name to locate
+     * @param messager optional Messager used to emit a warning if the service exposes additional RPCs not in the allowed set; may be null
+     * @return the matching {@link Descriptors.MethodDescriptor}
+     * @throws IllegalStateException if no method with the given name is found or if multiple methods share the same name
+     */
     private Descriptors.MethodDescriptor findMethodDescriptor(
         Descriptors.ServiceDescriptor serviceDescriptor,
         String methodName,
