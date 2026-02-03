@@ -7,7 +7,7 @@ The Pipeline Framework encourages append-only persistence by default; updates ar
 </Callout>
 
 <Callout type="tip" title="Rich Processing Patterns">
-The framework supports multiple processing patterns including OneToOne, OneToMany, ManyToOne, ManyToMany, SideEffect and blocking variants. Each step type is optimized for specific data transformation scenarios.
+The framework supports multiple processing patterns including OneToOne, OneToMany, ManyToOne, ManyToMany, and SideEffect. Each step type is optimized for specific data transformation scenarios.
 </Callout>
 
 <Callout type="tip" title="Prerequisites">

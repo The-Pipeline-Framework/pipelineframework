@@ -29,6 +29,7 @@ import org.pipelineframework.PipelineRunner;
 import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepOneToMany;
+import org.pipelineframework.step.StepOneToOne;
 
 @QuarkusTest
 public class CollectionStepsTest {
@@ -42,7 +43,7 @@ public class CollectionStepsTest {
         Multi<String> input = Multi.createFrom().items("Payment1", "Payment2");
 
         // Create steps and configure them properly
-        ValidatePaymentStepBlocking validateStep = new ValidatePaymentStepBlocking();
+        ValidatePaymentStep validateStep = new ValidatePaymentStep();
         // Configure step without calling liveConfig() directly
         StepConfig validateConfig = new StepConfig();
         validateStep.initialiseWithConfig(validateConfig);
@@ -73,19 +74,13 @@ public class CollectionStepsTest {
     }
 
     // Helper step for validating payments - this should be a OneToOne step
-    public static class ValidatePaymentStepBlocking extends ConfigurableStep
-            implements org.pipelineframework.step.blocking.StepOneToOneBlocking<String, String> {
-
-        @Override
-        public io.smallrye.mutiny.Uni<String> apply(String input) {
-            // Apply validation to the input
-            return io.smallrye.mutiny.Uni.createFrom().item("Validated: " + input);
-        }
+    public static class ValidatePaymentStep extends ConfigurableStep
+            implements StepOneToOne<String, String> {
 
         @Override
         public io.smallrye.mutiny.Uni<String> applyOneToOne(String input) {
             // Apply validation to the input
-            return apply(input);
+            return io.smallrye.mutiny.Uni.createFrom().item("Validated: " + input);
         }
 
         @Override

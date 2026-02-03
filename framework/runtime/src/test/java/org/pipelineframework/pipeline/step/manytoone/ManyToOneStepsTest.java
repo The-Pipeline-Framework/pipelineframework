@@ -28,7 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.pipelineframework.PipelineRunner;
 import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.step.ConfigurableStep;
-import org.pipelineframework.step.blocking.StepOneToOneBlocking;
+import org.pipelineframework.step.StepOneToOne;
 import org.pipelineframework.step.functional.ManyToOne;
 
 @QuarkusTest
@@ -48,7 +48,7 @@ public class ManyToOneStepsTest {
         Multi<TestPaymentEntity> input = Multi.createFrom().items(payment1, payment2, payment3, payment4);
 
         // Create steps and configure them properly
-        ValidatePaymentStepBlocking validateStep = new ValidatePaymentStepBlocking();
+        ValidatePaymentStep validateStep = new ValidatePaymentStep();
         StepConfig validateConfig = new StepConfig();
         validateStep.initialiseWithConfig(validateConfig);
 
@@ -72,48 +72,12 @@ public class ManyToOneStepsTest {
                 result.getTotalAmount()); // 100.00 + 200.50 + 75.25 + 300.75
     }
 
-    @Test
-    void testImperativeManyToOneStep() {
-        // Given: Create test entities
-        TestPaymentEntity payment1 = new TestPaymentEntity("John Doe", new BigDecimal("50.00"));
-        TestPaymentEntity payment2 = new TestPaymentEntity("Jane Smith", new BigDecimal("150.25"));
-        TestPaymentEntity payment3 = new TestPaymentEntity("Bob Johnson", new BigDecimal("25.50"));
-        TestPaymentEntity payment4 = new TestPaymentEntity("Alice Brown", new BigDecimal("125.75"));
-        TestPaymentEntity payment5 = new TestPaymentEntity("Charlie Wilson", new BigDecimal("80.00"));
-
-        Multi<TestPaymentEntity> input = Multi.createFrom().items(payment1, payment2, payment3, payment4, payment5);
-
-        // Create steps and configure them properly
-        ValidatePaymentStepBlocking validateStep = new ValidatePaymentStepBlocking();
-        StepConfig validateConfig = new StepConfig();
-        validateStep.initialiseWithConfig(validateConfig);
-
-        PaymentAggregationStepBlocking aggregateStep = new PaymentAggregationStepBlocking();
-        StepConfig aggregateConfig = new StepConfig();
-        aggregateStep.initialiseWithConfig(aggregateConfig);
-
-        // When: Run pipeline
-        Object result2 = pipelineRunner.run(input, List.of(validateStep, aggregateStep));
-        PaymentSummary result = ((io.smallrye.mutiny.Uni<PaymentSummary>) result2)
-                .onItem()
-                .castTo(PaymentSummary.class)
-                .await()
-                .atMost(Duration.ofSeconds(10));
-
-        // Then: Verify result
-        assertNotNull(result);
-        assertEquals(5, result.getTotalPayments()); // All 5 payments
-        assertEquals(
-                new BigDecimal("431.50"),
-                result.getTotalAmount()); // 50.00 + 150.25 + 25.50 + 125.75 + 80.00
-    }
-
     // Helper step for validating payments
-    public static class ValidatePaymentStepBlocking extends ConfigurableStep
-            implements StepOneToOneBlocking<TestPaymentEntity, TestPaymentEntity> {
+    public static class ValidatePaymentStep extends ConfigurableStep
+            implements StepOneToOne<TestPaymentEntity, TestPaymentEntity> {
 
         @Override
-        public io.smallrye.mutiny.Uni<TestPaymentEntity> apply(TestPaymentEntity payment) {
+        public io.smallrye.mutiny.Uni<TestPaymentEntity> applyOneToOne(TestPaymentEntity payment) {
             // Simulate some processing time
             try {
                 Thread.sleep(50);
@@ -129,11 +93,6 @@ public class ManyToOneStepsTest {
             }
 
             return io.smallrye.mutiny.Uni.createFrom().item(payment);
-        }
-
-        @Override
-        public io.smallrye.mutiny.Uni<TestPaymentEntity> applyOneToOne(TestPaymentEntity input) {
-            return apply(input);
         }
 
         @Override
@@ -215,22 +174,4 @@ public class ManyToOneStepsTest {
         }
     }
 
-    // Helper step for imperative aggregation
-    public static class PaymentAggregationStepBlocking extends ConfigurableStep
-            implements org.pipelineframework.step.blocking.StepManyToOneBlocking<TestPaymentEntity, PaymentSummary> {
-
-        @Override
-        public PaymentSummary applyBatchList(List<TestPaymentEntity> inputs) {
-            // Aggregate payments in the batch
-            BigDecimal totalAmount = inputs.stream()
-                    .map(TestPaymentEntity::getAmount)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-            return new PaymentSummary(inputs.size(), totalAmount);
-        }
-
-        @Override
-        public void initialiseWithConfig(org.pipelineframework.config.StepConfig config) {
-            super.initialiseWithConfig(config);
-        }
-    }
 }

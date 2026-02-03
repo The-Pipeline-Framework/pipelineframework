@@ -64,8 +64,7 @@ public class PipelineStepIRExtractor {
         targets.add(GenerationTarget.GRPC_SERVICE);
         targets.add(GenerationTarget.CLIENT_STEP);
 
-        ExecutionMode executionMode = AnnotationProcessingUtils.getAnnotationValueAsBoolean(annotationMirror, "runOnVirtualThreads", false)
-            ? ExecutionMode.VIRTUAL_THREADS : ExecutionMode.DEFAULT;
+        ExecutionMode executionMode = ExecutionMode.DEFAULT;
         OrderingRequirement orderingRequirement = AnnotationProcessingUtils.getAnnotationValueAsEnum(
             annotationMirror, "ordering", OrderingRequirement.class, OrderingRequirement.RELAXED);
         ThreadSafety threadSafety = AnnotationProcessingUtils.getAnnotationValueAsEnum(
