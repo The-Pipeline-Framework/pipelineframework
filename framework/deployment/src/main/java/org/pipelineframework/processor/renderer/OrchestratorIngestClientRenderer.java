@@ -154,8 +154,10 @@ public class OrchestratorIngestClientRenderer {
         if (!subscribeOutputType.equals(outputType) && ctx.processingEnv() != null
             && ctx.processingEnv().getMessager() != null) {
             ctx.processingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.WARNING,
-                "Subscribe output type differs from ingest output type; using ingest output type in client.");
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Subscribe output type differs from ingest output type; cannot generate a client that assumes "
+                    + "the ingest output type for subscribe.");
+            return null;
         }
         return subscribeInputType;
     }
