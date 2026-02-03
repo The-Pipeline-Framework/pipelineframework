@@ -66,14 +66,8 @@ public class PipelineOutputBus implements AutoCloseable {
      */
     public <T> Multi<T> stream(Class<T> type) {
         return stream()
-            .onItem()
-            .transform(item -> {
-                if (type.isInstance(item)) {
-                    return type.cast(item);
-                }
-                throw new ClassCastException("PipelineOutputBus item type mismatch. Expected " +
-                    type.getName() + " but got " + item.getClass().getName());
-            });
+            .select()
+            .ofType(type);
     }
 
     @Override

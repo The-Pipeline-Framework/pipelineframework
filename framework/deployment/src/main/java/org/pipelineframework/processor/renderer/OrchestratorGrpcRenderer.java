@@ -202,10 +202,17 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
             .addParameter(ClassName.get("com.google.protobuf", "Empty"), "request")
             .addStatement("long startTime = System.nanoTime()")
             .beginControlFlow("if ($T.get() == null)", pipelineContextHolder)
-            .addStatement("return $T.createFrom().failure(new $T($S))",
-                multi,
+            .addStatement("$T e = new $T($S)",
                 ClassName.get(IllegalStateException.class),
                 "Missing pipeline context for subscribe request")
+            .addStatement("$T.recordGrpcServer($S, $S, $T.fromThrowable(e), System.nanoTime() - startTime)",
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_SUBSCRIBE_METHOD,
+                ClassName.get("io.grpc", "Status"))
+            .addStatement("return $T.createFrom().failure(e)",
+                multi,
+                ClassName.get(IllegalStateException.class))
             .endControlFlow()
             .addCode("""
                 return pipelineOutputBus.stream($T.class)

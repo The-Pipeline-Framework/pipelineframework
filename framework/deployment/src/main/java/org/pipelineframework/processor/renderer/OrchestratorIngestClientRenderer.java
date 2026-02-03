@@ -35,7 +35,6 @@ public class OrchestratorIngestClientRenderer {
             throw new IllegalStateException("No protobuf descriptor set available for orchestrator ingest client.");
         }
 
-        OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
         var ingestBinding = safeResolveBinding(binding, descriptorSet, ctx, ORCHESTRATOR_INGEST_METHOD, true, true);
         if (ingestBinding == null) {
             return;
