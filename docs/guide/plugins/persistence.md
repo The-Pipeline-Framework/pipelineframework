@@ -71,3 +71,7 @@ aspects:
 ```
 
 The framework expands this into side-effect steps that observe the stream after each step.
+
+AFTER_STEP observes the output of a step (the next step's BEFORE_STEP). This means a single
+position captures every boundary except one cap. AFTER_STEP misses the first input boundary;
+BEFORE_STEP misses the final output boundary. Use two aspects if you need both caps.

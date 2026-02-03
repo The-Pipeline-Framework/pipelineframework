@@ -11,7 +11,7 @@ The Pipeline Framework template generator now uses a Java DTO-centered approach 
 - Protobuf conversions happen automatically via MapStruct and custom converters
 - Better developer experience with more appropriate domain types
 
-#### 3. Automatic Protobuf Mapping
+### 2. Automatic Protobuf Mapping
 - MapStruct automatically converts between Java DTOs and protobuf equivalents for built-in types
 - Built-in conversions: primitives, wrappers, UUID, BigDecimal/BigInteger, Java 8 time types, URI/URL/File/Path
 - Custom converters in `CommonConverters` class handle specialized mappings: Currency, AtomicInteger, AtomicLong, `List<String>`
@@ -77,10 +77,10 @@ public LocalDateTime stringToLocalDateTime(String string) { ... }
 #### Collection Converters
 ```java
 @Named("listToString")
-`public String listToString(List<String> list) { ... }`
+public String listToString(List<String> list) { ... }
 
 @Named("stringToList")
-`public List<String> stringToList(String string) { ... }`
+public List<String> stringToList(String string) { ... }
 ```
 
 #### Specialized Converters
@@ -96,7 +96,7 @@ public LocalDateTime stringToLocalDateTime(String string) { ... }
 
 When using the interactive mode, users now see:
 
-```
+```text
 Available Java types with protobuf mappings:
   String -> string
   Integer -> int32
@@ -157,3 +157,20 @@ Available Java types with protobuf mappings:
 Existing YAML configurations will continue to work with the new system. The framework maintains backward compatibility while providing access to the expanded type system for new configurations.
 
 To take advantage of the new types, simply use the updated type names when creating new pipeline configurations either through the interactive mode or by writing YAML files directly.
+
+Example YAML:
+
+```yaml
+steps:
+  - name: "ProcessPayment"
+    inputTypeName: "PaymentInput"
+    inputFields:
+      - name: "paymentId"
+        type: "UUID"
+      - name: "amount"
+        type: "BigDecimal"
+      - name: "processedAt"
+        type: "LocalDateTime"
+      - name: "labels"
+        type: "List<String>"
+```

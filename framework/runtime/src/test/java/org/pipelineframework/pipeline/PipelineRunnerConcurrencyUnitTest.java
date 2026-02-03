@@ -125,7 +125,14 @@ class PipelineRunnerConcurrencyUnitTest {
     static class PipelineRunnerTestHelper {
         public static Object applyOneToOne(Object step, Object current, boolean parallel) {
             return org.pipelineframework.PipelineRunner.applyOneToOneUnchecked(
-                    (org.pipelineframework.step.StepOneToOne<String, String>) step, current, parallel, 128, null, null);
+                    (org.pipelineframework.step.StepOneToOne<String, String>) step,
+                    current,
+                    parallel,
+                    128,
+                    null,
+                    null,
+                    null,
+                    null);
         }
     }
 }

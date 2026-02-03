@@ -30,7 +30,7 @@ import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.pipeline.step.collection.example.ExpandPaymentCollectionStep;
 import org.pipelineframework.pipeline.step.future.example.ProcessPaymentFutureStep;
 import org.pipelineframework.step.ConfigurableStep;
-import org.pipelineframework.step.blocking.StepOneToOneBlocking;
+import org.pipelineframework.step.StepOneToOne;
 
 @QuarkusTest
 public class ComprehensiveStepTypesTest {
@@ -44,7 +44,7 @@ public class ComprehensiveStepTypesTest {
         Multi<String> input = Multi.createFrom().items("Payment1", "Payment2");
 
         // Create different types of steps and configure them properly
-        ValidatePaymentStepBlocking validateStep = new ValidatePaymentStepBlocking();
+        ValidatePaymentStep validateStep = new ValidatePaymentStep();
         StepConfig validateConfig = new StepConfig();
         validateStep.initialiseWithConfig(validateConfig);
 
@@ -73,12 +73,12 @@ public class ComprehensiveStepTypesTest {
         }
     }
 
-    // Standard StepOneToOneBlocking with blocking operations
-    public static class ValidatePaymentStepBlocking extends ConfigurableStep
-            implements StepOneToOneBlocking<String, String> {
+    // Standard StepOneToOne with simulated latency
+    public static class ValidatePaymentStep extends ConfigurableStep
+            implements StepOneToOne<String, String> {
 
         @Override
-        public io.smallrye.mutiny.Uni<String> apply(String payment) {
+        public io.smallrye.mutiny.Uni<String> applyOneToOne(String payment) {
             // Simulate validation work
             try {
                 Thread.sleep(50);
@@ -87,11 +87,6 @@ public class ComprehensiveStepTypesTest {
             }
 
             return io.smallrye.mutiny.Uni.createFrom().item("Validated: " + payment);
-        }
-
-        @Override
-        public io.smallrye.mutiny.Uni<String> applyOneToOne(String input) {
-            return apply(input);
         }
 
         @Override

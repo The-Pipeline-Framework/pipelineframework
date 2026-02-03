@@ -16,8 +16,7 @@ The framework leverages Mutiny's reactive processing model for high-throughput, 
     outputType = PaymentStatus.class,
     stepType = StepOneToOne.class,
     inboundMapper = PaymentRecordInboundMapper.class,
-    outboundMapper = PaymentStatusOutboundMapper.class,
-    runOnVirtualThreads = true  // Run on virtual threads for I/O-bound operations
+    outboundMapper = PaymentStatusOutboundMapper.class
 )
 @ApplicationScoped
 public class ProcessPaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
@@ -90,7 +89,7 @@ Best practices:
 - Set concurrency based on system resources and external service limits
 - Set buffer capacity based on expected load spikes and acceptable memory usage
 - Monitor system performance to balance between throughput and resource utilization
-- Consider using virtual threads when dealing with I/O-bound operations to improve concurrency efficiency
+- Prefer non-blocking I/O and offload truly blocking work to worker threads (for example, Vert.x `executeBlocking`)
 
 ## Error Handling
 
@@ -227,7 +226,7 @@ The DLQ mechanism captures failed items for later inspection and reprocessing.
 
 ### DLQ Configuration
 
-DLQ/recovery is configured at runtime, not via @PipelineStep. Use StepConfig or application.properties (see Configuration Reference and Runtime Configuration below) for the exact settings.
+DLQ/recovery is configured at runtime, not via @PipelineStep. Use StepConfig or application.properties (see Configuration Reference below) for the exact settings.
 
 ### Persistence Dependencies
 
@@ -249,6 +248,8 @@ If you do not need persistence functionality, you can omit these dependencies.
 ### Custom DLQ Implementation
 
 Implement custom DLQ handling:
+
+> **Note:** The following example references `DeadLetterEntry`, `DeadLetterRepository`, and persistence helpers as placeholders. Define these types in your application (or swap in your persistence layer) to match your storage choice.
 
 ```java
 @Override
@@ -349,19 +350,17 @@ public Uni<PaymentStatus> process(PaymentRecord paymentRecord) {
     MDC.put("paymentId", paymentRecord.getId().toString());
     MDC.put("customerId", paymentRecord.getCustomerId());
     
-    try {
-        return processPayment(paymentRecord)
-            .onItem().invoke(result -> {
-                LOG.info("Payment processed successfully: {}", result.getStatus());
-                MDC.clear();
-            })
-            .onFailure().invoke(error -> {
-                LOG.error("Payment processing failed", error);
-                MDC.clear();
-            });
-    } finally {
-        MDC.clear();
-    }
+    return processPayment(paymentRecord)
+        .onItem().invoke(result -> {
+            LOG.info("Payment processed successfully: {}", result.getStatus());
+        })
+        .onFailure().invoke(error -> {
+            LOG.error("Payment processing failed", error);
+        })
+        .eventually(() -> {
+            MDC.clear();
+            return Uni.createFrom().voidItem();
+        });
 }
 ```
 
@@ -441,11 +440,13 @@ pipeline.step."com.example.ProcessPaymentService".retry-limit=10
 pipeline.step."com.example.ProcessPaymentService".retry-wait-ms=2000
 ```
 
+Note: DLQ configuration is not exposed via built-in `pipeline.*` properties. Configure DLQ behavior in your `deadLetter(...)` implementation or via application-specific configuration wiring.
+
 ## Best Practices
 
 ### Concurrency
 
-1. **Use Virtual Threads**: Enable for I/O-bound operations
+1. **Offload Blocking I/O**: Use worker-thread offloading for blocking operations
 2. **Set Appropriate Limits**: Don't overwhelm external systems
 3. **Monitor Resource Usage**: Watch for bottlenecks and adjust accordingly
 4. **Consider Batch Processing**: For high-volume scenarios
@@ -462,7 +463,7 @@ pipeline.step."com.example.ProcessPaymentService".retry-wait-ms=2000
 1. **Regular Monitoring**: Check DLQ for failed items regularly
 2. **Automated Retries**: Implement automated retry mechanisms
 3. **Alerting**: Notify on DLQ accumulation
-4. **Root Cause Analysis**: Investigate and fix recurring issues
+4. **Root Cause Analysis**: Investigate and resolve recurring issues
 
 ### Performance
 

@@ -575,7 +575,6 @@ class HandlebarsTemplateEngine {
         await this.generateModuleDevProperties(modulePath);
         await this.generatePersistenceTestProperties(modulePath);
         await this.generateModuleBeansXml(modulePath);
-        await this.generateStepDockerfile(modulePath);
         await this.copyBinaryResourceFiles(modulePath, false);
     }
 
@@ -613,7 +612,6 @@ class HandlebarsTemplateEngine {
         await this.generateModuleDevProperties(modulePath);
         await this.generateCacheInvalidationTestProperties(modulePath);
         await this.generateModuleBeansXml(modulePath);
-        await this.generateStepDockerfile(modulePath);
         await this.copyBinaryResourceFiles(modulePath, false);
     }
 
@@ -837,9 +835,6 @@ class HandlebarsTemplateEngine {
 
         // Generate beans.xml
         await this.generateBeansXml(step, basePackage, stepPath);
-
-        // Generate Dockerfile.jvm
-        await this.generateStepDockerfile(stepPath);
 
         // Copy binary resource files (e.g., keystore)
         await this.copyBinaryResourceFiles(stepPath, true);
@@ -1103,13 +1098,6 @@ class HandlebarsTemplateEngine {
         await fs.writeFile(beansXmlPath, rendered);
     }
 
-    async generateStepDockerfile(stepPath) {
-        const rendered = this.render('dockerfile-jvm', {});
-        const dockerDir = path.join(stepPath, 'src/main/docker');
-        await fs.ensureDir(dockerDir);
-        await fs.writeFile(path.join(dockerDir, 'Dockerfile.jvm'), rendered);
-    }
-
     // Copy binary files like keystore to the resources directory
     async copyBinaryResourceFiles(stepPath, includeReadme) {
         // This would copy the server-keystore.jks from a default location if available
@@ -1206,7 +1194,6 @@ class HandlebarsTemplateEngine {
 
         // Copy orchestrator binary resource files (e.g., truststore)
         await this.copyOrchestratorBinaryResourceFiles(orchPath);
-        await this.generateStepDockerfile(orchPath);
         await this.copyBinaryResourceFiles(orchPath, false);
         await this.generateOrchestratorApplicationTestProperties(orchPath);
     }

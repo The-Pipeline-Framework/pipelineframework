@@ -39,6 +39,17 @@ public class CacheInvalidationService<T> implements ReactiveSideEffectService<T>
     @Inject
     CacheKeyResolver cacheKeyResolver;
 
+    /**
+     * Attempts to invalidate the cache entry for the given item when replay conditions are met.
+     *
+     * If the item is null, no invalidation is performed. If cache key resolution fails or replay
+     * conditions indicate no invalidation, the item is returned unchanged. When an invalidation is
+     * attempted, the resolved key is combined with the pipeline version tag before calling the cache
+     * manager; the method always yields the original item regardless of invalidation success.
+     *
+     * @param item the object whose cache entry may be invalidated
+     * @return the same `item`, or `null` if the input `item` was `null`
+     */
     @Override
     public Uni<T> process(T item) {
         if (item == null) {
@@ -48,7 +59,7 @@ public class CacheInvalidationService<T> implements ReactiveSideEffectService<T>
         if (!shouldInvalidate(context)) {
             return Uni.createFrom().item(item);
         }
-        String baseKey = cacheKeyResolver.resolveKey(item, context).orElse(null);
+        String baseKey = cacheKeyResolver.resolveKey(item, context, item.getClass()).orElse(null);
         if (baseKey == null || baseKey.isBlank()) {
             LOG.warnf("No cache key strategy matched for item type %s, skipping invalidation",
                 item.getClass().getName());

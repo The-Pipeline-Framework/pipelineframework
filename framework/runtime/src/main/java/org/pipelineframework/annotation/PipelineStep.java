@@ -67,10 +67,6 @@ public @interface PipelineStep {
      * StepManyToOne
      * StepManyToMany
      * StepSideEffect
-     * StepOneToOneBlocking
-     * StepOneToManyBlocking
-     * StepManyToOneBlocking
-     * StepManyToManyBlocking
      * StepOneToOneCompletableFuture
      *
      * @return the step type class
@@ -88,12 +84,6 @@ public @interface PipelineStep {
      * @return the backend adapter type class
      */
     Class<?> backendType() default Void.class;
-
-    /**
-     * Whether the entrypoint method (REST or gRPC) should run on a virtual thread (default=false)
-     * @return true if virtual threads should be used, false otherwise
-     */
-    boolean runOnVirtualThreads() default false;
 
     /**
      * Specifies the plugin service type for side effect processing. When present, generates

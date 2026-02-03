@@ -13,7 +13,7 @@ The Pipeline Framework includes a visual canvas designer at <a href="https://app
 - **Visual Design Canvas**: Create and configure pipelines with the visual designer at [https://app.pipelineframework.org](https://app.pipelineframework.org)
 - **Annotation-Based Configuration**: Simplifies adapter generation with `@PipelineStep`
 - **gRPC & REST Flexibility**: Automatic adapter generation for fast gRPC or easy REST integration
-- **Multiple Processing Patterns**: OneToOne, OneToMany, ManyToOne, ManyToMany, SideEffect and blocking variants
+- **Multiple Processing Patterns**: OneToOne, OneToMany, ManyToOne, ManyToMany, and SideEffect
 - **Health Monitoring**: Built-in health check capabilities
 - **Multiple Persistence Models**: Choose from reactive or virtual thread-based persistence
 - **Modular Design**: Clear separation between runtime and deployment components
@@ -88,5 +88,12 @@ The framework lets you define pipeline steps as simple classes annotated with `@
 - [Testing Guidelines](/guide/evolve/testing-guidelines): Coverage and test strategy
 - [Gotchas & Pitfalls](/guide/evolve/gotchas-pitfalls): Known sharp edges
 - [Proto Descriptor Integration](/guide/evolve/protobuf-integration-descriptor-res): Descriptor generation and troubleshooting
+
+
+### TPFGo
+- [Reference Guide](/guide/evolve/tpfgo/): Grouped notes for the reference architecture
+- [TPF and DDD Alignment](/guide/evolve/tpfgo/ddd-alignment): DDD mapping, gaps, and planned work
+- [Application Design Spectrum](/guide/evolve/tpfgo/design-spectrum): Good vs bad designs and mitigations
+- [Roadmap: Checkpoint Pipelines vs FTGO](/guide/evolve/tpfgo/roadmap): Pessimistic architecture notes and open risks
 
 This approach reduces boilerplate and keeps pipeline code consistent and portable.

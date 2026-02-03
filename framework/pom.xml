@@ -21,11 +21,13 @@
     <parent>
         <groupId>org.pipelineframework</groupId>
         <artifactId>pipeline-framework-root</artifactId>
-        <version>26.1-SNAPSHOT</version>
+        <version>26.2.5-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
+    <groupId>org.pipelineframework</groupId>
     <artifactId>framework-parent</artifactId>
+    <version>26.2.5-SNAPSHOT</version>
     <!-- version is not needed as it is automatically inherited from the parent-->
     <packaging>pom</packaging>
     <name>The Pipeline Framework (Parent)</name>
@@ -48,9 +50,9 @@
     </developers>
 
     <scm>
-        <connection>scm:git:https://github.com/mbarcia/pipelineframework.git</connection>
-        <developerConnection>scm:git:git@github.com:mbarcia/pipelineframework.git</developerConnection>
-        <url>https://github.com/mbarcia/pipelineframework</url>
+        <connection>scm:git:https://github.com/The-Pipeline-Framework/pipelineframework.git</connection>
+        <developerConnection>scm:git:git@github.com:The-Pipeline-Framework/pipelineframework.git</developerConnection>
+        <url>https://github.com/The-Pipeline-Framework/pipelineframework</url>
         <tag>v0.9.2</tag>
     </scm>
 
@@ -64,6 +66,8 @@
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <version.jandex>3.5.0</version.jandex>
         <grpc.version>1.75.0</grpc.version>
+        <maven.deploy.skip>false</maven.deploy.skip>
+        <tpf.flatten.skip>true</tpf.flatten.skip>
         <surefireArgLine />
     </properties>
 
@@ -76,8 +80,8 @@
         <dependencies>
             <!-- Quarkus BOM -->
             <dependency>
-                <groupId>${quarkus.platform.group-id}</groupId>
-                <artifactId>${quarkus.platform.artifact-id}</artifactId>
+                <groupId>io.quarkus.platform</groupId>
+                <artifactId>quarkus-bom</artifactId>
                 <version>${quarkus.platform.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
@@ -151,6 +155,32 @@
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+                <version>1.7.3</version>
+                <configuration>
+                    <skip>${tpf.flatten.skip}</skip>
+                    <updatePomFile>true</updatePomFile>
+                    <flattenMode>oss</flattenMode>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>flatten</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>flatten</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>flatten-clean</id>
+                        <phase>clean</phase>
+                        <goals>
+                            <goal>clean</goal>
+                        </goals>
+                    </execution>
+                </executions>
             </plugin>
             <!-- Versions Maven Plugin for consistent version management across modules -->
             <plugin>

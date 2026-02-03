@@ -45,18 +45,32 @@ Metrics (OTel/Micrometer):
 - `tpf.step.inflight` (gauge): in-flight items per step (`tpf.step.class` attribute)
 - `tpf.step.buffer.queued` (gauge): queued items in the backpressure buffer (`tpf.step.class` attribute)
 - `tpf.step.buffer.capacity` (gauge): configured backpressure buffer capacity per step (`tpf.step.class` attribute)
+- `tpf.step.parent` (attribute): parent step class for plugin steps (same as `tpf.step.class` for regular steps)
 - `tpf.pipeline.max_concurrency` (gauge): configured max concurrency for the pipeline run
+- `tpf.item.produced` (counter): items produced at the configured item boundary
+- `tpf.item.consumed` (counter): items consumed at the configured item boundary
+- `tpf.slo.rpc.server.*` (counters): SLO-ready totals for RPC server reliability and latency (gRPC + REST)
+- `tpf.slo.rpc.client.*` (counters): SLO-ready totals for RPC client reliability and latency (gRPC + REST)
+- `tpf.slo.item.throughput.*` (counters): SLO-ready totals for item throughput per run
 
 Prometheus exports these as `*_items` because the unit is set to `items`.
+
+Note: `tpf.step.*` metrics represent step executions (not domain items). Use the
+`tpf.item.*` counters when you want throughput for a specific domain type.
+
+Note: New Relic dimensional metrics treat `tpf.slo.item.throughput.*` as event-counted counters, so
+SLOs should use `COUNT` (not `SUM`) over `metricName = 'tpf.slo.item.throughput.total|good'`.
+
+Aspect position note: AFTER_STEP observes the output of each step. This captures every boundary
+except the very first input boundary (before the pipeline starts). Conversely, BEFORE_STEP captures
+every boundary except the final output boundary (after the pipeline completes). Use two aspects if
+you need complete boundary coverage.
 
 Run-level span attributes (on `tpf.pipeline.run`):
 - `tpf.parallel.max_in_flight`
 - `tpf.parallel.avg_in_flight`
-- `tpf.item.count`
-- `tpf.item.avg_ms`
-- `tpf.items.per_min`
 
-These are designed for batch-style pipelines where throughput should be measured while the pipeline is running.
+These are designed for batch-style pipelines where parallelism should be inspected while the pipeline is running.
 
 Tip: gauges report the instantaneous value, so after a run finishes they will return to 0.
 When querying, use a max over time window to surface the peak:

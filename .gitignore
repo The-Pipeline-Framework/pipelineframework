@@ -64,6 +64,9 @@ QWEN.md
 GEMINI.md
 AGENTS.md
 
+# Local notes (kept out of Git)
+.local-notes/
+
 # Template generator
 /template-generator-node/test-output/
 /template-generator-node/node_modules/
@@ -75,3 +78,6 @@ pom.xml.releaseBackup
 
 # Terraform CLI
 /examples/csv-payments/terraform/.terraform/
+
+# flatten plugin
+**/.flattened-pom.xml

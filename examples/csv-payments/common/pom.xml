@@ -20,7 +20,7 @@
     <parent>
         <groupId>org.pipelineframework.csv</groupId>
         <artifactId>csv-payments-parent</artifactId>
-        <version>26.1-SNAPSHOT</version>
+        <version>26.2.5-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -36,7 +36,7 @@
         <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>pipelineframework</artifactId>
-            <version>${version.pipeline}</version>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -201,6 +201,31 @@
                             </arguments>
                             <addOutputToClasspath>true</addOutputToClasspath>
                             <classpathScope>compile</classpathScope>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.6.1</version>
+                <executions>
+                    <execution>
+                        <id>unpack-google-proto</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>unpack</goal>
+                        </goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>com.google.protobuf</groupId>
+                                    <artifactId>protobuf-java</artifactId>
+                                    <version>${protobuf.version}</version>
+                                    <includes>google/protobuf/*.proto</includes>
+                                    <outputDirectory>${generated.proto.dir}</outputDirectory>
+                                </artifactItem>
+                            </artifactItems>
                         </configuration>
                     </execution>
                 </executions>

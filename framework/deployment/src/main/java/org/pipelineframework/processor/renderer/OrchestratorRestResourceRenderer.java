@@ -25,23 +25,39 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
         return GenerationTarget.REST_RESOURCE;
     }
 
+    /**
+     * Generates and writes a REST resource class that exposes orchestrator pipeline endpoints based on the provided binding.
+     *
+     * <p>The generated class (PipelineRunResource) contains endpoints for running pipelines, ingesting streaming input,
+     * and subscribing to pipeline outputs; DTO types, streaming vs unary behaviour, package, and annotations are derived
+     * from the given binding.</p>
+     *
+     * @param binding source of configuration (base package, input/output DTO names, and streaming flags) used to shape the generated resource
+     * @param ctx     generation context used to write the produced Java file via the annotation processing Filer
+     * @throws IOException if writing the generated Java file to the processing Filer fails
+     */
     @Override
     public void render(OrchestratorBinding binding, GenerationContext ctx) throws IOException {
         ClassName applicationScoped = ClassName.get("jakarta.enterprise.context", "ApplicationScoped");
         ClassName inject = ClassName.get("jakarta.inject", "Inject");
         ClassName path = ClassName.get("jakarta.ws.rs", "Path");
         ClassName post = ClassName.get("jakarta.ws.rs", "POST");
+        ClassName get = ClassName.get("jakarta.ws.rs", "GET");
         ClassName consumes = ClassName.get("jakarta.ws.rs", "Consumes");
         ClassName produces = ClassName.get("jakarta.ws.rs", "Produces");
         ClassName restStream = ClassName.get("org.jboss.resteasy.reactive", "RestStreamElementType");
         ClassName uni = ClassName.get("io.smallrye.mutiny", "Uni");
         ClassName multi = ClassName.get("io.smallrye.mutiny", "Multi");
         ClassName executionService = ClassName.get("org.pipelineframework", "PipelineExecutionService");
+        ClassName outputBus = ClassName.get("org.pipelineframework", "PipelineOutputBus");
 
         ClassName inputType = ClassName.get(binding.basePackage() + ".common.dto", binding.inputTypeName() + "Dto");
         ClassName outputType = ClassName.get(binding.basePackage() + ".common.dto", binding.outputTypeName() + "Dto");
 
         FieldSpec executionField = FieldSpec.builder(executionService, "pipelineExecutionService", Modifier.PRIVATE)
+            .addAnnotation(inject)
+            .build();
+        FieldSpec outputBusField = FieldSpec.builder(outputBus, "pipelineOutputBus", Modifier.PRIVATE)
             .addAnnotation(inject)
             .build();
 
@@ -74,18 +90,53 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
 
         String methodSuffix = binding.outputStreaming() ? "Streaming" : "Unary";
         if (binding.inputStreaming()) {
-            runMethod.addStatement("return pipelineExecutionService.executePipeline$L(input)", methodSuffix);
+            runMethod.addStatement("return pipelineExecutionService.<$T>executePipeline$L(input)" +
+                    ".onItem().invoke(pipelineOutputBus::publish)",
+                outputType, methodSuffix);
         } else {
-            runMethod.addStatement("return pipelineExecutionService.executePipeline$L($T.createFrom().item(input))",
-                methodSuffix, uni);
+            runMethod.addStatement("return pipelineExecutionService.<$T>executePipeline$L($T.createFrom().item(input))" +
+                    ".onItem().invoke(pipelineOutputBus::publish)",
+                outputType, methodSuffix, uni);
         }
+
+        MethodSpec ingestMethod = MethodSpec.methodBuilder("ingest")
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(post)
+            .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/ingest").build())
+            .addAnnotation(AnnotationSpec.builder(consumes)
+                .addMember("value", "$S", "application/x-ndjson")
+                .build())
+            .addAnnotation(AnnotationSpec.builder(produces)
+                .addMember("value", "$S", "application/x-ndjson")
+                .build())
+            .addAnnotation(AnnotationSpec.builder(restStream).addMember("value", "$S", "application/json").build())
+            .returns(ParameterizedTypeName.get(multi, outputType))
+            .addParameter(ParameterizedTypeName.get(multi, inputType), "input")
+            .addStatement("return pipelineExecutionService.<$T>executePipelineStreaming(input)" +
+                ".onItem().invoke(pipelineOutputBus::publish)", outputType)
+            .build();
+
+        MethodSpec subscribeMethod = MethodSpec.methodBuilder("subscribe")
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(get)
+            .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/subscribe").build())
+            .addAnnotation(AnnotationSpec.builder(produces)
+                .addMember("value", "$S", "application/x-ndjson")
+                .build())
+            .addAnnotation(AnnotationSpec.builder(restStream).addMember("value", "$S", "application/json").build())
+            .returns(ParameterizedTypeName.get(multi, outputType))
+            .addStatement("return pipelineOutputBus.stream($T.class)", outputType)
+            .build();
 
         TypeSpec resource = TypeSpec.classBuilder(RESOURCE_CLASS)
             .addModifiers(Modifier.PUBLIC)
             .addAnnotation(applicationScoped)
             .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/pipeline").build())
             .addField(executionField)
+            .addField(outputBusField)
             .addMethod(runMethod.build())
+            .addMethod(ingestMethod)
+            .addMethod(subscribeMethod)
             .build();
 
         try {

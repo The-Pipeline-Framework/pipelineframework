@@ -68,9 +68,9 @@ class SearchPipelineEndToEndIT {
     private static final String ORCHESTRATOR_IMAGE = System.getProperty(
         "search.image.orchestrator", "localhost/search-pipeline/orchestrator-svc:latest");
     private static final String PERSISTENCE_IMAGE = System.getProperty(
-        "search.image.persistence", "localhost/search/persistence-svc:latest");
+        "search.image.persistence", "localhost/search-pipeline/persistence-svc:latest");
     private static final String CACHE_INVALIDATION_IMAGE = System.getProperty(
-        "search.image.cache-invalidation", "localhost/search/cache-invalidation-svc:latest");
+        "search.image.cache-invalidation", "localhost/search-pipeline/cache-invalidation-svc:latest");
 
     private static final PostgreSQLContainer<?> postgres =
         new PostgreSQLContainer<>("postgres:17")
@@ -393,6 +393,43 @@ class SearchPipelineEndToEndIT {
         assertRedisKeyState(key, false, "Expected ParsedDocument cache entry to be removed by replay invalidation");
     }
 
+    /**
+     * Verifies that warming the cache with a prefer-cache run prevents additional crawl fetches on a subsequent prefer-cache replay.
+     *
+     * The test warms the cache for a generated input, records the number of crawl fetches, runs the pipeline again with the same version,
+     * and asserts that the crawl fetch count did not increase.
+     *
+     * @throws Exception if an unexpected error occurs interacting with the test containers or asserting outcomes
+     */
+    @Test
+    void preferCacheShouldAvoidRecrawlOnWarmCache() throws Exception {
+        String version = "recrawl-" + UUID.randomUUID();
+        String input = "https://example.com/" + version;
+
+        ProcessResult warm = orchestratorTriggerRun(input, "prefer-cache", version, false);
+        assertExitSuccess(warm, "Expected prefer-cache warm run to succeed");
+
+        int fetchedBefore = countCrawlFetchesFor(input);
+
+        ProcessResult replay = orchestratorTriggerRun(input, "prefer-cache", version, false);
+        assertExitSuccess(replay, "Expected prefer-cache replay run to succeed");
+
+        int fetchedAfter = countCrawlFetchesFor(input);
+        assertTrue(fetchedAfter == fetchedBefore,
+            "Expected cache hit to avoid re-crawling; crawl fetch count changed from "
+                + fetchedBefore + " to " + fetchedAfter);
+    }
+
+    /**
+     * Trigger a pipeline run on the orchestrator service for the given input, cache policy, and version.
+     *
+     * @param input the source URL or input identifier used as the run's `sourceUrl`
+     * @param cachePolicy the cache policy header value to send (e.g., "require-cache", "prefer-cache", "bypass-cache", "cache-only")
+     * @param versionTag the pipeline version tag to send as `x-pipeline-version` to isolate replay/caching
+     * @param replay when true, includes the `x-pipeline-replay: true` header to request replay behavior
+     * @return a ProcessResult whose exitCode is `0` if the orchestrator returned an HTTP 2xx status or `1` otherwise, and whose output is the response body
+     * @throws Exception if building/sending the HTTP request or receiving the response fails
+     */
     private ProcessResult orchestratorTriggerRun(
         String input,
         String cachePolicy,
@@ -503,12 +540,46 @@ class SearchPipelineEndToEndIT {
         return HashingUtils.sha256Base64Url(rawContent);
     }
 
+    /**
+     * Constructs a synthetic raw crawl content string for a document.
+     *
+     * @param sourceUrl the source URL used in the generated content
+     * @param docId the document's UUID included in the generated content
+     * @return a raw crawl content string containing a title, the DocId, and a body
+     */
     private String buildRawContent(String sourceUrl, UUID docId) {
         return "Title: Example content for " + sourceUrl + "\n"
             + "DocId: " + docId + "\n"
             + "Body: This is a simulated crawl result with headers, metadata, and content.";
     }
 
+    /**
+     * Counts how many times the crawl service logged a fetch for the given input.
+     *
+     * @param input the input identifier or source URL fragment to search for in crawl service logs
+     * @return the number of occurrences of the fetch marker "Fetched {input} (" in the crawl service logs
+     */
+    private int countCrawlFetchesFor(String input) {
+        String marker = "Fetched " + input + " (";
+        String logs = crawlService.getLogs();
+        if (logs == null || logs.isBlank()) {
+            return 0;
+        }
+        int count = 0;
+        int index = 0;
+        while ((index = logs.indexOf(marker, index)) >= 0) {
+            count++;
+            index += marker.length();
+        }
+        return count;
+    }
+
+    /**
+     * Create an HttpClient that trusts all TLS certificates and does not perform hostname verification.
+     *
+     * @return an HttpClient configured to accept any server certificate and skip endpoint identification
+     * @throws Exception if the SSLContext cannot be created or initialized
+     */
     private HttpClient insecureHttpClient() throws Exception {
         TrustManager[] trustAll = new TrustManager[] { new X509TrustManager() {
             @Override

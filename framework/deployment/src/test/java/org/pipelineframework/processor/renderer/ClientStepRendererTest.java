@@ -29,7 +29,7 @@ class ClientStepRendererTest {
 
     @Test
     void testRenderUnaryUnaryClientStep() {
-        PipelineStepModel model = createModel(StreamingShape.UNARY_UNARY);
+        PipelineStepModel model = createModel(StreamingShape.UNARY_UNARY, false);
 
         // Build real descriptors to avoid mocking final protobuf types
         Descriptors.FileDescriptor fileDescriptor = buildFileDescriptor();
@@ -53,7 +53,7 @@ class ClientStepRendererTest {
 
     @Test
     void testRenderUnaryStreamingClientStep() {
-        PipelineStepModel model = createModel(StreamingShape.UNARY_STREAMING);
+        PipelineStepModel model = createModel(StreamingShape.UNARY_STREAMING, false);
 
         // Build real descriptors to avoid mocking final protobuf types
         Descriptors.FileDescriptor fileDescriptor = buildFileDescriptor();
@@ -75,6 +75,31 @@ class ClientStepRendererTest {
         assertDoesNotThrow(() -> renderer.render(binding, context));
     }
 
+    @Test
+    void rendersSideEffectClientStepWithCacheReadBypass() throws Exception {
+        PipelineStepModel model = createModel(StreamingShape.UNARY_UNARY, true);
+
+        Descriptors.FileDescriptor fileDescriptor = buildFileDescriptor();
+        Descriptors.ServiceDescriptor serviceDescriptor = fileDescriptor.findServiceByName("TestService");
+        Descriptors.MethodDescriptor methodDescriptor = serviceDescriptor.findMethodByName("remoteProcess");
+        GrpcBinding binding = new GrpcBinding(model, serviceDescriptor, methodDescriptor);
+
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getElementUtils()).thenReturn(null);
+        when(processingEnv.getTypeUtils()).thenReturn(null);
+        when(processingEnv.getFiler()).thenReturn(null);
+        when(processingEnv.getMessager()).thenReturn(null);
+
+        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.ORCHESTRATOR_CLIENT,
+            java.util.Set.of(), null, null);
+
+        renderer.render(binding, context);
+
+        Path clientStep = tempDir.resolve("com/example/pipeline/TestGrpcClientStep.java");
+        String source = java.nio.file.Files.readString(clientStep);
+        org.junit.jupiter.api.Assertions.assertTrue(source.contains("CacheReadBypass"));
+    }
+
     private TypeMapping createTypeMapping(String simpleName) {
         return new TypeMapping(
             ClassName.get("com.example.domain", simpleName),
@@ -83,7 +108,7 @@ class ClientStepRendererTest {
         );
     }
 
-    private PipelineStepModel createModel(StreamingShape shape) {
+    private PipelineStepModel createModel(StreamingShape shape, boolean sideEffect) {
         return new PipelineStepModel.Builder()
             .serviceName("TestService")
             .servicePackage("com.example")
@@ -92,6 +117,7 @@ class ClientStepRendererTest {
             .outputMapping(createTypeMapping("OutputType"))
             .streamingShape(shape)
             .executionMode(ExecutionMode.DEFAULT)
+            .sideEffect(sideEffect)
             .enabledTargets(java.util.Set.of(GenerationTarget.CLIENT_STEP))
             .build();
     }

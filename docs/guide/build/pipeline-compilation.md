@@ -84,6 +84,12 @@ The Pipeline Framework extension processor generates several classes:
 
 ### 2.5 Scaffolding
 The template generator provides the necessary scaffolding for:
+- Service and orchestrator entry points
+- Step interfaces and DTO placeholders
+- REST/gRPC adapter wiring and routing
+- Configuration files and environment defaults
+- Tests and sample fixtures
+- CI/workflow stubs for build and release
 
 ### 3. Dependency Injection Registration
 All generated classes are automatically registered with the CDI container, making them available for injection.

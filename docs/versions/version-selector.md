@@ -5,8 +5,9 @@ export default {
   data() {
     return {
       versions: [
-        { name: 'v26.1', url: '/', current: true },
-        { name: 'v0.9.2', url: '/versions/v0.9.2/', current: false }
+        { name: 'v26.2', url: '/', current: true },
+        { name: 'v26.2', url: '/versions/v26.2/', current: false },
+        { name: 'v0.9.2', url: '/versions/v0.9.2/', current: false },
         { name: 'v0.9.0', url: '/versions/v0.9.0/', current: false }
       ]
     }

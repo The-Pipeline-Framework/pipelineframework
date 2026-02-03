@@ -22,7 +22,7 @@
     <parent>
         <groupId>org.pipelineframework.csv</groupId>
         <artifactId>csv-payments-parent</artifactId>
-        <version>26.1-SNAPSHOT</version>
+        <version>26.2.5-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -39,7 +39,7 @@
         <dependency>
             <groupId>org.pipelineframework.csv</groupId>
             <artifactId>common</artifactId>
-            <version>${version.pipeline}</version>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>

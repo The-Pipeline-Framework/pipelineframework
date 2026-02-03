@@ -34,8 +34,19 @@ quarkus.container-image.name={{serviceName}}
 quarkus.container-image.tag=latest
 
 
-# Cache provider configuration
+# Cache provider configuration (build-time)
+# Choose one: redis | caffeine | memory
 pipeline.cache.provider=redis
 %prod.quarkus.redis.hosts=${REDIS_HOSTS:redis://localhost:6379}
 %dev.quarkus.redis.devservices.enabled=true
 %test.quarkus.redis.devservices.enabled=true
+
+# Caffeine (in-process) alternative:
+# pipeline.cache.provider=caffeine
+# pipeline.cache.caffeine.name=pipeline-cache
+# pipeline.cache.caffeine.maximum-size=10000
+# pipeline.cache.caffeine.expire-after-write=PT30M
+# pipeline.cache.caffeine.expire-after-access=PT30M
+
+# In-memory (simple map) alternative:
+# pipeline.cache.provider=memory

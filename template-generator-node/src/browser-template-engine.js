@@ -505,8 +505,6 @@ class BrowserTemplateEngine {
         // Generate the service class
         await this.generateStepServiceClass(appName, basePackage, step, stepIndex, allSteps, fileCallback);
 
-        // Generate Dockerfile.jvm
-        await this.generateStepDockerfile(step, fileCallback);
     }
 
     async generateStepPom(step, basePackage, fileCallback) {
@@ -570,12 +568,6 @@ class BrowserTemplateEngine {
 
         const rendered = this.render('step-service', context);
         const filePath = `${step.serviceName}/src/main/java/${this.toPath(basePackage + '.' + context.serviceNameForPackage + '.service')}/Process${serviceNamePascal}Service.java`;
-        await fileCallback(filePath, rendered);
-    }
-
-    async generateStepDockerfile(step, fileCallback) {
-        const rendered = this.render('dockerfile-jvm', {});
-        const filePath = `${step.serviceName}/src/main/docker/Dockerfile.jvm`;
         await fileCallback(filePath, rendered);
     }
 

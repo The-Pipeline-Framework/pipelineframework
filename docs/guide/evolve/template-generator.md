@@ -43,7 +43,7 @@ Download the latest template generator JAR file from the releases page or build 
 Generate a sample YAML configuration file to understand the structure:
 
 ```bash
-java -jar template-generator-1.0.0.jar --generate-config
+node template-generator-node/bin/generate.js sample-config
 ```
 
 This creates `sample-pipeline-config.yaml` with a complete example configuration.

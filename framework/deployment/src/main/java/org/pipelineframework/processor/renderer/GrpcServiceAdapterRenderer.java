@@ -140,15 +140,15 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
     }
 
     /**
-     * Add a unary-to-unary gRPC remoteProcess method to the provided class builder for the given binding.
+     * Adds a unary-to-unary gRPC `remoteProcess` method to the generated class for the given binding.
      *
-     * The generated method constructs an inline GrpcReactiveServiceAdapter tailored to the binding's
-     * gRPC parameter/return types and domain types, and delegates request handling to that adapter.
+     * The generated method delegates request handling to an inline `GrpcReactiveServiceAdapter` adapted to the
+     * binding's gRPC parameter/return and domain types.
      *
-     * @param builder the JavaPoet TypeSpec.Builder representing the class being generated
-     * @param binding provides pipeline step model and gRPC type metadata used to build the method
-     * @param messager used to report messages during type resolution
-     * @throws IllegalStateException if required gRPC parameter/return types or domain input/output types are missing for the service
+     * @param builder the JavaPoet TypeSpec.Builder for the class being generated
+     * @param binding supplies the PipelineStepModel and gRPC binding metadata used to build the method
+     * @param messager used to report messages during gRPC type resolution
+     * @throws IllegalStateException if required gRPC parameter/return types or required domain input/output types are missing for the service
      */
     private void addUnaryUnaryMethod(TypeSpec.Builder builder, GrpcBinding binding, Messager messager) {
         PipelineStepModel model = binding.model();
@@ -166,11 +166,16 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         // Create the inline adapter
         TypeSpec inlineAdapter = inlineAdapterBuilder(binding, grpcAdapterClassName, messager);
 
-        TypeName inputDomainTypeUnary = model.inboundDomainType();
-        TypeName outputDomainTypeUnary = model.outboundDomainType();
+        boolean cacheSideEffect = isCacheSideEffect(model);
+        TypeName inputDomainTypeUnary = cacheSideEffect
+            ? grpcTypes.grpcParameterType()
+            : model.inboundDomainType();
+        TypeName outputDomainTypeUnary = cacheSideEffect
+            ? grpcTypes.grpcReturnType()
+            : model.outboundDomainType();
 
         // Validate that required domain types are available
-        if (inputDomainTypeUnary == null || outputDomainTypeUnary == null) {
+        if (!cacheSideEffect && (inputDomainTypeUnary == null || outputDomainTypeUnary == null)) {
             throw new IllegalStateException("Missing required domain parameter or return type for service: " + binding.serviceName());
         }
 
@@ -190,19 +195,21 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 .addStatement("long startTime = System.nanoTime()")
                 .addCode("""
                     return adapter.remoteProcess($N)
-                        .onItem().invoke(item -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime))
-                        .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
-                            System.nanoTime() - startTime));
+                        .onTermination().invoke((item, failure, cancelled) -> {
+                            $T status = cancelled ? $T.CANCELLED
+                                : failure != null ? $T.fromThrowable(failure)
+                                : $T.OK;
+                            $T.recordGrpcServer($S, $S, status, System.nanoTime() - startTime);
+                        });
                     """,
                     "request",
-                    ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
-                    model.serviceName(),
-                    "remoteProcess",
+                    ClassName.get("io.grpc", "Status"),
+                    ClassName.get("io.grpc", "Status"),
+                    ClassName.get("io.grpc", "Status"),
                     ClassName.get("io.grpc", "Status"),
                     ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
                     model.serviceName(),
-                    "remoteProcess",
-                    ClassName.get("io.grpc", "Status"));
+                    "remoteProcess");
 
         // Add @RunOnVirtualThread annotation if the property is enabled
         if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
@@ -214,13 +221,12 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
     }
 
     /**
-     * Add a unary-to-streaming gRPC service method implementation to the generated class.
+     * Generate and append a public gRPC method named `remoteProcess` that accepts a single gRPC request
+     * and returns a reactive stream of gRPC responses for a unary-to-streaming pipeline step.
      *
-     * <p>Constructs and appends a public {@code remoteProcess} method that accepts a single gRPC
-     * request and returns a reactive stream of gRPC responses. The method instantiates an inline
-     * streaming adapter (mapping between gRPC and domain types) and delegates processing to it.
-     * If the step's execution mode is configured for virtual threads, the method is annotated with
-     * {@code @RunOnVirtualThread}.</p>
+     * The generated method delegates processing to an inline streaming adapter and records RPC
+     * telemetry on termination. If the step's execution mode is set to virtual threads, the method
+     * is annotated with `@RunOnVirtualThread`.
      *
      * @param builder the TypeSpec.Builder for the service class being generated
      * @param binding the gRPC binding containing pipeline and type information for this service
@@ -243,11 +249,16 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         // Create the inline adapter
         TypeSpec inlineAdapter = inlineAdapterBuilder(binding, grpcAdapterClassName, messager);
 
-        TypeName inputDomainTypeUnaryStreaming = model.inboundDomainType();
-        TypeName outputDomainTypeUnaryStreaming = model.outboundDomainType();
+        boolean cacheSideEffect = isCacheSideEffect(model);
+        TypeName inputDomainTypeUnaryStreaming = cacheSideEffect
+            ? grpcTypes.grpcParameterType()
+            : model.inboundDomainType();
+        TypeName outputDomainTypeUnaryStreaming = cacheSideEffect
+            ? grpcTypes.grpcReturnType()
+            : model.outboundDomainType();
 
         // Validate that required domain types are available
-        if (inputDomainTypeUnaryStreaming == null || outputDomainTypeUnaryStreaming == null) {
+        if (!cacheSideEffect && (inputDomainTypeUnaryStreaming == null || outputDomainTypeUnaryStreaming == null)) {
             throw new IllegalStateException("Missing required domain parameter or return type for service: " + binding.serviceName());
         }
 
@@ -267,19 +278,21 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 .addStatement("long startTime = System.nanoTime()")
                 .addCode("""
                     return adapter.remoteProcess($N)
-                        .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
-                            System.nanoTime() - startTime))
-                        .onCompletion().invoke(() -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime));
+                        .onTermination().invoke((failure, cancelled) -> {
+                            $T status = cancelled ? $T.CANCELLED
+                                : failure != null ? $T.fromThrowable(failure)
+                                : $T.OK;
+                            $T.recordGrpcServer($S, $S, status, System.nanoTime() - startTime);
+                        });
                     """,
                     "request",
-                    ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
-                    model.serviceName(),
-                    "remoteProcess",
+                    ClassName.get("io.grpc", "Status"),
+                    ClassName.get("io.grpc", "Status"),
+                    ClassName.get("io.grpc", "Status"),
                     ClassName.get("io.grpc", "Status"),
                     ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
                     model.serviceName(),
-                    "remoteProcess",
-                    ClassName.get("io.grpc", "Status"));
+                    "remoteProcess");
 
         // Add @RunOnVirtualThread annotation if the property is enabled
         if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
@@ -291,19 +304,13 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
     }
 
     /**
-     * Add the streaming-unary gRPC service method implementation to the provided class builder.
+     * Adds a public gRPC client-streaming (streaming→unary) `remoteProcess(Multi<Req>) : Uni<Resp>` method to the given class builder.
      *
-     * Builds and appends a public `remoteProcess(Multi<GrpcRequest>) : Uni<GrpcResponse>` method that
-     * instantiates an inline client-streaming adapter bridging gRPC message types and domain types,
-     * and delegates processing to that adapter.
+     * The generated method instantiates an inline client-streaming adapter that bridges gRPC DTOs and domain types, delegates the incoming request stream to that adapter, and records RPC telemetry on termination.
      *
      * @param builder the TypeSpec.Builder to which the generated method will be added
-     * @param binding source metadata containing the pipeline step model and service name used to
-     *                resolve gRPC and domain types
-     *
-     * @throws IllegalStateException if the binding does not resolve to required gRPC parameter or
-     *                               return types, or if the model lacks the necessary inbound or
-     *                               outbound domain types
+     * @param binding source metadata containing the pipeline step model and service name used to resolve gRPC and domain types
+     * @throws IllegalStateException if required gRPC parameter/return types or (when not a cache-side-effect) inbound/outbound domain types are missing for the binding's service
      */
     private void addStreamingUnaryMethod(TypeSpec.Builder builder, GrpcBinding binding, Messager messager) {
         PipelineStepModel model = binding.model();
@@ -321,11 +328,16 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         // Create the inline adapter
         TypeSpec inlineAdapter = inlineAdapterBuilder(binding, grpcAdapterClassName, messager);
 
-        TypeName inputDomainTypeStreamingUnary = model.inboundDomainType();
-        TypeName outputDomainTypeStreamingUnary = model.outboundDomainType();
+        boolean cacheSideEffect = isCacheSideEffect(model);
+        TypeName inputDomainTypeStreamingUnary = cacheSideEffect
+            ? grpcTypes.grpcParameterType()
+            : model.inboundDomainType();
+        TypeName outputDomainTypeStreamingUnary = cacheSideEffect
+            ? grpcTypes.grpcReturnType()
+            : model.outboundDomainType();
 
         // Validate that required domain types are available
-        if (inputDomainTypeStreamingUnary == null || outputDomainTypeStreamingUnary == null) {
+        if (!cacheSideEffect && (inputDomainTypeStreamingUnary == null || outputDomainTypeStreamingUnary == null)) {
             throw new IllegalStateException("Missing required domain parameter or return type for service: " + binding.serviceName());
         }
 
@@ -346,19 +358,21 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 .addStatement("long startTime = System.nanoTime()")
                 .addCode("""
                     return adapter.remoteProcess($N)
-                        .onItem().invoke(item -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime))
-                        .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
-                            System.nanoTime() - startTime));
+                        .onTermination().invoke((item, failure, cancelled) -> {
+                            $T status = cancelled ? $T.CANCELLED
+                                : failure != null ? $T.fromThrowable(failure)
+                                : $T.OK;
+                            $T.recordGrpcServer($S, $S, status, System.nanoTime() - startTime);
+                        });
                     """,
                     "request",
-                    ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
-                    model.serviceName(),
-                    "remoteProcess",
+                    ClassName.get("io.grpc", "Status"),
+                    ClassName.get("io.grpc", "Status"),
+                    ClassName.get("io.grpc", "Status"),
                     ClassName.get("io.grpc", "Status"),
                     ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
                     model.serviceName(),
-                    "remoteProcess",
-                    ClassName.get("io.grpc", "Status"));
+                    "remoteProcess");
 
         // Add @RunOnVirtualThread annotation if the property is enabled
         if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
@@ -396,11 +410,16 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         // Create the inline adapter
         TypeSpec inlineAdapterStreaming = inlineAdapterBuilder(binding, grpcAdapterClassName, messager);
 
-        TypeName inputDomainTypeStreamingStreaming = model.inboundDomainType();
-        TypeName outputDomainTypeStreamingStreaming = model.outboundDomainType();
+        boolean cacheSideEffect = isCacheSideEffect(model);
+        TypeName inputDomainTypeStreamingStreaming = cacheSideEffect
+            ? grpcTypes.grpcParameterType()
+            : model.inboundDomainType();
+        TypeName outputDomainTypeStreamingStreaming = cacheSideEffect
+            ? grpcTypes.grpcReturnType()
+            : model.outboundDomainType();
 
         // Validate that required domain types are available
-        if (inputDomainTypeStreamingStreaming == null || outputDomainTypeStreamingStreaming == null) {
+        if (!cacheSideEffect && (inputDomainTypeStreamingStreaming == null || outputDomainTypeStreamingStreaming == null)) {
             throw new IllegalStateException("Missing required domain parameter or return type for service: " + binding.serviceName());
         }
 
@@ -421,19 +440,21 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 .addStatement("long startTime = System.nanoTime()")
                 .addCode("""
                     return adapter.remoteProcess($N)
-                        .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
-                            System.nanoTime() - startTime))
-                        .onCompletion().invoke(() -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime));
+                        .onTermination().invoke((failure, cancelled) -> {
+                            $T status = cancelled ? $T.CANCELLED
+                                : failure != null ? $T.fromThrowable(failure)
+                                : $T.OK;
+                            $T.recordGrpcServer($S, $S, status, System.nanoTime() - startTime);
+                        });
                     """,
                     "request",
-                    ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
-                    model.serviceName(),
-                    "remoteProcess",
+                    ClassName.get("io.grpc", "Status"),
+                    ClassName.get("io.grpc", "Status"),
+                    ClassName.get("io.grpc", "Status"),
                     ClassName.get("io.grpc", "Status"),
                     ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
                     model.serviceName(),
-                    "remoteProcess",
-                    ClassName.get("io.grpc", "Status"));
+                    "remoteProcess");
 
         // Add @RunOnVirtualThread annotation if the property is enabled
         if (model.executionMode() == org.pipelineframework.processor.ir.ExecutionMode.VIRTUAL_THREADS) {
@@ -445,14 +466,14 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
     }
 
     /**
-     * Builds an anonymous subclass of the given gRPC adapter type that bridges between gRPC DTOs and domain types.
-     *
-     * @param binding               the gRPC binding containing the pipeline step model and service metadata
-     * @param grpcAdapterClassName  the adapter base class to extend (parameterised with input/output gRPC and domain types)
-     * @param messager              a Messager passed to the type resolver for diagnostics
-     * @return                      a TypeSpec for an anonymous class implementing `getService`, `fromGrpc` and `toGrpc`
-     * @throws IllegalStateException if required gRPC parameter/return types or domain input/output types are missing for the binding
-     */
+         * Create an anonymous subclass of the specified gRPC adapter that bridges between gRPC DTO types and domain types.
+         *
+         * @param binding              the gRPC binding containing the pipeline step model and service metadata
+         * @param grpcAdapterClassName the adapter base class to extend (parameterized with input/output gRPC and domain types)
+         * @param messager             a Messager used by the type resolver for diagnostics
+         * @return                     a TypeSpec for an anonymous class that implements `getService`, `fromGrpc`, and `toGrpc`
+         * @throws IllegalStateException if required gRPC parameter/return types or required domain input/output types are missing for the binding
+         */
     private TypeSpec inlineAdapterBuilder(
             GrpcBinding binding,
             ClassName grpcAdapterClassName,
@@ -470,16 +491,17 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
 
         TypeName inputGrpcType = grpcTypes.grpcParameterType(); // Get the correct input gRPC type
         TypeName outputGrpcType = grpcTypes.grpcReturnType(); // Get the correct output gRPC type
-        TypeName inputDomainType = model.inboundDomainType();
-        TypeName outputDomainType = model.outboundDomainType();
+        boolean cacheSideEffect = isCacheSideEffect(model);
+        TypeName inputDomainType = cacheSideEffect ? inputGrpcType : model.inboundDomainType();
+        TypeName outputDomainType = cacheSideEffect ? outputGrpcType : model.outboundDomainType();
 
         // Validate that required domain types are available
-        if (inputDomainType == null || outputDomainType == null) {
+        if (!cacheSideEffect && (inputDomainType == null || outputDomainType == null)) {
             throw new IllegalStateException("Missing required domain parameter or return type for service: " + binding.serviceName());
         }
 
-        boolean hasInboundMapper = model.inputMapping().hasMapper();
-        boolean hasOutboundMapper = model.outputMapping().hasMapper();
+        boolean hasInboundMapper = !cacheSideEffect && model.inputMapping().hasMapper();
+        boolean hasOutboundMapper = !cacheSideEffect && model.outputMapping().hasMapper();
 
         MethodSpec.Builder fromGrpcMethodBuilder = MethodSpec.methodBuilder("fromGrpc")
                 .addAnnotation(Override.class)
@@ -524,6 +546,13 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 .build();
     }
 
+    /**
+     * Determine the service type to use for the pipeline step.
+     *
+     * @param model the pipeline step model to inspect
+     * @return the service TypeName: the model's declared service class when the step is not a side effect;
+     *         otherwise the generated pipeline service class located in the model's package plus the pipeline package suffix
+     */
     private TypeName resolveServiceType(PipelineStepModel model) {
         if (!model.sideEffect()) {
             return model.serviceClassName();
@@ -531,6 +560,21 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         return ClassName.get(
             model.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
             model.serviceName());
+    }
+
+    /**
+     * Determines whether the given pipeline step represents a cache-backed side effect.
+     *
+     * @param model the pipeline step model to inspect
+     * @return `true` if the model indicates a side effect implemented by
+     *         `org.pipelineframework.plugin.cache.CacheService`, `false` otherwise
+     */
+    private boolean isCacheSideEffect(PipelineStepModel model) {
+        if (model == null || !model.sideEffect() || model.serviceClassName() == null) {
+            return false;
+        }
+        return "org.pipelineframework.plugin.cache.CacheService".equals(
+            model.serviceClassName().canonicalName());
     }
 
 }

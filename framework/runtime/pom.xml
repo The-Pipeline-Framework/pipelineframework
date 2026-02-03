@@ -21,15 +21,52 @@
     <parent>
         <groupId>org.pipelineframework</groupId>
         <artifactId>framework-parent</artifactId>
-        <version>26.1-SNAPSHOT</version>
+        <version>26.2.5-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
+    <groupId>org.pipelineframework</groupId>
     <artifactId>pipelineframework</artifactId>
+    <version>26.2.5-SNAPSHOT</version>
     <!-- version is not needed as it is automatically inherited from the parent-->
 
     <name>The Pipeline Framework Extension (Runtime)</name>
     <description>Runtime module for The Pipeline Framework Extension</description>
+    <url>https://pipelineframework.org/</url>
+    <licenses>
+        <license>
+            <name>Apache License, Version 2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>mbarcia</id>
+            <name>Mariano E. Barcia</name>
+            <url>https://github.com/mbarcia</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <connection>scm:git:https://github.com/The-Pipeline-Framework/pipelineframework.git</connection>
+        <developerConnection>scm:git:git@github.com:The-Pipeline-Framework/pipelineframework.git</developerConnection>
+        <url>https://github.com/The-Pipeline-Framework/pipelineframework</url>
+        <tag>v26.2.2</tag>
+    </scm>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.quarkus.platform</groupId>
+                <artifactId>quarkus-bom</artifactId>
+                <version>3.30.5</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <dependency>

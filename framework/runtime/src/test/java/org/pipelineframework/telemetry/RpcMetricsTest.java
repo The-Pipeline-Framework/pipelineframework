@@ -42,6 +42,7 @@ class RpcMetricsTest {
             .build();
         GlobalOpenTelemetry.resetForTest();
         GlobalOpenTelemetry.set(sdk);
+        RpcMetrics.resetForTest();
 
         try {
             RpcMetrics.recordGrpcServer("ProcessPaymentStatusService", "remoteProcess", Status.Code.OK, 1_000_000);
@@ -51,11 +52,17 @@ class RpcMetricsTest {
                 .filter(metric -> "rpc.server.requests".equals(metric.getName()))
                 .findFirst()
                 .orElseThrow();
+            boolean hasSloTotals = metrics.stream()
+                .anyMatch(metric -> "tpf.slo.rpc.server.total".equals(metric.getName()));
+            boolean hasSloLatency = metrics.stream()
+                .anyMatch(metric -> "tpf.slo.rpc.server.latency.total".equals(metric.getName()));
 
             boolean hasService = requests.getLongSumData().getPoints().stream()
                 .anyMatch(point -> "ProcessPaymentStatusService".equals(
                     point.getAttributes().get(AttributeKey.stringKey("rpc.service"))));
             assertTrue(hasService);
+            assertTrue(hasSloTotals);
+            assertTrue(hasSloLatency);
         } finally {
             meterProvider.shutdown();
             GlobalOpenTelemetry.resetForTest();

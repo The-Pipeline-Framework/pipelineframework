@@ -9,13 +9,16 @@ jobs:
   publish:
     name: Publish Release
     runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup JDK 21 (GPG enabled)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
@@ -25,24 +28,17 @@ jobs:
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           gpg-passphrase: GPG_PASSPHRASE
 
-      - name: Import GPG key
-        run: |
-          echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
-          gpg --list-secret-keys --keyid-format LONG
-
       - name: Build framework for release
+        run: ./mvnw -B -pl framework,framework/runtime,framework/deployment -am clean install -Pcentral-publishing -DskipTests --no-transfer-progress -Dtpf.flatten.skip=false
         env:
-          OSSRH_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
-          OSSRH_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-        run: ./mvnw -B -f framework/pom.xml clean install -Pcentral-publishing -DskipTests -Dgpg.passphrase=${{ secrets.GPG_PASSPHRASE }}
 
       - name: Deploy to Maven Central
+        run: ./mvnw -B -pl framework,framework/runtime,framework/deployment -am deploy -Pcentral-publishing -DskipTests -U -Dtpf.flatten.skip=false
         env:
-          OSSRH_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
-          OSSRH_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
+          CENTRAL_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          CENTRAL_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
-        run: ./mvnw -B -f framework/pom.xml deploy -Pcentral-publishing -DskipTests -U -Dgpg.passphrase=${{ secrets.GPG_PASSPHRASE }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

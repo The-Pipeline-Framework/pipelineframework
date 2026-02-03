@@ -16,41 +16,20 @@
 
 package org.pipelineframework.pipeline.step.collection.example;
 
-import java.util.ArrayList;
-import java.util.List;
+import io.smallrye.mutiny.Multi;
 import org.pipelineframework.step.ConfigurableStep;
-import org.pipelineframework.step.blocking.StepOneToManyBlocking;
+import org.pipelineframework.step.StepOneToMany;
 
 /**
- * Example of a collection-based 1:N step that expands a single payment request into multiple
+ * Example of a 1:N step that expands a single payment request into multiple
  * transactions.
- *
- * <p>
- * This step demonstrates how to use the StepOneToManyBlocking interface for operations that need
- * to expand a single input into multiple outputs using standard Java collections.
  */
 public class ExpandPaymentCollectionStep extends ConfigurableStep
-        implements StepOneToManyBlocking<String, String> {
+        implements StepOneToMany<String, String> {
 
     @Override
-    public List<String> applyList(String paymentRequest) {
-        // This is a blocking operation that simulates expanding one payment into multiple
-        // transactions
-        // In a real application, this might call external services or perform complex calculations
-
-        // Simulate some processing time (blocking operation)
-        try {
-            Thread.sleep(100); // Blocking sleep to simulate work
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-
-        // Expand the single payment request into multiple transactions
-        List<String> transactions = new ArrayList<>();
-        transactions.add("TXN-001-" + paymentRequest);
-        transactions.add("TXN-002-" + paymentRequest);
-        transactions.add("TXN-003-" + paymentRequest);
-
-        return transactions;
+    public Multi<String> applyOneToMany(String paymentRequest) {
+        return Multi.createFrom()
+                .items("TXN-001-" + paymentRequest, "TXN-002-" + paymentRequest, "TXN-003-" + paymentRequest);
     }
 }

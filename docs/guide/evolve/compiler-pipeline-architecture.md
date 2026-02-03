@@ -24,7 +24,7 @@ This led to:
 
 The refactored architecture follows a compiler-style pipeline with distinct phases:
 
-```
+```text
 Annotations -> Discovery -> Semantic Analysis -> Target Resolution -> Binding Construction -> Generation -> Infrastructure
 ```
 

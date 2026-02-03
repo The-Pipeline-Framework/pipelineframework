@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.pipelineframework</groupId>
         <artifactId>pipeline-framework-root</artifactId>
-        <version>26.1-SNAPSHOT</version>
+        <version>26.2.2</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
@@ -41,7 +41,6 @@
         <grpc.version>1.63.0</grpc.version>
         <version.jandex>3.5.0</version.jandex>
         <mockito.version>5.21.0</mockito.version>
-        <version.pipeline>26.1-SNAPSHOT</version.pipeline>
         <spotless.plugin.version>2.44.0</spotless.plugin.version>
         <google-java-format.version>1.25.0</google-java-format.version>
         <surefireArgLine />
@@ -71,7 +70,7 @@
             <dependency>
                 <groupId>org.pipelineframework</groupId>
                 <artifactId>framework-parent</artifactId>
-                <version>${version.pipeline}</version>
+                <version>${project.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -293,7 +292,7 @@
                             <path>
                                 <groupId>org.pipelineframework</groupId>
                                 <artifactId>pipelineframework-deployment</artifactId>
-                                <version>${version.pipeline}</version>
+                                <version>${project.version}</version>
                             </path>
                         </annotationProcessorPaths>
                     </configuration>

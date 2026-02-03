@@ -4,7 +4,7 @@ Use structured logging for consistent, searchable diagnostics across steps.
 
 ## MDC Context
 
-Attach pipeline identifiers to MDC so logs can be correlated across services:
+TPF does not set MDC values automatically. If you want MDC-based correlation, attach pipeline identifiers in your code (or via a custom interceptor/filter) so logs can be correlated across services:
 
 ```java
 MDC.put("pipelineId", pipelineId);

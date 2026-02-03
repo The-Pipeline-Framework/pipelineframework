@@ -20,7 +20,7 @@
 
     <groupId>org.pipelineframework</groupId>
     <artifactId>pipeline-framework-root</artifactId>
-    <version>26.1-SNAPSHOT</version>
+    <version>26.2.5-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>The Pipeline Framework - Root POM</name>
     <description>The root POM for the Pipeline Framework project, managing both framework components and example applications</description>
@@ -42,14 +42,13 @@
     </developers>
 
     <scm>
-        <connection>scm:git:https://github.com/mbarcia/pipelineframework.git</connection>
-        <developerConnection>scm:git:git@github.com:mbarcia/pipelineframework.git</developerConnection>
-        <url>https://github.com/mbarcia/pipelineframework</url>
-        <tag>v0.9.2</tag>
+        <connection>scm:git:https://github.com/The-Pipeline-Framework/pipelineframework.git</connection>
+        <developerConnection>scm:git:git@github.com:The-Pipeline-Framework/pipelineframework.git</developerConnection>
+        <url>https://github.com/The-Pipeline-Framework/pipelineframework</url>
+        <tag>v26.2.2</tag>
     </scm>
 
     <properties>
-        <version.pipeline>26.1-SNAPSHOT</version.pipeline> <!-- Needs to match the version of this POM declared above -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
@@ -66,6 +65,7 @@
         <junit.jupiter.version>5.13.4</junit.jupiter.version>
         <compile.testing.version>0.23.0</compile.testing.version>
         <mockito.version>5.21.0</mockito.version>
+        <maven.deploy.skip>true</maven.deploy.skip>
         <surefireArgLine />
         <pipeline.parallelism>AUTO</pipeline.parallelism>
     </properties>
@@ -184,9 +184,9 @@
                             <eclipse>
                                 <file>${maven.multiModuleProjectDirectory}/ide-config/quarkus-formatter.xml</file>
                             </eclipse>
-                            <removeUnusedImports/>
-                            <formatAnnotations/>
-                            <endWithNewline/>
+                            <removeUnusedImports />
+                            <formatAnnotations />
+                            <endWithNewline />
                         </java>
                         <formats>
                             <format>

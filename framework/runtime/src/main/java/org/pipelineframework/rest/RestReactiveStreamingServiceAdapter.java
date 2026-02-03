@@ -16,8 +16,11 @@
 
 package org.pipelineframework.rest;
 
+import java.util.concurrent.CancellationException;
+
 import io.smallrye.mutiny.Multi;
 import org.pipelineframework.service.ReactiveStreamingService;
+import org.pipelineframework.telemetry.HttpMetrics;
 
 /**
  * Base class for streaming REST resources that bridges reactive streaming services to REST endpoints.
@@ -28,6 +31,8 @@ import org.pipelineframework.service.ReactiveStreamingService;
  * @param <DomainOut> The domain output type
  */
 public abstract class RestReactiveStreamingServiceAdapter<DtoIn, DtoOut, DomainIn, DomainOut> {
+
+    private volatile String cachedServiceName;
 
     /**
      * Initialises a RestReactiveStreamingServiceAdapter instance.
@@ -43,6 +48,25 @@ public abstract class RestReactiveStreamingServiceAdapter<DtoIn, DtoOut, DomainI
      * @return the {@link ReactiveStreamingService} instance that processes {@code DomainIn} into {@code DomainOut}
      */
     protected abstract ReactiveStreamingService<DomainIn, DomainOut> getService();
+
+    /**
+     * Resolve the service name used for telemetry attributes.
+     *
+     * @return the service name
+     */
+    protected String getServiceName() {
+        String name = cachedServiceName;
+        if (name != null) {
+            return name;
+        }
+        Class<?> serviceClass = getService().getClass();
+        name = serviceClass.getSimpleName();
+        if (name.contains("_Subclass") && serviceClass.getSuperclass() != null) {
+            name = serviceClass.getSuperclass().getSimpleName();
+        }
+        cachedServiceName = name;
+        return name;
+    }
 
     /**
      * Convert a REST DTO input into the corresponding domain object.
@@ -70,8 +94,18 @@ public abstract class RestReactiveStreamingServiceAdapter<DtoIn, DtoOut, DomainI
      * @return the stream of REST DTO responses corresponding to processed domain outputs
      */
     public Multi<DtoOut> remoteProcess(DtoIn dtoRequest) {
+        long startNanos = System.nanoTime();
+        String serviceName = getServiceName();
         DomainIn entity = fromDto(dtoRequest);
         Multi<DomainOut> processedResult = getService().process(entity);
-        return processedResult.onItem().transform(this::toDto);
+        return processedResult
+            .onItem().transform(this::toDto)
+            .onTermination().invoke((failure, cancelled) -> {
+                Throwable resolved = cancelled
+                    ? new CancellationException("HTTP server call cancelled")
+                    : failure;
+                HttpMetrics.recordHttpServer(
+                    serviceName, "process", resolved, startNanos);
+            });
     }
 }

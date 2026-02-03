@@ -28,7 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.pipelineframework.PipelineRunner;
 import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.step.ConfigurableStep;
-import org.pipelineframework.step.blocking.StepOneToOneBlocking;
+import org.pipelineframework.step.StepOneToOne;
 
 @QuarkusTest
 public class FutureStepsTest {
@@ -42,7 +42,7 @@ public class FutureStepsTest {
         Multi<String> input = Multi.createFrom().items("Payment1", "Payment2", "Payment3");
 
         // Create steps and configure them properly
-        ValidatePaymentStepBlocking validateStep = new ValidatePaymentStepBlocking();
+        ValidatePaymentStep validateStep = new ValidatePaymentStep();
         StepConfig validateConfig = new StepConfig();
         validateStep.initialiseWithConfig(validateConfig);
 
@@ -67,11 +67,11 @@ public class FutureStepsTest {
     }
 
     // Helper step for validating payments
-    public static class ValidatePaymentStepBlocking extends ConfigurableStep
-            implements StepOneToOneBlocking<String, String> {
+    public static class ValidatePaymentStep extends ConfigurableStep
+            implements StepOneToOne<String, String> {
 
         @Override
-        public io.smallrye.mutiny.Uni<String> apply(String payment) {
+        public io.smallrye.mutiny.Uni<String> applyOneToOne(String payment) {
             // Simulate some processing time
             try {
                 Thread.sleep(50);
@@ -80,32 +80,6 @@ public class FutureStepsTest {
             }
 
             return io.smallrye.mutiny.Uni.createFrom().item("Validated: " + payment);
-        }
-
-        @Override
-        public io.smallrye.mutiny.Uni<String> applyOneToOne(String input) {
-            return apply(input);
-        }
-
-        @Override
-        public void initialiseWithConfig(org.pipelineframework.config.StepConfig config) {
-            super.initialiseWithConfig(config);
-        }
-    }
-
-    // Helper step for processing payments with CompletableFuture
-    public static class ProcessPaymentFutureStep extends ConfigurableStep
-            implements StepOneToOneBlocking<String, String> {
-
-        @Override
-        public io.smallrye.mutiny.Uni<String> apply(String input) {
-            // Simulate async processing using CompletableFuture
-            return io.smallrye.mutiny.Uni.createFrom().item("Processed: " + input);
-        }
-
-        @Override
-        public io.smallrye.mutiny.Uni<String> applyOneToOne(String input) {
-            return apply(input);
         }
 
         @Override
