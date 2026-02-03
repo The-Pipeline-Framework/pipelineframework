@@ -25,6 +25,17 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
         return GenerationTarget.REST_RESOURCE;
     }
 
+    /**
+     * Generates and writes a REST resource class that exposes orchestrator pipeline endpoints based on the provided binding.
+     *
+     * <p>The generated class (PipelineRunResource) contains endpoints for running pipelines, ingesting streaming input,
+     * and subscribing to pipeline outputs; DTO types, streaming vs unary behaviour, package, and annotations are derived
+     * from the given binding.</p>
+     *
+     * @param binding source of configuration (base package, input/output DTO names, and streaming flags) used to shape the generated resource
+     * @param ctx     generation context used to write the produced Java file via the annotation processing Filer
+     * @throws IOException if writing the generated Java file to the processing Filer fails
+     */
     @Override
     public void render(OrchestratorBinding binding, GenerationContext ctx) throws IOException {
         ClassName applicationScoped = ClassName.get("jakarta.enterprise.context", "ApplicationScoped");

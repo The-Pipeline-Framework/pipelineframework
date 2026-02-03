@@ -337,6 +337,13 @@ public class PipelineProtoGenerator {
         builder.append("}\n");
     }
 
+    /**
+     * Builds the Orchestrator service protobuf content for the given pipeline steps.
+     *
+     * @param basePackage the base Java package to use in the generated proto's java_package option
+     * @param steps the resolved pipeline steps in execution order; if null or empty no content is generated
+     * @return the text content of the orchestrator .proto file, or an empty string when {@code steps} is null or empty
+     */
     private String renderOrchestratorProto(String basePackage, List<ResolvedStep> steps) {
         if (steps == null || steps.isEmpty()) {
             return "";

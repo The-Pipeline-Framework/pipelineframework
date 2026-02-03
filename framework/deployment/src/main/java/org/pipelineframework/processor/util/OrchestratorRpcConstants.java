@@ -5,6 +5,9 @@ package org.pipelineframework.processor.util;
  */
 public final class OrchestratorRpcConstants {
 
+    /**
+     * Prevents instantiation of this utility class which only exposes static RPC method name constants.
+     */
     private OrchestratorRpcConstants() {
     }
 
