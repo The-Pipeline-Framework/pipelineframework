@@ -12,6 +12,11 @@ The Pipeline Framework uses MapStruct-based mappers to convert between different
 
 ## MapStruct-Based Mappers
 
+There are two different concepts named "Mapper" used together:
+
+- **MapStruct Mapper**: the `@org.mapstruct.Mapper` annotation used to generate mapping code.
+- **TPF Mapper Interface**: `org.pipelineframework.mapper.Mapper<Grpc, Dto, Domain>`, which standardizes the method set TPF expects (`toDto`, `fromDto`, `toGrpc`, `fromGrpc`).
+
 Create unified mappers using MapStruct that handle all conversions:
 
 ```java
@@ -48,9 +53,13 @@ public interface PaymentRecordMapper extends Mapper<PaymentRecordGrpc, PaymentRe
 
 The same unified mapper interface handles both inbound and outbound conversions, so no separate outbound mapper is needed when using the MapStruct approach.
 
-## Working with DTOs
+## Working with DTOs (Optional)
 
-When your service needs to work with DTOs internally, use the main mapper to convert between domain and DTO objects:
+In most cases you do **not** need to work with DTOs inside your `ReactiveService`. The generated REST/gRPC adapters perform DTO ↔ domain conversion at the transport boundary, so your business logic stays domain-only.
+
+Only reach for DTOs inside a service when there is a clear, local benefit (e.g., interacting with a legacy library or a DTO-first API). The CSV Payments example previously used DTOs in one service to set an ID before persistence; this is no longer necessary now that domain entities generate IDs on creation via `BaseEntity`.
+
+If you still need to work with DTOs internally, use the mapper to convert between domain and DTO objects:
 
 ```java
 @PipelineStep(
@@ -85,20 +94,14 @@ public class ProcessPaymentService implements ReactiveService<PaymentRecord, Pay
 }
 ```
 
-## Common Converters
+## Common Converters (Optional Scaffold)
 
-The framework provides common converters for standard types that MapStruct cannot handle automatically:
-
-- `UUID` ↔ `String` conversion
-- `BigDecimal` ↔ `String` conversion  
-- `Currency` ↔ `String` conversion
-- `LocalDateTime` ↔ `String` conversion
-- `List<String>` ↔ `String` conversion with delimiters
+The template generator includes a `CommonConverters` class as a convenience starting point. It is **optional** and intended to be customized per project. In the CSV Payments example it includes conversions like `UUID`, `BigDecimal`, `Long`, `Currency`, and `Path`. In other examples (like Search) it includes list and atomic conversions. Treat this as scaffolding, not a framework requirement.
 
 ## Best Practices
 
 1. **Use Unified Interface**: Create mappers that implement the unified `Mapper<Grpc, Dto, Domain>` interface
-2. **Leverage Common Converters**: Use the provided `CommonConverters` for standard type mappings
+2. **Leverage Common Converters**: If helpful, use (or adapt) a `CommonConverters` class for standard type mappings
 3. **Clear Error Handling**: Add appropriate error handling for mapping failures
 4. **Performance Considerations**: Be mindful of expensive mapping operations and cache where appropriate
 5. **Validation**: Consider validating DTOs after mapping to ensure data integrity
