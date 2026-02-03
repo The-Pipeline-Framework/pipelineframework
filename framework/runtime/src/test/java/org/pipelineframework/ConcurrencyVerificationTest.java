@@ -32,7 +32,6 @@ import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepOneToOne;
-import org.pipelineframework.step.blocking.StepOneToOneBlocking;
 import org.pipelineframework.step.future.StepOneToOneCompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -70,33 +69,6 @@ class ConcurrencyVerificationTest {
         }
     }
 
-    // Blocking step that tracks processing
-    private static class TrackingStepOneToOneBlocking extends ConfigurableStep
-            implements StepOneToOneBlocking<String, String> {
-
-        private final AtomicInteger callCount = new AtomicInteger(0);
-
-        @Override
-        public Uni<String> apply(String input) {
-            // Record the processing
-            callCount.incrementAndGet();
-
-            // Simulate variable processing times
-            int processingTime = input.equals("slow") ? 500 : 100; // 'slow' takes longer
-            try {
-                Thread.sleep(processingTime);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-
-            return Uni.createFrom().item("processed:" + input);
-        }
-
-        @Override
-        public Uni<String> applyOneToOne(String input) {
-            return apply(input);
-        }
-    }
 
     // CompletableFuture step that tracks processing
     private static class TrackingStepOneToOneCompletableFuture extends ConfigurableStep
@@ -184,36 +156,6 @@ class ConcurrencyVerificationTest {
 
         System.out.println(
                 "✓ Parallel processing completed successfully with concurrent execution");
-    }
-
-    @Test
-    void testBlockingStepParallelProcessing() {
-        System.out.println("=== Testing Blocking Step Parallel Processing ===");
-        pipelineConfig.parallelism(ParallelismPolicy.PARALLEL);
-
-        // Given
-        TrackingStepOneToOneBlocking step = new TrackingStepOneToOneBlocking();
-        StepConfig stepConfig = new StepConfig();
-        step.initialiseWithConfig(stepConfig);
-
-        // When - Use items where some are slow to demonstrate concurrent processing
-        Multi<String> input = Multi.createFrom().items("slow", "fast1", "fast2");
-        Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step));
-
-        // Then - Should process concurrently (fast items finish before slow)
-        AssertSubscriber<Object> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(3));
-        subscriber.awaitItems(3, Duration.ofSeconds(2)).assertCompleted();
-
-        List<Object> items = subscriber.getItems();
-        assertEquals(3, items.size());
-        assertTrue(items.stream().anyMatch(item -> item.toString().contains("slow")));
-        assertTrue(items.stream().anyMatch(item -> item.toString().contains("fast1")));
-        assertTrue(items.stream().anyMatch(item -> item.toString().contains("fast2")));
-
-        // With parallel processing, all should be processed
-        assertEquals(3, step.callCount.get());
-
-        System.out.println("✓ Blocking step parallel processing completed successfully");
     }
 
     @Test

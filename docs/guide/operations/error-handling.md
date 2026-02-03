@@ -16,8 +16,7 @@ The framework leverages Mutiny's reactive processing model for high-throughput, 
     outputType = PaymentStatus.class,
     stepType = StepOneToOne.class,
     inboundMapper = PaymentRecordInboundMapper.class,
-    outboundMapper = PaymentStatusOutboundMapper.class,
-    runOnVirtualThreads = true  // Run on virtual threads for I/O-bound operations
+    outboundMapper = PaymentStatusOutboundMapper.class
 )
 @ApplicationScoped
 public class ProcessPaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
@@ -90,7 +89,7 @@ Best practices:
 - Set concurrency based on system resources and external service limits
 - Set buffer capacity based on expected load spikes and acceptable memory usage
 - Monitor system performance to balance between throughput and resource utilization
-- Consider using virtual threads when dealing with I/O-bound operations to improve concurrency efficiency
+- Prefer non-blocking I/O and offload truly blocking work to worker threads (for example, Vert.x `executeBlocking`)
 
 ## Error Handling
 
@@ -447,7 +446,7 @@ Note: DLQ configuration is not exposed via built-in `pipeline.*` properties. Con
 
 ### Concurrency
 
-1. **Use Virtual Threads**: Enable for I/O-bound operations
+1. **Offload Blocking I/O**: Use worker-thread offloading for blocking operations
 2. **Set Appropriate Limits**: Don't overwhelm external systems
 3. **Monitor Resource Usage**: Watch for bottlenecks and adjust accordingly
 4. **Consider Batch Processing**: For high-volume scenarios

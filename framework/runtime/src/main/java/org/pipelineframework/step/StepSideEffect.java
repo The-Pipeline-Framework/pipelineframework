@@ -29,8 +29,4 @@ package org.pipelineframework.step;
  */
 public interface StepSideEffect<I> extends Configurable, StepOneToOne<I, I>, DeadLetterQueue<I, I> {
 
-    /**
-     * Indicates whether this step should run with virtual threads.
-     * @return true if virtual threads should be used, false otherwise (defaults to false)
-     */
 }

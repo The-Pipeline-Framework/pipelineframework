@@ -34,7 +34,6 @@ import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepOneToMany;
 import org.pipelineframework.step.StepOneToOne;
-import org.pipelineframework.step.blocking.StepOneToManyBlocking;
 import org.pipelineframework.step.future.StepOneToOneCompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -96,27 +95,6 @@ class ConcurrencyIntegrationTest {
         }
     }
 
-    private static class TestStepOneToManyBlocking extends ConfigurableStep
-            implements StepOneToManyBlocking<String, String> {
-
-        private final AtomicInteger callCount = new AtomicInteger(0);
-
-        @Override
-        public List<String> applyList(String input) {
-            // Record the order in which items are processed
-            int order = callCount.incrementAndGet();
-
-            // Simulate variable processing times
-            int processingTime = input.equals("slow") ? 500 : 100; // 'slow' takes longer
-            try {
-                Thread.sleep(processingTime);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-
-            return List.of("processed:" + input + "_1", "processed:" + input + "_2");
-        }
-    }
 
     private static class TestStepOneToOneCompletableFuture extends ConfigurableStep
             implements StepOneToOneCompletableFuture<String, String> {
@@ -244,28 +222,6 @@ class ConcurrencyIntegrationTest {
         assertEquals(3, step.callCount.get());
     }
 
-    @Test
-    void testOneToManyBlockingParallelProcessing() {
-        // Given
-        pipelineConfig.parallelism(ParallelismPolicy.PARALLEL);
-        TestStepOneToManyBlocking step = new TestStepOneToManyBlocking();
-        StepConfig liveConfig = new StepConfig();
-        step.initialiseWithConfig(liveConfig);
-
-        // When
-        Multi<String> input = Multi.createFrom().items("slow", "fast1", "fast2");
-        Multi<Object> result = (Multi<Object>) pipelineRunner.run(input, List.of(step));
-
-        // Then
-        AssertSubscriber<Object> subscriber = result.subscribe()
-                .withSubscriber(
-                        AssertSubscriber.create(6)); // Each input produces 2 outputs
-        subscriber.awaitItems(6, Duration.ofSeconds(2)).assertCompleted();
-
-        List<Object> items = subscriber.getItems();
-        assertEquals(6, items.size());
-        assertEquals(3, step.callCount.get());
-    }
 
     @Test
     void testOneToOneCompletableFutureParallelProcessing() {

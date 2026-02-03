@@ -41,7 +41,7 @@ The fastest way to get started is using our visual canvas designer:
 - **Build-Time Generation**: Automatic gRPC and REST adapter generation at build time
 - **gRPC & REST Flexibility**: Fast gRPC for high-throughput scenarios, REST for ease of development and integration
 - **TLS Ready**: Reference implementation includes TLS configuration out of the box
-- **Multiple Processing Patterns**: OneToOne, OneToMany, ManyToOne, ManyToMany, SideEffect and blocking variants
+- **Multiple Processing Patterns**: OneToOne, OneToMany, ManyToOne, ManyToMany, and SideEffect
 - **Health Monitoring**: Built-in health check capabilities for infrastructure monitoring
 
 ### QA Engineers
@@ -67,9 +67,9 @@ The fastest way to get started is using our visual canvas designer:
 - Native-ready builds for ultra‑fast startup and cloud efficiency  
 - Built-in health monitoring, observability, metrics, and tracing  
 - Visual pipeline designer for rapid development  
-- Multiple execution patterns (OneToOne, OneToMany, ManyToOne, ManyToMany, SideEffect, blocking)  
+- Multiple execution patterns (OneToOne, OneToMany, ManyToOne, ManyToMany, SideEffect)  
 - Comprehensive error handling with dead-letter queue support  
-- Multiple persistence models (reactive or virtual‑thread‑based)  
+- Multiple persistence models (reactive or traditional drivers)  
 - Strong testing support: deterministic, focused, and easy to automate  
 
 ## 📚 Documentation

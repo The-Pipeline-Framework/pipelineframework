@@ -10,10 +10,9 @@ The `@PipelineStep` annotation marks a class as a pipeline step and enables auto
 
 - `inputType`: The input type for this step (domain type)
 - `outputType`: The output type for this step (domain type)
-- `stepType`: The step type (StepOneToOne, StepOneToMany, StepManyToOne, StepManyToMany, StepSideEffect, or blocking variants)
+- `stepType`: The step type (StepOneToOne, StepOneToMany, StepManyToOne, StepManyToMany, StepSideEffect)
 - `inboundMapper`: The inbound mapper class for this pipeline service/step - handles conversion from gRPC to domain types (using MapStruct-based unified Mapper interface)
 - `outboundMapper`: The outbound mapper class for this pipeline service/step - handles conversion from domain to gRPC types (using MapStruct-based unified Mapper interface)
-- `runOnVirtualThreads`: Whether to offload server processing to virtual threads, i.e. for I/O-bound operations (defaults to `false`)
 - `sideEffect`: Optional plugin service type used to generate side-effect client/server adapters
 - `ordering`: Ordering requirement for the generated client step
 - `threadSafety`: Thread safety declaration for the generated client step

@@ -13,7 +13,7 @@ The Pipeline Framework includes a visual canvas designer at <a href="https://app
 - **Visual Design Canvas**: Create and configure pipelines with the visual designer at [https://app.pipelineframework.org](https://app.pipelineframework.org)
 - **Annotation-Based Configuration**: Simplifies adapter generation with `@PipelineStep`
 - **gRPC & REST Flexibility**: Automatic adapter generation for fast gRPC or easy REST integration
-- **Multiple Processing Patterns**: OneToOne, OneToMany, ManyToOne, ManyToMany, SideEffect and blocking variants
+- **Multiple Processing Patterns**: OneToOne, OneToMany, ManyToOne, ManyToMany, and SideEffect
 - **Health Monitoring**: Built-in health check capabilities
 - **Multiple Persistence Models**: Choose from reactive or virtual thread-based persistence
 - **Modular Design**: Clear separation between runtime and deployment components

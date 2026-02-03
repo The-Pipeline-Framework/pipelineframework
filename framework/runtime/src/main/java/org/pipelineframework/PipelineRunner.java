@@ -38,7 +38,6 @@ import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ParallelismHints;
 import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.step.*;
-import org.pipelineframework.step.blocking.StepOneToManyBlocking;
 import org.pipelineframework.step.functional.ManyToOne;
 import org.pipelineframework.step.future.StepOneToOneCompletableFuture;
 import org.pipelineframework.telemetry.PipelineTelemetry;
@@ -59,8 +58,7 @@ public class PipelineRunner implements AutoCloseable {
     private enum StepParallelismType {
         ONE_TO_ONE(false),
         ONE_TO_ONE_FUTURE(false),
-        ONE_TO_MANY(true),
-        ONE_TO_MANY_BLOCKING(true);
+        ONE_TO_MANY(true);
 
         private final boolean autoCandidate;
 
@@ -160,11 +158,6 @@ public class PipelineRunner implements AutoCloseable {
                     boolean parallel = shouldParallelize(stepOneToMany, parallelismPolicy, StepParallelismType.ONE_TO_MANY);
                     current = applyOneToManyUnchecked(
                         stepOneToMany, current, parallel, maxConcurrency, telemetry, telemetryContext, contextSnapshot);
-                }
-                case StepOneToManyBlocking stepOneToManyBlocking -> {
-                    boolean parallel = shouldParallelize(stepOneToManyBlocking, parallelismPolicy, StepParallelismType.ONE_TO_MANY_BLOCKING);
-                    current = applyOneToManyBlockingUnchecked(
-                        stepOneToManyBlocking, current, parallel, maxConcurrency, telemetry, telemetryContext, contextSnapshot);
                 }
                 case ManyToOne manyToOne -> current = applyManyToOneUnchecked(manyToOne, current, telemetry, telemetryContext, contextSnapshot);
                 case StepManyToMany manyToMany -> current = applyManyToManyUnchecked(manyToMany, current, telemetry, telemetryContext, contextSnapshot);
@@ -767,91 +760,6 @@ public class PipelineRunner implements AutoCloseable {
             }
         } else {
             throw new IllegalArgumentException(MessageFormat.format("Unsupported current type for StepOneToOneCompletableFuture: {0}", current));
-        }
-    }
-
-    /**
-     * Applies a blocking one-to-many pipeline step to the provided reactive input.
-     *
-     * <p>If `current` is a `Uni<I>`, the step is applied once and a `Multi<O>` of results is returned.
-     * If `current` is a `Multi<I>`, the step is applied for each item and a `Multi<O>` of all results is returned;
-     * when `parallel` is true the per-item `Multi<O>` streams are merged with the provided `maxConcurrency`,
-     * otherwise they are concatenated in source order. When `telemetry` is non-null, item consumption,
-     * production and per-step execution are instrumented. The step is executed with the provided
-     * `contextSnapshot` bound for the duration of each invocation.
-     *
-     * @param step the blocking one-to-many step to execute
-     * @param current the current reactive source; must be a `Uni<I>` or `Multi<I>`
-     * @param parallel if true, per-item result streams are merged with `maxConcurrency`; otherwise they are concatenated
-     * @param maxConcurrency maximum concurrent inner streams when merging
-     * @param telemetry optional telemetry component used to instrument consumption, production, and step execution
-     * @param telemetryContext telemetry run context passed to instrumentation hooks
-     * @param contextSnapshot pipeline context to bind during step execution
-     * @return a `Multi<O>` (returned as `Object`): for a `Uni<I>` input a `Multi<O>` of that single invocation's outputs;
-     *         for a `Multi<I>` input a `Multi<O>` that merges or concatenates per-item outputs according to `parallel`
-     * @throws IllegalArgumentException if `current` is not a `Uni` or `Multi`
-     */
-    @SuppressWarnings({"unchecked"})
-    private static <I, O> Object applyOneToManyBlockingUnchecked(
-        StepOneToManyBlocking<I, O> step,
-        Object current,
-        boolean parallel,
-        int maxConcurrency,
-        PipelineTelemetry telemetry,
-        PipelineTelemetry.RunContext telemetryContext,
-        PipelineContext contextSnapshot) {
-        if (current instanceof Uni<?>) {
-            Uni<I> input = (Uni<I>) current;
-            if (telemetry != null) {
-                input = telemetry.instrumentItemConsumed(step.getClass(), telemetryContext, input);
-            }
-            Uni<I> finalInput = input;
-            Multi<O> result = withPipelineContext(contextSnapshot, () -> step.apply(finalInput));
-            if (telemetry == null) {
-                return result;
-            }
-            result = telemetry.instrumentItemProduced(step.getClass(), telemetryContext, result);
-            return telemetry.instrumentStepMulti(step.getClass(), result, telemetryContext, false);
-        } else if (current instanceof Multi<?>) {
-            if (parallel) {
-                logger.debugf("Applying step %s (merge)", step.getClass());
-                Multi<I> multi = (Multi<I>) current;
-                if (telemetry != null) {
-                    multi = telemetry.instrumentItemConsumed(step.getClass(), telemetryContext, multi);
-                }
-                return multi
-                    .onItem()
-                    .transformToMulti(item -> {
-                        Multi<O> result = withPipelineContext(contextSnapshot,
-                            () -> step.apply(Uni.createFrom().item(item)));
-                        if (telemetry == null) {
-                            return result;
-                        }
-                        result = telemetry.instrumentItemProduced(step.getClass(), telemetryContext, result);
-                        return telemetry.instrumentStepMulti(step.getClass(), result, telemetryContext, true);
-                    })
-                    .merge(maxConcurrency);
-            } else {
-                logger.debugf("Applying step %s (concatenate)", step.getClass());
-                Multi<I> multi = (Multi<I>) current;
-                if (telemetry != null) {
-                    multi = telemetry.instrumentItemConsumed(step.getClass(), telemetryContext, multi);
-                }
-                return multi
-                    .onItem()
-                    .transformToMulti(item -> {
-                        Multi<O> result = withPipelineContext(contextSnapshot,
-                            () -> step.apply(Uni.createFrom().item(item)));
-                        if (telemetry == null) {
-                            return result;
-                        }
-                        result = telemetry.instrumentItemProduced(step.getClass(), telemetryContext, result);
-                        return telemetry.instrumentStepMulti(step.getClass(), result, telemetryContext, true);
-                    })
-                    .concatenate();
-            }
-        } else {
-            throw new IllegalArgumentException(MessageFormat.format("Unsupported current type for StepOneToManyBlocking: {0}", current));
         }
     }
 

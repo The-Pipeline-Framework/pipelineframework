@@ -25,7 +25,7 @@ features:
   - title: Immutable Architecture
     details: No database updates during pipeline execution - only appends/preserves
   - title: Multiple Processing Patterns
-    details: OneToOne, OneToMany, ManyToOne, ManyToMany, SideEffect and blocking variants
+    details: OneToOne, OneToMany, ManyToOne, ManyToMany, and SideEffect
   - title: gRPC & REST Flexibility
     details: Automatic adapter generation for fast gRPC or easy REST integration
   - title: Annotation Driven
@@ -54,7 +54,7 @@ The Pipeline Framework is a powerful tool for building reactive pipeline process
 - **Immutable Architecture**: No database updates during pipeline execution - only appends/preserves, ensuring data integrity
 - **Annotation-Based Configuration**: Simplifies adapter generation with `@PipelineStep`
 - **gRPC & REST Flexibility**: Automatic adapter generation for fast gRPC or easy REST integration
-- **Multiple Processing Patterns**: OneToOne, OneToMany, ManyToOne, ManyToMany, SideEffect and blocking variants
+- **Multiple Processing Patterns**: OneToOne, OneToMany, ManyToOne, ManyToMany, and SideEffect
 - **Health Monitoring**: Built-in health check capabilities
 - **Multiple Persistence Models**: Choose from reactive or virtual thread-based persistence
 - **Modular Design**: Clear separation between runtime and deployment components
