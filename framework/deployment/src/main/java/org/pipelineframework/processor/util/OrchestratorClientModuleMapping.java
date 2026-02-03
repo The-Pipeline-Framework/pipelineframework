@@ -58,9 +58,9 @@ public class OrchestratorClientModuleMapping {
      * @param properties     raw application properties; may be null
      * @param env            processing environment used to emit warnings (may be null)
      * @param stepOverrides  optional mapping of normalized step/client names to module names; when provided these
-     *                       replace any step mappings parsed from properties
+     *                       override any step mappings parsed from properties (merge semantics)
      * @param aspectOverrides optional mapping of normalized aspect names to module names; when provided these
-     *                        replace any aspect mappings parsed from properties
+     *                        override any aspect mappings parsed from properties (merge semantics)
      * @return               an OrchestratorClientModuleMapping populated with module configs, step-to-module and
      *                       aspect-to-module mappings, base port, and optional TLS configuration name
      */
@@ -141,7 +141,6 @@ public class OrchestratorClientModuleMapping {
             }
         }
         if (stepOverrides != null && !stepOverrides.isEmpty()) {
-            stepToModule.clear();
             for (Map.Entry<String, String> entry : stepOverrides.entrySet()) {
                 if (entry.getKey() == null || entry.getValue() == null) {
                     continue;
@@ -162,7 +161,6 @@ public class OrchestratorClientModuleMapping {
             }
         }
         if (aspectOverrides != null && !aspectOverrides.isEmpty()) {
-            aspectToModule.clear();
             for (Map.Entry<String, String> entry : aspectOverrides.entrySet()) {
                 if (entry.getKey() == null || entry.getValue() == null) {
                     continue;

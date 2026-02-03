@@ -126,7 +126,7 @@ public class OrchestratorClientPropertiesGenerator {
             properties,
             processingEnv,
             resolution.clientOverrides(),
-            Map.of() // aspectOverrides
+            Map.of() // TODO: add aspectOverrides to PipelineRuntimeMappingResolution and plumb through here.
         );
     }
 

@@ -92,7 +92,8 @@ layout: monolith
 validation: auto
 
 runtimes:
-  monolith: {}
+  monolith:
+    # orchestrator: in-process (implicit in monolith layout)
 
 modules:
   monolith:
