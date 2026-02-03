@@ -9,6 +9,7 @@ import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.OrchestratorBinding;
 import org.pipelineframework.processor.util.GrpcJavaTypeResolver;
 import org.pipelineframework.processor.util.OrchestratorGrpcBindingResolver;
+import org.pipelineframework.processor.util.OrchestratorRpcConstants;
 
 /**
  * Generates gRPC orchestrator service based on pipeline configuration.
@@ -23,13 +24,32 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
 
     private static final String GRPC_CLASS = "OrchestratorGrpcService";
     private static final String ORCHESTRATOR_SERVICE = "OrchestratorService";
-    private static final String ORCHESTRATOR_METHOD = "Run";
+    private static final String ORCHESTRATOR_METHOD = OrchestratorRpcConstants.RUN_METHOD;
+    private static final String ORCHESTRATOR_INGEST_METHOD = OrchestratorRpcConstants.INGEST_METHOD;
+    private static final String ORCHESTRATOR_SUBSCRIBE_METHOD = OrchestratorRpcConstants.SUBSCRIBE_METHOD;
 
+    /**
+     * Specifies the generation target for this renderer.
+     *
+     * @return the GenerationTarget for a gRPC service
+     */
     @Override
     public GenerationTarget target() {
         return GenerationTarget.GRPC_SERVICE;
     }
 
+    /**
+     * Generates and emits a gRPC orchestrator service class based on the provided binding and generation context.
+     *
+     * The generated service implements the orchestrator RPCs (run, ingest, subscribe), injects pipeline
+     * execution and output bus dependencies, and wires telemetry for RPC metrics. Generation is skipped
+     * if the binding cannot be resolved against the provided protobuf descriptors.
+     *
+     * @param binding the orchestrator binding describing RPC names, streaming modes, and package information
+     * @param ctx the generation context providing descriptor sets, processing environment, and filer
+     * @throws IOException if writing the generated Java file fails
+     * @throws IllegalStateException if no protobuf descriptor set is available or required gRPC message types cannot be resolved
+     */
     @Override
     public void render(OrchestratorBinding binding, GenerationContext ctx) throws IOException {
         DescriptorProtos.FileDescriptorSet descriptorSet = ctx.descriptorSet();
@@ -42,6 +62,8 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         ClassName uni = ClassName.get("io.smallrye.mutiny", "Uni");
         ClassName multi = ClassName.get("io.smallrye.mutiny", "Multi");
         ClassName executionService = ClassName.get("org.pipelineframework", "PipelineExecutionService");
+        ClassName outputBus = ClassName.get("org.pipelineframework", "PipelineOutputBus");
+        ClassName pipelineContextHolder = ClassName.get("org.pipelineframework.context", "PipelineContextHolder");
 
         OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
         var grpcBinding = safeResolveBinding(binding, descriptorSet, ctx);
@@ -68,6 +90,9 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         FieldSpec executionField = FieldSpec.builder(executionService, "pipelineExecutionService", Modifier.PRIVATE)
             .addAnnotation(inject)
             .build();
+        FieldSpec outputBusField = FieldSpec.builder(outputBus, "pipelineOutputBus", Modifier.PRIVATE)
+            .addAnnotation(inject)
+            .build();
 
         MethodSpec.Builder runMethod = MethodSpec.methodBuilder("run")
             .addAnnotation(Override.class)
@@ -89,6 +114,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
             if (binding.inputStreaming()) {
                 runMethod.addCode("""
                     return pipelineExecutionService.<$T>executePipeline$L(input)
+                        .onItem().invoke(pipelineOutputBus::publish)
                         .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
                             System.nanoTime() - startTime))
                         .onCompletion().invoke(() -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime));
@@ -106,6 +132,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
             } else {
                 runMethod.addCode("""
                     return pipelineExecutionService.<$T>executePipeline$L($T.createFrom().item(input))
+                        .onItem().invoke(pipelineOutputBus::publish)
                         .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
                             System.nanoTime() - startTime))
                         .onCompletion().invoke(() -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime));
@@ -125,6 +152,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         } else if (binding.inputStreaming()) {
             runMethod.addCode("""
                 return pipelineExecutionService.<$T>executePipeline$L(input)
+                    .onItem().invoke(pipelineOutputBus::publish)
                     .onItem().invoke(item -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime))
                     .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
                         System.nanoTime() - startTime));
@@ -142,6 +170,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         } else {
             runMethod.addCode("""
                 return pipelineExecutionService.<$T>executePipeline$L($T.createFrom().item(input))
+                    .onItem().invoke(pipelineOutputBus::publish)
                     .onItem().invoke(item -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime))
                     .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
                         System.nanoTime() - startTime));
@@ -159,12 +188,74 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
                 ClassName.get("io.grpc", "Status"));
         }
 
+        MethodSpec ingestMethod = MethodSpec.methodBuilder("ingest")
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(ParameterizedTypeName.get(multi, outputType))
+            .addParameter(ParameterizedTypeName.get(multi, inputType), "input")
+            .addStatement("long startTime = System.nanoTime()")
+            .addCode("""
+                return pipelineExecutionService.<$T>executePipelineStreaming(input)
+                    .onItem().invoke(pipelineOutputBus::publish)
+                    .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
+                        System.nanoTime() - startTime))
+                    .onCompletion().invoke(() -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime));
+                """,
+                outputType,
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_INGEST_METHOD,
+                ClassName.get("io.grpc", "Status"),
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_INGEST_METHOD,
+                ClassName.get("io.grpc", "Status"))
+            .build();
+
+        MethodSpec subscribeMethod = MethodSpec.methodBuilder("subscribe")
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(ParameterizedTypeName.get(multi, outputType))
+            .addParameter(ClassName.get("com.google.protobuf", "Empty"), "request")
+            .addStatement("long startTime = System.nanoTime()")
+            .beginControlFlow("if ($T.get() == null)", pipelineContextHolder)
+            .addStatement("$1T e = new $1T($2S)",
+                ClassName.get(IllegalStateException.class),
+                "Missing pipeline context for subscribe request")
+            .addStatement("$T.recordGrpcServer($S, $S, $T.fromThrowable(e), System.nanoTime() - startTime)",
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_SUBSCRIBE_METHOD,
+                ClassName.get("io.grpc", "Status"))
+            .addStatement("return $T.createFrom().failure(e)",
+                multi)
+            .endControlFlow()
+            .addCode("""
+                return pipelineOutputBus.stream($T.class)
+                    .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
+                        System.nanoTime() - startTime))
+                    .onCompletion().invoke(() -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime));
+                """,
+                outputType,
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_SUBSCRIBE_METHOD,
+                ClassName.get("io.grpc", "Status"),
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_SUBSCRIBE_METHOD,
+                ClassName.get("io.grpc", "Status"))
+            .build();
+
         TypeSpec service = TypeSpec.classBuilder(GRPC_CLASS)
             .addModifiers(Modifier.PUBLIC)
             .addAnnotation(grpcServiceAnnotation)
             .superclass(implBase)
             .addField(executionField)
+            .addField(outputBusField)
             .addMethod(runMethod.build())
+            .addMethod(ingestMethod)
+            .addMethod(subscribeMethod)
             .build();
 
         JavaFile.builder(binding.basePackage() + ".orchestrator.service", service)

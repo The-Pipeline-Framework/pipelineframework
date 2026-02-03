@@ -12,6 +12,8 @@ import org.pipelineframework.processor.ir.StreamingShape;
  * as those are now resolved at render time by the GrpcJavaTypeResolver.
  */
 public class GrpcBindingResolver {
+    private static final org.jboss.logging.Logger logger =
+        org.jboss.logging.Logger.getLogger(GrpcBindingResolver.class);
 
     /**
      * Default constructor for GrpcBindingResolver.
@@ -71,19 +73,19 @@ public class GrpcBindingResolver {
     }
 
     /**
-     * Resolve and return the service descriptor whose name matches the step's configured service.
-     *
-     * Builds FileDescriptor instances from the provided FileDescriptorSet in dependency order,
-     * searches the resulting descriptors for a service named after stepModel.serviceName(), and returns it.
-     *
-     * @param stepModel      the pipeline step model containing the expected service name
-     * @param descriptorSet  the compiled protobuf FileDescriptorSet used to construct file descriptors
-     * @return               the located Descriptors.ServiceDescriptor matching the step's service name
-     * @throws IllegalStateException if the service name does not start with "Process", if file descriptors
-     *                               cannot be built due to unresolved dependencies or build errors, if no
-     *                               service with the expected name is found, or if multiple services with
-     *                               the same name are present in the descriptor set
-     */
+         * Locate the service descriptor whose name matches the step's configured service.
+         *
+         * Builds file descriptors from the provided FileDescriptorSet (resolving dependencies)
+         * and returns the Descriptors.ServiceDescriptor whose name equals stepModel.serviceName().
+         *
+         * @param stepModel     the pipeline step model containing the expected service name
+         * @param descriptorSet the compiled protobuf FileDescriptorSet used to construct file descriptors
+         * @return              the Descriptors.ServiceDescriptor matching the step's service name
+         * @throws IllegalStateException if the service name does not start with "Process" or "Observe",
+         *                               if file descriptors cannot be built due to unresolved dependencies
+         *                               or build errors, if no service with the expected name is found,
+         *                               or if multiple services with the same name are present
+         */
     private Descriptors.ServiceDescriptor findServiceDescriptor(PipelineStepModel stepModel, DescriptorProtos.FileDescriptorSet descriptorSet) {
         String expectedServiceName = stepModel.serviceName();
 
@@ -146,21 +148,20 @@ public class GrpcBindingResolver {
             }
         }
 
-        // Check if all files were built
         if (builtFileDescriptors.size() != descriptorSet.getFileCount()) {
-            // Identify which files couldn't be built
             java.util.Set<String> builtFiles = builtFileDescriptors.keySet();
             java.util.Set<String> allFiles = new java.util.HashSet<>();
             for (DescriptorProtos.FileDescriptorProto fileProto : descriptorSet.getFileList()) {
                 allFiles.add(fileProto.getName());
             }
-
             allFiles.removeAll(builtFiles);
             String unbuiltFiles = String.join(", ", allFiles);
-
-            throw new IllegalStateException(
-                String.format("Build error for step '%s': Could not resolve all file descriptor dependencies after %d iterations. Built: %d, Expected: %d. Unbuilt files: [%s]",
-                    stepModel.serviceName(), iterations, builtFileDescriptors.size(), descriptorSet.getFileCount(), unbuiltFiles));
+            String message = String.format(
+                "Build error for step '%s': Could not resolve all file descriptor dependencies after %d iterations. " +
+                    "Built: %d, Expected: %d. Unbuilt files: [%s]",
+                stepModel.serviceName(), iterations, builtFileDescriptors.size(), descriptorSet.getFileCount(), unbuiltFiles);
+            logger.warn(message);
+            throw new IllegalStateException(message);
         }
 
         // Now look for the service in all built file descriptors

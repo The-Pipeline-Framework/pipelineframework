@@ -12,6 +12,13 @@ This section is for maintainers and contributors who evolve the framework itself
 - [Aspect Warnings](/guide/evolve/aspects/warnings)
 - [Reference Implementation](/guide/evolve/reference-implementation)
 
+## TPFGo
+
+- [TPFGo Reference (TPF-Inspired)](/guide/evolve/tpfgo/)
+- [TPF and DDD Alignment](/guide/evolve/tpfgo/ddd-alignment)
+- [Application Design Spectrum](/guide/evolve/tpfgo/design-spectrum)
+- [Roadmap: Checkpoint Pipelines vs FTGO](/guide/evolve/tpfgo/roadmap)
+
 ## Release and Governance
 
 - [Template Generator (Reference)](/guide/evolve/template-generator)

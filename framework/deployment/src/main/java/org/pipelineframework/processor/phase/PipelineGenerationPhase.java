@@ -83,6 +83,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         OrchestratorGrpcRenderer orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
         OrchestratorRestResourceRenderer orchestratorRestRenderer = new OrchestratorRestResourceRenderer();
         OrchestratorCliRenderer orchestratorCliRenderer = new OrchestratorCliRenderer();
+        OrchestratorIngestClientRenderer orchestratorIngestClientRenderer = new OrchestratorIngestClientRenderer();
 
         // Initialize role metadata generator
         RoleMetadataGenerator roleMetadataGenerator = new RoleMetadataGenerator(ctx.getProcessingEnv());
@@ -129,6 +130,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     orchestratorGrpcRenderer,
                     orchestratorRestRenderer,
                     orchestratorCliRenderer,
+                    orchestratorIngestClientRenderer,
                     roleMetadataGenerator,
                     cacheKeyGenerator
                 );
@@ -811,17 +813,22 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Generates orchestrator server artifacts.
-     * 
-     * @param ctx the compilation context
-     * @param descriptorSet the protobuf descriptor set
-     * @param generateCli whether to generate CLI
-     * @param orchestratorGrpcRenderer gRPC orchestrator renderer
-     * @param orchestratorRestRenderer REST orchestrator renderer
-     * @param orchestratorCliRenderer CLI orchestrator renderer
-     * @param roleMetadataGenerator role metadata generator
-     * @param cacheKeyGenerator cache key generator
-     */
+         * Generate orchestrator server and client artifacts according to the orchestrator binding's transport.
+         *
+         * Renders a REST server when the binding uses REST, otherwise renders a gRPC pipeline server; optionally renders a CLI client when
+         * {@code generateCli} is true, and renders an ingest client when the transport is not REST. Errors are reported to the processing
+         * environment's Messager.
+         *
+         * @param ctx the pipeline compilation context
+         * @param descriptorSet protobuf descriptor set used during generation (may be null)
+         * @param generateCli whether to generate the CLI orchestrator client
+         * @param orchestratorGrpcRenderer renderer used to produce gRPC orchestrator server artifacts
+         * @param orchestratorRestRenderer renderer used to produce REST orchestrator server artifacts
+         * @param orchestratorCliRenderer renderer used to produce CLI orchestrator client artifacts
+         * @param orchestratorIngestClientRenderer renderer used to produce orchestrator ingest client artifacts
+         * @param roleMetadataGenerator generator that records generated classes by deployment role
+         * @param cacheKeyGenerator optional cache key generator class name used in generated code (may be null)
+         */
     private void generateOrchestratorServer(
             PipelineCompilationContext ctx,
             DescriptorProtos.FileDescriptorSet descriptorSet,
@@ -829,6 +836,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             OrchestratorGrpcRenderer orchestratorGrpcRenderer,
             OrchestratorRestResourceRenderer orchestratorRestRenderer,
             OrchestratorCliRenderer orchestratorCliRenderer,
+            OrchestratorIngestClientRenderer orchestratorIngestClientRenderer,
             RoleMetadataGenerator roleMetadataGenerator,
             ClassName cacheKeyGenerator) {
         // Get orchestrator binding from context
@@ -839,7 +847,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
 
         try {
             String transport = binding.normalizedTransport();
-            if ("REST".equalsIgnoreCase(transport)) {
+            boolean rest = "REST".equalsIgnoreCase(transport);
+            if (rest) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER;
                 orchestratorRestRenderer.render(binding, new GenerationContext(
                     ctx.getProcessingEnv(),
@@ -862,6 +871,17 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             if (generateCli) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT;
                 orchestratorCliRenderer.render(binding, new GenerationContext(
+                    ctx.getProcessingEnv(),
+                    resolveRoleOutputDir(ctx, role),
+                    role,
+                    java.util.Set.of(),
+                    cacheKeyGenerator,
+                    descriptorSet));
+            }
+
+            if (!rest) {
+                org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT;
+                orchestratorIngestClientRenderer.render(binding, new GenerationContext(
                     ctx.getProcessingEnv(),
                     resolveRoleOutputDir(ctx, role),
                     role,
