@@ -67,7 +67,9 @@ public class PipelineOutputBus implements AutoCloseable {
     public <T> Multi<T> stream(Class<T> type) {
         return stream()
             .select()
-            .ofType(type);
+            .where(type::isInstance)
+            .onItem()
+            .transform(type::cast);
     }
 
     @Override
