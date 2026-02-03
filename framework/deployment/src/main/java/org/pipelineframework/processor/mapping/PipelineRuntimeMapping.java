@@ -38,6 +38,14 @@ public record PipelineRuntimeMapping(
         PIPELINE_RUNTIME,
         MONOLITH;
 
+        /**
+         * Parse a layout name and map it to the corresponding Layout constant.
+         *
+         * @param value the string representation of a layout; may be null or blank
+         * @return {@code MODULAR} if the input is null, blank, or unrecognized;
+         *         {@code PIPELINE_RUNTIME} for "pipeline-runtime", "pipeline_runtime", or "pipeline";
+         *         {@code MONOLITH} for "monolith"
+         */
         public static Layout fromString(String value) {
             if (value == null || value.isBlank()) {
                 return MODULAR;
@@ -55,6 +63,12 @@ public record PipelineRuntimeMapping(
         AUTO,
         STRICT;
 
+        /**
+         * Resolve a Validation value from a string representation.
+         *
+         * @param value the string to parse; may be null or blank
+         * @return `STRICT` if the trimmed, case-insensitive value equals "strict", `AUTO` otherwise
+         */
         public static Validation fromString(String value) {
             if (value == null || value.isBlank()) {
                 return AUTO;
@@ -74,6 +88,14 @@ public record PipelineRuntimeMapping(
             synthetic = synthetic == null ? SyntheticDefaults.defaultValues() : synthetic;
         }
 
+        /**
+         * Create a Defaults instance populated with the canonical default values.
+         *
+         * The created Defaults has runtime "local", module "per-step", and synthetic
+         * set to SyntheticDefaults.defaultValues().
+         *
+         * @return a Defaults with runtime "local", module "per-step", and the default SyntheticDefaults
+         */
         public static Defaults defaultValues() {
             return new Defaults("local", "per-step", SyntheticDefaults.defaultValues());
         }
@@ -84,6 +106,11 @@ public record PipelineRuntimeMapping(
             module = module == null || module.isBlank() ? "plugin" : module;
         }
 
+        /**
+         * Create a SyntheticDefaults populated with the module default.
+         *
+         * @return a SyntheticDefaults whose `module` field is "plugin"
+         */
         public static SyntheticDefaults defaultValues() {
             return new SyntheticDefaults("plugin");
         }

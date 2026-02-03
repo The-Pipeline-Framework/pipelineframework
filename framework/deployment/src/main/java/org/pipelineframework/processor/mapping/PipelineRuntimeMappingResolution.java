@@ -39,6 +39,11 @@ public record PipelineRuntimeMappingResolution(
         }
     }
 
+    /**
+     * Indicates whether the resolution contains any validation errors.
+     *
+     * @return `true` if there is at least one validation error, `false` otherwise.
+     */
     public boolean hasErrors() {
         return !errors.isEmpty();
     }

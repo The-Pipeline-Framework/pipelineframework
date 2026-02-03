@@ -23,11 +23,36 @@ public class PipelineRuntimeMappingResolver {
     private final PipelineRuntimeMapping mapping;
     private final ProcessingEnvironment processingEnv;
 
+    /**
+     * Create a resolver configured with the given runtime mapping and processing environment.
+     *
+     * The provided mapping drives module and runtime resolution behavior; the processing environment,
+     * if non-null, is used to emit diagnostics (warnings/errors) during resolution.
+     *
+     * @param mapping         the PipelineRuntimeMapping describing mappings, defaults, layout, and validation; may be null
+     * @param processingEnv   the ProcessingEnvironment used to report diagnostics; may be null
+     */
     public PipelineRuntimeMappingResolver(PipelineRuntimeMapping mapping, ProcessingEnvironment processingEnv) {
         this.mapping = mapping;
         this.processingEnv = processingEnv;
     }
 
+    /**
+     * Resolve module placements and related mappings for the given pipeline step models using the configured PipelineRuntimeMapping.
+     *
+     * <p>Assigns each step (regular and synthetic) to a module according to explicit mappings, defaults, layout rules (MONOLITH or other),
+     * and declared module runtimes. Collects client-name overrides, service-package→module mappings, used modules, and any validation
+     * errors or warnings produced during resolution. If the configured mapping or the provided models list is null, an empty resolution
+     * is returned.</p>
+     *
+     * @param models the list of PipelineStepModel instances to resolve module placements for
+     * @return a PipelineRuntimeMappingResolution containing:
+     *         - per-step module assignments,
+     *         - client-name → module overrides,
+     *         - service-package → module mappings,
+     *         - ordered lists of validation errors and warnings,
+     *         - the set of modules used by the resolved assignments
+     */
     public PipelineRuntimeMappingResolution resolve(List<PipelineStepModel> models) {
         if (mapping == null || models == null) {
             return new PipelineRuntimeMappingResolution(Map.of(), Map.of(), Map.of(), List.of(), List.of(), Set.of());
@@ -114,6 +139,20 @@ public class PipelineRuntimeMappingResolver {
         return finish(moduleAssignments, clientOverrides, moduleByServicePackage, errors, warnings, usedModules);
     }
 
+    /**
+     * Finalizes the mapping resolution by emitting diagnostics (if a processing environment is present)
+     * and returning an immutable PipelineRuntimeMappingResolution with the provided data.
+     *
+     * @param moduleAssignments      mapping of pipeline steps to resolved module names
+     * @param clientOverrides        mapping of client names to their override module names
+     * @param moduleByServicePackage mapping of service-package identifiers to module names
+     * @param errors                 collected error messages
+     * @param warnings               collected warning messages
+     * @param usedModules            set of module names that were referenced or assigned
+     * @return an immutable PipelineRuntimeMappingResolution containing module assignments, client overrides,
+     *         service-package-to-module mappings, and the collected errors, warnings, and used modules
+     * @throws IllegalStateException if validation mode is STRICT and there is at least one recorded error
+     */
     private PipelineRuntimeMappingResolution finish(
         Map<PipelineStepModel, String> moduleAssignments,
         Map<String, String> clientOverrides,
@@ -147,6 +186,20 @@ public class PipelineRuntimeMappingResolver {
         );
     }
 
+    /**
+     * Selects the module to assign a pipeline step, using an explicit step mapping if present
+     * or falling back to the configured defaults ("shared", "per-step", or a fixed module).
+     *
+     * The chosen module is guaranteed to have an entry in {@code moduleRuntimes} (the method
+     * will add a default runtime entry when necessary). Any resolution problems are appended
+     * to the provided {@code errors} list.
+     *
+     * @param model the pipeline step model to resolve a module for
+     * @param normalizedStepMappings mapping of normalized step keys to module names
+     * @param moduleRuntimes map of module names to runtime identifiers; may be mutated to ensure entries for chosen modules
+     * @param errors collector for human-readable error messages produced during resolution
+     * @return the resolved module name for the step, or {@code null} if no valid module could be determined
+     */
     private String resolveStepModule(
         PipelineStepModel model,
         Map<String, String> normalizedStepMappings,
@@ -179,6 +232,23 @@ public class PipelineRuntimeMappingResolver {
         return defaultModule;
     }
 
+    /**
+     * Resolve the target module name for a synthetic (side-effect) pipeline step.
+     *
+     * Uses an explicit synthetic mapping when available; otherwise falls back to the configured
+     * synthetic default strategy: "per-step" (prefer the step's service-package module, then plugin default),
+     * "plugin" (plugin default), or a fixed module name. Records validation errors when an explicit
+     * mapping references an unknown module and adds warnings when falling back from "per-step" to the plugin default.
+     *
+     * @param model the synthetic step model to resolve
+     * @param syntheticIndex index used to compute the synthetic key (payload/index/ambiguity)
+     * @param normalizedSyntheticMappings explicit synthetic key -> module mappings (lower-cased/normalized)
+     * @param moduleByServicePackage map of service-package -> module determined for regular steps
+     * @param moduleRuntimes map of module -> runtime name; used to validate or ensure module runtime entries
+     * @param errors mutable list to append resolution or validation error messages
+     * @param warnings mutable list to append non-fatal warnings (e.g., fallback from per-step to plugin default)
+     * @return the resolved module name for the synthetic step
+     */
     private String resolveSyntheticModule(
         PipelineStepModel model,
         SyntheticIndex syntheticIndex,
@@ -224,6 +294,16 @@ public class PipelineRuntimeMappingResolver {
         return syntheticDefault;
     }
 
+    /**
+     * Validates that each module's declared runtime name exists in the provided runtimes map.
+     *
+     * Appends a descriptive error message to `errors` for every module that references a runtime
+     * name not present in `runtimes`. No action is taken if `runtimes` is null or empty.
+     *
+     * @param modules a map from module name to declared runtime name
+     * @param runtimes a map whose keys are valid runtime names
+     * @param errors a mutable list to which error messages will be appended for unknown runtimes
+     */
     private void validateRuntimeNames(
         Map<String, String> modules,
         Map<String, String> runtimes,
@@ -240,6 +320,16 @@ public class PipelineRuntimeMappingResolver {
         }
     }
 
+    /**
+     * Checks that all non-side-effect pipeline steps resolve to a single runtime and records a diagnostic if multiple runtimes are used.
+     *
+     * Iterates non-side-effect entries in {@code moduleAssignments}, collects the runtime names from {@code moduleRuntimes}, and if more than one distinct runtime is found appends a message to {@code errors} when strict validation is configured or to {@code warnings} otherwise.
+     *
+     * @param moduleAssignments mapping of pipeline step models to resolved module names
+     * @param moduleRuntimes mapping of module names to runtime names
+     * @param errors list to which an error message will be added when strict validation detects multiple runtimes
+     * @param warnings list to which a warning message will be added when non-strict validation detects multiple runtimes
+     */
     private void validateSingleRuntime(
         Map<PipelineStepModel, String> moduleAssignments,
         Map<String, String> moduleRuntimes,
@@ -268,6 +358,14 @@ public class PipelineRuntimeMappingResolver {
         }
     }
 
+    /**
+     * Ensures every explicit step and synthetic mapping targets the given monolith module and records the first violation.
+     *
+     * @param stepMappings       map of explicit step keys to module names; may be null
+     * @param syntheticMappings  map of explicit synthetic keys to module names; may be null
+     * @param monolithModule     expected module name for a monolith layout
+     * @param errors             mutable list that will receive an error message if a mapping targets a different module
+     */
     private void validateMonolithOverrides(
         Map<String, String> stepMappings,
         Map<String, String> syntheticMappings,
@@ -292,6 +390,20 @@ public class PipelineRuntimeMappingResolver {
         }
     }
 
+    /**
+     * Selects the module name to use when the pipeline layout is MONOLITH.
+     *
+     * Chooses an explicit default module from `defaults` when that value is set and not
+     * `per-step` or `shared`; otherwise picks the first declared module from `moduleRuntimes`;
+     * if no modules are declared, falls back to the constant "monolith". Ensures the chosen
+     * module has an associated runtime entry in `moduleRuntimes`.
+     *
+     * @param moduleRuntimes map of module name -> runtime name; used to pick a declared module
+     *                       and to record the chosen module's runtime if missing
+     * @param defaults       pipeline-level defaults containing a possible explicit module name
+     * @param errors         list for recording validation errors (unused by this implementation)
+     * @return the resolved monolith module name
+     */
     private String resolveMonolithModule(
         Map<String, String> moduleRuntimes,
         PipelineRuntimeMapping.Defaults defaults,
@@ -313,6 +425,16 @@ public class PipelineRuntimeMappingResolver {
         return fallback;
     }
 
+    /**
+     * Selects the single declared module to use when defaults.module is set to "shared".
+     *
+     * If exactly one module is declared in moduleRuntimes that module name is returned;
+     * otherwise an error message is appended to errors and null is returned.
+     *
+     * @param moduleRuntimes mapping of declared module name to its runtime identifier
+     * @param errors        list to which a diagnostic message will be added when zero or multiple modules are declared
+     * @return the sole declared module name if exactly one exists, or null if none or more than one are declared
+     */
     private String resolveSharedModule(
         Map<String, String> moduleRuntimes,
         List<String> errors
@@ -328,6 +450,18 @@ public class PipelineRuntimeMappingResolver {
         return null;
     }
 
+    /**
+     * Selects an explicit module mapping for a synthetic (side-effect) step using the synthetic key and normalized mappings.
+     *
+     * Checks, in order, a payload+index mapping, an alternate payload+index mapping, a payload mapping, an alternate payload mapping,
+     * a generic mapping, and an alternate generic mapping; if a payload mapping is used but the key is ambiguous while validation is STRICT,
+     * an error message is appended to `errors`.
+     *
+     * @param key the synthetic key describing payload/generic identifiers and ambiguity/index information; may be null
+     * @param normalizedSyntheticMappings normalized mapping keys to module names for synthetics
+     * @param errors a mutable list to append validation error messages to
+     * @return the resolved module name for the synthetic mapping, or `null` if no explicit mapping is found
+     */
     private String resolveSyntheticMapping(
         SyntheticKey key,
         Map<String, String> normalizedSyntheticMappings,
@@ -377,6 +511,16 @@ public class PipelineRuntimeMappingResolver {
         return null;
     }
 
+    /**
+     * Locate the first mapped module name for a pipeline step using its candidate lookup keys.
+     *
+     * Checks each candidate key produced for the given step (in order) against the provided
+     * normalized mappings and returns the first matching module name.
+     *
+     * @param model the pipeline step model whose candidate keys will be checked
+     * @param normalizedMappings a map of normalized lookup keys to module names
+     * @return the matched module name, or `null` if no mapping is found or inputs are null/empty
+     */
     private String findStepMapping(PipelineStepModel model, Map<String, String> normalizedMappings) {
         if (model == null || normalizedMappings.isEmpty()) {
             return null;
@@ -391,6 +535,14 @@ public class PipelineRuntimeMappingResolver {
         return null;
     }
 
+    /**
+     * Generate candidate lookup keys for a pipeline step used when resolving explicit mappings.
+     *
+     * @param model the pipeline step model to derive candidate names from
+     * @return a list of candidate keys in preferred lookup order: service name, base service name,
+     *         client name, and kebab-case base name; each entry is lower-cased and trimmed and empty
+     *         values are omitted
+     */
     private List<String> stepCandidates(PipelineStepModel model) {
         List<String> candidates = new ArrayList<>();
         String serviceName = safeLower(model.serviceName());
@@ -412,6 +564,12 @@ public class PipelineRuntimeMappingResolver {
         return candidates;
     }
 
+    /**
+     * Produce a normalized map with lower-cased, trimmed keys and only entries that have non-blank keys and module names.
+     *
+     * @param mapping the input key-to-module mapping; may be null
+     * @return a new map containing entries from {@code mapping} whose keys and module values are non-blank, where keys are lower-cased and trimmed; returns an empty map if {@code mapping} is null
+     */
     private Map<String, String> normalizeMappings(Map<String, String> mapping) {
         Map<String, String> normalized = new LinkedHashMap<>();
         if (mapping == null) {
@@ -428,6 +586,12 @@ public class PipelineRuntimeMappingResolver {
         return normalized;
     }
 
+    /**
+     * Ensures the given module name is present in the module-to-runtime map, adding the mapping to the configured default runtime if missing.
+     *
+     * @param moduleRuntimes map of module names to runtime names; may be modified
+     * @param moduleName the module name to ensure in the map; ignored if null or blank
+     */
     private void ensureModuleRuntime(Map<String, String> moduleRuntimes, String moduleName) {
         if (moduleName == null || moduleName.isBlank()) {
             return;
@@ -435,6 +599,13 @@ public class PipelineRuntimeMappingResolver {
         moduleRuntimes.putIfAbsent(moduleName, mapping.defaults().runtime());
     }
 
+    /**
+     * Derives a default module name for a pipeline step from its service name.
+     *
+     * @param model  the pipeline step model whose service name is used to derive the module name
+     * @param errors a mutable list to which an error message is appended if a module name cannot be derived
+     * @return       the derived module name (kebab-case base service name with the `-svc` suffix), or `null` if derivation failed
+     */
     private String defaultModuleForStep(PipelineStepModel model, List<String> errors) {
         String baseName = OrchestratorClientNaming.baseServiceName(model.serviceName());
         if (baseName.isBlank()) {
@@ -444,6 +615,12 @@ public class PipelineRuntimeMappingResolver {
         return OrchestratorClientNaming.toKebabCase(baseName) + "-svc";
     }
 
+    /**
+     * Derives a default module name for a side-effect step based on its aspect name.
+     *
+     * @param model the side-effect step model whose aspect name is used to derive the module
+     * @return the default module name: "persistence-svc" for aspects starting with "persistence", "cache-invalidation-svc" for aspects starting with "cache", or "<aspectName>-svc" otherwise
+     */
     private String defaultModuleForSideEffect(PipelineStepModel model) {
         String aspectName = OrchestratorClientNaming.resolveAspectName(model);
         if (aspectName.startsWith("persistence")) {
@@ -455,6 +632,12 @@ public class PipelineRuntimeMappingResolver {
         return aspectName + "-svc";
     }
 
+    /**
+     * Converts the input string to lowercase and trims surrounding whitespace; returns an empty string for null input.
+     *
+     * @param value the string to normalize
+     * @return the trimmed, lowercased string using {@link java.util.Locale#ROOT}, or an empty string if {@code value} is null
+     */
     private static String safeLower(String value) {
         if (value == null) {
             return "";
@@ -462,6 +645,12 @@ public class PipelineRuntimeMappingResolver {
         return value.trim().toLowerCase(Locale.ROOT);
     }
 
+    /**
+     * Builds an index of synthetic side-effect steps grouped by synthetic payload identifier.
+     *
+     * @param syntheticSteps list of synthetic PipelineStepModel instances to index; entries without a synthetic key are ignored
+     * @return a SyntheticIndex that maps payload IDs to lists of matching synthetic step models (preserving insertion order)
+     */
     private SyntheticIndex buildSyntheticIndex(List<PipelineStepModel> syntheticSteps) {
         Map<String, List<PipelineStepModel>> payloadIndex = new LinkedHashMap<>();
         for (PipelineStepModel model : syntheticSteps) {
@@ -475,6 +664,12 @@ public class PipelineRuntimeMappingResolver {
     }
 
     private record SyntheticIndex(Map<String, List<PipelineStepModel>> payloadIndex) {
+        /**
+         * Produces a SyntheticKey for the given synthetic step that includes its payload group index and whether that payload is ambiguous.
+         *
+         * @param model the pipeline step model to compute a synthetic key for
+         * @return      a `SyntheticKey` whose index is the model's position within its payload group and whose ambiguity flag is true when multiple synthetics share that payload; or `null` if no synthetic key can be derived for the model
+         */
         SyntheticKey keyFor(PipelineStepModel model) {
             SyntheticKey base = SyntheticKey.fromModel(model);
             if (base == null) {
@@ -493,6 +688,16 @@ public class PipelineRuntimeMappingResolver {
                                 String altGenericId,
                                 int index,
                                 boolean ambiguous) {
+        /**
+         * Create a SyntheticKey that identifies a synthetic (side-effect) mapping for the given pipeline step.
+         *
+         * <p>The key encodes the synthetic's payload and generic identifiers and includes placeholders for
+         * index and ambiguity; it is intended for lookup of explicit synthetic-to-module mappings.
+         *
+         * @param model the pipeline step model for which to build the synthetic key; may be null
+         * @return the constructed SyntheticKey, or `null` if `model` is null or does not expose the aspect
+         *         or payload type required to form a synthetic key
+         */
         static SyntheticKey fromModel(PipelineStepModel model) {
             if (model == null) {
                 return null;
@@ -516,10 +721,26 @@ public class PipelineRuntimeMappingResolver {
             return new SyntheticKey(payloadId, genericId, altPayloadId, altGenericId, 0, false);
         }
 
+        /**
+         * Create a copy of this SyntheticKey with the given index and ambiguity flag.
+         *
+         * @param index     the 0-based position of this synthetic within its payload group
+         * @param ambiguous true if this synthetic key refers to an ambiguous (non-unique) payload group
+         * @return a new SyntheticKey identical to this one except for the provided index and ambiguity
+         */
         SyntheticKey withIndex(int index, boolean ambiguous) {
             return new SyntheticKey(payloadId, genericId, altPayloadId, altGenericId, index, ambiguous);
         }
 
+        /**
+         * Derives the aspect identifier from a step's service name.
+         *
+         * <p>If the model has no service name, an empty string is returned. The method strips a
+         * trailing "SideEffectService" suffix and then strips the side-effect type name (if present)
+         * from the end of the service name to produce the aspect id.
+         *
+         * @return the derived aspect identifier, or an empty string if the model has no service name
+         */
         private static String resolveAspectId(PipelineStepModel model) {
             String serviceName = model.serviceName();
             if (serviceName == null) {
