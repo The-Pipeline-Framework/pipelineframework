@@ -172,6 +172,11 @@ public class PipelineRuntimeMappingLoader {
                 if (!runtimeValue.isBlank()) {
                     runtime = runtimeValue;
                 }
+            } else {
+                String runtimeValue = readString(value);
+                if (!runtimeValue.isBlank()) {
+                    runtime = runtimeValue;
+                }
             }
             modules.put(name, runtime);
         }

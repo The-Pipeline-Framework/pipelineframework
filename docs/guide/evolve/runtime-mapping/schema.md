@@ -80,7 +80,7 @@ If you are unsure, pick **pipeline-runtime** first. It gives you fewer deployabl
 | --- | --- |
 | Independent deploys per service | modular |
 | Fewer containers, same pipeline cadence | pipeline-runtime |
-| Single deployable, lowest ops overhead | monolith |
+| Single deployable, the lowest ops overhead | monolith |
 | Uncertain, want low risk | pipeline-runtime |
 
 ### Trade-offs at a glance

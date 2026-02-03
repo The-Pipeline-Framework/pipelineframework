@@ -82,8 +82,10 @@ public class OrchestratorClientModuleMapping {
                 try {
                     basePort = Integer.parseInt(basePortValue.trim());
                 } catch (NumberFormatException e) {
-                    env.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
-                        "Invalid pipeline.module.base-port value '" + basePortValue + "': " + e.getMessage());
+                    if (env != null) {
+                        env.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                            "Invalid pipeline.module.base-port value '" + basePortValue + "': " + e.getMessage());
+                    }
                 }
             }
 
@@ -270,8 +272,10 @@ public class OrchestratorClientModuleMapping {
         try {
             return Integer.parseInt(value.trim());
         } catch (NumberFormatException e) {
-            env.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
-                "Invalid port for module '" + moduleName + "': " + e.getMessage());
+            if (env != null) {
+                env.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                    "Invalid port for module '" + moduleName + "': " + e.getMessage());
+            }
             return null;
         }
     }
@@ -313,8 +317,10 @@ public class OrchestratorClientModuleMapping {
     ) {
         String existing = mapping.get(key);
         if (existing != null && !existing.equals(moduleName)) {
-            env.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
-                "Ignoring duplicate " + kind + " mapping for '" + key + "'; already mapped to '" + existing + "'");
+            if (env != null) {
+                env.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                    "Ignoring duplicate " + kind + " mapping for '" + key + "'; already mapped to '" + existing + "'");
+            }
             return;
         }
         mapping.put(key, moduleName);

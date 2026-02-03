@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -49,8 +50,7 @@ public class PipelineRuntimeMappingLocator {
             String names = matches.stream()
                 .map(Path::toString)
                 .sorted()
-                .reduce((a, b) -> a + ", " + b)
-                .orElse("");
+                .collect(Collectors.joining(", "));
             throw new IllegalStateException("Multiple runtime mapping files found: " + names);
         }
 
@@ -128,13 +128,11 @@ public class PipelineRuntimeMappingLocator {
         }
 
         try (var stream = Files.list(directory)) {
-            stream.filter(Files::isRegularFile)
-                .forEach(path -> {
-                    String filename = path.getFileName().toString();
-                    if (EXACT_FILENAMES.contains(filename)) {
-                        matches.add(path);
-                    }
-                });
+            List<Path> found = stream
+                .filter(Files::isRegularFile)
+                .filter(path -> EXACT_FILENAMES.contains(path.getFileName().toString()))
+                .collect(Collectors.toList());
+            matches.addAll(found);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to scan runtime mapping directory: " + directory, e);
         }

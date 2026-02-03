@@ -19,6 +19,10 @@ import org.pipelineframework.processor.util.OrchestratorClientNaming;
 public class PipelineRuntimeMappingResolver {
 
     private static final String DEFAULT_MONOLITH_MODULE = "monolith";
+    private static final String PERSISTENCE_ASPECT_PREFIX = "persistence";
+    private static final String CACHE_ASPECT_PREFIX = "cache";
+    private static final String PERSISTENCE_MODULE = "persistence-svc";
+    private static final String CACHE_MODULE = "cache-invalidation-svc";
 
     private final PipelineRuntimeMapping mapping;
     private final ProcessingEnvironment processingEnv;
@@ -177,12 +181,12 @@ public class PipelineRuntimeMappingResolver {
             throw new IllegalStateException(errors.get(0));
         }
         return new PipelineRuntimeMappingResolution(
-            Map.copyOf(moduleAssignments),
-            Map.copyOf(clientOverrides),
-            Map.copyOf(moduleByServicePackage),
-            List.copyOf(errors),
-            List.copyOf(warnings),
-            Set.copyOf(usedModules)
+            moduleAssignments,
+            clientOverrides,
+            moduleByServicePackage,
+            errors,
+            warnings,
+            usedModules
         );
     }
 
@@ -623,11 +627,11 @@ public class PipelineRuntimeMappingResolver {
      */
     private String defaultModuleForSideEffect(PipelineStepModel model) {
         String aspectName = OrchestratorClientNaming.resolveAspectName(model);
-        if (aspectName.startsWith("persistence")) {
-            return "persistence-svc";
+        if (aspectName.startsWith(PERSISTENCE_ASPECT_PREFIX)) {
+            return PERSISTENCE_MODULE;
         }
-        if (aspectName.startsWith("cache")) {
-            return "cache-invalidation-svc";
+        if (aspectName.startsWith(CACHE_ASPECT_PREFIX)) {
+            return CACHE_MODULE;
         }
         return aspectName + "-svc";
     }

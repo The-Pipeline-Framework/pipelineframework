@@ -14,9 +14,9 @@ import org.pipelineframework.processor.ir.PipelineStepModel;
  * @param moduleAssignments resolved module for each step model
  * @param clientOverrides client-name to module mapping for orchestrator client wiring
  * @param moduleByServicePackage resolved module per service package (used for synthetic per-step defaults)
- * @param usedModules ordered set of modules referenced by the resolution
  * @param errors validation errors encountered during resolution
  * @param warnings validation warnings encountered during resolution
+ * @param usedModules ordered set of modules referenced by the resolution
  */
 public record PipelineRuntimeMappingResolution(
     Map<PipelineStepModel, String> moduleAssignments,

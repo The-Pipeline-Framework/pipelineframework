@@ -42,7 +42,7 @@ public record PipelineRuntimeMapping(
          * Parse a layout name and map it to the corresponding Layout constant.
          *
          * @param value the string representation of a layout; may be null or blank
-         * @return {@code MODULAR} if the input is null, blank, or unrecognized;
+         * @return {@code MODULAR} if the input is null, blank, "modular", or unrecognized;
          *         {@code PIPELINE_RUNTIME} for "pipeline-runtime", "pipeline_runtime", or "pipeline";
          *         {@code MONOLITH} for "monolith"
          */
@@ -52,6 +52,7 @@ public record PipelineRuntimeMapping(
             }
             String normalized = value.trim().toLowerCase(Locale.ROOT);
             return switch (normalized) {
+                case "modular" -> MODULAR;
                 case "pipeline-runtime", "pipeline_runtime", "pipeline" -> PIPELINE_RUNTIME;
                 case "monolith" -> MONOLITH;
                 default -> MODULAR;

@@ -81,7 +81,7 @@ flowchart LR
 
 - **Containers**: modular (highest) > pipeline-runtime > monolith (lowest)
 - **Isolation**: modular (highest) > pipeline-runtime > monolith (lowest)
-- **Build time** (per-module vs full rebuild): modular (shortest per-module build) > pipeline-runtime (medium) > monolith (longest full rebuild)
+- **Build time** (incremental per-change vs full rebuild): modular (shortest incremental build) > pipeline-runtime (moderate incremental/build tradeoff) > monolith (longest full rebuild)
 
 ## Minimal YAML starters
 
