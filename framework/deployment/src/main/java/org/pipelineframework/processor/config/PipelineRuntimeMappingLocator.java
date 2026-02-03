@@ -30,10 +30,10 @@ public class PipelineRuntimeMappingLocator {
     }
 
     /**
-     * Locate the runtime mapping configuration file for the given module.
+     * Locate the pipeline runtime mapping file starting from the given module directory.
      *
-     * @param moduleDir the module directory to search from
-     * @return the resolved config path if found
+     * @param moduleDir the starting module directory from which to search upward for a project root and mapping file
+     * @return the located mapping file path, or empty if no mapping file is found
      */
     public Optional<Path> locate(Path moduleDir) {
         Path projectRoot = findNearestParentPom(moduleDir);
@@ -57,6 +57,12 @@ public class PipelineRuntimeMappingLocator {
         return matches.isEmpty() ? Optional.empty() : Optional.of(matches.get(0));
     }
 
+    /**
+     * Locate the nearest ancestor directory of {@code moduleDir} that contains a {@code pom.xml}, preferring a POM whose `<packaging>` is `pom`.
+     *
+     * @param moduleDir the starting directory to search upward from
+     * @return the nearest directory containing a {@code pom.xml} with `<packaging>` equal to `pom` if present; otherwise the nearest directory containing any {@code pom.xml}; or {@code null} if no {@code pom.xml} is found
+     */
     private Path findNearestParentPom(Path moduleDir) {
         Path current = moduleDir;
         Path fallback = null;
@@ -75,6 +81,12 @@ public class PipelineRuntimeMappingLocator {
         return fallback;
     }
 
+    /**
+     * Checks whether the given pom.xml declares a packaging type of "pom".
+     *
+     * @param pomPath the path to the pom.xml file to inspect
+     * @return `true` if the pom's `<packaging>` element equals "pom" (case-insensitive), `false` otherwise or if the file cannot be parsed
+     */
     private boolean isPomPackagingPom(Path pomPath) {
         try {
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
@@ -101,6 +113,15 @@ public class PipelineRuntimeMappingLocator {
         }
     }
 
+    /**
+     * Scans the given directory for files named "pipeline.runtime.yaml" or "pipeline.runtime.yml" and adds any matches to the provided list.
+     *
+     * If the supplied path is not a directory the method returns without modification.
+     *
+     * @param directory the directory to scan
+     * @param matches a mutable list that will be appended with any matching file paths found in the directory
+     * @throws IllegalStateException if an I/O error occurs while listing the directory
+     */
     private void scanDirectory(Path directory, List<Path> matches) {
         if (!Files.isDirectory(directory)) {
             return;

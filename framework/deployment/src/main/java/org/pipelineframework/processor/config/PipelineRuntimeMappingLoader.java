@@ -29,10 +29,14 @@ public class PipelineRuntimeMappingLoader {
     }
 
     /**
-     * Load the runtime mapping configuration from the given file path.
+     * Load a PipelineRuntimeMapping from the YAML configuration at the given path.
      *
-     * @param configPath the runtime mapping config path
-     * @return the parsed runtime mapping configuration
+     * The YAML may contain top-level sections for layout, validation, defaults (including synthetic defaults),
+     * runtimes, modules, steps, and synthetics; each section is parsed and used to construct the returned mapping.
+     *
+     * @param configPath the path to the runtime mapping YAML file
+     * @return a PipelineRuntimeMapping built from the configuration file
+     * @throws IllegalStateException if the YAML root is not a map or if the file cannot be read
      */
     public PipelineRuntimeMapping load(Path configPath) {
         Object root = loadYaml(configPath);
@@ -57,6 +61,13 @@ public class PipelineRuntimeMappingLoader {
         return new PipelineRuntimeMapping(layout, validation, defaults, runtimes, modules, steps, synthetics);
     }
 
+    /**
+     * Load and parse YAML content from the given file path.
+     *
+     * @param configPath the path to the YAML configuration file
+     * @return the parsed YAML root object (for example a Map, List, scalar, or `null` if the document is empty)
+     * @throws IllegalStateException if the file cannot be read
+     */
     private Object loadYaml(Path configPath) {
         LoaderOptions options = new LoaderOptions();
         Yaml yaml = new Yaml(new SafeConstructor(options));
@@ -67,6 +78,12 @@ public class PipelineRuntimeMappingLoader {
         }
     }
 
+    /**
+     * Parses the "defaults" section of the runtime mapping YAML and returns a Defaults object.
+     *
+     * @param defaultsObj the parsed YAML value for the "defaults" section; expected to be a Map, otherwise defaults are used
+     * @return a Defaults instance constructed from the "runtime", "module", and nested "synthetic" entries (or Defaults.defaultValues() when input is missing or not a map)
+     */
     private Defaults readDefaults(Object defaultsObj) {
         if (!(defaultsObj instanceof Map<?, ?> defaultsMap)) {
             return Defaults.defaultValues();
@@ -77,6 +94,12 @@ public class PipelineRuntimeMappingLoader {
         return new Defaults(runtime, module, synthetic);
     }
 
+    /**
+     * Parse the synthetic defaults section and produce a corresponding SyntheticDefaults instance.
+     *
+     * @param syntheticObj the parsed YAML value for the `synthetic` section (expected to be a Map containing a `module` entry); if not a Map, defaults are used
+     * @return a SyntheticDefaults initialized from the map's `module` value, or SyntheticDefaults.defaultValues() if the input is not a map
+     */
     private SyntheticDefaults readSyntheticDefaults(Object syntheticObj) {
         if (!(syntheticObj instanceof Map<?, ?> syntheticMap)) {
             return SyntheticDefaults.defaultValues();
@@ -85,6 +108,12 @@ public class PipelineRuntimeMappingLoader {
         return new SyntheticDefaults(module);
     }
 
+    /**
+     * Parse the "runtimes" section from a YAML node into an ordered map of runtime names to runtime identifiers.
+     *
+     * @param runtimesObj the raw YAML node for the "runtimes" section; expected to be a Map of keys to values
+     * @return a LinkedHashMap preserving insertion order where each key is the trimmed runtime name and each value is the resolved runtime identifier; returns an empty map if {@code runtimesObj} is not a map
+     */
     private Map<String, String> readRuntimes(Object runtimesObj) {
         if (!(runtimesObj instanceof Map<?, ?> runtimesMap)) {
             return Map.of();
@@ -112,6 +141,17 @@ public class PipelineRuntimeMappingLoader {
         return runtimes;
     }
 
+    /**
+     * Parse the `modules` YAML section into an insertion-ordered map of module name to runtime.
+     *
+     * @param modulesObj    the parsed YAML value for the `modules` section; expected to be a map where
+     *                      each key is a module name and each value is either a runtime string or a
+     *                      map that may contain a `runtime` entry
+     * @param defaultRuntime the runtime to use when a module entry does not specify a runtime
+     * @return               a LinkedHashMap preserving the original order that maps each non-blank
+     *                       module name to its resolved runtime; returns an empty map if
+     *                       `modulesObj` is not a map
+     */
     private Map<String, String> readModules(Object modulesObj, String defaultRuntime) {
         if (!(modulesObj instanceof Map<?, ?> modulesMap)) {
             return Map.of();
@@ -138,6 +178,16 @@ public class PipelineRuntimeMappingLoader {
         return modules;
     }
 
+    /**
+     * Parse a YAML/heterogeneous mapping into an ordered key→module mapping.
+     *
+     * Accepts a Map-like input where each entry's key is converted to a trimmed string and each value is resolved
+     * into a module name (via readMappingModule). Entries with null or blank keys are ignored; entries whose
+     * resolved module is blank are omitted.
+     *
+     * @param mappingObj the raw mapping object (expected to be a Map); other types yield an empty mapping
+     * @return an insertion-ordered map from trimmed keys to non-blank module names, or an empty map if the input is not a map
+     */
     private Map<String, String> readMapping(Object mappingObj) {
         if (!(mappingObj instanceof Map<?, ?> mappingMap)) {
             return Map.of();
@@ -159,6 +209,12 @@ public class PipelineRuntimeMappingLoader {
         return mapping;
     }
 
+    /**
+     * Resolve the module name for a mapping entry.
+     *
+     * @param value the mapping entry value; either a Map containing a "module" key or a scalar value
+     * @return the resolved module name as a trimmed string (empty string if the value or key is missing)
+     */
     private String readMappingModule(Object value) {
         if (value instanceof Map<?, ?> mapValue) {
             return readString(mapValue.get("module"));
@@ -166,6 +222,12 @@ public class PipelineRuntimeMappingLoader {
         return readString(value);
     }
 
+    /**
+     * Convert an arbitrary object to its trimmed string representation.
+     *
+     * @param value the object to convert; may be null
+     * @return `""` if `value` is null, otherwise `String.valueOf(value).trim()`
+     */
     private String readString(Object value) {
         if (value == null) {
             return "";

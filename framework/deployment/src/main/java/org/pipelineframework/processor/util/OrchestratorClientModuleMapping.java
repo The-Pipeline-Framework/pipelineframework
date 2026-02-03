@@ -49,13 +49,20 @@ public class OrchestratorClientModuleMapping {
     }
 
     /**
-     * Build a module mapping from application properties and optional overrides.
+     * Constructs an OrchestratorClientModuleMapping from application properties and optional override maps.
      *
-     * @param properties raw application properties
-     * @param env processing environment used for warnings
-     * @param stepOverrides optional step/client overrides (normalized client names)
-     * @param aspectOverrides optional aspect overrides (normalized aspect names)
-     * @return resolved module mapping
+     * Reads module entries under the "pipeline.module." prefix, the base client port and TLS configuration key,
+     * and applies provided step and aspect overrides. Emits warnings via the provided ProcessingEnvironment messager
+     * for malformed values or ignored overrides.
+     *
+     * @param properties     raw application properties; may be null
+     * @param env            processing environment used to emit warnings (may be null)
+     * @param stepOverrides  optional mapping of normalized step/client names to module names; when provided these
+     *                       replace any step mappings parsed from properties
+     * @param aspectOverrides optional mapping of normalized aspect names to module names; when provided these
+     *                        replace any aspect mappings parsed from properties
+     * @return               an OrchestratorClientModuleMapping populated with module configs, step-to-module and
+     *                       aspect-to-module mappings, base port, and optional TLS configuration name
      */
     public static OrchestratorClientModuleMapping fromProperties(
         Properties properties,

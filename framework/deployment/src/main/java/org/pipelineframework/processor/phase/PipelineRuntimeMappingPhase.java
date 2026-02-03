@@ -24,11 +24,32 @@ public class PipelineRuntimeMappingPhase implements PipelineCompilationPhase {
     public PipelineRuntimeMappingPhase() {
     }
 
+    /**
+     * Provides the human-readable name of this compilation phase.
+     *
+     * @return the phase name "Pipeline Runtime Mapping Phase".
+     */
     @Override
     public String name() {
         return "Pipeline Runtime Mapping Phase";
     }
 
+    /**
+     * Applies runtime module-to-step mapping to the given compilation context, storing the resolved mapping
+     * and filtering the context's step models to those applicable to the current module.
+     *
+     * <p>The method resolves the runtime mapping from the context and saves the resolution back into the
+     * context. If the context does not have a module name and the mapping's validation is STRICT, an
+     * IllegalStateException is thrown; otherwise a warning is emitted and processing stops without
+     * filtering. When a module name is present, step models are filtered so that steps assigned to the
+     * current module are kept; steps with no assignment and steps with roles ORCHESTRATOR_CLIENT or
+     * PLUGIN_CLIENT are always kept.</p>
+     *
+     * @param ctx the compilation context to read mapping and step models from and to update with the
+     *            resolved mapping and filtered step models
+     * @throws IllegalStateException if the mapping requires a module name (STRICT validation) but none
+     *                               is provided in the context
+     */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
         PipelineRuntimeMapping mapping = ctx.getRuntimeMapping();
@@ -65,6 +86,16 @@ public class PipelineRuntimeMappingPhase implements PipelineCompilationPhase {
         ctx.setStepModels(filtered);
     }
 
+    /**
+     * Decides whether a pipeline step model applies to the current module based on its deployment role and the runtime mapping resolution.
+     *
+     * @param model the pipeline step model to evaluate
+     * @param moduleName the name of the current module
+     * @param resolution the resolved runtime mapping containing module assignments for step models
+     * @return `true` if the step should be included for the given module; `false` otherwise
+     *         (always includes steps with roles ORCHESTRATOR_CLIENT or PLUGIN_CLIENT;
+     *         includes unassigned steps; otherwise includes only when the assigned module matches `moduleName`)
+     */
     private boolean shouldInclude(
         PipelineStepModel model,
         String moduleName,

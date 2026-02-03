@@ -65,7 +65,7 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
     }
 
     /**
-     * Initialises the processor by creating the phased compiler.
+     * Initializes the processor and constructs the phased PipelineCompiler used for processing.
      *
      * @param processingEnv the processing environment used to configure compiler-facing utilities
      */
