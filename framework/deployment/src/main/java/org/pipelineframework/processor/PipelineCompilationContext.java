@@ -14,6 +14,8 @@ import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
 import org.pipelineframework.processor.ir.PipelineOrchestratorModel;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
+import org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolution;
 
 /**
  * Holds the compilation context for the pipeline annotation processing.
@@ -52,6 +54,10 @@ public class PipelineCompilationContext {
     private Path generatedSourcesRoot;
     @Setter
     private Path moduleDir;
+    private String moduleName;
+
+    private PipelineRuntimeMapping runtimeMapping;
+    private PipelineRuntimeMappingResolution runtimeMappingResolution;
     
     // Additional compilation flags and state
     @Setter
@@ -123,6 +129,33 @@ public class PipelineCompilationContext {
     }
 
     /**
+     * Returns the logical module name provided to the annotation processor.
+     *
+     * @return the module name, or null when unspecified
+     */
+    public String getModuleName() {
+        return moduleName;
+    }
+
+    /**
+     * Returns the loaded runtime mapping configuration, if any.
+     *
+     * @return runtime mapping configuration or null
+     */
+    public org.pipelineframework.processor.mapping.PipelineRuntimeMapping getRuntimeMapping() {
+        return runtimeMapping;
+    }
+
+    /**
+     * Returns the resolved runtime mapping assignments, if any.
+     *
+     * @return runtime mapping resolution or null
+     */
+    public org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolution getRuntimeMappingResolution() {
+        return runtimeMappingResolution;
+    }
+
+    /**
      * Returns whether the module is a plugin host.
      *
      * @return true when the module is a plugin host
@@ -184,6 +217,34 @@ public class PipelineCompilationContext {
      */
     public void setModuleDir(Path moduleDir) {
         this.moduleDir = moduleDir;
+    }
+
+    /**
+     * Sets the logical module name for the current compilation.
+     *
+     * @param moduleName the module name to set
+     */
+    public void setModuleName(String moduleName) {
+        this.moduleName = moduleName;
+    }
+
+    /**
+     * Sets the runtime mapping configuration for the current compilation.
+     *
+     * @param runtimeMapping runtime mapping configuration
+     */
+    public void setRuntimeMapping(org.pipelineframework.processor.mapping.PipelineRuntimeMapping runtimeMapping) {
+        this.runtimeMapping = runtimeMapping;
+    }
+
+    /**
+     * Sets the resolved runtime mapping assignments for the current compilation.
+     *
+     * @param runtimeMappingResolution runtime mapping resolution
+     */
+    public void setRuntimeMappingResolution(
+        org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolution runtimeMappingResolution) {
+        this.runtimeMappingResolution = runtimeMappingResolution;
     }
 
     /**

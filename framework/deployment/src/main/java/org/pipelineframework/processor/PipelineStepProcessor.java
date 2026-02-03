@@ -24,7 +24,8 @@ import javax.lang.model.element.TypeElement;
     "pipeline.generatedSourcesDir", // Optional: base directory for role-specific generated sources
     "pipeline.generatedSourcesRoot", // Optional: legacy alias for generated sources base directory
     "pipeline.cache.keyGenerator", // Optional: fully-qualified CacheKeyGenerator class for @CacheResult
-    "pipeline.orchestrator.generate" // Optional: enable orchestrator endpoint generation
+    "pipeline.orchestrator.generate", // Optional: enable orchestrator endpoint generation
+    "pipeline.module" // Optional: logical module name for runtime mapping
 })
 @SupportedSourceVersion(SourceVersion.RELEASE_21)
 @Deprecated(forRemoval = true)
@@ -76,6 +77,7 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
         List<PipelineCompilationPhase> phases = List.of(
             new org.pipelineframework.processor.phase.PipelineDiscoveryPhase(),
             new org.pipelineframework.processor.phase.ModelExtractionPhase(),
+            new org.pipelineframework.processor.phase.PipelineRuntimeMappingPhase(),
             new org.pipelineframework.processor.phase.PipelineSemanticAnalysisPhase(),
             new org.pipelineframework.processor.phase.PipelineTargetResolutionPhase(),
             new org.pipelineframework.processor.phase.PipelineBindingConstructionPhase(),

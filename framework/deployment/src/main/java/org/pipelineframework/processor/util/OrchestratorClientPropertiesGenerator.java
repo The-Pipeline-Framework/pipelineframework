@@ -17,6 +17,9 @@ import org.pipelineframework.config.pipeline.PipelineYamlStep;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
+import org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolution;
+import org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolver;
 
 /**
  * Generates orchestrator client configuration properties based on the compiled pipeline model.
@@ -97,7 +100,23 @@ public class OrchestratorClientPropertiesGenerator {
             processingEnv.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
                 "Failed to read application.properties for module mapping overrides: " + e.getMessage());
         }
-        return OrchestratorClientModuleMapping.fromProperties(properties, processingEnv);
+        PipelineRuntimeMapping runtimeMapping = ctx.getRuntimeMapping();
+        if (runtimeMapping == null) {
+            return OrchestratorClientModuleMapping.fromProperties(properties, processingEnv);
+        }
+        PipelineRuntimeMappingResolution resolution = ctx.getRuntimeMappingResolution();
+        if (resolution == null) {
+            PipelineRuntimeMappingResolver resolver =
+                new PipelineRuntimeMappingResolver(runtimeMapping, processingEnv);
+            resolution = resolver.resolve(ctx.getStepModels());
+            ctx.setRuntimeMappingResolution(resolution);
+        }
+        return OrchestratorClientModuleMapping.fromProperties(
+            properties,
+            processingEnv,
+            resolution.clientOverrides(),
+            Map.of() // aspectOverrides
+        );
     }
 
     private Properties loadApplicationProperties(PipelineCompilationContext ctx) throws IOException {

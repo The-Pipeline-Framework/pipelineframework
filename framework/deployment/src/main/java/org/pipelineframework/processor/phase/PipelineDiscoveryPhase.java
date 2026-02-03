@@ -16,9 +16,12 @@ import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.config.PipelineAspectConfigLoader;
+import org.pipelineframework.processor.config.PipelineRuntimeMappingLoader;
+import org.pipelineframework.processor.config.PipelineRuntimeMappingLocator;
 import org.pipelineframework.processor.config.PipelineStepConfigLoader;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
 import org.pipelineframework.processor.ir.PipelineOrchestratorModel;
+import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 
 /**
  * Discovers and loads pipeline configuration, aspects, and semantic models.
@@ -51,6 +54,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
 
         Path moduleDir = resolveModuleDir(ctx, generatedSourcesRoot);
         ctx.setModuleDir(moduleDir);
+        ctx.setModuleName(resolveModuleName(ctx));
 
         // Check if this is a plugin host
         boolean isPluginHost = !pluginElements.isEmpty();
@@ -63,6 +67,10 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         // Load pipeline template config
         PipelineTemplateConfig templateConfig = loadPipelineTemplateConfig(ctx);
         ctx.setPipelineTemplateConfig(templateConfig);
+
+        // Load runtime mapping config (optional)
+        PipelineRuntimeMapping runtimeMapping = loadRuntimeMapping(ctx);
+        ctx.setRuntimeMapping(runtimeMapping);
 
         // Determine transport mode
         boolean isGrpc = loadPipelineTransport(ctx);
@@ -196,6 +204,40 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
             }
         }
         return null;
+    }
+
+    private PipelineRuntimeMapping loadRuntimeMapping(PipelineCompilationContext ctx) {
+        PipelineRuntimeMappingLocator locator = new PipelineRuntimeMappingLocator();
+        Path moduleDir = ctx.getModuleDir();
+        if (moduleDir == null) {
+            return null;
+        }
+        Optional<Path> configPath = locator.locate(moduleDir);
+        if (configPath.isEmpty()) {
+            return null;
+        }
+
+        PipelineRuntimeMappingLoader loader = new PipelineRuntimeMappingLoader();
+        try {
+            return loader.load(configPath.get());
+        } catch (Exception e) {
+            if (ctx.getProcessingEnv() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR,
+                    "Failed to load runtime mapping from " + configPath.get() + ": " + e.getMessage());
+            }
+            throw e;
+        }
+    }
+
+    private String resolveModuleName(PipelineCompilationContext ctx) {
+        if (ctx.getProcessingEnv() == null) {
+            return null;
+        }
+        String moduleName = ctx.getProcessingEnv().getOptions().get("pipeline.module");
+        if (moduleName == null || moduleName.isBlank()) {
+            return null;
+        }
+        return moduleName.trim();
     }
 
     private Path resolveGeneratedSourcesRoot(PipelineCompilationContext ctx) {

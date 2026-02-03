@@ -45,6 +45,24 @@ public class OrchestratorClientModuleMapping {
      * @return resolved module mapping
      */
     public static OrchestratorClientModuleMapping fromProperties(Properties properties, ProcessingEnvironment env) {
+        return fromProperties(properties, env, Map.of(), Map.of());
+    }
+
+    /**
+     * Build a module mapping from application properties and optional overrides.
+     *
+     * @param properties raw application properties
+     * @param env processing environment used for warnings
+     * @param stepOverrides optional step/client overrides (normalized client names)
+     * @param aspectOverrides optional aspect overrides (normalized aspect names)
+     * @return resolved module mapping
+     */
+    public static OrchestratorClientModuleMapping fromProperties(
+        Properties properties,
+        ProcessingEnvironment env,
+        Map<String, String> stepOverrides,
+        Map<String, String> aspectOverrides
+    ) {
         Map<String, ModuleConfig> modules = new LinkedHashMap<>();
         Map<String, String> stepToModule = new LinkedHashMap<>();
         Map<String, String> aspectToModule = new LinkedHashMap<>();
@@ -113,6 +131,48 @@ public class OrchestratorClientModuleMapping {
                         // Ignore unknown fields.
                     }
                 }
+            }
+        }
+        if (stepOverrides != null && !stepOverrides.isEmpty()) {
+            stepToModule.clear();
+            for (Map.Entry<String, String> entry : stepOverrides.entrySet()) {
+                if (entry.getKey() == null || entry.getValue() == null) {
+                    continue;
+                }
+                String key = normalizeClientToken(entry.getKey());
+                if (key.isBlank()) {
+                    continue;
+                }
+                String module = entry.getValue().trim();
+                if (module.isBlank()) {
+                    if (env != null) {
+                        env.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                            "Ignoring step override for '" + entry.getKey() + "': module name is blank");
+                    }
+                    continue;
+                }
+                stepToModule.put(key, module);
+            }
+        }
+        if (aspectOverrides != null && !aspectOverrides.isEmpty()) {
+            aspectToModule.clear();
+            for (Map.Entry<String, String> entry : aspectOverrides.entrySet()) {
+                if (entry.getKey() == null || entry.getValue() == null) {
+                    continue;
+                }
+                String key = entry.getKey().trim().toLowerCase(Locale.ROOT);
+                if (key.isBlank()) {
+                    continue;
+                }
+                String module = entry.getValue().trim();
+                if (module.isBlank()) {
+                    if (env != null) {
+                        env.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                            "Ignoring aspect override for '" + entry.getKey() + "': module name is blank");
+                    }
+                    continue;
+                }
+                aspectToModule.put(key, module);
             }
         }
 
