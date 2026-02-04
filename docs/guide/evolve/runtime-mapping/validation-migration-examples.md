@@ -100,22 +100,3 @@ modules:
     runtime: monolith
     # Orchestrator is bundled here and uses in-process wiring.
 ```
-
-### 4) Monolith with in-process orchestrator
-
-This is the same layout as above, but explicitly highlights the runtime effect:
-the orchestrator is bundled into the same module and uses in-process wiring
-instead of REST/gRPC calls.
-
-```yaml
-version: 1
-layout: monolith
-validation: auto
-
-runtimes:
-  monolith: {}
-
-modules:
-  monolith:
-    runtime: monolith
-```
