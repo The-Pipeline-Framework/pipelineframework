@@ -7,6 +7,8 @@ This section is for maintainers and contributors who evolve the framework itself
 - [Architecture](/guide/evolve/architecture)
 - [Annotation Processor Architecture](/guide/evolve/annotation-processor-architecture)
 - [Plugins Architecture](/guide/evolve/plugins-architecture)
+- [Runtime Mapping (Phase 2)](/guide/evolve/runtime-mapping)
+- [Runtime Mapping Cheat Sheet](/guide/evolve/runtime-mapping/cheat-sheet)
 - [Aspect Semantics](/guide/evolve/aspects/semantics)
 - [Aspect Ordering](/guide/evolve/aspects/ordering)
 - [Aspect Warnings](/guide/evolve/aspects/warnings)

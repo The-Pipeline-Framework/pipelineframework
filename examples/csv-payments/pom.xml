@@ -56,6 +56,7 @@
         <spotless.plugin.version>2.44.0</spotless.plugin.version>
         <surefireArgLine />
         <pipeline.generatedSourcesArg />
+        <pipeline.moduleArg>-Apipeline.module=${project.artifactId}</pipeline.moduleArg>
         <protobuf.descriptor.fileArg />
         <pipeline.parallelism>PARALLEL</pipeline.parallelism>
         <quarkus.container-image.build>true</quarkus.container-image.build>
@@ -316,6 +317,7 @@
                             <configuration>
                                 <compilerArgs>
                                     <arg>${pipeline.generatedSourcesArg}</arg>
+                                    <arg>${pipeline.moduleArg}</arg>
                                     <arg>${protobuf.descriptor.fileArg}</arg>
                                 </compilerArgs>
                             </configuration>

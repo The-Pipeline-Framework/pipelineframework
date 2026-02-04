@@ -24,15 +24,14 @@ import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepManyToMany;
 import org.pipelineframework.step.StepOneToMany;
 import org.pipelineframework.step.StepOneToOne;
-import org.pipelineframework.step.blocking.StepOneToOneBlocking;
 
 @ApplicationScoped
 public class TestSteps {
 
     private static final Logger LOG = Logger.getLogger(TestSteps.class);
 
-    public static class TestStepOneToOneBlocking extends ConfigurableStep
-            implements StepOneToOneBlocking<String, String> {
+    public static class TestStepOneToOneProcessed extends ConfigurableStep
+            implements StepOneToOne<String, String> {
         private boolean hasManualConfig = false;
         private int manualRetryLimit = -1;
         private java.time.Duration manualRetryWait = null;
@@ -44,7 +43,7 @@ public class TestSteps {
          * @return the processed string prefixed with "Processed: "
          */
         @Override
-        public Uni<String> apply(String input) {
+        public Uni<String> applyOneToOne(String input) {
             // This is a blocking operation that simulates processing
             try {
                 Thread.sleep(10); // Simulate some work
@@ -120,15 +119,6 @@ public class TestSteps {
             return effectiveConfig().retryWait();
         }
 
-        /**
-         * Process a single input value and produce a corresponding output value.
-         *
-         * @param input the value to process
-         * @return the processed string
-         */
-        public Uni<String> applyOneToOne(String input) {
-            return apply(input);
-        }
     }
 
     public static class TestStepOneToMany extends ConfigurableStep
@@ -155,8 +145,8 @@ public class TestSteps {
         }
     }
 
-    public static class FailingStepBlocking extends ConfigurableStep
-            implements StepOneToOneBlocking<String, String> {
+    public static class FailingStepOneToOne extends ConfigurableStep
+            implements StepOneToOne<String, String> {
         // Configuration preservation fields like in AsyncFailNTimesStep
         private boolean hasManualConfig = false;
         private int manualRetryLimit = -1;
@@ -164,28 +154,21 @@ public class TestSteps {
         private boolean manualRecoverOnFailure = false;
         private boolean manualRecoverOnFailureSet = false; // Sentinel to track if constructor set the value
 
-        public FailingStepBlocking() {
+        public FailingStepOneToOne() {
             // Leave recoverOnFailure to be driven by configuration unless explicitly set
         }
 
-        public FailingStepBlocking(boolean shouldRecover) {
+        public FailingStepOneToOne(boolean shouldRecover) {
             this.manualRecoverOnFailure = shouldRecover;
             this.manualRecoverOnFailureSet = true; // Mark that constructor explicitly set this value
         }
 
         @Override
-        public Uni<String> apply(String input) {
+        public Uni<String> applyOneToOne(String input) {
             // Return the input wrapped in a Uni that fails - this way the input is preserved
             // for potential recovery by the deadLetter method
             return Uni.createFrom()
                     .failure(new RuntimeException("Intentional failure for testing"));
-        }
-
-        @Override
-        public Uni<String> applyOneToOne(String input) {
-            // For the reactive interface, call the blocking interface method
-            // This ensures both interfaces are properly handled
-            return apply(input);
         }
 
         /**

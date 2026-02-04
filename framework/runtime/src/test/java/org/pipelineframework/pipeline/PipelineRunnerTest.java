@@ -60,7 +60,7 @@ class PipelineRunnerTest {
     @Test
     void testRunWithStepOneToOne() {
         Multi<String> input = Multi.createFrom().items("item1", "item2", "item3");
-        List<Object> steps = List.of(new TestSteps.TestStepOneToOneBlocking());
+        List<Object> steps = List.of(new TestSteps.TestStepOneToOneProcessed());
 
         Multi<Object> result = (Multi<Object>) runner.run(input, steps);
 
@@ -126,7 +126,7 @@ class PipelineRunnerTest {
     void testRunWithMultipleSteps() {
         Multi<String> input = Multi.createFrom().items("item1", "item2");
         List<Object> steps = List.of(
-                new TestSteps.TestStepOneToOneBlocking(),
+                new TestSteps.TestStepOneToOneProcessed(),
                 new TestSteps.TestStepOneToMany());
 
         Multi<Object> result = (Multi<Object>) runner.run(input, steps);
@@ -153,7 +153,7 @@ class PipelineRunnerTest {
     @Test
     void testRunWithFailingStepAndRecovery() {
         Multi<String> input = Multi.createFrom().items("item1", "item2");
-        List<Object> steps = List.of(new TestSteps.FailingStepBlocking(true));
+        List<Object> steps = List.of(new TestSteps.FailingStepOneToOne(true));
 
         Multi<Object> result = (Multi<Object>) runner.run(input, steps);
 
@@ -174,7 +174,7 @@ class PipelineRunnerTest {
     @Test
     void testRunWithFailingStepWithoutRecovery() {
         Multi<String> input = Multi.createFrom().items("item1", "item2");
-        List<Object> steps = List.of(new TestSteps.FailingStepBlocking());
+        List<Object> steps = List.of(new TestSteps.FailingStepOneToOne());
 
         Multi<Object> result = (Multi<Object>) runner.run(input, steps);
 
@@ -252,7 +252,7 @@ class PipelineRunnerTest {
         Multi<String> input = Multi.createFrom().items("item1");
 
         // Create a step and configure it properly through the pipeline runner
-        TestSteps.TestStepOneToOneBlocking step = new TestSteps.TestStepOneToOneBlocking();
+        TestSteps.TestStepOneToOneProcessed step = new TestSteps.TestStepOneToOneProcessed();
 
         // Configure the step before running it through the pipeline
         StepConfig stepConfig = new StepConfig();
@@ -274,7 +274,7 @@ class PipelineRunnerTest {
     @Test
     void testPipelineOrdering() throws Exception {
         // Create test steps in a specific order
-        TestSteps.TestStepOneToOneBlocking stepB = new TestSteps.TestStepOneToOneBlocking();
+        TestSteps.TestStepOneToOneProcessed stepB = new TestSteps.TestStepOneToOneProcessed();
         TestSteps.TestStepOneToMany stepA = new TestSteps.TestStepOneToMany();
         TestSteps.TestStepManyToMany stepC = new TestSteps.TestStepManyToMany();
 

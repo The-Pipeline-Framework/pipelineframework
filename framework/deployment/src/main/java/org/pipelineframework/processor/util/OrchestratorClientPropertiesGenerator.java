@@ -17,6 +17,9 @@ import org.pipelineframework.config.pipeline.PipelineYamlStep;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
+import org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolution;
+import org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolver;
 
 /**
  * Generates orchestrator client configuration properties based on the compiled pipeline model.
@@ -89,6 +92,17 @@ public class OrchestratorClientPropertiesGenerator {
             .toList();
     }
 
+    /**
+     * Builds an OrchestratorClientModuleMapping from the project's application properties and, when available,
+     * includes resolved runtime client overrides from the compilation context.
+     *
+     * If the context contains a PipelineRuntimeMapping, that mapping is resolved against the step models and
+     * its client overrides are applied to the returned OrchestratorClientModuleMapping; otherwise the mapping
+     * is created solely from the loaded application properties.
+     *
+     * @param ctx the current pipeline compilation context used to load properties, step models, and optional runtime mapping
+     * @return an OrchestratorClientModuleMapping configured from application properties and any resolved client overrides
+     */
     private OrchestratorClientModuleMapping loadModuleMapping(PipelineCompilationContext ctx) {
         Properties properties = new Properties();
         try {
@@ -97,9 +111,32 @@ public class OrchestratorClientPropertiesGenerator {
             processingEnv.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
                 "Failed to read application.properties for module mapping overrides: " + e.getMessage());
         }
-        return OrchestratorClientModuleMapping.fromProperties(properties, processingEnv);
+        PipelineRuntimeMapping runtimeMapping = ctx.getRuntimeMapping();
+        if (runtimeMapping == null) {
+            return OrchestratorClientModuleMapping.fromProperties(properties, processingEnv);
+        }
+        PipelineRuntimeMappingResolution resolution = ctx.getRuntimeMappingResolution();
+        if (resolution == null) {
+            PipelineRuntimeMappingResolver resolver =
+                new PipelineRuntimeMappingResolver(runtimeMapping, processingEnv);
+            resolution = resolver.resolve(ctx.getStepModels());
+            ctx.setRuntimeMappingResolution(resolution);
+        }
+        return OrchestratorClientModuleMapping.fromProperties(
+            properties,
+            processingEnv,
+            resolution.clientOverrides(),
+            Map.of() // TODO: add aspectOverrides to PipelineRuntimeMappingResolution and plumb through here.
+        );
     }
 
+    /**
+     * Load application.properties from the project's source directories or, if not found there, from the annotation-processing source path.
+     *
+     * @param ctx the compilation context used to determine candidate base directories to search
+     * @return a Properties object populated from the first application.properties found; an empty Properties if none is found
+     * @throws IOException if an I/O error occurs while reading a filesystem application.properties file
+     */
     private Properties loadApplicationProperties(PipelineCompilationContext ctx) throws IOException {
         Properties properties = new Properties();
         for (Path baseDir : getBaseDirectories(ctx)) {

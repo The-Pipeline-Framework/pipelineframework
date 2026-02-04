@@ -45,6 +45,31 @@ public class OrchestratorClientModuleMapping {
      * @return resolved module mapping
      */
     public static OrchestratorClientModuleMapping fromProperties(Properties properties, ProcessingEnvironment env) {
+        return fromProperties(properties, env, Map.of(), Map.of());
+    }
+
+    /**
+     * Constructs an OrchestratorClientModuleMapping from application properties and optional override maps.
+     *
+     * Reads module entries under the "pipeline.module." prefix, the base client port and TLS configuration key,
+     * and applies provided step and aspect overrides. Emits warnings via the provided ProcessingEnvironment messager
+     * for malformed values or ignored overrides.
+     *
+     * @param properties     raw application properties; may be null
+     * @param env            processing environment used to emit warnings (may be null)
+     * @param stepOverrides  optional mapping of normalized step/client names to module names; when provided these
+     *                       override any step mappings parsed from properties (merge semantics)
+     * @param aspectOverrides optional mapping of normalized aspect names to module names; when provided these
+     *                        override any aspect mappings parsed from properties (merge semantics)
+     * @return               an OrchestratorClientModuleMapping populated with module configs, step-to-module and
+     *                       aspect-to-module mappings, base port, and optional TLS configuration name
+     */
+    public static OrchestratorClientModuleMapping fromProperties(
+        Properties properties,
+        ProcessingEnvironment env,
+        Map<String, String> stepOverrides,
+        Map<String, String> aspectOverrides
+    ) {
         Map<String, ModuleConfig> modules = new LinkedHashMap<>();
         Map<String, String> stepToModule = new LinkedHashMap<>();
         Map<String, String> aspectToModule = new LinkedHashMap<>();
@@ -57,8 +82,10 @@ public class OrchestratorClientModuleMapping {
                 try {
                     basePort = Integer.parseInt(basePortValue.trim());
                 } catch (NumberFormatException e) {
-                    env.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
-                        "Invalid pipeline.module.base-port value '" + basePortValue + "': " + e.getMessage());
+                    if (env != null) {
+                        env.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                            "Invalid " + BASE_PORT_KEY + " value '" + basePortValue + "': " + e.getMessage());
+                    }
                 }
             }
 
@@ -113,6 +140,46 @@ public class OrchestratorClientModuleMapping {
                         // Ignore unknown fields.
                     }
                 }
+            }
+        }
+        if (stepOverrides != null && !stepOverrides.isEmpty()) {
+            for (Map.Entry<String, String> entry : stepOverrides.entrySet()) {
+                if (entry.getKey() == null || entry.getValue() == null) {
+                    continue;
+                }
+                String key = normalizeClientToken(entry.getKey());
+                if (key.isBlank()) {
+                    continue;
+                }
+                String module = entry.getValue().trim();
+                if (module.isBlank()) {
+                    if (env != null) {
+                        env.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                            "Ignoring step override for '" + entry.getKey() + "': module name is blank");
+                    }
+                    continue;
+                }
+                stepToModule.put(key, module);
+            }
+        }
+        if (aspectOverrides != null && !aspectOverrides.isEmpty()) {
+            for (Map.Entry<String, String> entry : aspectOverrides.entrySet()) {
+                if (entry.getKey() == null || entry.getValue() == null) {
+                    continue;
+                }
+                String key = entry.getKey().trim().toLowerCase(Locale.ROOT);
+                if (key.isBlank()) {
+                    continue;
+                }
+                String module = entry.getValue().trim();
+                if (module.isBlank()) {
+                    if (env != null) {
+                        env.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                            "Ignoring aspect override for '" + entry.getKey() + "': module name is blank");
+                    }
+                    continue;
+                }
+                aspectToModule.put(key, module);
             }
         }
 
@@ -205,8 +272,10 @@ public class OrchestratorClientModuleMapping {
         try {
             return Integer.parseInt(value.trim());
         } catch (NumberFormatException e) {
-            env.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
-                "Invalid port for module '" + moduleName + "': " + e.getMessage());
+            if (env != null) {
+                env.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                    "Invalid port for module '" + moduleName + "': " + e.getMessage());
+            }
             return null;
         }
     }
@@ -248,8 +317,10 @@ public class OrchestratorClientModuleMapping {
     ) {
         String existing = mapping.get(key);
         if (existing != null && !existing.equals(moduleName)) {
-            env.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
-                "Ignoring duplicate " + kind + " mapping for '" + key + "'; already mapped to '" + existing + "'");
+            if (env != null) {
+                env.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                    "Ignoring duplicate " + kind + " mapping for '" + key + "'; already mapped to '" + existing + "'");
+            }
             return;
         }
         mapping.put(key, moduleName);

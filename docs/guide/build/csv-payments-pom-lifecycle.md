@@ -34,6 +34,22 @@ directories and then merged back into `target/classes` before packaging. This is
 required for Quarkus packaging and the Docker images to expose the generated
 gRPC/REST endpoints at runtime.
 
+## Why this POM looks complex (and how to simplify it)
+
+This build is complex because a single Maven module is compiling multiple
+runtime roles and then merging them for packaging. That requires multiple
+compiler executions, classifier JARs, and merge steps.
+
+If you prefer simpler POMs, use the runtime mapping layouts to align one
+module to one runtime role:
+
+- **pipeline-runtime**: keep the orchestrator separate, collapse all pipeline
+  steps into one runtime module. This removes most of the multi-role compile
+  steps from service modules.
+- **monolith**: bundle the orchestrator and steps into one runtime. Orchestrator
+  calls become in-process and the module can compile a single runtime role,
+  which avoids most of the role-specific compile/merge machinery.
+
 ## Phase-by-phase breakdown
 
 ### generate-resources

@@ -18,42 +18,15 @@ package org.pipelineframework.pipeline;
 
 import java.time.Duration;
 
-import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.PipelineRunner;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.config.StepConfig;
-import org.pipelineframework.step.ConfigurableStep;
-import org.pipelineframework.step.blocking.StepOneToOneBlocking;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class ConfigurationIntegrationTest {
-
-    static class ConfigTestStepBlocking extends ConfigurableStep
-            implements StepOneToOneBlocking<String, String> {
-        @Override
-        public Uni<String> apply(String input) {
-            // This is a blocking operation that simulates processing
-            try {
-                Thread.sleep(10); // Simulate some work
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            return Uni.createFrom().item("ConfigTest: " + input);
-        }
-
-        @Override
-        public void initialiseWithConfig(org.pipelineframework.config.StepConfig config) {
-            super.initialiseWithConfig(config);
-        }
-
-        public Uni<String> applyOneToOne(String input) {
-            return apply(input);
-        }
-    }
-
     @Test
     void testPipelineConfigDefaults() {
         try (PipelineRunner runner = new PipelineRunner()) {

@@ -143,7 +143,7 @@ graph TD
 ```
 
 ### Concurrency
-Steps can be configured to run with different concurrency models, including virtual threads for high-throughput scenarios.
+Steps can be configured to run with different concurrency models and execution contexts to fit throughput and ordering requirements.
 
 ## Module Structure
 
@@ -221,7 +221,7 @@ Additional adapters can be created for new protocols or integration patterns.
 - Handle errors gracefully with appropriate recovery mechanisms
 
 ### Performance Optimization
-- Use virtual threads for I/O-bound operations
+- Prefer non-blocking I/O and offload blocking work when needed
 - Configure appropriate concurrency levels
 - Implement efficient mapper implementations
 
