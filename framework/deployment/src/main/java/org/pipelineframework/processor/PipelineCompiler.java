@@ -27,7 +27,8 @@ import org.pipelineframework.annotation.PipelineStep;
     "pipeline.generatedSourcesDir", // Optional: base directory for role-specific generated sources
     "pipeline.generatedSourcesRoot", // Optional: legacy alias for generated sources base directory
     "pipeline.cache.keyGenerator", // Optional: fully-qualified CacheKeyGenerator class for @CacheResult
-    "pipeline.orchestrator.generate" // Optional: enable orchestrator endpoint generation
+    "pipeline.orchestrator.generate", // Optional: enable orchestrator endpoint generation
+    "pipeline.module" // Optional: logical module name for runtime mapping
 })
 @SupportedSourceVersion(SourceVersion.RELEASE_21)
 public class PipelineCompiler extends AbstractProcessingTool {

@@ -1,0 +1,40 @@
+version: 1
+layout: modular
+validation: auto
+
+defaults:
+  runtime: local
+  module: per-step
+  synthetic:
+    module: plugin
+
+runtimes:
+  local: {}
+
+modules:
+  input-csv-file-processing-svc:
+    runtime: local
+  payments-processing-svc:
+    runtime: local
+  payment-status-svc:
+    runtime: local
+  output-csv-file-processing-svc:
+    runtime: local
+  persistence-svc:
+    runtime: local
+  orchestrator-svc:
+    runtime: local
+
+steps:
+  process-folder:
+    module: input-csv-file-processing-svc
+  process-csv-payments-input:
+    module: input-csv-file-processing-svc
+  process-send-payment-record:
+    module: payments-processing-svc
+  process-ack-payment-sent:
+    module: payments-processing-svc
+  process-payment-status:
+    module: payment-status-svc
+  process-csv-payments-output-file:
+    module: output-csv-file-processing-svc

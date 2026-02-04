@@ -14,6 +14,8 @@ import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
 import org.pipelineframework.processor.ir.PipelineOrchestratorModel;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
+import org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolution;
 
 /**
  * Holds the compilation context for the pipeline annotation processing.
@@ -52,6 +54,10 @@ public class PipelineCompilationContext {
     private Path generatedSourcesRoot;
     @Setter
     private Path moduleDir;
+    private String moduleName;
+
+    private PipelineRuntimeMapping runtimeMapping;
+    private PipelineRuntimeMappingResolution runtimeMappingResolution;
     
     // Additional compilation flags and state
     @Setter
@@ -114,12 +120,39 @@ public class PipelineCompilationContext {
     }
 
     /**
-     * Returns the module directory resolved for the current compilation.
-     *
-     * @return the module directory resolved for the current compilation
-     */
+         * Retrieve the resolved module directory for the current compilation.
+         *
+         * @return the resolved module directory, or `null` if not specified
+         */
     public Path getModuleDir() {
         return moduleDir;
+    }
+
+    /**
+     * Logical module name provided to the annotation processor.
+     *
+     * @return the module name, or {@code null} if unspecified
+     */
+    public String getModuleName() {
+        return moduleName;
+    }
+
+    /**
+     * The loaded runtime mapping configuration for the current compilation, if present.
+     *
+     * @return the loaded PipelineRuntimeMapping, or {@code null} if none is configured
+     */
+    public org.pipelineframework.processor.mapping.PipelineRuntimeMapping getRuntimeMapping() {
+        return runtimeMapping;
+    }
+
+    /**
+     * Retrieves the resolved pipeline runtime mapping assignments for the current compilation.
+     *
+     * @return the resolved PipelineRuntimeMappingResolution, or null if no resolution is available
+     */
+    public org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolution getRuntimeMappingResolution() {
+        return runtimeMappingResolution;
     }
 
     /**
@@ -178,12 +211,40 @@ public class PipelineCompilationContext {
     }
 
     /**
-     * Sets the module directory resolved for this compilation.
-     *
-     * @param moduleDir the module directory resolved for this compilation
-     */
+         * Set the resolved module directory for the current compilation.
+         *
+         * @param moduleDir the resolved module directory path for this compilation
+         */
     public void setModuleDir(Path moduleDir) {
         this.moduleDir = moduleDir;
+    }
+
+    /**
+         * Set the logical module name used for this compilation.
+         *
+         * @param moduleName the logical module name for the compilation, or `null` to unset it
+         */
+    public void setModuleName(String moduleName) {
+        this.moduleName = moduleName;
+    }
+
+    /**
+     * Sets the runtime mapping configuration for the current compilation.
+     *
+     * @param runtimeMapping runtime mapping configuration
+     */
+    public void setRuntimeMapping(org.pipelineframework.processor.mapping.PipelineRuntimeMapping runtimeMapping) {
+        this.runtimeMapping = runtimeMapping;
+    }
+
+    /**
+     * Set the resolved runtime mapping assignments used during this compilation.
+     *
+     * @param runtimeMappingResolution the resolved PipelineRuntimeMappingResolution to apply to this context
+     */
+    public void setRuntimeMappingResolution(
+        org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolution runtimeMappingResolution) {
+        this.runtimeMappingResolution = runtimeMappingResolution;
     }
 
     /**
