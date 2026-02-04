@@ -67,7 +67,7 @@ done
 
 backup_file=""
 if [[ -f "$ACTIVE_MAPPING" ]]; then
-  backup_file="$(mktemp)"
+  backup_file="$(mktemp "${TMPDIR:-/tmp}/pipeline-runtime.XXXXXX")"
   cp "$ACTIVE_MAPPING" "$backup_file"
 fi
 
