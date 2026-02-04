@@ -99,6 +99,7 @@ If you are unsure, pick **pipeline-runtime** first. It gives you fewer deployabl
 - One runtime per pipeline (orchestrator remains separate).
 - All steps in a pipeline must resolve to modules that share the same runtime.
 - Synthetics default to the pipeline module (or plugin grouping if configured).
+- Physical deploy units still depend on project build topology.
 - For multiple pipelines, use explicit step mappings per pipeline or define distinct modules per pipeline.
   This is the "fewer containers" compromise: one runtime per pipeline, but no sprawling service fleet.
   It also keeps a minimal client/server boundary, so if you later split services you already have
@@ -106,8 +107,9 @@ If you are unsure, pick **pipeline-runtime** first. It gives you fewer deployabl
 
 ### monolith
 
-- The pipeline is compiled as a single runtime and single module.
-- All steps, synthetics, and the orchestrator are placed into the monolith module.
+- Logical placement resolves all steps, synthetics, and orchestrator to the monolith module.
+- Wiring for internal calls is generated as in-process for that single-module target.
+- A real monolith artifact/runtime requires a monolithic build topology.
 - In `validation: auto`, unmapped steps/synthetics fall back to the monolith module.
 - Explicit placements are allowed but must all target the monolith module.
   This is the "everything in one place" option. You trade isolation for operational simplicity.

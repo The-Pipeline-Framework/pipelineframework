@@ -18,6 +18,12 @@ This guide is intentionally pragmatic: most teams want fewer deployables, less o
 - Support both gRPC and REST wiring without drift (transport remains pipeline-global).
 - Enable a single-runtime "monolith" option without introducing a deployment DSL.
 
+## Reality check: what Phase 2 provides (and what it does not)
+
+- **Provided now**: logical placement, validation, deterministic synthetic ids, and generated client/server wiring aligned to mapping + transport.
+- **Not provided now**: automatic Maven/module reshaping into a new physical topology.
+- **Implication**: a `layout: monolith` mapping is a logical target; it becomes a real monolith only when the project build is arranged to produce a monolith runtime artifact.
+
 ## Non-goals
 
 - A full deployment or orchestration configuration language.
@@ -30,6 +36,7 @@ This guide is intentionally pragmatic: most teams want fewer deployables, less o
 - [Synthetic Step Identifiers](/guide/evolve/runtime-mapping/synthetics)
 - [Annotation Processing and Transport](/guide/evolve/runtime-mapping/annotation-processing)
 - [Validation, Migration, and Examples](/guide/evolve/runtime-mapping/validation-migration-examples)
+- [Build Topologies (What Is Real Today)](/guide/evolve/runtime-mapping/build-topologies)
 - [Cheat Sheet](/guide/evolve/runtime-mapping/cheat-sheet)
 - [TDD Plan](/guide/evolve/runtime-mapping/tdd-plan)
 - [Implementation Plan](/guide/evolve/runtime-mapping/implementation-plan)

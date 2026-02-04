@@ -2,6 +2,8 @@
 
 This is a one-page guide to help you pick a layout quickly.
 
+Note: these layouts are resolved logically by mapping; physical deploy units still follow project build topology.
+
 ## Pick a layout in 30 seconds
 
 | If this is true | Choose |

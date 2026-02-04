@@ -21,14 +21,16 @@ The annotation processor (AP) runs per module, but runtime mapping is global. Th
 
 ## Monolith layout
 
-- All services and plugins are placed in a single module.
-- All client wiring collapses to in-process wiring (including orchestrator calls).
+- Logical placement resolves all services/plugins to one module.
+- Client wiring is generated as in-process for that single-module target.
+- This becomes a real monolith runtime only if the Maven/build topology is also monolithic.
 - Transport settings remain relevant only for external exposure (if any).
 
 ## Pipeline-runtime layout
 
 - Steps within the same pipeline must resolve to a single runtime.
 - The orchestrator remains a separate runtime (current default scaffolding behavior).
+- As with monolith, this is logical placement first; physical deploy units depend on build topology.
 
 ## Backward compatibility
 

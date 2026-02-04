@@ -4,6 +4,9 @@ This plan turns `pipeline.runtime.yaml` into build-time behavior without changin
 The approach is intentionally incremental: reuse existing modules and generation outputs, and let the
 annotation processor filter artifacts per module.
 
+For physical topology targets (for example a true monolith artifact), see
+[Build Topologies (What Is Real Today)](/guide/evolve/runtime-mapping/build-topologies).
+
 ## 1) Inputs and wiring
 
 ### New input file
