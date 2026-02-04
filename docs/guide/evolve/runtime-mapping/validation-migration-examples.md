@@ -47,6 +47,7 @@ synthetics:
 - Image size and heap baseline dominating? Start with `pipeline-runtime` or `monolith`.
 - Teams deploying independently? Stay `modular` and only map hot spots.
 - Orchestrator as a control point? Keep it as a separate runtime even when collapsing services.
+
 ## Examples
 
 ### 1) Simple pipeline (defaults only)

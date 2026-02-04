@@ -6,6 +6,11 @@ CSV_DIR="$ROOT_DIR/examples/csv-payments"
 SCENARIO_DIR="$CSV_DIR/config/runtime-mapping"
 ACTIVE_MAPPING="$CSV_DIR/config/pipeline.runtime.yaml"
 MVN_BIN="${MVN_BIN:-$ROOT_DIR/mvnw}"
+if [[ ! -x "$MVN_BIN" ]]; then
+  echo "Maven launcher is not executable: $MVN_BIN" >&2
+  echo "Set MVN_BIN to a valid executable (for example ./mvnw or mvn)." >&2
+  exit 1
+fi
 
 WITH_E2E=0
 declare -a SCENARIOS=()
@@ -15,7 +20,7 @@ usage() {
 Usage: run-runtime-mapping-matrix.sh [options]
 
 Options:
-  --with-e2e           Run CsvPaymentsEndToEndIT after each scenario build.
+  --with-e2e           Run functional CsvPaymentsEndToEndIT after each scenario build.
   --scenario <name>    Run a single scenario (can be repeated).
                        Known: modular-auto, modular-strict, pipeline-runtime
   --help               Show this help.
@@ -24,6 +29,10 @@ Examples:
   ./examples/csv-payments/run-runtime-mapping-matrix.sh
   ./examples/csv-payments/run-runtime-mapping-matrix.sh --with-e2e
   ./examples/csv-payments/run-runtime-mapping-matrix.sh --scenario pipeline-runtime --with-e2e
+
+Note:
+  This runner validates build/runtime-mapping and functional behavior.
+  It does not assert deployment topology shape (container/runtime count).
 USAGE
 }
 

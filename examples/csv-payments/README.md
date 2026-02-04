@@ -40,9 +40,9 @@ This script will:
 
 The script uses the health endpoints (`/q/health`) of each service to determine when they are ready, rather than waiting a fixed amount of time.
 
-## Runtime-mapping matrix (Phase 2 smoke tests)
+## Runtime-mapping matrix (Phase 2 build/functional smoke tests)
 
-To validate runtime mapping scenarios from `examples/csv-payments/config/runtime-mapping`:
+To exercise runtime mapping scenarios from `examples/csv-payments/config/runtime-mapping`:
 
 ```bash
 ./examples/csv-payments/run-runtime-mapping-matrix.sh
@@ -56,6 +56,7 @@ To run the same matrix plus `CsvPaymentsEndToEndIT` for each scenario:
 
 This runner uses plain flags (no Maven profiles) and swaps `config/pipeline.runtime.yaml`
 per scenario before each build.
+It validates build/runtime-mapping and functional behavior; it does not assert deployment topology shape.
 Current matrix scenarios are `modular-auto`, `modular-strict`, and `pipeline-runtime`.
 `monolith` is not included yet because csv-payments still builds/runs as separate Maven modules/services.
 
