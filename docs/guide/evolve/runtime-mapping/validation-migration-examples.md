@@ -21,6 +21,19 @@ Errors should be actionable and deterministic, for example:
 - `RUNTIME_MAP_UNKNOWN_MODULE`: Module "payments-core" not declared.
 - `RUNTIME_MAP_SYNTHETIC_AMBIGUOUS`: "ObserveLatency.SideEffect" has 2 instances; use @before/@after/@<index>.
 
+For `RUNTIME_MAP_SYNTHETIC_AMBIGUOUS`, suffixes select a specific synthetic instance:
+`@before` means the synthetic attached before the target step, `@after` means after it,
+and `@<index>` is the zero-based expansion position. See
+[`Synthetic Step Identifiers`](./synthetics.md#disambiguation-suffix).
+
+```yaml
+synthetics:
+  ObserveLatency.SideEffect@before:
+    module: cache
+  ObserveLatency.SideEffect@1:
+    module: persistence
+```
+
 ## Migration plan
 
 1. Add `pipeline.runtime.yaml` with only `version` and `validation: auto`.
