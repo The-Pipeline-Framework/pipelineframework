@@ -84,7 +84,7 @@ public class OrchestratorClientModuleMapping {
                 } catch (NumberFormatException e) {
                     if (env != null) {
                         env.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
-                            "Invalid pipeline.module.base-port value '" + basePortValue + "': " + e.getMessage());
+                            "Invalid " + BASE_PORT_KEY + " value '" + basePortValue + "': " + e.getMessage());
                     }
                 }
             }

@@ -681,6 +681,9 @@ public class PipelineRuntimeMappingResolver {
             }
             List<PipelineStepModel> list = payloadIndex.get(base.payloadId());
             int index = list == null ? 0 : list.indexOf(model);
+            if (index < 0) {
+                index = 0;
+            }
             boolean ambiguous = list != null && list.size() > 1;
             return base.withIndex(index, ambiguous);
         }

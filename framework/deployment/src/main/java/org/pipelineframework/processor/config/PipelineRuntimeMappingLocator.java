@@ -12,6 +12,7 @@ import javax.xml.XMLConstants;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import org.w3c.dom.Document;
+import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 /**
@@ -102,12 +103,28 @@ public class PipelineRuntimeMappingLocator {
             try (InputStream input = Files.newInputStream(pomPath)) {
                 document = builder.parse(input);
             }
-            NodeList packagingNodes = document.getElementsByTagName("packaging");
-            if (packagingNodes.getLength() == 0) {
+            Node root = document.getDocumentElement();
+            if (root == null) {
                 return false;
             }
-            String packaging = packagingNodes.item(0).getTextContent();
-            return packaging != null && packaging.trim().equalsIgnoreCase("pom");
+            NodeList children = root.getChildNodes();
+            for (int i = 0; i < children.getLength(); i++) {
+                Node child = children.item(i);
+                if (child.getNodeType() != Node.ELEMENT_NODE) {
+                    continue;
+                }
+                String localName = child.getLocalName();
+                String nodeName = child.getNodeName();
+                boolean packagingNode = "packaging".equals(localName)
+                    || "packaging".equals(nodeName)
+                    || (nodeName != null && nodeName.endsWith(":packaging"));
+                if (!packagingNode) {
+                    continue;
+                }
+                String packaging = child.getTextContent();
+                return packaging != null && packaging.trim().equalsIgnoreCase("pom");
+            }
+            return false;
         } catch (Exception e) {
             return false;
         }

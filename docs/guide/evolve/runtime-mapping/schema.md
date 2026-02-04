@@ -59,9 +59,9 @@ synthetics:
 ## Default behavior
 
 - If `pipeline.runtime.yaml` is missing, current scaffold defaults apply.
-- If `validation: auto`, unmapped steps and synthetics fall back to defaults.
-- If `validation: strict`, all steps and synthetics must be mapped.
-- If `defaults.module: shared`, declare exactly one module (the shared module), or use an explicit module name instead.
+- `validation: auto` causes unmapped steps and synthetics to fall back to defaults.
+- `validation: strict` requires all steps and synthetics to be mapped.
+- `defaults.module: shared` requires exactly one module (the shared module), or an explicit module name instead.
 - Transport is configured globally in `pipeline.yaml` and applies to all runtimes in the pipeline.
 
 ## Layout behavior
