@@ -44,10 +44,9 @@ synthetics:
 
 ## Practical heuristics
 
-- If image size and heap baseline dominate, start with `pipeline-runtime` or `monolith`.
-- If teams deploy independently, stay `modular` and only map hot spots.
-- If the orchestrator is a point of control, keep it as a separate runtime even when collapsing services.
-
+- Image size and heap baseline dominating? Start with `pipeline-runtime` or `monolith`.
+- Teams deploying independently? Stay `modular` and only map hot spots.
+- Orchestrator as a control point? Keep it as a separate runtime even when collapsing services.
 ## Examples
 
 ### 1) Simple pipeline (defaults only)
