@@ -1,0 +1,15 @@
+version: 1
+layout: monolith
+validation: strict
+
+runtimes:
+  monolith: {}
+
+modules:
+  monolith-svc:
+    runtime: monolith
+
+defaults:
+  module: monolith-svc
+  synthetic:
+    module: monolith-svc
