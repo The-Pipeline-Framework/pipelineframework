@@ -24,7 +24,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.logging.Logger;
 
 import org.yaml.snakeyaml.Yaml;
 
@@ -32,6 +35,8 @@ import org.yaml.snakeyaml.Yaml;
  * Loads pipeline.yaml configuration for runtime usage.
  */
 public class PipelineYamlConfigLoader {
+    private static final Logger LOG = Logger.getLogger(PipelineYamlConfigLoader.class.getName());
+    private static final Set<String> KNOWN_TRANSPORTS = Set.of("GRPC", "REST", "LOCAL");
 
     /**
      * Creates a new PipelineYamlConfigLoader.
@@ -105,6 +110,19 @@ public class PipelineYamlConfigLoader {
         String transportOverride = resolveTransportOverride();
         if (transportOverride != null && !transportOverride.isBlank()) {
             transport = transportOverride.trim();
+        }
+        if (transport != null) {
+            transport = transport.trim();
+            if (!transport.isBlank()) {
+                String normalized = transport.toUpperCase(Locale.ROOT);
+                if (KNOWN_TRANSPORTS.contains(normalized)) {
+                    transport = normalized;
+                } else {
+                    LOG.warning("Unknown transport override '" + transport
+                        + "'; defaulting pipeline transport to GRPC.");
+                    transport = "GRPC";
+                }
+            }
         }
         List<PipelineYamlStep> steps = readSteps(rootMap);
         List<PipelineYamlAspect> aspects = readAspects(rootMap);

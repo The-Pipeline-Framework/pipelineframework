@@ -16,7 +16,9 @@
 
     <properties>
         <pipeline.generatedSourcesArg>-Apipeline.generatedSourcesDir=${project.build.directory}/generated-sources/pipeline</pipeline.generatedSourcesArg>
-        <protobuf.descriptor.fileArg>-Aprotobuf.descriptor.file=${project.basedir}/../common/target/generated-sources/grpc/descriptor_set.dsc</protobuf.descriptor.fileArg>
+        <!-- Build `common` first, or pass -Dprotobuf.descriptor.path=... to point to a pre-built descriptor set. -->
+        <protobuf.descriptor.path>${project.basedir}/../common/target/generated-sources/grpc/descriptor_set.dsc</protobuf.descriptor.path>
+        <protobuf.descriptor.fileArg>-Aprotobuf.descriptor.file=${protobuf.descriptor.path}</protobuf.descriptor.fileArg>
     </properties>
 
     <dependencies>
@@ -65,17 +67,17 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.36</version>
+            <version>${lombok.version}</version>
         </dependency>
         <dependency>
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct</artifactId>
-            <version>1.5.5.Final</version>
+            <version>${mapstruct.version}</version>
         </dependency>
         <dependency>
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct-processor</artifactId>
-            <version>1.5.5.Final</version>
+            <version>${mapstruct.version}</version>
             <scope>provided</scope>
         </dependency>
 
@@ -87,7 +89,7 @@
         <dependency>
             <groupId>org.assertj</groupId>
             <artifactId>assertj-core</artifactId>
-            <version>3.26.3</version>
+            <version>${assertj.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -123,6 +125,21 @@
                 <version>3.1.0</version>
                 <executions>
                     <execution>
+                        <id>validate-protobuf-descriptor</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <available file="${protobuf.descriptor.path}" property="protobuf.descriptor.exists"/>
+                                <fail unless="protobuf.descriptor.exists">
+                                    Missing protobuf descriptor file at ${protobuf.descriptor.path}. Build `common` first (for example: ./examples/csv-payments/build-monolith.sh -DskipTests) or override -Dprotobuf.descriptor.path.
+                                </fail>
+                            </target>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>collect-monolith-sources</id>
                         <phase>generate-sources</phase>
                         <goals>
@@ -131,19 +148,32 @@
                         <configuration>
                             <target>
                                 <mkdir dir="${project.build.directory}/monolith-sources"/>
-                                <copy todir="${project.build.directory}/monolith-sources" overwrite="true">
+                                <exec executable="bash" failonerror="true">
+                                    <arg value="${project.basedir}/check-duplicate-sources.sh"/>
+                                    <arg value="${project.build.directory}/monolith-sources"/>
+                                    <arg value="${project.basedir}/../input-csv-file-processing-svc/src/main/java"/>
+                                    <arg value="${project.basedir}/../payments-processing-svc/src/main/java"/>
+                                    <arg value="${project.basedir}/../payment-status-svc/src/main/java"/>
+                                    <arg value="${project.basedir}/../output-csv-file-processing-svc/src/main/java"/>
+                                    <arg value="${project.basedir}/../orchestrator-svc/src/main/java"/>
+                                </exec>
+                                <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
                                     <fileset dir="${project.basedir}/../input-csv-file-processing-svc/src/main/java"/>
                                 </copy>
-                                <copy todir="${project.build.directory}/monolith-sources" overwrite="true">
-                                    <fileset dir="${project.basedir}/../payments-processing-svc/src/main/java"/>
+                                <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
+                                    <fileset dir="${project.basedir}/../payments-processing-svc/src/main/java">
+                                        <exclude name="org/pipelineframework/csv/service/ExecutorProducer.java"/>
+                                    </fileset>
                                 </copy>
-                                <copy todir="${project.build.directory}/monolith-sources" overwrite="true">
+                                <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
                                     <fileset dir="${project.basedir}/../payment-status-svc/src/main/java"/>
                                 </copy>
-                                <copy todir="${project.build.directory}/monolith-sources" overwrite="true">
-                                    <fileset dir="${project.basedir}/../output-csv-file-processing-svc/src/main/java"/>
+                                <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
+                                    <fileset dir="${project.basedir}/../output-csv-file-processing-svc/src/main/java">
+                                        <exclude name="org/pipelineframework/csv/service/ExecutorProducer.java"/>
+                                    </fileset>
                                 </copy>
-                                <copy todir="${project.build.directory}/monolith-sources" overwrite="true">
+                                <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
                                     <fileset dir="${project.basedir}/../orchestrator-svc/src/main/java"/>
                                 </copy>
                             </target>

@@ -20,6 +20,7 @@ import jakarta.inject.Inject;
 
 import io.smallrye.common.vertx.VertxContext;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.subscription.Cancellable;
 import io.quarkus.vertx.core.runtime.context.VertxContextSafetyToggle;
 import io.vertx.core.Context;
 import io.vertx.core.Vertx;
@@ -30,15 +31,15 @@ import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.service.ReactiveSideEffectService;
 import org.pipelineframework.step.NonRetryableException;
 
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicReference;
+
 /**
  * A general-purpose persistence plugin that can persist any entity that has a corresponding
  * PersistenceProvider configured in the system.
  */
 public class PersistenceService<T> implements ReactiveSideEffectService<T>, ParallelismHints {
     private final Logger logger = Logger.getLogger(PersistenceService.class);
-    private static final String SESSION_ON_DEMAND_KEY = "hibernate.reactive.panache.sessionOnDemand";
-    private static final String VTHREAD_PROVIDER = "org.pipelineframework.plugin.persistence.provider.VThreadPersistenceProvider";
-    private static final String REACTIVE_PROVIDER = "org.pipelineframework.plugin.persistence.provider.ReactivePanachePersistenceProvider";
 
     @Inject
     PersistenceManager persistenceManager;
@@ -94,13 +95,19 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
         if (configured.isBlank()) {
             return true;
         }
-        if (configured.equals(VTHREAD_PROVIDER) || configured.equals("VThreadPersistenceProvider")) {
+        if (configured.equals(PersistenceConstants.VTHREAD_PROVIDER_CLASS)
+            || configured.equals(PersistenceConstants.VTHREAD_PROVIDER_SIMPLE)) {
             return false;
         }
-        if (configured.equals(REACTIVE_PROVIDER) || configured.equals("ReactivePanachePersistenceProvider")) {
+        if (configured.equals(PersistenceConstants.REACTIVE_PROVIDER_CLASS)
+            || configured.equals(PersistenceConstants.REACTIVE_PROVIDER_SIMPLE)) {
             return true;
         }
-        return true;
+        throw new IllegalStateException(
+            "Unknown persistence.provider.class value '" + configured + "'. "
+                + "Supported values are "
+                + PersistenceConstants.REACTIVE_PROVIDER_CLASS + " and "
+                + PersistenceConstants.VTHREAD_PROVIDER_CLASS + ".");
     }
 
     private Uni<T> persistOnVertxContext(T item) {
@@ -110,17 +117,33 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
         Context baseContext = vertx.getOrCreateContext();
         Context context = VertxContext.createNewDuplicatedContext(baseContext);
         VertxContextSafetyToggle.setContextSafe(context, true);
-        return Uni.createFrom().emitter(emitter -> context.runOnContext(ignored -> {
-            context.putLocal(SESSION_ON_DEMAND_KEY, Boolean.TRUE);
-            persistenceManager.persist(item)
-                .subscribe().with(result -> {
-                    context.removeLocal(SESSION_ON_DEMAND_KEY);
-                    emitter.complete(result);
-                }, failure -> {
-                    context.removeLocal(SESSION_ON_DEMAND_KEY);
-                    emitter.fail(failure);
-                });
-        }));
+        return Uni.createFrom().<T>emitter(emitter -> {
+            AtomicReference<Cancellable> subscriptionRef = new AtomicReference<>();
+            emitter.onTermination(() -> {
+                context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
+                Cancellable subscription = subscriptionRef.getAndSet(null);
+                if (subscription != null) {
+                    subscription.cancel();
+                }
+            });
+            context.runOnContext(ignored -> {
+                context.putLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY, Boolean.TRUE);
+                try {
+                    Cancellable subscription = persistenceManager.persist(item)
+                        .subscribe().with(result -> {
+                            context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
+                            emitter.complete(result);
+                        }, failure -> {
+                            context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
+                            emitter.fail(failure);
+                        });
+                    subscriptionRef.set(subscription);
+                } catch (Throwable t) {
+                    context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
+                    emitter.fail(t);
+                }
+            });
+        }).ifNoItem().after(Duration.ofSeconds(30)).fail();
     }
 
     private Uni<T> handleDuplicateKey(T item, Throwable failure) {

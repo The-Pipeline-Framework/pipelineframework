@@ -237,9 +237,6 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     }
 
     private boolean isMonolithLayout(PipelineCompilationContext ctx) {
-        if (ctx == null) {
-            return false;
-        }
         PipelineRuntimeMapping mapping = ctx.getRuntimeMapping();
         return mapping != null && mapping.layout() == PipelineRuntimeMapping.Layout.MONOLITH;
     }

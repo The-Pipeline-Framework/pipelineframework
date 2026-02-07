@@ -9,6 +9,7 @@ import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.TransportMode;
 
 /**
  * Resolves generation targets and client/server roles based on configuration and annotation settings.
@@ -30,7 +31,7 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
 
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
-        org.pipelineframework.processor.ir.TransportMode transportMode = ctx.getTransportMode();
+        TransportMode transportMode = ctx.getTransportMode();
 
         // Apply transport targets and resolve client/server roles for each step model
         List<PipelineStepModel> updatedModels = new ArrayList<>();
@@ -61,7 +62,7 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
     }
 
     private Set<GenerationTarget> resolveTargetsForRole(
-            DeploymentRole role, org.pipelineframework.processor.ir.TransportMode transportMode) {
+            DeploymentRole role, TransportMode transportMode) {
         boolean clientRole = role == DeploymentRole.ORCHESTRATOR_CLIENT || role == DeploymentRole.PLUGIN_CLIENT;
         if (clientRole) {
             return switch (transportMode) {

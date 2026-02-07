@@ -43,4 +43,32 @@ class PipelineStepConfigLoaderTest {
         assertTrue(stepConfig.outputTypes().contains("PaymentRecord"));
         assertTrue(stepConfig.outputTypes().contains("PaymentStatus"));
     }
+
+    @Test
+    void transportOverridePrefersSystemPropertyOverEnv() throws IOException {
+        PipelineStepConfigLoader loader = new PipelineStepConfigLoader(
+            key -> "pipeline.transport".equals(key) ? "LOCAL" : null,
+            key -> "PIPELINE_TRANSPORT".equals(key) ? "REST" : null
+        );
+        Path config = Files.createTempFile("pipeline-config", ".yaml");
+        Files.writeString(config, "basePackage: test\ntransport: GRPC\nsteps: []\n");
+
+        PipelineStepConfigLoader.StepConfig stepConfig = loader.load(config);
+
+        assertEquals("LOCAL", stepConfig.transport());
+    }
+
+    @Test
+    void transportOverrideFallsBackToEnvWhenPropertyMissing() throws IOException {
+        PipelineStepConfigLoader loader = new PipelineStepConfigLoader(
+            key -> null,
+            key -> "PIPELINE_TRANSPORT".equals(key) ? "REST" : null
+        );
+        Path config = Files.createTempFile("pipeline-config", ".yaml");
+        Files.writeString(config, "basePackage: test\ntransport: GRPC\nsteps: []\n");
+
+        PipelineStepConfigLoader.StepConfig stepConfig = loader.load(config);
+
+        assertEquals("REST", stepConfig.transport());
+    }
 }

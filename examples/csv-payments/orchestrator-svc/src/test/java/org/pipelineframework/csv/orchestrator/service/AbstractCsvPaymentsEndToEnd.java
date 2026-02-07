@@ -48,6 +48,7 @@ import org.testcontainers.lifecycle.Startables;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 abstract class AbstractCsvPaymentsEndToEnd {
@@ -227,7 +228,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
     private static void ensureWritable(Path path) {
         try {
-            Set<PosixFilePermission> perms = PosixFilePermissions.fromString("rwxrwxrwx");
+            String permission = Files.isDirectory(path) ? "rwxr-xr-x" : "rw-r--r--";
+            Set<PosixFilePermission> perms = PosixFilePermissions.fromString(permission);
             Files.setPosixFilePermissions(path, perms);
         } catch (IOException | UnsupportedOperationException e) {
             LOG.warnf("Unable to set permissions on %s: %s", path, e.getMessage());
@@ -311,7 +313,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         ? "../monolith-svc/target/quarkus-app/quarkus-run.jar"
                         : "target/quarkus-app/quarkus-run.jar";
         // The test harness lives in orchestrator-svc, but monolith mode executes monolith-svc.
-        Path jar = resolveJarPath(jarPath);
+        Path jar = resolveJarPath(jarPath, MONOLITH_LAYOUT);
         String buildHint =
                 MONOLITH_LAYOUT
                         ? "Run ./examples/csv-payments/build-monolith.sh -DskipTests first."
@@ -340,192 +342,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
         pb.environment().put("QUARKUS_JIB_JVM_ADDITIONAL_ARGUMENTS", "--enable-preview");
 
         if (MONOLITH_LAYOUT) {
-            pb.environment().put("PIPELINE_TRANSPORT", "LOCAL");
-            pb.environment()
-                    .put(
-                            "SERVER_KEYSTORE_PATH",
-                            DEV_CERTS_DIR.resolve("orchestrator-svc/server-keystore.jks").toString());
-            pb.environment()
-                    .put(
-                            "CLIENT_TRUSTSTORE_PATH",
-                            DEV_CERTS_DIR.resolve("orchestrator-svc/client-truststore.jks").toString());
-            pb.environment().put("QUARKUS_GRPC_SERVER_USE_SEPARATE_SERVER", "false");
-
-            String postgresUrl =
-                    "postgresql://"
-                            + postgresContainer.getHost()
-                            + ":"
-                            + postgresContainer.getMappedPort(5432)
-                            + "/quarkus";
-            String jdbcUrl = "jdbc:" + postgresUrl;
-            pb.environment().put("QUARKUS_DATASOURCE_JDBC_URL", jdbcUrl);
-            pb.environment().put("PERSISTENCE_PROVIDER_CLASS", "org.pipelineframework.plugin.persistence.provider.VThreadPersistenceProvider");
-            pb.environment().put("QUARKUS_HIBERNATE_ORM_BLOCKING", "true");
-            pb.environment().put("QUARKUS_HIBERNATE_ORM_SCHEMA_MANAGEMENT_STRATEGY", "drop-and-create");
-            pb.environment().put("QUARKUS_HIBERNATE_ORM_PACKAGES", "org.pipelineframework.csv.common.domain");
-            pb.environment().put("QUARKUS_DATASOURCE_USERNAME", postgresContainer.getUsername());
-            pb.environment().put("QUARKUS_DATASOURCE_PASSWORD", postgresContainer.getPassword());
-
-            String localhost = "localhost";
-            String grpcPort = "8443";
-            pb.environment().put("QUARKUS_GRPC_CLIENTS_PROCESS_FOLDER_HOST", localhost);
-            pb.environment().put("QUARKUS_GRPC_CLIENTS_PROCESS_FOLDER_PORT", grpcPort);
-            pb.environment().put("QUARKUS_GRPC_CLIENTS_PROCESS_CSV_PAYMENTS_INPUT_HOST", localhost);
-            pb.environment().put("QUARKUS_GRPC_CLIENTS_PROCESS_CSV_PAYMENTS_INPUT_PORT", grpcPort);
-            pb.environment()
-                    .put("QUARKUS_GRPC_CLIENTS_PROCESS_SEND_PAYMENT_RECORD_HOST", localhost);
-            pb.environment()
-                    .put("QUARKUS_GRPC_CLIENTS_PROCESS_SEND_PAYMENT_RECORD_PORT", grpcPort);
-            pb.environment().put("QUARKUS_GRPC_CLIENTS_PROCESS_ACK_PAYMENT_SENT_HOST", localhost);
-            pb.environment().put("QUARKUS_GRPC_CLIENTS_PROCESS_ACK_PAYMENT_SENT_PORT", grpcPort);
-            pb.environment().put("QUARKUS_GRPC_CLIENTS_PROCESS_PAYMENT_STATUS_HOST", localhost);
-            pb.environment().put("QUARKUS_GRPC_CLIENTS_PROCESS_PAYMENT_STATUS_PORT", grpcPort);
-            pb.environment()
-                    .put("QUARKUS_GRPC_CLIENTS_PROCESS_CSV_PAYMENTS_OUTPUT_FILE_HOST", localhost);
-            pb.environment()
-                    .put("QUARKUS_GRPC_CLIENTS_PROCESS_CSV_PAYMENTS_OUTPUT_FILE_PORT", grpcPort);
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT_HOST",
-                            localhost);
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT_PORT",
-                            grpcPort);
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT_HOST",
-                            localhost);
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT_PORT",
-                            grpcPort);
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT_HOST",
-                            localhost);
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT_PORT",
-                            grpcPort);
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT_HOST",
-                            localhost);
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT_PORT",
-                            grpcPort);
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT_HOST",
-                            localhost);
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT_PORT",
-                            grpcPort);
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT_HOST",
-                            localhost);
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT_PORT",
-                            grpcPort);
+            configureMonolithEnv(pb);
         } else {
-            pb.environment().put("QUARKUS_GRPC_CLIENTS_PROCESS_FOLDER_HOST", inputCsvService.getHost());
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_PROCESS_FOLDER_PORT",
-                            String.valueOf(inputCsvService.getMappedPort(8444)));
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_PROCESS_CSV_PAYMENTS_INPUT_HOST",
-                            inputCsvService.getHost());
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_PROCESS_CSV_PAYMENTS_INPUT_PORT",
-                            String.valueOf(inputCsvService.getMappedPort(8444)));
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_PROCESS_SEND_PAYMENT_RECORD_HOST",
-                            paymentsProcessingService.getHost());
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_PROCESS_SEND_PAYMENT_RECORD_PORT",
-                            String.valueOf(paymentsProcessingService.getMappedPort(8445)));
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_PROCESS_ACK_PAYMENT_SENT_HOST",
-                            paymentsProcessingService.getHost());
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_PROCESS_ACK_PAYMENT_SENT_PORT",
-                            String.valueOf(paymentsProcessingService.getMappedPort(8445)));
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_PROCESS_PAYMENT_STATUS_HOST",
-                            paymentStatusService.getHost());
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_PROCESS_PAYMENT_STATUS_PORT",
-                            String.valueOf(paymentStatusService.getMappedPort(8446)));
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_PROCESS_CSV_PAYMENTS_OUTPUT_FILE_HOST",
-                            outputCsvService.getHost());
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_PROCESS_CSV_PAYMENTS_OUTPUT_FILE_PORT",
-                            String.valueOf(outputCsvService.getMappedPort(8447)));
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT_HOST",
-                            persistenceService.getHost());
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT_PORT",
-                            String.valueOf(persistenceService.getMappedPort(8448)));
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT_HOST",
-                            persistenceService.getHost());
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT_PORT",
-                            String.valueOf(persistenceService.getMappedPort(8448)));
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT_HOST",
-                            persistenceService.getHost());
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT_PORT",
-                            String.valueOf(persistenceService.getMappedPort(8448)));
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT_HOST",
-                            persistenceService.getHost());
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT_PORT",
-                            String.valueOf(persistenceService.getMappedPort(8448)));
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT_HOST",
-                            persistenceService.getHost());
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT_PORT",
-                            String.valueOf(persistenceService.getMappedPort(8448)));
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT_HOST",
-                            persistenceService.getHost());
-            pb.environment()
-                    .put(
-                            "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT_PORT",
-                            String.valueOf(persistenceService.getMappedPort(8448)));
+            configureModularEnv(pb);
         }
 
         pb.inheritIO();
@@ -536,7 +355,69 @@ abstract class AbstractCsvPaymentsEndToEnd {
         assertEquals(0, exitCode, "Orchestrator exited with non-zero code");
     }
 
-    private static Path resolveJarPath(String jarPath) {
+    private static void configureMonolithEnv(ProcessBuilder pb) {
+        pb.environment().put("PIPELINE_TRANSPORT", "LOCAL");
+        pb.environment()
+                .put(
+                        "SERVER_KEYSTORE_PATH",
+                        DEV_CERTS_DIR.resolve("orchestrator-svc/server-keystore.jks").toString());
+        pb.environment()
+                .put(
+                        "CLIENT_TRUSTSTORE_PATH",
+                        DEV_CERTS_DIR.resolve("orchestrator-svc/client-truststore.jks").toString());
+        pb.environment().put("QUARKUS_GRPC_SERVER_USE_SEPARATE_SERVER", "false");
+
+        String postgresUrl =
+                "postgresql://"
+                        + postgresContainer.getHost()
+                        + ":"
+                        + postgresContainer.getMappedPort(5432)
+                        + "/quarkus";
+        pb.environment().put("QUARKUS_DATASOURCE_JDBC_URL", "jdbc:" + postgresUrl);
+        pb.environment().put("PERSISTENCE_PROVIDER_CLASS", "org.pipelineframework.plugin.persistence.provider.VThreadPersistenceProvider");
+        pb.environment().put("QUARKUS_HIBERNATE_ORM_BLOCKING", "true");
+        pb.environment().put("QUARKUS_HIBERNATE_ORM_SCHEMA_MANAGEMENT_STRATEGY", "drop-and-create");
+        pb.environment().put("QUARKUS_HIBERNATE_ORM_PACKAGES", "org.pipelineframework.csv.common.domain");
+        pb.environment().put("QUARKUS_DATASOURCE_USERNAME", postgresContainer.getUsername());
+        pb.environment().put("QUARKUS_DATASOURCE_PASSWORD", postgresContainer.getPassword());
+
+        String localhost = "localhost";
+        String grpcPort = "8443";
+        putGrpcClient(pb, "PROCESS_FOLDER", localhost, grpcPort);
+        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", localhost, grpcPort);
+        putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", localhost, grpcPort);
+        putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", localhost, grpcPort);
+        putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", localhost, grpcPort);
+        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_OUTPUT_FILE", localhost, grpcPort);
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", localhost, grpcPort);
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", localhost, grpcPort);
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT", localhost, grpcPort);
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT", localhost, grpcPort);
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT", localhost, grpcPort);
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT", localhost, grpcPort);
+    }
+
+    private static void configureModularEnv(ProcessBuilder pb) {
+        putGrpcClient(pb, "PROCESS_FOLDER", inputCsvService.getHost(), String.valueOf(inputCsvService.getMappedPort(8444)));
+        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", inputCsvService.getHost(), String.valueOf(inputCsvService.getMappedPort(8444)));
+        putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", paymentsProcessingService.getHost(), String.valueOf(paymentsProcessingService.getMappedPort(8445)));
+        putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", paymentsProcessingService.getHost(), String.valueOf(paymentsProcessingService.getMappedPort(8445)));
+        putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", paymentStatusService.getHost(), String.valueOf(paymentStatusService.getMappedPort(8446)));
+        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_OUTPUT_FILE", outputCsvService.getHost(), String.valueOf(outputCsvService.getMappedPort(8447)));
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", persistenceService.getHost(), String.valueOf(persistenceService.getMappedPort(8448)));
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", persistenceService.getHost(), String.valueOf(persistenceService.getMappedPort(8448)));
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT", persistenceService.getHost(), String.valueOf(persistenceService.getMappedPort(8448)));
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT", persistenceService.getHost(), String.valueOf(persistenceService.getMappedPort(8448)));
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT", persistenceService.getHost(), String.valueOf(persistenceService.getMappedPort(8448)));
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT", persistenceService.getHost(), String.valueOf(persistenceService.getMappedPort(8448)));
+    }
+
+    private static void putGrpcClient(ProcessBuilder pb, String clientName, String host, String port) {
+        pb.environment().put("QUARKUS_GRPC_CLIENTS_" + clientName + "_HOST", host);
+        pb.environment().put("QUARKUS_GRPC_CLIENTS_" + clientName + "_PORT", port);
+    }
+
+    private static Path resolveJarPath(String jarPath, boolean monolithLayout) {
         Path candidate = Paths.get(jarPath).normalize();
         if (Files.isRegularFile(candidate)) {
             return candidate;
@@ -547,15 +428,17 @@ abstract class AbstractCsvPaymentsEndToEnd {
             if (Files.isRegularFile(resolved)) {
                 return resolved;
             }
-            Path cursor = cwd;
-            for (int i = 0; i < 6 && cursor != null; i++) {
-                Path repoCandidate = cursor
-                        .resolve("examples/csv-payments/monolith-svc/target/quarkus-app/quarkus-run.jar")
-                        .normalize();
-                if (Files.isRegularFile(repoCandidate)) {
-                    return repoCandidate;
+            if (monolithLayout || jarPath.contains("monolith-svc/target/quarkus-app/quarkus-run.jar")) {
+                Path cursor = cwd;
+                for (int i = 0; i < 6 && cursor != null; i++) {
+                    Path repoCandidate = cursor
+                            .resolve("examples/csv-payments/monolith-svc/target/quarkus-app/quarkus-run.jar")
+                            .normalize();
+                    if (Files.isRegularFile(repoCandidate)) {
+                        return repoCandidate;
+                    }
+                    cursor = cursor.getParent();
                 }
-                cursor = cursor.getParent();
             }
         }
         return candidate;
@@ -639,7 +522,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
      *
      * <p>Polls the TEST_E2E_DIR for files whose names end with ".out", checking once per second and
      * returning as soon as any such file is detected. If no output files are found within the
-     * 10-second timeout the method logs a warning and returns.
+     * 10-second timeout the method fails the test.
      *
      * @throws InterruptedException if the thread is interrupted while sleeping between polls
      * @throws IOException if an I/O error occurs when listing the test directory
@@ -667,7 +550,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
             Thread.sleep(1000); // Check every second
         }
 
-        LOG.warn("Pipeline completion timeout reached, proceeding with verification anyway");
+        fail("Pipeline completion timeout reached with no .out files in " + TEST_E2E_DIR);
     }
 
     /**
@@ -760,9 +643,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
         String jdbcUrl = postgresContainer.getJdbcUrl();
         String username = postgresContainer.getUsername();
         String password = postgresContainer.getPassword();
-
-        // Load the PostgreSQL JDBC driver
-        Class.forName("org.postgresql.Driver");
 
         try (Connection connection = DriverManager.getConnection(jdbcUrl, username, password)) {
             // Verify that the paymentrecord table exists

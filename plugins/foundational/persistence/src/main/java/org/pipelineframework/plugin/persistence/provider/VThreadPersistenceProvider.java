@@ -65,20 +65,20 @@ public class VThreadPersistenceProvider implements PersistenceProvider<Object> {
     @Override
     @Transactional
     public Uni<Object> persist(Object entity) {
-    if (entity == null) {
-      return Uni.createFrom().failure(new IllegalArgumentException("Cannot persist a null entity"));
-    }
-    
-    return Uni.createFrom().item(() -> {
-        if (!entityManagerInstance.isResolvable()) {
-        throw new IllegalStateException("No EntityManager available for VThreadPersistenceProvider");
+        if (entity == null) {
+            return Uni.createFrom().failure(new IllegalArgumentException("Cannot persist a null entity"));
         }
 
-        EntityManager em = entityManagerInstance.get();
-        em.persist(entity);
-        return entity;
-    });
-  }
+        return Uni.createFrom().item(() -> {
+            if (!entityManagerInstance.isResolvable()) {
+                throw new IllegalStateException("No EntityManager available for VThreadPersistenceProvider");
+            }
+
+            EntityManager em = entityManagerInstance.get();
+            em.persist(entity);
+            return entity;
+        });
+    }
 
   @Override
   @Transactional
@@ -131,10 +131,10 @@ public class VThreadPersistenceProvider implements PersistenceProvider<Object> {
    */
     @Override
     public boolean supportsThreadContext() {
-    // Allow virtual threads and non-event-loop threads; reject Vert.x event-loop threads.
-    if (Thread.currentThread().isVirtual()) {
-      return true;
-    }
-    return !Context.isOnEventLoopThread();
+        // Allow virtual threads and non-event-loop threads; reject Vert.x event-loop threads.
+        if (Thread.currentThread().isVirtual()) {
+            return true;
+        }
+        return !Context.isOnEventLoopThread();
     }
 }

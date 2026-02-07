@@ -38,7 +38,9 @@ class MonolithTopologyTest {
                 .filter(name -> name.startsWith("quarkus.grpc.clients.") && name.endsWith(".port"))
                 .collect(Collectors.toSet());
 
-            assertEquals(hostKeys.size(), portKeys.size(), "Expected matching host/port entries");
+            int expectedHostEntries = hostKeys.size();
+            int actualPortEntries = portKeys.size();
+            assertEquals(expectedHostEntries, actualPortEntries, "Expected matching host/port entries");
             hostKeys.forEach(key -> assertEquals("localhost", properties.getProperty(key)));
             portKeys.forEach(key -> assertEquals("8444", properties.getProperty(key)));
         }

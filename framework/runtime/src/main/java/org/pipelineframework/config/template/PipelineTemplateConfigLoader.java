@@ -53,6 +53,7 @@ public class PipelineTemplateConfigLoader {
         String appName = readString(rootMap, "appName");
         String basePackage = readString(rootMap, "basePackage");
         String transport = readString(rootMap, "transport");
+        transport = transport == null ? null : transport.trim();
         String transportOverride = resolveTransportOverride();
         if (transportOverride != null && !transportOverride.isBlank()) {
             transport = transportOverride.trim();

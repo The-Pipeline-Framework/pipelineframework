@@ -95,9 +95,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
 
         DescriptorProtos.FileDescriptorSet descriptorSet = ctx.getDescriptorSet();
 
-        boolean hasPluginSideEffects = ctx.getStepModels().stream()
-            .anyMatch(model -> model.sideEffect()
-                && model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER);
+        Set<String> generatedSideEffectBeans = new HashSet<>();
 
         // Generate artifacts for each step model
         for (PipelineStepModel model : ctx.getStepModels()) {
@@ -113,7 +111,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 grpcBinding,
                 restBinding,
                 localBinding,
-                hasPluginSideEffects,
+                generatedSideEffectBeans,
                 descriptorSet,
                 cacheKeyGenerator,
                 roleMetadataGenerator,
@@ -468,7 +466,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             GrpcBinding grpcBinding,
             RestBinding restBinding,
             LocalBinding localBinding,
-            boolean hasPluginSideEffects,
+            Set<String> generatedSideEffectBeans,
             DescriptorProtos.FileDescriptorSet descriptorSet,
             ClassName cacheKeyGenerator,
             RoleMetadataGenerator roleMetadataGenerator,
@@ -544,13 +542,17 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     if (ctx.getProcessingEnv() == null) {
                         break;
                     }
-                    if (model.sideEffect() && !hasPluginSideEffects) {
-                        generateSideEffectBean(
-                            ctx,
-                            model,
-                            org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER,
-                            org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT,
-                            grpcBinding);
+                    if (model.sideEffect()
+                        && model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER) {
+                        String sideEffectBeanKey = model.servicePackage() + ".pipeline." + model.serviceName();
+                        if (generatedSideEffectBeans.add(sideEffectBeanKey)) {
+                            generateSideEffectBean(
+                                ctx,
+                                model,
+                                org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER,
+                                org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT,
+                                grpcBinding);
+                        }
                     }
                     if (localBinding == null) {
                         ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,

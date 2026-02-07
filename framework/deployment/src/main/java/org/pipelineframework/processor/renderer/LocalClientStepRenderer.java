@@ -90,7 +90,7 @@ public class LocalClientStepRenderer implements PipelineRenderer<LocalBinding> {
 
         ClassName stepInterface;
         switch (model.streamingShape()) {
-            case UNARY_UNARY:
+            case UNARY_UNARY -> {
                 stepInterface = ClassName.get(StepOneToOne.class);
                 clientStepBuilder.addSuperinterface(ClassName.get("org.pipelineframework.cache", "CacheKeyTarget"));
                 clientStepBuilder.addSuperinterface(ParameterizedTypeName.get(stepInterface, inputType, outputType));
@@ -102,24 +102,24 @@ public class LocalClientStepRenderer implements PipelineRenderer<LocalBinding> {
                     .addStatement("return $T.class", outputType)
                     .build();
                 clientStepBuilder.addMethod(cacheKeyTargetMethod);
-                break;
-            case UNARY_STREAMING:
+            }
+            case UNARY_STREAMING -> {
                 stepInterface = ClassName.get("org.pipelineframework.step", "StepOneToMany");
                 clientStepBuilder.addSuperinterface(ParameterizedTypeName.get(stepInterface, inputType, outputType));
-                break;
-            case STREAMING_UNARY:
+            }
+            case STREAMING_UNARY -> {
                 stepInterface = ClassName.get(StepManyToOne.class);
                 clientStepBuilder.addSuperinterface(ParameterizedTypeName.get(stepInterface, inputType, outputType));
-                break;
-            case STREAMING_STREAMING:
+            }
+            case STREAMING_STREAMING -> {
                 stepInterface = ClassName.get("org.pipelineframework.step", "StepManyToMany");
                 clientStepBuilder.addSuperinterface(ParameterizedTypeName.get(stepInterface, inputType, outputType));
-                break;
+            }
         }
 
         ClassName tracing = ClassName.get("org.pipelineframework.telemetry", "LocalClientTracing");
         String rpcServiceName = model.serviceName();
-        String rpcMethodName = "remoteProcess";
+        String rpcMethodName = "localProcess";
 
         switch (model.streamingShape()) {
             case UNARY_STREAMING -> {

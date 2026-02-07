@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 import org.yaml.snakeyaml.Yaml;
 
@@ -15,11 +16,19 @@ import org.yaml.snakeyaml.Yaml;
  * Loads pipeline step configuration metadata from a YAML file.
  */
 public class PipelineStepConfigLoader {
+    private final Function<String, String> propertyLookup;
+    private final Function<String, String> envLookup;
 
     /**
      * Creates a new PipelineStepConfigLoader.
      */
     public PipelineStepConfigLoader() {
+        this(System::getProperty, System::getenv);
+    }
+
+    public PipelineStepConfigLoader(Function<String, String> propertyLookup, Function<String, String> envLookup) {
+        this.propertyLookup = propertyLookup == null ? key -> null : propertyLookup;
+        this.envLookup = envLookup == null ? key -> null : envLookup;
     }
 
     /**
@@ -91,9 +100,9 @@ public class PipelineStepConfigLoader {
     }
 
     private String resolveTransportOverride() {
-        String override = System.getProperty("pipeline.transport");
+        String override = propertyLookup.apply("pipeline.transport");
         if (override == null || override.isBlank()) {
-            override = System.getenv("PIPELINE_TRANSPORT");
+            override = envLookup.apply("PIPELINE_TRANSPORT");
         }
         return override;
     }

@@ -378,11 +378,7 @@ public class PipelineTelemetryMetadataGenerator {
     }
 
     private String resolveClientStepClassName(PipelineStepModel model, TransportMode transportMode) {
-        String suffix = switch (transportMode) {
-            case REST -> "RestClientStep";
-            case LOCAL -> "LocalClientStep";
-            case GRPC -> "GrpcClientStep";
-        };
+        String suffix = transportMode.clientStepSuffix();
         return model.servicePackage() + ".pipeline." +
             model.generatedName().replace("Service", "") + suffix;
     }

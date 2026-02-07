@@ -11,7 +11,7 @@ public final class LocalClientTracing {
     private LocalClientTracing() {
     }
 
-    // TODO: switch to local-specific metrics/spans once dashboards can handle rpc.system=local.
+    // TODO(#98): switch to local-specific metrics/spans once dashboards can handle rpc.system=local.
     public static <T> Uni<T> traceUnary(String service, String method, Uni<T> uni) {
         return GrpcClientTracing.traceUnary(service, method, uni);
     }

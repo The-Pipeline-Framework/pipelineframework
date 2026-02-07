@@ -8,6 +8,7 @@ import com.squareup.javapoet.*;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.OrchestratorBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.TransportMode;
 import org.pipelineframework.processor.util.GrpcJavaTypeResolver;
 
 /**
@@ -30,8 +31,9 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
 
     @Override
     public void render(OrchestratorBinding binding, GenerationContext ctx) throws IOException {
-        boolean restMode = "REST".equalsIgnoreCase(binding.normalizedTransport());
-        boolean localMode = "LOCAL".equalsIgnoreCase(binding.normalizedTransport());
+        TransportMode transportMode = TransportMode.fromStringOptional(binding.normalizedTransport()).orElse(TransportMode.GRPC);
+        boolean restMode = transportMode == TransportMode.REST;
+        boolean localMode = transportMode == TransportMode.LOCAL;
         ClassName pipelineExecutionService = ClassName.get("org.pipelineframework", "PipelineExecutionService");
         ClassName pipelineInputDeserializer = ClassName.get("org.pipelineframework.util", "PipelineInputDeserializer");
         ClassName quarkusApplication = ClassName.get("io.quarkus.runtime", "QuarkusApplication");
@@ -112,8 +114,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
 
         String mapperName = mapperField == null ? null : mapperField.name;
         String mapperMethod = localMode ? "fromDto" : "toGrpc";
-        String multiMapSuffix = mapperName == null ? "" : ".map(" + mapperName + "::" + mapperMethod + ")";
-        String uniMapSuffix = mapperName == null ? "" : ".map(" + mapperName + "::" + mapperMethod + ")";
+        String mapSuffix = mapperName == null ? "" : ".map(" + mapperName + "::" + mapperMethod + ")";
         String uniToMultiSuffix = ".toMulti()";
 
         MethodSpec callMethod = MethodSpec.methodBuilder("call")
@@ -178,7 +179,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
                     }
                     $T.flush();
                 }
-                """.formatted(multiMapSuffix, uniMapSuffix, uniToMultiSuffix),
+                """.formatted(mapSuffix, mapSuffix, uniToMultiSuffix),
                 commandLine,
                 inputMultiType,
                 commandLine,

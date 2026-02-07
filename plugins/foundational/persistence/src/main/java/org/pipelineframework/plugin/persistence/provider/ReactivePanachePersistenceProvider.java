@@ -57,31 +57,33 @@ public class ReactivePanachePersistenceProvider implements PersistenceProvider<O
   public Uni<Object> persist(Object entity) {
     LOG.tracef("Persisting entity of type %s", entity.getClass().getSimpleName());
 
-    return Panache.withTransaction(() -> Panache.getSession()
-        .onItem()
-        .transformToUni(session -> session.persist(entity).replaceWith(entity)))
-        .replaceWith(entity)
+    return Panache.withTransaction(
+            () ->
+                Panache.getSession()
+                    .onItem()
+                    .transformToUni(session -> session.persist(entity).replaceWith(entity)))
         .onFailure()
         .transform(
             t ->
                 new PersistenceException(
                     "Failed to persist entity of type " + entity.getClass().getName(), t));
-    }
+  }
 
-    @Override
-    public Uni<Object> persistOrUpdate(Object entity) {
-        LOG.tracef("Persisting or updating entity of type %s", entity.getClass().getSimpleName());
+  @Override
+  public Uni<Object> persistOrUpdate(Object entity) {
+    LOG.tracef("Persisting or updating entity of type %s", entity.getClass().getSimpleName());
 
-        return Panache.withTransaction(() -> Panache.getSession()
-            .onItem()
-            .transformToUni(session -> session.merge(entity).replaceWith(entity)))
-            .replaceWith(entity)
-            .onFailure()
-            .transform(
-                t ->
-                    new PersistenceException(
-                        "Failed to persist or update entity of type " + entity.getClass().getName(), t));
-    }
+    return Panache.withTransaction(
+            () ->
+                Panache.getSession()
+                    .onItem()
+                    .transformToUni(session -> session.merge(entity)))
+        .onFailure()
+        .transform(
+            t ->
+                new PersistenceException(
+                    "Failed to persist or update entity of type " + entity.getClass().getName(), t));
+  }
 
     /**
      * Checks whether the provider supports the given entity instance.

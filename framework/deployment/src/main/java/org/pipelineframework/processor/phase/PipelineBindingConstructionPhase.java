@@ -101,9 +101,13 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
             if (config == null) {
                 return false;
             }
-            org.pipelineframework.processor.ir.TransportMode transportMode =
-                org.pipelineframework.processor.ir.TransportMode.fromString(config.transport());
-            return transportMode == org.pipelineframework.processor.ir.TransportMode.GRPC;
+            String transport = config.transport();
+            if (transport == null || transport.isBlank()) {
+                return true;
+            }
+            return TransportMode.fromStringOptional(transport)
+                .map(mode -> mode == TransportMode.GRPC)
+                .orElse(false);
         }
         return false;
     }
