@@ -22,6 +22,7 @@ if [[ -f "$ACTIVE_MAPPING" ]]; then
   cp "$ACTIVE_MAPPING" "$backup_file"
 fi
 
+# cleanup restores ACTIVE_MAPPING from $backup_file if one exists; otherwise it removes the ACTIVE_MAPPING file.
 cleanup() {
   if [[ -n "$backup_file" ]]; then
     cp "$backup_file" "$ACTIVE_MAPPING"

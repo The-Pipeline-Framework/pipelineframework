@@ -35,6 +35,17 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
         return "Pipeline Binding Construction Phase";
     }
 
+    /**
+     * Constructs renderer-specific bindings for each pipeline step and stores them in the compilation context.
+     *
+     * <p>This builds gRPC, REST and local bindings as appropriate for each PipelineStepModel, optionally
+     * loads a protocol descriptor set when gRPC bindings are required, and adds an orchestrator binding
+     * if orchestrator models are present. Bindings are stored in the context's renderer bindings map
+     * using keys: "<modelName>_grpc", "<modelName>_rest", "<modelName>_local" and "orchestrator".
+     *
+     * @param ctx the pipeline compilation context to read models from and write constructed bindings into
+     * @throws Exception if descriptor set loading or binding construction fails
+     */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
         // Create a map to store bindings for each model
@@ -90,6 +101,15 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
         ctx.setRendererBindings(bindingsMap);
     }
 
+    /**
+     * Determine whether gRPC bindings are required for the given compilation context.
+     *
+     * Evaluates step models and orchestrator template configuration to decide if descriptor
+     * loading and gRPC binding resolution are necessary.
+     *
+     * @param ctx the pipeline compilation context to inspect
+     * @return `true` if gRPC bindings are required, `false` otherwise
+     */
     private boolean needsGrpcBindings(PipelineCompilationContext ctx) {
         if (ctx.getStepModels().stream().anyMatch(model ->
             model.enabledTargets().contains(GenerationTarget.GRPC_SERVICE)

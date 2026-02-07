@@ -44,10 +44,14 @@ public class PipelineTelemetryMetadataGenerator {
     }
 
     /**
-     * Writes item-boundary metadata to META-INF/pipeline/telemetry.json.
+     * Generate pipeline telemetry metadata used for item-boundary inference and write it to META-INF/pipeline/telemetry.json.
      *
-     * @param ctx the compilation context
-     * @throws IOException if writing the resource fails
+     * The written metadata contains the pipeline item input/output types, the resolved producer and consumer client step class names,
+     * and plugin-to-parent step mappings. If required information cannot be determined (for example, orchestrator not generated or item
+     * types unresolved), no resource is produced.
+     *
+     * @param ctx the compilation context providing step models, transport mode, and processor utilities
+     * @throws IOException if creating or writing the resource fails
      */
     public void writeTelemetryMetadata(PipelineCompilationContext ctx) throws IOException {
         if (!ctx.isOrchestratorGenerated()) {
@@ -92,6 +96,14 @@ public class PipelineTelemetryMetadataGenerator {
         }
     }
 
+    /**
+     * Filter pipeline step models to those enabled for the client generation target
+     * corresponding to the context's transport mode.
+     *
+     * @param ctx the pipeline compilation context used to obtain step models and determine the transport mode
+     * @return a list of PipelineStepModel instances whose enabledTargets contain the resolved client GenerationTarget;
+     *         returns an empty list if the context has no step models or none match the target
+     */
     private List<PipelineStepModel> filterClientModels(PipelineCompilationContext ctx) {
         List<PipelineStepModel> models = ctx.getStepModels();
         if (models == null || models.isEmpty()) {
@@ -103,6 +115,12 @@ public class PipelineTelemetryMetadataGenerator {
             .toList();
     }
 
+    /**
+     * Map a transport mode to its corresponding client-generation target.
+     *
+     * @param transportMode the transport mode to map
+     * @return the GenerationTarget used for client step generation for the given transport mode
+     */
     private GenerationTarget resolveClientTarget(TransportMode transportMode) {
         return switch (transportMode) {
             case REST -> GenerationTarget.REST_CLIENT_STEP;
@@ -111,6 +129,13 @@ public class PipelineTelemetryMetadataGenerator {
         };
     }
 
+    /**
+     * Loads the configured pipeline item input type from application.properties.
+     *
+     * @param ctx the pipeline compilation context used to locate application.properties
+     * @return the trimmed value of the `pipeline.telemetry.item-input-type` property, or `null` if the property is not present or could not be read
+     *         (an IO failure while reading application.properties will emit a compiler warning)
+     */
     private String loadItemInputType(PipelineCompilationContext ctx) {
         Properties properties = new Properties();
         try {
@@ -203,6 +228,17 @@ public class PipelineTelemetryMetadataGenerator {
         return baseDirs;
     }
 
+    /**
+     * Orders the provided base pipeline step models according to the steps defined in the project's pipeline YAML.
+     *
+     * If no pipeline YAML or no steps are defined, the original models list is returned unchanged. Models whose
+     * class-name tokens match entries in the YAML are placed in the same order as the YAML; any models not matched
+     * by the YAML are appended after the matched models in their original relative order.
+     *
+     * @param ctx the pipeline compilation context used to locate and load the pipeline YAML configuration
+     * @param models the base (non-side-effect) pipeline step models to order
+     * @return a list of pipeline step models ordered to reflect the pipeline YAML, with unmatched models appended
+     */
     private List<PipelineStepModel> orderBaseSteps(PipelineCompilationContext ctx, List<PipelineStepModel> models) {
         PipelineYamlConfig config = loadPipelineConfig(ctx);
         if (config == null || config.steps() == null || config.steps().isEmpty()) {
@@ -228,6 +264,14 @@ public class PipelineTelemetryMetadataGenerator {
         return ordered;
     }
 
+    /**
+     * Loads the pipeline YAML configuration from the module directory in the provided compilation context.
+     *
+     * If the context has no module directory or no pipeline config file is located, this method returns {@code null}.
+     *
+     * @param ctx the pipeline compilation context used to determine the module directory
+     * @return the loaded {@link PipelineYamlConfig}, or {@code null} if no module directory is present or no config file is found
+     */
     private PipelineYamlConfig loadPipelineConfig(PipelineCompilationContext ctx) {
         PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
         Path moduleDir = ctx.getModuleDir();
@@ -242,6 +286,14 @@ public class PipelineTelemetryMetadataGenerator {
         return loader.load(configPath.get());
     }
 
+    /**
+     * Selects the pipeline step model whose normalized client-step class name best matches the given token.
+     *
+     * @param candidates   candidate pipeline step models to consider
+     * @param token        the matching token to search for in the normalized class name
+     * @param transportMode transport mode used to resolve the client-step class name
+     * @return             the best-matching PipelineStepModel, or `null` if none match
+     */
     private PipelineStepModel selectBestMatch(
         List<PipelineStepModel> candidates,
         String token,
@@ -259,6 +311,17 @@ public class PipelineTelemetryMetadataGenerator {
         return best;
     }
 
+    /**
+     * Converts a step class name into a normalized lowercase alphanumeric token.
+     *
+     * Removes the package prefix (if present) and common client/service suffixes
+     * such as "Service", "GrpcClientStep", "RestClientStep", and "LocalClientStep",
+     * then returns the resulting name as a lowercase string containing only
+     * letters and digits.
+     *
+     * @param className the fully-qualified or simple class name of the step
+     * @return a lowercase alphanumeric token derived from the class name
+     */
     private String normalizeStepToken(String className) {
         String simple = className;
         int lastDot = simple.lastIndexOf('.');
@@ -269,6 +332,15 @@ public class PipelineTelemetryMetadataGenerator {
         return toClassToken(simple);
     }
 
+    /**
+     * Convert a string to a lowercase alphanumeric token.
+     *
+     * <p>All non-alphanumeric characters are removed and the result is lowercased.</p>
+     *
+     * @param name the input string to convert; may be null
+     * @return the input converted to a lowercase string containing only ASCII letters and digits,
+     *         or an empty string if {@code name} is null or contains no alphanumeric characters
+     */
     private String toClassToken(String name) {
         if (name == null) {
             return "";
@@ -276,6 +348,15 @@ public class PipelineTelemetryMetadataGenerator {
         return name.replaceAll("[^A-Za-z0-9]", "").toLowerCase();
     }
 
+    /**
+     * Selects the producer (client) step class name for the given item type from an ordered list of pipeline steps.
+     *
+     * @param ordered       the ordered list of pipeline steps to search
+     * @param itemType      the domain type to match against each step's output mapping
+     * @param transportMode the transport mode used to resolve the client step class name
+     * @return the fully-qualified client step class name whose output mapping matches `itemType` (last matching step is returned);
+     *         if no step matches, the client class name of the final step in `ordered` is returned; returns `null` if `ordered` is null or empty
+     */
     private String findProducerStep(
         List<PipelineStepModel> ordered,
         String itemType,
@@ -296,6 +377,14 @@ public class PipelineTelemetryMetadataGenerator {
         return resolveClientStepClassName(ordered.get(ordered.size() - 1), transportMode);
     }
 
+    /**
+     * Resolve parent mappings for plugin (side-effect) steps to their corresponding base steps.
+     *
+     * @param ctx         the pipeline compilation context used to access step models and transport mode
+     * @param orderedBase ordered list of base (non-side-effect) step models to consult when locating a plugin's parent
+     * @return            a map where each key is a plugin step's client step class name and each value is the parent base step's client step class name;
+     *                    returns an empty map if no plugin parents are found
+     */
     private Map<String, String> resolveStepParents(PipelineCompilationContext ctx, List<PipelineStepModel> orderedBase) {
         List<PipelineStepModel> models = ctx.getStepModels();
         if (models == null || models.isEmpty()) {
@@ -355,6 +444,14 @@ public class PipelineTelemetryMetadataGenerator {
         return mapping.domainType().toString();
     }
 
+    /**
+     * Determine the client-side class name of the consumer step that accepts a given item type.
+     *
+     * @param ordered the ordered list of base pipeline step models to search
+     * @param itemType the item domain type to match against each step's input mapping
+     * @param transportMode the transport mode used to resolve the client step class name
+     * @return the fully-qualified client step class name for the first step whose input matches `itemType`; if none match but `ordered` is non-empty, the first step's client class name; `null` if `ordered` is null or empty
+     */
     private String findConsumerStep(
         List<PipelineStepModel> ordered,
         String itemType,
@@ -370,6 +467,13 @@ public class PipelineTelemetryMetadataGenerator {
         return resolveClientStepClassName(ordered.get(0), transportMode);
     }
 
+    /**
+     * Determine whether the given mapping's domain type matches the provided item type string.
+     *
+     * @param mapping the type mapping to inspect; may be null
+     * @param itemType the item type to compare against; may be null
+     * @return `true` if the mapping has a non-null domain type equal to `itemType`, `false` otherwise
+     */
     private boolean matchesType(TypeMapping mapping, String itemType) {
         if (mapping == null || mapping.domainType() == null || itemType == null) {
             return false;
@@ -377,6 +481,13 @@ public class PipelineTelemetryMetadataGenerator {
         return itemType.equals(mapping.domainType().toString());
     }
 
+    /**
+     * Builds the fully-qualified client step class name for a pipeline step model.
+     *
+     * @param model the pipeline step model used to derive package and generated name
+     * @param transportMode the transport mode whose client-step suffix is appended
+     * @return the fully-qualified client step class name (package + ".pipeline." + generated name without "Service" + transport suffix)
+     */
     private String resolveClientStepClassName(PipelineStepModel model, TransportMode transportMode) {
         String suffix = transportMode.clientStepSuffix();
         return model.servicePackage() + ".pipeline." +

@@ -29,6 +29,18 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
         return GenerationTarget.ORCHESTRATOR_CLI;
     }
 
+    /**
+     * Generates the OrchestratorApplication Java source that implements a CLI for running pipelines locally.
+     *
+     * <p>The generated class is written to the binding's orchestrator package and is wired with Quarkus, Picocli,
+     * dependency injection, optional metrics/telemetry, and the PipelineExecutionService. Input deserialization,
+     * transport mode (REST, LOCAL, or gRPC), and optional mapping between DTO/domain/gRPC types are resolved from
+     * the provided binding and generation context.</p>
+     *
+     * @param binding configuration and metadata that determine package, input type, CLI name/description/version, and transport
+     * @param ctx     generation context used for type resolution and for writing the generated source file
+     * @throws IOException if writing the generated Java file to the processing environment's filer fails
+     */
     @Override
     public void render(OrchestratorBinding binding, GenerationContext ctx) throws IOException {
         TransportMode transportMode = TransportMode.fromStringOptional(binding.normalizedTransport()).orElse(TransportMode.GRPC);
@@ -302,6 +314,14 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             .writeTo(ctx.processingEnv().getFiler());
     }
 
+    /**
+     * Resolve the gRPC Java input TypeName for the orchestrator's first pipeline step.
+     *
+     * @param binding orchestrator binding containing configuration (including the first step service name and base package)
+     * @param ctx generation context providing the protobuf descriptor set and processing environment
+     * @return the resolved gRPC parameter TypeName for the first step
+     * @throws IllegalStateException if the protobuf descriptor set is not available, if the first step service name is missing or blank, or if the gRPC input type cannot be resolved from the descriptors
+     */
     private TypeName resolveGrpcInputType(OrchestratorBinding binding, GenerationContext ctx) {
         DescriptorProtos.FileDescriptorSet descriptorSet = ctx.descriptorSet();
         if (descriptorSet == null) {
@@ -336,10 +356,25 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
         return grpcTypes.grpcParameterType();
     }
 
+    /**
+     * Produce the TypeName that refers to the domain input class for the given binding.
+     *
+     * <p>The returned TypeName points to the class named by binding.inputTypeName() inside
+     * the package "{basePackage}.common.domain".</p>
+     *
+     * @param binding the orchestrator binding containing basePackage() and inputTypeName()
+     * @return the TypeName of the domain input class (package: basePackage + ".common.domain", class: inputTypeName)
+     */
     private TypeName resolveDomainInputType(OrchestratorBinding binding) {
         return ClassName.get(binding.basePackage() + ".common.domain", binding.inputTypeName());
     }
 
+    /**
+     * Convert a string to lower camel case by lowercasing its first character.
+     *
+     * @param name the input string
+     * @return the input with its first character lowercased; returns the original value if it is null or empty
+     */
     private String lowerCamel(String name) {
         if (name == null || name.isEmpty()) {
             return name;

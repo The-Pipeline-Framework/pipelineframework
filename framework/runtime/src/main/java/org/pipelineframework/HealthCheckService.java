@@ -186,12 +186,13 @@ public class HealthCheckService {
     }
 
     /**
-     * Checks the health of all dependent services before running the pipeline.
-     * This method inspects each step to detect gRPC client dependencies and checks their health endpoints.
-     * Retries every 5 seconds for up to 2 minutes before giving up.
+     * Verify that all gRPC and REST service dependencies used by the provided pipeline steps are reachable and healthy.
      *
-     * @param steps the list of pipeline steps to check for dependent services
-     * @return true if all dependent services are healthy, false otherwise
+     * Scans each step for configured gRPC and REST clients, performs health checks for any detected dependencies,
+     * and returns the overall health outcome.
+     *
+     * @param steps the list of pipeline step instances to inspect for gRPC and REST client dependencies
+     * @return `true` if all detected dependent services are healthy, `false` otherwise
      */
     public boolean checkHealthOfDependentServices(List<Object> steps) {
         if (isLocalTransport()) {
@@ -262,6 +263,11 @@ public class HealthCheckService {
         }
     }
 
+    /**
+     * Determine whether the pipeline transport is configured as LOCAL.
+     *
+     * @return `true` if the `pipeline.transport` configuration equals "LOCAL" (case-insensitive, trimmed), `false` otherwise.
+     */
     private boolean isLocalTransport() {
         return ConfigProvider.getConfig()
                 .getOptionalValue("pipeline.transport", String.class)

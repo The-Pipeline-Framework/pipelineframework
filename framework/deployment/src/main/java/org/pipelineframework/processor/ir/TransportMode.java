@@ -10,6 +10,12 @@ public enum TransportMode {
     REST,
     LOCAL;
 
+    /**
+     * The platform-specific client step class name suffix for this transport mode.
+     *
+     * @return the client step suffix corresponding to the transport mode — one of
+     *         "GrpcClientStep", "RestClientStep", or "LocalClientStep"
+     */
     public String clientStepSuffix() {
         return switch (this) {
             case REST -> "RestClientStep";
@@ -18,6 +24,12 @@ public enum TransportMode {
         };
     }
 
+    /**
+     * Parse a string into a TransportMode when the input matches a known mode name.
+     *
+     * @param raw the input string to parse; null or blank input is treated as no match
+     * @return an Optional containing the matching TransportMode for "REST", "LOCAL", or "GRPC" (case-insensitive), or Optional.empty() if the input is null, blank, or does not match
+     */
     public static Optional<TransportMode> fromStringOptional(String raw) {
         if (raw == null || raw.isBlank()) {
             return Optional.empty();
@@ -35,6 +47,13 @@ public enum TransportMode {
         return Optional.empty();
     }
 
+    /**
+     * Parse the given string into a TransportMode, using GRPC as the default when the input is null or blank.
+     *
+     * @param raw the input string to parse; may be null or blank
+     * @return the corresponding TransportMode, or GRPC if {@code raw} is null or blank
+     * @throws IllegalArgumentException if {@code raw} is non-blank and does not match GRPC, REST, or LOCAL
+     */
     public static TransportMode fromString(String raw) {
         if (raw == null || raw.isBlank()) {
             return GRPC;

@@ -21,12 +21,18 @@ public class PipelineStepConfigLoader {
     private final Function<String, String> envLookup;
 
     /**
-     * Creates a new PipelineStepConfigLoader.
+     * Construct a PipelineStepConfigLoader that uses system properties and environment variables.
      */
     public PipelineStepConfigLoader() {
         this(System::getProperty, System::getenv);
     }
 
+    /**
+     * Create a PipelineStepConfigLoader with injectable lookups for system properties and environment variables.
+     *
+     * @param propertyLookup function that accepts a property name and returns its value; if `null`, a lookup that always returns `null` is used
+     * @param envLookup function that accepts an environment variable name and returns its value; if `null`, a lookup that always returns `null` is used
+     */
     public PipelineStepConfigLoader(Function<String, String> propertyLookup, Function<String, String> envLookup) {
         this.propertyLookup = propertyLookup == null ? key -> null : propertyLookup;
         this.envLookup = envLookup == null ? key -> null : envLookup;
@@ -43,10 +49,16 @@ public class PipelineStepConfigLoader {
     public record StepConfig(String basePackage, String transport, List<String> inputTypes, List<String> outputTypes) {}
 
     /**
-     * Load output type names and base package from the pipeline configuration.
+     * Load pipeline step configuration from a YAML file.
      *
-     * @param configPath the pipeline configuration file path
-     * @return a StepConfig containing the base package and output type names
+     * Reads the file at the given path, extracts the configured base package, resolves the transport
+     * (applying known-name normalization and any external override), and collects declared step
+     * input and output type names.
+     *
+     * @param configPath the path to the pipeline YAML configuration
+     * @return a StepConfig containing the configured base package, the resolved transport name,
+     *         the list of input type names, and the list of output type names
+     * @throws IllegalStateException if the YAML file cannot be read
      */
     public StepConfig load(Path configPath) {
         Object root = loadYaml(configPath);
@@ -100,6 +112,12 @@ public class PipelineStepConfigLoader {
         }
     }
 
+    /**
+     * Convert a YAML value to its string representation.
+     *
+     * @param value the YAML value to convert; may be null
+     * @return the string representation of {@code value}, or an empty string if {@code value} is null
+     */
     private String getString(Object value) {
         if (value == null) {
             return "";
@@ -107,6 +125,11 @@ public class PipelineStepConfigLoader {
         return String.valueOf(value);
     }
 
+    /**
+     * Resolve the transport override value from the configured property and environment lookups.
+     *
+     * @return the transport override string, or null/empty string if no override is configured
+     */
     private String resolveTransportOverride() {
         return TransportOverrideResolver.resolveOverride(propertyLookup, envLookup);
     }

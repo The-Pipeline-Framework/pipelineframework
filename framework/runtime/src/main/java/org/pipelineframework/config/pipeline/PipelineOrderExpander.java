@@ -164,6 +164,13 @@ public final class PipelineOrderExpander {
         return false;
     }
 
+    /**
+     * Determines whether the given pipeline order already includes any side-effect client steps.
+     *
+     * @param baseOrder the list of fully-qualified step class names to inspect
+     * @return {@code true} if any entry contains "SideEffectGrpcClientStep", "SideEffectRestClientStep",
+     *         or "SideEffectLocalClientStep"; {@code false} otherwise
+     */
     private static boolean containsSideEffectSteps(List<String> baseOrder) {
         return baseOrder.stream().anyMatch(name -> name != null
             && (name.contains("SideEffectGrpcClientStep")
@@ -171,6 +178,19 @@ public final class PipelineOrderExpander {
                 || name.contains("SideEffectLocalClientStep")));
     }
 
+    /**
+     * Determines the domain type associated with a pipeline step for a given aspect position.
+     *
+     * Attempts to resolve the type by inspecting the step class (using the provided ClassLoader when available).
+     * If that fails, it matches the step name against the supplied step mappings and returns the best matching
+     * step's input type when position equals "BEFORE_STEP" (case-insensitive), or the output type otherwise.
+     *
+     * @param stepClassName the step's class name (fully-qualified or simple); may be used for reflection or token matching
+     * @param steps         a list of configured pipeline steps to match names to types; may be null or empty
+     * @param classLoader   the ClassLoader to use when reflecting on the step class; may be null
+     * @param position      the aspect position (case-insensitive); "BEFORE_STEP" selects the step's input type, any other value selects the output type
+     * @return the resolved simple type name for the step (e.g., DTO or domain type), or null if no mapping could be determined
+     */
     private static String resolveTypeForAspect(
         String stepClassName,
         List<PipelineYamlStep> steps,
@@ -280,6 +300,13 @@ public final class PipelineOrderExpander {
         return name.replaceAll("[^A-Za-z0-9]", "");
     }
 
+    /**
+     * Produces a condensed token for a pipeline step class name by extracting the simple class
+     * name, removing common step/client/service suffixes, and keeping only alphanumeric characters.
+     *
+     * @param name the fully-qualified or simple class name of the step; may be null
+     * @return the normalized token (only letters and digits), or an empty string if {@code name} is null
+     */
     private static String normalizeStepToken(String name) {
         if (name == null) {
             return "";
@@ -329,6 +356,14 @@ public final class PipelineOrderExpander {
         return typeName.endsWith("Dto") ? typeName.substring(0, typeName.length() - 3) : typeName;
     }
 
+    /**
+     * Selects the client step class name suffix based on the pipeline transport setting.
+     *
+     * If the config or its transport is null the method selects the default GRPC suffix.
+     *
+     * @param config pipeline YAML configuration whose transport value is used to decide the suffix
+     * @return `RestClientStep` for transport `"REST"`, `LocalClientStep` for transport `"LOCAL"`, `GrpcClientStep` otherwise
+     */
     private static String resolveClientStepSuffix(PipelineYamlConfig config) {
         if (config == null || config.transport() == null) {
             return "GrpcClientStep";
@@ -342,6 +377,13 @@ public final class PipelineOrderExpander {
         return "GrpcClientStep";
     }
 
+    /**
+     * Capitalizes the first character of the given string using the ROOT locale.
+     *
+     * @param input the string whose first character should be capitalized; may be null or empty
+     * @return the input with its first character converted to upper case according to Locale.ROOT,
+     *         or the original input if it is null or empty
+     */
     private static String capitalize(String input) {
         if (input == null || input.isEmpty()) {
             return input;

@@ -155,6 +155,16 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         }
     }
 
+    /**
+     * Validates provider-related processing-option hints and invokes provider validation for each recognized provider entry.
+     *
+     * Reads the global parallelism option and, for each processing option that names a provider, maps the option key to a provider label
+     * ("persistence.provider.class" -> "Provider 'persistence'", keys starting with "pipeline.provider.class." -> "Provider '<name>'")
+     * and calls validateProviderHint with the provider class, label, and the normalized policy.
+     *
+     * @param ctx the pipeline compilation context containing the processing environment and options; if null or its processing environment
+     *            is null, no validation is performed
+     */
     private void validateProviderHints(PipelineCompilationContext ctx) {
         if (ctx == null || ctx.getProcessingEnv() == null) {
             return;
