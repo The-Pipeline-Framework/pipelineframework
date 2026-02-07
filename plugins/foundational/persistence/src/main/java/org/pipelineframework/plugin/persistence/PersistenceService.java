@@ -114,6 +114,7 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
         if (vertx == null) {
             return persistenceManager.persist(item);
         }
+        int timeoutSeconds = config != null ? Math.max(1, config.vertxContextTimeoutSeconds()) : 30;
         Context baseContext = vertx.getOrCreateContext();
         Context context = VertxContext.createNewDuplicatedContext(baseContext);
         VertxContextSafetyToggle.setContextSafe(context, true);
@@ -143,7 +144,7 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
                     emitter.fail(t);
                 }
             });
-        }).ifNoItem().after(Duration.ofSeconds(30)).fail();
+        }).ifNoItem().after(Duration.ofSeconds(timeoutSeconds)).fail();
     }
 
     private Uni<T> handleDuplicateKey(T item, Throwable failure) {

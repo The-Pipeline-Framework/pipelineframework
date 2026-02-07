@@ -491,12 +491,24 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                         org.pipelineframework.processor.ir.DeploymentRole sideEffectOutputRole = ctx.isTransportModeLocal()
                             ? org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT
                             : org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER;
-                        generateSideEffectBean(
-                            ctx,
-                            model,
-                            org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER,
-                            sideEffectOutputRole,
-                            grpcBinding);
+                        if (ctx.isTransportModeLocal()) {
+                            String sideEffectBeanKey = model.servicePackage() + ".pipeline." + model.serviceName();
+                            if (generatedSideEffectBeans.add(sideEffectBeanKey)) {
+                                generateSideEffectBean(
+                                    ctx,
+                                    model,
+                                    org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER,
+                                    sideEffectOutputRole,
+                                    grpcBinding);
+                            }
+                        } else {
+                            generateSideEffectBean(
+                                ctx,
+                                model,
+                                org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER,
+                                sideEffectOutputRole,
+                                grpcBinding);
+                        }
                     }
                     if (ctx.isTransportModeLocal()) {
                         break;
@@ -843,6 +855,17 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         return observedType;
     }
 
+    /**
+     * Checks whether plugin-server artifacts are allowed for the current compilation context.
+     *
+     * <p>Generation is enabled when the context is an explicit plugin host ({@code ctx.isPluginHost()})
+     * or when runtime mapping is active and a non-blank module name is present, which indicates
+     * plugin-server role generation can coexist with other roles in monolith/modular builds.
+     * A {@code null} context returns {@code false}.</p>
+     *
+     * @param ctx compilation context used for role and runtime mapping checks
+     * @return {@code true} when plugin-server artifacts should be generated, otherwise {@code false}
+     */
     private boolean allowPluginServerArtifacts(PipelineCompilationContext ctx) {
         if (ctx == null) {
             return false;

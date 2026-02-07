@@ -10,12 +10,13 @@ target_dir="$1"
 shift
 
 tmp_file="${target_dir}/monolith-source-files.txt"
+mkdir -p "$target_dir"
 : > "$tmp_file"
 
 for dir in "$@"; do
   if [ -d "$dir" ]; then
     find "$dir" -type f -name '*.java' -print | while IFS= read -r file; do
-      rel_path="${file#${dir}/}"
+      rel_path="${file#"${dir}/"}"
       # Monolith keeps a single ExecutorProducer copy from input-csv-file-processing-svc.
       if [ "$rel_path" = "org/pipelineframework/csv/service/ExecutorProducer.java" ] \
         && { [[ "$dir" == *"/payments-processing-svc/src/main/java" ]] \

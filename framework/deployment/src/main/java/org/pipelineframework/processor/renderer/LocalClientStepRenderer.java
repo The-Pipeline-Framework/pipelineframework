@@ -115,6 +115,8 @@ public class LocalClientStepRenderer implements PipelineRenderer<LocalBinding> {
                 stepInterface = ClassName.get("org.pipelineframework.step", "StepManyToMany");
                 clientStepBuilder.addSuperinterface(ParameterizedTypeName.get(stepInterface, inputType, outputType));
             }
+            default -> throw new IllegalStateException(
+                "Unsupported streaming shape for local client generation: " + model.streamingShape());
         }
 
         ClassName tracing = ClassName.get("org.pipelineframework.telemetry", "LocalClientTracing");
@@ -166,6 +168,9 @@ public class LocalClientStepRenderer implements PipelineRenderer<LocalBinding> {
                     .build();
                 clientStepBuilder.addMethod(applyOneToOneMethod);
             }
+            default -> throw new IllegalStateException(
+                "Unsupported streaming shape for local call " + rpcServiceName + "." + rpcMethodName
+                    + ": " + model.streamingShape());
         }
 
         return clientStepBuilder.build();

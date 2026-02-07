@@ -36,4 +36,10 @@ public interface PersistenceConfig {
      */
     @WithName("provider.class")
     Optional<String> providerClass();
+
+    /**
+     * Timeout for persistence execution wrapped on a Vert.x context.
+     */
+    @WithDefault("30")
+    int vertxContextTimeoutSeconds();
 }

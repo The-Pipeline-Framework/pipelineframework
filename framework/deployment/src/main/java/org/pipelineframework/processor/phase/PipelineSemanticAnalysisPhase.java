@@ -164,14 +164,21 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         var options = ctx.getProcessingEnv().getOptions();
         for (var entry : options.entrySet()) {
             String key = entry.getKey();
-            if (key == null || !key.startsWith("pipeline.provider.class.")) {
+            if (key == null) {
                 continue;
             }
             String providerClass = entry.getValue();
             if (providerClass == null || providerClass.isBlank()) {
                 continue;
             }
-            String label = "Provider '" + key.substring("pipeline.provider.class.".length()) + "'";
+            String label;
+            if ("persistence.provider.class".equals(key)) {
+                label = "Provider 'persistence'";
+            } else if (key.startsWith("pipeline.provider.class.")) {
+                label = "Provider '" + key.substring("pipeline.provider.class.".length()) + "'";
+            } else {
+                continue;
+            }
             validateProviderHint(ctx, providerClass.trim(), label, normalizedPolicy);
         }
     }

@@ -41,27 +41,27 @@ import org.pipelineframework.persistence.PersistenceProvider;
 @ParallelismHint(ordering = OrderingRequirement.STRICT_ADVISED, threadSafety = ThreadSafety.SAFE)
 public class VThreadPersistenceProvider implements PersistenceProvider<Object> {
 
-  private final Logger logger = Logger.getLogger(VThreadPersistenceProvider.class);
+    private final Logger logger = Logger.getLogger(VThreadPersistenceProvider.class);
 
-  private final InjectableInstance<EntityManager> entityManagerInstance;
+    private final InjectableInstance<EntityManager> entityManagerInstance;
 
-  /**
-   * Initialises the provider and locates an injectable EntityManager instance via Arc.
-   *
-   * Stores the resolved InjectableInstance&lt;EntityManager&gt; for use by the provider's persistence operations.
-   */
-  public VThreadPersistenceProvider() {
-    // Look up the EntityManager bean instance via Arc
-    entityManagerInstance = Arc.container().select(EntityManager.class);
-  }
+    /**
+     * Initialises the provider and locates an injectable EntityManager instance via Arc.
+     *
+     * Stores the resolved InjectableInstance&lt;EntityManager&gt; for use by the provider's persistence operations.
+     */
+    public VThreadPersistenceProvider() {
+        // Look up the EntityManager bean instance via Arc
+        entityManagerInstance = Arc.container().select(EntityManager.class);
+    }
 
-  /**
-   * Persist the given entity within a JPA transaction and return the same instance.
-   *
-   * @param entity the entity to persist
-   * @return the persisted entity instance
-   * @throws IllegalStateException if no EntityManager is resolvable for this provider
-   */
+    /**
+     * Persist the given entity within a JPA transaction and return the same instance.
+     *
+     * @param entity the entity to persist
+     * @return the persisted entity instance
+     * @throws IllegalStateException if no EntityManager is resolvable for this provider
+     */
     @Override
     @Transactional
     public Uni<Object> persist(Object entity) {
@@ -80,55 +80,55 @@ public class VThreadPersistenceProvider implements PersistenceProvider<Object> {
         });
     }
 
-  @Override
-  @Transactional
-  public Uni<Object> persistOrUpdate(Object entity) {
-    if (entity == null) {
-      return Uni.createFrom().failure(new IllegalArgumentException("Cannot persist a null entity"));
-    }
-
-    return Uni.createFrom().item(() -> {
-        if (!entityManagerInstance.isResolvable()) {
-        throw new IllegalStateException("No EntityManager available for VThreadPersistenceProvider");
+    @Override
+    @Transactional
+    public Uni<Object> persistOrUpdate(Object entity) {
+        if (entity == null) {
+            return Uni.createFrom().failure(new IllegalArgumentException("Cannot persist a null entity"));
         }
 
-        EntityManager em = entityManagerInstance.get();
-        em.merge(entity);
-        return entity;
-    });
-  }
+        return Uni.createFrom().item(() -> {
+            if (!entityManagerInstance.isResolvable()) {
+                throw new IllegalStateException("No EntityManager available for VThreadPersistenceProvider");
+            }
 
-  /**
-   * Identifies the handled entity type for this persistence provider.
-   *
-   * @return the Class object representing the handled entity type, {@code Object.class}
-   */
-  @Override
-  public Class<Object> type() {
-    return Object.class;
-  }
+            EntityManager em = entityManagerInstance.get();
+            Object mergedEntity = em.merge(entity);
+            return mergedEntity;
+        });
+    }
 
-  /**
-   * Checks whether an object's runtime class is annotated as a JPA entity.
-   *
-   * @param entity the object whose runtime class will be inspected for the `@Entity` annotation
-   * @return `true` if the runtime class of {@code entity} is annotated with `jakarta.persistence.Entity`, `false` otherwise
-   */
-  @Override
-  public boolean supports(Object entity) {
-    return entity != null && entity.getClass().isAnnotationPresent(Entity.class);
-  }
+    /**
+     * Identifies the handled entity type for this persistence provider.
+     *
+     * @return the Class object representing the handled entity type, {@code Object.class}
+     */
+    @Override
+    public Class<Object> type() {
+        return Object.class;
+    }
 
-  @Override
-  public ThreadSafety threadSafety() {
-    return ThreadSafety.SAFE;
-  }
+    /**
+     * Checks whether an object's runtime class is annotated as a JPA entity.
+     *
+     * @param entity the object whose runtime class will be inspected for the `@Entity` annotation
+     * @return `true` if the runtime class of {@code entity} is annotated with `jakarta.persistence.Entity`, `false` otherwise
+     */
+    @Override
+    public boolean supports(Object entity) {
+        return entity != null && entity.getClass().isAnnotationPresent(Entity.class);
+    }
 
-  /**
-   * Indicates whether this provider is running in a virtual-thread context.
-   *
-   * @return {@code true} if the current thread is a virtual thread, {@code false} otherwise.
-   */
+    @Override
+    public ThreadSafety threadSafety() {
+        return ThreadSafety.SAFE;
+    }
+
+    /**
+     * Indicates whether this provider is running in a virtual-thread context.
+     *
+     * @return {@code true} if the current thread is a virtual thread, {@code false} otherwise.
+     */
     @Override
     public boolean supportsThreadContext() {
         // Allow virtual threads and non-event-loop threads; reject Vert.x event-loop threads.

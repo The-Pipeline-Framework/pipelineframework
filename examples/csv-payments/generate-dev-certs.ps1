@@ -12,7 +12,7 @@ if (Test-Path $tempDir) {
 New-Item -Path $tempDir -ItemType Directory | Out-Null
 New-Item -Path $outputDir -ItemType Directory -Force | Out-Null
 
-$keystore = Join-Path $tempDir "server-keystore.p12"
+$keystore = Join-Path $tempDir "server-keystore.p12" # PKCS12 payload copied to server-keystore.jks for Java/Quarkus compatibility.
 $certPem = Join-Path $tempDir "quarkus-cert.pem"
 $truststore = Join-Path $tempDir "client-truststore.jks"
 

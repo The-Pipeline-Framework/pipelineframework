@@ -105,9 +105,16 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
             if (transport == null || transport.isBlank()) {
                 return true;
             }
-            return TransportMode.fromStringOptional(transport)
-                .map(mode -> mode == TransportMode.GRPC)
-                .orElse(false);
+            var resolvedMode = TransportMode.fromStringOptional(transport);
+            if (resolvedMode.isEmpty()) {
+                if (ctx.getProcessingEnv() != null) {
+                    ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                        "Unknown transport '" + transport + "' in pipeline template. "
+                            + "Valid values are GRPC|gRPC|REST|LOCAL; skipping descriptor loading.");
+                }
+                return false;
+            }
+            return resolvedMode.orElseThrow() == TransportMode.GRPC;
         }
         return false;
     }

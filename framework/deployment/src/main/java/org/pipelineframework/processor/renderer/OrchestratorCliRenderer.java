@@ -56,9 +56,14 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
         ClassName grpcStatusCode = grpcStatus.nestedClass("Code");
 
         ClassName inputDtoType = ClassName.get(binding.basePackage() + ".common.dto", binding.inputTypeName() + "Dto");
-        TypeName inputType = restMode
-            ? inputDtoType
-            : (localMode ? resolveDomainInputType(binding) : resolveGrpcInputType(binding, ctx));
+        TypeName inputType;
+        if (restMode) {
+            inputType = inputDtoType;
+        } else if (localMode) {
+            inputType = resolveDomainInputType(binding);
+        } else {
+            inputType = resolveGrpcInputType(binding, ctx);
+        }
         ParameterizedTypeName inputMultiType = ParameterizedTypeName.get(multi, inputType);
 
         FieldSpec inputField = FieldSpec.builder(String.class, "input", Modifier.PUBLIC)

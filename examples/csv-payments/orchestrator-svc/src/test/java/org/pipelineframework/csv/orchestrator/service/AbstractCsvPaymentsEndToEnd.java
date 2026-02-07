@@ -30,6 +30,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -68,119 +69,13 @@ abstract class AbstractCsvPaymentsEndToEnd {
             System.getProperty("csv.runtime.layout", "modular").trim().toLowerCase();
     private static final boolean MONOLITH_LAYOUT = "monolith".equals(RUNTIME_LAYOUT);
 
-    // Define containers for each service
-    static PostgreSQLContainer<?> postgresContainer =
-            new PostgreSQLContainer<>("postgres:17")
-                    .withDatabaseName("quarkus")
-                    .withUsername("quarkus")
-                    .withPassword("quarkus")
-                    .withNetwork(network)
-                    .withNetworkAliases("postgres")
-                    .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofSeconds(60)));
-
-    static GenericContainer<?> persistenceService =
-            new GenericContainer<>("localhost/csv-payments/persistence-svc:latest")
-                    .withNetwork(network)
-                    .withNetworkAliases("persistence-svc")
-                    .withFileSystemBind(
-                            DEV_CERTS_DIR.resolve("persistence-svc/server-keystore.jks").toString(),
-                            CONTAINER_KEYSTORE_PATH,
-                            BindMode.READ_ONLY)
-                    .withExposedPorts(8448)
-                    .withEnv("QUARKUS_PROFILE", "test")
-                    .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
-                    .withEnv(
-                            "QUARKUS_HTTP_SSL_CERTIFICATE_KEY_STORE_FILE",
-                            CONTAINER_KEYSTORE_PATH)
-                    .withEnv(
-                            "QUARKUS_DATASOURCE_REACTIVE_URL", "postgresql://postgres:5432/quarkus")
-                    .withEnv("QUARKUS_DATASOURCE_USERNAME", "quarkus")
-                    .withEnv("QUARKUS_DATASOURCE_PASSWORD", "quarkus")
-                    .waitingFor(
-                            Wait.forHttps("/q/health")
-                                    .forPort(8448)
-                                    .allowInsecure()
-                                    .withStartupTimeout(Duration.ofSeconds(60)));
-
-    static GenericContainer<?> inputCsvService =
-            new GenericContainer<>("localhost/csv-payments/input-csv-file-processing-svc:latest")
-                    .withNetwork(network)
-                    .withNetworkAliases("input-csv-file-processing-svc")
-                    .withFileSystemBind(
-                            Paths.get(TEST_E2E_DIR).toAbsolutePath().toString(),
-                            TEST_E2E_TARGET_DIR,
-                            BindMode.READ_ONLY)
-                    .withFileSystemBind(
-                            DEV_CERTS_DIR.resolve("input-csv-file-processing-svc/server-keystore.jks")
-                                    .toString(),
-                            CONTAINER_KEYSTORE_PATH,
-                            BindMode.READ_ONLY)
-                    .withExposedPorts(8444)
-                    .withEnv("QUARKUS_PROFILE", "test")
-                    .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
-                    .waitingFor(
-                            Wait.forHttps("/q/health")
-                                    .forPort(8444)
-                                    .allowInsecure()
-                                    .withStartupTimeout(Duration.ofSeconds(60)));
-
-    static GenericContainer<?> paymentsProcessingService =
-            new GenericContainer<>("localhost/csv-payments/payments-processing-svc:latest")
-                    .withNetwork(network)
-                    .withNetworkAliases("payments-processing-svc")
-                    .withFileSystemBind(
-                            DEV_CERTS_DIR.resolve("payments-processing-svc/server-keystore.jks")
-                                    .toString(),
-                            CONTAINER_KEYSTORE_PATH,
-                            BindMode.READ_ONLY)
-                    .withExposedPorts(8445)
-                    .withEnv("QUARKUS_PROFILE", "test")
-                    .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
-                    .waitingFor(
-                            Wait.forHttps("/q/health")
-                                    .forPort(8445)
-                                    .allowInsecure()
-                                    .withStartupTimeout(Duration.ofSeconds(60)));
-
-    static GenericContainer<?> paymentStatusService =
-            new GenericContainer<>("localhost/csv-payments/payment-status-svc:latest")
-                    .withNetwork(network)
-                    .withNetworkAliases("payment-status-svc")
-                    .withFileSystemBind(
-                            DEV_CERTS_DIR.resolve("payment-status-svc/server-keystore.jks").toString(),
-                            CONTAINER_KEYSTORE_PATH,
-                            BindMode.READ_ONLY)
-                    .withExposedPorts(8446)
-                    .withEnv("QUARKUS_PROFILE", "test")
-                    .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
-                    .waitingFor(
-                            Wait.forHttps("/q/health")
-                                    .forPort(8446)
-                                    .allowInsecure()
-                                    .withStartupTimeout(Duration.ofSeconds(60)));
-
-    static GenericContainer<?> outputCsvService =
-            new GenericContainer<>("localhost/csv-payments/output-csv-file-processing-svc:latest")
-                    .withNetwork(network)
-                    .withNetworkAliases("output-csv-file-processing-svc")
-                    .withFileSystemBind(
-                            Paths.get(TEST_E2E_DIR).toAbsolutePath().toString(),
-                            TEST_E2E_TARGET_DIR,
-                            BindMode.READ_WRITE)
-                    .withFileSystemBind(
-                            DEV_CERTS_DIR.resolve("output-csv-file-processing-svc/server-keystore.jks")
-                                    .toString(),
-                            CONTAINER_KEYSTORE_PATH,
-                            BindMode.READ_ONLY)
-                    .withExposedPorts(8447)
-                    .withEnv("QUARKUS_PROFILE", "test")
-                    .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
-                    .withLogConsumer(containerLog("output-csv-file-processing-svc"))
-                    .waitingFor(
-                            Wait.forHttps("/q/health")
-                                    .forPort(8447)
-                                    .allowInsecure()
-                                    .withStartupTimeout(Duration.ofSeconds(60)));
+    // Containers are lazily created so monolith mode does not require service cert binds.
+    static PostgreSQLContainer<?> postgresContainer;
+    static GenericContainer<?> persistenceService;
+    static GenericContainer<?> inputCsvService;
+    static GenericContainer<?> paymentsProcessingService;
+    static GenericContainer<?> paymentStatusService;
+    static GenericContainer<?> outputCsvService;
 
     /**
      * Initialises and starts the test containers required for the end-to-end CSV payments test.
@@ -198,19 +93,162 @@ abstract class AbstractCsvPaymentsEndToEnd {
         ensureDevCerts();
 
         if (MONOLITH_LAYOUT) {
-            Startables.deepStart(java.util.stream.Stream.of(postgresContainer)).join();
+            Startables.deepStart(java.util.stream.Stream.of(getPostgresContainer())).join();
             return;
         }
 
         Startables.deepStart(
                         java.util.stream.Stream.of(
-                                postgresContainer,
-                                persistenceService,
-                                inputCsvService,
-                                paymentsProcessingService,
-                                paymentStatusService,
-                                outputCsvService))
+                                getPostgresContainer(),
+                                getPersistenceService(),
+                                getInputCsvService(),
+                                getPaymentsProcessingService(),
+                                getPaymentStatusService(),
+                                getOutputCsvService()))
                 .join();
+    }
+
+    private static PostgreSQLContainer<?> getPostgresContainer() {
+        if (postgresContainer == null) {
+            postgresContainer =
+                    new PostgreSQLContainer<>("postgres:17")
+                            .withDatabaseName("quarkus")
+                            .withUsername("quarkus")
+                            .withPassword("quarkus")
+                            .withNetwork(network)
+                            .withNetworkAliases("postgres")
+                            .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofSeconds(60)));
+        }
+        return postgresContainer;
+    }
+
+    private static GenericContainer<?> getPersistenceService() {
+        if (persistenceService == null) {
+            persistenceService =
+                    new GenericContainer<>("localhost/csv-payments/persistence-svc:latest")
+                            .withNetwork(network)
+                            .withNetworkAliases("persistence-svc")
+                            .withFileSystemBind(
+                                    DEV_CERTS_DIR.resolve("persistence-svc/server-keystore.jks").toString(),
+                                    CONTAINER_KEYSTORE_PATH,
+                                    BindMode.READ_ONLY)
+                            .withExposedPorts(8448)
+                            .withEnv("QUARKUS_PROFILE", "test")
+                            .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
+                            .withEnv(
+                                    "QUARKUS_HTTP_SSL_CERTIFICATE_KEY_STORE_FILE",
+                                    CONTAINER_KEYSTORE_PATH)
+                            .withEnv(
+                                    "QUARKUS_DATASOURCE_REACTIVE_URL", "postgresql://postgres:5432/quarkus")
+                            .withEnv("QUARKUS_DATASOURCE_USERNAME", "quarkus")
+                            .withEnv("QUARKUS_DATASOURCE_PASSWORD", "quarkus")
+                            .waitingFor(
+                                    Wait.forHttps("/q/health")
+                                            .forPort(8448)
+                                            .allowInsecure()
+                                            .withStartupTimeout(Duration.ofSeconds(60)));
+        }
+        return persistenceService;
+    }
+
+    private static GenericContainer<?> getInputCsvService() {
+        if (inputCsvService == null) {
+            inputCsvService =
+                    new GenericContainer<>("localhost/csv-payments/input-csv-file-processing-svc:latest")
+                            .withNetwork(network)
+                            .withNetworkAliases("input-csv-file-processing-svc")
+                            .withFileSystemBind(
+                                    Paths.get(TEST_E2E_DIR).toAbsolutePath().toString(),
+                                    TEST_E2E_TARGET_DIR,
+                                    BindMode.READ_ONLY)
+                            .withFileSystemBind(
+                                    DEV_CERTS_DIR.resolve("input-csv-file-processing-svc/server-keystore.jks")
+                                            .toString(),
+                                    CONTAINER_KEYSTORE_PATH,
+                                    BindMode.READ_ONLY)
+                            .withExposedPorts(8444)
+                            .withEnv("QUARKUS_PROFILE", "test")
+                            .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
+                            .waitingFor(
+                                    Wait.forHttps("/q/health")
+                                            .forPort(8444)
+                                            .allowInsecure()
+                                            .withStartupTimeout(Duration.ofSeconds(60)));
+        }
+        return inputCsvService;
+    }
+
+    private static GenericContainer<?> getPaymentsProcessingService() {
+        if (paymentsProcessingService == null) {
+            paymentsProcessingService =
+                    new GenericContainer<>("localhost/csv-payments/payments-processing-svc:latest")
+                            .withNetwork(network)
+                            .withNetworkAliases("payments-processing-svc")
+                            .withFileSystemBind(
+                                    DEV_CERTS_DIR.resolve("payments-processing-svc/server-keystore.jks")
+                                            .toString(),
+                                    CONTAINER_KEYSTORE_PATH,
+                                    BindMode.READ_ONLY)
+                            .withExposedPorts(8445)
+                            .withEnv("QUARKUS_PROFILE", "test")
+                            .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
+                            .waitingFor(
+                                    Wait.forHttps("/q/health")
+                                            .forPort(8445)
+                                            .allowInsecure()
+                                            .withStartupTimeout(Duration.ofSeconds(60)));
+        }
+        return paymentsProcessingService;
+    }
+
+    private static GenericContainer<?> getPaymentStatusService() {
+        if (paymentStatusService == null) {
+            paymentStatusService =
+                    new GenericContainer<>("localhost/csv-payments/payment-status-svc:latest")
+                            .withNetwork(network)
+                            .withNetworkAliases("payment-status-svc")
+                            .withFileSystemBind(
+                                    DEV_CERTS_DIR.resolve("payment-status-svc/server-keystore.jks").toString(),
+                                    CONTAINER_KEYSTORE_PATH,
+                                    BindMode.READ_ONLY)
+                            .withExposedPorts(8446)
+                            .withEnv("QUARKUS_PROFILE", "test")
+                            .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
+                            .waitingFor(
+                                    Wait.forHttps("/q/health")
+                                            .forPort(8446)
+                                            .allowInsecure()
+                                            .withStartupTimeout(Duration.ofSeconds(60)));
+        }
+        return paymentStatusService;
+    }
+
+    private static GenericContainer<?> getOutputCsvService() {
+        if (outputCsvService == null) {
+            outputCsvService =
+                    new GenericContainer<>("localhost/csv-payments/output-csv-file-processing-svc:latest")
+                            .withNetwork(network)
+                            .withNetworkAliases("output-csv-file-processing-svc")
+                            .withFileSystemBind(
+                                    Paths.get(TEST_E2E_DIR).toAbsolutePath().toString(),
+                                    TEST_E2E_TARGET_DIR,
+                                    BindMode.READ_WRITE)
+                            .withFileSystemBind(
+                                    DEV_CERTS_DIR.resolve("output-csv-file-processing-svc/server-keystore.jks")
+                                            .toString(),
+                                    CONTAINER_KEYSTORE_PATH,
+                                    BindMode.READ_ONLY)
+                            .withExposedPorts(8447)
+                            .withEnv("QUARKUS_PROFILE", "test")
+                            .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
+                            .withLogConsumer(containerLog("output-csv-file-processing-svc"))
+                            .waitingFor(
+                                    Wait.forHttps("/q/health")
+                                            .forPort(8447)
+                                            .allowInsecure()
+                                            .withStartupTimeout(Duration.ofSeconds(60)));
+        }
+        return outputCsvService;
     }
 
     private static Consumer<OutputFrame> containerLog(String containerName) {
@@ -243,7 +281,18 @@ abstract class AbstractCsvPaymentsEndToEnd {
             return;
         }
 
-        ProcessBuilder pb = new ProcessBuilder("bash", "../generate-dev-certs.sh");
+        String osName = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+        ProcessBuilder pb;
+        if (osName.contains("win")) {
+            pb = new ProcessBuilder(
+                    "powershell.exe",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-File",
+                    "../generate-dev-certs.ps1");
+        } else {
+            pb = new ProcessBuilder("bash", "../generate-dev-certs.sh");
+        }
         pb.directory(Paths.get(System.getProperty("user.dir")).toFile());
         pb.inheritIO();
         try {
@@ -356,6 +405,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private static void configureMonolithEnv(ProcessBuilder pb) {
+        PostgreSQLContainer<?> postgres = getPostgresContainer();
         pb.environment().put("PIPELINE_TRANSPORT", "LOCAL");
         pb.environment()
                 .put(
@@ -369,17 +419,17 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         String postgresUrl =
                 "postgresql://"
-                        + postgresContainer.getHost()
+                        + postgres.getHost()
                         + ":"
-                        + postgresContainer.getMappedPort(5432)
+                        + postgres.getMappedPort(5432)
                         + "/quarkus";
         pb.environment().put("QUARKUS_DATASOURCE_JDBC_URL", "jdbc:" + postgresUrl);
         pb.environment().put("PERSISTENCE_PROVIDER_CLASS", "org.pipelineframework.plugin.persistence.provider.VThreadPersistenceProvider");
         pb.environment().put("QUARKUS_HIBERNATE_ORM_BLOCKING", "true");
         pb.environment().put("QUARKUS_HIBERNATE_ORM_SCHEMA_MANAGEMENT_STRATEGY", "drop-and-create");
         pb.environment().put("QUARKUS_HIBERNATE_ORM_PACKAGES", "org.pipelineframework.csv.common.domain");
-        pb.environment().put("QUARKUS_DATASOURCE_USERNAME", postgresContainer.getUsername());
-        pb.environment().put("QUARKUS_DATASOURCE_PASSWORD", postgresContainer.getPassword());
+        pb.environment().put("QUARKUS_DATASOURCE_USERNAME", postgres.getUsername());
+        pb.environment().put("QUARKUS_DATASOURCE_PASSWORD", postgres.getPassword());
 
         String localhost = "localhost";
         String grpcPort = "8443";
@@ -398,18 +448,23 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private static void configureModularEnv(ProcessBuilder pb) {
-        putGrpcClient(pb, "PROCESS_FOLDER", inputCsvService.getHost(), String.valueOf(inputCsvService.getMappedPort(8444)));
-        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", inputCsvService.getHost(), String.valueOf(inputCsvService.getMappedPort(8444)));
-        putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", paymentsProcessingService.getHost(), String.valueOf(paymentsProcessingService.getMappedPort(8445)));
-        putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", paymentsProcessingService.getHost(), String.valueOf(paymentsProcessingService.getMappedPort(8445)));
-        putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", paymentStatusService.getHost(), String.valueOf(paymentStatusService.getMappedPort(8446)));
-        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_OUTPUT_FILE", outputCsvService.getHost(), String.valueOf(outputCsvService.getMappedPort(8447)));
-        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", persistenceService.getHost(), String.valueOf(persistenceService.getMappedPort(8448)));
-        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", persistenceService.getHost(), String.valueOf(persistenceService.getMappedPort(8448)));
-        putGrpcClient(pb, "OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT", persistenceService.getHost(), String.valueOf(persistenceService.getMappedPort(8448)));
-        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT", persistenceService.getHost(), String.valueOf(persistenceService.getMappedPort(8448)));
-        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT", persistenceService.getHost(), String.valueOf(persistenceService.getMappedPort(8448)));
-        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT", persistenceService.getHost(), String.valueOf(persistenceService.getMappedPort(8448)));
+        GenericContainer<?> inputService = getInputCsvService();
+        GenericContainer<?> paymentsService = getPaymentsProcessingService();
+        GenericContainer<?> statusService = getPaymentStatusService();
+        GenericContainer<?> outputService = getOutputCsvService();
+        GenericContainer<?> persistence = getPersistenceService();
+        putGrpcClient(pb, "PROCESS_FOLDER", inputService.getHost(), String.valueOf(inputService.getMappedPort(8444)));
+        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", inputService.getHost(), String.valueOf(inputService.getMappedPort(8444)));
+        putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", paymentsService.getHost(), String.valueOf(paymentsService.getMappedPort(8445)));
+        putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", paymentsService.getHost(), String.valueOf(paymentsService.getMappedPort(8445)));
+        putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)));
+        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_OUTPUT_FILE", outputService.getHost(), String.valueOf(outputService.getMappedPort(8447)));
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)));
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)));
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)));
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)));
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)));
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)));
     }
 
     private static void putGrpcClient(ProcessBuilder pb, String clientName, String host, String port) {
@@ -640,9 +695,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
         LOG.info("Verifying database persistence...");
 
         // Connect to the database using the test container's connection details
-        String jdbcUrl = postgresContainer.getJdbcUrl();
-        String username = postgresContainer.getUsername();
-        String password = postgresContainer.getPassword();
+        PostgreSQLContainer<?> postgres = getPostgresContainer();
+        String jdbcUrl = postgres.getJdbcUrl();
+        String username = postgres.getUsername();
+        String password = postgres.getPassword();
 
         try (Connection connection = DriverManager.getConnection(jdbcUrl, username, password)) {
             // Verify that the paymentrecord table exists

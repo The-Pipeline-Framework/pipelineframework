@@ -24,11 +24,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
+import java.util.function.Function;
 import java.util.logging.Logger;
 
+import org.pipelineframework.config.TransportOverrideResolver;
 import org.yaml.snakeyaml.Yaml;
 
 /**
@@ -36,12 +36,19 @@ import org.yaml.snakeyaml.Yaml;
  */
 public class PipelineYamlConfigLoader {
     private static final Logger LOG = Logger.getLogger(PipelineYamlConfigLoader.class.getName());
-    private static final Set<String> KNOWN_TRANSPORTS = Set.of("GRPC", "REST", "LOCAL");
+    private final Function<String, String> propertyLookup;
+    private final Function<String, String> envLookup;
 
     /**
      * Creates a new PipelineYamlConfigLoader.
      */
     public PipelineYamlConfigLoader() {
+        this(System::getProperty, System::getenv);
+    }
+
+    public PipelineYamlConfigLoader(Function<String, String> propertyLookup, Function<String, String> envLookup) {
+        this.propertyLookup = propertyLookup == null ? key -> null : propertyLookup;
+        this.envLookup = envLookup == null ? key -> null : envLookup;
     }
 
     /**
@@ -107,21 +114,25 @@ public class PipelineYamlConfigLoader {
 
         String basePackage = readString(rootMap, "basePackage");
         String transport = readString(rootMap, "transport");
+        boolean fromOverride = false;
         String transportOverride = resolveTransportOverride();
         if (transportOverride != null && !transportOverride.isBlank()) {
-            transport = transportOverride.trim();
+            transport = transportOverride;
+            fromOverride = true;
         }
-        if (transport != null) {
-            transport = transport.trim();
-            if (!transport.isBlank()) {
-                String normalized = transport.toUpperCase(Locale.ROOT);
-                if (KNOWN_TRANSPORTS.contains(normalized)) {
-                    transport = normalized;
-                } else {
+        if (transport != null && !transport.isBlank()) {
+            String normalized = TransportOverrideResolver.normalizeKnownTransport(transport);
+            if (normalized != null) {
+                transport = normalized;
+            } else {
+                if (fromOverride) {
                     LOG.warning("Unknown transport override '" + transport
                         + "'; defaulting pipeline transport to GRPC.");
-                    transport = "GRPC";
+                } else {
+                    LOG.warning("Unknown transport in YAML config '" + transport
+                        + "'; defaulting pipeline transport to GRPC.");
                 }
+                transport = "GRPC";
             }
         }
         List<PipelineYamlStep> steps = readSteps(rootMap);
@@ -131,11 +142,7 @@ public class PipelineYamlConfigLoader {
     }
 
     private String resolveTransportOverride() {
-        String override = System.getProperty("pipeline.transport");
-        if (override == null || override.isBlank()) {
-            override = System.getenv("PIPELINE_TRANSPORT");
-        }
-        return override;
+        return TransportOverrideResolver.resolveOverride(propertyLookup, envLookup);
     }
 
     private List<PipelineYamlStep> readSteps(Map<?, ?> rootMap) {

@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
+import org.pipelineframework.config.TransportOverrideResolver;
 import org.yaml.snakeyaml.Yaml;
 
 /**
@@ -55,9 +56,16 @@ public class PipelineStepConfigLoader {
 
         String basePackage = getString(rootMap.get("basePackage"));
         String transport = getString(rootMap.get("transport"));
+        String normalizedTransport = TransportOverrideResolver.normalizeKnownTransport(transport);
+        if (normalizedTransport != null) {
+            transport = normalizedTransport;
+        }
         String transportOverride = resolveTransportOverride();
         if (transportOverride != null && !transportOverride.isBlank()) {
-            transport = transportOverride.trim();
+            String normalizedOverride = TransportOverrideResolver.normalizeKnownTransport(transportOverride);
+            if (normalizedOverride != null) {
+                transport = normalizedOverride;
+            }
         }
         Object stepsValue = rootMap.get("steps");
         if (!(stepsValue instanceof List<?> steps)) {
@@ -100,10 +108,6 @@ public class PipelineStepConfigLoader {
     }
 
     private String resolveTransportOverride() {
-        String override = propertyLookup.apply("pipeline.transport");
-        if (override == null || override.isBlank()) {
-            override = envLookup.apply("PIPELINE_TRANSPORT");
-        }
-        return override;
+        return TransportOverrideResolver.resolveOverride(propertyLookup, envLookup);
     }
 }

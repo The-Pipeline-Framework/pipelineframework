@@ -31,7 +31,7 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
 
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
-        TransportMode transportMode = ctx.getTransportMode();
+        TransportMode transportMode = ctx.getTransportMode() == null ? TransportMode.GRPC : ctx.getTransportMode();
 
         // Apply transport targets and resolve client/server roles for each step model
         List<PipelineStepModel> updatedModels = new ArrayList<>();

@@ -204,18 +204,23 @@ public class PersistenceManager {
     }
 
     private PersistenceProvider<?> resolveConfiguredProvider(String configuredClass) {
-        String normalizedConfigured = normalizeConfiguredClass(configuredClass);
+        String configured = configuredClass == null ? "" : configuredClass.trim();
+        boolean simpleNameConfigured = !configured.contains(".");
         for (PersistenceProvider<?> provider : providers) {
             Object unwrapped = provider instanceof ClientProxy
                 ? ClientProxy.unwrap(provider)
                 : provider;
             Class<?> providerClass = unwrapped.getClass();
-            if (providerClass.getName().equals(normalizedConfigured) ||
-                providerClass.getSimpleName().equals(configuredClass) ||
-                providerClass.getName().equals(normalizedConfigured + "_Subclass")) {
+            if (providerClass.getName().equals(configured)
+                || providerClass.getName().equals(configured + "_Subclass")) {
                 return provider;
             }
-            if (isAssignableToConfigured(providerClass, normalizedConfigured)) {
+            if (simpleNameConfigured
+                && (providerClass.getSimpleName().equals(configured)
+                    || providerClass.getSimpleName().equals(configured + "_Subclass"))) {
+                return provider;
+            }
+            if (!simpleNameConfigured && isAssignableToConfigured(providerClass, configured)) {
                 return provider;
             }
         }
@@ -241,16 +246,6 @@ public class PersistenceManager {
     private boolean hasConfiguredProvider() {
         Optional<String> configuredProvider = configuredProviderClass();
         return configuredProvider.isPresent() && !configuredProvider.orElseThrow().isBlank();
-    }
-
-    private String normalizeConfiguredClass(String configuredClass) {
-        if (PersistenceConstants.VTHREAD_PROVIDER_SIMPLE.equals(configuredClass)) {
-            return PersistenceConstants.VTHREAD_PROVIDER_CLASS;
-        }
-        if (PersistenceConstants.REACTIVE_PROVIDER_SIMPLE.equals(configuredClass)) {
-            return PersistenceConstants.REACTIVE_PROVIDER_CLASS;
-        }
-        return configuredClass;
     }
 
     private String providerClassName(PersistenceProvider<?> provider) {

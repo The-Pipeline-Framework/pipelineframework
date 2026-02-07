@@ -1,6 +1,7 @@
 package org.pipelineframework.csv.monolith;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -38,6 +39,7 @@ class MonolithTopologyTest {
                 .filter(name -> name.startsWith("quarkus.grpc.clients.") && name.endsWith(".port"))
                 .collect(Collectors.toSet());
 
+            assertFalse(hostKeys.isEmpty(), "No gRPC client host entries found");
             int expectedHostEntries = hostKeys.size();
             int actualPortEntries = portKeys.size();
             assertEquals(expectedHostEntries, actualPortEntries, "Expected matching host/port entries");
