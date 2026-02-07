@@ -40,7 +40,7 @@ Providers implement `PersistenceProvider<T>` and declare whether they support th
 This lets you plug in multiple backends without changing the plugin code.
 
 To lock a specific provider (recommended for production), set
-`pipeline.persistence.provider.class` to the provider's fully-qualified class name. The persistence
+`persistence.provider.class` to the provider's fully-qualified class name. The persistence
 manager will fail fast if the configured provider cannot be found or does not support the current
 execution context. For build-time validation, pass `-Apipeline.provider.class.persistence=<fqcn>`
 to the annotation processor.

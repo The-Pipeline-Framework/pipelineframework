@@ -154,7 +154,7 @@ Prefix: `pipeline.persistence`
 | Property                              | Type   | Default | Description                                                                   |
 |---------------------------------------|--------|---------|-------------------------------------------------------------------------------|
 | `pipeline.persistence.duplicate-key`  | string | `fail`  | Duplicate key policy for persistence (`fail`, `ignore`, `upsert`).            |
-| `pipeline.persistence.provider.class` | string | none    | Fully-qualified persistence provider class name to lock selection at runtime. |
+| `persistence.provider.class` | string | none    | Fully-qualified persistence provider class name to lock selection at runtime. |
 
 ### Pipeline Execution
 
