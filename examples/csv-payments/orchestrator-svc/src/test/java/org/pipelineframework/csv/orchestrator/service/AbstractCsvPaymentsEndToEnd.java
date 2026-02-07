@@ -310,11 +310,20 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 MONOLITH_LAYOUT
                         ? "../monolith-svc/target/quarkus-app/quarkus-run.jar"
                         : "target/quarkus-app/quarkus-run.jar";
-        Path jar = Paths.get(jarPath);
+        // The test harness lives in orchestrator-svc, but monolith mode executes monolith-svc.
+        Path jar = resolveJarPath(jarPath);
         String buildHint =
                 MONOLITH_LAYOUT
                         ? "Run ./examples/csv-payments/build-monolith.sh -DskipTests first."
                         : "Run ./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -DskipTests package first.";
+        if (!Files.isRegularFile(jar)) {
+            LOG.infof(
+                    "Resolved jar path: %s (exists=%s, regular=%s, size=%s)",
+                    jar,
+                    Files.exists(jar),
+                    Files.isRegularFile(jar),
+                    Files.exists(jar) ? Files.size(jar) : "n/a");
+        }
         assertTrue(
                 Files.isRegularFile(jar),
                 "Expected executable jar at " + jarPath + ". " + buildHint);
@@ -324,17 +333,23 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         "java",
                         "--enable-preview",
                         "-jar",
-                        jarPath,
+                        jar.toString(),
                         "-i=" + inputDir);
 
         pb.environment().put("QUARKUS_PROFILE", "test");
         pb.environment().put("QUARKUS_JIB_JVM_ADDITIONAL_ARGUMENTS", "--enable-preview");
 
         if (MONOLITH_LAYOUT) {
-            pb.environment().put("QUARKUS_GRPC_SERVER_PLAIN_TEXT", "true");
+            pb.environment().put("PIPELINE_TRANSPORT", "LOCAL");
+            pb.environment()
+                    .put(
+                            "SERVER_KEYSTORE_PATH",
+                            DEV_CERTS_DIR.resolve("orchestrator-svc/server-keystore.jks").toString());
+            pb.environment()
+                    .put(
+                            "CLIENT_TRUSTSTORE_PATH",
+                            DEV_CERTS_DIR.resolve("orchestrator-svc/client-truststore.jks").toString());
             pb.environment().put("QUARKUS_GRPC_SERVER_USE_SEPARATE_SERVER", "false");
-            pb.environment().put("QUARKUS_HTTP_INSECURE_REQUESTS", "enabled");
-            pb.environment().put("QUARKUS_HTTP_SSL_PORT", "0");
 
             String postgresUrl =
                     "postgresql://"
@@ -342,12 +357,17 @@ abstract class AbstractCsvPaymentsEndToEnd {
                             + ":"
                             + postgresContainer.getMappedPort(5432)
                             + "/quarkus";
-            pb.environment().put("QUARKUS_DATASOURCE_REACTIVE_URL", postgresUrl);
+            String jdbcUrl = "jdbc:" + postgresUrl;
+            pb.environment().put("QUARKUS_DATASOURCE_JDBC_URL", jdbcUrl);
+            pb.environment().put("PERSISTENCE_PROVIDER_CLASS", "org.pipelineframework.plugin.persistence.provider.VThreadPersistenceProvider");
+            pb.environment().put("QUARKUS_HIBERNATE_ORM_BLOCKING", "true");
+            pb.environment().put("QUARKUS_HIBERNATE_ORM_SCHEMA_MANAGEMENT_STRATEGY", "drop-and-create");
+            pb.environment().put("QUARKUS_HIBERNATE_ORM_PACKAGES", "org.pipelineframework.csv.common.domain");
             pb.environment().put("QUARKUS_DATASOURCE_USERNAME", postgresContainer.getUsername());
             pb.environment().put("QUARKUS_DATASOURCE_PASSWORD", postgresContainer.getPassword());
 
             String localhost = "localhost";
-            String grpcPort = "8080";
+            String grpcPort = "8443";
             pb.environment().put("QUARKUS_GRPC_CLIENTS_PROCESS_FOLDER_HOST", localhost);
             pb.environment().put("QUARKUS_GRPC_CLIENTS_PROCESS_FOLDER_PORT", grpcPort);
             pb.environment().put("QUARKUS_GRPC_CLIENTS_PROCESS_CSV_PAYMENTS_INPUT_HOST", localhost);
@@ -412,26 +432,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
                     .put(
                             "QUARKUS_GRPC_CLIENTS_OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT_PORT",
                             grpcPort);
-
-            String[] clientNames = {
-                "process-folder",
-                "process-csv-payments-input",
-                "process-send-payment-record",
-                "process-ack-payment-sent",
-                "process-payment-status",
-                "process-csv-payments-output-file",
-                "observe-persistence-csv-payments-input-file-side-effect",
-                "observe-persistence-payment-record-side-effect",
-                "observe-persistence-ack-payment-sent-side-effect",
-                "observe-persistence-payment-status-side-effect",
-                "observe-persistence-payment-output-side-effect",
-                "observe-persistence-csv-payments-output-file-side-effect"
-            };
-            for (String clientName : clientNames) {
-                String prefix = "QUARKUS_GRPC_CLIENTS_" + clientName.toUpperCase().replace('-', '_') + "_";
-                pb.environment().put(prefix + "TLS_ENABLED", "false");
-                pb.environment().put(prefix + "PLAIN_TEXT", "true");
-            }
         } else {
             pb.environment().put("QUARKUS_GRPC_CLIENTS_PROCESS_FOLDER_HOST", inputCsvService.getHost());
             pb.environment()
@@ -534,6 +534,31 @@ abstract class AbstractCsvPaymentsEndToEnd {
         assertTrue(completed, "Orchestrator process timed out");
         int exitCode = p.exitValue();
         assertEquals(0, exitCode, "Orchestrator exited with non-zero code");
+    }
+
+    private static Path resolveJarPath(String jarPath) {
+        Path candidate = Paths.get(jarPath).normalize();
+        if (Files.isRegularFile(candidate)) {
+            return candidate;
+        }
+        if (!candidate.isAbsolute()) {
+            Path cwd = Paths.get(System.getProperty("user.dir")).normalize();
+            Path resolved = cwd.resolve(jarPath).normalize();
+            if (Files.isRegularFile(resolved)) {
+                return resolved;
+            }
+            Path cursor = cwd;
+            for (int i = 0; i < 6 && cursor != null; i++) {
+                Path repoCandidate = cursor
+                        .resolve("examples/csv-payments/monolith-svc/target/quarkus-app/quarkus-run.jar")
+                        .normalize();
+                if (Files.isRegularFile(repoCandidate)) {
+                    return repoCandidate;
+                }
+                cursor = cursor.getParent();
+            }
+        }
+        return candidate;
     }
 
     /**

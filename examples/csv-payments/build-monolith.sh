@@ -33,4 +33,5 @@ cleanup() {
 trap cleanup EXIT
 
 cp "$MONOLITH_MAPPING" "$ACTIVE_MAPPING"
-"$MVN_BIN" -f "$CSV_DIR/pom.monolith.xml" clean install "$@"
+PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT:-LOCAL}"
+"$MVN_BIN" -f "$CSV_DIR/pom.monolith.xml" -Dpipeline.transport="$PIPELINE_TRANSPORT" clean install "$@"

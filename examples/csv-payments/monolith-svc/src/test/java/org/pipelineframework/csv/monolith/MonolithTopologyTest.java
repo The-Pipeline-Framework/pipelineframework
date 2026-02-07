@@ -1,6 +1,7 @@
 package org.pipelineframework.csv.monolith;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.io.InputStream;
@@ -14,9 +15,18 @@ class MonolithTopologyTest {
 
     @Test
     void routesAllGeneratedGrpcClientsToSingleRuntimeEndpoint() throws Exception {
+        String transportOverride = System.getProperty("pipeline.transport");
+        if (transportOverride == null || transportOverride.isBlank()) {
+            transportOverride = System.getenv("PIPELINE_TRANSPORT");
+        }
+        boolean localTransport = transportOverride != null && "LOCAL".equalsIgnoreCase(transportOverride.trim());
         try (InputStream input = Thread.currentThread()
             .getContextClassLoader()
             .getResourceAsStream("META-INF/pipeline/orchestrator-clients.properties")) {
+            if (localTransport) {
+                assertNull(input, "Local transport should not emit orchestrator client metadata.");
+                return;
+            }
             assertNotNull(input, "Expected generated orchestrator client metadata");
             Properties properties = new Properties();
             properties.load(input);
