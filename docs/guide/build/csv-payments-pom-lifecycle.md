@@ -6,6 +6,12 @@ appear and when they are packaged into the runnable artifacts.
 
 Reference POM: `examples/csv-payments/pom.xml`
 
+If your goal is to operate the app (not analyze every build phase), start with:
+
+- [Runtime Layouts and Build Topologies](/guide/build/runtime-layouts/)
+- [Maven Migration Playbook](/guide/build/runtime-layouts/maven-migration)
+- [CSV Payments Monolith Walkthrough](/guide/build/runtime-layouts/csv-payments-monolith)
+
 ## Build flow chart
 
 ```mermaid
@@ -49,6 +55,18 @@ module to one runtime role:
 - **monolith**: bundle the orchestrator and steps into one runtime. Orchestrator
   calls become in-process and the module can compile a single runtime role,
   which avoids most of the role-specific compile/merge machinery.
+
+### Practical simplification path
+
+1. Keep `examples/csv-payments/pom.xml` as the modular reference build.
+2. Introduce a grouped topology (`pipeline-runtime`) when service count grows.
+3. Introduce a dedicated monolith parent/runtime module when you want one deployable.
+
+In this repository, monolith support is demonstrated by:
+
+- `examples/csv-payments/pom.monolith.xml`
+- `examples/csv-payments/monolith-svc/pom.xml`
+- `examples/csv-payments/build-monolith.sh`
 
 ## Phase-by-phase breakdown
 

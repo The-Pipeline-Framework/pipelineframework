@@ -34,13 +34,18 @@ const mainSidebar = [
         items: [
             {text: 'Application Structure', link: '/guide/design/application-structure'},
             {text: 'Common Module Structure', link: '/guide/design/common-module-structure'},
-            {text: 'Expansion and Reduction', link: '/guide/design/expansion-and-reduction'}
+            {text: 'Expansion and Reduction', link: '/guide/design/expansion-and-reduction'},
+            {text: 'Runtime Topology Strategy', link: '/guide/design/runtime-topology-strategy'}
         ]
     },
     {
         text: 'Build',
         items: [
             {text: 'Pipeline Compilation', link: '/guide/build/pipeline-compilation'},
+            {text: 'Runtime Layouts and Build Topologies', link: '/guide/build/runtime-layouts/'},
+            {text: 'Using Runtime Mapping', link: '/guide/build/runtime-layouts/using-runtime-mapping'},
+            {text: 'Maven Migration Playbook', link: '/guide/build/runtime-layouts/maven-migration'},
+            {text: 'CSV Payments Monolith Walkthrough', link: '/guide/build/runtime-layouts/csv-payments-monolith'},
             {text: 'Configuration Reference', link: '/guide/build/configuration/'},
             {text: 'Dependency Management', link: '/guide/build/dependency-management'},
             {text: 'Best Practices', link: '/guide/operations/best-practices'}

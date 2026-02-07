@@ -49,6 +49,18 @@ jobs:
           -Dquarkus.container-image.build=true \
           -Dquarkus.container-image.push=false
 
+      - name: Build csv-payments monolith runtime
+        run: |
+          ./examples/csv-payments/build-monolith.sh -DskipTests
+
+      - name: Run csv-payments monolith E2E
+        run: |
+          ./mvnw $MAVEN_ARGS -f examples/csv-payments/pom.xml \
+            -pl orchestrator-svc \
+            -Dcsv.runtime.layout=monolith \
+            -Dtest=CsvPaymentsEndToEndIT \
+            test
+
       - name: Dump integration test reports on failure
         if: failure()
         run: |

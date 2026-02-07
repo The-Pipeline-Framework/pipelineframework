@@ -40,9 +40,13 @@ The framework lets you define pipeline steps as simple classes annotated with `@
 - [Application Structure](/guide/design/application-structure): Modular layout and service boundaries
 - [Common Module Structure](/guide/design/common-module-structure): Shared domain types and mappers
 - [Expansion and Reduction](/guide/design/expansion-and-reduction): Cardinality explained for imperative developers
+- [Runtime Topology Strategy](/guide/design/runtime-topology-strategy): Architecture trade-offs for modular, grouped, and monolith layouts
 
 ### Build
 - [Pipeline Compilation](/guide/build/pipeline-compilation): Build-time generation flow
+- [Runtime Layouts and Build Topologies](/guide/build/runtime-layouts/): Use runtime mapping and align Maven topology
+- [Maven Migration Playbook](/guide/build/runtime-layouts/maven-migration): Move between modular, pipeline-runtime, and monolith
+- [CSV Payments Monolith Walkthrough](/guide/build/runtime-layouts/csv-payments-monolith): Concrete example of monolith build + E2E
 - [Configuration Reference](/guide/build/configuration/): Build-time and runtime settings
 - [Dependency Management](/guide/build/dependency-management): Manage build-time and runtime deps
 - [Best Practices](/guide/operations/best-practices): Operational and design guidance
