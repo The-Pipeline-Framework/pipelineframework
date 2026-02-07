@@ -40,11 +40,19 @@ class MonolithTopologyTest {
                 .collect(Collectors.toSet());
 
             assertFalse(hostKeys.isEmpty(), "No gRPC client host entries found");
-            int expectedHostEntries = hostKeys.size();
-            int actualPortEntries = portKeys.size();
-            assertEquals(expectedHostEntries, actualPortEntries, "Expected matching host/port entries");
-            hostKeys.forEach(key -> assertEquals("localhost", properties.getProperty(key)));
-            portKeys.forEach(key -> assertEquals("8444", properties.getProperty(key)));
+            String prefix = "quarkus.grpc.clients.";
+            Set<String> hostClientIds = hostKeys.stream()
+                .map(key -> key.substring(prefix.length(), key.length() - ".host".length()))
+                .collect(Collectors.toSet());
+            Set<String> portClientIds = portKeys.stream()
+                .map(key -> key.substring(prefix.length(), key.length() - ".port".length()))
+                .collect(Collectors.toSet());
+
+            assertEquals(hostClientIds, portClientIds, "Expected matching host/port client entries");
+            hostClientIds.forEach(clientId -> {
+                assertEquals("localhost", properties.getProperty(prefix + clientId + ".host"));
+                assertEquals("8444", properties.getProperty(prefix + clientId + ".port"));
+            });
         }
     }
 }

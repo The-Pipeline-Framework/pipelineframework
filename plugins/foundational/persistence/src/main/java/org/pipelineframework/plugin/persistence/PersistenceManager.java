@@ -142,7 +142,7 @@ public class PersistenceManager {
             return ThreadSafety.SAFE;
         }
         if (hasConfiguredProvider()) {
-            PersistenceProvider<?> provider = resolveConfiguredProvider(configuredProviderClass().orElseThrow().trim());
+            PersistenceProvider<?> provider = resolveConfiguredProvider(configuredProviderClass().get().trim());
             warnIfThreadSafetyDefault(provider);
             return provider.threadSafety();
         }
@@ -163,7 +163,7 @@ public class PersistenceManager {
             return OrderingRequirement.RELAXED;
         }
         if (hasConfiguredProvider()) {
-            PersistenceProvider<?> provider = resolveConfiguredProvider(configuredProviderClass().orElseThrow().trim());
+            PersistenceProvider<?> provider = resolveConfiguredProvider(configuredProviderClass().get().trim());
             return orderingRequirementFor(provider, OrderingRequirement.RELAXED);
         }
         if (providers.size() == 1) {
@@ -178,7 +178,7 @@ public class PersistenceManager {
             return null;
         }
         if (hasConfiguredProvider()) {
-            PersistenceProvider<?> provider = resolveConfiguredProvider(configuredProviderClass().orElseThrow().trim());
+            PersistenceProvider<?> provider = resolveConfiguredProvider(configuredProviderClass().get().trim());
             if (!provider.supports(entity)) {
                 throw new IllegalStateException(
                     "Configured persistence provider " + provider.getClass().getName() +
@@ -245,7 +245,7 @@ public class PersistenceManager {
 
     private boolean hasConfiguredProvider() {
         Optional<String> configuredProvider = configuredProviderClass();
-        return configuredProvider.isPresent() && !configuredProvider.orElseThrow().isBlank();
+        return configuredProvider.isPresent() && !configuredProvider.get().isBlank();
     }
 
     private String providerClassName(PersistenceProvider<?> provider) {

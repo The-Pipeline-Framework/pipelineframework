@@ -11,22 +11,23 @@ shift
 
 tmp_file="${target_dir}/monolith-source-files.txt"
 mkdir -p "$target_dir"
-: > "$tmp_file"
 
-for dir in "$@"; do
-  if [ -d "$dir" ]; then
-    find "$dir" -type f -name '*.java' -print | while IFS= read -r file; do
-      rel_path="${file#"${dir}/"}"
-      # Monolith keeps a single ExecutorProducer copy from input-csv-file-processing-svc.
-      if [ "$rel_path" = "org/pipelineframework/csv/service/ExecutorProducer.java" ] \
-        && { [[ "$dir" == *"/payments-processing-svc/src/main/java" ]] \
-          || [[ "$dir" == *"/output-csv-file-processing-svc/src/main/java" ]]; }; then
-        continue
-      fi
-      echo "$rel_path" >> "$tmp_file"
-    done
-  fi
-done
+{
+  for dir in "$@"; do
+    if [ -d "$dir" ]; then
+      while IFS= read -r -d '' file; do
+        rel_path="${file#"${dir}/"}"
+        # Monolith keeps a single ExecutorProducer copy from input-csv-file-processing-svc.
+        if [ "$rel_path" = "org/pipelineframework/csv/service/ExecutorProducer.java" ] \
+          && { [[ "$dir" == *"/payments-processing-svc/src/main/java" ]] \
+            || [[ "$dir" == *"/output-csv-file-processing-svc/src/main/java" ]]; }; then
+          continue
+        fi
+        printf '%s\n' "$rel_path"
+      done < <(find "$dir" -type f -name '*.java' -print0)
+    fi
+  done
+} > "$tmp_file"
 
 duplicates="$(sort "$tmp_file" | uniq -d)"
 if [ -n "$duplicates" ]; then

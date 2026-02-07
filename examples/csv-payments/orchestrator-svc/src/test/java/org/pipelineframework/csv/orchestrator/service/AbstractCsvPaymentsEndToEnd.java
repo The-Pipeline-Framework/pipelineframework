@@ -29,8 +29,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -281,18 +281,13 @@ abstract class AbstractCsvPaymentsEndToEnd {
             return;
         }
 
-        String osName = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
-        ProcessBuilder pb;
-        if (osName.contains("win")) {
-            pb = new ProcessBuilder(
-                    "powershell.exe",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-File",
-                    "../generate-dev-certs.ps1");
-        } else {
-            pb = new ProcessBuilder("bash", "../generate-dev-certs.sh");
+        String osName = System.getProperty("os.name", "");
+        if (osName.toLowerCase().contains("win")) {
+            throw new IOException(
+                    "Dev cert generation is Unix-only. Run ../generate-dev-certs.sh from a Unix-like shell "
+                            + "(e.g. Linux/macOS/WSL) before running this test.");
         }
+        ProcessBuilder pb = new ProcessBuilder("bash", "../generate-dev-certs.sh");
         pb.directory(Paths.get(System.getProperty("user.dir")).toFile());
         pb.inheritIO();
         try {
@@ -656,27 +651,19 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 totalRecords >= 5,
                 String.format("Expected at least 5 records, but found %d", totalRecords));
 
-        // Verify content patterns exist in output files
-        boolean johnDoeFound = false;
-        boolean janeSmithFound = false;
-        boolean bobJohnsonFound = false;
-        boolean aliceBrownFound = false;
-        boolean charlieWilsonFound = false;
-
+        Set<String> expectedRecipients = Set.of(
+            "John Doe", "Jane Smith", "Bob Johnson", "Alice Brown", "Charlie Wilson");
+        Set<String> foundRecipients = new HashSet<>();
         for (Path outputFile : outputFiles) {
             String content = Files.readString(outputFile);
-            if (content.contains("John Doe")) johnDoeFound = true;
-            if (content.contains("Jane Smith")) janeSmithFound = true;
-            if (content.contains("Bob Johnson")) bobJohnsonFound = true;
-            if (content.contains("Alice Brown")) aliceBrownFound = true;
-            if (content.contains("Charlie Wilson")) charlieWilsonFound = true;
+            expectedRecipients.stream()
+                .filter(content::contains)
+                .forEach(foundRecipients::add);
         }
-
-        assertTrue(johnDoeFound, "John Doe record should be found in output");
-        assertTrue(janeSmithFound, "Jane Smith record should be found in output");
-        assertTrue(bobJohnsonFound, "Bob Johnson record should be found in output");
-        assertTrue(aliceBrownFound, "Alice Brown record should be found in output");
-        assertTrue(charlieWilsonFound, "Charlie Wilson record should be found in output");
+        assertTrue(foundRecipients.containsAll(expectedRecipients),
+            "Missing expected recipients in output files: " + expectedRecipients.stream()
+                .filter(recipient -> !foundRecipients.contains(recipient))
+                .toList());
 
         LOG.info("All expected records found in output files");
     }
