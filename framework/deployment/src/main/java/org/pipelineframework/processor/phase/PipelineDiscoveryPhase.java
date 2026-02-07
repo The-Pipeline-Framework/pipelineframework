@@ -82,8 +82,8 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         ctx.setRuntimeMapping(runtimeMapping);
 
         // Determine transport mode
-        boolean isGrpc = loadPipelineTransport(ctx);
-        ctx.setTransportModeGrpc(isGrpc);
+        org.pipelineframework.processor.ir.TransportMode transportMode = loadPipelineTransport(ctx);
+        ctx.setTransportMode(transportMode);
 
         // Discover orchestrator models if present
         List<PipelineOrchestratorModel> orchestratorModels = discoverOrchestratorModels(ctx, orchestratorElements);
@@ -130,12 +130,12 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         }
     }
 
-    private boolean loadPipelineTransport(PipelineCompilationContext ctx) {
+    private org.pipelineframework.processor.ir.TransportMode loadPipelineTransport(PipelineCompilationContext ctx) {
         PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
         Path moduleDir = ctx.getModuleDir();
         Optional<Path> configPath = locator.locate(moduleDir);
         if (configPath.isEmpty()) {
-            return true; // Default to GRPC
+            return org.pipelineframework.processor.ir.TransportMode.GRPC;
         }
 
         PipelineStepConfigLoader stepLoader = new PipelineStepConfigLoader();
@@ -143,24 +143,25 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
             PipelineStepConfigLoader.StepConfig stepConfig = stepLoader.load(configPath.get());
             String transport = stepConfig.transport();
             if (transport == null || transport.isBlank()) {
-                return true; // Default to GRPC
+                return org.pipelineframework.processor.ir.TransportMode.GRPC;
             }
-            if ("REST".equalsIgnoreCase(transport)) {
-                return false; // REST mode
-            }
-            if (!"GRPC".equalsIgnoreCase(transport)) {
+            org.pipelineframework.processor.ir.TransportMode mode =
+                org.pipelineframework.processor.ir.TransportMode.fromString(transport);
+            if (mode == org.pipelineframework.processor.ir.TransportMode.GRPC
+                && !"GRPC".equalsIgnoreCase(transport)) {
                 if (ctx.getProcessingEnv() != null) {
                     ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
                         "Unknown pipeline transport '" + transport + "'; defaulting to GRPC.");
                 }
             }
+            return mode;
         } catch (Exception e) {
             if (ctx.getProcessingEnv() != null) {
                 ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
                     "Failed to load pipeline transport from " + configPath.get() + ": " + e.getMessage());
             }
         }
-        return true; // Default to GRPC
+        return org.pipelineframework.processor.ir.TransportMode.GRPC;
     }
 
     private List<PipelineOrchestratorModel> discoverOrchestratorModels(
@@ -184,9 +185,9 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
                 
                 // Determine enabled targets based on transport mode
                 // This is simplified - in reality, it would depend on configuration
-                var enabledTargets = ctx.isTransportModeGrpc() 
-                    ? java.util.Set.of(org.pipelineframework.processor.ir.GenerationTarget.GRPC_SERVICE)
-                    : java.util.Set.of(org.pipelineframework.processor.ir.GenerationTarget.REST_RESOURCE);
+                var enabledTargets = ctx.isTransportModeRest()
+                    ? java.util.Set.of(org.pipelineframework.processor.ir.GenerationTarget.REST_RESOURCE)
+                    : java.util.Set.of(org.pipelineframework.processor.ir.GenerationTarget.GRPC_SERVICE);
                 
                 PipelineOrchestratorModel model = new PipelineOrchestratorModel(
                     serviceName,

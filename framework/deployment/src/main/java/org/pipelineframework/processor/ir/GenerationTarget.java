@@ -7,6 +7,8 @@ package org.pipelineframework.processor.ir;
 public enum GenerationTarget {
     /** gRPC client that delegates to gRPC stub */
     CLIENT_STEP,
+    /** Local client step that delegates directly to the service */
+    LOCAL_CLIENT_STEP,
     /** REST client step that delegates to a REST client */
     REST_CLIENT_STEP,
     /** gRPC server adapter */

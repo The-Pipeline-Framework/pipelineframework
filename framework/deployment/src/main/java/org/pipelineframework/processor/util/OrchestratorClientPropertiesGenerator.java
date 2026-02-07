@@ -49,13 +49,16 @@ public class OrchestratorClientPropertiesGenerator {
         if (!ctx.isOrchestratorGenerated()) {
             return;
         }
+        if (ctx.isTransportModeLocal()) {
+            return;
+        }
 
         List<PipelineStepModel> models = ctx.getStepModels();
         if (models == null || models.isEmpty()) {
             return;
         }
 
-        List<PipelineStepModel> clientModels = filterClientModels(models, ctx.isTransportModeGrpc());
+        List<PipelineStepModel> clientModels = filterClientModels(models, ctx.getTransportMode());
         if (clientModels.isEmpty()) {
             return;
         }
@@ -85,8 +88,15 @@ public class OrchestratorClientPropertiesGenerator {
         }
     }
 
-    private List<PipelineStepModel> filterClientModels(List<PipelineStepModel> models, boolean grpcTransport) {
-        GenerationTarget target = grpcTransport ? GenerationTarget.CLIENT_STEP : GenerationTarget.REST_CLIENT_STEP;
+    private List<PipelineStepModel> filterClientModels(
+        List<PipelineStepModel> models,
+        org.pipelineframework.processor.ir.TransportMode transportMode
+    ) {
+        GenerationTarget target = switch (transportMode) {
+            case REST -> GenerationTarget.REST_CLIENT_STEP;
+            case LOCAL -> GenerationTarget.LOCAL_CLIENT_STEP;
+            case GRPC -> GenerationTarget.CLIENT_STEP;
+        };
         return models.stream()
             .filter(model -> model.enabledTargets().contains(target))
             .toList();
@@ -243,7 +253,7 @@ public class OrchestratorClientPropertiesGenerator {
         if (lastDot != -1) {
             simple = simple.substring(lastDot + 1);
         }
-        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep)(_Subclass)?$", "");
+        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep|LocalClientStep)(_Subclass)?$", "");
         return toClassToken(simple);
     }
 

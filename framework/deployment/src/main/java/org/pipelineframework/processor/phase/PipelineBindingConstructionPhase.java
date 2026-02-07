@@ -40,10 +40,9 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
         // Create a map to store bindings for each model
         Map<String, Object> bindingsMap = new HashMap<>();
 
-        boolean isGrpc = ctx.isTransportModeGrpc();
         DescriptorProtos.FileDescriptorSet descriptorSet = ctx.getDescriptorSet();
 
-        if (isGrpc && descriptorSet == null && needsGrpcBindings(ctx)) {
+        if (descriptorSet == null && needsGrpcBindings(ctx)) {
             descriptorSet = loadDescriptorSet(ctx);
             ctx.setDescriptorSet(descriptorSet);
         }
@@ -71,6 +70,9 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
             String modelKey = model.serviceName();
             bindingsMap.put(modelKey + "_grpc", grpcBinding);
             bindingsMap.put(modelKey + "_rest", restBinding);
+            if (model.enabledTargets().contains(GenerationTarget.LOCAL_CLIENT_STEP)) {
+                bindingsMap.put(modelKey + "_local", new LocalBinding(model));
+            }
         }
         
         // Process orchestrator models if present
@@ -96,7 +98,12 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
         }
         if (!ctx.getOrchestratorModels().isEmpty()) {
             PipelineTemplateConfig config = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig cfg ? cfg : null;
-            return config != null && "GRPC".equalsIgnoreCase(config.transport());
+            if (config == null) {
+                return false;
+            }
+            org.pipelineframework.processor.ir.TransportMode transportMode =
+                org.pipelineframework.processor.ir.TransportMode.fromString(config.transport());
+            return transportMode == org.pipelineframework.processor.ir.TransportMode.GRPC;
         }
         return false;
     }

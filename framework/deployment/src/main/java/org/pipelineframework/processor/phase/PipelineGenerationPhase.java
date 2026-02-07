@@ -78,6 +78,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         GrpcServiceAdapterRenderer grpcRenderer = new GrpcServiceAdapterRenderer(GenerationTarget.GRPC_SERVICE);
         org.pipelineframework.processor.renderer.ClientStepRenderer clientRenderer =
             new org.pipelineframework.processor.renderer.ClientStepRenderer(GenerationTarget.CLIENT_STEP);
+        org.pipelineframework.processor.renderer.LocalClientStepRenderer localClientRenderer =
+            new org.pipelineframework.processor.renderer.LocalClientStepRenderer();
         RestClientStepRenderer restClientRenderer = new RestClientStepRenderer();
         RestResourceRenderer restRenderer = new RestResourceRenderer();
         OrchestratorGrpcRenderer orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
@@ -93,11 +95,16 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
 
         DescriptorProtos.FileDescriptorSet descriptorSet = ctx.getDescriptorSet();
 
+        boolean hasPluginSideEffects = ctx.getStepModels().stream()
+            .anyMatch(model -> model.sideEffect()
+                && model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER);
+
         // Generate artifacts for each step model
         for (PipelineStepModel model : ctx.getStepModels()) {
             // Get the bindings for this model
             GrpcBinding grpcBinding = (GrpcBinding) bindingsMap.get(model.serviceName() + "_grpc");
             RestBinding restBinding = (RestBinding) bindingsMap.get(model.serviceName() + "_rest");
+            LocalBinding localBinding = (LocalBinding) bindingsMap.get(model.serviceName() + "_local");
 
             // Generate artifacts based on enabled targets
             generateArtifacts(
@@ -105,11 +112,14 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 model,
                 grpcBinding,
                 restBinding,
+                localBinding,
+                hasPluginSideEffects,
                 descriptorSet,
                 cacheKeyGenerator,
                 roleMetadataGenerator,
                 grpcRenderer,
                 clientRenderer,
+                localClientRenderer,
                 restClientRenderer,
                 restRenderer
             );
@@ -457,11 +467,14 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             PipelineStepModel model,
             GrpcBinding grpcBinding,
             RestBinding restBinding,
+            LocalBinding localBinding,
+            boolean hasPluginSideEffects,
             DescriptorProtos.FileDescriptorSet descriptorSet,
             ClassName cacheKeyGenerator,
             RoleMetadataGenerator roleMetadataGenerator,
             GrpcServiceAdapterRenderer grpcRenderer,
             org.pipelineframework.processor.renderer.ClientStepRenderer clientRenderer,
+            org.pipelineframework.processor.renderer.LocalClientStepRenderer localClientRenderer,
             RestClientStepRenderer restClientRenderer,
             RestResourceRenderer restRenderer) throws IOException {
         
@@ -472,11 +485,29 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         for (GenerationTarget target : model.enabledTargets()) {
             switch (target) {
                 case GRPC_SERVICE -> {
-                    if (model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER && !ctx.isPluginHost()) {
+                    if (model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER
+                        && !allowPluginServerArtifacts(ctx)) {
                         break;
                     }
                     if (model.sideEffect() && model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER) {
-                        generateSideEffectBean(ctx, model, org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER, grpcBinding);
+                        org.pipelineframework.processor.ir.DeploymentRole sideEffectOutputRole = ctx.isTransportModeLocal()
+                            ? org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT
+                            : org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER;
+                        generateSideEffectBean(
+                            ctx,
+                            model,
+                            org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER,
+                            sideEffectOutputRole,
+                            grpcBinding);
+                    }
+                    if (ctx.isTransportModeLocal()) {
+                        break;
+                    }
+                    if (grpcBinding == null) {
+                        ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                            "Skipping gRPC service generation for '" + model.generatedName() +
+                                "' because no gRPC binding is available.");
+                        break;
                     }
                     String grpcClassName = model.servicePackage() + ".pipeline." +
                             model.generatedName() + "GrpcService";
@@ -506,12 +537,51 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                         descriptorSet));
                     roleMetadataGenerator.recordClassWithRole(clientClassName, clientRole.name());
                 }
+                case LOCAL_CLIENT_STEP -> {
+                    if (model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER && ctx.isPluginHost()) {
+                        break;
+                    }
+                    if (ctx.getProcessingEnv() == null) {
+                        break;
+                    }
+                    if (model.sideEffect() && !hasPluginSideEffects) {
+                        generateSideEffectBean(
+                            ctx,
+                            model,
+                            org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER,
+                            org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT,
+                            grpcBinding);
+                    }
+                    if (localBinding == null) {
+                        ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                            "Skipping local client step generation for '" + model.generatedName() +
+                                "' because no local binding is available.");
+                        break;
+                    }
+                    String localClientClassName = model.servicePackage() + ".pipeline." +
+                        model.generatedName().replace("Service", "") + "LocalClientStep";
+                    org.pipelineframework.processor.ir.DeploymentRole localClientRole = resolveClientRole(model.deploymentRole());
+                    localClientRenderer.render(localBinding, new GenerationContext(
+                        ctx.getProcessingEnv(),
+                        resolveRoleOutputDir(ctx, localClientRole),
+                        localClientRole,
+                        enabledAspects,
+                        cacheKeyGenerator,
+                        descriptorSet));
+                    roleMetadataGenerator.recordClassWithRole(localClientClassName, localClientRole.name());
+                }
                 case REST_RESOURCE -> {
-                    if (model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER && !ctx.isPluginHost()) {
+                    if (model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER
+                        && !allowPluginServerArtifacts(ctx)) {
                         break;
                     }
                     if (model.sideEffect() && model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER) {
-                        generateSideEffectBean(ctx, model, org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER, grpcBinding);
+                        generateSideEffectBean(
+                            ctx,
+                            model,
+                            org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER,
+                            org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER,
+                            grpcBinding);
                     }
                     if (restBinding == null) {
                         ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
@@ -570,6 +640,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             PipelineCompilationContext ctx,
             PipelineStepModel model,
             org.pipelineframework.processor.ir.DeploymentRole role,
+            org.pipelineframework.processor.ir.DeploymentRole outputRole,
             GrpcBinding grpcBinding) {
         if (model == null || model.serviceClassName() == null) {
             return;
@@ -592,8 +663,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             .addAnnotation(com.squareup.javapoet.AnnotationSpec.builder(
                 com.squareup.javapoet.ClassName.get("io.quarkus.arc", "Unremovable"))
                 .build())
-            .addAnnotation(com.squareup.javapoet.AnnotationSpec.builder(
-                com.squareup.javapoet.ClassName.get("org.pipelineframework.annotation", "GeneratedRole"))
+                .addAnnotation(com.squareup.javapoet.AnnotationSpec.builder(
+                    com.squareup.javapoet.ClassName.get("org.pipelineframework.annotation", "GeneratedRole"))
                 .addMember("value", "$T.$L",
                     com.squareup.javapoet.ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role"),
                     role.name())
@@ -611,7 +682,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         try {
             com.squareup.javapoet.JavaFile.builder(packageName, beanClass)
                 .build()
-                .writeTo(resolveRoleOutputDir(ctx, role));
+                .writeTo(resolveRoleOutputDir(ctx, outputRole == null ? role : outputRole));
         } catch (IOException e) {
             if (ctx.getProcessingEnv() != null) {
                 ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
@@ -770,6 +841,17 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         return observedType;
     }
 
+    private boolean allowPluginServerArtifacts(PipelineCompilationContext ctx) {
+        if (ctx == null) {
+            return false;
+        }
+        if (ctx.isPluginHost()) {
+            return true;
+        }
+        String moduleName = ctx.getModuleName();
+        return ctx.getRuntimeMapping() != null && moduleName != null && !moduleName.isBlank();
+    }
+
     /**
      * Determines whether the given pipeline step model represents the cache plugin.
      *
@@ -848,6 +930,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         try {
             String transport = binding.normalizedTransport();
             boolean rest = "REST".equalsIgnoreCase(transport);
+            boolean local = "LOCAL".equalsIgnoreCase(transport);
             if (rest) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER;
                 orchestratorRestRenderer.render(binding, new GenerationContext(
@@ -857,7 +940,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     java.util.Set.of(),
                     cacheKeyGenerator,
                     descriptorSet));
-            } else {
+            } else if (!local) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.PIPELINE_SERVER;
                 orchestratorGrpcRenderer.render(binding, new GenerationContext(
                     ctx.getProcessingEnv(),
@@ -879,7 +962,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     descriptorSet));
             }
 
-            if (!rest) {
+            if (!rest && !local) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT;
                 orchestratorIngestClientRenderer.render(binding, new GenerationContext(
                     ctx.getProcessingEnv(),

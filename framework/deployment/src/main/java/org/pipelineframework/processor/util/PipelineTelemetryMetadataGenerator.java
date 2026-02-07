@@ -19,6 +19,7 @@ import org.pipelineframework.config.pipeline.PipelineYamlStep;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.TransportMode;
 import org.pipelineframework.processor.ir.TypeMapping;
 
 /**
@@ -67,8 +68,9 @@ public class PipelineTelemetryMetadataGenerator {
         if (itemTypes == null || itemTypes.inputType() == null || itemTypes.outputType() == null) {
             return;
         }
-        String consumer = findConsumerStep(ordered, itemTypes.inputType(), ctx.isTransportModeGrpc());
-        String producer = findProducerStep(ordered, itemTypes.outputType(), ctx.isTransportModeGrpc());
+        TransportMode transportMode = ctx.getTransportMode();
+        String consumer = findConsumerStep(ordered, itemTypes.inputType(), transportMode);
+        String producer = findProducerStep(ordered, itemTypes.outputType(), transportMode);
         Map<String, String> stepParents = resolveStepParents(ctx, ordered);
         if (producer == null && consumer == null) {
             return;
@@ -95,10 +97,18 @@ public class PipelineTelemetryMetadataGenerator {
         if (models == null || models.isEmpty()) {
             return List.of();
         }
-        GenerationTarget target = ctx.isTransportModeGrpc() ? GenerationTarget.CLIENT_STEP : GenerationTarget.REST_CLIENT_STEP;
+        GenerationTarget target = resolveClientTarget(ctx.getTransportMode());
         return models.stream()
             .filter(model -> model.enabledTargets().contains(target))
             .toList();
+    }
+
+    private GenerationTarget resolveClientTarget(TransportMode transportMode) {
+        return switch (transportMode) {
+            case REST -> GenerationTarget.REST_CLIENT_STEP;
+            case LOCAL -> GenerationTarget.LOCAL_CLIENT_STEP;
+            case GRPC -> GenerationTarget.CLIENT_STEP;
+        };
     }
 
     private String loadItemInputType(PipelineCompilationContext ctx) {
@@ -208,7 +218,7 @@ public class PipelineTelemetryMetadataGenerator {
             if (token.isBlank()) {
                 continue;
             }
-            PipelineStepModel match = selectBestMatch(remaining, token, ctx.isTransportModeGrpc());
+            PipelineStepModel match = selectBestMatch(remaining, token, ctx.getTransportMode());
             if (match != null) {
                 ordered.add(match);
                 remaining.remove(match);
@@ -232,11 +242,15 @@ public class PipelineTelemetryMetadataGenerator {
         return loader.load(configPath.get());
     }
 
-    private PipelineStepModel selectBestMatch(List<PipelineStepModel> candidates, String token, boolean grpcTransport) {
+    private PipelineStepModel selectBestMatch(
+        List<PipelineStepModel> candidates,
+        String token,
+        TransportMode transportMode
+    ) {
         PipelineStepModel best = null;
         int bestLength = -1;
         for (PipelineStepModel candidate : candidates) {
-            String normalized = normalizeStepToken(resolveClientStepClassName(candidate, grpcTransport));
+            String normalized = normalizeStepToken(resolveClientStepClassName(candidate, transportMode));
             if (normalized.contains(token) && normalized.length() > bestLength) {
                 best = candidate;
                 bestLength = normalized.length();
@@ -251,7 +265,7 @@ public class PipelineTelemetryMetadataGenerator {
         if (lastDot != -1) {
             simple = simple.substring(lastDot + 1);
         }
-        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep)(_Subclass)?$", "");
+        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep|LocalClientStep)(_Subclass)?$", "");
         return toClassToken(simple);
     }
 
@@ -262,11 +276,15 @@ public class PipelineTelemetryMetadataGenerator {
         return name.replaceAll("[^A-Za-z0-9]", "").toLowerCase();
     }
 
-    private String findProducerStep(List<PipelineStepModel> ordered, String itemType, boolean grpcTransport) {
+    private String findProducerStep(
+        List<PipelineStepModel> ordered,
+        String itemType,
+        TransportMode transportMode
+    ) {
         String lastMatch = null;
         for (PipelineStepModel model : ordered) {
             if (matchesType(model.outputMapping(), itemType)) {
-                lastMatch = resolveClientStepClassName(model, grpcTransport);
+                lastMatch = resolveClientStepClassName(model, transportMode);
             }
         }
         if (lastMatch != null) {
@@ -275,7 +293,7 @@ public class PipelineTelemetryMetadataGenerator {
         if (ordered == null || ordered.isEmpty()) {
             return null;
         }
-        return resolveClientStepClassName(ordered.get(ordered.size() - 1), grpcTransport);
+        return resolveClientStepClassName(ordered.get(ordered.size() - 1), transportMode);
     }
 
     private Map<String, String> resolveStepParents(PipelineCompilationContext ctx, List<PipelineStepModel> orderedBase) {
@@ -283,7 +301,7 @@ public class PipelineTelemetryMetadataGenerator {
         if (models == null || models.isEmpty()) {
             return Map.of();
         }
-        GenerationTarget target = ctx.isTransportModeGrpc() ? GenerationTarget.CLIENT_STEP : GenerationTarget.REST_CLIENT_STEP;
+        GenerationTarget target = resolveClientTarget(ctx.getTransportMode());
         List<PipelineStepModel> pluginSteps = models.stream()
             .filter(model -> model.enabledTargets().contains(target))
             .filter(PipelineStepModel::sideEffect)
@@ -298,8 +316,8 @@ public class PipelineTelemetryMetadataGenerator {
                 continue;
             }
             parents.put(
-                resolveClientStepClassName(plugin, ctx.isTransportModeGrpc()),
-                resolveClientStepClassName(parent, ctx.isTransportModeGrpc()));
+                resolveClientStepClassName(plugin, ctx.getTransportMode()),
+                resolveClientStepClassName(parent, ctx.getTransportMode()));
         }
         return parents;
     }
@@ -340,16 +358,16 @@ public class PipelineTelemetryMetadataGenerator {
     private String findConsumerStep(
         List<PipelineStepModel> ordered,
         String itemType,
-        boolean grpcTransport) {
+        TransportMode transportMode) {
         for (PipelineStepModel model : ordered) {
             if (matchesType(model.inputMapping(), itemType)) {
-                return resolveClientStepClassName(model, grpcTransport);
+                return resolveClientStepClassName(model, transportMode);
             }
         }
         if (ordered == null || ordered.isEmpty()) {
             return null;
         }
-        return resolveClientStepClassName(ordered.get(0), grpcTransport);
+        return resolveClientStepClassName(ordered.get(0), transportMode);
     }
 
     private boolean matchesType(TypeMapping mapping, String itemType) {
@@ -359,8 +377,12 @@ public class PipelineTelemetryMetadataGenerator {
         return itemType.equals(mapping.domainType().toString());
     }
 
-    private String resolveClientStepClassName(PipelineStepModel model, boolean grpcTransport) {
-        String suffix = grpcTransport ? "GrpcClientStep" : "RestClientStep";
+    private String resolveClientStepClassName(PipelineStepModel model, TransportMode transportMode) {
+        String suffix = switch (transportMode) {
+            case REST -> "RestClientStep";
+            case LOCAL -> "LocalClientStep";
+            case GRPC -> "GrpcClientStep";
+        };
         return model.servicePackage() + ".pipeline." +
             model.generatedName().replace("Service", "") + suffix;
     }

@@ -166,7 +166,9 @@ public final class PipelineOrderExpander {
 
     private static boolean containsSideEffectSteps(List<String> baseOrder) {
         return baseOrder.stream().anyMatch(name -> name != null
-            && (name.contains("SideEffectGrpcClientStep") || name.contains("SideEffectRestClientStep")));
+            && (name.contains("SideEffectGrpcClientStep")
+                || name.contains("SideEffectRestClientStep")
+                || name.contains("SideEffectLocalClientStep")));
     }
 
     private static String resolveTypeForAspect(
@@ -287,7 +289,7 @@ public final class PipelineOrderExpander {
         if (lastDot != -1) {
             simple = simple.substring(lastDot + 1);
         }
-        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep)(_Subclass)?$", "");
+        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep|LocalClientStep)(_Subclass)?$", "");
         return toClassToken(simple);
     }
 
@@ -331,7 +333,13 @@ public final class PipelineOrderExpander {
         if (config == null || config.transport() == null) {
             return "GrpcClientStep";
         }
-        return "REST".equalsIgnoreCase(config.transport()) ? "RestClientStep" : "GrpcClientStep";
+        if ("REST".equalsIgnoreCase(config.transport())) {
+            return "RestClientStep";
+        }
+        if ("LOCAL".equalsIgnoreCase(config.transport())) {
+            return "LocalClientStep";
+        }
+        return "GrpcClientStep";
     }
 
     private static String capitalize(String input) {

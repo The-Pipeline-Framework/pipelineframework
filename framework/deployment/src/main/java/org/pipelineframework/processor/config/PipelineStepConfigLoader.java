@@ -46,6 +46,10 @@ public class PipelineStepConfigLoader {
 
         String basePackage = getString(rootMap.get("basePackage"));
         String transport = getString(rootMap.get("transport"));
+        String transportOverride = resolveTransportOverride();
+        if (transportOverride != null && !transportOverride.isBlank()) {
+            transport = transportOverride.trim();
+        }
         Object stepsValue = rootMap.get("steps");
         if (!(stepsValue instanceof List<?> steps)) {
             return new StepConfig(basePackage, transport, List.of(), List.of());
@@ -84,5 +88,13 @@ public class PipelineStepConfigLoader {
             return "";
         }
         return String.valueOf(value);
+    }
+
+    private String resolveTransportOverride() {
+        String override = System.getProperty("pipeline.transport");
+        if (override == null || override.isBlank()) {
+            override = System.getenv("PIPELINE_TRANSPORT");
+        }
+        return override;
     }
 }

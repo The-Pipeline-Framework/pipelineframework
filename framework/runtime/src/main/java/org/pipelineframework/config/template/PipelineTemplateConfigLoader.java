@@ -53,6 +53,10 @@ public class PipelineTemplateConfigLoader {
         String appName = readString(rootMap, "appName");
         String basePackage = readString(rootMap, "basePackage");
         String transport = readString(rootMap, "transport");
+        String transportOverride = resolveTransportOverride();
+        if (transportOverride != null && !transportOverride.isBlank()) {
+            transport = transportOverride.trim();
+        }
         List<PipelineTemplateStep> steps = readSteps(rootMap);
         Map<String, PipelineTemplateAspect> aspects = readAspects(rootMap);
 
@@ -160,6 +164,14 @@ public class PipelineTemplateConfigLoader {
     private String readString(Map<?, ?> map, String key) {
         Object value = map.get(key);
         return value == null ? null : value.toString();
+    }
+
+    private String resolveTransportOverride() {
+        String override = System.getProperty("pipeline.transport");
+        if (override == null || override.isBlank()) {
+            override = System.getenv("PIPELINE_TRANSPORT");
+        }
+        return override;
     }
 
     private boolean readBoolean(Map<?, ?> map, String key, boolean defaultValue) {

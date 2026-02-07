@@ -98,7 +98,7 @@ public class PipelineOrderMetadataGenerator {
         if (models == null || models.isEmpty()) {
             return List.of();
         }
-        String suffix = ctx.isTransportModeGrpc() ? "GrpcClientStep" : "RestClientStep";
+        String suffix = resolveClientStepSuffix(ctx.getTransportMode());
         Set<String> ordered = new LinkedHashSet<>();
         for (PipelineStepModel model : models) {
             if (model.deploymentRole() != DeploymentRole.ORCHESTRATOR_CLIENT || model.sideEffect()) {
@@ -132,6 +132,14 @@ public class PipelineOrderMetadataGenerator {
         return ordered;
     }
 
+    private String resolveClientStepSuffix(org.pipelineframework.processor.ir.TransportMode transportMode) {
+        return switch (transportMode) {
+            case REST -> "RestClientStep";
+            case LOCAL -> "LocalClientStep";
+            case GRPC -> "GrpcClientStep";
+        };
+    }
+
     private String selectBestMatch(List<String> candidates, String token) {
         String best = null;
         int bestLength = -1;
@@ -154,7 +162,7 @@ public class PipelineOrderMetadataGenerator {
         if (lastDot != -1) {
             simple = simple.substring(lastDot + 1);
         }
-        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep)(_Subclass)?$", "");
+        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep|LocalClientStep)(_Subclass)?$", "");
         return toClassToken(simple);
     }
 

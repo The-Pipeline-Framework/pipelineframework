@@ -102,10 +102,22 @@ public class PipelineYamlConfigLoader {
 
         String basePackage = readString(rootMap, "basePackage");
         String transport = readString(rootMap, "transport");
+        String transportOverride = resolveTransportOverride();
+        if (transportOverride != null && !transportOverride.isBlank()) {
+            transport = transportOverride.trim();
+        }
         List<PipelineYamlStep> steps = readSteps(rootMap);
         List<PipelineYamlAspect> aspects = readAspects(rootMap);
 
         return new PipelineYamlConfig(basePackage, transport, steps, aspects);
+    }
+
+    private String resolveTransportOverride() {
+        String override = System.getProperty("pipeline.transport");
+        if (override == null || override.isBlank()) {
+            override = System.getenv("PIPELINE_TRANSPORT");
+        }
+        return override;
     }
 
     private List<PipelineYamlStep> readSteps(Map<?, ?> rootMap) {

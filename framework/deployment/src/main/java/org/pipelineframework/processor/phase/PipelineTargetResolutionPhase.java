@@ -30,12 +30,12 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
 
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
-        boolean isGrpc = ctx.isTransportModeGrpc();
+        org.pipelineframework.processor.ir.TransportMode transportMode = ctx.getTransportMode();
 
         // Apply transport targets and resolve client/server roles for each step model
         List<PipelineStepModel> updatedModels = new ArrayList<>();
         for (PipelineStepModel model : ctx.getStepModels()) {
-            Set<GenerationTarget> targets = resolveTargetsForRole(model.deploymentRole(), isGrpc);
+            Set<GenerationTarget> targets = resolveTargetsForRole(model.deploymentRole(), transportMode);
             PipelineStepModel updatedModel = new PipelineStepModel(
                 model.serviceName(),
                 model.generatedName(),
@@ -60,15 +60,19 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
         ctx.setResolvedTargets(resolvedTargets);
     }
 
-    private Set<GenerationTarget> resolveTargetsForRole(DeploymentRole role, boolean isGrpc) {
+    private Set<GenerationTarget> resolveTargetsForRole(
+            DeploymentRole role, org.pipelineframework.processor.ir.TransportMode transportMode) {
         boolean clientRole = role == DeploymentRole.ORCHESTRATOR_CLIENT || role == DeploymentRole.PLUGIN_CLIENT;
-        if (isGrpc) {
-            return clientRole
-                ? Set.of(GenerationTarget.CLIENT_STEP)
-                : Set.of(GenerationTarget.GRPC_SERVICE);
+        if (clientRole) {
+            return switch (transportMode) {
+                case REST -> Set.of(GenerationTarget.REST_CLIENT_STEP);
+                case LOCAL -> Set.of(GenerationTarget.LOCAL_CLIENT_STEP);
+                case GRPC -> Set.of(GenerationTarget.CLIENT_STEP);
+            };
         }
-        return clientRole
-            ? Set.of(GenerationTarget.REST_CLIENT_STEP)
-            : Set.of(GenerationTarget.REST_RESOURCE);
+        return switch (transportMode) {
+            case REST -> Set.of(GenerationTarget.REST_RESOURCE);
+            case LOCAL, GRPC -> Set.of(GenerationTarget.GRPC_SERVICE);
+        };
     }
 }

@@ -31,6 +31,7 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
     @Override
     public void render(OrchestratorBinding binding, GenerationContext ctx) throws IOException {
         boolean restMode = "REST".equalsIgnoreCase(binding.normalizedTransport());
+        boolean localMode = "LOCAL".equalsIgnoreCase(binding.normalizedTransport());
         ClassName pipelineExecutionService = ClassName.get("org.pipelineframework", "PipelineExecutionService");
         ClassName pipelineInputDeserializer = ClassName.get("org.pipelineframework.util", "PipelineInputDeserializer");
         ClassName quarkusApplication = ClassName.get("io.quarkus.runtime", "QuarkusApplication");
@@ -53,7 +54,9 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
         ClassName grpcStatusCode = grpcStatus.nestedClass("Code");
 
         ClassName inputDtoType = ClassName.get(binding.basePackage() + ".common.dto", binding.inputTypeName() + "Dto");
-        TypeName inputType = restMode ? inputDtoType : resolveGrpcInputType(binding, ctx);
+        TypeName inputType = restMode
+            ? inputDtoType
+            : (localMode ? resolveDomainInputType(binding) : resolveGrpcInputType(binding, ctx));
         ParameterizedTypeName inputMultiType = ParameterizedTypeName.get(multi, inputType);
 
         FieldSpec inputField = FieldSpec.builder(String.class, "input", Modifier.PUBLIC)
@@ -108,8 +111,9 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             .build();
 
         String mapperName = mapperField == null ? null : mapperField.name;
-        String multiMapSuffix = mapperName == null ? "" : ".map(" + mapperName + "::toGrpc)";
-        String uniMapSuffix = mapperName == null ? "" : ".map(" + mapperName + "::toGrpc)";
+        String mapperMethod = localMode ? "fromDto" : "toGrpc";
+        String multiMapSuffix = mapperName == null ? "" : ".map(" + mapperName + "::" + mapperMethod + ")";
+        String uniMapSuffix = mapperName == null ? "" : ".map(" + mapperName + "::" + mapperMethod + ")";
         String uniToMultiSuffix = ".toMulti()";
 
         MethodSpec callMethod = MethodSpec.methodBuilder("call")
@@ -324,6 +328,10 @@ public class OrchestratorCliRenderer implements PipelineRenderer<OrchestratorBin
             throw new IllegalStateException("Failed to resolve orchestrator gRPC input type from descriptors.");
         }
         return grpcTypes.grpcParameterType();
+    }
+
+    private TypeName resolveDomainInputType(OrchestratorBinding binding) {
+        return ClassName.get(binding.basePackage() + ".common.domain", binding.inputTypeName());
     }
 
     private String lowerCamel(String name) {

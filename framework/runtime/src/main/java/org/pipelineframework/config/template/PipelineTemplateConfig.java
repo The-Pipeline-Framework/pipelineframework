@@ -24,7 +24,7 @@ import java.util.Map;
  *
  * @param appName the application name
  * @param basePackage the base Java package
- * @param transport the global transport (GRPC or REST)
+ * @param transport the global transport (GRPC, REST, or LOCAL)
  * @param steps the pipeline steps defined in the template
  * @param aspects the aspect configurations keyed by aspect name
  */

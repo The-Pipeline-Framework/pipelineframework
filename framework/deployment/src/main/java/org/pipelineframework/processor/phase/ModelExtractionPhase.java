@@ -21,6 +21,7 @@ import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.TypeMapping;
+import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 
 /**
  * Extracts semantic models from annotated elements.
@@ -102,7 +103,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return List.of();
         }
 
-        if (ctx.isPluginHost()) {
+        boolean colocatedPlugins = ctx.isTransportModeLocal() || isMonolithLayout(ctx);
+        if (ctx.isPluginHost() && !colocatedPlugins) {
             Set<String> pluginAspectNames = PluginBindingBuilder.extractPluginAspectNames(ctx);
             if (pluginAspectNames.isEmpty()) {
                 return List.of();
@@ -126,9 +128,23 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .filter(this::hasPluginImplementation)
             .toList();
         List<PipelineStepModel> expanded = expandAspects(baseModels, expandableAspects);
-        return expanded.stream()
+        List<PipelineStepModel> clientModels = expanded.stream()
             .map(model -> withDeploymentRole(model, DeploymentRole.ORCHESTRATOR_CLIENT))
             .toList();
+        if (!colocatedPlugins) {
+            return clientModels;
+        }
+        List<PipelineStepModel> pluginModels = expanded.stream()
+            .filter(PipelineStepModel::sideEffect)
+            .map(model -> withDeploymentRole(model, DeploymentRole.PLUGIN_SERVER))
+            .toList();
+        if (pluginModels.isEmpty()) {
+            return clientModels;
+        }
+        List<PipelineStepModel> combined = new ArrayList<>(pluginModels.size() + clientModels.size());
+        combined.addAll(pluginModels);
+        combined.addAll(clientModels);
+        return combined;
     }
 
     private List<PipelineStepModel> buildTemplateStepModels(PipelineTemplateConfig config) {
@@ -218,6 +234,14 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             model.sideEffect(),
             model.cacheKeyGenerator()
         );
+    }
+
+    private boolean isMonolithLayout(PipelineCompilationContext ctx) {
+        if (ctx == null) {
+            return false;
+        }
+        PipelineRuntimeMapping mapping = ctx.getRuntimeMapping();
+        return mapping != null && mapping.layout() == PipelineRuntimeMapping.Layout.MONOLITH;
     }
 
     private boolean hasPluginImplementation(org.pipelineframework.processor.ir.PipelineAspectModel aspect) {
