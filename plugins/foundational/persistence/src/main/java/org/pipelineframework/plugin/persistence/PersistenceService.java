@@ -18,7 +18,11 @@ package org.pipelineframework.plugin.persistence;
 
 import jakarta.inject.Inject;
 
+import io.smallrye.common.vertx.VertxContext;
 import io.smallrye.mutiny.Uni;
+import io.quarkus.vertx.core.runtime.context.VertxContextSafetyToggle;
+import io.vertx.core.Context;
+import io.vertx.core.Vertx;
 import org.jboss.logging.Logger;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ParallelismHints;
@@ -32,12 +36,18 @@ import org.pipelineframework.step.NonRetryableException;
  */
 public class PersistenceService<T> implements ReactiveSideEffectService<T>, ParallelismHints {
     private final Logger logger = Logger.getLogger(PersistenceService.class);
+    private static final String SESSION_ON_DEMAND_KEY = "hibernate.reactive.panache.sessionOnDemand";
+    private static final String VTHREAD_PROVIDER = "org.pipelineframework.plugin.persistence.provider.VThreadPersistenceProvider";
+    private static final String REACTIVE_PROVIDER = "org.pipelineframework.plugin.persistence.provider.ReactivePanachePersistenceProvider";
 
     @Inject
     PersistenceManager persistenceManager;
 
     @Inject
     PersistenceConfig config;
+
+    @Inject
+    Vertx vertx;
 
     @Override
     public Uni<T> process(T item) {
@@ -56,7 +66,11 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
         if (persistenceManager == null) {
             return Uni.createFrom().failure(new IllegalStateException("PersistenceManager is not available"));
         }
-        return persistenceManager.persist(item)
+        boolean useVertx = shouldUseVertxContext();
+        Uni<T> persistUni = hasSafeVertxContext() || !useVertx
+            ? persistenceManager.persist(item)
+            : persistOnVertxContext(item);
+        return persistUni
             .onFailure(this::isDuplicateKeyError)
             .recoverWithUni(failure -> handleDuplicateKey(item, failure))
             .onItem().invoke(result -> logger.debugf("Successfully persisted entity: %s", result != null ? result.getClass().getName() : "null"))
@@ -65,6 +79,48 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
                 ? failure
                 : new NonRetryableException("Non-transient persistence error", failure))
             .replaceWith(item); // Return the original item as it was just persisted (side effect)
+    }
+
+    private boolean hasSafeVertxContext() {
+        Context context = Vertx.currentContext();
+        return context != null && VertxContext.isDuplicatedContext(context);
+    }
+
+    private boolean shouldUseVertxContext() {
+        if (config == null || config.providerClass().isEmpty()) {
+            return true;
+        }
+        String configured = config.providerClass().orElse("").trim();
+        if (configured.isBlank()) {
+            return true;
+        }
+        if (configured.equals(VTHREAD_PROVIDER) || configured.equals("VThreadPersistenceProvider")) {
+            return false;
+        }
+        if (configured.equals(REACTIVE_PROVIDER) || configured.equals("ReactivePanachePersistenceProvider")) {
+            return true;
+        }
+        return true;
+    }
+
+    private Uni<T> persistOnVertxContext(T item) {
+        if (vertx == null) {
+            return persistenceManager.persist(item);
+        }
+        Context baseContext = vertx.getOrCreateContext();
+        Context context = VertxContext.createNewDuplicatedContext(baseContext);
+        VertxContextSafetyToggle.setContextSafe(context, true);
+        return Uni.createFrom().emitter(emitter -> context.runOnContext(ignored -> {
+            context.putLocal(SESSION_ON_DEMAND_KEY, Boolean.TRUE);
+            persistenceManager.persist(item)
+                .subscribe().with(result -> {
+                    context.removeLocal(SESSION_ON_DEMAND_KEY);
+                    emitter.complete(result);
+                }, failure -> {
+                    context.removeLocal(SESSION_ON_DEMAND_KEY);
+                    emitter.fail(failure);
+                });
+        }));
     }
 
     private Uni<T> handleDuplicateKey(T item, Throwable failure) {

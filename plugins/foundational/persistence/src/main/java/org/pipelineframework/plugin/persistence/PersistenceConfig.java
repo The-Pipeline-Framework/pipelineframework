@@ -17,7 +17,10 @@
 package org.pipelineframework.plugin.persistence;
 
 import io.smallrye.config.ConfigMapping;
+import java.util.Optional;
+
 import io.smallrye.config.WithDefault;
+import io.smallrye.config.WithName;
 
 @ConfigMapping(prefix = "persistence")
 public interface PersistenceConfig {
@@ -27,4 +30,10 @@ public interface PersistenceConfig {
      */
     @WithDefault("fail")
     String duplicateKey();
+
+    /**
+     * Fully-qualified persistence provider class name to lock selection at runtime.
+     */
+    @WithName("provider.class")
+    Optional<String> providerClass();
 }

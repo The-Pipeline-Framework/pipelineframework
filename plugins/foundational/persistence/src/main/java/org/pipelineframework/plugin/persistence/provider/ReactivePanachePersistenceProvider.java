@@ -34,7 +34,7 @@ import org.pipelineframework.persistence.PersistenceProvider;
  */
 @ApplicationScoped
 @Unremovable
-@ParallelismHint(ordering = OrderingRequirement.STRICT_ADVISED, threadSafety = ThreadSafety.SAFE)
+@ParallelismHint(ordering = OrderingRequirement.STRICT_ADVISED, threadSafety = ThreadSafety.UNSAFE)
 public class ReactivePanachePersistenceProvider implements PersistenceProvider<Object> {
 
   private static final Logger LOG = Logger.getLogger(ReactivePanachePersistenceProvider.class);
@@ -57,11 +57,10 @@ public class ReactivePanachePersistenceProvider implements PersistenceProvider<O
   public Uni<Object> persist(Object entity) {
     LOG.tracef("Persisting entity of type %s", entity.getClass().getSimpleName());
 
-    return Panache.getSession()
+    return Panache.withTransaction(() -> Panache.getSession()
         .onItem()
-        .transformToUni(session -> 
-            session.withTransaction(ignored -> session.persist(entity)))
-        .replaceWith(Uni.createFrom().item(entity))
+        .transformToUni(session -> session.persist(entity).replaceWith(entity)))
+        .replaceWith(entity)
         .onFailure()
         .transform(
             t ->
@@ -73,11 +72,10 @@ public class ReactivePanachePersistenceProvider implements PersistenceProvider<O
     public Uni<Object> persistOrUpdate(Object entity) {
         LOG.tracef("Persisting or updating entity of type %s", entity.getClass().getSimpleName());
 
-        return Panache.getSession()
+        return Panache.withTransaction(() -> Panache.getSession()
             .onItem()
-            .transformToUni(session ->
-                session.withTransaction(ignored -> session.merge(entity)))
-            .replaceWith(Uni.createFrom().item(entity))
+            .transformToUni(session -> session.merge(entity).replaceWith(entity)))
+            .replaceWith(entity)
             .onFailure()
             .transform(
                 t ->
@@ -97,7 +95,7 @@ public class ReactivePanachePersistenceProvider implements PersistenceProvider<O
 
     @Override
     public ThreadSafety threadSafety() {
-        return ThreadSafety.SAFE;
+        return ThreadSafety.UNSAFE;
     }
 
     /**

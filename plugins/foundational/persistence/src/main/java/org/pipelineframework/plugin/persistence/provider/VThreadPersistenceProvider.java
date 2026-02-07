@@ -19,10 +19,13 @@ package org.pipelineframework.plugin.persistence.provider;
 import jakarta.enterprise.context.Dependent;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 
 import io.quarkus.arc.Arc;
+import io.quarkus.arc.Unremovable;
 import io.quarkus.arc.InjectableInstance;
 import io.smallrye.mutiny.Uni;
+import io.vertx.core.Context;
 import org.jboss.logging.Logger;
 import org.pipelineframework.annotation.ParallelismHint;
 import org.pipelineframework.parallelism.OrderingRequirement;
@@ -34,6 +37,7 @@ import org.pipelineframework.persistence.PersistenceProvider;
  * This provider is designed to handle persistence operations within virtual thread contexts.
  */
 @Dependent
+@Unremovable
 @ParallelismHint(ordering = OrderingRequirement.STRICT_ADVISED, threadSafety = ThreadSafety.SAFE)
 public class VThreadPersistenceProvider implements PersistenceProvider<Object> {
 
@@ -58,8 +62,9 @@ public class VThreadPersistenceProvider implements PersistenceProvider<Object> {
    * @return the persisted entity instance
    * @throws IllegalStateException if no EntityManager is resolvable for this provider
    */
-  @Override
-  public Uni<Object> persist(Object entity) {
+    @Override
+    @Transactional
+    public Uni<Object> persist(Object entity) {
     if (entity == null) {
       return Uni.createFrom().failure(new IllegalArgumentException("Cannot persist a null entity"));
     }
@@ -69,23 +74,14 @@ public class VThreadPersistenceProvider implements PersistenceProvider<Object> {
         throw new IllegalStateException("No EntityManager available for VThreadPersistenceProvider");
         }
 
-        try (EntityManager em = entityManagerInstance.get()) {
-            em.getTransaction().begin();
-            try {
-                em.persist(entity);
-                em.getTransaction().commit();
-            } catch (Exception e) {
-                if (em.getTransaction().isActive()) {
-                    em.getTransaction().rollback();
-                }
-                throw e;
-            }
-            return entity;
-        }
+        EntityManager em = entityManagerInstance.get();
+        em.persist(entity);
+        return entity;
     });
   }
 
   @Override
+  @Transactional
   public Uni<Object> persistOrUpdate(Object entity) {
     if (entity == null) {
       return Uni.createFrom().failure(new IllegalArgumentException("Cannot persist a null entity"));
@@ -96,19 +92,9 @@ public class VThreadPersistenceProvider implements PersistenceProvider<Object> {
         throw new IllegalStateException("No EntityManager available for VThreadPersistenceProvider");
         }
 
-        try (EntityManager em = entityManagerInstance.get()) {
-            em.getTransaction().begin();
-            try {
-                em.merge(entity);
-                em.getTransaction().commit();
-            } catch (Exception e) {
-                if (em.getTransaction().isActive()) {
-                    em.getTransaction().rollback();
-                }
-                throw e;
-            }
-            return entity;
-        }
+        EntityManager em = entityManagerInstance.get();
+        em.merge(entity);
+        return entity;
     });
   }
 
@@ -143,9 +129,12 @@ public class VThreadPersistenceProvider implements PersistenceProvider<Object> {
    *
    * @return {@code true} if the current thread is a virtual thread, {@code false} otherwise.
    */
-  @Override
-  public boolean supportsThreadContext() {
-    // This provider is designed for virtual threads
-    return Thread.currentThread().isVirtual();
-  }
+    @Override
+    public boolean supportsThreadContext() {
+    // Allow virtual threads and non-event-loop threads; reject Vert.x event-loop threads.
+    if (Thread.currentThread().isVirtual()) {
+      return true;
+    }
+    return !Context.isOnEventLoopThread();
+    }
 }

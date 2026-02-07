@@ -26,9 +26,8 @@ import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 
 import io.quarkus.arc.Unremovable;
-import io.quarkus.hibernate.reactive.panache.common.WithTransaction;
+import io.quarkus.arc.ClientProxy;
 import io.smallrye.mutiny.Uni;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.pipelineframework.annotation.ParallelismHint;
 import org.pipelineframework.parallelism.OrderingRequirement;
@@ -54,8 +53,8 @@ public class PersistenceManager {
     @Inject
     Instance<PersistenceProvider<?>> providerInstance;
 
-    @ConfigProperty(name = "pipeline.persistence.provider.class")
-    Optional<String> persistenceProviderClass;
+    @Inject
+    PersistenceConfig persistenceConfig;
 
     /**
      * Default constructor for PersistenceManager.
@@ -87,7 +86,6 @@ public class PersistenceManager {
      * @param entity the entity to persist
      * @return the persisted entity if a suitable provider handled it, otherwise the original entity; if the input was null the Uni emits `null`
      */
-    @WithTransaction
     public <T> Uni<T> persist(T entity) {
         if (entity == null) {
             LOG.debug("Entity is null, returning empty Uni");
@@ -114,7 +112,6 @@ public class PersistenceManager {
      * @param entity the entity to persist or update
      * @return the persisted entity if a suitable provider handled it, otherwise the original entity; if the input was null the Uni emits `null`
      */
-    @WithTransaction
     public <T> Uni<T> persistOrUpdate(T entity) {
         if (entity == null) {
             LOG.debug("Entity is null, returning empty Uni");
@@ -143,9 +140,9 @@ public class PersistenceManager {
         if (providers == null || providers.isEmpty()) {
             return ThreadSafety.SAFE;
         }
-        if (persistenceProviderClass != null && persistenceProviderClass.isPresent() &&
-            !persistenceProviderClass.get().isBlank()) {
-            PersistenceProvider<?> provider = resolveConfiguredProvider(persistenceProviderClass.get().trim());
+        Optional<String> configuredProvider = configuredProviderClass();
+        if (configuredProvider.isPresent() && !configuredProvider.get().isBlank()) {
+            PersistenceProvider<?> provider = resolveConfiguredProvider(configuredProvider.get().trim());
             warnIfThreadSafetyDefault(provider);
             return provider.threadSafety();
         }
@@ -164,9 +161,9 @@ public class PersistenceManager {
         if (providers == null || providers.isEmpty()) {
             return OrderingRequirement.RELAXED;
         }
-        if (persistenceProviderClass != null && persistenceProviderClass.isPresent() &&
-            !persistenceProviderClass.get().isBlank()) {
-            PersistenceProvider<?> provider = resolveConfiguredProvider(persistenceProviderClass.get().trim());
+        Optional<String> configuredProvider = configuredProviderClass();
+        if (configuredProvider.isPresent() && !configuredProvider.get().isBlank()) {
+            PersistenceProvider<?> provider = resolveConfiguredProvider(configuredProvider.get().trim());
             return orderingRequirementFor(provider, OrderingRequirement.RELAXED);
         }
         if (providers.size() == 1) {
@@ -180,9 +177,9 @@ public class PersistenceManager {
             LOG.warn("No persistence providers available");
             return null;
         }
-        if (persistenceProviderClass != null && persistenceProviderClass.isPresent() &&
-            !persistenceProviderClass.get().isBlank()) {
-            PersistenceProvider<?> provider = resolveConfiguredProvider(persistenceProviderClass.get().trim());
+        Optional<String> configuredProvider = configuredProviderClass();
+        if (configuredProvider.isPresent() && !configuredProvider.get().isBlank()) {
+            PersistenceProvider<?> provider = resolveConfiguredProvider(configuredProvider.get().trim());
             if (!provider.supports(entity)) {
                 throw new IllegalStateException(
                     "Configured persistence provider " + provider.getClass().getName() +
@@ -209,14 +206,57 @@ public class PersistenceManager {
 
     private PersistenceProvider<?> resolveConfiguredProvider(String configuredClass) {
         for (PersistenceProvider<?> provider : providers) {
-            Class<?> providerClass = provider.getClass();
+            Object unwrapped = provider instanceof ClientProxy
+                ? ClientProxy.unwrap(provider)
+                : provider;
+            Class<?> providerClass = unwrapped.getClass();
             if (providerClass.getName().equals(configuredClass) ||
-                providerClass.getSimpleName().equals(configuredClass)) {
+                providerClass.getSimpleName().equals(configuredClass) ||
+                providerClass.getName().equals(configuredClass + "_Subclass")) {
+                return provider;
+            }
+            if (isAssignableToConfigured(providerClass, configuredClass)) {
                 return provider;
             }
         }
+        String available = providers.stream()
+            .map(this::providerClassName)
+            .distinct()
+            .sorted()
+            .toList()
+            .toString();
         throw new IllegalStateException(
-            "No persistence provider matches pipeline.persistence.provider.class=" + configuredClass);
+            "No persistence provider matches persistence.provider.class=" + configuredClass +
+                "; available providers=" + available);
+    }
+
+    private Optional<String> configuredProviderClass() {
+        if (persistenceConfig == null) {
+            return Optional.empty();
+        }
+        return persistenceConfig.providerClass();
+    }
+
+    private String providerClassName(PersistenceProvider<?> provider) {
+        if (provider == null) {
+            return "null";
+        }
+        if (provider instanceof ClientProxy proxy) {
+            Object unwrapped = ClientProxy.unwrap(proxy);
+            if (unwrapped != null) {
+                return unwrapped.getClass().getName();
+            }
+        }
+        return provider.getClass().getName();
+    }
+
+    private boolean isAssignableToConfigured(Class<?> providerClass, String configuredClass) {
+        try {
+            Class<?> configured = Class.forName(configuredClass);
+            return configured.isAssignableFrom(providerClass);
+        } catch (ClassNotFoundException ignored) {
+            return false;
+        }
     }
 
     private OrderingRequirement orderingRequirementFor(PersistenceProvider<?> provider,
