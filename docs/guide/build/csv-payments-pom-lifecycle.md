@@ -19,6 +19,7 @@ Reference POM: `examples/csv-payments/pom.xml`
 > constraints); Maven topology changes are handled separately through the
 > migration workflow.
 > See:
+> - [POM vs Layout Matrix](/guide/build/runtime-layouts/pom-layout-matrix)
 > - [Using Runtime Mapping](/guide/build/runtime-layouts/using-runtime-mapping)
 > - [Maven Migration Playbook](/guide/build/runtime-layouts/maven-migration)
 

@@ -42,6 +42,8 @@ const mainSidebar = [
                 items: [
                     {text: 'Using Runtime Mapping', link: '/guide/build/runtime-layouts/using-runtime-mapping'},
                     {text: 'Maven Migration Playbook', link: '/guide/build/runtime-layouts/maven-migration'},
+                    {text: 'POM vs Layout Matrix', link: '/guide/build/runtime-layouts/pom-layout-matrix'},
+                    {text: 'CSV Payments Pipeline-Runtime Walkthrough', link: '/guide/build/runtime-layouts/csv-payments-pipeline-runtime'},
                     {text: 'CSV Payments Monolith Walkthrough', link: '/guide/build/runtime-layouts/csv-payments-monolith'}
                 ]
             },
@@ -92,7 +94,7 @@ const mainSidebar = [
         collapsed: true,
         items: [
             {text: 'Error Handling & DLQ', link: '/guide/operations/error-handling'},
-            {text: 'Kill Switches', link: '/guide/operations/kill-switches'},
+            {text: 'In-flight Probe', link: '/guide/operations/kill-switches'},
             {
                 text: 'Observability',
                 link: '/guide/operations/observability/',
@@ -207,7 +209,7 @@ export default withMermaid(
             {text: 'Build', link: '/guide/getting-started/'},
             {text: 'Design', link: '/guide/design/application-structure'},
             {text: 'Develop', link: '/guide/development/pipeline-step'},
-            {text: 'Operate', link: '/guide/operations/observability/'},
+            {text: 'Operate', link: '/guide/operations/error-handling'},
             {text: 'Versions', link: '/versions'}
         ],
 

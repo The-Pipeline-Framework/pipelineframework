@@ -1,6 +1,6 @@
 # Runtime Layouts and Build Topologies
 
-This section is the app-developer guide for shaping deployments after scaffold generation.
+This section is the application developer guide for shaping deployments after scaffold generation.
 In the standard flow, you design in the Web UI Canvas Designer, download the scaffold,
 then choose how many deployables you actually want to run.
 
@@ -24,7 +24,7 @@ Defined by Maven modules and POM wiring.
 
 ### Transport mode (call mechanism)
 
-Defined at pipeline config level (`GRPC`, `REST`, `LOCAL`).
+Values include `GRPC`, `REST`, and `LOCAL`.
 
 - Decides how steps are invoked.
 - Orthogonal to layout/topology.
@@ -45,12 +45,12 @@ Maven topology is still modular.
 - Runtime mapping changed the logical placement.
 - Maven still produced modular deployables.
 
-Both layers must be aligned for the runtime shape you intend to operate in.
+Both layers must be aligned to achieve your intended runtime shape.
 
 ## What runtime mapping changes automatically
 
 - Placement rules for regular and synthetic steps.
-- Validation behavior (`auto` vs `strict`).
+- Validation behavior ([`auto` = best-effort fallback placement, `strict` = fail on unmapped/mismatched placement](/guide/evolve/runtime-mapping/schema#validation)).
 - Generated client/server wiring aligned to placement + transport.
 
 ## What runtime mapping does not change automatically
@@ -63,6 +63,8 @@ For that work, use the migration playbook.
 
 ## Start here
 
+- [POM vs Layout Matrix](/guide/build/runtime-layouts/pom-layout-matrix)
 - [Using Runtime Mapping](/guide/build/runtime-layouts/using-runtime-mapping)
 - [Maven Migration Playbook](/guide/build/runtime-layouts/maven-migration)
+- [CSV Payments Pipeline-Runtime Walkthrough](/guide/build/runtime-layouts/csv-payments-pipeline-runtime)
 - [CSV Payments Monolith Walkthrough](/guide/build/runtime-layouts/csv-payments-monolith)

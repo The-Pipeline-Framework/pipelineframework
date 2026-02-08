@@ -48,7 +48,7 @@ Typical flow:
 2. Add or refine `pipeline.runtime.yaml`.
 3. Align Maven topology to target runtime shape (`modular`, `pipeline-runtime`, `monolith`).
 
-If steps 2 and 3 diverge, behavior may be logically valid but operationally confusing.
+If steps 2 and 3 diverge, behaviour may be logically valid but operationally confusing.
 For example, `layout: monolith` with modular Maven still yields modular artifacts.
 
 See:
