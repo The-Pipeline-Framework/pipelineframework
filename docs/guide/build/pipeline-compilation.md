@@ -8,6 +8,12 @@ For a build-phase walkthrough of the generated parent POM, see:
 - [Pipeline Parent POM Lifecycle](pipeline-parent-pom-lifecycle.md)
 - [CSV Payments POM Lifecycle](csv-payments-pom-lifecycle.md)
 
+For runtime layout usage and build migration, see:
+- [Runtime Layouts and Build Topologies](/guide/build/runtime-layouts/)
+- [Using Runtime Mapping](/guide/build/runtime-layouts/using-runtime-mapping)
+- [Maven Migration Playbook](/guide/build/runtime-layouts/maven-migration)
+- [CSV Payments Monolith Walkthrough](/guide/build/runtime-layouts/csv-payments-monolith)
+
 ## Overview
 
 The Pipeline Framework uses annotation processing to automatically generate the necessary infrastructure for pipeline execution. When you annotate your services with `@PipelineStep`, the framework's annotation processor:

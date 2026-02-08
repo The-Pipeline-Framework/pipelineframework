@@ -78,6 +78,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         GrpcServiceAdapterRenderer grpcRenderer = new GrpcServiceAdapterRenderer(GenerationTarget.GRPC_SERVICE);
         org.pipelineframework.processor.renderer.ClientStepRenderer clientRenderer =
             new org.pipelineframework.processor.renderer.ClientStepRenderer(GenerationTarget.CLIENT_STEP);
+        org.pipelineframework.processor.renderer.LocalClientStepRenderer localClientRenderer =
+            new org.pipelineframework.processor.renderer.LocalClientStepRenderer();
         RestClientStepRenderer restClientRenderer = new RestClientStepRenderer();
         RestResourceRenderer restRenderer = new RestResourceRenderer();
         OrchestratorGrpcRenderer orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
@@ -93,11 +95,14 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
 
         DescriptorProtos.FileDescriptorSet descriptorSet = ctx.getDescriptorSet();
 
+        Set<String> generatedSideEffectBeans = new HashSet<>();
+
         // Generate artifacts for each step model
         for (PipelineStepModel model : ctx.getStepModels()) {
             // Get the bindings for this model
             GrpcBinding grpcBinding = (GrpcBinding) bindingsMap.get(model.serviceName() + "_grpc");
             RestBinding restBinding = (RestBinding) bindingsMap.get(model.serviceName() + "_rest");
+            LocalBinding localBinding = (LocalBinding) bindingsMap.get(model.serviceName() + "_local");
 
             // Generate artifacts based on enabled targets
             generateArtifacts(
@@ -105,11 +110,14 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 model,
                 grpcBinding,
                 restBinding,
+                localBinding,
+                generatedSideEffectBeans,
                 descriptorSet,
                 cacheKeyGenerator,
                 roleMetadataGenerator,
                 grpcRenderer,
                 clientRenderer,
+                localClientRenderer,
                 restClientRenderer,
                 restRenderer
             );
@@ -430,38 +438,41 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
     }
 
     /**
-         * Generate all code artifacts for a single pipeline step model based on its enabled generation targets
-         * and the provided bindings and renderers.
-         *
-         * <p>The method invokes appropriate renderers to produce gRPC services, client steps, REST resources,
-         * and REST clients as configured, records generated class roles via the provided RoleMetadataGenerator,
-         * and may generate side-effect beans when the model requires them. Generation for a target is skipped
-         * when required bindings are absent or when deployment/hosting conditions indicate the target should not
-         * be produced.</p>
-         *
-         * @param ctx the compilation context containing environment, aspect models, and configuration
-         * @param model the pipeline step model to generate artifacts for
-         * @param grpcBinding gRPC binding information for rendering gRPC-related artifacts; may be null if not available
-         * @param restBinding REST binding information for rendering REST-related artifacts; may be null if not available
-         * @param descriptorSet protobuf descriptor set used when generating protobuf-related artifacts; may be null
-         * @param cacheKeyGenerator optional cache key generator class to include in generation contexts; may be null
-         * @param roleMetadataGenerator generator used to record generated classes and their deployment roles
-         * @param grpcRenderer renderer responsible for producing gRPC service classes
-         * @param clientRenderer renderer responsible for producing gRPC client step classes
-         * @param restClientRenderer renderer responsible for producing REST client step classes
-         * @param restRenderer renderer responsible for producing REST resource classes
-         * @throws IOException if an I/O error occurs while writing generated sources or renderers perform IO
-         */
+     * Generate all source and metadata artifacts for a single pipeline step according to its enabled generation targets.
+     *
+     * This will invoke the appropriate renderers to produce gRPC services, client steps (gRPC, local, REST),
+     * REST resources, record generated classes with their deployment roles, and generate side-effect CDI beans
+     * when required and permitted by the compilation context.
+     *
+     * @param ctx the compilation context containing processing environment, aspect models, transport and hosting configuration
+     * @param model the pipeline step model to generate artifacts for
+     * @param grpcBinding gRPC binding information for rendering gRPC-related artifacts; may be null
+     * @param restBinding REST binding information for rendering REST-related artifacts; may be null
+     * @param localBinding local-transport binding information for rendering local client artifacts; may be null
+     * @param generatedSideEffectBeans a set used to track already-generated side-effect bean keys to avoid duplicates
+     * @param descriptorSet protobuf descriptor set used for protobuf-related generation; may be null
+     * @param cacheKeyGenerator optional cache key generator class to include in generation contexts; may be null
+     * @param roleMetadataGenerator generator used to record generated class names and their deployment roles
+     * @param grpcRenderer renderer responsible for producing gRPC service classes
+     * @param clientRenderer renderer responsible for producing gRPC client step classes
+     * @param localClientRenderer renderer responsible for producing local-transport client step classes
+     * @param restClientRenderer renderer responsible for producing REST client step classes
+     * @param restRenderer renderer responsible for producing REST resource classes
+     * @throws IOException if an I/O error occurs while writing generated sources or renderers perform IO
+     */
     private void generateArtifacts(
             PipelineCompilationContext ctx,
             PipelineStepModel model,
             GrpcBinding grpcBinding,
             RestBinding restBinding,
+            LocalBinding localBinding,
+            Set<String> generatedSideEffectBeans,
             DescriptorProtos.FileDescriptorSet descriptorSet,
             ClassName cacheKeyGenerator,
             RoleMetadataGenerator roleMetadataGenerator,
             GrpcServiceAdapterRenderer grpcRenderer,
             org.pipelineframework.processor.renderer.ClientStepRenderer clientRenderer,
+            org.pipelineframework.processor.renderer.LocalClientStepRenderer localClientRenderer,
             RestClientStepRenderer restClientRenderer,
             RestResourceRenderer restRenderer) throws IOException {
         
@@ -472,11 +483,41 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         for (GenerationTarget target : model.enabledTargets()) {
             switch (target) {
                 case GRPC_SERVICE -> {
-                    if (model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER && !ctx.isPluginHost()) {
+                    if (model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER
+                        && !allowPluginServerArtifacts(ctx)) {
                         break;
                     }
                     if (model.sideEffect() && model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER) {
-                        generateSideEffectBean(ctx, model, org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER, grpcBinding);
+                        org.pipelineframework.processor.ir.DeploymentRole sideEffectOutputRole = ctx.isTransportModeLocal()
+                            ? org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT
+                            : org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER;
+                        if (ctx.isTransportModeLocal()) {
+                            String sideEffectBeanKey = model.servicePackage() + ".pipeline." + model.serviceName();
+                            if (generatedSideEffectBeans.add(sideEffectBeanKey)) {
+                                generateSideEffectBean(
+                                    ctx,
+                                    model,
+                                    org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER,
+                                    sideEffectOutputRole,
+                                    grpcBinding);
+                            }
+                        } else {
+                            generateSideEffectBean(
+                                ctx,
+                                model,
+                                org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER,
+                                sideEffectOutputRole,
+                                grpcBinding);
+                        }
+                    }
+                    if (ctx.isTransportModeLocal()) {
+                        break;
+                    }
+                    if (grpcBinding == null) {
+                        ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                            "Skipping gRPC service generation for '" + model.generatedName() +
+                                "' because no gRPC binding is available.");
+                        break;
                     }
                     String grpcClassName = model.servicePackage() + ".pipeline." +
                             model.generatedName() + "GrpcService";
@@ -506,12 +547,55 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                         descriptorSet));
                     roleMetadataGenerator.recordClassWithRole(clientClassName, clientRole.name());
                 }
+                case LOCAL_CLIENT_STEP -> {
+                    if (model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER && ctx.isPluginHost()) {
+                        break;
+                    }
+                    if (ctx.getProcessingEnv() == null) {
+                        break;
+                    }
+                    if (model.sideEffect()
+                        && model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER) {
+                        String sideEffectBeanKey = model.servicePackage() + ".pipeline." + model.serviceName();
+                        if (generatedSideEffectBeans.add(sideEffectBeanKey)) {
+                            generateSideEffectBean(
+                                ctx,
+                                model,
+                                org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER,
+                                org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT,
+                                grpcBinding);
+                        }
+                    }
+                    if (localBinding == null) {
+                        ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                            "Skipping local client step generation for '" + model.generatedName() +
+                                "' because no local binding is available.");
+                        break;
+                    }
+                    String localClientClassName = model.servicePackage() + ".pipeline." +
+                        model.generatedName().replace("Service", "") + "LocalClientStep";
+                    org.pipelineframework.processor.ir.DeploymentRole localClientRole = resolveClientRole(model.deploymentRole());
+                    localClientRenderer.render(localBinding, new GenerationContext(
+                        ctx.getProcessingEnv(),
+                        resolveRoleOutputDir(ctx, localClientRole),
+                        localClientRole,
+                        enabledAspects,
+                        cacheKeyGenerator,
+                        descriptorSet));
+                    roleMetadataGenerator.recordClassWithRole(localClientClassName, localClientRole.name());
+                }
                 case REST_RESOURCE -> {
-                    if (model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER && !ctx.isPluginHost()) {
+                    if (model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER
+                        && !allowPluginServerArtifacts(ctx)) {
                         break;
                     }
                     if (model.sideEffect() && model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER) {
-                        generateSideEffectBean(ctx, model, org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER, grpcBinding);
+                        generateSideEffectBean(
+                            ctx,
+                            model,
+                            org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER,
+                            org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER,
+                            grpcBinding);
                     }
                     if (restBinding == null) {
                         ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
@@ -558,18 +642,28 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Generates a side-effect CDI bean class that extends the step's service type with the resolved observed type
-     * and writes it to the role-specific generated sources directory.
-     *
-     * @param ctx the compilation context used to access the processing environment and output directories
-     * @param model the pipeline step model describing the service to extend and naming/packaging metadata
-     * @param role the deployment role that determines the generated class's annotation value and output subdirectory
-     * @param grpcBinding an optional gRPC binding used to resolve gRPC-specific observed types (may be null)
-     */
+         * Generates a CDI side-effect bean subclass of the step's service type and writes it to the generated-sources
+         * directory for the specified role.
+         *
+         * <p>The generated class is public, Dependent-scoped, marked Unremovable, and annotated with
+         * {@code @GeneratedRole} using the provided {@code role}. The bean's generic type parameter is the resolved
+         * observed type (which may be derived from gRPC bindings when applicable). If {@code outputRole} is non-null it
+         * is used to determine the output subdirectory; otherwise {@code role} is used.</p>
+         *
+         * <p>If {@code model} is null or has no service class name this method is a no-op. IO failures while writing the
+         * generated source are reported as a warning via the processing environment's Messager and not rethrown.</p>
+         *
+         * @param ctx the compilation context providing the processing environment and output directories
+         * @param model the pipeline step model describing the service to extend and naming/packaging metadata
+         * @param role the deployment role used for the {@code @GeneratedRole} annotation and default output location
+         * @param outputRole optional override for the output role (if null the {@code role} parameter is used)
+         * @param grpcBinding optional gRPC binding used to resolve gRPC-specific observed types (may be null)
+         */
     private void generateSideEffectBean(
             PipelineCompilationContext ctx,
             PipelineStepModel model,
             org.pipelineframework.processor.ir.DeploymentRole role,
+            org.pipelineframework.processor.ir.DeploymentRole outputRole,
             GrpcBinding grpcBinding) {
         if (model == null || model.serviceClassName() == null) {
             return;
@@ -592,8 +686,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             .addAnnotation(com.squareup.javapoet.AnnotationSpec.builder(
                 com.squareup.javapoet.ClassName.get("io.quarkus.arc", "Unremovable"))
                 .build())
-            .addAnnotation(com.squareup.javapoet.AnnotationSpec.builder(
-                com.squareup.javapoet.ClassName.get("org.pipelineframework.annotation", "GeneratedRole"))
+                .addAnnotation(com.squareup.javapoet.AnnotationSpec.builder(
+                    com.squareup.javapoet.ClassName.get("org.pipelineframework.annotation", "GeneratedRole"))
                 .addMember("value", "$T.$L",
                     com.squareup.javapoet.ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role"),
                     role.name())
@@ -611,7 +705,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         try {
             com.squareup.javapoet.JavaFile.builder(packageName, beanClass)
                 .build()
-                .writeTo(resolveRoleOutputDir(ctx, role));
+                .writeTo(resolveRoleOutputDir(ctx, outputRole == null ? role : outputRole));
         } catch (IOException e) {
             if (ctx.getProcessingEnv() != null) {
                 ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
@@ -695,21 +789,19 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Resolve the effective observed type for a pipeline step, applying cache-plugin and transport-specific conversions.
-     *
-     * The method selects the step's outbound domain type if present, otherwise the inbound domain type, and uses
-     * java.lang.Object if neither is available. If the step is not the cache plugin the selected domain type is returned
-     * unchanged. For REST server deployments the domain type is converted to a corresponding DTO type. For plugin server
-     * deployments with a provided gRPC binding, an attempt is made to map the domain type to the gRPC parameter or return
-     * type via GrpcJavaTypeResolver; if a message or service name matches the domain type the corresponding gRPC type is
-     * returned, otherwise the resolver's return type is used. If gRPC type resolution fails, the original domain type is
-     * returned.
-     *
-     * @param model the pipeline step model to resolve the observed type for
-     * @param role the deployment role where the step will run
-     * @param grpcBinding optional gRPC binding used to resolve gRPC parameter/return types when applicable
-     * @return the resolved TypeName to be observed by the step (or `Object` if no domain type is available)
-     */
+         * Resolve the observed domain type for a pipeline step, applying cache-plugin and transport-specific conversions.
+         *
+         * Selects the step's outbound domain type if present, otherwise the inbound domain type, and uses `Object` if neither
+         * is available. If the step is not the cache plugin the selected domain type is returned unchanged. For
+         * REST_SERVER deployments the domain type is converted to a corresponding DTO type. For PLUGIN_SERVER deployments
+         * with a provided gRPC binding, an attempt is made to map the domain type to the gRPC parameter or return type;
+         * resolution failures fall back to the original domain type.
+         *
+         * @param model the pipeline step model to resolve the observed type for
+         * @param role the deployment role where the step will run
+         * @param grpcBinding optional gRPC binding used to resolve gRPC parameter/return types when applicable
+         * @return the resolved TypeName to be observed by the step; `Object` if no domain type is available
+         */
     private com.squareup.javapoet.TypeName resolveObservedType(
             PipelineStepModel model,
             org.pipelineframework.processor.ir.DeploymentRole role,
@@ -771,6 +863,27 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
     }
 
     /**
+         * Determine whether plugin-server artifacts should be generated for the given compilation context.
+         *
+         * <p>Generation is enabled when the context represents an explicit plugin host, or when a runtime
+         * mapping exists and the module name is non-blank (indicating module-aware builds where plugin-server
+         * artifacts may coexist). A {@code null} context disables generation.</p>
+         *
+         * @param ctx compilation context used to evaluate plugin-host status, runtime mapping, and module name
+         * @return {@code true} if plugin-server artifacts should be generated, {@code false} otherwise
+         */
+    private boolean allowPluginServerArtifacts(PipelineCompilationContext ctx) {
+        if (ctx == null) {
+            return false;
+        }
+        if (ctx.isPluginHost()) {
+            return true;
+        }
+        String moduleName = ctx.getModuleName();
+        return ctx.getRuntimeMapping() != null && moduleName != null && !moduleName.isBlank();
+    }
+
+    /**
      * Determines whether the given pipeline step model represents the cache plugin.
      *
      * @param model the pipeline step model to inspect
@@ -813,22 +926,20 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
     }
 
     /**
-         * Generate orchestrator server and client artifacts according to the orchestrator binding's transport.
-         *
-         * Renders a REST server when the binding uses REST, otherwise renders a gRPC pipeline server; optionally renders a CLI client when
-         * {@code generateCli} is true, and renders an ingest client when the transport is not REST. Errors are reported to the processing
-         * environment's Messager.
-         *
-         * @param ctx the pipeline compilation context
-         * @param descriptorSet protobuf descriptor set used during generation (may be null)
-         * @param generateCli whether to generate the CLI orchestrator client
-         * @param orchestratorGrpcRenderer renderer used to produce gRPC orchestrator server artifacts
-         * @param orchestratorRestRenderer renderer used to produce REST orchestrator server artifacts
-         * @param orchestratorCliRenderer renderer used to produce CLI orchestrator client artifacts
-         * @param orchestratorIngestClientRenderer renderer used to produce orchestrator ingest client artifacts
-         * @param roleMetadataGenerator generator that records generated classes by deployment role
-         * @param cacheKeyGenerator optional cache key generator class name used in generated code (may be null)
-         */
+     * Generate orchestrator server and client source artifacts based on the orchestrator binding's transport.
+     *
+     * Renders a REST orchestrator server when transport is REST, a gRPC pipeline server when transport is gRPC (or unspecified), and skips server generation for LOCAL transport; additionally renders a CLI client when {@code generateCli} is true and renders an ingest client when transport is neither REST nor LOCAL. Errors during generation are reported to the processing environment Messager.
+     *
+     * @param ctx the pipeline compilation context
+     * @param descriptorSet protobuf descriptor set used during generation; may be {@code null}
+     * @param generateCli whether to generate the CLI orchestrator client
+     * @param orchestratorGrpcRenderer renderer for gRPC orchestrator server artifacts
+     * @param orchestratorRestRenderer renderer for REST orchestrator server artifacts
+     * @param orchestratorCliRenderer renderer for CLI orchestrator client artifacts
+     * @param orchestratorIngestClientRenderer renderer for orchestrator ingest client artifacts
+     * @param roleMetadataGenerator generator that records generated classes by deployment role
+     * @param cacheKeyGenerator optional cache key generator class; may be {@code null}
+     */
     private void generateOrchestratorServer(
             PipelineCompilationContext ctx,
             DescriptorProtos.FileDescriptorSet descriptorSet,
@@ -848,6 +959,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         try {
             String transport = binding.normalizedTransport();
             boolean rest = "REST".equalsIgnoreCase(transport);
+            boolean local = "LOCAL".equalsIgnoreCase(transport);
             if (rest) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER;
                 orchestratorRestRenderer.render(binding, new GenerationContext(
@@ -857,7 +969,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     java.util.Set.of(),
                     cacheKeyGenerator,
                     descriptorSet));
-            } else {
+            } else if (!local) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.PIPELINE_SERVER;
                 orchestratorGrpcRenderer.render(binding, new GenerationContext(
                     ctx.getProcessingEnv(),
@@ -879,7 +991,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     descriptorSet));
             }
 
-            if (!rest) {
+            if (!rest && !local) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT;
                 orchestratorIngestClientRenderer.render(binding, new GenerationContext(
                     ctx.getProcessingEnv(),
@@ -924,6 +1036,13 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         };
     }
 
+    /**
+     * Resolve and ensure existence of the output directory for the given deployment role under the generated sources root.
+     *
+     * @param ctx  the compilation context used to obtain the generated sources root and the processing environment for reporting
+     * @param role the deployment role whose directory name will be derived (role name lowercased with underscores replaced by dashes)
+     * @return the role-specific output Path under the generated sources root; if the generated sources root is null returns null; if role is null returns the generated sources root
+     */
     private java.nio.file.Path resolveRoleOutputDir(
             PipelineCompilationContext ctx,
             org.pipelineframework.processor.ir.DeploymentRole role) {

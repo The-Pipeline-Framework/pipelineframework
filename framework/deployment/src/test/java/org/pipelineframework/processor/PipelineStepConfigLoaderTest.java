@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.processor.config.PipelineStepConfigLoader;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -13,9 +14,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class PipelineStepConfigLoaderTest {
 
     @Test
-    void loadsOutputTypesFromPipelineConfig() throws IOException {
+    void loadsOutputTypesFromPipelineConfig(@TempDir Path tempDir) throws IOException {
         PipelineStepConfigLoader loader = new PipelineStepConfigLoader();
-        Path config = Files.createTempFile("pipeline-config", ".yaml");
+        Path config = tempDir.resolve("pipeline-config.yaml");
         Files.writeString(config, """
             appName: "test"
             basePackage: "org.pipelineframework.csv"
@@ -42,5 +43,33 @@ class PipelineStepConfigLoaderTest {
         assertTrue(stepConfig.outputTypes().contains("CsvPaymentsInputFile"));
         assertTrue(stepConfig.outputTypes().contains("PaymentRecord"));
         assertTrue(stepConfig.outputTypes().contains("PaymentStatus"));
+    }
+
+    @Test
+    void transportOverridePrefersSystemPropertyOverEnv(@TempDir Path tempDir) throws IOException {
+        PipelineStepConfigLoader loader = new PipelineStepConfigLoader(
+            key -> "pipeline.transport".equals(key) ? "LOCAL" : null,
+            key -> "PIPELINE_TRANSPORT".equals(key) ? "REST" : null
+        );
+        Path config = tempDir.resolve("pipeline-config.yaml");
+        Files.writeString(config, "basePackage: test\ntransport: GRPC\nsteps: []\n");
+
+        PipelineStepConfigLoader.StepConfig stepConfig = loader.load(config);
+
+        assertEquals("LOCAL", stepConfig.transport());
+    }
+
+    @Test
+    void transportOverrideFallsBackToEnvWhenPropertyMissing(@TempDir Path tempDir) throws IOException {
+        PipelineStepConfigLoader loader = new PipelineStepConfigLoader(
+            key -> null,
+            key -> "PIPELINE_TRANSPORT".equals(key) ? "REST" : null
+        );
+        Path config = tempDir.resolve("pipeline-config.yaml");
+        Files.writeString(config, "basePackage: test\ntransport: GRPC\nsteps: []\n");
+
+        PipelineStepConfigLoader.StepConfig stepConfig = loader.load(config);
+
+        assertEquals("REST", stepConfig.transport());
     }
 }

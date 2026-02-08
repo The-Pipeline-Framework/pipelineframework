@@ -35,15 +35,25 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
         return "Pipeline Binding Construction Phase";
     }
 
+    /**
+     * Constructs renderer-specific bindings for each pipeline step and stores them in the compilation context.
+     *
+     * <p>This builds gRPC, REST and local bindings as appropriate for each PipelineStepModel, optionally
+     * loads a protocol descriptor set when gRPC bindings are required, and adds an orchestrator binding
+     * if orchestrator models are present. Bindings are stored in the context's renderer bindings map
+     * using keys: "<modelName>_grpc", "<modelName>_rest", "<modelName>_local" and "orchestrator".
+     *
+     * @param ctx the pipeline compilation context to read models from and write constructed bindings into
+     * @throws Exception if descriptor set loading or binding construction fails
+     */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
         // Create a map to store bindings for each model
         Map<String, Object> bindingsMap = new HashMap<>();
 
-        boolean isGrpc = ctx.isTransportModeGrpc();
         DescriptorProtos.FileDescriptorSet descriptorSet = ctx.getDescriptorSet();
 
-        if (isGrpc && descriptorSet == null && needsGrpcBindings(ctx)) {
+        if (descriptorSet == null && needsGrpcBindings(ctx)) {
             descriptorSet = loadDescriptorSet(ctx);
             ctx.setDescriptorSet(descriptorSet);
         }
@@ -71,6 +81,9 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
             String modelKey = model.serviceName();
             bindingsMap.put(modelKey + "_grpc", grpcBinding);
             bindingsMap.put(modelKey + "_rest", restBinding);
+            if (model.enabledTargets().contains(GenerationTarget.LOCAL_CLIENT_STEP)) {
+                bindingsMap.put(modelKey + "_local", new LocalBinding(model));
+            }
         }
         
         // Process orchestrator models if present
@@ -88,6 +101,15 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
         ctx.setRendererBindings(bindingsMap);
     }
 
+    /**
+     * Determine whether gRPC bindings are required for the given compilation context.
+     *
+     * Evaluates step models and orchestrator template configuration to decide if descriptor
+     * loading and gRPC binding resolution are necessary.
+     *
+     * @param ctx the pipeline compilation context to inspect
+     * @return `true` if gRPC bindings are required, `false` otherwise
+     */
     private boolean needsGrpcBindings(PipelineCompilationContext ctx) {
         if (ctx.getStepModels().stream().anyMatch(model ->
             model.enabledTargets().contains(GenerationTarget.GRPC_SERVICE)
@@ -96,7 +118,23 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
         }
         if (!ctx.getOrchestratorModels().isEmpty()) {
             PipelineTemplateConfig config = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig cfg ? cfg : null;
-            return config != null && "GRPC".equalsIgnoreCase(config.transport());
+            if (config == null) {
+                return false;
+            }
+            String transport = config.transport();
+            if (transport == null || transport.isBlank()) {
+                return true;
+            }
+            var resolvedMode = TransportMode.fromStringOptional(transport);
+            if (resolvedMode.isEmpty()) {
+                if (ctx.getProcessingEnv() != null) {
+                    ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                        "Unknown transport '" + transport + "' in pipeline template. "
+                            + "Valid values are GRPC|gRPC|REST|LOCAL; skipping descriptor loading.");
+                }
+                return false;
+            }
+            return resolvedMode.orElseThrow() == TransportMode.GRPC;
         }
         return false;
     }
