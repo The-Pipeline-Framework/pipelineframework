@@ -53,9 +53,22 @@ public class PipelineRuntimeSecurityConfigValidator {
 
     private void requireAbsolutePath(String key, String value) {
         Path path = Paths.get(value);
-        if (!path.isAbsolute()) {
+        Path normalized = path.normalize();
+        if (!normalized.isAbsolute()) {
             throw new IllegalStateException("TLS path '" + key + "' must be absolute in non-dev profiles: " + value);
         }
+        if (containsParentTraversal(path) || containsParentTraversal(normalized) || normalized.toString().contains("..")) {
+            throw new IllegalStateException("TLS path '" + key + "' must not contain parent traversal segments: " + value);
+        }
         LOG.debugf("Validated absolute TLS path for %s", key);
+    }
+
+    private boolean containsParentTraversal(Path path) {
+        for (Path segment : path) {
+            if ("..".equals(segment.toString())) {
+                return true;
+            }
+        }
+        return false;
     }
 }

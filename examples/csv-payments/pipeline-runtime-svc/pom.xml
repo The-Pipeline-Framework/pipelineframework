@@ -154,7 +154,7 @@
                                     <arg value="${pipeline.runtime.source.dir.status}"/>
                                     <arg value="${pipeline.runtime.source.dir.output}"/>
                                 </exec>
-                                <copy todir="${project.build.directory}/pipeline-runtime-sources" overwrite="false">
+                                <copy todir="${project.build.directory}/pipeline-runtime-sources">
                                     <fileset dir="${pipeline.runtime.source.root}">
                                         <patternset
                                                 includes="${pipeline.runtime.source.includes}"
