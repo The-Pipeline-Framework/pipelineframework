@@ -41,7 +41,8 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
      * <p>This builds gRPC, REST and local bindings as appropriate for each PipelineStepModel, optionally
      * loads a protocol descriptor set when gRPC bindings are required, and adds an orchestrator binding
      * if orchestrator models are present. Bindings are stored in the context's renderer bindings map
-     * using keys: "<modelName>_grpc", "<modelName>_rest", "<modelName>_local" and "orchestrator".
+     * using keys: {@code <modelName>_grpc}, {@code <modelName>_rest},
+     * {@code <modelName>_local} and {@code orchestrator}.
      *
      * @param ctx the pipeline compilation context to read models from and write constructed bindings into
      * @throws Exception if descriptor set loading or binding construction fails

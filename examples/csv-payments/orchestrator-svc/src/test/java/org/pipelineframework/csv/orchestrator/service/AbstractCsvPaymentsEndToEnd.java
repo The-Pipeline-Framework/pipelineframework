@@ -67,9 +67,20 @@ abstract class AbstractCsvPaymentsEndToEnd {
                     .normalize()
                     .toAbsolutePath();
     private static final String CONTAINER_KEYSTORE_PATH = "/deployments/server-keystore.jks";
+    private static final String CONTAINER_TRUSTSTORE_PATH = "/deployments/client-truststore.jks";
     private static final String RUNTIME_LAYOUT =
             System.getProperty("csv.runtime.layout", "modular").trim().toLowerCase();
     private static final boolean MONOLITH_LAYOUT = "monolith".equals(RUNTIME_LAYOUT);
+    private static final boolean PIPELINE_RUNTIME_LAYOUT = "pipeline-runtime".equals(RUNTIME_LAYOUT);
+    // CI sets IMAGE_TAG to github.sha; local fallback should match dev image naming conventions.
+    private static final String PIPELINE_RUNTIME_IMAGE =
+            System.getenv().getOrDefault("IMAGE_REGISTRY", "registry.example.com")
+                    + "/"
+                    + System.getenv().getOrDefault("IMAGE_GROUP", "csv-payments")
+                    + "/"
+                    + System.getenv().getOrDefault("IMAGE_NAME", "pipeline-runtime-svc")
+                    + ":"
+                    + System.getenv().getOrDefault("IMAGE_TAG", "latest");
 
     // Containers are lazily created so monolith mode does not require service cert binds.
     static PostgreSQLContainer<?> postgresContainer;
@@ -78,6 +89,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     static GenericContainer<?> paymentsProcessingService;
     static GenericContainer<?> paymentStatusService;
     static GenericContainer<?> outputCsvService;
+    static GenericContainer<?> pipelineRuntimeService;
 
     /**
          * Prepare test artifacts and start the containers required for the end-to-end CSV payments tests.
@@ -98,6 +110,13 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         if (MONOLITH_LAYOUT) {
             Startables.deepStart(Stream.of(getPostgresContainer())).join();
+            return;
+        }
+
+        if (PIPELINE_RUNTIME_LAYOUT) {
+            Startables.deepStart(
+                    Stream.of(getPostgresContainer(), getPersistenceService(), getPipelineRuntimeService()))
+                .join();
             return;
         }
 
@@ -302,6 +321,50 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     /**
+     * Lazily creates and returns the grouped pipeline runtime service container used by pipeline-runtime layout tests.
+     *
+     * <p>The container mounts the test directory read-write (the grouped runtime both reads CSV input and writes
+     * output files), binds a server keystore for TLS, and waits for HTTPS health on port 8445.
+     *
+     * @return the configured grouped pipeline runtime container
+     */
+    private static GenericContainer<?> getPipelineRuntimeService() {
+        if (pipelineRuntimeService == null) {
+            pipelineRuntimeService =
+                    new GenericContainer<>(PIPELINE_RUNTIME_IMAGE)
+                            .withNetwork(network)
+                            .withNetworkAliases("pipeline-runtime-svc")
+                            .withFileSystemBind(
+                                    Paths.get(TEST_E2E_DIR).toAbsolutePath().toString(),
+                                    TEST_E2E_TARGET_DIR,
+                                    BindMode.READ_WRITE)
+                            .withFileSystemBind(
+                                    DEV_CERTS_DIR.resolve("pipeline-runtime-svc/server-keystore.jks")
+                                            .toString(),
+                                    CONTAINER_KEYSTORE_PATH,
+                                    BindMode.READ_ONLY)
+                            .withFileSystemBind(
+                                    DEV_CERTS_DIR.resolve("pipeline-runtime-svc/client-truststore.jks")
+                                            .toString(),
+                                    CONTAINER_TRUSTSTORE_PATH,
+                                    BindMode.READ_ONLY)
+                            .withExposedPorts(8445)
+                            .withEnv("QUARKUS_PROFILE", "test")
+                            .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
+                            .withEnv("SERVER_KEYSTORE_PASSWORD", "secret")
+                            .withEnv("CLIENT_TRUSTSTORE_PATH", CONTAINER_TRUSTSTORE_PATH)
+                            .withEnv("CLIENT_TRUSTSTORE_PASSWORD", "secret")
+                            .withLogConsumer(containerLog("pipeline-runtime-svc"))
+                            .waitingFor(
+                                    Wait.forHttps("/q/health")
+                                            .forPort(8445)
+                                            .allowInsecure()
+                                            .withStartupTimeout(Duration.ofSeconds(60)));
+        }
+        return pipelineRuntimeService;
+    }
+
+    /**
      * Creates a Consumer that logs non-empty container output frames prefixed with the given container name.
      *
      * @param containerName label used as a tag at the start of each log message
@@ -339,12 +402,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     /**
-     * Ensures development TLS certificates for the orchestrator exist, generating them if missing.
+     * Ensures development TLS certificates required by the active test topology exist.
      *
-     * <p>If the required keystore (orchestrator-svc/server-keystore.jks) and truststore
-     * (orchestrator-svc/client-truststore.jks) are not present under the configured dev
-     * certificates directory, this method invokes the repository script "../generate-dev-certs.sh"
-     * to create them.
+     * <p>If required cert files are missing under the configured dev certificates directory, this
+     * method invokes the repository script "../generate-dev-certs.sh" to create them.
      *
      * @throws IOException if certificate files are missing and cannot be generated, including when
      *                     running on Windows (generation is supported only on Unix-like systems),
@@ -352,9 +413,17 @@ abstract class AbstractCsvPaymentsEndToEnd {
      *                     generation process is interrupted.
      */
     private static void ensureDevCerts() throws IOException {
-        Path serverKeystore = DEV_CERTS_DIR.resolve("orchestrator-svc/server-keystore.jks");
-        Path truststore = DEV_CERTS_DIR.resolve("orchestrator-svc/client-truststore.jks");
-        if (Files.exists(serverKeystore) && Files.exists(truststore)) {
+        Path orchestratorKeystore = DEV_CERTS_DIR.resolve("orchestrator-svc/server-keystore.jks");
+        Path orchestratorTruststore = DEV_CERTS_DIR.resolve("orchestrator-svc/client-truststore.jks");
+        Path pipelineRuntimeKeystore = DEV_CERTS_DIR.resolve("pipeline-runtime-svc/server-keystore.jks");
+        Path pipelineRuntimeTruststore = DEV_CERTS_DIR.resolve("pipeline-runtime-svc/client-truststore.jks");
+
+        boolean orchestratorCertsReady =
+                Files.exists(orchestratorKeystore) && Files.exists(orchestratorTruststore);
+        boolean pipelineRuntimeCertsReady =
+                Files.exists(pipelineRuntimeKeystore) && Files.exists(pipelineRuntimeTruststore);
+
+        if (orchestratorCertsReady && (!PIPELINE_RUNTIME_LAYOUT || pipelineRuntimeCertsReady)) {
             return;
         }
 
@@ -462,6 +531,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         if (MONOLITH_LAYOUT) {
             configureMonolithEnv(pb);
+        } else if (PIPELINE_RUNTIME_LAYOUT) {
+            configurePipelineRuntimeEnv(pb);
         } else {
             configureModularEnv(pb);
         }
@@ -561,6 +632,43 @@ abstract class AbstractCsvPaymentsEndToEnd {
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)));
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)));
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)));
+    }
+
+    /**
+     * Configure the given ProcessBuilder's environment for pipeline-runtime layout (grouped pipeline runtime plus
+     * standalone persistence runtime).
+     *
+     * @param pb the ProcessBuilder whose environment will be populated
+     */
+    private static void configurePipelineRuntimeEnv(ProcessBuilder pb) {
+        GenericContainer<?> pipelineService = getPipelineRuntimeService();
+        GenericContainer<?> persistence = getPersistenceService();
+        pb.environment()
+            .put(
+                "SERVER_KEYSTORE_PATH",
+                DEV_CERTS_DIR.resolve("orchestrator-svc/server-keystore.jks").toString());
+        pb.environment()
+            .put(
+                "CLIENT_TRUSTSTORE_PATH",
+                DEV_CERTS_DIR.resolve("orchestrator-svc/client-truststore.jks").toString());
+        String pipelineHost = pipelineService.getHost();
+        String pipelinePort = String.valueOf(pipelineService.getMappedPort(8445));
+        String persistenceHost = persistence.getHost();
+        String persistencePort = String.valueOf(persistence.getMappedPort(8448));
+
+        putGrpcClient(pb, "PROCESS_FOLDER", pipelineHost, pipelinePort);
+        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", pipelineHost, pipelinePort);
+        putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", pipelineHost, pipelinePort);
+        putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", pipelineHost, pipelinePort);
+        putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", pipelineHost, pipelinePort);
+        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_OUTPUT_FILE", pipelineHost, pipelinePort);
+
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", persistenceHost, persistencePort);
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", persistenceHost, persistencePort);
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT", persistenceHost, persistencePort);
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT", persistenceHost, persistencePort);
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT", persistenceHost, persistencePort);
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT", persistenceHost, persistencePort);
     }
 
     /**
@@ -882,6 +990,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
         // Stop all containers to prevent resource leaks
         if (outputCsvService != null && outputCsvService.isRunning()) {
             outputCsvService.stop();
+        }
+        if (pipelineRuntimeService != null && pipelineRuntimeService.isRunning()) {
+            pipelineRuntimeService.stop();
         }
         if (paymentStatusService != null && paymentStatusService.isRunning()) {
             paymentStatusService.stop();

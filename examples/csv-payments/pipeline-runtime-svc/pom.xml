@@ -11,14 +11,21 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>monolith-svc</artifactId>
-    <name>csv-payments monolith runtime</name>
+    <artifactId>pipeline-runtime-svc</artifactId>
+    <name>csv-payments grouped pipeline runtime</name>
 
     <properties>
         <pipeline.generatedSourcesArg>-Apipeline.generatedSourcesDir=${project.build.directory}/generated-sources/pipeline</pipeline.generatedSourcesArg>
         <!-- Build `common` first, or pass -Dprotobuf.descriptor.path=... to point to a pre-built descriptor set. -->
         <protobuf.descriptor.path>${project.basedir}/../common/target/generated-sources/grpc/descriptor_set.dsc</protobuf.descriptor.path>
         <protobuf.descriptor.fileArg>-Aprotobuf.descriptor.file=${protobuf.descriptor.path}</protobuf.descriptor.fileArg>
+        <pipeline.runtime.source.root>${project.basedir}/..</pipeline.runtime.source.root>
+        <pipeline.runtime.source.dir.input>${pipeline.runtime.source.root}/input-csv-file-processing-svc/src/main/java</pipeline.runtime.source.dir.input>
+        <pipeline.runtime.source.dir.payments>${pipeline.runtime.source.root}/payments-processing-svc/src/main/java</pipeline.runtime.source.dir.payments>
+        <pipeline.runtime.source.dir.status>${pipeline.runtime.source.root}/payment-status-svc/src/main/java</pipeline.runtime.source.dir.status>
+        <pipeline.runtime.source.dir.output>${pipeline.runtime.source.root}/output-csv-file-processing-svc/src/main/java</pipeline.runtime.source.dir.output>
+        <pipeline.runtime.source.exclude.executor>org/pipelineframework/csv/service/ExecutorProducer.java</pipeline.runtime.source.exclude.executor>
+        <pipeline.runtime.duplicate.check.script>${pipeline.runtime.source.root}/build-tools/check-duplicate-sources.sh</pipeline.runtime.duplicate.check.script>
     </properties>
 
     <dependencies>
@@ -32,15 +39,6 @@
             <artifactId>quarkus-arc</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.pipelineframework</groupId>
-            <artifactId>persistence-plugin</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-picocli</artifactId>
-        </dependency>
-        <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-grpc</artifactId>
         </dependency>
@@ -51,14 +49,6 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-smallrye-health</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-agroal</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-jdbc-postgresql</artifactId>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -122,7 +112,7 @@
             </plugin>
             <plugin>
                 <artifactId>maven-antrun-plugin</artifactId>
-                <version>3.1.0</version>
+                <version>3.2.0</version>
                 <executions>
                     <execution>
                         <id>validate-protobuf-descriptor</id>
@@ -134,47 +124,50 @@
                             <target>
                                 <available file="${protobuf.descriptor.path}" property="protobuf.descriptor.exists"/>
                                 <fail unless="protobuf.descriptor.exists">
-                                    Missing protobuf descriptor file at ${protobuf.descriptor.path}. Build `common` first (for example: ./examples/csv-payments/build-monolith.sh -DskipTests) or override -Dprotobuf.descriptor.path.
+                                    Missing protobuf descriptor file at ${protobuf.descriptor.path}. Build `common` first (for example: ./examples/csv-payments/build-pipeline-runtime.sh -DskipTests) or override -Dprotobuf.descriptor.path.
                                 </fail>
                             </target>
                         </configuration>
                     </execution>
                     <execution>
-                        <id>collect-monolith-sources</id>
+                        <id>collect-pipeline-runtime-sources</id>
                         <phase>generate-sources</phase>
                         <goals>
                             <goal>run</goal>
                         </goals>
                         <configuration>
                             <target>
-                                <mkdir dir="${project.build.directory}/monolith-sources"/>
+                                <delete dir="${project.build.directory}/pipeline-runtime-sources"/>
+                                <mkdir dir="${project.build.directory}/pipeline-runtime-sources"/>
+                                <condition property="is.windows">
+                                    <os family="windows"/>
+                                </condition>
+                                <fail if="is.windows">
+                                    pipeline-runtime-svc source aggregation runs a Unix shell script (`check-duplicate-sources.sh`). Run this module on Unix-like environments (Linux/macOS/WSL).
+                                </fail>
                                 <exec executable="bash" failonerror="true">
-                                    <arg value="${project.basedir}/../build-tools/check-duplicate-sources.sh"/>
-                                    <arg value="${project.build.directory}/monolith-sources"/>
-                                    <arg value="${project.basedir}/../input-csv-file-processing-svc/src/main/java"/>
-                                    <arg value="${project.basedir}/../payments-processing-svc/src/main/java"/>
-                                    <arg value="${project.basedir}/../payment-status-svc/src/main/java"/>
-                                    <arg value="${project.basedir}/../output-csv-file-processing-svc/src/main/java"/>
-                                    <arg value="${project.basedir}/../orchestrator-svc/src/main/java"/>
+                                    <arg value="${pipeline.runtime.duplicate.check.script}"/>
+                                    <arg value="${project.build.directory}/pipeline-runtime-sources"/>
+                                    <arg value="${pipeline.runtime.source.dir.input}"/>
+                                    <arg value="${pipeline.runtime.source.dir.payments}"/>
+                                    <arg value="${pipeline.runtime.source.dir.status}"/>
+                                    <arg value="${pipeline.runtime.source.dir.output}"/>
                                 </exec>
-                                <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
-                                    <fileset dir="${project.basedir}/../input-csv-file-processing-svc/src/main/java"/>
+                                <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                    <fileset dir="${pipeline.runtime.source.dir.input}"/>
                                 </copy>
-                                <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
-                                    <fileset dir="${project.basedir}/../payments-processing-svc/src/main/java">
-                                        <exclude name="org/pipelineframework/csv/service/ExecutorProducer.java"/>
+                                <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                    <fileset dir="${pipeline.runtime.source.dir.payments}">
+                                        <exclude name="${pipeline.runtime.source.exclude.executor}"/>
                                     </fileset>
                                 </copy>
-                                <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
-                                    <fileset dir="${project.basedir}/../payment-status-svc/src/main/java"/>
+                                <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                    <fileset dir="${pipeline.runtime.source.dir.status}"/>
                                 </copy>
-                                <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
-                                    <fileset dir="${project.basedir}/../output-csv-file-processing-svc/src/main/java">
-                                        <exclude name="org/pipelineframework/csv/service/ExecutorProducer.java"/>
+                                <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                    <fileset dir="${pipeline.runtime.source.dir.output}">
+                                        <exclude name="${pipeline.runtime.source.exclude.executor}"/>
                                     </fileset>
-                                </copy>
-                                <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
-                                    <fileset dir="${project.basedir}/../orchestrator-svc/src/main/java"/>
                                 </copy>
                             </target>
                         </configuration>
@@ -187,14 +180,14 @@
                 <version>3.6.0</version>
                 <executions>
                     <execution>
-                        <id>add-monolith-sources</id>
+                        <id>add-pipeline-runtime-sources</id>
                         <phase>generate-sources</phase>
                         <goals>
                             <goal>add-source</goal>
                         </goals>
                         <configuration>
                             <sources>
-                                <source>${project.build.directory}/monolith-sources</source>
+                                <source>${project.build.directory}/pipeline-runtime-sources</source>
                             </sources>
                         </configuration>
                     </execution>

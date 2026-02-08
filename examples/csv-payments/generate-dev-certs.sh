@@ -62,15 +62,17 @@ openssl pkcs12 -export -in "${CERT_DIR}/quarkus-cert.pem" -inkey "${CERT_DIR}/qu
 keytool -import -file "${CERT_DIR}/quarkus-cert.pem" -keystore "${CERT_DIR}/client-truststore.jks" -storepass secret -noprompt -alias server
 
 # Copy certificates to service directories
-for svc in persistence-svc input-csv-file-processing-svc payments-processing-svc payment-status-svc output-csv-file-processing-svc orchestrator-svc; do
+for svc in persistence-svc input-csv-file-processing-svc payments-processing-svc payment-status-svc output-csv-file-processing-svc orchestrator-svc pipeline-runtime-svc; do
     mkdir -p "${OUTPUT_DIR}/${svc}"
     cp "${CERT_DIR}/server-keystore.p12" "${OUTPUT_DIR}/${svc}/server-keystore.jks"
     chmod 644 "${OUTPUT_DIR}/${svc}/server-keystore.jks"
 done
 
-mkdir -p "${OUTPUT_DIR}/orchestrator-svc"
-cp "${CERT_DIR}/client-truststore.jks" "${OUTPUT_DIR}/orchestrator-svc/client-truststore.jks"
-chmod 644 "${OUTPUT_DIR}/orchestrator-svc/client-truststore.jks"
+for svc in orchestrator-svc pipeline-runtime-svc; do
+    mkdir -p "${OUTPUT_DIR}/${svc}"
+    cp "${CERT_DIR}/client-truststore.jks" "${OUTPUT_DIR}/${svc}/client-truststore.jks"
+    chmod 644 "${OUTPUT_DIR}/${svc}/client-truststore.jks"
+done
 
 # Clean up temporary files
 rm -rf "${CERT_DIR}"
