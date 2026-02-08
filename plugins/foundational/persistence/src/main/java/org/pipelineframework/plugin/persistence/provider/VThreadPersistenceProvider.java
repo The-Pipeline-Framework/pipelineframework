@@ -46,9 +46,9 @@ public class VThreadPersistenceProvider implements PersistenceProvider<Object> {
     private final InjectableInstance<EntityManager> entityManagerInstance;
 
     /**
-     * Initialises the provider and locates an injectable EntityManager instance via Arc.
+     * Initializes the provider and resolves an injectable EntityManager via Arc.
      *
-     * Stores the resolved InjectableInstance&lt;EntityManager&gt; for use by the provider's persistence operations.
+     * Stores the resolved InjectableInstance<EntityManager> for the provider's persistence operations.
      */
     public VThreadPersistenceProvider() {
         // Look up the EntityManager bean instance via Arc
@@ -56,9 +56,8 @@ public class VThreadPersistenceProvider implements PersistenceProvider<Object> {
     }
 
     /**
-     * Persist the given entity within a JPA transaction and return the same instance.
+     * Persist the provided entity within a JPA transaction.
      *
-     * @param entity the entity to persist
      * @return the persisted entity instance
      * @throws IllegalStateException if no EntityManager is resolvable for this provider
      */
@@ -80,6 +79,14 @@ public class VThreadPersistenceProvider implements PersistenceProvider<Object> {
         });
     }
 
+    /**
+     * Merge the provided entity into the persistence context and return the managed instance.
+     *
+     * @param entity the entity instance to merge; must not be null
+     * @return the merged (managed) entity instance
+     * @throws IllegalArgumentException if {@code entity} is null
+     * @throws IllegalStateException if no {@link javax.persistence.EntityManager} is available
+     */
     @Override
     @Transactional
     public Uni<Object> persistOrUpdate(Object entity) {
@@ -119,16 +126,21 @@ public class VThreadPersistenceProvider implements PersistenceProvider<Object> {
         return entity != null && entity.getClass().isAnnotationPresent(Entity.class);
     }
 
+    /**
+     * Indicates that this persistence provider is safe for concurrent use by multiple threads.
+     *
+     * @return `ThreadSafety.SAFE` when the provider is thread-safe.
+     */
     @Override
     public ThreadSafety threadSafety() {
         return ThreadSafety.SAFE;
     }
 
     /**
-     * Indicates whether this provider is running in a virtual-thread context.
-     *
-     * @return {@code true} if the current thread is a virtual thread, {@code false} otherwise.
-     */
+         * Determines whether the current thread context is supported for persistence operations.
+         *
+         * @return {@code true} if running on a virtual thread or on a thread that is not a Vert.x event-loop thread, {@code false} otherwise.
+         */
     @Override
     public boolean supportsThreadContext() {
         // Allow virtual threads and non-event-loop threads; reject Vert.x event-loop threads.

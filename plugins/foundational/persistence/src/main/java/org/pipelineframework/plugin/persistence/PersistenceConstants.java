@@ -12,6 +12,9 @@ public final class PersistenceConstants {
     public static final String VTHREAD_PROVIDER_SIMPLE = "VThreadPersistenceProvider";
     public static final String REACTIVE_PROVIDER_SIMPLE = "ReactivePanachePersistenceProvider";
 
+    /**
+     * Prevents instantiation of this utility class.
+     */
     private PersistenceConstants() {
     }
 }

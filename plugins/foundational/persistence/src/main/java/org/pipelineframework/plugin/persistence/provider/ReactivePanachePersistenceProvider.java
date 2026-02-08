@@ -51,7 +51,10 @@ public class ReactivePanachePersistenceProvider implements PersistenceProvider<O
   }
 
   /**
-   * Persists a Panache entity using Hibernate Reactive.
+   * Persist the provided JPA entity within a reactive transaction.
+   *
+   * @param entity the JPA entity to persist
+   * @return the same entity instance after persistence
    */
   @Override
   public Uni<Object> persist(Object entity) {
@@ -69,6 +72,14 @@ public class ReactivePanachePersistenceProvider implements PersistenceProvider<O
                     "Failed to persist entity of type " + entity.getClass().getName(), t));
   }
 
+  /**
+   * Persists a new entity or merges an existing entity within a reactive Panache transaction.
+   *
+   * <p>On failure, the operation results in a PersistenceException that wraps the original cause.
+   *
+   * @param entity the JPA entity instance to persist or merge
+   * @return the managed entity after persist or merge
+   */
   @Override
   public Uni<Object> persistOrUpdate(Object entity) {
     LOG.tracef("Persisting or updating entity of type %s", entity.getClass().getSimpleName());
@@ -95,6 +106,11 @@ public class ReactivePanachePersistenceProvider implements PersistenceProvider<O
         return entity != null && entity.getClass().isAnnotationPresent(Entity.class);
     }
 
+    /**
+     * Report the provider's thread-safety level.
+     *
+     * @return `ThreadSafety.UNSAFE` indicating the provider is not safe for concurrent use across threads.
+     */
     @Override
     public ThreadSafety threadSafety() {
         return ThreadSafety.UNSAFE;

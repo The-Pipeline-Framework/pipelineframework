@@ -79,12 +79,14 @@ abstract class AbstractCsvPaymentsEndToEnd {
     static GenericContainer<?> outputCsvService;
 
     /**
-     * Initialises and starts the test containers required for the end-to-end CSV payments test.
-     *
-     * <p>Creates the test directory first if needed, then starts the PostgreSQL container, then
-     * starts each service container so the test services (input CSV, payments processing, payment
-     * status and output CSV) are available before tests execute.
-     */
+         * Prepare test artifacts and start the containers required for the end-to-end CSV payments tests.
+         *
+         * Creates the test output directory (if missing) and ensures it is writable, ensures development
+         * certificates are available, then starts the PostgreSQL container and the service containers.
+         * In monolith layout only the PostgreSQL container is started.
+         *
+         * @throws IOException if creating directories, ensuring writability, or preparing development certificates fails
+         */
     @BeforeAll
     static void startServices() throws IOException {
         // Create the test directory if it doesn't exist
@@ -109,6 +111,12 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 .join();
     }
 
+    /**
+     * Obtain the lazily initialized PostgreSQL Testcontainers instance used by the tests.
+     *
+     * @return the configured {@code PostgreSQLContainer} (database name "quarkus", username/password "quarkus",
+     *         attached to the test network, alias "postgres", with a 60-second startup wait)
+     */
     private static PostgreSQLContainer<?> getPostgresContainer() {
         if (postgresContainer == null) {
             postgresContainer =
@@ -123,6 +131,14 @@ abstract class AbstractCsvPaymentsEndToEnd {
         return postgresContainer;
     }
 
+    /**
+     * Creates and returns the test container configured for the persistence service used in end-to-end tests.
+     *
+     * The container is lazily initialized on first invocation and is configured with network settings,
+     * SSL keystore binding, exposed port, datasource credentials, and an HTTPS health check.
+     *
+     * @return the initialized GenericContainer instance for the persistence service (lazily created)
+     */
     private static GenericContainer<?> getPersistenceService() {
         if (persistenceService == null) {
             persistenceService =
@@ -152,6 +168,11 @@ abstract class AbstractCsvPaymentsEndToEnd {
         return persistenceService;
     }
 
+    /**
+     * Lazily initialize the Testcontainers container for the input CSV file processing service used by end-to-end tests.
+     *
+     * @return the configured GenericContainer instance for the input CSV file processing service
+     */
     private static GenericContainer<?> getInputCsvService() {
         if (inputCsvService == null) {
             inputCsvService =
@@ -179,6 +200,14 @@ abstract class AbstractCsvPaymentsEndToEnd {
         return inputCsvService;
     }
 
+    /**
+     * Lazily creates and returns a Testcontainers GenericContainer configured for the payments-processing service.
+     *
+     * The container is attached to the shared test network, exposes port 8445, mounts the service keystore
+     * into the container, sets the Quarkus profile to "test", and waits for an HTTPS health endpoint at /q/health.
+     *
+     * @return the initialized or previously created GenericContainer for the payments-processing service
+     */
     private static GenericContainer<?> getPaymentsProcessingService() {
         if (paymentsProcessingService == null) {
             paymentsProcessingService =
@@ -202,6 +231,14 @@ abstract class AbstractCsvPaymentsEndToEnd {
         return paymentsProcessingService;
     }
 
+    /**
+     * Create and configure the payment status service Testcontainers GenericContainer for the test network.
+     *
+     * The container is lazily initialized and configured with network settings, a mounted server keystore,
+     * exposed HTTPS port 8446, the `test` Quarkus profile, and a health check against `/q/health`.
+     *
+     * @return the configured GenericContainer instance for the payment status service
+     */
     private static GenericContainer<?> getPaymentStatusService() {
         if (paymentStatusService == null) {
             paymentStatusService =
@@ -224,6 +261,17 @@ abstract class AbstractCsvPaymentsEndToEnd {
         return paymentStatusService;
     }
 
+    /**
+     * Lazily creates and returns a Testcontainers GenericContainer configured for the output CSV file
+     * processing service.
+     *
+     * <p>The returned container mounts the test output directory into the container, binds the
+     * service keystore for TLS, exposes the service port (8447), sets the Quarkus test profile and
+     * server keystore environment variables, attaches a log consumer, and waits for the HTTPS
+     * health endpoint to become available.
+     *
+     * @return the initialized GenericContainer configured for the output CSV file processing service
+     */
     private static GenericContainer<?> getOutputCsvService() {
         if (outputCsvService == null) {
             outputCsvService =
@@ -252,6 +300,12 @@ abstract class AbstractCsvPaymentsEndToEnd {
         return outputCsvService;
     }
 
+    /**
+     * Creates a Consumer that logs non-empty container output frames prefixed with the given container name.
+     *
+     * @param containerName label used as a tag at the start of each log message
+     * @return a Consumer that logs each non-null, non-blank OutputFrame's UTF-8 text prefixed by the container name
+     */
     private static Consumer<OutputFrame> containerLog(String containerName) {
         return outputFrame -> {
             if (outputFrame == null) {
@@ -265,6 +319,14 @@ abstract class AbstractCsvPaymentsEndToEnd {
         };
     }
 
+    /**
+     * Attempts to set POSIX file permissions to make the given path writable.
+     *
+     * If the path is a directory, sets permissions to `rwxr-xr-x`; otherwise sets `rw-r--r--`.
+     * A warning is logged if the permissions cannot be changed or the platform does not support POSIX permissions.
+     *
+     * @param path the file or directory to make writable
+     */
     private static void ensureWritable(Path path) {
         try {
             String permission = Files.isDirectory(path) ? "rwxr-xr-x" : "rw-r--r--";
@@ -275,6 +337,19 @@ abstract class AbstractCsvPaymentsEndToEnd {
         }
     }
 
+    /**
+     * Ensures development TLS certificates for the orchestrator exist, generating them if missing.
+     *
+     * <p>If the required keystore (orchestrator-svc/server-keystore.jks) and truststore
+     * (orchestrator-svc/client-truststore.jks) are not present under the configured dev
+     * certificates directory, this method invokes the repository script "../generate-dev-certs.sh"
+     * to create them.
+     *
+     * @throws IOException if certificate files are missing and cannot be generated, including when
+     *                     running on Windows (generation is supported only on Unix-like systems),
+     *                     if the generation script exits with a non-zero status, or if the
+     *                     generation process is interrupted.
+     */
     private static void ensureDevCerts() throws IOException {
         Path serverKeystore = DEV_CERTS_DIR.resolve("orchestrator-svc/server-keystore.jks");
         Path truststore = DEV_CERTS_DIR.resolve("orchestrator-svc/client-truststore.jks");
@@ -342,12 +417,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     /**
-     * Launches the orchestrator JAR as a separate JVM process configured to use the test services
-     * and the given input directory.
+     * Start the orchestrator JAR in a separate JVM configured to use the test services and process CSV files from the given input directory.
      *
-     * @param inputDir path to the directory containing input CSV files that the orchestrator should
-     *     process
-     * @throws Exception if the process cannot be started or if it exits with a non-zero exit code
+     * @param inputDir path to the directory containing input CSV files to process
+     * @throws Exception if the process cannot be started, times out, or exits with a non-zero exit code
      */
     @SuppressWarnings("SameParameterValue")
     private void orchestratorTriggerRun(String inputDir) throws Exception {
@@ -400,6 +473,15 @@ abstract class AbstractCsvPaymentsEndToEnd {
         assertEquals(0, exitCode, "Orchestrator exited with non-zero code");
     }
 
+    /**
+     * Configure the given ProcessBuilder's environment for running the orchestrator in a monolith layout.
+     *
+     * Sets up local pipeline transport, keystore/truststore paths, Hibernate and datasource settings pointing
+     * to the test PostgreSQL container, a persistence provider, and gRPC client host/port entries that route
+     * all internal service endpoints to the local orchestrator port.
+     *
+     * @param pb the ProcessBuilder whose environment will be modified for monolith execution
+     */
     private static void configureMonolithEnv(ProcessBuilder pb) {
         PostgreSQLContainer<?> postgres = getPostgresContainer();
         pb.environment().put("PIPELINE_TRANSPORT", "LOCAL");
@@ -443,6 +525,15 @@ abstract class AbstractCsvPaymentsEndToEnd {
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT", localhost, grpcPort);
     }
 
+    /**
+     * Configure the given ProcessBuilder's environment so the orchestrator connects to modular service
+     * containers over gRPC.
+     *
+     * <p>Sets QUARKUS gRPC client host and port environment variables for input, payments processing,
+     * payment status, output file processing, and persistence services.
+     *
+     * @param pb the ProcessBuilder whose environment will be populated with gRPC client host/port entries
+     */
     private static void configureModularEnv(ProcessBuilder pb) {
         GenericContainer<?> inputService = getInputCsvService();
         GenericContainer<?> paymentsService = getPaymentsProcessingService();
@@ -471,11 +562,31 @@ abstract class AbstractCsvPaymentsEndToEnd {
         putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)));
     }
 
+    /**
+     * Adds QUARKUS gRPC client host and port environment variables to the given ProcessBuilder.
+     *
+     * @param pb         the ProcessBuilder whose environment will be modified
+     * @param clientName the client identifier used in the environment variable names (e.g. "PAYMENTS_SVC")
+     * @param host       the host value to assign to the client's HOST environment variable
+     * @param port       the port value to assign to the client's PORT environment variable
+     */
     private static void putGrpcClient(ProcessBuilder pb, String clientName, String host, String port) {
         pb.environment().put("QUARKUS_GRPC_CLIENTS_" + clientName + "_HOST", host);
         pb.environment().put("QUARKUS_GRPC_CLIENTS_" + clientName + "_PORT", port);
     }
 
+    /**
+     * Resolve the filesystem path to the orchestrator JAR, locating it from several likely locations.
+     *
+     * If `jarPath` points to an existing regular file that path is returned. If `jarPath` is relative,
+     * it is resolved against the current working directory and returned if present. When `monolithLayout`
+     * is true (or the provided path suggests a monolith layout), the method will also search upward from
+     * the working directory for the repository's monolith JAR location.
+     *
+     * @param jarPath the original JAR path candidate (absolute or relative)
+     * @param monolithLayout true to prefer/allow searching for the monolith JAR location in parent directories
+     * @return a Path pointing to a discovered JAR file when found, otherwise the normalized input candidate
+     */
     private static Path resolveJarPath(String jarPath, boolean monolithLayout) {
         Path candidate = Paths.get(jarPath).normalize();
         if (Files.isRegularFile(candidate)) {
@@ -531,11 +642,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     /**
-     * Create two CSV input files in the test directory containing five payment records used by the
-     * end-to-end test.
+     * Creates two CSV files under the test directory containing five payment records for the end-to-end test.
      *
-     * <p>The files created are "payments_first.csv" (three records) and "payments_second.csv" (two
-     * records). The method logs the created CSV filenames.
+     * <p>The files are "payments_first.csv" (three records) and "payments_second.csv" (two records). The method also
+     * makes the files writable and logs the created CSV filenames.
      *
      * @throws IOException if an I/O error occurs while writing the files or listing the directory
      */
@@ -576,12 +686,11 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     /**
-     * Waits for pipeline output files to appear in the test directory by polling for a limited
-     * time.
+     * Waits until at least one pipeline output file (a file ending with ".out") appears in the test
+     * output directory or a 10-second timeout elapses.
      *
-     * <p>Polls the TEST_E2E_DIR for files whose names end with ".out", checking once per second and
-     * returning as soon as any such file is detected. If no output files are found within the
-     * 10-second timeout the method fails the test.
+     * <p>Polls the TEST_E2E_DIR and returns as soon as any ".out" file is detected; if the timeout is
+     * reached without finding output files the test is failed.
      *
      * @throws InterruptedException if the thread is interrupted while sleeping between polls
      * @throws IOException if an I/O error occurs when listing the test directory
@@ -613,15 +722,15 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     /**
-     * Verifies generated output files in the given target directory contain the expected records.
-     *
-     * <p>Checks that at least one `.out` file exists, that the combined number of data records
-     * (excluding header lines) is at least five, and that output contains records for the
-     * recipients John Doe, Jane Smith, Bob Johnson, Alice Brown and Charlie Wilson.
-     *
-     * @param testOutputTargetDir path to the directory containing generated output files
-     * @throws IOException if an I/O error occurs while listing or reading output files
-     */
+         * Validates that output `.out` files in the specified directory contain the expected payment records.
+         *
+         * <p>Checks that at least one `.out` file exists, that the combined number of data records
+         * (excluding header lines) is at least five, and that records for the recipients
+         * John Doe, Jane Smith, Bob Johnson, Alice Brown, and Charlie Wilson are present.
+         *
+         * @param testOutputTargetDir path to the directory containing generated output files
+         * @throws IOException if an I/O error occurs while listing or reading output files
+         */
     @SuppressWarnings("SameParameterValue")
     private void verifyOutputFiles(String testOutputTargetDir) throws IOException {
         LOG.info("Verifying output files...");
@@ -729,10 +838,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     /**
-     * Verify that expected payment recipient records exist in the database.
+     * Verifies that a payment record exists for each expected recipient in the database.
      *
-     * <p>Checks that a row exists in the `paymentrecord` table for each of the predefined recipient
-     * names and fails the test if any expected record is missing.
+     * Checks that the `paymentrecord` table contains at least one row for each predefined
+     * recipient name and fails the test if any expected record is missing.
      *
      * @param connection a JDBC connection to the database containing the `paymentrecord` table
      * @throws SQLException if a database access error occurs while querying for records

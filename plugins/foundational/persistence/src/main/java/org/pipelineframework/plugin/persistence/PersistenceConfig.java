@@ -27,18 +27,24 @@ public interface PersistenceConfig {
 
     /**
      * Policy to apply when a persistence provider reports a duplicate key.
+     *
+     * @return the duplicate-key policy as a string (for example, "fail"). Default is "fail" when not specified.
      */
     @WithDefault("fail")
     String duplicateKey();
 
     /**
-     * Fully-qualified persistence provider class name to lock selection at runtime.
+     * Provides an optional fully-qualified persistence provider class name used to lock provider selection at runtime.
+     *
+     * @return an {@code Optional} containing the fully-qualified provider class name if configured, or an empty {@code Optional} if not set
      */
     @WithName("provider.class")
     Optional<String> providerClass();
 
     /**
-     * Timeout for persistence execution wrapped on a Vert.x context.
+     * Timeout in seconds for persistence operations executed on a Vert.x context.
+     *
+     * @return the timeout in seconds for persistence execution on a Vert.x context
      */
     @WithDefault("30")
     int vertxContextTimeoutSeconds();

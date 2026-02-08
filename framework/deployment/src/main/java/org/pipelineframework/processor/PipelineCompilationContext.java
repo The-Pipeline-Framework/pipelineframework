@@ -71,10 +71,10 @@ public class PipelineCompilationContext {
     private DescriptorProtos.FileDescriptorSet descriptorSet;
     
     /**
-     * Creates a new compilation context for the current annotation processing round.
+     * Initialize a compilation context for the given annotation processing round.
      *
-     * @param processingEnv the processing environment for compiler utilities and messaging
-     * @param roundEnv the round environment containing annotated elements
+     * @param processingEnv the processing environment providing compiler utilities and messaging
+     * @param roundEnv the round environment containing the annotated elements visible in this round
      */
     public PipelineCompilationContext(ProcessingEnvironment processingEnv, RoundEnvironment roundEnv) {
         this.processingEnv = processingEnv;
@@ -174,36 +174,36 @@ public class PipelineCompilationContext {
     }
 
     /**
-     * Returns whether the transport mode is gRPC.
+     * Indicates whether the current transport mode is gRPC.
      *
-     * @return true for gRPC transport mode, false for REST transport mode
+     * @return true if the transport mode is GRPC, false otherwise.
      */
     public boolean isTransportModeGrpc() {
         return transportMode == TransportMode.GRPC;
     }
 
     /**
-     * Returns whether the transport mode is REST.
+     * Determines if the current transport mode is REST.
      *
-     * @return true for REST transport mode, false otherwise
+     * @return true if the transport mode is REST, false otherwise.
      */
     public boolean isTransportModeRest() {
         return transportMode == TransportMode.REST;
     }
 
     /**
-     * Returns whether the transport mode is local/in-process.
+     * Indicates whether the transport mode is Local (in-process).
      *
-     * @return true for local transport mode, false otherwise
+     * @return `true` if the transport mode is Local, `false` otherwise
      */
     public boolean isTransportModeLocal() {
         return transportMode == TransportMode.LOCAL;
     }
 
     /**
-     * Returns the configured transport mode.
+     * Access the configured transport mode for this compilation context.
      *
-     * @return the current transport mode
+     * @return the configured TransportMode
      */
     public TransportMode getTransportMode() {
         return transportMode;
@@ -284,18 +284,18 @@ public class PipelineCompilationContext {
     }
 
     /**
-     * Sets whether orchestrator artifacts should be generated.
+     * Enable or disable generation of orchestrator artifacts for this compilation context.
      *
-     * @param orchestratorGenerated whether orchestrator artifacts should be generated
+     * @param orchestratorGenerated true to generate orchestrator artifacts, false to skip generation
      */
     public void setOrchestratorGenerated(boolean orchestratorGenerated) {
         this.orchestratorGenerated = orchestratorGenerated;
     }
 
     /**
-     * Sets the configured transport mode.
+     * Set the transport mode for the compilation context.
      *
-     * @param transportMode the transport mode to apply
+     * @param transportMode the transport mode to assign; if `null`, defaults to {@link TransportMode#GRPC}
      */
     public void setTransportMode(TransportMode transportMode) {
         this.transportMode = transportMode == null ? TransportMode.GRPC : transportMode;

@@ -39,10 +39,11 @@ public class PipelineTemplateConfigLoader {
     }
 
     /**
-     * Load the pipeline template configuration from the given file path.
+     * Load and parse the pipeline template configuration from the specified file path.
      *
-     * @param configPath the pipeline template config path
-     * @return the parsed pipeline template config
+     * @param configPath the path to the pipeline template YAML file
+     * @return a PipelineTemplateConfig built from the file's contents
+     * @throws IllegalStateException if the YAML root is not a map or the file cannot be read/parsed
      */
     public PipelineTemplateConfig load(Path configPath) {
         Object root = loadYaml(configPath);
@@ -162,11 +163,26 @@ public class PipelineTemplateConfigLoader {
         return values;
     }
 
+    /**
+     * Retrieve the string representation of the value associated with the given key in the map.
+     *
+     * @param map the map to read from
+     * @param key the key whose value should be returned
+     * @return the value's string representation, or {@code null} if the key is absent or maps to {@code null}
+     */
     private String readString(Map<?, ?> map, String key) {
         Object value = map.get(key);
         return value == null ? null : value.toString();
     }
 
+    /**
+     * Resolve transport override from system property or environment variable.
+     *
+     * Checks the JVM system property "pipeline.transport" first; if it is null or blank,
+     * falls back to the environment variable "PIPELINE_TRANSPORT".
+     *
+     * @return the resolved transport override value, or {@code null} if neither is set
+     */
     private String resolveTransportOverride() {
         String override = System.getProperty("pipeline.transport");
         if (override == null || override.isBlank()) {
@@ -175,6 +191,15 @@ public class PipelineTemplateConfigLoader {
         return override;
     }
 
+    /**
+     * Resolve a boolean configuration value from the map, falling back to the provided default.
+     *
+     * @param map the map containing configuration values
+     * @param key the key to look up in the map
+     * @param defaultValue the value to return when the map contains no value for the key
+     * @return the boolean value from the map for the given key; if the value is a Boolean it is returned directly,
+     *         if it is non-null it is parsed with Boolean.parseBoolean, and if the key is absent the defaultValue is returned
+     */
     private boolean readBoolean(Map<?, ?> map, String key, boolean defaultValue) {
         Object value = map.get(key);
         if (value == null) {
