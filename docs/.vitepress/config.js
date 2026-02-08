@@ -26,7 +26,6 @@ const mainSidebar = [
         items: [
             {
                 text: 'Getting Started',
-                link: '/guide/getting-started/',
                 collapsed: true,
                 items: [
                     {text: 'Quick Start', link: '/guide/getting-started/'},
@@ -94,7 +93,7 @@ const mainSidebar = [
         collapsed: true,
         items: [
             {text: 'Error Handling & DLQ', link: '/guide/operations/error-handling'},
-            {text: 'In-flight Probe', link: '/guide/operations/kill-switches'},
+            {text: 'In-flight Probe', link: '/guide/operations/in-flight-probe'},
             {
                 text: 'Observability',
                 link: '/guide/operations/observability/',
@@ -194,10 +193,7 @@ export default withMermaid(
   defineConfig({
     title: 'The Pipeline Framework',
     description: 'A framework for building reactive pipeline processing systems',
-    lang: 'en-UK',
-    
-    // Disable dead links check since we're only documenting the pipeline framework
-    ignoreDeadLinks: true,
+    lang: 'en-GB',
     
     // Base URL for the site (can be changed for different deployments)
     base: '/',

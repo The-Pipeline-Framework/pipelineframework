@@ -36,21 +36,6 @@ What the script does:
 
 ## Required runtime environment
 
-`pipeline-runtime-svc` requires explicit TLS password variables (no insecure defaults):
-
-```bash
-export SERVER_KEYSTORE_PASSWORD=secret
-export CLIENT_TRUSTSTORE_PASSWORD=secret
-```
-
-If you build container images in CI, set a deterministic image tag:
-
-```bash
-export IMAGE_TAG="$GITHUB_SHA"
-```
-
-## Required runtime environment
-
 `pipeline-runtime-svc` requires explicit TLS path/password variables (no insecure defaults):
 
 ```bash

@@ -53,16 +53,16 @@ public class ProcessPaymentStatusService
       PaymentRecord paymentRecord = ackPaymentSent.getPaymentRecord();
       assert paymentRecord != null;
 
-    PaymentOutput output = new PaymentOutput();
-    output.setPaymentStatus(paymentStatus);
-    output.setCsvId(paymentRecord.getCsvId());
-    output.setRecipient(paymentRecord.getRecipient());
-    output.setAmount(paymentRecord.getAmount());
-    output.setCurrency(paymentRecord.getCurrency());
-    output.setConversationId(ackPaymentSent.getConversationId());
-    output.setStatus(ackPaymentSent.getStatus());
-    output.setMessage(paymentStatus.getMessage());
-    output.setFee(paymentStatus.getFee());
+      PaymentOutput output = new PaymentOutput();
+      output.setPaymentStatus(paymentStatus);
+      output.setCsvId(paymentRecord.getCsvId());
+      output.setRecipient(paymentRecord.getRecipient());
+      output.setAmount(paymentRecord.getAmount());
+      output.setCurrency(paymentRecord.getCurrency());
+      output.setConversationId(ackPaymentSent.getConversationId());
+      output.setStatus(ackPaymentSent.getStatus());
+      output.setMessage(paymentStatus.getMessage());
+      output.setFee(paymentStatus.getFee());
 
     return Uni.createFrom()
             .item(output)

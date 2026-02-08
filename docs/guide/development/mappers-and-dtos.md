@@ -57,7 +57,7 @@ The Java type names you choose in your pipeline YAML (or the web UI) determine D
 
 ## Working with DTOs (Optional)
 
-In most cases you do **not** need to work with DTOs inside your `ReactiveService`. The generated REST/gRPC adapters perform DTO ↔ domain conversion at the transport boundary, so your business logic stays domain-only.
+In most cases, you do **not** need to work with DTOs inside your `ReactiveService`. The generated REST/gRPC adapters perform DTO ↔ domain conversion at the transport boundary, so your business logic stays domain-only.
 
 Only reach for DTOs inside a service when there is a clear, local benefit (e.g., interacting with a legacy library or a DTO-first API). The CSV Payments example previously used DTOs in one service to set an ID before persistence; this is no longer necessary now that domain entities generate IDs on creation via `BaseEntity`.
 
@@ -71,7 +71,9 @@ If you still need to work with DTOs internally, use the mapper to convert betwee
 public class ProcessPaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
 
     @Inject
-    PaymentRecordMapper paymentRecordMapper;  // Main mapper for DTO conversions
+    PaymentRecordMapper paymentRecordMapper;
+    @Inject
+    PaymentStatusMapper paymentStatusMapper;
 
     @Override
     public Uni<PaymentStatus> process(PaymentRecord paymentRecord) {
@@ -82,7 +84,7 @@ public class ProcessPaymentService implements ReactiveService<PaymentRecord, Pay
         PaymentStatusDto statusDto = processPaymentDto(dto);
 
         // Convert DTO back to domain
-        return Uni.createFrom().item(paymentRecordMapper.fromDto(statusDto));
+        return Uni.createFrom().item(paymentStatusMapper.fromDto(statusDto));
     }
 
     private PaymentStatusDto processPaymentDto(PaymentRecordDto dto) {

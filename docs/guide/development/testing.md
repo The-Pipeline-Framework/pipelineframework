@@ -35,27 +35,41 @@ class ProcessPaymentServiceTest {
 Use Testcontainers when you need real infrastructure. The pattern below uses Postgres and Redis as examples.
 
 ```java
-@QuarkusTest
-@Testcontainers
-class PersistenceIntegrationTest {
+public class PostgresRedisResource implements QuarkusTestResourceLifecycleManager {
 
-  @Container
-  static PostgreSQLContainer<?> postgres =
-      new PostgreSQLContainer<>("postgres:17");
+  private PostgreSQLContainer<?> postgres;
+  private GenericContainer<?> redis;
 
-  @Container
-  static GenericContainer<?> redis =
-      new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
+  @Override
+  public Map<String, String> start() {
+    postgres = new PostgreSQLContainer<>("postgres:17");
+    redis = new GenericContainer<>("redis:7-alpine").withExposedPorts(6379);
 
-  @DynamicPropertySource
-  static void datasourceProps(DynamicPropertyRegistry registry) {
-    registry.add("quarkus.datasource.jdbc.url", postgres::getJdbcUrl);
-    registry.add("quarkus.datasource.username", postgres::getUsername);
-    registry.add("quarkus.datasource.password", postgres::getPassword);
+    postgres.start();
+    redis.start();
 
-    registry.add("quarkus.redis.hosts",
-        () -> "redis://" + redis.getHost() + ":" + redis.getMappedPort(6379));
+    return Map.of(
+        "quarkus.datasource.jdbc.url", postgres.getJdbcUrl(),
+        "quarkus.datasource.username", postgres.getUsername(),
+        "quarkus.datasource.password", postgres.getPassword(),
+        "quarkus.redis.hosts", "redis://" + redis.getHost() + ":" + redis.getMappedPort(6379)
+    );
   }
+
+  @Override
+  public void stop() {
+    if (redis != null) {
+      redis.stop();
+    }
+    if (postgres != null) {
+      postgres.stop();
+    }
+  }
+}
+
+@QuarkusTest
+@QuarkusTestResource(value = PostgresRedisResource.class, restrictToAnnotatedClass = true)
+class PersistenceIntegrationTest {
 
   @Test
   void persistsRecords() {
