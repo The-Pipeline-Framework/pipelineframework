@@ -14,6 +14,7 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
 class PipelineRuntimeTopologyTest {
+    private static final String OBSERVE_PERSISTENCE_PREFIX = "observe-persistence-";
 
     @Test
     void routesPipelineAndPluginClientsToTwoGroupedRuntimeEndpoints() throws Exception {
@@ -37,6 +38,7 @@ class PipelineRuntimeTopologyTest {
                     .collect(Collectors.toSet());
 
             assertFalse(hostKeys.isEmpty(), "No gRPC client host entries found");
+            assertFalse(portKeys.isEmpty(), "No gRPC client port entries found");
             Set<String> hostClientIds = hostKeys.stream()
                     .map(key -> key.substring(prefix.length(), key.length() - ".host".length()))
                     .collect(Collectors.toSet());
@@ -46,10 +48,10 @@ class PipelineRuntimeTopologyTest {
             assertEquals(hostClientIds, portClientIds, "Expected matching host/port client entries");
 
             Set<String> pipelineClientIds = hostClientIds.stream()
-                    .filter(clientId -> !clientId.startsWith("observe-persistence-"))
+                    .filter(clientId -> !clientId.startsWith(OBSERVE_PERSISTENCE_PREFIX))
                     .collect(Collectors.toSet());
             Set<String> pluginClientIds = hostClientIds.stream()
-                    .filter(clientId -> clientId.startsWith("observe-persistence-"))
+                    .filter(clientId -> clientId.startsWith(OBSERVE_PERSISTENCE_PREFIX))
                     .collect(Collectors.toSet());
 
             assertFalse(pipelineClientIds.isEmpty(), "No grouped pipeline-runtime clients found");

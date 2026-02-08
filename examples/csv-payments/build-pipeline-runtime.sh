@@ -16,6 +16,8 @@ if [[ ! -f "$PIPELINE_RUNTIME_MAPPING" ]]; then
   exit 1
 fi
 
+mkdir -p "$(dirname "$ACTIVE_MAPPING")"
+
 backup_file=""
 if [[ -f "$ACTIVE_MAPPING" ]]; then
   backup_file="$(mktemp "${TMPDIR:-/tmp}/pipeline-runtime.XXXXXX")"

@@ -105,7 +105,7 @@
             </plugin>
             <plugin>
                 <artifactId>maven-antrun-plugin</artifactId>
-                <version>3.1.0</version>
+                <version>3.2.0</version>
                 <executions>
                     <execution>
                         <id>validate-protobuf-descriptor</id>
@@ -131,6 +131,12 @@
                         <configuration>
                             <target>
                                 <mkdir dir="${project.build.directory}/pipeline-runtime-sources"/>
+                                <condition property="is.windows">
+                                    <os family="windows"/>
+                                </condition>
+                                <fail if="is.windows">
+                                    pipeline-runtime-svc source aggregation runs a Unix shell script (`check-duplicate-sources.sh`). Run this module on Unix-like environments (Linux/macOS/WSL).
+                                </fail>
                                 <exec executable="bash" failonerror="true">
                                     <arg value="${project.basedir}/../monolith-svc/check-duplicate-sources.sh"/>
                                     <arg value="${project.build.directory}/pipeline-runtime-sources"/>

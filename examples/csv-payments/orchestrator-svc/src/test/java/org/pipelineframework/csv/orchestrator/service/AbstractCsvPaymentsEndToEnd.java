@@ -72,6 +72,14 @@ abstract class AbstractCsvPaymentsEndToEnd {
             System.getProperty("csv.runtime.layout", "modular").trim().toLowerCase();
     private static final boolean MONOLITH_LAYOUT = "monolith".equals(RUNTIME_LAYOUT);
     private static final boolean PIPELINE_RUNTIME_LAYOUT = "pipeline-runtime".equals(RUNTIME_LAYOUT);
+    private static final String PIPELINE_RUNTIME_IMAGE =
+            System.getenv().getOrDefault("IMAGE_REGISTRY", "registry.example.com")
+                    + "/"
+                    + System.getenv().getOrDefault("IMAGE_GROUP", "csv-payments")
+                    + "/"
+                    + System.getenv().getOrDefault("IMAGE_NAME", "pipeline-runtime-svc")
+                    + ":"
+                    + System.getenv().getOrDefault("IMAGE_TAG", "1.0.0");
 
     // Containers are lazily created so monolith mode does not require service cert binds.
     static PostgreSQLContainer<?> postgresContainer;
@@ -322,7 +330,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static GenericContainer<?> getPipelineRuntimeService() {
         if (pipelineRuntimeService == null) {
             pipelineRuntimeService =
-                    new GenericContainer<>("localhost/csv-payments/pipeline-runtime-svc:latest")
+                    new GenericContainer<>(PIPELINE_RUNTIME_IMAGE)
                             .withNetwork(network)
                             .withNetworkAliases("pipeline-runtime-svc")
                             .withFileSystemBind(
@@ -340,7 +348,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
                             .withExposedPorts(8445)
                             .withEnv("QUARKUS_PROFILE", "test")
                             .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
+                            .withEnv("SERVER_KEYSTORE_PASSWORD", "secret")
                             .withEnv("CLIENT_TRUSTSTORE_PATH", CONTAINER_TRUSTSTORE_PATH)
+                            .withEnv("CLIENT_TRUSTSTORE_PASSWORD", "secret")
                             .withLogConsumer(containerLog("pipeline-runtime-svc"))
                             .waitingFor(
                                     Wait.forHttps("/q/health")

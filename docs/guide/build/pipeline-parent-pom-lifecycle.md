@@ -19,7 +19,7 @@ Reference template: `template-generator-node/templates/parent-pom.hbs`
 > - [POM vs Layout Matrix](/guide/build/runtime-layouts/pom-layout-matrix)
 > - [Using Runtime Mapping](/guide/build/runtime-layouts/using-runtime-mapping)
 > - [Maven Migration Playbook](/guide/build/runtime-layouts/maven-migration)
-> - [CSV Payments POM Lifecycle](csv-payments-pom-lifecycle.md) for an example-specific variant
+> - [CSV Payments POM Lifecycle](/guide/build/csv-payments-pom-lifecycle) for an example-specific variant
 
 ## Build flow chart
 

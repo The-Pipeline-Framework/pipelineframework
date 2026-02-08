@@ -34,6 +34,28 @@ What the script does:
 ./mvnw -f examples/csv-payments/pom.pipeline-runtime.xml -DskipTests compile
 ```
 
+## Required runtime environment
+
+`pipeline-runtime-svc` requires explicit TLS path/password variables (no insecure defaults):
+
+```bash
+export SERVER_KEYSTORE_PATH=/deployments/server-keystore.jks
+export SERVER_KEYSTORE_PASSWORD=secret
+export CLIENT_TRUSTSTORE_PATH=/deployments/client-truststore.jks
+export CLIENT_TRUSTSTORE_PASSWORD=secret
+```
+
+Startup now validates these values and fails fast if they are missing.
+
+If you build container images in CI, set a deterministic image tag:
+
+```bash
+export IMAGE_REGISTRY=registry.example.com
+export IMAGE_GROUP=csv-payments
+export IMAGE_NAME=pipeline-runtime-svc
+export IMAGE_TAG="$GITHUB_SHA"
+```
+
 ## Operational note
 
 This topology is the concrete bridge between fully modular and monolith:

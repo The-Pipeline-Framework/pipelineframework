@@ -30,7 +30,7 @@ Legend:
 - `n/a`: not part of that topology
 - `depends`: required only if that module is present in the topology
 
-| Build concern | Modular (`pom.xml`) | Pipeline-runtime (target) | Monolith (`pom.monolith.xml`) |
+| Build concern | Modular (`pom.xml`) | Pipeline-runtime (`pom.pipeline-runtime.xml`) | Monolith (`pom.monolith.xml`) |
 | --- | --- | --- | --- |
 | Parent dev cert generation (`generate-dev-certs.sh`) | required | required | required |
 | Per-module role source roots (`target/generated-sources/pipeline/*`) | required | required | required |

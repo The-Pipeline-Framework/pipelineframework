@@ -61,7 +61,7 @@
             <id>windows-dev-certs</id>
             <activation>
                 <os>
-                    <family>Windows</family>
+                    <family>windows</family>
                 </os>
             </activation>
             <build>
