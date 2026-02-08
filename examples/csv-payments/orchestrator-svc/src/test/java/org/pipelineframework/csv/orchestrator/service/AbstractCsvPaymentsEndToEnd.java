@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterAll;
@@ -96,12 +97,12 @@ abstract class AbstractCsvPaymentsEndToEnd {
         ensureDevCerts();
 
         if (MONOLITH_LAYOUT) {
-            Startables.deepStart(java.util.stream.Stream.of(getPostgresContainer())).join();
+            Startables.deepStart(Stream.of(getPostgresContainer())).join();
             return;
         }
 
         Startables.deepStart(
-                        java.util.stream.Stream.of(
+                        Stream.of(
                                 getPostgresContainer(),
                                 getPersistenceService(),
                                 getInputCsvService(),

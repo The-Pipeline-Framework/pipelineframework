@@ -49,6 +49,8 @@ public class PersistenceManager {
     private List<PersistenceProvider<?>> providers;
     private final Set<Class<?>> warnedOrderingDefaults = ConcurrentHashMap.newKeySet();
     private final Set<Class<?>> warnedThreadSafetyDefaults = ConcurrentHashMap.newKeySet();
+    private volatile String cachedConfiguredProviderKey;
+    private volatile PersistenceProvider<?> cachedConfiguredProvider;
 
     @Inject
     Instance<PersistenceProvider<?>> providerInstance;
@@ -231,6 +233,23 @@ public class PersistenceManager {
      */
     private PersistenceProvider<?> resolveConfiguredProvider(String configuredClass) {
         String configured = configuredClass == null ? "" : configuredClass.trim();
+        PersistenceProvider<?> cached = cachedConfiguredProvider;
+        if (cached != null && configured.equals(cachedConfiguredProviderKey)) {
+            return cached;
+        }
+        synchronized (this) {
+            cached = cachedConfiguredProvider;
+            if (cached != null && configured.equals(cachedConfiguredProviderKey)) {
+                return cached;
+            }
+            PersistenceProvider<?> resolved = resolveConfiguredProviderUncached(configured, configuredClass);
+            cachedConfiguredProvider = resolved;
+            cachedConfiguredProviderKey = configured;
+            return resolved;
+        }
+    }
+
+    private PersistenceProvider<?> resolveConfiguredProviderUncached(String configured, String configuredClass) {
         boolean simpleNameConfigured = !configured.contains(".");
         for (PersistenceProvider<?> provider : providers) {
             Object unwrapped = provider instanceof ClientProxy
