@@ -16,9 +16,7 @@
 
 package org.pipelineframework.csv.service;
 
-import java.util.UUID;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 import lombok.Getter;
@@ -29,7 +27,6 @@ import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentOutput;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
-import org.pipelineframework.csv.common.dto.PaymentOutputDto;
 import org.pipelineframework.csv.common.mapper.PaymentOutputMapper;
 import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
 import org.pipelineframework.service.ReactiveService;
@@ -49,11 +46,6 @@ public class ProcessPaymentStatusService
 
   private static final Logger LOGGER = Logger.getLogger(ProcessPaymentStatusService.class);
 
-  @Inject
-  PaymentOutputMapper mapper;
-  @Inject
-  PaymentStatusMapper paymentStatusMapper;
-
   @Override
   public Uni<PaymentOutput> process(PaymentStatus paymentStatus) {
       AckPaymentSent ackPaymentSent = paymentStatus.getAckPaymentSent();
@@ -61,22 +53,19 @@ public class ProcessPaymentStatusService
       PaymentRecord paymentRecord = ackPaymentSent.getPaymentRecord();
       assert paymentRecord != null;
 
-    PaymentOutputDto dto =
-        PaymentOutputDto.builder()
-            .id(UUID.randomUUID())
-            .paymentStatus(paymentStatusMapper.toDto(paymentStatus))
-            .csvId(paymentRecord.getCsvId())
-            .recipient(paymentRecord.getRecipient())
-            .amount(paymentRecord.getAmount())
-            .currency(paymentRecord.getCurrency())
-            .conversationId(ackPaymentSent.getConversationId())
-            .status(ackPaymentSent.getStatus())
-            .message(paymentStatus.getMessage())
-            .fee(paymentStatus.getFee())
-            .build();
+      PaymentOutput output = new PaymentOutput();
+      output.setPaymentStatus(paymentStatus);
+      output.setCsvId(paymentRecord.getCsvId());
+      output.setRecipient(paymentRecord.getRecipient());
+      output.setAmount(paymentRecord.getAmount());
+      output.setCurrency(paymentRecord.getCurrency());
+      output.setConversationId(ackPaymentSent.getConversationId());
+      output.setStatus(ackPaymentSent.getStatus());
+      output.setMessage(paymentStatus.getMessage());
+      output.setFee(paymentStatus.getFee());
 
     return Uni.createFrom()
-            .item(mapper.fromDto(dto))
+            .item(output)
             .invoke(
                 result -> {
                   String serviceId = this.getClass().toString();

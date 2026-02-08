@@ -40,6 +40,8 @@ public class ProcessPaymentService implements ReactiveService<PaymentRecord, Pay
 
 Create MapStruct mappers that convert between gRPC, DTO, and domain types.
 
+Note: The Java type names you choose in your pipeline YAML (or the web UI) drive the DTO/domain fields and the generated proto mappings. See [Data Types](/guide/evolve/data-types) for the full list and defaults.
+
 ```java
 @Mapper(
     componentModel = "jakarta",

@@ -26,6 +26,12 @@ Typical Maven changes:
 - Remove per-step service modules from parent `<modules>`.
 - Keep `orchestrator-svc` module as separate deployable.
 
+In CSV Payments, the concrete migration assets currently implemented are:
+
+- `examples/csv-payments/pom.monolith.xml`
+- `examples/csv-payments/monolith-svc/pom.xml`
+- `examples/csv-payments/build-monolith.sh`
+
 Typical runtime mapping changes:
 
 - `layout: pipeline-runtime`

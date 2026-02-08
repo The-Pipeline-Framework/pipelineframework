@@ -1,13 +1,14 @@
-# Runtime Mapping (Phase 2)
+# Runtime Mapping
 
-Phase 2 introduces an optional runtime mapping file that lets users place pipeline steps (regular and synthetic) into modules and runtimes. The design keeps current scaffolding behavior by default, and adds a "majestic monolith" mode for teams that want a single runtime containing the orchestrator, services, and plugins.
+Runtime mapping is the official mechanism for controlling where orchestrator,
+regular steps, and synthetic/plugin side effects are placed.
 
-This guide is intentionally pragmatic: most teams want fewer deployables, less operational drift, and predictable wiring. The mapping is a controlled way to get there without turning TPF into a deployment DSL.
+It is optional and backward compatible:
 
-## Phase 1 vs Phase 2
+- If `pipeline.runtime.yaml` is absent, scaffold defaults remain in effect.
+- If `pipeline.runtime.yaml` is present, placement/validation/wiring follow that file.
 
-- **Phase 1 (today)**: module mapping is implicit (scaffold defaults) with optional overrides in `application.properties` (e.g., `pipeline.module.*`).
-- **Phase 2 (this guide)**: explicit YAML runtime mapping that drives placement, validation, and pipeline-transport-aware wiring.
+Use this section as the reference for mapping semantics.
 
 ## Goals
 
@@ -18,17 +19,43 @@ This guide is intentionally pragmatic: most teams want fewer deployables, less o
 - Support both gRPC and REST wiring without drift (transport remains pipeline-global).
 - Enable a single-runtime "monolith" option without introducing a deployment DSL.
 
-## Reality check: what Phase 2 provides (and what it does not)
+## What runtime mapping controls
 
-- **Provided now**: logical placement, validation, deterministic synthetic ids, and generated client/server wiring aligned to mapping + transport.
-- **Not provided now**: automatic Maven/module reshaping into a new physical topology.
-- **Implication**: a `layout: monolith` mapping is a logical target; it becomes a real monolith only when the project build is arranged to produce a monolith runtime artifact.
+- Logical placement of steps and synthetics.
+- Placement defaults and strictness rules.
+- Generated client/server wiring aligned to placement and transport.
+
+## What runtime mapping does not control
+
+- Maven module topology.
+- Number of physical deployables produced.
+- CI lane composition/build matrix.
+
+That separation is intentional. Runtime mapping defines logical architecture;
+Maven topology defines physical artifacts.
 
 ## Non-goals
 
 - A full deployment or orchestration configuration language.
 - Replacing existing build or runtime config formats.
 - Enforcing a single architecture style.
+
+## Relationship to Canvas and Maven
+
+Typical flow:
+
+1. Design application in Web UI Canvas Designer and download scaffold.
+2. Add or refine `pipeline.runtime.yaml`.
+3. Align Maven topology to target runtime shape (`modular`, `pipeline-runtime`, `monolith`).
+
+If steps 2 and 3 diverge, behaviour may be logically valid but operationally confusing.
+For example, `layout: monolith` with modular Maven still yields modular artifacts.
+
+See:
+
+- [Runtime Layouts and Build Topologies](/guide/build/runtime-layouts)
+- [Using Runtime Mapping](/guide/build/runtime-layouts/using-runtime-mapping)
+- [Maven Migration Playbook](/guide/build/runtime-layouts/maven-migration)
 
 ## Contents
 
@@ -38,8 +65,6 @@ This guide is intentionally pragmatic: most teams want fewer deployables, less o
 - [Validation, Migration, and Examples](/guide/evolve/runtime-mapping/validation-migration-examples)
 - [Build Topologies (What Is Real Today)](/guide/evolve/runtime-mapping/build-topologies)
 - [Cheat Sheet](/guide/evolve/runtime-mapping/cheat-sheet)
-- [TDD Plan](/guide/evolve/runtime-mapping/tdd-plan)
-- [Implementation Plan](/guide/evolve/runtime-mapping/implementation-plan)
 
 ## Quick orientation
 
@@ -47,6 +72,9 @@ This guide is intentionally pragmatic: most teams want fewer deployables, less o
 - **pipeline-runtime**: one runtime per pipeline, orchestrator stays separate. This is the default recommendation and keeps a minimal network boundary for future splits.
 - **monolith**: one runtime for everything (orchestrator + services + plugins).
 
-## A short story (why this exists)
+## Engineering Notes
 
-Most teams are not trying to win an architecture contest. They are trying to ship changes, keep costs predictable, and avoid rebuilding the world every time the pipeline grows. Runtime mapping is a small, explicit layer that lets you collapse or expand the topology without changing the code you already trust.
+These pages are implementation-oriented and mainly for maintainers:
+
+- [TDD Plan](/guide/evolve/runtime-mapping/tdd-plan)
+- [Implementation Plan](/guide/evolve/runtime-mapping/implementation-plan)
