@@ -67,7 +67,7 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-antrun-plugin</artifactId>
-                        <version>3.1.0</version>
+                        <version>3.2.0</version>
                         <executions>
                             <execution>
                                 <id>generate-dev-certs</id>
@@ -77,7 +77,10 @@
                                 </goals>
                                 <configuration>
                                     <target>
-                                        <fail message="CSV monolith cert generation is Unix-only. Run generate-dev-certs.sh from WSL/Linux/macOS before this build." />
+                                        <condition property="skip.certs.active">
+                                            <equals arg1="${skip.certs}" arg2="true" />
+                                        </condition>
+                                        <fail unless="skip.certs.active" message="CSV monolith cert generation is Unix-only. Run generate-dev-certs.sh from WSL/Linux/macOS before this build, or pass -Dskip.certs=true to bypass this check." />
                                     </target>
                                 </configuration>
                                 <inherited>false</inherited>

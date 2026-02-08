@@ -210,7 +210,7 @@ public class PersistenceManager {
             Object unwrapped = provider instanceof ClientProxy
                 ? ClientProxy.unwrap(provider)
                 : provider;
-            Class<?> providerClass = unwrapped.getClass();
+            Class<?> providerClass = unwrapped != null ? unwrapped.getClass() : provider.getClass();
             if (providerClass.getName().equals(configured)
                 || providerClass.getName().equals(configured + "_Subclass")) {
                 return provider;

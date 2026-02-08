@@ -17,6 +17,7 @@
 package org.pipelineframework.csv.orchestrator.service;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -448,6 +449,14 @@ abstract class AbstractCsvPaymentsEndToEnd {
         GenericContainer<?> statusService = getPaymentStatusService();
         GenericContainer<?> outputService = getOutputCsvService();
         GenericContainer<?> persistence = getPersistenceService();
+        pb.environment()
+            .put(
+                "SERVER_KEYSTORE_PATH",
+                DEV_CERTS_DIR.resolve("orchestrator-svc/server-keystore.jks").toString());
+        pb.environment()
+            .put(
+                "CLIENT_TRUSTSTORE_PATH",
+                DEV_CERTS_DIR.resolve("orchestrator-svc/client-truststore.jks").toString());
         putGrpcClient(pb, "PROCESS_FOLDER", inputService.getHost(), String.valueOf(inputService.getMappedPort(8444)));
         putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", inputService.getHost(), String.valueOf(inputService.getMappedPort(8444)));
         putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", paymentsService.getHost(), String.valueOf(paymentsService.getMappedPort(8445)));
@@ -543,7 +552,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
             2,Jane Smith,200.00,EUR
             3,Bob Johnson,300.00,GBP
             """
-                        .getBytes());
+                        .getBytes(StandardCharsets.UTF_8));
 
         // Create second test file with 2 records
         Path secondFile = Paths.get(TEST_E2E_DIR, "payments_second.csv");
@@ -554,7 +563,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
             1,Alice Brown,150.00,AUD
             2,Charlie Wilson,250.00,CAD
             """
-                        .getBytes());
+                        .getBytes(StandardCharsets.UTF_8));
 
         ensureWritable(firstFile);
         ensureWritable(secondFile);

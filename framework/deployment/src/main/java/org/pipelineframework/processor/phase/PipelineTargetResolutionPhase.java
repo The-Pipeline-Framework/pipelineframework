@@ -2,6 +2,7 @@ package org.pipelineframework.processor.phase;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 import org.pipelineframework.processor.PipelineCompilationContext;
@@ -31,7 +32,8 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
 
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
-        TransportMode transportMode = ctx.getTransportMode() == null ? TransportMode.GRPC : ctx.getTransportMode();
+        TransportMode mode = ctx.getTransportMode();
+        TransportMode transportMode = Objects.requireNonNullElse(mode, TransportMode.GRPC);
 
         // Apply transport targets and resolve client/server roles for each step model
         List<PipelineStepModel> updatedModels = new ArrayList<>();

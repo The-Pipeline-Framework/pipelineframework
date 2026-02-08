@@ -11,6 +11,7 @@ shift
 
 tmp_file="${target_dir}/monolith-source-files.txt"
 mkdir -p "$target_dir"
+trap 'rm -f "$tmp_file"' EXIT
 
 {
   for dir in "$@"; do
