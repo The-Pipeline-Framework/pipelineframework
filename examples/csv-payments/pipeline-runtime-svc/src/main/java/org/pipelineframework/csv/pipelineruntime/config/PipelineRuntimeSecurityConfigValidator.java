@@ -1,12 +1,14 @@
-package org.pipelineframework.csv.pipeline_runtime.config;
+package org.pipelineframework.csv.pipelineruntime.config;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 
 import io.quarkus.runtime.StartupEvent;
+import io.quarkus.runtime.configuration.ConfigUtils;
 import org.eclipse.microprofile.config.Config;
 import org.jboss.logging.Logger;
 
@@ -32,8 +34,9 @@ public class PipelineRuntimeSecurityConfigValidator {
         String trustStorePath = required(TRUSTSTORE_PATH_KEY, "CLIENT_TRUSTSTORE_PATH");
         required(TRUSTSTORE_PASSWORD_KEY, "CLIENT_TRUSTSTORE_PASSWORD");
 
-        String profile = config.getOptionalValue("quarkus.profile", String.class).orElse("prod");
-        if (!"dev".equalsIgnoreCase(profile) && !"test".equalsIgnoreCase(profile)) {
+        List<String> activeProfiles = ConfigUtils.getProfiles();
+        boolean devOrTestActive = activeProfiles.contains("dev") || activeProfiles.contains("test");
+        if (!devOrTestActive) {
             requireAbsolutePath(KEYSTORE_PATH_KEY, keyStorePath);
             requireAbsolutePath(TRUSTSTORE_PATH_KEY, trustStorePath);
         }

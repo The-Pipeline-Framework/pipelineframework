@@ -19,6 +19,14 @@
         <!-- Build `common` first, or pass -Dprotobuf.descriptor.path=... to point to a pre-built descriptor set. -->
         <protobuf.descriptor.path>${project.basedir}/../common/target/generated-sources/grpc/descriptor_set.dsc</protobuf.descriptor.path>
         <protobuf.descriptor.fileArg>-Aprotobuf.descriptor.file=${protobuf.descriptor.path}</protobuf.descriptor.fileArg>
+        <pipeline.runtime.source.root>${project.basedir}/..</pipeline.runtime.source.root>
+        <pipeline.runtime.source.dir.input>${pipeline.runtime.source.root}/input-csv-file-processing-svc/src/main/java</pipeline.runtime.source.dir.input>
+        <pipeline.runtime.source.dir.payments>${pipeline.runtime.source.root}/payments-processing-svc/src/main/java</pipeline.runtime.source.dir.payments>
+        <pipeline.runtime.source.dir.status>${pipeline.runtime.source.root}/payment-status-svc/src/main/java</pipeline.runtime.source.dir.status>
+        <pipeline.runtime.source.dir.output>${pipeline.runtime.source.root}/output-csv-file-processing-svc/src/main/java</pipeline.runtime.source.dir.output>
+        <pipeline.runtime.source.includes>input-csv-file-processing-svc/src/main/java/**/*.java,payments-processing-svc/src/main/java/**/*.java,payment-status-svc/src/main/java/**/*.java,output-csv-file-processing-svc/src/main/java/**/*.java</pipeline.runtime.source.includes>
+        <pipeline.runtime.source.excludes>payments-processing-svc/src/main/java/org/pipelineframework/csv/service/ExecutorProducer.java,output-csv-file-processing-svc/src/main/java/org/pipelineframework/csv/service/ExecutorProducer.java</pipeline.runtime.source.excludes>
+        <pipeline.runtime.duplicate.check.script>${pipeline.runtime.source.root}/build-tools/check-duplicate-sources.sh</pipeline.runtime.duplicate.check.script>
     </properties>
 
     <dependencies>
@@ -130,6 +138,7 @@
                         </goals>
                         <configuration>
                             <target>
+                                <delete dir="${project.build.directory}/pipeline-runtime-sources"/>
                                 <mkdir dir="${project.build.directory}/pipeline-runtime-sources"/>
                                 <condition property="is.windows">
                                     <os family="windows"/>
@@ -138,27 +147,18 @@
                                     pipeline-runtime-svc source aggregation runs a Unix shell script (`check-duplicate-sources.sh`). Run this module on Unix-like environments (Linux/macOS/WSL).
                                 </fail>
                                 <exec executable="bash" failonerror="true">
-                                    <arg value="${project.basedir}/../monolith-svc/check-duplicate-sources.sh"/>
+                                    <arg value="${pipeline.runtime.duplicate.check.script}"/>
                                     <arg value="${project.build.directory}/pipeline-runtime-sources"/>
-                                    <arg value="${project.basedir}/../input-csv-file-processing-svc/src/main/java"/>
-                                    <arg value="${project.basedir}/../payments-processing-svc/src/main/java"/>
-                                    <arg value="${project.basedir}/../payment-status-svc/src/main/java"/>
-                                    <arg value="${project.basedir}/../output-csv-file-processing-svc/src/main/java"/>
+                                    <arg value="${pipeline.runtime.source.dir.input}"/>
+                                    <arg value="${pipeline.runtime.source.dir.payments}"/>
+                                    <arg value="${pipeline.runtime.source.dir.status}"/>
+                                    <arg value="${pipeline.runtime.source.dir.output}"/>
                                 </exec>
                                 <copy todir="${project.build.directory}/pipeline-runtime-sources" overwrite="false">
-                                    <fileset dir="${project.basedir}/../input-csv-file-processing-svc/src/main/java"/>
-                                </copy>
-                                <copy todir="${project.build.directory}/pipeline-runtime-sources" overwrite="false">
-                                    <fileset dir="${project.basedir}/../payments-processing-svc/src/main/java">
-                                        <exclude name="org/pipelineframework/csv/service/ExecutorProducer.java"/>
-                                    </fileset>
-                                </copy>
-                                <copy todir="${project.build.directory}/pipeline-runtime-sources" overwrite="false">
-                                    <fileset dir="${project.basedir}/../payment-status-svc/src/main/java"/>
-                                </copy>
-                                <copy todir="${project.build.directory}/pipeline-runtime-sources" overwrite="false">
-                                    <fileset dir="${project.basedir}/../output-csv-file-processing-svc/src/main/java">
-                                        <exclude name="org/pipelineframework/csv/service/ExecutorProducer.java"/>
+                                    <fileset dir="${pipeline.runtime.source.root}">
+                                        <patternset
+                                                includes="${pipeline.runtime.source.includes}"
+                                                excludes="${pipeline.runtime.source.excludes}"/>
                                     </fileset>
                                 </copy>
                             </target>

@@ -72,6 +72,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
             System.getProperty("csv.runtime.layout", "modular").trim().toLowerCase();
     private static final boolean MONOLITH_LAYOUT = "monolith".equals(RUNTIME_LAYOUT);
     private static final boolean PIPELINE_RUNTIME_LAYOUT = "pipeline-runtime".equals(RUNTIME_LAYOUT);
+    // CI sets IMAGE_TAG to github.sha; local fallback should match dev image naming conventions.
     private static final String PIPELINE_RUNTIME_IMAGE =
             System.getenv().getOrDefault("IMAGE_REGISTRY", "registry.example.com")
                     + "/"
@@ -79,7 +80,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                     + "/"
                     + System.getenv().getOrDefault("IMAGE_NAME", "pipeline-runtime-svc")
                     + ":"
-                    + System.getenv().getOrDefault("IMAGE_TAG", "1.0.0");
+                    + System.getenv().getOrDefault("IMAGE_TAG", "latest");
 
     // Containers are lazily created so monolith mode does not require service cert binds.
     static PostgreSQLContainer<?> postgresContainer;
@@ -338,11 +339,13 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                     TEST_E2E_TARGET_DIR,
                                     BindMode.READ_WRITE)
                             .withFileSystemBind(
-                                    DEV_CERTS_DIR.resolve("orchestrator-svc/server-keystore.jks").toString(),
+                                    DEV_CERTS_DIR.resolve("pipeline-runtime-svc/server-keystore.jks")
+                                            .toString(),
                                     CONTAINER_KEYSTORE_PATH,
                                     BindMode.READ_ONLY)
                             .withFileSystemBind(
-                                    DEV_CERTS_DIR.resolve("orchestrator-svc/client-truststore.jks").toString(),
+                                    DEV_CERTS_DIR.resolve("pipeline-runtime-svc/client-truststore.jks")
+                                            .toString(),
                                     CONTAINER_TRUSTSTORE_PATH,
                                     BindMode.READ_ONLY)
                             .withExposedPorts(8445)
@@ -399,12 +402,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     /**
-     * Ensures development TLS certificates for the orchestrator exist, generating them if missing.
+     * Ensures development TLS certificates required by the active test topology exist.
      *
-     * <p>If the required keystore (orchestrator-svc/server-keystore.jks) and truststore
-     * (orchestrator-svc/client-truststore.jks) are not present under the configured dev
-     * certificates directory, this method invokes the repository script "../generate-dev-certs.sh"
-     * to create them.
+     * <p>If required cert files are missing under the configured dev certificates directory, this
+     * method invokes the repository script "../generate-dev-certs.sh" to create them.
      *
      * @throws IOException if certificate files are missing and cannot be generated, including when
      *                     running on Windows (generation is supported only on Unix-like systems),
@@ -412,9 +413,17 @@ abstract class AbstractCsvPaymentsEndToEnd {
      *                     generation process is interrupted.
      */
     private static void ensureDevCerts() throws IOException {
-        Path serverKeystore = DEV_CERTS_DIR.resolve("orchestrator-svc/server-keystore.jks");
-        Path truststore = DEV_CERTS_DIR.resolve("orchestrator-svc/client-truststore.jks");
-        if (Files.exists(serverKeystore) && Files.exists(truststore)) {
+        Path orchestratorKeystore = DEV_CERTS_DIR.resolve("orchestrator-svc/server-keystore.jks");
+        Path orchestratorTruststore = DEV_CERTS_DIR.resolve("orchestrator-svc/client-truststore.jks");
+        Path pipelineRuntimeKeystore = DEV_CERTS_DIR.resolve("pipeline-runtime-svc/server-keystore.jks");
+        Path pipelineRuntimeTruststore = DEV_CERTS_DIR.resolve("pipeline-runtime-svc/client-truststore.jks");
+
+        boolean orchestratorCertsReady =
+                Files.exists(orchestratorKeystore) && Files.exists(orchestratorTruststore);
+        boolean pipelineRuntimeCertsReady =
+                Files.exists(pipelineRuntimeKeystore) && Files.exists(pipelineRuntimeTruststore);
+
+        if (orchestratorCertsReady && (!PIPELINE_RUNTIME_LAYOUT || pipelineRuntimeCertsReady)) {
             return;
         }
 

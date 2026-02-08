@@ -149,7 +149,7 @@
                             <target>
                                 <mkdir dir="${project.build.directory}/monolith-sources"/>
                                 <exec executable="bash" failonerror="true">
-                                    <arg value="${project.basedir}/check-duplicate-sources.sh"/>
+                                    <arg value="${project.basedir}/../build-tools/check-duplicate-sources.sh"/>
                                     <arg value="${project.build.directory}/monolith-sources"/>
                                     <arg value="${project.basedir}/../input-csv-file-processing-svc/src/main/java"/>
                                     <arg value="${project.basedir}/../payments-processing-svc/src/main/java"/>
