@@ -53,6 +53,8 @@ public interface PaymentRecordMapper extends Mapper<PaymentRecordGrpc, PaymentRe
 
 The same unified mapper interface handles both inbound and outbound conversions, so no separate outbound mapper is needed when using the MapStruct approach.
 
+The Java type names you choose in your pipeline YAML (or the web UI) determine DTO/domain field types and the default proto mappings. See [Data Types](/guide/evolve/data-types) for the current type list and defaults.
+
 ## Working with DTOs (Optional)
 
 In most cases you do **not** need to work with DTOs inside your `ReactiveService`. The generated REST/gRPC adapters perform DTO ↔ domain conversion at the transport boundary, so your business logic stays domain-only.

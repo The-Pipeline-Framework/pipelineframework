@@ -11,7 +11,7 @@ hero:
   actions:
     - theme: brand
       text: Quick Start
-      link: /guide/getting-started/quick-start
+      link: /guide/getting-started/
     - theme: alt
       text: View on GitHub
       link: https://github.com/The-Pipeline-Framework/pipelineframework
@@ -62,17 +62,18 @@ The Pipeline Framework is a powerful tool for building reactive pipeline process
 - **Observability**: Built-in metrics, tracing, and logging support
 - **Error Handling**: Comprehensive error handling with DLQ support
 - **Backpressure Management**: Reactive processing with configurable backpressure strategies
+- **Test Integration**: [Testing with Testcontainers](/guide/development/testing)
 
 ## Getting Started
 
-New to The Pipeline Framework? Start with our [Quick Start](/guide/getting-started/quick-start) guide to learn the basics using the visual Canvas designer.
+New to The Pipeline Framework? Start with our [Quick Start](/guide/getting-started/) guide to learn the basics using the visual Canvas designer.
 
 ## Guides
 
 To get started with The Pipeline Framework, explore these guides:
 
 ### Build Fast
-- [Quick Start](/guide/getting-started/quick-start): Create a pipeline with the Canvas
+- [Quick Start](/guide/getting-started/): Create a pipeline with the Canvas
 - [Business Value](/guide/getting-started/business-value): Speed, ROI, and portability
 - [Canvas Designer Guide](/guide/getting-started/canvas-guide): Deep dive into the visual designer
 
@@ -92,11 +93,10 @@ To get started with The Pipeline Framework, explore these guides:
 - [Code a Step](/guide/development/code-a-step): Implement a step and its mappers
 - [Using Plugins](/guide/development/using-plugins): Apply plugins to pipelines
 - [Mappers and DTOs](/guide/development/mappers-and-dtos): Type conversions and mappings
-- [Dependency Management](/guide/build/dependency-management): Manage build-time and runtime deps
-- [Upgrade Guide](/guide/development/upgrade): Version changes and migrations
+- [Testing with Testcontainers](/guide/development/testing): Application testing with real dependencies
 - [Orchestrator Runtime](/guide/development/orchestrator-runtime): Coordinate pipeline execution
 
-### Observe
+### Operate
 - [Observability Overview](/guide/operations/observability/): Metrics, tracing, logs, and security notes
 - [Metrics](/guide/operations/observability/metrics): Instrumentation and dashboards
 - [Tracing](/guide/operations/observability/tracing): Distributed tracing and context propagation
