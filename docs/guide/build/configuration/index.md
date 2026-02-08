@@ -178,7 +178,7 @@ Prefix: `pipeline.telemetry`
 
 Item boundary types are compiled into telemetry metadata; runtime changes do not apply unless you rebuild the project.
 
-### Kill Switches
+### In-flight Probe (Kill Switch)
 
 Prefix: `pipeline.kill-switch`
 

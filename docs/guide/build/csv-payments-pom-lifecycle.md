@@ -13,9 +13,11 @@ Reference POM: `examples/csv-payments/pom.xml`
 > - [Pipeline Parent POM Lifecycle](pipeline-parent-pom-lifecycle.md)
 > - [Using the Canvas Designer](/guide/getting-started/canvas-guide)
 >
-> Runtime mapping does not automatically mutate this POM. It controls step and
-> synthetic placement and transport-aware generation; Maven topology changes are
-> handled separately through the migration workflow.
+> Runtime mapping does not automatically mutate this POM. It controls step
+> placement and synthetic placement (generated or inferred steps), and it also
+> governs transport-aware generation (generation that accounts for transport
+> constraints); Maven topology changes are handled separately through the
+> migration workflow.
 > See:
 > - [POM vs Layout Matrix](/guide/build/runtime-layouts/pom-layout-matrix)
 > - [Using Runtime Mapping](/guide/build/runtime-layouts/using-runtime-mapping)

@@ -10,7 +10,7 @@ then choose how many deployables you actually want to run.
 
 Defined in `pipeline.runtime.yaml`.
 
-- Decides where orchestrator, regular steps, and synthetic/plugin side effects are placed.
+- Decides where orchestrator, regular steps, and synthetic and plugin side effects are placed.
 - Values include `modular`, `pipeline-runtime`, and `monolith`.
 - Drives generated wiring and validation.
 

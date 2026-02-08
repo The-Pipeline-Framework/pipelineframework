@@ -44,7 +44,7 @@ Maven topology defines physical artifacts.
 
 Typical flow:
 
-1. Design app in Web UI Canvas Designer and download scaffold.
+1. Design application in Web UI Canvas Designer and download scaffold.
 2. Add or refine `pipeline.runtime.yaml`.
 3. Align Maven topology to target runtime shape (`modular`, `pipeline-runtime`, `monolith`).
 
@@ -53,7 +53,7 @@ For example, `layout: monolith` with modular Maven still yields modular artifact
 
 See:
 
-- [Runtime Layouts and Build Topologies](/guide/build/runtime-layouts/)
+- [Runtime Layouts and Build Topologies](/guide/build/runtime-layouts)
 - [Using Runtime Mapping](/guide/build/runtime-layouts/using-runtime-mapping)
 - [Maven Migration Playbook](/guide/build/runtime-layouts/maven-migration)
 

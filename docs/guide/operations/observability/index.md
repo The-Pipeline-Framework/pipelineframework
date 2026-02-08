@@ -78,7 +78,7 @@ Use the following metrics to observe the signal:
 - [Tracing](/guide/operations/observability/tracing)
 - [Logging](/guide/operations/observability/logging)
 - [Health Checks](/guide/operations/observability/health-checks)
-- [Kill Switches](/guide/operations/kill-switches)
+- [In-flight Probe](/guide/operations/in-flight-probe)
 - [Alerting](/guide/operations/observability/alerting)
 - [Security Notes](/guide/operations/observability/security)
 
