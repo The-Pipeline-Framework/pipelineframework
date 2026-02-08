@@ -24,8 +24,7 @@
         <pipeline.runtime.source.dir.payments>${pipeline.runtime.source.root}/payments-processing-svc/src/main/java</pipeline.runtime.source.dir.payments>
         <pipeline.runtime.source.dir.status>${pipeline.runtime.source.root}/payment-status-svc/src/main/java</pipeline.runtime.source.dir.status>
         <pipeline.runtime.source.dir.output>${pipeline.runtime.source.root}/output-csv-file-processing-svc/src/main/java</pipeline.runtime.source.dir.output>
-        <pipeline.runtime.source.includes>input-csv-file-processing-svc/src/main/java/**/*.java,payments-processing-svc/src/main/java/**/*.java,payment-status-svc/src/main/java/**/*.java,output-csv-file-processing-svc/src/main/java/**/*.java</pipeline.runtime.source.includes>
-        <pipeline.runtime.source.excludes>payments-processing-svc/src/main/java/org/pipelineframework/csv/service/ExecutorProducer.java,output-csv-file-processing-svc/src/main/java/org/pipelineframework/csv/service/ExecutorProducer.java</pipeline.runtime.source.excludes>
+        <pipeline.runtime.source.exclude.executor>org/pipelineframework/csv/service/ExecutorProducer.java</pipeline.runtime.source.exclude.executor>
         <pipeline.runtime.duplicate.check.script>${pipeline.runtime.source.root}/build-tools/check-duplicate-sources.sh</pipeline.runtime.duplicate.check.script>
     </properties>
 
@@ -155,10 +154,19 @@
                                     <arg value="${pipeline.runtime.source.dir.output}"/>
                                 </exec>
                                 <copy todir="${project.build.directory}/pipeline-runtime-sources">
-                                    <fileset dir="${pipeline.runtime.source.root}">
-                                        <patternset
-                                                includes="${pipeline.runtime.source.includes}"
-                                                excludes="${pipeline.runtime.source.excludes}"/>
+                                    <fileset dir="${pipeline.runtime.source.dir.input}"/>
+                                </copy>
+                                <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                    <fileset dir="${pipeline.runtime.source.dir.payments}">
+                                        <exclude name="${pipeline.runtime.source.exclude.executor}"/>
+                                    </fileset>
+                                </copy>
+                                <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                    <fileset dir="${pipeline.runtime.source.dir.status}"/>
+                                </copy>
+                                <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                    <fileset dir="${pipeline.runtime.source.dir.output}">
+                                        <exclude name="${pipeline.runtime.source.exclude.executor}"/>
                                     </fileset>
                                 </copy>
                             </target>

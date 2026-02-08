@@ -1,6 +1,7 @@
 package org.pipelineframework.csv.pipelineruntime.config;
 
 import java.nio.file.Path;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Paths;
 import java.util.List;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -24,21 +25,25 @@ public class PipelineRuntimeSecurityConfigValidator {
     private static final String KEYSTORE_PASSWORD_KEY = "quarkus.http.ssl.certificate.key-store-password";
     private static final String TRUSTSTORE_PATH_KEY = "quarkus.tls.pipeline-client.trust-store.jks.path";
     private static final String TRUSTSTORE_PASSWORD_KEY = "quarkus.tls.pipeline-client.trust-store.jks.password";
+    private static final String KEYSTORE_PATH_ENV = "SERVER_KEYSTORE_PATH";
+    private static final String KEYSTORE_PASSWORD_ENV = "SERVER_KEYSTORE_PASSWORD";
+    private static final String TRUSTSTORE_PATH_ENV = "CLIENT_TRUSTSTORE_PATH";
+    private static final String TRUSTSTORE_PASSWORD_ENV = "CLIENT_TRUSTSTORE_PASSWORD";
 
     @Inject
     Config config;
 
     void onStart(@Observes StartupEvent ignored) {
-        String keyStorePath = required(KEYSTORE_PATH_KEY, "SERVER_KEYSTORE_PATH");
-        required(KEYSTORE_PASSWORD_KEY, "SERVER_KEYSTORE_PASSWORD");
-        String trustStorePath = required(TRUSTSTORE_PATH_KEY, "CLIENT_TRUSTSTORE_PATH");
-        required(TRUSTSTORE_PASSWORD_KEY, "CLIENT_TRUSTSTORE_PASSWORD");
+        String keyStorePath = required(KEYSTORE_PATH_KEY, KEYSTORE_PATH_ENV);
+        required(KEYSTORE_PASSWORD_KEY, KEYSTORE_PASSWORD_ENV);
+        String trustStorePath = required(TRUSTSTORE_PATH_KEY, TRUSTSTORE_PATH_ENV);
+        required(TRUSTSTORE_PASSWORD_KEY, TRUSTSTORE_PASSWORD_ENV);
 
         List<String> activeProfiles = ConfigUtils.getProfiles();
         boolean devOrTestActive = activeProfiles.contains("dev") || activeProfiles.contains("test");
         if (!devOrTestActive) {
-            requireAbsolutePath(KEYSTORE_PATH_KEY, keyStorePath);
-            requireAbsolutePath(TRUSTSTORE_PATH_KEY, trustStorePath);
+            requireAbsolutePath(KEYSTORE_PATH_KEY, KEYSTORE_PATH_ENV, keyStorePath);
+            requireAbsolutePath(TRUSTSTORE_PATH_KEY, TRUSTSTORE_PATH_ENV, trustStorePath);
         }
     }
 
@@ -51,13 +56,21 @@ public class PipelineRuntimeSecurityConfigValidator {
         return value.trim();
     }
 
-    private void requireAbsolutePath(String key, String value) {
-        Path path = Paths.get(value);
+    private void requireAbsolutePath(String key, String envName, String value) {
+        Path path;
+        try {
+            path = Paths.get(value);
+        } catch (InvalidPathException e) {
+            throw new IllegalStateException(
+                "Invalid TLS path for '" + key + "'. Provide a valid absolute path via "
+                    + envName + ". Value: " + value,
+                e);
+        }
         Path normalized = path.normalize();
         if (!normalized.isAbsolute()) {
             throw new IllegalStateException("TLS path '" + key + "' must be absolute in non-dev profiles: " + value);
         }
-        if (containsParentTraversal(path) || containsParentTraversal(normalized) || normalized.toString().contains("..")) {
+        if (containsParentTraversal(path) || containsParentTraversal(normalized)) {
             throw new IllegalStateException("TLS path '" + key + "' must not contain parent traversal segments: " + value);
         }
         LOG.debugf("Validated absolute TLS path for %s", key);
