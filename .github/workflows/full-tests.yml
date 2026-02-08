@@ -63,6 +63,20 @@ jobs:
             -Dit.test=CsvPaymentsEndToEndIT \
             verify
 
+      - name: Build csv-payments pipeline-runtime topology
+        run: |
+          ./examples/csv-payments/build-pipeline-runtime.sh -DskipTests
+
+      - name: Run csv-payments pipeline-runtime topology + E2E
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.pipeline-runtime.xml \
+            -pl orchestrator-svc \
+            -Dcsv.runtime.layout=pipeline-runtime \
+            -Dtest=PipelineRuntimeTopologyTest \
+            -Dit.test=CsvPaymentsPipelineRuntimeEndToEndIT \
+            verify
+
       - name: Dump integration test reports on failure
         if: failure()
         run: |

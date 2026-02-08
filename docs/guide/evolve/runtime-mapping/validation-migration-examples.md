@@ -19,7 +19,7 @@ Errors should be actionable and deterministic, for example:
 - `RUNTIME_MAP_MISSING_STEP`: Step "ValidateCard" has no module assignment in strict mode.
 - `RUNTIME_MAP_DUPLICATE_STEP`: Step "ValidateCard" mapped to modules "A" and "B".
 - `RUNTIME_MAP_UNKNOWN_MODULE`: Module "payments-core" not declared.
-- `RUNTIME_MAP_SYNTHETIC_AMBIGUOUS`: "ObserveLatency.SideEffect" has 2 instances; use @before/@after/@<index>.
+- `RUNTIME_MAP_SYNTHETIC_AMBIGUOUS`: "ObserveLatency.SideEffect" has 2 instances; use `@before`/`@after`/`@<index>`.
 
 For `RUNTIME_MAP_SYNTHETIC_AMBIGUOUS`, suffixes select a specific synthetic instance:
 `@before` means the synthetic attached before the target step, `@after` means after it,

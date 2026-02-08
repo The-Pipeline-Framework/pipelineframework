@@ -3,39 +3,20 @@ layout: pipeline-runtime
 validation: strict
 
 defaults:
-  runtime: payments
-  module: per-step
+  runtime: pipeline
+  module: pipeline-runtime-svc
   synthetic:
-    module: plugin
+    module: persistence-svc
 
 runtimes:
-  payments: {}
+  pipeline: {}
+  plugin: {}
   orchestrator: {}
 
 modules:
-  input-csv-file-processing-svc:
-    runtime: payments
-  payments-processing-svc:
-    runtime: payments
-  payment-status-svc:
-    runtime: payments
-  output-csv-file-processing-svc:
-    runtime: payments
+  pipeline-runtime-svc:
+    runtime: pipeline
   persistence-svc:
-    runtime: payments
+    runtime: plugin
   orchestrator-svc:
     runtime: orchestrator
-
-steps:
-  process-folder:
-    module: input-csv-file-processing-svc
-  process-csv-payments-input:
-    module: input-csv-file-processing-svc
-  process-send-payment-record:
-    module: payments-processing-svc
-  process-ack-payment-sent:
-    module: payments-processing-svc
-  process-payment-status:
-    module: payment-status-svc
-  process-csv-payments-output-file:
-    module: output-csv-file-processing-svc

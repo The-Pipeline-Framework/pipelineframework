@@ -26,6 +26,12 @@ Typical Maven changes:
 - Remove per-step service modules from parent `<modules>`.
 - Keep `orchestrator-svc` module as separate deployable.
 
+In CSV Payments, this is implemented as:
+
+- `examples/csv-payments/pom.pipeline-runtime.xml`
+- `examples/csv-payments/pipeline-runtime-svc/pom.xml`
+- `examples/csv-payments/build-pipeline-runtime.sh`
+
 Typical runtime mapping changes:
 
 - `layout: pipeline-runtime`
@@ -56,6 +62,7 @@ Prefer explicit flags/scripts over profiles for clarity. Example pattern:
 
 ```bash
 ./examples/csv-payments/build-monolith.sh -DskipTests
+./examples/csv-payments/build-pipeline-runtime.sh -DskipTests
 ./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc \
   -Dcsv.runtime.layout=monolith -Dtest=CsvPaymentsEndToEndIT test
 ```
