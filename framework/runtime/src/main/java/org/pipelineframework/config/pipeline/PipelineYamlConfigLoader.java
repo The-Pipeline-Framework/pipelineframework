@@ -25,18 +25,40 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.logging.Logger;
 
+import org.pipelineframework.config.TransportOverrideResolver;
 import org.yaml.snakeyaml.Yaml;
 
 /**
  * Loads pipeline.yaml configuration for runtime usage.
  */
 public class PipelineYamlConfigLoader {
+    private static final Logger LOG = Logger.getLogger(PipelineYamlConfigLoader.class.getName());
+    private final Function<String, String> propertyLookup;
+    private final Function<String, String> envLookup;
 
     /**
-     * Creates a new PipelineYamlConfigLoader.
-     */
+         * Construct a loader that reads system properties and environment variables.
+         *
+         * This default constructor delegates to the configurable constructor using
+         * System::getProperty for property lookup and System::getenv for environment lookup.
+         */
     public PipelineYamlConfigLoader() {
+        this(System::getProperty, System::getenv);
+    }
+
+    /**
+     * Creates a PipelineYamlConfigLoader that uses the provided lookup functions to resolve
+     * system properties and environment variables when parsing pipeline YAML.
+     *
+     * @param propertyLookup function that maps a property name to its value; if null, a lookup that always returns null is used
+     * @param envLookup      function that maps an environment variable name to its value; if null, a lookup that always returns null is used
+     */
+    public PipelineYamlConfigLoader(Function<String, String> propertyLookup, Function<String, String> envLookup) {
+        this.propertyLookup = propertyLookup == null ? key -> null : propertyLookup;
+        this.envLookup = envLookup == null ? key -> null : envLookup;
     }
 
     /**
@@ -95,6 +117,18 @@ public class PipelineYamlConfigLoader {
         return yaml.load(reader);
     }
 
+    /**
+     * Parses the YAML root object and constructs a PipelineYamlConfig.
+     *
+     * Reads top-level fields (basePackage, transport), applies a transport override if present,
+     * normalizes known transport values (defaults to "GRPC" for unknown transports), and
+     * reads pipeline steps and aspects from the root map.
+     *
+     * @param root   the deserialized YAML root; expected to be a Map
+     * @param source descriptive source used in error messages (e.g., file path or resource)
+     * @return a PipelineYamlConfig populated from the provided YAML root
+     * @throws IllegalStateException if the root is not a Map
+     */
     private PipelineYamlConfig parseRoot(Object root, String source) {
         if (!(root instanceof Map<?, ?> rootMap)) {
             throw new IllegalStateException("Pipeline config root is not a map for " + source);
@@ -102,12 +136,48 @@ public class PipelineYamlConfigLoader {
 
         String basePackage = readString(rootMap, "basePackage");
         String transport = readString(rootMap, "transport");
+        boolean fromOverride = false;
+        String transportOverride = resolveTransportOverride();
+        if (transportOverride != null && !transportOverride.isBlank()) {
+            transport = transportOverride;
+            fromOverride = true;
+        }
+        if (transport != null && !transport.isBlank()) {
+            String normalized = TransportOverrideResolver.normalizeKnownTransport(transport);
+            if (normalized != null) {
+                transport = normalized;
+            } else {
+                if (fromOverride) {
+                    LOG.warning("Unknown transport override '" + transport
+                        + "'; defaulting pipeline transport to GRPC.");
+                } else {
+                    LOG.warning("Unknown transport in YAML config '" + transport
+                        + "'; defaulting pipeline transport to GRPC.");
+                }
+                transport = "GRPC";
+            }
+        }
         List<PipelineYamlStep> steps = readSteps(rootMap);
         List<PipelineYamlAspect> aspects = readAspects(rootMap);
 
         return new PipelineYamlConfig(basePackage, transport, steps, aspects);
     }
 
+    /**
+     * Resolve a transport override using the configured property and environment lookups.
+     *
+     * @return the transport override value if present, or {@code null} when no override is configured
+     */
+    private String resolveTransportOverride() {
+        return TransportOverrideResolver.resolveOverride(propertyLookup, envLookup);
+    }
+
+    /**
+     * Parse the "steps" entry from the YAML root map into a list of PipelineYamlStep objects.
+     *
+     * @param rootMap the parsed YAML root map potentially containing a "steps" entry
+     * @return a list of PipelineYamlStep instances for entries that have a non-blank name and non-blank output type; returns an empty list if no valid "steps" section is present
+     */
     private List<PipelineYamlStep> readSteps(Map<?, ?> rootMap) {
         Object stepsObj = rootMap.get("steps");
         if (!(stepsObj instanceof Iterable<?> steps)) {

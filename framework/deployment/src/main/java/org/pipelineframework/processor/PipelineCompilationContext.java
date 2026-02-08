@@ -14,6 +14,7 @@ import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
 import org.pipelineframework.processor.ir.PipelineOrchestratorModel;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.TransportMode;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolution;
 
@@ -64,17 +65,16 @@ public class PipelineCompilationContext {
     private boolean pluginHost;
     @Setter
     private boolean orchestratorGenerated;
-    @Setter
-    private boolean transportModeGrpc; // true for GRPC, false for REST
+    private TransportMode transportMode;
 
     @Setter
     private DescriptorProtos.FileDescriptorSet descriptorSet;
     
     /**
-     * Creates a new compilation context for the current annotation processing round.
+     * Initialize a compilation context for the given annotation processing round.
      *
-     * @param processingEnv the processing environment for compiler utilities and messaging
-     * @param roundEnv the round environment containing annotated elements
+     * @param processingEnv the processing environment providing compiler utilities and messaging
+     * @param roundEnv the round environment containing the annotated elements visible in this round
      */
     public PipelineCompilationContext(ProcessingEnvironment processingEnv, RoundEnvironment roundEnv) {
         this.processingEnv = processingEnv;
@@ -88,7 +88,7 @@ public class PipelineCompilationContext {
         this.rendererBindings = Map.of();
         this.pluginHost = false;
         this.orchestratorGenerated = false;
-        this.transportModeGrpc = true; // Default to GRPC
+        this.transportMode = TransportMode.GRPC;
     }
 
     // Getters for additional properties
@@ -174,12 +174,39 @@ public class PipelineCompilationContext {
     }
 
     /**
-     * Returns whether the transport mode is gRPC.
+     * Indicates whether the current transport mode is gRPC.
      *
-     * @return true for gRPC transport mode, false for REST transport mode
+     * @return true if the transport mode is GRPC, false otherwise.
      */
     public boolean isTransportModeGrpc() {
-        return transportModeGrpc;
+        return transportMode == TransportMode.GRPC;
+    }
+
+    /**
+     * Determines if the current transport mode is REST.
+     *
+     * @return true if the transport mode is REST, false otherwise.
+     */
+    public boolean isTransportModeRest() {
+        return transportMode == TransportMode.REST;
+    }
+
+    /**
+     * Indicates whether the transport mode is Local (in-process).
+     *
+     * @return `true` if the transport mode is Local, `false` otherwise
+     */
+    public boolean isTransportModeLocal() {
+        return transportMode == TransportMode.LOCAL;
+    }
+
+    /**
+     * Access the configured transport mode for this compilation context.
+     *
+     * @return the configured TransportMode
+     */
+    public TransportMode getTransportMode() {
+        return transportMode;
     }
 
     /**
@@ -257,21 +284,21 @@ public class PipelineCompilationContext {
     }
 
     /**
-     * Sets whether orchestrator artifacts should be generated.
+     * Enable or disable generation of orchestrator artifacts for this compilation context.
      *
-     * @param orchestratorGenerated whether orchestrator artifacts should be generated
+     * @param orchestratorGenerated true to generate orchestrator artifacts, false to skip generation
      */
     public void setOrchestratorGenerated(boolean orchestratorGenerated) {
         this.orchestratorGenerated = orchestratorGenerated;
     }
 
     /**
-     * Sets whether the transport mode is gRPC.
+     * Set the transport mode for the compilation context.
      *
-     * @param transportModeGrpc true for gRPC transport mode, false for REST transport mode
+     * @param transportMode the transport mode to assign; if `null`, defaults to {@link TransportMode#GRPC}
      */
-    public void setTransportModeGrpc(boolean transportModeGrpc) {
-        this.transportModeGrpc = transportModeGrpc;
+    public void setTransportMode(TransportMode transportMode) {
+        this.transportMode = transportMode == null ? TransportMode.GRPC : transportMode;
     }
 
     /**

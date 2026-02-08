@@ -21,31 +21,38 @@ import {withMermaid} from "vitepress-plugin-mermaid"
 // Note: This adds significant size to the bundle due to Mermaid's dependencies
 const mainSidebar = [
     {
-        text: 'Build',
-        collapsed: true,
+        text: 'Build Fast',
         items: [
             {text: 'Overview', link: '/guide/'},
             {text: 'Quick Start', link: '/guide/getting-started/quick-start'},
             {text: 'Canvas Guide', link: '/guide/getting-started/canvas-guide'},
-            {text: 'Business Value', link: '/guide/getting-started/business-value'},
+            {text: 'Business Value', link: '/guide/getting-started/business-value'}
+        ]
+    },
+    {
+        text: 'Design',
+        items: [
+            {text: 'Application Structure', link: '/guide/design/application-structure'},
+            {text: 'Common Module Structure', link: '/guide/design/common-module-structure'},
+            {text: 'Expansion and Reduction', link: '/guide/design/expansion-and-reduction'},
+            {text: 'Runtime Topology Strategy', link: '/guide/design/runtime-topology-strategy'}
+        ]
+    },
+    {
+        text: 'Build',
+        items: [
             {text: 'Pipeline Compilation', link: '/guide/build/pipeline-compilation'},
+            {text: 'Runtime Layouts and Build Topologies', link: '/guide/build/runtime-layouts/'},
+            {text: 'Using Runtime Mapping', link: '/guide/build/runtime-layouts/using-runtime-mapping'},
+            {text: 'Maven Migration Playbook', link: '/guide/build/runtime-layouts/maven-migration'},
+            {text: 'CSV Payments Monolith Walkthrough', link: '/guide/build/runtime-layouts/csv-payments-monolith'},
             {text: 'Configuration Reference', link: '/guide/build/configuration/'},
             {text: 'Dependency Management', link: '/guide/build/dependency-management'},
             {text: 'Best Practices', link: '/guide/operations/best-practices'}
         ]
     },
     {
-        text: 'Design',
-        collapsed: true,
-        items: [
-            {text: 'Application Structure', link: '/guide/design/application-structure'},
-            {text: 'Common Module Structure', link: '/guide/design/common-module-structure'},
-            {text: 'Expansion and Reduction', link: '/guide/design/expansion-and-reduction'}
-        ]
-    },
-    {
         text: 'Develop',
-        collapsed: true,
         items: [
             {text: '@PipelineStep Annotation', link: '/guide/development/pipeline-step'},
             {text: 'Code a Step', link: '/guide/development/code-a-step'},
@@ -60,7 +67,6 @@ const mainSidebar = [
     },
     {
         text: 'Observe',
-        collapsed: true,
         items: [
             {text: 'Observability Overview', link: '/guide/operations/observability/'},
             {text: 'Metrics', link: '/guide/operations/observability/metrics'},
@@ -74,7 +80,6 @@ const mainSidebar = [
     },
     {
         text: 'Plugins',
-        collapsed: true,
         items: [
             {text: 'Using Plugins', link: '/guide/development/using-plugins'},
             {text: 'Writing a Plugin', link: '/guide/plugins/writing-a-plugin'},
@@ -90,7 +95,6 @@ const mainSidebar = [
     },
     {
         text: 'Extend',
-        collapsed: true,
         items: [
             {text: 'Orchestrator Extensions', link: '/guide/development/extension/orchestrator-runtime'},
             {text: 'Reactive Service Extensions', link: '/guide/development/extension/reactive-services'},
@@ -100,7 +104,6 @@ const mainSidebar = [
     },
     {
         text: 'Evolve',
-        collapsed: true,
         items: [
             {text: 'Architecture', link: '/guide/evolve/architecture'},
             {text: 'Annotation Processor Architecture', link: '/guide/evolve/annotation-processor-architecture'},
@@ -119,7 +122,6 @@ const mainSidebar = [
     },
     {
         text: 'Additional Resources',
-        collapsed: true,
         items: [
             {text: 'Versions', link: '/versions'}
         ]

@@ -258,8 +258,31 @@ sequenceDiagram
 ### Building the Application
 
 ```bash
-mvn clean package
+./mvnw -f examples/csv-payments/pom.xml clean package
 ```
+
+### Build Targets
+
+#### Modular build (default)
+
+```bash
+./mvnw -f examples/csv-payments/pom.xml clean package
+```
+
+#### Monolith build target
+
+```bash
+./examples/csv-payments/build-monolith.sh
+```
+
+`build-monolith.sh` applies the monolith runtime mapping, builds `examples/csv-payments/pom.monolith.xml`,
+sets `-Dpipeline.transport=LOCAL` for the build, and restores the previous `config/pipeline.runtime.yaml` afterwards.
+When running the monolith runtime, set `PIPELINE_TRANSPORT=LOCAL` (or pass `-Dpipeline.transport=LOCAL`) so the
+pipeline order resolves to `LocalClientStep` classes.
+
+Note: the end-to-end test lives under `orchestrator-svc`, but in monolith mode it launches the
+`monolith-svc` runnable JAR. The `orchestrator-svc` module is the test harness; the monolith runtime
+is in `monolith-svc`.
 
 ### Running the Application
 

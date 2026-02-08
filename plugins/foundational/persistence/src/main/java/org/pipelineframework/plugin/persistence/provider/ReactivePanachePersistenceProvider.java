@@ -34,7 +34,7 @@ import org.pipelineframework.persistence.PersistenceProvider;
  */
 @ApplicationScoped
 @Unremovable
-@ParallelismHint(ordering = OrderingRequirement.STRICT_ADVISED, threadSafety = ThreadSafety.SAFE)
+@ParallelismHint(ordering = OrderingRequirement.STRICT_ADVISED, threadSafety = ThreadSafety.UNSAFE)
 public class ReactivePanachePersistenceProvider implements PersistenceProvider<Object> {
 
   private static final Logger LOG = Logger.getLogger(ReactivePanachePersistenceProvider.class);
@@ -51,39 +51,50 @@ public class ReactivePanachePersistenceProvider implements PersistenceProvider<O
   }
 
   /**
-   * Persists a Panache entity using Hibernate Reactive.
+   * Persist the provided JPA entity within a reactive transaction.
+   *
+   * @param entity the JPA entity to persist
+   * @return the same entity instance after persistence
    */
   @Override
   public Uni<Object> persist(Object entity) {
     LOG.tracef("Persisting entity of type %s", entity.getClass().getSimpleName());
 
-    return Panache.getSession()
-        .onItem()
-        .transformToUni(session -> 
-            session.withTransaction(ignored -> session.persist(entity)))
-        .replaceWith(Uni.createFrom().item(entity))
+    return Panache.withTransaction(
+            () ->
+                Panache.getSession()
+                    .onItem()
+                    .transformToUni(session -> session.persist(entity).replaceWith(entity)))
         .onFailure()
         .transform(
             t ->
                 new PersistenceException(
                     "Failed to persist entity of type " + entity.getClass().getName(), t));
-    }
+  }
 
-    @Override
-    public Uni<Object> persistOrUpdate(Object entity) {
-        LOG.tracef("Persisting or updating entity of type %s", entity.getClass().getSimpleName());
+  /**
+   * Persists a new entity or merges an existing entity within a reactive Panache transaction.
+   *
+   * <p>On failure, the operation results in a PersistenceException that wraps the original cause.
+   *
+   * @param entity the JPA entity instance to persist or merge
+   * @return the managed entity after persist or merge
+   */
+  @Override
+  public Uni<Object> persistOrUpdate(Object entity) {
+    LOG.tracef("Persisting or updating entity of type %s", entity.getClass().getSimpleName());
 
-        return Panache.getSession()
-            .onItem()
-            .transformToUni(session ->
-                session.withTransaction(ignored -> session.merge(entity)))
-            .replaceWith(Uni.createFrom().item(entity))
-            .onFailure()
-            .transform(
-                t ->
-                    new PersistenceException(
-                        "Failed to persist or update entity of type " + entity.getClass().getName(), t));
-    }
+    return Panache.withTransaction(
+            () ->
+                Panache.getSession()
+                    .onItem()
+                    .transformToUni(session -> session.merge(entity)))
+        .onFailure()
+        .transform(
+            t ->
+                new PersistenceException(
+                    "Failed to persist or update entity of type " + entity.getClass().getName(), t));
+  }
 
     /**
      * Checks whether the provider supports the given entity instance.
@@ -95,9 +106,14 @@ public class ReactivePanachePersistenceProvider implements PersistenceProvider<O
         return entity != null && entity.getClass().isAnnotationPresent(Entity.class);
     }
 
+    /**
+     * Report the provider's thread-safety level.
+     *
+     * @return `ThreadSafety.UNSAFE` indicating the provider is not safe for concurrent use across threads.
+     */
     @Override
     public ThreadSafety threadSafety() {
-        return ThreadSafety.SAFE;
+        return ThreadSafety.UNSAFE;
     }
 
     /**

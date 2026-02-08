@@ -19,8 +19,10 @@ import org.pipelineframework.processor.config.PipelineAspectConfigLoader;
 import org.pipelineframework.processor.config.PipelineRuntimeMappingLoader;
 import org.pipelineframework.processor.config.PipelineRuntimeMappingLocator;
 import org.pipelineframework.processor.config.PipelineStepConfigLoader;
+import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
 import org.pipelineframework.processor.ir.PipelineOrchestratorModel;
+import org.pipelineframework.processor.ir.TransportMode;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 
 /**
@@ -41,12 +43,12 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Performs discovery of pipeline annotated elements, configurations, aspects, transport mode, and models,
-     * then stores the resulting data on the provided compilation context.
+     * Discover pipeline annotated elements, configuration files, aspects, transport mode, and orchestrator models,
+     * then store the discovered artifacts on the provided compilation context.
      *
-     * @param ctx the pipeline compilation context used to read the processing environment and options,
-     *            and to store discovered artifacts (generated sources root, module directory/name, plugin host flag,
-     *            aspect models, template config, runtime mapping, transport mode, and orchestrator models)
+     * @param ctx the compilation context used to read the processing environment and options and to receive discovered
+     *            artifacts (generated sources root, module directory/name, plugin host flag, aspect models,
+     *            template config, runtime mapping, transport mode, and orchestrator models)
      * @throws Exception if a fatal error occurs while locating or loading required configuration or models
      */
     @Override
@@ -82,8 +84,8 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         ctx.setRuntimeMapping(runtimeMapping);
 
         // Determine transport mode
-        boolean isGrpc = loadPipelineTransport(ctx);
-        ctx.setTransportModeGrpc(isGrpc);
+        TransportMode transportMode = loadPipelineTransport(ctx);
+        ctx.setTransportMode(transportMode);
 
         // Discover orchestrator models if present
         List<PipelineOrchestratorModel> orchestratorModels = discoverOrchestratorModels(ctx, orchestratorElements);
@@ -110,6 +112,12 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         }
     }
 
+    /**
+     * Locates and loads the pipeline template configuration from the module directory.
+     *
+     * @param ctx compilation context used to determine the module directory and to report warnings
+     * @return the loaded PipelineTemplateConfig, or `null` if no configuration is present or if loading fails (a warning is emitted via the processing environment when available)
+     */
     private PipelineTemplateConfig loadPipelineTemplateConfig(PipelineCompilationContext ctx) {
         PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
         Path moduleDir = ctx.getModuleDir();
@@ -130,12 +138,24 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         }
     }
 
-    private boolean loadPipelineTransport(PipelineCompilationContext ctx) {
+    /**
+     * Resolve the pipeline transport mode from the module's pipeline step configuration.
+     *
+     * Locates a pipeline YAML under the context's module directory, reads the configured
+     * transport name and converts it to a TransportMode. If the configuration is missing,
+     * the transport value is blank, unrecognized, or an error occurs while loading the
+     * configuration, this method returns TransportMode.GRPC and emits a warning via the
+     * processing environment when available.
+     *
+     * @param ctx the pipeline compilation context used to locate the module directory and to report warnings
+     * @return the determined TransportMode; defaults to {@link TransportMode#GRPC} when configuration is missing, blank, unknown, or on load failure
+     */
+    private TransportMode loadPipelineTransport(PipelineCompilationContext ctx) {
         PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
         Path moduleDir = ctx.getModuleDir();
         Optional<Path> configPath = locator.locate(moduleDir);
         if (configPath.isEmpty()) {
-            return true; // Default to GRPC
+            return TransportMode.GRPC;
         }
 
         PipelineStepConfigLoader stepLoader = new PipelineStepConfigLoader();
@@ -143,26 +163,33 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
             PipelineStepConfigLoader.StepConfig stepConfig = stepLoader.load(configPath.get());
             String transport = stepConfig.transport();
             if (transport == null || transport.isBlank()) {
-                return true; // Default to GRPC
+                return TransportMode.GRPC;
             }
-            if ("REST".equalsIgnoreCase(transport)) {
-                return false; // REST mode
-            }
-            if (!"GRPC".equalsIgnoreCase(transport)) {
+            Optional<TransportMode> mode = TransportMode.fromStringOptional(transport);
+            if (mode.isEmpty()) {
                 if (ctx.getProcessingEnv() != null) {
                     ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
                         "Unknown pipeline transport '" + transport + "'; defaulting to GRPC.");
                 }
+                return TransportMode.GRPC;
             }
+            return mode.get();
         } catch (Exception e) {
             if (ctx.getProcessingEnv() != null) {
                 ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
                     "Failed to load pipeline transport from " + configPath.get() + ": " + e.getMessage());
             }
         }
-        return true; // Default to GRPC
+        return TransportMode.GRPC;
     }
 
+    /**
+     * Discover and build simple PipelineOrchestratorModel instances from elements annotated with @PipelineOrchestrator.
+     *
+     * @param ctx the compilation context used to determine transport mode and other contextual settings
+     * @param orchestratorElements the set of elements to inspect for a PipelineOrchestrator annotation; may be null or empty
+     * @return a list of PipelineOrchestratorModel objects created from the annotated elements; an empty list if no orchestrator elements are provided or none contain the annotation
+     */
     private List<PipelineOrchestratorModel> discoverOrchestratorModels(
             PipelineCompilationContext ctx, 
             Set<? extends Element> orchestratorElements) {
@@ -184,9 +211,11 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
                 
                 // Determine enabled targets based on transport mode
                 // This is simplified - in reality, it would depend on configuration
-                var enabledTargets = ctx.isTransportModeGrpc() 
-                    ? java.util.Set.of(org.pipelineframework.processor.ir.GenerationTarget.GRPC_SERVICE)
-                    : java.util.Set.of(org.pipelineframework.processor.ir.GenerationTarget.REST_RESOURCE);
+                var enabledTargets = ctx.isTransportModeLocal()
+                    ? java.util.Set.<GenerationTarget>of()
+                    : (ctx.isTransportModeRest()
+                        ? java.util.Set.of(GenerationTarget.REST_RESOURCE)
+                        : java.util.Set.of(GenerationTarget.GRPC_SERVICE));
                 
                 PipelineOrchestratorModel model = new PipelineOrchestratorModel(
                     serviceName,
@@ -301,6 +330,14 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         return java.nio.file.Paths.get(System.getProperty("user.dir"), "target", "generated-sources", "pipeline");
     }
 
+    /**
+     * Resolve the module root directory by ascending from a generated-sources path or falling back to the current working directory.
+     *
+     * <p>If {@code generatedSourcesRoot} is non-null, the method climbs up to three parent directory levels and returns the resulting path if found. If no candidate is available or {@code generatedSourcesRoot} is null, the method returns the JVM current working directory.
+     *
+     * @param generatedSourcesRoot the path inside the module's generated-sources tree, or {@code null} if unknown
+     * @return the resolved module directory path, or the current working directory if resolution fails
+     */
     private Path resolveModuleDir(PipelineCompilationContext ctx, Path generatedSourcesRoot) {
         if (generatedSourcesRoot != null) {
             Path candidate = generatedSourcesRoot;

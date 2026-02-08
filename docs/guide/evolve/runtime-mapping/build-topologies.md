@@ -2,6 +2,12 @@
 
 This page explains what runtime mapping means for app developers using TPF.
 
+For hands-on app-developer usage in the Build section, see:
+
+- [Runtime Layouts and Build Topologies](/guide/build/runtime-layouts/)
+- [Maven Migration Playbook](/guide/build/runtime-layouts/maven-migration)
+- [CSV Payments Monolith Walkthrough](/guide/build/runtime-layouts/csv-payments-monolith)
+
 Typical onboarding is:
 
 1. Design the pipeline in Web UI.

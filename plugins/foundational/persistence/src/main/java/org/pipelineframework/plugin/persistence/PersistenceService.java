@@ -18,13 +18,21 @@ package org.pipelineframework.plugin.persistence;
 
 import jakarta.inject.Inject;
 
+import io.smallrye.common.vertx.VertxContext;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.subscription.Cancellable;
+import io.quarkus.vertx.core.runtime.context.VertxContextSafetyToggle;
+import io.vertx.core.Context;
+import io.vertx.core.Vertx;
 import org.jboss.logging.Logger;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ParallelismHints;
 import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.service.ReactiveSideEffectService;
 import org.pipelineframework.step.NonRetryableException;
+
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * A general-purpose persistence plugin that can persist any entity that has a corresponding
@@ -39,6 +47,21 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
     @Inject
     PersistenceConfig config;
 
+    @Inject
+    Vertx vertx;
+
+    /**
+     * Persists the given item using the configured PersistenceProvider and emits the original item.
+     *
+     * The method applies duplicate-key handling according to configuration (IGNORE emits the original
+     * item, UPSERT attempts an upsert via the provider, FAIL propagates the original failure). Non-transient
+     * persistence errors are wrapped as a NonRetryableException; transient errors are propagated as-is.
+     * Depending on configuration and current Vert.x context, persistence may be executed on a duplicated
+     * Vert.x context or directly via the provider.
+     *
+     * @param item the entity to persist; if null, the method returns a null item
+     * @return the same `item` instance that was passed in (or `null` if `item` was null)
+     */
     @Override
     public Uni<T> process(T item) {
         logger.debugf("PersistenceService.process() called with item: %s (class: %s)",
@@ -56,7 +79,11 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
         if (persistenceManager == null) {
             return Uni.createFrom().failure(new IllegalStateException("PersistenceManager is not available"));
         }
-        return persistenceManager.persist(item)
+        boolean useVertx = shouldUseVertxContext();
+        Uni<T> persistUni = hasSafeVertxContext() || !useVertx
+            ? persistenceManager.persist(item)
+            : persistOnVertxContext(item);
+        return persistUni
             .onFailure(this::isDuplicateKeyError)
             .recoverWithUni(failure -> handleDuplicateKey(item, failure))
             .onItem().invoke(result -> logger.debugf("Successfully persisted entity: %s", result != null ? result.getClass().getName() : "null"))
@@ -67,6 +94,103 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
             .replaceWith(item); // Return the original item as it was just persisted (side effect)
     }
 
+    /**
+     * Determine whether a current Vert.x context exists and is a duplicated (safe) context for Vert.x-based persistence.
+     *
+     * @return `true` if a current Vert.x context exists and is a duplicated context, `false` otherwise.
+     */
+    private boolean hasSafeVertxContext() {
+        Context context = Vertx.currentContext();
+        return context != null && VertxContext.isDuplicatedContext(context);
+    }
+
+    /**
+     * Determine whether persistence operations should run inside a Vert.x context based on configuration.
+     *
+     * If no provider class is configured or the configured value is blank, this defaults to using a Vert.x context.
+     * Returns `false` when the provider is configured as the vthread provider, and `true` when configured as the reactive provider.
+     *
+     * @return true if persistence should use a Vert.x context, false otherwise
+     * @throws IllegalStateException if the configured provider class is not recognized (supported values are
+     *                               PersistenceConstants.REACTIVE_PROVIDER_CLASS and PersistenceConstants.VTHREAD_PROVIDER_CLASS)
+     */
+    private boolean shouldUseVertxContext() {
+        if (config == null || config.providerClass().isEmpty()) {
+            return true;
+        }
+        String configured = config.providerClass().orElse("").trim();
+        if (configured.isBlank()) {
+            return true;
+        }
+        if (configured.equals(PersistenceConstants.VTHREAD_PROVIDER_CLASS)
+            || configured.equals(PersistenceConstants.VTHREAD_PROVIDER_SIMPLE)) {
+            return false;
+        }
+        if (configured.equals(PersistenceConstants.REACTIVE_PROVIDER_CLASS)
+            || configured.equals(PersistenceConstants.REACTIVE_PROVIDER_SIMPLE)) {
+            return true;
+        }
+        throw new IllegalStateException(
+            "Unknown persistence.provider.class value '" + configured + "'. "
+                + "Supported values are "
+                + PersistenceConstants.REACTIVE_PROVIDER_CLASS + " and "
+                + PersistenceConstants.VTHREAD_PROVIDER_CLASS + ".");
+    }
+
+    /**
+     * Persist the given item inside a duplicated Vert.x context when Vert.x is available; otherwise delegate to the persistence manager.
+     *
+     * The duplicated context is marked as safe and a session-local flag is set for the duration of the operation. If the persistence does not emit an item within the configured Vert.x context timeout, the returned Uni fails.
+     *
+     * @return a Uni that emits the persisted item on success, or fails with the underlying error or a timeout error if no item is emitted within the configured timeout
+     */
+    private Uni<T> persistOnVertxContext(T item) {
+        if (vertx == null) {
+            return persistenceManager.persist(item);
+        }
+        int timeoutSeconds = config != null ? Math.max(1, config.vertxContextTimeoutSeconds()) : 30;
+        Context baseContext = vertx.getOrCreateContext();
+        Context context = VertxContext.createNewDuplicatedContext(baseContext);
+        VertxContextSafetyToggle.setContextSafe(context, true);
+        return Uni.createFrom().<T>emitter(emitter -> {
+            AtomicReference<Cancellable> subscriptionRef = new AtomicReference<>();
+            emitter.onTermination(() -> {
+                context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
+                Cancellable subscription = subscriptionRef.getAndSet(null);
+                if (subscription != null) {
+                    subscription.cancel();
+                }
+            });
+            context.runOnContext(ignored -> {
+                context.putLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY, Boolean.TRUE);
+                try {
+                    Cancellable subscription = persistenceManager.persist(item)
+                        .subscribe().with(result -> {
+                            context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
+                            emitter.complete(result);
+                        }, failure -> {
+                            context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
+                            emitter.fail(failure);
+                        });
+                    subscriptionRef.set(subscription);
+                } catch (Throwable t) {
+                    context.removeLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY);
+                    emitter.fail(t);
+                }
+            });
+        }).ifNoItem().after(Duration.ofSeconds(timeoutSeconds)).fail();
+    }
+
+    /**
+     * Handle a duplicate-key persistence error according to the configured duplicate-key policy.
+     *
+     * @param item    the original entity that was being persisted
+     * @param failure the original failure that indicates a duplicate-key condition
+     * @return a Uni that:
+     *         - emits the original `item` when the policy is IGNORE,
+     *         - performs an upsert and then emits the original `item` when the policy is UPSERT,
+     *         - fails with the original `failure` when the policy is FAIL
+     */
     private Uni<T> handleDuplicateKey(T item, Throwable failure) {
         String policyValue = config != null ? config.duplicateKey() : null;
         DuplicateKeyPolicy policy = DuplicateKeyPolicy.fromConfig(policyValue);

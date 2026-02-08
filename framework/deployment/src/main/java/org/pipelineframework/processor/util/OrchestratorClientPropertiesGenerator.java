@@ -49,13 +49,16 @@ public class OrchestratorClientPropertiesGenerator {
         if (!ctx.isOrchestratorGenerated()) {
             return;
         }
+        if (ctx.isTransportModeLocal()) {
+            return;
+        }
 
         List<PipelineStepModel> models = ctx.getStepModels();
         if (models == null || models.isEmpty()) {
             return;
         }
 
-        List<PipelineStepModel> clientModels = filterClientModels(models, ctx.isTransportModeGrpc());
+        List<PipelineStepModel> clientModels = filterClientModels(models, ctx.getTransportMode());
         if (clientModels.isEmpty()) {
             return;
         }
@@ -85,8 +88,22 @@ public class OrchestratorClientPropertiesGenerator {
         }
     }
 
-    private List<PipelineStepModel> filterClientModels(List<PipelineStepModel> models, boolean grpcTransport) {
-        GenerationTarget target = grpcTransport ? GenerationTarget.CLIENT_STEP : GenerationTarget.REST_CLIENT_STEP;
+    /**
+     * Selects pipeline step models that are enabled for client generation for the provided transport mode.
+     *
+     * @param models the candidate step models to filter
+     * @param transportMode the transport mode used to determine the required client generation target
+     * @return a list of models whose enabled targets include the generation target corresponding to the transport mode
+     */
+    private List<PipelineStepModel> filterClientModels(
+        List<PipelineStepModel> models,
+        org.pipelineframework.processor.ir.TransportMode transportMode
+    ) {
+        GenerationTarget target = switch (transportMode) {
+            case REST -> GenerationTarget.REST_CLIENT_STEP;
+            case LOCAL -> GenerationTarget.LOCAL_CLIENT_STEP;
+            case GRPC -> GenerationTarget.CLIENT_STEP;
+        };
         return models.stream()
             .filter(model -> model.enabledTargets().contains(target))
             .toList();
@@ -237,13 +254,19 @@ public class OrchestratorClientPropertiesGenerator {
         return best;
     }
 
+    /**
+     * Produce a normalized class token from a step implementation class name.
+     *
+     * @param className the fully-qualified or simple class name of the step implementation; may be null
+     * @return the normalized class token derived from the simple class name with common suffixes removed (only alphanumeric characters); empty string if the input is null or yields no characters
+     */
     private String normalizeStepToken(String className) {
         String simple = className == null ? "" : className;
         int lastDot = simple.lastIndexOf('.');
         if (lastDot != -1) {
             simple = simple.substring(lastDot + 1);
         }
-        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep)(_Subclass)?$", "");
+        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep|LocalClientStep)(_Subclass)?$", "");
         return toClassToken(simple);
     }
 

@@ -21,6 +21,7 @@ import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.TypeMapping;
+import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 
 /**
  * Extracts semantic models from annotated elements.
@@ -83,6 +84,19 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         return stepModels;
     }
 
+    /**
+     * Create pipeline step models derived from the configured pipeline template, assigning deployment roles
+     * according to the compilation context and available aspect/plugin implementations.
+     *
+     * The method returns an empty list when there is no template configuration, no template steps, or when
+     * template-derived steps are not applicable given the current orchestrator/plugin-host/runtime mapping.
+     * When applicable, it builds models from the template, expands them with aspects that provide plugin
+     * implementations, and assigns DeploymentRole.ORCHESTRATOR_CLIENT to client-facing models and
+     * DeploymentRole.PLUGIN_SERVER to side-effect models where plugins are required or colocated.
+     *
+     * @param ctx the compilation context providing the pipeline template, aspect models, and runtime mapping
+     * @return the list of pipeline step models derived from the template; empty if none apply
+     */
     private List<PipelineStepModel> extractTemplateModels(PipelineCompilationContext ctx) {
         PipelineTemplateConfig config = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig cfg
             ? cfg
@@ -102,7 +116,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return List.of();
         }
 
-        if (ctx.isPluginHost()) {
+        boolean colocatedPlugins = ctx.isTransportModeLocal() || isMonolithLayout(ctx);
+        if (ctx.isPluginHost() && !colocatedPlugins) {
             Set<String> pluginAspectNames = PluginBindingBuilder.extractPluginAspectNames(ctx);
             if (pluginAspectNames.isEmpty()) {
                 return List.of();
@@ -126,11 +141,36 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .filter(this::hasPluginImplementation)
             .toList();
         List<PipelineStepModel> expanded = expandAspects(baseModels, expandableAspects);
-        return expanded.stream()
+        List<PipelineStepModel> clientModels = expanded.stream()
             .map(model -> withDeploymentRole(model, DeploymentRole.ORCHESTRATOR_CLIENT))
             .toList();
+        if (!colocatedPlugins) {
+            return clientModels;
+        }
+        List<PipelineStepModel> pluginModels = expanded.stream()
+            .filter(PipelineStepModel::sideEffect)
+            .map(model -> withDeploymentRole(model, DeploymentRole.PLUGIN_SERVER))
+            .toList();
+        if (pluginModels.isEmpty()) {
+            return clientModels;
+        }
+        List<PipelineStepModel> combined = new ArrayList<>(pluginModels.size() + clientModels.size());
+        combined.addAll(pluginModels);
+        combined.addAll(clientModels);
+        return combined;
     }
 
+    /**
+     * Create PipelineStepModel instances from the provided pipeline template configuration.
+     *
+     * Builds a model for each valid PipelineTemplateStep using generated service class names,
+     * package segments, input/output type mappings, resolved streaming shape, default execution
+     * mode, and a deployment role of PIPELINE_SERVER. Steps with a missing or blank base package,
+     * null entries, or invalid formatted names are skipped.
+     *
+     * @param config the pipeline template configuration containing the base package and step definitions
+     * @return a list of PipelineStepModel derived from the template steps; empty if no models could be produced
+     */
     private List<PipelineStepModel> buildTemplateStepModels(PipelineTemplateConfig config) {
         String basePackage = config.basePackage();
         if (basePackage == null || basePackage.isBlank()) {
@@ -203,6 +243,13 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .toList();
     }
 
+    /**
+     * Create a copy of a PipelineStepModel with the specified deployment role.
+     *
+     * @param model the original step model to copy
+     * @param role the deployment role to assign on the returned model
+     * @return a new PipelineStepModel identical to {@code model} except with its deployment role set to {@code role}
+     */
     private PipelineStepModel withDeploymentRole(PipelineStepModel model, DeploymentRole role) {
         return new PipelineStepModel(
             model.serviceName(),
@@ -220,6 +267,23 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         );
     }
 
+    /**
+     * Determine whether the configured runtime layout is MONOLITH.
+     *
+     * @param ctx the compilation context from which the runtime mapping is obtained
+     * @return `true` if a runtime mapping exists and its layout is `MONOLITH`, `false` otherwise
+     */
+    private boolean isMonolithLayout(PipelineCompilationContext ctx) {
+        PipelineRuntimeMapping mapping = ctx.getRuntimeMapping();
+        return mapping != null && mapping.layout() == PipelineRuntimeMapping.Layout.MONOLITH;
+    }
+
+    /**
+     * Checks whether an aspect model specifies a plugin implementation class in its configuration.
+     *
+     * @param aspect the aspect model to inspect; may be null
+     * @return `true` if the aspect's config contains a non-blank `"pluginImplementationClass"` entry, `false` otherwise
+     */
     private boolean hasPluginImplementation(org.pipelineframework.processor.ir.PipelineAspectModel aspect) {
         if (aspect == null || aspect.config() == null) {
             return false;

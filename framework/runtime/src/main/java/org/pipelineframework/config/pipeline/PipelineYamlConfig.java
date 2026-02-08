@@ -22,7 +22,7 @@ import java.util.List;
  * Pipeline configuration parsed from pipeline.yaml.
  *
  * @param basePackage the base package for generated pipeline classes
- * @param transport the transport mode (GRPC or REST)
+ * @param transport the transport mode (GRPC, REST, or LOCAL)
  * @param steps the configured pipeline steps
  * @param aspects the configured pipeline aspects
  */

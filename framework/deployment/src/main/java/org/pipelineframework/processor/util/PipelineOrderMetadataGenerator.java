@@ -93,12 +93,22 @@ public class PipelineOrderMetadataGenerator {
         return loader.load(configPath.get());
     }
 
+    /**
+     * Builds the ordered list of base client pipeline step class names for the given compilation context.
+     *
+     * Filters the pipeline step models to those with deployment role ORCHESTRATOR_CLIENT and not marked as side effects,
+     * constructs each step's fully qualified class name using the model's package, generated name (with "Service" removed),
+     * and the transport-mode-specific client step suffix, preserves the original model order and removes duplicates.
+     *
+     * @param ctx the pipeline compilation context containing step models and transport mode
+     * @return a list of fully qualified client step class names in preserved insertion order, or an empty list if no applicable models exist
+     */
     private List<String> resolveBaseClientSteps(PipelineCompilationContext ctx) {
         List<PipelineStepModel> models = ctx.getStepModels();
         if (models == null || models.isEmpty()) {
             return List.of();
         }
-        String suffix = ctx.isTransportModeGrpc() ? "GrpcClientStep" : "RestClientStep";
+        String suffix = ctx.getTransportMode().clientStepSuffix();
         Set<String> ordered = new LinkedHashSet<>();
         for (PipelineStepModel model : models) {
             if (model.deploymentRole() != DeploymentRole.ORCHESTRATOR_CLIENT || model.sideEffect()) {
@@ -148,13 +158,22 @@ public class PipelineOrderMetadataGenerator {
         return best;
     }
 
+    /**
+     * Convert a fully-qualified step class name into a compact alphanumeric token by removing the package
+     * prefix and common step suffixes.
+     *
+     * @param className the fully-qualified or simple class name of the step
+     * @return the normalized alphanumeric token derived from the class's simple name with known
+     *         suffixes (Service, GrpcClientStep, RestClientStep, LocalClientStep and optional _Subclass)
+     *         removed; returns an empty string if the result contains no alphanumeric characters
+     */
     private String normalizeStepToken(String className) {
         String simple = className;
         int lastDot = simple.lastIndexOf('.');
         if (lastDot != -1) {
             simple = simple.substring(lastDot + 1);
         }
-        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep)(_Subclass)?$", "");
+        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep|LocalClientStep)(_Subclass)?$", "");
         return toClassToken(simple);
     }
 

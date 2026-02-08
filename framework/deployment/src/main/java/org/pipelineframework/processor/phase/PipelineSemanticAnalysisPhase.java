@@ -155,6 +155,16 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         }
     }
 
+    /**
+     * Validates provider-related processing-option hints and invokes provider validation for each recognized provider entry.
+     *
+     * Reads the global parallelism option and, for each processing option that names a provider, maps the option key to a provider label
+     * ("persistence.provider.class" -> "Provider 'persistence'", keys starting with "pipeline.provider.class." -> "Provider '<name>'")
+     * and calls validateProviderHint with the provider class, label, and the normalized policy.
+     *
+     * @param ctx the pipeline compilation context containing the processing environment and options; if null or its processing environment
+     *            is null, no validation is performed
+     */
     private void validateProviderHints(PipelineCompilationContext ctx) {
         if (ctx == null || ctx.getProcessingEnv() == null) {
             return;
@@ -164,14 +174,21 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         var options = ctx.getProcessingEnv().getOptions();
         for (var entry : options.entrySet()) {
             String key = entry.getKey();
-            if (key == null || !key.startsWith("pipeline.provider.class.")) {
+            if (key == null) {
                 continue;
             }
             String providerClass = entry.getValue();
             if (providerClass == null || providerClass.isBlank()) {
                 continue;
             }
-            String label = "Provider '" + key.substring("pipeline.provider.class.".length()) + "'";
+            String label;
+            if ("persistence.provider.class".equals(key)) {
+                label = "Provider 'persistence'";
+            } else if (key.startsWith("pipeline.provider.class.")) {
+                label = "Provider '" + key.substring("pipeline.provider.class.".length()) + "'";
+            } else {
+                continue;
+            }
             validateProviderHint(ctx, providerClass.trim(), label, normalizedPolicy);
         }
     }
