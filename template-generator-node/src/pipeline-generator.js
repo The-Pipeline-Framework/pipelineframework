@@ -36,7 +36,7 @@ class PipelineGenerator {
     async generateFromConfig(configPath, outputPath) {
         const config = this.loadConfig(configPath);
         const { appName, basePackage, steps, aspects, transport, runtimeLayout } = config;
-        await this.engine.generateApplication(
+        await this.engine.generateApplication({
             appName,
             basePackage,
             steps,
@@ -44,7 +44,7 @@ class PipelineGenerator {
             transport,
             runtimeLayout,
             outputPath
-        );
+        });
         await this.copyConfig(config, outputPath);
     }
 
@@ -113,6 +113,7 @@ class PipelineGenerator {
         const yamlStr = fs.readFileSync(configPath, 'utf8');
         const config = YAML.load(yamlStr);
 
+        // Normalize casing for JSON schema validation.
         if (typeof config.runtimeLayout === 'string') {
             config.runtimeLayout = config.runtimeLayout.trim().toUpperCase().replace(/-/g, '_');
         }
@@ -144,37 +145,41 @@ class PipelineGenerator {
     }
 
     normalizeRuntimeLayout(runtimeLayout) {
+        if (runtimeLayout == null) {
+            return 'modular';
+        }
         if (typeof runtimeLayout !== 'string') {
-            console.warn(
-                `Unknown runtimeLayout '${runtimeLayout}'. Falling back to 'modular'.`
-            );
+            console.warn(`Unknown runtimeLayout '${runtimeLayout}'. Falling back to 'modular'.`);
             return 'modular';
         }
         const normalized = runtimeLayout.trim().toLowerCase().replace(/_/g, '-');
+        if (normalized === '') {
+            return 'modular';
+        }
         if (normalized === 'modular' || normalized === 'pipeline-runtime' || normalized === 'monolith') {
             return normalized;
         }
-        console.warn(
-            `Unknown runtimeLayout '${runtimeLayout}'. Falling back to 'modular'.`
-        );
+        console.warn(`Unknown runtimeLayout '${runtimeLayout}'. Falling back to 'modular'.`);
         return 'modular';
     }
 
     normalizeTransport(transport, runtimeLayout) {
         const fallback = runtimeLayout === 'monolith' ? 'LOCAL' : 'GRPC';
+        if (transport == null) {
+            return fallback;
+        }
         if (typeof transport === 'string') {
             const normalized = transport.trim().toUpperCase();
+            if (normalized === '') {
+                return fallback;
+            }
             if (normalized === 'GRPC' || normalized === 'REST' || normalized === 'LOCAL') {
                 return normalized;
             }
-            console.warn(
-                `Unknown transport '${transport}'. Falling back to '${fallback}'.`
-            );
-        } else {
-            console.warn(
-                `Unknown transport '${transport}'. Falling back to '${fallback}'.`
-            );
+            console.warn(`Unknown transport '${transport}'. Falling back to '${fallback}'.`);
+            return fallback;
         }
+        console.warn(`Unknown transport '${transport}'. Falling back to '${fallback}'.`);
         return fallback;
     }
 

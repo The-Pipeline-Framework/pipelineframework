@@ -21,6 +21,8 @@ trap 'rm -f "$tmp_file"' EXIT
         rel_path="${file#"${dir}/"}"
         printf '%s\n' "$rel_path"
       done < <(find "$dir" -type f -name '*.java' -print0)
+    else
+      printf 'Warning: source directory does not exist or is not a directory: %s\n' "$dir" >&2
     fi
   done
 } > "$tmp_file"

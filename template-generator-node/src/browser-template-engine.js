@@ -24,6 +24,8 @@ if (typeof window !== 'undefined' && window.Handlebars) {
     // Node.js environment
     Handlebars = require('handlebars');
 }
+const YAML = require('js-yaml');
+const { buildRuntimeMappingCore } = require('./runtime-mapping-builder');
 
 // Register helper for replacing characters in strings
 Handlebars.registerHelper('replace', function(str, find, repl) {
@@ -34,7 +36,12 @@ Handlebars.registerHelper('replace', function(str, find, repl) {
 });
 
 Handlebars.registerHelper('add', function(a, b) {
-    return Number(a) + Number(b);
+    const left = Number(a);
+    const right = Number(b);
+    if (Number.isNaN(left) || Number.isNaN(right)) {
+        return 0;
+    }
+    return left + right;
 });
 // Register helper for converting to lowercase
 Handlebars.registerHelper('lowercase', function(str) {
@@ -176,7 +183,7 @@ Handlebars.registerHelper('sanitizeJavaIdentifier', function(fieldName) {
     if (typeof fieldName !== 'string' || fieldName.trim() === '') {
         return 'field';
     }
-    let sanitized = fieldName.replace(/[^a-zA-Z0-9_]/g, '_');
+    let sanitized = fieldName.replace(/[^a-zA-Z0-9_$]/g, '_');
     if (/^[0-9]/.test(sanitized)) {
         sanitized = '_' + sanitized;
     }
@@ -186,10 +193,10 @@ Handlebars.registerHelper('sanitizeJavaIdentifier', function(fieldName) {
         'finally', 'float', 'for', 'goto', 'if', 'implements', 'import', 'instanceof', 'int',
         'interface', 'long', 'native', 'new', 'package', 'private', 'protected', 'public',
         'return', 'short', 'static', 'strictfp', 'super', 'switch', 'synchronized', 'this',
-        'throw', 'throws', 'transient', 'try', 'void', 'volatile', 'while'
+        'throw', 'throws', 'transient', 'try', 'void', 'volatile', 'while', 'true', 'false', 'null'
     ];
     if (reservedWords.includes(sanitized.toLowerCase())) {
-        sanitized = '_' + sanitized;
+        sanitized = sanitized + '_';
     }
     return sanitized || 'field';
 });
@@ -277,52 +284,60 @@ class BrowserTemplateEngine {
     }
 
     async generateApplication(appName, basePackage, steps, aspects, transport, runtimeLayout, fileCallback) {
-        const options = {
-            aspects: {},
-            transport: 'GRPC',
-            runtimeLayout: 'modular',
-            fileCallback
+        let options;
+        if (arguments.length === 1 && appName && typeof appName === 'object') {
+            options = { ...appName };
+        } else if (steps && typeof steps === 'object' && !Array.isArray(steps)) {
+            options = { appName, basePackage, ...steps };
+        } else {
+            console.warn(
+                'generateApplication positional arguments are deprecated. Pass a single options object instead.'
+            );
+            options = {
+                appName,
+                basePackage,
+                steps,
+                aspects,
+                transport,
+                runtimeLayout,
+                fileCallback
+            };
+        }
+        const normalizedOptions = {
+            appName: options.appName,
+            basePackage: options.basePackage,
+            steps: Array.isArray(options.steps) ? options.steps : [],
+            aspects: options.aspects && typeof options.aspects === 'object' ? options.aspects : {},
+            runtimeLayout: this.normalizeRuntimeLayout(options.runtimeLayout),
+            fileCallback: options.fileCallback
         };
-        if (typeof aspects === 'function' && fileCallback === undefined) {
-            options.fileCallback = aspects;
-        } else if (aspects && typeof aspects === 'object') {
-            options.aspects = aspects;
-        }
-        if (typeof transport === 'function' && fileCallback === undefined) {
-            options.fileCallback = transport;
-        } else if (typeof transport === 'string') {
-            if (this.isTransport(transport)) {
-                options.transport = transport;
-            } else if (fileCallback === undefined) {
-                if (typeof runtimeLayout === 'function') {
-                    options.fileCallback = runtimeLayout;
-                } else {
-                    console.warn(
-                        `Unknown transport '${transport}' received by browser generator. Falling back to 'GRPC'.`
-                    );
-                }
-            }
-        }
-        if (typeof runtimeLayout === 'function' && fileCallback === undefined) {
-            options.fileCallback = runtimeLayout;
-        } else if (this.isRuntimeLayout(runtimeLayout)) {
-            options.runtimeLayout = runtimeLayout;
-        }
-        if (typeof options.fileCallback !== 'function') {
+        normalizedOptions.transport = this.normalizeTransport(
+            options.transport,
+            normalizedOptions.runtimeLayout
+        );
+
+        if (typeof normalizedOptions.fileCallback !== 'function') {
             throw new Error('fileCallback must be provided as a function.');
         }
-        const normalizedRuntimeLayout = this.normalizeRuntimeLayout(options.runtimeLayout);
-        const transportMode = this.normalizeTransport(options.transport, normalizedRuntimeLayout);
-        const aspectConfig = options.aspects || {};
+        if (!normalizedOptions.appName || !normalizedOptions.basePackage) {
+            throw new Error('appName and basePackage are required.');
+        }
+
+        const appNameValue = normalizedOptions.appName;
+        const basePackageValue = normalizedOptions.basePackage;
+        const stepsValue = normalizedOptions.steps;
+        const normalizedRuntimeLayout = normalizedOptions.runtimeLayout;
+        const transportMode = normalizedOptions.transport;
+        const aspectConfig = normalizedOptions.aspects;
         const includePersistenceModule = this.isAspectEnabled(aspectConfig, 'persistence');
         const includeCacheInvalidationModule = this.isAspectEnabled(aspectConfig, 'cache')
             || this.isAspectEnabled(aspectConfig, 'cache-invalidate')
             || this.isAspectEnabled(aspectConfig, 'cache-invalidate-all');
         // For sequential pipeline, update input types of steps after the first one
         // to match the output type of the previous step
-        for (let i = 1; i < steps.length; i++) {
-            const currentStep = steps[i];
-            const previousStep = steps[i - 1];
+        for (let i = 1; i < stepsValue.length; i++) {
+            const currentStep = stepsValue[i];
+            const previousStep = stepsValue[i - 1];
             // Set the input type of the current step to the output type of the previous step
             currentStep.inputTypeName = previousStep.outputTypeName;
             currentStep.inputFields = Array.isArray(previousStep.outputFields)
@@ -332,89 +347,89 @@ class BrowserTemplateEngine {
 
         // Generate parent POM
         await this.generateParentPom(
-            appName,
-            basePackage,
-            steps,
+            appNameValue,
+            basePackageValue,
+            stepsValue,
             includePersistenceModule,
             includeCacheInvalidationModule,
             normalizedRuntimeLayout,
-            options.fileCallback);
+            normalizedOptions.fileCallback);
 
         // Generate common module
-        await this.generateCommonModule(appName, basePackage, steps, transportMode, options.fileCallback);
+        await this.generateCommonModule(appNameValue, basePackageValue, stepsValue, transportMode, normalizedOptions.fileCallback);
 
         // Generate each step service
-        for (let i = 0; i < steps.length; i++) {
-            await this.generateStepService(appName, basePackage, steps[i], i, steps, transportMode, options.fileCallback);
+        for (let i = 0; i < stepsValue.length; i++) {
+            await this.generateStepService(appNameValue, basePackageValue, stepsValue[i], i, stepsValue, transportMode, normalizedOptions.fileCallback);
         }
 
         if (includePersistenceModule) {
-            await this.generatePersistenceModule(appName, basePackage, steps, options.fileCallback);
+            await this.generatePersistenceModule(appNameValue, basePackageValue, stepsValue, normalizedOptions.fileCallback);
         }
 
         if (includeCacheInvalidationModule) {
-            await this.generateCacheInvalidationModule(appName, basePackage, options.fileCallback);
+            await this.generateCacheInvalidationModule(appNameValue, basePackageValue, normalizedOptions.fileCallback);
         }
 
         // Generate orchestrator
         await this.generateOrchestrator(
-            appName,
-            basePackage,
-            steps,
+            appNameValue,
+            basePackageValue,
+            stepsValue,
             includePersistenceModule,
             includeCacheInvalidationModule,
             transportMode,
-            options.fileCallback);
+            normalizedOptions.fileCallback);
 
         if (normalizedRuntimeLayout === 'pipeline-runtime') {
             await this.generatePipelineRuntimeModule(
-                appName,
-                basePackage,
-                steps,
-                options.fileCallback
+                appNameValue,
+                basePackageValue,
+                stepsValue,
+                normalizedOptions.fileCallback
             );
         } else if (normalizedRuntimeLayout === 'monolith') {
             await this.generateMonolithModule(
-                appName,
-                basePackage,
-                steps,
+                appNameValue,
+                basePackageValue,
+                stepsValue,
                 includePersistenceModule,
                 includeCacheInvalidationModule,
-                options.fileCallback
+                normalizedOptions.fileCallback
             );
         }
 
         await this.generateRuntimeMappingFiles(
-            steps,
+            stepsValue,
             includePersistenceModule,
             includeCacheInvalidationModule,
             normalizedRuntimeLayout,
-            options.fileCallback
+            normalizedOptions.fileCallback
         );
 
         const configSnapshot = {
-            appName,
-            basePackage,
+            appName: appNameValue,
+            basePackage: basePackageValue,
             transport: transportMode,
             runtimeLayout: normalizedRuntimeLayout,
-            steps,
+            steps: stepsValue,
             aspects: aspectConfig
         };
-        await options.fileCallback('pipeline-config.yaml', JSON.stringify(configSnapshot, null, 2));
+        await normalizedOptions.fileCallback('pipeline-config.yaml', JSON.stringify(configSnapshot, null, 2));
 
         // Generate mvnw files
-        await this.generateMvNWFiles(options.fileCallback);
+        await this.generateMvNWFiles(normalizedOptions.fileCallback);
 
         // Generate Maven wrapper files
-        await this.generateMavenWrapperFiles(options.fileCallback);
+        await this.generateMavenWrapperFiles(normalizedOptions.fileCallback);
 
         // Generate other files
         await this.generateOtherFiles(
-            appName,
-            steps,
+            appNameValue,
+            stepsValue,
             includePersistenceModule,
             includeCacheInvalidationModule,
-            options.fileCallback);
+            normalizedOptions.fileCallback);
     }
 
     async generateParentPom(
@@ -971,145 +986,28 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
     }
 
     buildRuntimeMapping(layout, steps, includePersistenceModule, includeCacheInvalidationModule) {
-        const modularModules = {};
-        const pipelineModules = {};
-        const monolithModules = {};
-        const runtimeLayout = this.normalizeRuntimeLayout(layout);
-
-        for (const step of steps || []) {
-            const moduleName = step.serviceName;
-            const stepName = this.stepId(step);
-            if (!moduleName || !stepName) {
-                continue;
-            }
-            modularModules[moduleName] = {
-                runtime: moduleName,
-                steps: [stepName]
-            };
-            pipelineModules['pipeline-runtime-svc'] = pipelineModules['pipeline-runtime-svc'] || {
-                runtime: 'pipeline-runtime-svc',
-                steps: []
-            };
-            pipelineModules['pipeline-runtime-svc'].steps.push(stepName);
-            monolithModules['monolith-svc'] = monolithModules['monolith-svc'] || {
-                runtime: 'monolith-svc',
-                steps: []
-            };
-            monolithModules['monolith-svc'].steps.push(stepName);
-        }
-
-        modularModules['orchestrator-svc'] = { runtime: 'orchestrator-svc' };
-        pipelineModules['orchestrator-svc'] = { runtime: 'orchestrator-svc' };
-        // Monolith layout runs orchestrator logic inside monolith-svc.
-        monolithModules['orchestrator-svc'] = { runtime: 'monolith-svc' };
-
-        const monolithAspectTargets = [];
-        if (includePersistenceModule) {
-            modularModules['persistence-svc'] = {
-                runtime: 'persistence-svc',
-                aspects: ['persistence']
-            };
-            pipelineModules['persistence-svc'] = {
-                runtime: 'persistence-svc',
-                aspects: ['persistence']
-            };
-            monolithAspectTargets.push('persistence');
-        }
-        if (includeCacheInvalidationModule) {
-            modularModules['cache-invalidation-svc'] = {
-                runtime: 'cache-invalidation-svc',
-                aspects: ['cache', 'cache-invalidate', 'cache-invalidate-all']
-            };
-            pipelineModules['cache-invalidation-svc'] = {
-                runtime: 'cache-invalidation-svc',
-                aspects: ['cache', 'cache-invalidate', 'cache-invalidate-all']
-            };
-            monolithAspectTargets.push('cache');
-            monolithAspectTargets.push('cache-invalidate');
-            monolithAspectTargets.push('cache-invalidate-all');
-        }
-        if (monolithAspectTargets.length > 0) {
-            monolithModules['monolith-svc'].aspects = monolithAspectTargets;
-        }
-
-        const mappings = {
-            modular: {
-                layout: 'modular',
-                validation: 'auto',
-                defaults: {
-                    runtime: 'orchestrator-svc',
-                    module: 'orchestrator-svc',
-                    synthetic: {
-                        module: includePersistenceModule ? 'persistence-svc' : 'orchestrator-svc'
-                    }
-                },
-                modules: modularModules
-            },
-            'pipeline-runtime': {
-                layout: 'pipeline-runtime',
-                validation: 'auto',
-                defaults: {
-                    runtime: 'pipeline-runtime-svc',
-                    module: 'pipeline-runtime-svc',
-                    synthetic: {
-                        module: includePersistenceModule
-                            ? 'persistence-svc'
-                            : includeCacheInvalidationModule
-                                ? 'cache-invalidation-svc'
-                                : 'pipeline-runtime-svc'
-                    }
-                },
-                modules: pipelineModules
-            },
-            monolith: {
-                layout: 'monolith',
-                validation: 'auto',
-                defaults: {
-                    runtime: 'monolith-svc',
-                    module: 'monolith-svc',
-                    synthetic: {
-                        module: 'monolith-svc'
-                    }
-                },
-                modules: monolithModules
-            }
-        };
-        return mappings[runtimeLayout];
+        return buildRuntimeMappingCore({
+            layout,
+            steps,
+            includePersistenceModule,
+            includeCacheInvalidationModule,
+            isRuntimeLayout: this.isRuntimeLayout.bind(this),
+            normalizeRuntimeLayout: this.normalizeRuntimeLayout.bind(this),
+            stepId: this.stepId.bind(this)
+        });
     }
 
     toYaml(value, indent = 0) {
+        const dumped = YAML.dump(value, { noRefs: true, lineWidth: -1 });
+        if (indent <= 0) {
+            return dumped.trimEnd();
+        }
         const prefix = ' '.repeat(indent);
-        if (Array.isArray(value)) {
-            if (value.length === 0) {
-                return `${prefix}[]`;
-            }
-            return value.map(item => {
-                const itemYaml = this.toYaml(item, indent + 2);
-                if (item !== null && typeof item === 'object') {
-                    const lines = itemYaml.split('\n');
-                    const firstLine = lines[0].slice(indent + 2);
-                    const restLines = lines
-                        .slice(1)
-                        .map(line => `${' '.repeat(indent + 2)}${line.slice(indent + 2)}`);
-                    return [`${prefix}- ${firstLine}`, ...restLines].join('\n');
-                }
-                return `${prefix}- ${this.toYamlScalar(item)}`;
-            }).join('\n');
-        }
-        if (value !== null && typeof value === 'object') {
-            const keys = Object.keys(value);
-            if (keys.length === 0) {
-                return `${prefix}{}`;
-            }
-            return keys.map(key => {
-                const entry = value[key];
-                if (entry !== null && typeof entry === 'object') {
-                    return `${prefix}${key}:\n${this.toYaml(entry, indent + 2)}`;
-                }
-                return `${prefix}${key}: ${this.toYamlScalar(entry)}`;
-            }).join('\n');
-        }
-        return `${prefix}${this.toYamlScalar(value)}`;
+        return dumped
+            .trimEnd()
+            .split('\n')
+            .map(line => `${prefix}${line}`)
+            .join('\n');
     }
 
     toYamlScalar(value) {

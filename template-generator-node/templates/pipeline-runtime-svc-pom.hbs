@@ -20,8 +20,6 @@
         <protobuf.descriptor.fileArg>-Aprotobuf.descriptor.file=${protobuf.descriptor.path}</protobuf.descriptor.fileArg>
         <pipeline.runtime.source.root>${project.basedir}/..</pipeline.runtime.source.root>
         <pipeline.runtime.duplicate.check.script>${pipeline.runtime.source.root}/build-tools/check-duplicate-sources.sh</pipeline.runtime.duplicate.check.script>
-        <lombok.version>1.18.36</lombok.version>
-        <mapstruct.version>1.5.5.Final</mapstruct.version>
 {{#each sourceDirs}}
         <{{propertyName}}>${pipeline.runtime.source.root}/{{moduleName}}/src/main/java</{{propertyName}}>
 {{/each}}
@@ -119,6 +117,23 @@
                         </configuration>
                     </execution>
                     <execution>
+                        <id>validate-platform</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <condition property="is.windows">
+                                    <os family="windows"/>
+                                </condition>
+                                <fail if="is.windows">
+                                    pipeline-runtime source aggregation runs a Unix shell script (`check-duplicate-sources.sh`). Use Linux/macOS/WSL for this module.
+                                </fail>
+                            </target>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>collect-pipeline-runtime-sources</id>
                         <phase>generate-sources</phase>
                         <goals>
@@ -128,12 +143,6 @@
                             <target>
                                 <delete dir="${project.build.directory}/pipeline-runtime-sources"/>
                                 <mkdir dir="${project.build.directory}/pipeline-runtime-sources"/>
-                                <condition property="is.windows">
-                                    <os family="windows"/>
-                                </condition>
-                                <fail if="is.windows">
-                                    pipeline-runtime source aggregation runs a Unix shell script (`check-duplicate-sources.sh`). Use Linux/macOS/WSL for this module.
-                                </fail>
                                 <exec executable="bash" failonerror="true">
                                     <arg value="${pipeline.runtime.duplicate.check.script}"/>
                                     <arg value="${project.build.directory}/pipeline-runtime-sources"/>

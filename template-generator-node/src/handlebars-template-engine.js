@@ -18,6 +18,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const YAML = require('js-yaml');
 const Handlebars = require('handlebars');
+const { buildRuntimeMappingCore } = require('./runtime-mapping-builder');
 let distTemplates = null;
 try {
     distTemplates = require('../dist/templates');
@@ -413,65 +414,23 @@ class HandlebarsTemplateEngine {
     }
 
     async generateApplication(appName, basePackage, steps, aspects, transport, runtimeLayout, outputPath) {
-        const options = {
-            aspects: {},
-            transport: 'GRPC',
-            runtimeLayout: 'modular',
+        const options = this.normalizeGenerateApplicationOptions(
+            appName,
+            basePackage,
+            steps,
+            aspects,
+            transport,
+            runtimeLayout,
             outputPath
-        };
-
-        if (typeof aspects === 'string') {
-            options.outputPath = aspects;
-        } else if (aspects && typeof aspects === 'object') {
-            options.aspects = aspects;
-        }
-
-        if (typeof transport === 'string') {
-            if (this.isTransport(transport)) {
-                options.transport = transport;
-                if (typeof runtimeLayout === 'string') {
-                    if (this.isRuntimeLayout(runtimeLayout)) {
-                        options.runtimeLayout = runtimeLayout;
-                        if (typeof outputPath === 'string') {
-                            options.outputPath = outputPath;
-                        }
-                    } else if (typeof outputPath === 'string') {
-                        options.outputPath = outputPath;
-                    } else {
-                        options.outputPath = runtimeLayout;
-                    }
-                } else if (typeof outputPath === 'string') {
-                    options.outputPath = outputPath;
-                }
-            } else if (typeof runtimeLayout === 'string' && this.isRuntimeLayout(runtimeLayout)) {
-                options.runtimeLayout = runtimeLayout;
-                if (typeof outputPath === 'string') {
-                    options.outputPath = outputPath;
-                } else {
-                    options.outputPath = transport;
-                }
-            } else if (typeof outputPath === 'string') {
-                options.outputPath = outputPath;
-            } else {
-                options.outputPath = transport;
-            }
-        } else if (typeof runtimeLayout === 'string') {
-            if (this.isRuntimeLayout(runtimeLayout)) {
-                options.runtimeLayout = runtimeLayout;
-                if (typeof outputPath === 'string') {
-                    options.outputPath = outputPath;
-                }
-            } else if (typeof outputPath === 'string') {
-                options.outputPath = outputPath;
-            } else {
-                options.outputPath = runtimeLayout;
-            }
-        }
+        );
 
         if (typeof options.outputPath !== 'string' || options.outputPath.trim() === '') {
             throw new Error('outputPath must be provided as a non-empty string.');
         }
 
+        const resolvedAppName = options.appName;
+        const resolvedBasePackage = options.basePackage;
+        const resolvedSteps = options.steps;
         const aspectConfig = options.aspects || {};
         const normalizedRuntimeLayout = this.normalizeRuntimeLayout(options.runtimeLayout);
         const transportMode = this.normalizeTransport(options.transport, normalizedRuntimeLayout);
@@ -482,9 +441,9 @@ class HandlebarsTemplateEngine {
         const aspectDefinitions = this.getAspectDefinitions(aspectConfig);
         // For sequential pipeline, update input types of steps after the first one
         // to match the output type of the previous step
-        for (let i = 1; i < steps.length; i++) {
-            const currentStep = steps[i];
-            const previousStep = steps[i - 1];
+        for (let i = 1; i < resolvedSteps.length; i++) {
+            const currentStep = resolvedSteps[i];
+            const previousStep = resolvedSteps[i - 1];
             // Set the input type of the current step to the output type of the previous step
             currentStep.inputTypeName = previousStep.outputTypeName;
             currentStep.inputFields = Array.isArray(previousStep.outputFields) 
@@ -497,35 +456,56 @@ class HandlebarsTemplateEngine {
 
         // Generate parent POM
         await this.generateParentPom(
-            appName,
-            basePackage,
-            steps,
+            resolvedAppName,
+            resolvedBasePackage,
+            resolvedSteps,
             includePersistenceModule,
             includeCacheInvalidationModule,
             normalizedRuntimeLayout,
             options.outputPath);
 
         // Generate common module
-        await this.generateCommonModule(appName, basePackage, steps, aspectDefinitions, transportMode, options.outputPath);
+        await this.generateCommonModule(
+            resolvedAppName,
+            resolvedBasePackage,
+            resolvedSteps,
+            aspectDefinitions,
+            transportMode,
+            options.outputPath
+        );
 
         // Generate each step service
-        for (let i = 0; i < steps.length; i++) {
-            await this.generateStepService(appName, basePackage, steps[i], options.outputPath, i, steps, transportMode);
+        for (let i = 0; i < resolvedSteps.length; i++) {
+            await this.generateStepService(
+                resolvedAppName,
+                resolvedBasePackage,
+                resolvedSteps[i],
+                options.outputPath,
+                i,
+                resolvedSteps,
+                transportMode
+            );
         }
 
         if (includePersistenceModule) {
-            await this.generatePersistenceModule(appName, basePackage, steps, options.outputPath);
+            await this.generatePersistenceModule(resolvedAppName, resolvedBasePackage, resolvedSteps, options.outputPath);
         }
 
         if (includeCacheInvalidationModule) {
-            await this.generateCacheInvalidationModule(appName, basePackage, steps, includePersistenceModule, options.outputPath);
+            await this.generateCacheInvalidationModule(
+                resolvedAppName,
+                resolvedBasePackage,
+                resolvedSteps,
+                includePersistenceModule,
+                options.outputPath
+            );
         }
 
         // Generate orchestrator
         await this.generateOrchestrator(
-            appName,
-            basePackage,
-            steps,
+            resolvedAppName,
+            resolvedBasePackage,
+            resolvedSteps,
             includePersistenceModule,
             includeCacheInvalidationModule,
             aspectDefinitions,
@@ -534,22 +514,22 @@ class HandlebarsTemplateEngine {
 
         if (normalizedRuntimeLayout === 'pipeline-runtime') {
             await this.generatePipelineRuntimeModule(
-                appName,
-                basePackage,
-                steps,
+                resolvedAppName,
+                resolvedBasePackage,
+                resolvedSteps,
                 options.outputPath);
         } else if (normalizedRuntimeLayout === 'monolith') {
             await this.generateMonolithModule(
-                appName,
-                basePackage,
-                steps,
+                resolvedAppName,
+                resolvedBasePackage,
+                resolvedSteps,
                 includePersistenceModule,
                 includeCacheInvalidationModule,
                 options.outputPath);
         }
 
         await this.generateRuntimeMappingFiles(
-            steps,
+            resolvedSteps,
             includePersistenceModule,
             includeCacheInvalidationModule,
             normalizedRuntimeLayout,
@@ -557,22 +537,75 @@ class HandlebarsTemplateEngine {
         );
 
         // Generate utility scripts
-        await this.generateUtilityScripts(outputPath);
+        await this.generateUtilityScripts(options.outputPath);
 
         // Generate mvnw files
-        await this.generateMvNWFiles(outputPath);
+        await this.generateMvNWFiles(options.outputPath);
 
         // Generate Maven wrapper files
-        await this.generateMavenWrapperFiles(outputPath);
+        await this.generateMavenWrapperFiles(options.outputPath);
 
         // Generate other files
         await this.generateOtherFiles(
-            appName,
-            basePackage,
-            steps,
+            resolvedAppName,
+            resolvedBasePackage,
+            resolvedSteps,
             includePersistenceModule,
             includeCacheInvalidationModule,
-            outputPath);
+            options.outputPath);
+    }
+
+    normalizeGenerateApplicationOptions(appName, basePackage, steps, aspects, transport, runtimeLayout, outputPath) {
+        if (
+            appName
+            && typeof appName === 'object'
+            && basePackage === undefined
+            && steps === undefined
+            && aspects === undefined
+            && transport === undefined
+            && runtimeLayout === undefined
+            && outputPath === undefined
+        ) {
+            const options = { ...appName };
+            const normalizedLayout = this.normalizeRuntimeLayout(options.runtimeLayout);
+            return {
+                appName: options.appName,
+                basePackage: options.basePackage,
+                steps: Array.isArray(options.steps) ? options.steps : [],
+                aspects: options.aspects && typeof options.aspects === 'object' ? options.aspects : {},
+                transport: this.normalizeTransport(options.transport, normalizedLayout),
+                runtimeLayout: normalizedLayout,
+                outputPath: options.outputPath
+            };
+        }
+
+        if (steps && typeof steps === 'object' && !Array.isArray(steps)) {
+            const options = { appName, basePackage, ...steps };
+            const normalizedLayout = this.normalizeRuntimeLayout(options.runtimeLayout);
+            return {
+                appName: options.appName,
+                basePackage: options.basePackage,
+                steps: Array.isArray(options.steps) ? options.steps : [],
+                aspects: options.aspects && typeof options.aspects === 'object' ? options.aspects : {},
+                transport: this.normalizeTransport(options.transport, normalizedLayout),
+                runtimeLayout: normalizedLayout,
+                outputPath: options.outputPath
+            };
+        }
+
+        console.warn(
+            'generateApplication positional arguments are deprecated. Pass a single options object instead.'
+        );
+        const normalizedLayout = this.normalizeRuntimeLayout(runtimeLayout);
+        return {
+            appName,
+            basePackage,
+            steps: Array.isArray(steps) ? steps : [],
+            aspects: aspects && typeof aspects === 'object' ? aspects : {},
+            transport: this.normalizeTransport(transport, normalizedLayout),
+            runtimeLayout: normalizedLayout,
+            outputPath
+        };
     }
 
     async generateParentPom(
@@ -1652,151 +1685,15 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
     }
 
     buildRuntimeMapping(layout, steps, includePersistenceModule, includeCacheInvalidationModule) {
-        if (!Array.isArray(steps)) {
-            throw new Error('buildRuntimeMapping requires steps to be an array.');
-        }
-        if (!this.isRuntimeLayout(layout)) {
-            throw new Error(`Unsupported runtime layout '${layout}'.`);
-        }
-        const runtimeLayout = this.normalizeRuntimeLayout(layout);
-        const validatedSteps = steps;
-
-        const mappings = {
-            modular: {
-                layout: 'modular',
-                validation: 'auto',
-                defaults: {
-                    runtime: 'orchestrator-svc',
-                    module: 'orchestrator-svc',
-                    synthetic: {
-                        module: includePersistenceModule ? 'persistence-svc' : 'orchestrator-svc'
-                    }
-                },
-                modules: this.buildModularModules(validatedSteps, includePersistenceModule, includeCacheInvalidationModule)
-            },
-            'pipeline-runtime': {
-                layout: 'pipeline-runtime',
-                validation: 'auto',
-                defaults: {
-                    runtime: 'pipeline-runtime-svc',
-                    module: 'pipeline-runtime-svc',
-                    synthetic: {
-                        module: includePersistenceModule
-                            ? 'persistence-svc'
-                            : includeCacheInvalidationModule
-                                ? 'cache-invalidation-svc'
-                                : 'pipeline-runtime-svc'
-                    }
-                },
-                modules: this.buildPipelineModules(validatedSteps, includePersistenceModule, includeCacheInvalidationModule)
-            },
-            monolith: {
-                layout: 'monolith',
-                validation: 'auto',
-                defaults: {
-                    runtime: 'monolith-svc',
-                    module: 'monolith-svc',
-                    synthetic: {
-                        module: 'monolith-svc'
-                    }
-                },
-                modules: this.buildMonolithModules(validatedSteps, includePersistenceModule, includeCacheInvalidationModule)
-            }
-        };
-
-        return mappings[runtimeLayout];
-    }
-
-    buildModularModules(steps, includePersistenceModule, includeCacheInvalidationModule) {
-        const modules = {};
-        for (const step of steps) {
-            const moduleName = step.serviceName;
-            const stepName = this.stepId(step);
-            if (!moduleName || !stepName) {
-                continue;
-            }
-            modules[moduleName] = {
-                runtime: moduleName,
-                steps: [stepName]
-            };
-        }
-        modules['orchestrator-svc'] = { runtime: 'orchestrator-svc' };
-        if (includePersistenceModule) {
-            modules['persistence-svc'] = {
-                runtime: 'persistence-svc',
-                aspects: ['persistence']
-            };
-        }
-        if (includeCacheInvalidationModule) {
-            modules['cache-invalidation-svc'] = {
-                runtime: 'cache-invalidation-svc',
-                aspects: ['cache', 'cache-invalidate', 'cache-invalidate-all']
-            };
-        }
-        return modules;
-    }
-
-    buildPipelineModules(steps, includePersistenceModule, includeCacheInvalidationModule) {
-        const modules = {
-            'pipeline-runtime-svc': {
-                runtime: 'pipeline-runtime-svc',
-                steps: []
-            },
-            'orchestrator-svc': {
-                runtime: 'orchestrator-svc'
-            }
-        };
-        for (const step of steps) {
-            const stepName = this.stepId(step);
-            if (!stepName) {
-                continue;
-            }
-            modules['pipeline-runtime-svc'].steps.push(stepName);
-        }
-        if (includePersistenceModule) {
-            modules['persistence-svc'] = {
-                runtime: 'persistence-svc',
-                aspects: ['persistence']
-            };
-        }
-        if (includeCacheInvalidationModule) {
-            modules['cache-invalidation-svc'] = {
-                runtime: 'cache-invalidation-svc',
-                aspects: ['cache', 'cache-invalidate', 'cache-invalidate-all']
-            };
-        }
-        return modules;
-    }
-
-    buildMonolithModules(steps, includePersistenceModule, includeCacheInvalidationModule) {
-        const modules = {
-            'monolith-svc': {
-                runtime: 'monolith-svc',
-                steps: []
-            },
-            // Monolith folds orchestrator behavior into monolith-svc.
-            'orchestrator-svc': {
-                runtime: 'monolith-svc'
-            }
-        };
-        for (const step of steps) {
-            const stepName = this.stepId(step);
-            if (!stepName) {
-                continue;
-            }
-            modules['monolith-svc'].steps.push(stepName);
-        }
-        const monolithAspectTargets = [];
-        if (includePersistenceModule) {
-            monolithAspectTargets.push('persistence');
-        }
-        if (includeCacheInvalidationModule) {
-            monolithAspectTargets.push('cache', 'cache-invalidate', 'cache-invalidate-all');
-        }
-        if (monolithAspectTargets.length > 0) {
-            modules['monolith-svc'].aspects = monolithAspectTargets;
-        }
-        return modules;
+        return buildRuntimeMappingCore({
+            layout,
+            steps,
+            includePersistenceModule,
+            includeCacheInvalidationModule,
+            isRuntimeLayout: this.isRuntimeLayout.bind(this),
+            normalizeRuntimeLayout: this.normalizeRuntimeLayout.bind(this),
+            stepId: this.stepId.bind(this)
+        });
     }
 
     async generateRuntimeMappingFiles(

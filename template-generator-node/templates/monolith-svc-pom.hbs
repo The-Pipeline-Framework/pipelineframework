@@ -20,8 +20,6 @@
         <protobuf.descriptor.fileArg>-Aprotobuf.descriptor.file=${protobuf.descriptor.path}</protobuf.descriptor.fileArg>
         <monolith.source.root>${project.basedir}/..</monolith.source.root>
         <monolith.duplicate.check.script>${monolith.source.root}/build-tools/check-duplicate-sources.sh</monolith.duplicate.check.script>
-        <lombok.version>1.18.36</lombok.version>
-        <mapstruct.version>1.5.5.Final</mapstruct.version>
 {{#each sourceDirs}}
         <{{propertyName}}>${monolith.source.root}/{{moduleName}}/src/main/java</{{propertyName}}>
 {{/each}}

@@ -698,6 +698,9 @@
       // Generate the complete application using the template engine
       const stepsCopy = [...config.steps];
       const selectedLayout = normalizeRuntimeLayout(config.runtimeLayout);
+      if (selectedLayout === 'monolith' && config.transport !== 'LOCAL') {
+        config = { ...config, transport: 'LOCAL' };
+      }
       const selectedTransport = normalizeTransport(config.transport, selectedLayout);
       await templateEngine.generateApplication(
         config.appName,
@@ -861,14 +864,6 @@
           step.serviceNameCamel = capitalizedCamelName;
         }
         
-        if (!step.inputFields || !Array.isArray(step.inputFields)) {
-          step.inputFields = [];
-        }
-        
-        if (!step.outputFields || !Array.isArray(step.outputFields)) {
-          step.outputFields = [];
-        }
-        
         // Validate fields have required properties and valid types
         for (let j = 0; j < step.inputFields.length; j++) {
           const field = step.inputFields[j];
@@ -988,6 +983,9 @@
         break;
       case 'REDUCTION':
         step.stepType = 'StepManyToOne';
+        break;
+      case 'MANY_TO_MANY':
+        step.stepType = 'StepManyToMany';
         break;
       case 'SIDE_EFFECT':
         step.stepType = 'StepSideEffect';
