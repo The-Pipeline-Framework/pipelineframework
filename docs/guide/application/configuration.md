@@ -12,8 +12,9 @@ This page maps the most-used configuration entry points and where to manage them
 For AWS Lambda-targeted applications:
 
 - Build-time platform override:
-  - system property: `pipeline.platform=LAMBDA`
-  - environment variable: `PIPELINE_PLATFORM=LAMBDA`
+  - system property: `pipeline.platform=FUNCTION`
+  - environment variable: `PIPELINE_PLATFORM=FUNCTION`
+  - legacy aliases still accepted: `LAMBDA` and `STANDARD`
 - Build-time transport override:
   - system property: `pipeline.transport=REST`
   - environment variable: `PIPELINE_TRANSPORT=REST`

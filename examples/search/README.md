@@ -28,9 +28,9 @@ Use the Quarkus plugin in IntelliJ IDEA or run with:
 ./mvnw compile quarkus:dev
 ```
 
-### Lambda Platform Build (Local Mock Runtime)
+### Function Platform Build (Local Mock Runtime)
 
-Build the search pipeline with Lambda platform mode and RESTful resource naming:
+Build the search pipeline with Function platform mode and RESTful resource naming:
 
 ```bash
 ./build-lambda.sh -DskipTests
@@ -40,7 +40,7 @@ Run only the Lambda mock event server smoke test:
 
 ```bash
 ./mvnw -pl orchestrator-svc -am \
-  -Dpipeline.platform=LAMBDA \
+  -Dpipeline.platform=FUNCTION \
   -Dtest=LambdaMockEventServerSmokeTest \
   test
 ```

@@ -84,7 +84,7 @@ jobs:
           ./mvnw "${maven_args[@]}" -f examples/search/pom.xml \
             -pl orchestrator-svc \
             -am \
-            -Dpipeline.platform=LAMBDA \
+            -Dpipeline.platform=FUNCTION \
             -Dpipeline.transport=REST \
             -Dpipeline.rest.naming.strategy=RESOURCEFUL \
             -Dtest=LambdaMockEventServerSmokeTest \
@@ -161,7 +161,7 @@ jobs:
             -pl crawl-source-svc \
             -am \
             -DskipTests \
-            -Dpipeline.platform=LAMBDA \
+            -Dpipeline.platform=FUNCTION \
             -Dpipeline.transport=REST \
             -Dpipeline.rest.naming.strategy=RESOURCEFUL \
             -Dquarkus.container-image.build=false \

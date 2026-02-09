@@ -91,7 +91,7 @@ public class PipelineCompilationContext {
         this.pluginHost = false;
         this.orchestratorGenerated = false;
         this.transportMode = TransportMode.GRPC;
-        this.platformMode = PlatformMode.STANDARD;
+        this.platformMode = PlatformMode.COMPUTE;
     }
 
     // Getters for additional properties
@@ -222,21 +222,41 @@ public class PipelineCompilationContext {
     }
 
     /**
-     * Indicates whether the current platform mode is LAMBDA.
+     * Indicates whether the current platform mode is FUNCTION.
      *
-     * @return true when platform mode is LAMBDA
+     * @return true when platform mode is FUNCTION
      */
-    public boolean isPlatformModeLambda() {
-        return platformMode == PlatformMode.LAMBDA;
+    public boolean isPlatformModeFunction() {
+        return platformMode == PlatformMode.FUNCTION;
     }
 
     /**
-     * Indicates whether the current platform mode is STANDARD.
+     * Indicates whether the current platform mode is COMPUTE.
      *
-     * @return true when platform mode is STANDARD
+     * @return true when platform mode is COMPUTE
      */
+    public boolean isPlatformModeCompute() {
+        return platformMode == PlatformMode.COMPUTE;
+    }
+
+    /**
+     * Backward-compatible alias for FUNCTION checks.
+     *
+     * @return true when platform mode is FUNCTION
+     */
+    @Deprecated(forRemoval = false)
+    public boolean isPlatformModeLambda() {
+        return isPlatformModeFunction();
+    }
+
+    /**
+     * Backward-compatible alias for COMPUTE checks.
+     *
+     * @return true when platform mode is COMPUTE
+     */
+    @Deprecated(forRemoval = false)
     public boolean isPlatformModeStandard() {
-        return platformMode == PlatformMode.STANDARD;
+        return isPlatformModeCompute();
     }
 
     /**
@@ -332,12 +352,12 @@ public class PipelineCompilationContext {
     }
 
     /**
-     * Sets the deployment platform mode, defaulting to STANDARD when null.
+     * Sets the deployment platform mode, defaulting to COMPUTE when null.
      *
      * @param platformMode platform mode
      */
     public void setPlatformMode(PlatformMode platformMode) {
-        this.platformMode = platformMode == null ? PlatformMode.STANDARD : platformMode;
+        this.platformMode = platformMode == null ? PlatformMode.COMPUTE : platformMode;
     }
 
     /**

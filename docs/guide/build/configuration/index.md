@@ -17,7 +17,7 @@ The pipeline YAML controls global settings used by the annotation processor.
 | Property    | Type | Default | Description                                                 |
 |-------------|------|---------|-------------------------------------------------------------|
 | `transport` | enum | `GRPC`  | Global transport for generated adapters (`GRPC`, `REST`, or `LOCAL`). |
-| `platform`  | enum | `STANDARD` | Target deployment platform (`STANDARD` or `LAMBDA`). |
+| `platform`  | enum | `COMPUTE` | Target deployment platform (`COMPUTE` or `FUNCTION`; legacy aliases: `STANDARD`, `LAMBDA`). |
 
 If `pipeline-config.yaml` (the template configuration produced by Canvas or the template generator) is present,
 the build can also use it to generate protobuf definitions and orchestrator endpoints at compile time.
@@ -70,7 +70,7 @@ Pass via `maven-compiler-plugin` with `-A` arguments.
 | `-Apipeline.generatedSourcesRoot`       | path    | none    | Legacy alias of `pipeline.generatedSourcesDir`.                                                                    |
 | `-Apipeline.orchestrator.generate`      | boolean | `false` | Generate orchestrator endpoint even without `@PipelineOrchestrator`. CLI generation still requires the annotation. |
 | `-Apipeline.transport`                  | enum    | from YAML (`GRPC`) | Build-time transport override.                                                                                |
-| `-Apipeline.platform`                   | enum    | from YAML (`STANDARD`) | Build-time platform override (`STANDARD` or `LAMBDA`).                                                      |
+| `-Apipeline.platform`                   | enum    | from YAML (`COMPUTE`) | Build-time platform override (`COMPUTE` or `FUNCTION`; legacy aliases: `STANDARD`, `LAMBDA`).                                                      |
 | `-Apipeline.rest.naming.strategy`       | enum    | `RESOURCEFUL` | REST endpoint naming strategy (`RESOURCEFUL` or `LEGACY`).                                                     |
 
 Equivalent process-level overrides are also supported through:

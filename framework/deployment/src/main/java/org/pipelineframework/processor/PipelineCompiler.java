@@ -29,7 +29,7 @@ import org.pipelineframework.annotation.PipelineStep;
     "pipeline.cache.keyGenerator", // Optional: fully-qualified CacheKeyGenerator class for @CacheResult
     "pipeline.orchestrator.generate", // Optional: enable orchestrator endpoint generation
     "pipeline.module", // Optional: logical module name for runtime mapping
-    "pipeline.platform" // Optional: target deployment platform (STANDARD|LAMBDA)
+    "pipeline.platform" // Optional: target deployment platform (COMPUTE|FUNCTION; legacy: STANDARD|LAMBDA)
 })
 @SupportedSourceVersion(SourceVersion.RELEASE_21)
 public class PipelineCompiler extends AbstractProcessingTool {

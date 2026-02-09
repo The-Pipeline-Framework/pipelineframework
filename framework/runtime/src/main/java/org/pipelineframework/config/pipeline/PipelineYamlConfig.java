@@ -17,15 +17,15 @@
 package org.pipelineframework.config.pipeline;
 
 import java.util.List;
-import java.util.Locale;
-import java.util.Set;
+
+import org.pipelineframework.config.PlatformOverrideResolver;
 
 /**
  * Pipeline configuration parsed from pipeline.yaml.
  *
  * @param basePackage the base package for generated pipeline classes
  * @param transport the transport mode (GRPC, REST, or LOCAL)
- * @param platform the runtime/deployment platform mode (STANDARD or LAMBDA)
+ * @param platform the runtime/deployment platform mode (COMPUTE or FUNCTION)
  * @param steps the configured pipeline steps
  * @param aspects the configured pipeline aspects
  */
@@ -39,18 +39,22 @@ public record PipelineYamlConfig(
     /**
      * Creates a validated pipeline configuration.
      *
-     * @throws IllegalArgumentException when platform is not STANDARD or LAMBDA
+     * @throws IllegalArgumentException when platform is not COMPUTE or FUNCTION
      */
     public PipelineYamlConfig {
-        String normalizedPlatform = platform == null ? "" : platform.trim();
-        if (normalizedPlatform.isBlank()) {
-            normalizedPlatform = "STANDARD";
-        } else {
-            normalizedPlatform = normalizedPlatform.toUpperCase(Locale.ROOT);
+        String normalizedPlatform = PlatformOverrideResolver.normalizeKnownPlatform(platform);
+        if (normalizedPlatform == null) {
+            if (platform == null || platform.isBlank()) {
+                normalizedPlatform = "COMPUTE";
+            } else {
+                throw new IllegalArgumentException(
+                    "Invalid platform '" + platform + "'. Allowed values: COMPUTE, FUNCTION "
+                        + "(legacy aliases: STANDARD, LAMBDA).");
+            }
         }
-        if (!Set.of("STANDARD", "LAMBDA").contains(normalizedPlatform)) {
+        if (normalizedPlatform.isBlank()) {
             throw new IllegalArgumentException(
-                "Invalid platform '" + platform + "'. Allowed values: STANDARD, LAMBDA.");
+                "Invalid platform '" + platform + "'. Allowed values: COMPUTE, FUNCTION.");
         }
         platform = normalizedPlatform;
     }
@@ -69,6 +73,6 @@ public record PipelineYamlConfig(
         List<PipelineYamlStep> steps,
         List<PipelineYamlAspect> aspects
     ) {
-        this(basePackage, transport, "STANDARD", steps, aspects);
+        this(basePackage, transport, "COMPUTE", steps, aspects);
     }
 }

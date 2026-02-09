@@ -117,9 +117,9 @@ public class PipelineSemanticAnalysisPhaseTest {
     }
 
     @Test
-    public void lambdaPlatformRequiresRestTransport() throws Exception {
+    public void functionPlatformRequiresRestTransport() throws Exception {
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
-        context.setPlatformMode(PlatformMode.LAMBDA);
+        context.setPlatformMode(PlatformMode.FUNCTION);
         context.setTransportMode(TransportMode.GRPC);
         context.setStepModels(List.of(step(StreamingShape.UNARY_UNARY)));
 
@@ -133,9 +133,9 @@ public class PipelineSemanticAnalysisPhaseTest {
     @EnumSource(
         value = StreamingShape.class,
         names = {"UNARY_STREAMING", "STREAMING_UNARY", "STREAMING_STREAMING"})
-    public void lambdaPlatformRejectsStreamingShapes(StreamingShape shape) throws Exception {
+    public void functionPlatformRejectsStreamingShapes(StreamingShape shape) throws Exception {
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
-        context.setPlatformMode(PlatformMode.LAMBDA);
+        context.setPlatformMode(PlatformMode.FUNCTION);
         context.setTransportMode(TransportMode.REST);
         context.setStepModels(List.of(step(shape)));
 
@@ -146,9 +146,9 @@ public class PipelineSemanticAnalysisPhaseTest {
     }
 
     @Test
-    public void lambdaPlatformAllowsUnaryRestSteps() throws Exception {
+    public void functionPlatformAllowsUnaryRestSteps() throws Exception {
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
-        context.setPlatformMode(PlatformMode.LAMBDA);
+        context.setPlatformMode(PlatformMode.FUNCTION);
         context.setTransportMode(TransportMode.REST);
         context.setStepModels(List.of(step(StreamingShape.UNARY_UNARY)));
 

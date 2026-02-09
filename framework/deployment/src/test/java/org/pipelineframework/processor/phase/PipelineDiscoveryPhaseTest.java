@@ -92,6 +92,6 @@ class PipelineDiscoveryPhaseTest {
         assertNotNull(context.getModuleDir()); // Should be set to default path
         assertFalse(context.isPluginHost()); // Should be false since no plugin elements
         assertTrue(context.isTransportModeGrpc()); // Should be true by default
-        assertEquals(PlatformMode.STANDARD, context.getPlatformMode()); // Should be STANDARD by default
+        assertEquals(PlatformMode.COMPUTE, context.getPlatformMode()); // Should default to COMPUTE
     }
 }

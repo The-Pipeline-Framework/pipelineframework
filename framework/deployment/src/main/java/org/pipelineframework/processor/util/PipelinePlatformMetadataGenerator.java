@@ -44,7 +44,7 @@ public class PipelinePlatformMetadataGenerator {
             throw new IllegalArgumentException("Compilation context is required to write platform metadata");
         }
         PlatformMetadata metadata = new PlatformMetadata(
-            ctx.getPlatformMode() != null ? ctx.getPlatformMode().name() : "STANDARD",
+            ctx.getPlatformMode() != null ? ctx.getPlatformMode().name() : "COMPUTE",
             ctx.getTransportMode() != null ? ctx.getTransportMode().name() : "GRPC",
             ctx.getModuleName(),
             ctx.isPluginHost());

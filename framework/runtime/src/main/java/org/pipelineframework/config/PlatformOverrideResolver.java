@@ -10,7 +10,7 @@ import java.util.function.Function;
 public final class PlatformOverrideResolver {
     public static final String PLATFORM_PROPERTY_KEY = "pipeline.platform";
     public static final String PLATFORM_ENV_KEY = "PIPELINE_PLATFORM";
-    public static final Set<String> KNOWN_PLATFORMS = Set.of("STANDARD", "LAMBDA");
+    public static final Set<String> KNOWN_PLATFORMS = Set.of("COMPUTE", "FUNCTION");
 
     private PlatformOverrideResolver() {
     }
@@ -55,6 +55,10 @@ public final class PlatformOverrideResolver {
             return null;
         }
         String normalized = trimmed.toUpperCase(Locale.ROOT);
-        return KNOWN_PLATFORMS.contains(normalized) ? normalized : null;
+        return switch (normalized) {
+            case "STANDARD", "COMPUTE" -> "COMPUTE";
+            case "LAMBDA", "FUNCTION" -> "FUNCTION";
+            default -> null;
+        };
     }
 }

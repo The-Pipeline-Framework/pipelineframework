@@ -45,20 +45,20 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
 
         validateParallelismHints(ctx);
         validateProviderHints(ctx);
-        validateLambdaPlatformConstraints(ctx);
+        validateFunctionPlatformConstraints(ctx);
 
         // Analyze streaming shapes and other semantic properties
         // This phase focuses on semantic analysis without building bindings or calling renderers
     }
 
-    private void validateLambdaPlatformConstraints(PipelineCompilationContext ctx) {
-        if (ctx == null || ctx.getProcessingEnv() == null || !ctx.isPlatformModeLambda()) {
+    private void validateFunctionPlatformConstraints(PipelineCompilationContext ctx) {
+        if (ctx == null || ctx.getProcessingEnv() == null || !ctx.isPlatformModeFunction()) {
             return;
         }
         if (!ctx.isTransportModeRest()) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 Diagnostic.Kind.ERROR,
-                "pipeline.platform=LAMBDA currently requires pipeline.transport=REST.");
+                "pipeline.platform=FUNCTION currently requires pipeline.transport=REST.");
         }
         List<PipelineStepModel> steps = ctx.getStepModels();
         if (steps == null || steps.isEmpty()) {
@@ -71,7 +71,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
             if (model.streamingShape() != StreamingShape.UNARY_UNARY) {
                 ctx.getProcessingEnv().getMessager().printMessage(
                     Diagnostic.Kind.ERROR,
-                    "pipeline.platform=LAMBDA currently supports only UNARY_UNARY steps in REST mode. "
+                    "pipeline.platform=FUNCTION currently supports only UNARY_UNARY steps in REST mode. "
                         + "This corresponds to ONE_TO_ONE-style steps in pipeline.yaml cardinality terms. "
                         + "Unsupported streaming shape '" + model.streamingShape()
                         + "' for step '" + model.serviceName() + "'.");

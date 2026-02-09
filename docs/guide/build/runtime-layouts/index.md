@@ -31,10 +31,10 @@ Values include `GRPC`, `REST`, and `LOCAL`.
 
 ### Platform mode (deployment target)
 
-Values include `STANDARD` and `LAMBDA`.
+Values include `COMPUTE` and `FUNCTION` (legacy aliases: `STANDARD`, `LAMBDA`).
 
 - Decides whether generation targets standard Quarkus runtimes or AWS Lambda packaging/runtime semantics.
-- Constrained by transport and step shapes (currently Lambda requires REST and unary-unary steps).
+- Constrained by transport and step shapes (currently Function mode requires REST and unary-unary steps).
 - Orthogonal to runtime layout/topology.
 
 ## Who this guide is for

@@ -58,7 +58,7 @@ public class PipelineStepConfigLoader {
          * @param outputTypes output types
          */
         public StepConfig(String basePackage, String transport, List<String> inputTypes, List<String> outputTypes) {
-            this(basePackage, transport, "STANDARD", inputTypes, outputTypes);
+            this(basePackage, transport, "COMPUTE", inputTypes, outputTypes);
         }
     }
 
@@ -100,7 +100,7 @@ public class PipelineStepConfigLoader {
         if (normalizedPlatform != null) {
             platform = normalizedPlatform;
         } else {
-            platform = "STANDARD";
+            platform = "COMPUTE";
         }
         String platformOverride = resolvePlatformOverride();
         if (platformOverride != null && !platformOverride.isBlank()) {

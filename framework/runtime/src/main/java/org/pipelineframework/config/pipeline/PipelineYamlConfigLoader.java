@@ -123,7 +123,7 @@ public class PipelineYamlConfigLoader {
      *
      * Reads top-level fields (basePackage, transport, platform), applies overrides if present,
      * normalizes known transport values (defaults to "GRPC" for unknown transports), normalizes known
-     * platform values (defaults to "STANDARD" for unknown values), and
+     * platform values (defaults to "COMPUTE" for unknown values), and
      * reads pipeline steps and aspects from the root map.
      *
      * @param root   the deserialized YAML root; expected to be a Map
@@ -167,7 +167,7 @@ public class PipelineYamlConfigLoader {
             platformFromOverride = true;
         }
         if (platform == null || platform.isBlank()) {
-            platform = "STANDARD";
+            platform = "COMPUTE";
         } else {
             String normalized = PlatformOverrideResolver.normalizeKnownPlatform(platform);
             if (normalized != null) {
@@ -175,12 +175,12 @@ public class PipelineYamlConfigLoader {
             } else {
                 if (platformFromOverride) {
                     LOG.warning("Unknown platform override '" + platform
-                        + "'; defaulting pipeline platform to STANDARD.");
+                        + "'; defaulting pipeline platform to COMPUTE.");
                 } else {
                     LOG.warning("Unknown platform in YAML config '" + platform
-                        + "'; defaulting pipeline platform to STANDARD.");
+                        + "'; defaulting pipeline platform to COMPUTE.");
                 }
-                platform = "STANDARD";
+                platform = "COMPUTE";
             }
         }
         List<PipelineYamlStep> steps = readSteps(rootMap);

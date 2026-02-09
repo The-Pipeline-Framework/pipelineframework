@@ -72,7 +72,7 @@ class PipelineTemplateConfigLoaderTest {
         assertEquals("Test App", config.appName());
         assertEquals("com.example.test", config.basePackage());
         assertEquals("GRPC", config.transport());
-        assertEquals(PipelinePlatform.STANDARD, config.platform());
+        assertEquals(PipelinePlatform.COMPUTE, config.platform());
         assertEquals(1, config.steps().size());
 
         PipelineTemplateStep step = config.steps().get(0);
@@ -110,7 +110,7 @@ class PipelineTemplateConfigLoaderTest {
             appName: "Test App"
             basePackage: "com.example.test"
             transport: "REST"
-            platform: "STANDARD"
+            platform: "COMPUTE"
             steps: []
             """;
         Path configPath = tempDir.resolve("pipeline-config.yaml");
@@ -118,7 +118,7 @@ class PipelineTemplateConfigLoaderTest {
 
         PipelineTemplateConfigLoader loader = new PipelineTemplateConfigLoader();
         PipelineTemplateConfig config = loader.load(configPath);
-        assertEquals(PipelinePlatform.LAMBDA, config.platform());
+        assertEquals(PipelinePlatform.FUNCTION, config.platform());
         assertEquals("REST", config.transport());
     }
 }

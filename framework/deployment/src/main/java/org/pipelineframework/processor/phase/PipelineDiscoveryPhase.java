@@ -32,7 +32,7 @@ import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
  */
 public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     private static final PipelineStepConfigLoader.StepConfig DEFAULT_STEP_CONFIG =
-        new PipelineStepConfigLoader.StepConfig("", "GRPC", "STANDARD", List.of(), List.of());
+        new PipelineStepConfigLoader.StepConfig("", "GRPC", "COMPUTE", List.of(), List.of());
 
     /**
      * Creates a new PipelineDiscoveryPhase.
@@ -199,15 +199,15 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         PipelineStepConfigLoader.StepConfig stepConfig) {
         String platform = stepConfig == null ? null : stepConfig.platform();
         if (platform == null || platform.isBlank()) {
-            return PlatformMode.STANDARD;
+            return PlatformMode.COMPUTE;
         }
         Optional<PlatformMode> mode = PlatformMode.fromStringOptional(platform);
         if (mode.isEmpty()) {
             if (ctx.getProcessingEnv() != null) {
                 ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
-                    "Unknown pipeline platform '" + platform + "'; defaulting to STANDARD.");
+                    "Unknown pipeline platform '" + platform + "'; defaulting to COMPUTE.");
             }
-            return PlatformMode.STANDARD;
+            return PlatformMode.COMPUTE;
         }
         return mode.get();
     }

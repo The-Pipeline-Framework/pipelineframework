@@ -1,6 +1,6 @@
 # Search Lambda Verification Lane
 
-This page is a reference verification lane for `examples/search` in Lambda mode.
+This page is a reference verification lane for `examples/search` in Function mode (AWS Lambda target).
 
 Canonical Lambda development and operations guidance lives here:
 
@@ -9,7 +9,7 @@ Canonical Lambda development and operations guidance lives here:
 
 ## Scope
 
-- Verifies TPF Lambda platform wiring on a concrete example
+- Verifies TPF Function platform wiring on a concrete example
 - Verifies Quarkus Lambda mock event-server behavior locally
 - Does not require provisioning a live AWS stack
 
@@ -21,7 +21,7 @@ Canonical Lambda development and operations guidance lives here:
 
 This sets:
 
-- `pipeline.platform=LAMBDA`
+- `pipeline.platform=FUNCTION`
 - `pipeline.transport=REST`
 - `pipeline.rest.naming.strategy=RESOURCEFUL`
 
@@ -30,7 +30,7 @@ This sets:
 ```bash
 ./mvnw -f examples/search/pom.xml \
   -pl orchestrator-svc -am \
-  -Dpipeline.platform=LAMBDA \
+  -Dpipeline.platform=FUNCTION \
   -Dtest=LambdaMockEventServerSmokeTest \
   test
 ```
@@ -45,7 +45,7 @@ Expected result:
 ```bash
 ./mvnw -f examples/search/pom.xml \
   -pl crawl-source-svc -am \
-  -Dpipeline.platform=LAMBDA \
+  -Dpipeline.platform=FUNCTION \
   -DskipTests \
   -Dquarkus.native.enabled=true \
   -Pnative \

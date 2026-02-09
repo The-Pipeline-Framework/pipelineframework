@@ -34,7 +34,7 @@ import org.yaml.snakeyaml.Yaml;
  */
 public class PipelineTemplateConfigLoader {
     private static final String DEFAULT_TRANSPORT = "GRPC";
-    private static final PipelinePlatform DEFAULT_PLATFORM = PipelinePlatform.STANDARD;
+    private static final PipelinePlatform DEFAULT_PLATFORM = PipelinePlatform.COMPUTE;
 
     /**
      * Creates a new PipelineTemplateConfigLoader.
@@ -72,9 +72,8 @@ public class PipelineTemplateConfigLoader {
             platform = platformOverride.trim();
         }
         String normalizedPlatform = PlatformOverrideResolver.normalizeKnownPlatform(platform);
-        PipelinePlatform resolvedPlatform = normalizedPlatform != null
-            ? PipelinePlatform.valueOf(normalizedPlatform)
-            : DEFAULT_PLATFORM;
+        PipelinePlatform resolvedPlatform = PipelinePlatform.fromStringOptional(normalizedPlatform)
+            .orElse(DEFAULT_PLATFORM);
         List<PipelineTemplateStep> steps = readSteps(rootMap);
         Map<String, PipelineTemplateAspect> aspects = readAspects(rootMap);
 

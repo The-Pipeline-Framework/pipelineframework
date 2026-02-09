@@ -39,7 +39,7 @@ class PipelinePlatformMetadataGeneratorTest {
         RoundEnvironment roundEnv = mock(RoundEnvironment.class);
 
         PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, roundEnv);
-        ctx.setPlatformMode(PlatformMode.LAMBDA);
+        ctx.setPlatformMode(PlatformMode.FUNCTION);
         ctx.setTransportMode(TransportMode.REST);
         ctx.setModuleName("orchestrator-svc");
         ctx.setPluginHost(false);
@@ -48,7 +48,7 @@ class PipelinePlatformMetadataGeneratorTest {
 
         Path file = tempDir.resolve("class-output").resolve("META-INF/pipeline/platform.json");
         JsonObject metadata = new Gson().fromJson(Files.readString(file), JsonObject.class);
-        assertEquals("LAMBDA", metadata.get("platform").getAsString());
+        assertEquals("FUNCTION", metadata.get("platform").getAsString());
         assertEquals("REST", metadata.get("transport").getAsString());
         assertEquals("orchestrator-svc", metadata.get("module").getAsString());
         assertFalse(metadata.get("pluginHost").getAsBoolean());

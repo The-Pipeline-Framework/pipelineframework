@@ -43,7 +43,7 @@ class PipelineStepConfigLoaderTest {
         assertTrue(stepConfig.outputTypes().contains("CsvPaymentsInputFile"));
         assertTrue(stepConfig.outputTypes().contains("PaymentRecord"));
         assertTrue(stepConfig.outputTypes().contains("PaymentStatus"));
-        assertEquals("STANDARD", stepConfig.platform());
+        assertEquals("COMPUTE", stepConfig.platform());
     }
 
     @Test
@@ -58,7 +58,7 @@ class PipelineStepConfigLoaderTest {
         PipelineStepConfigLoader.StepConfig stepConfig = loader.load(config);
 
         assertEquals("LOCAL", stepConfig.transport());
-        assertEquals("STANDARD", stepConfig.platform());
+        assertEquals("COMPUTE", stepConfig.platform());
     }
 
     @Test
@@ -73,21 +73,21 @@ class PipelineStepConfigLoaderTest {
         PipelineStepConfigLoader.StepConfig stepConfig = loader.load(config);
 
         assertEquals("REST", stepConfig.transport());
-        assertEquals("STANDARD", stepConfig.platform());
+        assertEquals("COMPUTE", stepConfig.platform());
     }
 
     @Test
     void platformOverridePrefersSystemPropertyOverEnv(@TempDir Path tempDir) throws IOException {
         PipelineStepConfigLoader loader = new PipelineStepConfigLoader(
             key -> "pipeline.platform".equals(key) ? "LAMBDA" : null,
-            key -> "PIPELINE_PLATFORM".equals(key) ? "STANDARD" : null
+            key -> "PIPELINE_PLATFORM".equals(key) ? "COMPUTE" : null
         );
         Path config = tempDir.resolve("pipeline-config.yaml");
-        Files.writeString(config, "basePackage: test\nplatform: STANDARD\nsteps: []\n");
+        Files.writeString(config, "basePackage: test\nplatform: COMPUTE\nsteps: []\n");
 
         PipelineStepConfigLoader.StepConfig stepConfig = loader.load(config);
 
-        assertEquals("LAMBDA", stepConfig.platform());
+        assertEquals("FUNCTION", stepConfig.platform());
     }
 
     @Test
@@ -97,10 +97,10 @@ class PipelineStepConfigLoaderTest {
             key -> "PIPELINE_PLATFORM".equals(key) ? "LAMBDA" : null
         );
         Path config = tempDir.resolve("pipeline-config.yaml");
-        Files.writeString(config, "basePackage: test\nplatform: STANDARD\nsteps: []\n");
+        Files.writeString(config, "basePackage: test\nplatform: COMPUTE\nsteps: []\n");
 
         PipelineStepConfigLoader.StepConfig stepConfig = loader.load(config);
 
-        assertEquals("LAMBDA", stepConfig.platform());
+        assertEquals("FUNCTION", stepConfig.platform());
     }
 }

@@ -53,6 +53,6 @@ public record PipelineTemplateConfig(
         List<PipelineTemplateStep> steps,
         Map<String, PipelineTemplateAspect> aspects
     ) {
-        this(appName, basePackage, transport, PipelinePlatform.STANDARD, steps, aspects);
+        this(appName, basePackage, transport, PipelinePlatform.COMPUTE, steps, aspects);
     }
 }
