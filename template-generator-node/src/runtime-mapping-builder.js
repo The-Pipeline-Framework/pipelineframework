@@ -179,5 +179,8 @@ function buildRuntimeMappingCore(options) {
 }
 
 module.exports = {
-    buildRuntimeMappingCore
+    buildRuntimeMappingCore,
+    buildModularModules,
+    buildPipelineModules,
+    buildMonolithModules
 };

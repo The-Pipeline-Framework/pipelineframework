@@ -152,7 +152,7 @@
     if (typeof value !== 'string') {
       return 'modular';
     }
-    const normalized = value.trim().toLowerCase();
+    const normalized = value.trim().replace(/_/g, '-').toLowerCase();
     if (normalized === 'pipeline-runtime' || normalized === 'monolith') {
       return normalized;
     }
@@ -1126,21 +1126,6 @@
           bind:value={config.basePackage}
           class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
         />
-        <div class="mt-2">
-          <label class="block text-sm font-medium text-gray-700 mb-1">Runtime Layout</label>
-          <select
-            bind:value={config.runtimeLayout}
-            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-          >
-            {#each runtimeLayoutOptions as option}
-              <option value={option.value}>{option.label}</option>
-            {/each}
-          </select>
-          <p class="mt-1 text-xs text-gray-600">
-            Layout changes deployable topology, not where step source code is authored. Even in
-            <code>monolith</code>, step modules are scaffolded and <code>monolith-svc</code> assembles them at build time.
-          </p>
-        </div>
         <div class="mt-2 flex flex-wrap gap-4 text-sm text-gray-700">
           <label class="inline-flex items-center">
             <input
@@ -1161,6 +1146,22 @@
             <span class="ml-2">Add cache plugin</span>
           </label>
         </div>
+      </div>
+
+      <div class="flex-1">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Runtime Layout</label>
+        <select
+          bind:value={config.runtimeLayout}
+          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+        >
+          {#each runtimeLayoutOptions as option}
+            <option value={option.value}>{option.label}</option>
+          {/each}
+        </select>
+        <p class="mt-1 text-xs text-gray-600">
+          Layout changes deployable topology, not where step source code is authored. Even in
+          <code>monolith</code>, step modules are scaffolded and <code>monolith-svc</code> assembles them at build time.
+        </p>
       </div>
     </div>
   </div>

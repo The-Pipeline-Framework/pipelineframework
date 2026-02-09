@@ -24,144 +24,15 @@ if (typeof window !== 'undefined' && window.Handlebars) {
     // Node.js environment
     Handlebars = require('handlebars');
 }
-let buildRuntimeMappingCore;
-if (typeof require === 'function') {
+let buildRuntimeMappingCore = null;
+if (typeof globalThis !== 'undefined' && globalThis.__TPF_RUNTIME_MAPPING_BUILDER__) {
+    buildRuntimeMappingCore = globalThis.__TPF_RUNTIME_MAPPING_BUILDER__.buildRuntimeMappingCore;
+}
+if (!buildRuntimeMappingCore && typeof require === 'function') {
     try {
         ({ buildRuntimeMappingCore } = require('./runtime-mapping-builder'));
     } catch (_error) {
         buildRuntimeMappingCore = null;
-    }
-}
-
-function buildRuntimeMappingCoreFallback(options) {
-    const {
-        layout,
-        steps,
-        includePersistenceModule,
-        includeCacheInvalidationModule,
-        isRuntimeLayout,
-        normalizeRuntimeLayout,
-        stepId
-    } = options;
-
-    if (!Array.isArray(steps)) {
-        throw new Error('buildRuntimeMapping requires steps to be an array.');
-    }
-    if (!isRuntimeLayout(layout)) {
-        throw new Error(`Unsupported runtime layout '${layout}'.`);
-    }
-
-    const runtimeLayout = normalizeRuntimeLayout(layout);
-    const modularModules = {};
-    for (const step of steps) {
-        const moduleName = step.serviceName;
-        const resolvedStepId = stepId(step);
-        if (!moduleName || !resolvedStepId) {
-            continue;
-        }
-        modularModules[moduleName] = {
-            runtime: moduleName,
-            steps: [resolvedStepId]
-        };
-    }
-    modularModules['orchestrator-svc'] = { runtime: 'orchestrator-svc' };
-    if (includePersistenceModule) {
-        modularModules['persistence-svc'] = { runtime: 'persistence-svc', aspects: ['persistence'] };
-    }
-    if (includeCacheInvalidationModule) {
-        modularModules['cache-invalidation-svc'] = {
-            runtime: 'cache-invalidation-svc',
-            aspects: ['cache', 'cache-invalidate', 'cache-invalidate-all']
-        };
-    }
-
-    const pipelineModules = {
-        'pipeline-runtime-svc': { runtime: 'pipeline-runtime-svc', steps: [] },
-        'orchestrator-svc': { runtime: 'orchestrator-svc' }
-    };
-    for (const step of steps) {
-        const resolvedStepId = stepId(step);
-        if (resolvedStepId) {
-            pipelineModules['pipeline-runtime-svc'].steps.push(resolvedStepId);
-        }
-    }
-    if (includePersistenceModule) {
-        pipelineModules['persistence-svc'] = { runtime: 'persistence-svc', aspects: ['persistence'] };
-    }
-    if (includeCacheInvalidationModule) {
-        pipelineModules['cache-invalidation-svc'] = {
-            runtime: 'cache-invalidation-svc',
-            aspects: ['cache', 'cache-invalidate', 'cache-invalidate-all']
-        };
-    }
-
-    const monolithModules = {
-        'monolith-svc': { runtime: 'monolith-svc', steps: [] },
-        'orchestrator-svc': { runtime: 'monolith-svc' }
-    };
-    for (const step of steps) {
-        const resolvedStepId = stepId(step);
-        if (resolvedStepId) {
-            monolithModules['monolith-svc'].steps.push(resolvedStepId);
-        }
-    }
-    const monolithAspects = [];
-    if (includePersistenceModule) {
-        monolithAspects.push('persistence');
-    }
-    if (includeCacheInvalidationModule) {
-        monolithAspects.push('cache', 'cache-invalidate', 'cache-invalidate-all');
-    }
-    if (monolithAspects.length > 0) {
-        monolithModules['monolith-svc'].aspects = monolithAspects;
-    }
-
-    switch (runtimeLayout) {
-        case 'modular':
-            return {
-                layout: 'modular',
-                validation: 'auto',
-                defaults: {
-                    runtime: 'orchestrator-svc',
-                    module: 'orchestrator-svc',
-                    synthetic: {
-                        module: includePersistenceModule ? 'persistence-svc' : 'orchestrator-svc'
-                    }
-                },
-                modules: modularModules
-            };
-        case 'pipeline-runtime':
-            return {
-                layout: 'pipeline-runtime',
-                validation: 'auto',
-                defaults: {
-                    runtime: 'pipeline-runtime-svc',
-                    module: 'pipeline-runtime-svc',
-                    synthetic: {
-                        module: includePersistenceModule
-                            ? 'persistence-svc'
-                            : includeCacheInvalidationModule
-                                ? 'cache-invalidation-svc'
-                                : 'pipeline-runtime-svc'
-                    }
-                },
-                modules: pipelineModules
-            };
-        case 'monolith':
-            return {
-                layout: 'monolith',
-                validation: 'auto',
-                defaults: {
-                    runtime: 'monolith-svc',
-                    module: 'monolith-svc',
-                    synthetic: {
-                        module: 'monolith-svc'
-                    }
-                },
-                modules: monolithModules
-            };
-        default:
-            throw new Error(`Unsupported runtime layout '${layout}'.`);
     }
 }
 
@@ -1125,8 +996,10 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
     }
 
     buildRuntimeMapping(layout, steps, includePersistenceModule, includeCacheInvalidationModule) {
-        const core = buildRuntimeMappingCore || buildRuntimeMappingCoreFallback;
-        return core({
+        if (!buildRuntimeMappingCore) {
+            throw new Error('buildRuntimeMappingCore is not available in this environment.');
+        }
+        return buildRuntimeMappingCore({
             layout,
             steps,
             includePersistenceModule,
@@ -1200,7 +1073,32 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         if (/^[A-Za-z0-9_.-]+$/.test(text) && !reservedWords.has(textLower) && !numericPattern.test(text)) {
             return text;
         }
-        return `"${text.replace(/"/g, '\\"')}"`;
+        const escaped = text.replace(/[\u0000-\u001F\\"]/g, (char) => {
+            switch (char) {
+                case '\n':
+                    return '\\n';
+                case '\r':
+                    return '\\r';
+                case '\t':
+                    return '\\t';
+                case '\b':
+                    return '\\b';
+                case '\f':
+                    return '\\f';
+                case '\\':
+                    return '\\\\';
+                case '"':
+                    return '\\"';
+                default: {
+                    const code = char.charCodeAt(0);
+                    if (code <= 0xff) {
+                        return `\\x${code.toString(16).padStart(2, '0')}`;
+                    }
+                    return `\\u${code.toString(16).padStart(4, '0')}`;
+                }
+            }
+        });
+        return `"${escaped}"`;
     }
 
     // Utility methods
