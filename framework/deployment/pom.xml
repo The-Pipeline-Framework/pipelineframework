@@ -211,6 +211,11 @@
             <artifactId>quarkus-jacoco</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-amazon-lambda-event-server</artifactId>
+            <scope>test</scope>
+        </dependency>
         <!-- Missing dependencies for Quarkus extension -->
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -272,11 +277,6 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-amazon-lambda-deployment</artifactId>
-            <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-amazon-lambda-http-deployment</artifactId>
             <optional>true</optional>
         </dependency>
         <!-- Quarkus core/dev & security (needed by Lambda dev/test integration) -->

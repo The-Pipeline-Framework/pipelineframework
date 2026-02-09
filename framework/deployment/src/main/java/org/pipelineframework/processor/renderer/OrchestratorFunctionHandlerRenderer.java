@@ -43,6 +43,7 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
 
         ClassName applicationScoped = ClassName.get("jakarta.enterprise.context", "ApplicationScoped");
         ClassName inject = ClassName.get("jakarta.inject", "Inject");
+        ClassName named = ClassName.get("jakarta.inject", "Named");
         ClassName lambdaContext = ClassName.get("com.amazonaws.services.lambda.runtime", "Context");
         ClassName requestHandler = ClassName.get("com.amazonaws.services.lambda.runtime", "RequestHandler");
         ClassName generatedRole = ClassName.get("org.pipelineframework.annotation", "GeneratedRole");
@@ -55,6 +56,9 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
         TypeSpec.Builder handler = TypeSpec.classBuilder(HANDLER_CLASS)
             .addModifiers(Modifier.PUBLIC)
             .addAnnotation(applicationScoped)
+            .addAnnotation(AnnotationSpec.builder(named)
+                .addMember("value", "$S", HANDLER_CLASS)
+                .build())
             .addAnnotation(AnnotationSpec.builder(generatedRole)
                 .addMember("value", "$T.$L", roleEnum, "REST_SERVER")
                 .build())
@@ -79,4 +83,3 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
             .writeTo(ctx.outputDir());
     }
 }
-

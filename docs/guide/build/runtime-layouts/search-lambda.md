@@ -31,6 +31,16 @@ This sets:
 ./mvnw -f examples/search/pom.xml \
   -pl orchestrator-svc -am \
   -Dpipeline.platform=FUNCTION \
+  -Dpipeline.transport=REST \
+  -Dpipeline.rest.naming.strategy=RESOURCEFUL \
+  -DskipTests \
+  compile
+
+./mvnw -f examples/search/pom.xml \
+  -pl orchestrator-svc \
+  -Dpipeline.platform=FUNCTION \
+  -Dpipeline.transport=REST \
+  -Dpipeline.rest.naming.strategy=RESOURCEFUL \
   -Dtest=LambdaMockEventServerSmokeTest \
   test
 ```
@@ -39,6 +49,7 @@ Expected result:
 
 - `BUILD SUCCESS`
 - `LambdaMockEventServerSmokeTest` passes
+- pass/fail details are available in Maven Surefire summary and `orchestrator-svc/target/surefire-reports`
 
 ## Native Smoke Build
 

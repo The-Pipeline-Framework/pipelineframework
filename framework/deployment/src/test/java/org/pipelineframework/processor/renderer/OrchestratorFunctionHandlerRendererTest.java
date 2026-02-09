@@ -37,6 +37,7 @@ class OrchestratorFunctionHandlerRendererTest {
         String source = Files.readString(generatedSource);
 
         assertTrue(source.contains("implements RequestHandler<InputTypeDto, OutputTypeDto>"));
+        assertTrue(source.contains("@Named(\"PipelineRunFunctionHandler\")"));
         assertTrue(source.contains("PipelineRunResource resource"));
         assertTrue(source.contains("handleRequest(InputTypeDto input, Context context)"));
         assertTrue(source.contains("return resource.run(input).await().indefinitely()"));
@@ -73,4 +74,3 @@ class OrchestratorFunctionHandlerRendererTest {
         );
     }
 }
-

@@ -87,6 +87,13 @@ jobs:
             -Dpipeline.platform=FUNCTION \
             -Dpipeline.transport=REST \
             -Dpipeline.rest.naming.strategy=RESOURCEFUL \
+            -DskipTests \
+            compile
+          ./mvnw "${maven_args[@]}" -f examples/search/pom.xml \
+            -pl orchestrator-svc \
+            -Dpipeline.platform=FUNCTION \
+            -Dpipeline.transport=REST \
+            -Dpipeline.rest.naming.strategy=RESOURCEFUL \
             -Dtest=LambdaMockEventServerSmokeTest \
             test
 

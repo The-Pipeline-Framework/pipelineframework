@@ -4,9 +4,9 @@ This page is the canonical TPF guide for building pipeline applications for AWS 
 
 ## What TPF Supports Today
 
-- Platform mode: `FUNCTION` (legacy alias: `LAMBDA`)
+- Platform mode: `FUNCTION` (default platform remains `COMPUTE`)
 - Transport mode: `REST` (required in Function mode)
-- Current compile-time constraint: `UNARY_UNARY` step shape only
+- Current compile-time constraint: `UNARY_UNARY` step shape only (Milestone A scope)
 
 Set platform mode during build:
 
@@ -14,34 +14,36 @@ Set platform mode during build:
 ./mvnw -f <app-parent>/pom.xml -Dpipeline.platform=FUNCTION -Dpipeline.transport=REST clean verify
 ```
 
-## Gateway Extension Choice
+TPF uses build switches for this mode. It does not require a dedicated Maven profile.
 
-Quarkus provides different Lambda gateway extensions:
+## Required and Optional Quarkus Extensions
 
-- `quarkus-amazon-lambda-http` for API Gateway HTTP API (v2 events)
-- `quarkus-amazon-lambda-rest` for API Gateway REST API (v1 events)
+Required for FUNCTION runtime wiring and generated handlers:
 
-TPF reference examples and CI currently use `quarkus-amazon-lambda-http`.
+- `io.quarkus:quarkus-amazon-lambda`
 
-### If You Want REST API Gateway Instead
+Optional API Gateway REST bridge (v1 events):
 
-Use `quarkus-amazon-lambda-rest` in your application module(s) instead of `quarkus-amazon-lambda-http`.
+- `io.quarkus:quarkus-amazon-lambda-rest`
+- `io.quarkus:quarkus-amazon-lambda-rest-event-server` (test/dev mock server for REST gateway events)
 
-In practice:
+API Gateway HTTP bridge extensions are outside the canonical TPF FUNCTION path.
 
-1. Remove `quarkus-amazon-lambda-http`
-2. Add `quarkus-amazon-lambda-rest`
-3. Keep `pipeline.platform=FUNCTION` and `pipeline.transport=REST`
-4. Use the matching local event-server test artifact for your gateway type
+## Generated Lambda Handlers
 
-TPF does not currently ship a separate first-class generator mode per gateway flavor; the gateway choice is an app dependency decision.
+In FUNCTION mode, TPF generates native Lambda handlers for unary REST bindings:
 
-## Why No `RequestHandler<?, ?>` in Step Classes
+- Step handlers implement `RequestHandler<I, O>`
+- Orchestrator handler implements `RequestHandler<I, O>`
+- Handlers delegate to generated TPF resources, preserving pipeline behavior
 
-In Lambda gateway mode, Quarkus provides the Lambda handler bridge. Your generated TPF resources remain JAX-RS REST resources.
+When multiple handlers exist in one module, choose one explicitly:
 
-- Step classes do not need to implement `RequestHandler`
-- Quarkus handler bridges API Gateway events to Quarkus HTTP routing
+```properties
+quarkus.lambda.handler=PipelineRunFunctionHandler
+```
+
+TPF-generated handlers are annotated with `@Named("<HandlerClassName>")`.
 
 ## Function Transport Contracts (Preview)
 
@@ -71,14 +73,14 @@ boundaries are explicit adaptation points:
 
 ## Quarkus Integrations You Can Leverage in TPF Apps
 
-When using Quarkus Lambda HTTP gateway support, app developers can leverage:
+With Quarkus Lambda integrations, app developers can leverage:
 
 - AWS request context injection (request/event/context objects)
-- HTTP request context attributes via Quarkus REST request context
+- request context attributes via Quarkus REST context (when REST gateway extensions are enabled)
 - Security integration and custom identity provider hooks
 - Custom Lambda auth mechanism hooks
 
-These are application-level integrations and can be layered on top of generated TPF resources.
+These are application-level integrations layered on top of generated TPF resources.
 
 ## X-Ray Extension
 

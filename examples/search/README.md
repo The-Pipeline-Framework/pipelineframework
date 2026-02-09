@@ -41,6 +41,15 @@ Run only the Lambda mock event server smoke test:
 ```bash
 ./mvnw -pl orchestrator-svc -am \
   -Dpipeline.platform=FUNCTION \
+  -Dpipeline.transport=REST \
+  -Dpipeline.rest.naming.strategy=RESOURCEFUL \
+  -DskipTests \
+  compile
+
+./mvnw -pl orchestrator-svc \
+  -Dpipeline.platform=FUNCTION \
+  -Dpipeline.transport=REST \
+  -Dpipeline.rest.naming.strategy=RESOURCEFUL \
   -Dtest=LambdaMockEventServerSmokeTest \
   test
 ```

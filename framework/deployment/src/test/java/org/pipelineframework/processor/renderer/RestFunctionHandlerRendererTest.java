@@ -41,6 +41,7 @@ class RestFunctionHandlerRendererTest {
         String source = Files.readString(generatedSource);
 
         assertTrue(source.contains("implements RequestHandler<ParsedDocumentDto, IndexAckDto>"));
+        assertTrue(source.contains("@Named(\"ParsedDocumentFunctionHandler\")"));
         assertTrue(source.contains("ParsedDocumentResource resource"));
         assertTrue(source.contains("handleRequest(ParsedDocumentDto input, Context context)"));
         assertTrue(source.contains("return resource.process(input).await().indefinitely()"));
@@ -100,4 +101,3 @@ class RestFunctionHandlerRendererTest {
             .build();
     }
 }
-

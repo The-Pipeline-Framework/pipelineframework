@@ -41,6 +41,7 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
 
         ClassName applicationScoped = ClassName.get("jakarta.enterprise.context", "ApplicationScoped");
         ClassName inject = ClassName.get("jakarta.inject", "Inject");
+        ClassName named = ClassName.get("jakarta.inject", "Named");
         ClassName lambdaContext = ClassName.get("com.amazonaws.services.lambda.runtime", "Context");
         ClassName requestHandler = ClassName.get("com.amazonaws.services.lambda.runtime", "RequestHandler");
         ClassName generatedRole = ClassName.get("org.pipelineframework.annotation", "GeneratedRole");
@@ -67,6 +68,9 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
         TypeSpec.Builder handler = TypeSpec.classBuilder(handlerClassName)
             .addModifiers(Modifier.PUBLIC)
             .addAnnotation(applicationScoped)
+            .addAnnotation(AnnotationSpec.builder(named)
+                .addMember("value", "$S", handlerClassName)
+                .build())
             .addAnnotation(AnnotationSpec.builder(generatedRole)
                 .addMember("value", "$T.$L", roleEnum, "REST_SERVER")
                 .build())
@@ -112,4 +116,3 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
         return ClassName.get(packageName, dtoSimpleName);
     }
 }
-

@@ -45,7 +45,7 @@
         <protobuf.descriptor.fileArg />
         <pipeline.transport>REST</pipeline.transport>
         <pipeline.transportArg>-Apipeline.transport=${pipeline.transport}</pipeline.transportArg>
-        <pipeline.platform>STANDARD</pipeline.platform>
+        <pipeline.platform>COMPUTE</pipeline.platform>
         <pipeline.platformArg>-Apipeline.platform=${pipeline.platform}</pipeline.platformArg>
         <pipeline.rest.naming.strategy>RESOURCEFUL</pipeline.rest.naming.strategy>
         <pipeline.rest.naming.strategyArg>-Apipeline.rest.naming.strategy=${pipeline.rest.naming.strategy}</pipeline.rest.naming.strategyArg>
@@ -79,6 +79,14 @@
 
         </dependencies>
     </dependencyManagement>
+
+    <dependencies>
+        <!-- Required for generated FUNCTION-mode handlers and Lambda runtime integration. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-amazon-lambda</artifactId>
+        </dependency>
+    </dependencies>
 
     <build>
         <resources>
@@ -588,25 +596,6 @@
     </build>
 
     <profiles>
-        <profile>
-            <id>lambda-platform</id>
-            <activation>
-                <property>
-                    <name>pipeline.platform</name>
-                    <value>LAMBDA</value>
-                </property>
-            </activation>
-            <dependencies>
-                <dependency>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-amazon-lambda</artifactId>
-                </dependency>
-                <dependency>
-                    <groupId>io.quarkus</groupId>
-                    <artifactId>quarkus-amazon-lambda-http</artifactId>
-                </dependency>
-            </dependencies>
-        </profile>
         <profile>
             <id>coverage</id>
             <activation>
