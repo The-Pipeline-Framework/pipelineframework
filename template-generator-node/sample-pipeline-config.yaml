@@ -1,5 +1,6 @@
 appName: Sample Pipeline App
 basePackage: com.example.sample
+runtimeLayout: modular
 steps:
   - name: Process Customer
     cardinality: ONE_TO_ONE

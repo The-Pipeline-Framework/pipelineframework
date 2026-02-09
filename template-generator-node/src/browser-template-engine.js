@@ -24,6 +24,17 @@ if (typeof window !== 'undefined' && window.Handlebars) {
     // Node.js environment
     Handlebars = require('handlebars');
 }
+let buildRuntimeMappingCore = null;
+if (typeof globalThis !== 'undefined' && globalThis.__TPF_RUNTIME_MAPPING_BUILDER__) {
+    buildRuntimeMappingCore = globalThis.__TPF_RUNTIME_MAPPING_BUILDER__.buildRuntimeMappingCore;
+}
+if (!buildRuntimeMappingCore && typeof require === 'function') {
+    try {
+        ({ buildRuntimeMappingCore } = require('./runtime-mapping-builder'));
+    } catch (_error) {
+        buildRuntimeMappingCore = null;
+    }
+}
 
 // Register helper for replacing characters in strings
 Handlebars.registerHelper('replace', function(str, find, repl) {
@@ -31,6 +42,15 @@ Handlebars.registerHelper('replace', function(str, find, repl) {
   if (typeof find !== 'string') return str;
   if (typeof str.replaceAll === 'function') return str.replaceAll(find, repl);
   return str.split(find).join(repl);
+});
+
+Handlebars.registerHelper('add', function(a, b) {
+    const left = Number(a);
+    const right = Number(b);
+    if (Number.isNaN(left) || Number.isNaN(right)) {
+        return 0;
+    }
+    return left + right;
 });
 // Register helper for converting to lowercase
 Handlebars.registerHelper('lowercase', function(str) {
@@ -133,6 +153,13 @@ Handlebars.registerHelper('hasUtilFields', function(fields) {
     return fields.some(field => field.type === 'List<String>');
 });
 
+Handlebars.registerHelper('hasMapFields', function(fields) {
+    if (!Array.isArray(fields)) return false;
+    return fields.some(field => {
+        return field && typeof field.type === 'string' && field.type.startsWith('Map<');
+    });
+});
+
 Handlebars.registerHelper('hasIdField', function(fields) {
     if (!Array.isArray(fields)) return false;
     return fields.some(field => field.name === 'id');
@@ -159,11 +186,95 @@ Handlebars.registerHelper('isIdField', function(fieldName) {
     return fieldName === 'id';
 });
 
+Handlebars.registerHelper('sanitizeJavaIdentifier', function(fieldName) {
+    if (typeof fieldName !== 'string' || fieldName.trim() === '') {
+        return 'field';
+    }
+    let sanitized = fieldName.replace(/[^a-zA-Z0-9_$]/g, '_');
+    if (/^[0-9]/.test(sanitized)) {
+        sanitized = '_' + sanitized;
+    }
+    const reservedWords = [
+        'abstract', 'assert', 'boolean', 'break', 'byte', 'case', 'catch', 'char', 'class',
+        'const', 'continue', 'default', 'do', 'double', 'else', 'enum', 'extends', 'final',
+        'finally', 'float', 'for', 'goto', 'if', 'implements', 'import', 'instanceof', 'int',
+        'interface', 'long', 'native', 'new', 'package', 'private', 'protected', 'public',
+        'return', 'short', 'static', 'strictfp', 'super', 'switch', 'synchronized', 'this',
+        'throw', 'throws', 'transient', 'try', 'void', 'volatile', 'while', 'true', 'false', 'null'
+    ];
+    if (reservedWords.includes(sanitized.toLowerCase())) {
+        sanitized = sanitized + '_';
+    }
+    return sanitized || 'field';
+});
+
 class BrowserTemplateEngine {
     constructor(templates) {
         this.templates = templates || {};
         this.compiledTemplates = new Map();
+        this.validateTemplateHelpers();
         this.loadTemplates();
+    }
+
+    validateTemplateHelpers() {
+        const builtInHelpers = new Set(['if', 'unless', 'each', 'with', 'lookup', 'log']);
+        const missing = new Map();
+        const visit = (node, acc) => {
+            if (!node || typeof node !== 'object') return;
+            if (Array.isArray(node)) {
+                for (const child of node) visit(child, acc);
+                return;
+            }
+            if (node.type === 'MustacheStatement') {
+                if (node.path && node.path.type === 'PathExpression' && node.params && node.params.length > 0) {
+                    acc.add(node.path.original);
+                }
+            } else if (node.type === 'BlockStatement') {
+                if (
+                    node.path
+                    && node.path.type === 'PathExpression'
+                    && (
+                        (node.params && node.params.length > 0)
+                        || (node.hash && node.hash.pairs && node.hash.pairs.length > 0)
+                    )
+                ) {
+                    acc.add(node.path.original);
+                }
+                visit(node.program, acc);
+                visit(node.inverse, acc);
+            } else if (node.type === 'SubExpression') {
+                if (node.path && node.path.type === 'PathExpression') {
+                    acc.add(node.path.original);
+                }
+            }
+            for (const [key, value] of Object.entries(node)) {
+                if (node.type === 'BlockStatement' && (key === 'program' || key === 'inverse')) {
+                    continue;
+                }
+                visit(value, acc);
+            }
+        };
+
+        for (const [name, templateStr] of Object.entries(this.templates)) {
+            const ast = Handlebars.parse(templateStr);
+            const usedHelpers = new Set();
+            visit(ast, usedHelpers);
+            for (const helperName of usedHelpers) {
+                if (builtInHelpers.has(helperName)) continue;
+                if (Handlebars.helpers[helperName]) continue;
+                if (!missing.has(helperName)) {
+                    missing.set(helperName, []);
+                }
+                missing.get(helperName).push(name);
+            }
+        }
+
+        if (missing.size > 0) {
+            const detail = Array.from(missing.entries())
+                .map(([helper, templates]) => `${helper} (templates: ${templates.join(', ')})`)
+                .join('; ');
+            throw new Error(`Missing Handlebars helper registration(s): ${detail}`);
+        }
     }
 
     loadTemplates() {
@@ -182,21 +293,61 @@ class BrowserTemplateEngine {
         return template(context);
     }
 
-    async generateApplication(appName, basePackage, steps, aspects, fileCallback) {
-        if (typeof aspects === 'function' && fileCallback === undefined) {
-            fileCallback = aspects;
-            aspects = {};
+    async generateApplication(appName, basePackage, steps, aspects, transport, runtimeLayout, fileCallback) {
+        let options;
+        if (arguments.length === 1 && appName && typeof appName === 'object') {
+            options = { ...appName };
+        } else if (steps && typeof steps === 'object' && !Array.isArray(steps)) {
+            options = { appName, basePackage, ...steps };
+        } else {
+            console.warn(
+                'generateApplication positional arguments are deprecated. Pass a single options object instead.'
+            );
+            options = {
+                appName,
+                basePackage,
+                steps,
+                aspects,
+                transport,
+                runtimeLayout,
+                fileCallback
+            };
         }
-        const aspectConfig = aspects || {};
+        const normalizedOptions = {
+            appName: options.appName,
+            basePackage: options.basePackage,
+            steps: Array.isArray(options.steps) ? options.steps : [],
+            aspects: options.aspects && typeof options.aspects === 'object' ? options.aspects : {},
+            runtimeLayout: this.normalizeRuntimeLayout(options.runtimeLayout),
+            fileCallback: options.fileCallback
+        };
+        normalizedOptions.transport = this.normalizeTransport(
+            options.transport,
+            normalizedOptions.runtimeLayout
+        );
+
+        if (typeof normalizedOptions.fileCallback !== 'function') {
+            throw new Error('fileCallback must be provided as a function.');
+        }
+        if (!normalizedOptions.appName || !normalizedOptions.basePackage) {
+            throw new Error('appName and basePackage are required.');
+        }
+
+        const appNameValue = normalizedOptions.appName;
+        const basePackageValue = normalizedOptions.basePackage;
+        const stepsValue = normalizedOptions.steps;
+        const normalizedRuntimeLayout = normalizedOptions.runtimeLayout;
+        const transportMode = normalizedOptions.transport;
+        const aspectConfig = normalizedOptions.aspects;
         const includePersistenceModule = this.isAspectEnabled(aspectConfig, 'persistence');
         const includeCacheInvalidationModule = this.isAspectEnabled(aspectConfig, 'cache')
             || this.isAspectEnabled(aspectConfig, 'cache-invalidate')
             || this.isAspectEnabled(aspectConfig, 'cache-invalidate-all');
         // For sequential pipeline, update input types of steps after the first one
         // to match the output type of the previous step
-        for (let i = 1; i < steps.length; i++) {
-            const currentStep = steps[i];
-            const previousStep = steps[i - 1];
+        for (let i = 1; i < stepsValue.length; i++) {
+            const currentStep = stepsValue[i];
+            const previousStep = stepsValue[i - 1];
             // Set the input type of the current step to the output type of the previous step
             currentStep.inputTypeName = previousStep.outputTypeName;
             currentStep.inputFields = Array.isArray(previousStep.outputFields)
@@ -206,63 +357,89 @@ class BrowserTemplateEngine {
 
         // Generate parent POM
         await this.generateParentPom(
-            appName,
-            basePackage,
-            steps,
+            appNameValue,
+            basePackageValue,
+            stepsValue,
             includePersistenceModule,
             includeCacheInvalidationModule,
-            fileCallback);
+            normalizedRuntimeLayout,
+            normalizedOptions.fileCallback);
 
         // Generate common module
-        await this.generateCommonModule(appName, basePackage, steps, fileCallback);
+        await this.generateCommonModule(appNameValue, basePackageValue, stepsValue, transportMode, normalizedOptions.fileCallback);
 
         // Generate each step service
-        for (let i = 0; i < steps.length; i++) {
-            await this.generateStepService(appName, basePackage, steps[i], i, steps, fileCallback);
+        for (let i = 0; i < stepsValue.length; i++) {
+            await this.generateStepService(appNameValue, basePackageValue, stepsValue[i], i, stepsValue, transportMode, normalizedOptions.fileCallback);
         }
 
         if (includePersistenceModule) {
-            await this.generatePersistenceModule(appName, basePackage, steps, fileCallback);
+            await this.generatePersistenceModule(appNameValue, basePackageValue, stepsValue, normalizedOptions.fileCallback);
         }
 
         if (includeCacheInvalidationModule) {
-            await this.generateCacheInvalidationModule(appName, basePackage, fileCallback);
+            await this.generateCacheInvalidationModule(appNameValue, basePackageValue, normalizedOptions.fileCallback);
         }
 
         // Generate orchestrator
         await this.generateOrchestrator(
-            appName,
-            basePackage,
-            steps,
+            appNameValue,
+            basePackageValue,
+            stepsValue,
             includePersistenceModule,
             includeCacheInvalidationModule,
-            fileCallback);
+            transportMode,
+            normalizedOptions.fileCallback);
+
+        if (normalizedRuntimeLayout === 'pipeline-runtime') {
+            await this.generatePipelineRuntimeModule(
+                appNameValue,
+                basePackageValue,
+                stepsValue,
+                normalizedOptions.fileCallback
+            );
+        } else if (normalizedRuntimeLayout === 'monolith') {
+            await this.generateMonolithModule(
+                appNameValue,
+                basePackageValue,
+                stepsValue,
+                includePersistenceModule,
+                includeCacheInvalidationModule,
+                normalizedOptions.fileCallback
+            );
+        }
+
+        await this.generateRuntimeMappingFiles(
+            stepsValue,
+            includePersistenceModule,
+            includeCacheInvalidationModule,
+            normalizedRuntimeLayout,
+            normalizedOptions.fileCallback
+        );
 
         const configSnapshot = {
-            appName,
-            basePackage,
-            transport: 'GRPC',
-            steps,
+            appName: appNameValue,
+            basePackage: basePackageValue,
+            transport: transportMode,
+            runtimeLayout: normalizedRuntimeLayout,
+            steps: stepsValue,
             aspects: aspectConfig
         };
-        await fileCallback('pipeline-config.yaml', JSON.stringify(configSnapshot, null, 2));
-
-        // Generate utility scripts
-        await this.generateUtilityScripts(fileCallback);
+        await normalizedOptions.fileCallback('pipeline-config.yaml', this.toYaml(configSnapshot));
 
         // Generate mvnw files
-        await this.generateMvNWFiles(fileCallback);
+        await this.generateMvNWFiles(normalizedOptions.fileCallback);
 
         // Generate Maven wrapper files
-        await this.generateMavenWrapperFiles(fileCallback);
+        await this.generateMavenWrapperFiles(normalizedOptions.fileCallback);
 
         // Generate other files
         await this.generateOtherFiles(
-            appName,
-            steps,
+            appNameValue,
+            stepsValue,
             includePersistenceModule,
             includeCacheInvalidationModule,
-            fileCallback);
+            normalizedOptions.fileCallback);
     }
 
     async generateParentPom(
@@ -271,7 +448,9 @@ class BrowserTemplateEngine {
         steps,
         includePersistenceModule,
         includeCacheInvalidationModule,
+        runtimeLayout,
         fileCallback) {
+        const normalizedLayout = this.normalizeRuntimeLayout(runtimeLayout);
         const context = {
             basePackage,
             artifactId: appName
@@ -281,16 +460,19 @@ class BrowserTemplateEngine {
             name: appName,
             steps,
             includePersistenceModule,
-            includeCacheInvalidationModule
+            includeCacheInvalidationModule,
+            isModularLayout: normalizedLayout === 'modular',
+            isPipelineRuntimeLayout: normalizedLayout === 'pipeline-runtime',
+            isMonolithLayout: normalizedLayout === 'monolith'
         };
 
         const rendered = this.render('parent-pom', context);
         await fileCallback('pom.xml', rendered);
     }
 
-    async generateCommonModule(appName, basePackage, steps, fileCallback) {
+    async generateCommonModule(appName, basePackage, steps, transport, fileCallback) {
         // Generate common POM
-        await this.generateCommonPom(appName, basePackage, fileCallback);
+        await this.generateCommonPom(appName, basePackage, transport, fileCallback);
 
         // Generate entities, DTOs, and mappers for each step
         for (let i = 0; i < steps.length; i++) {
@@ -305,6 +487,94 @@ class BrowserTemplateEngine {
 
         // Generate common converters
         await this.generateCommonConverters(basePackage, fileCallback);
+    }
+
+    async generatePipelineRuntimeModule(appName, basePackage, steps, fileCallback) {
+        const rootProjectName = appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-');
+        const context = {
+            basePackage,
+            rootProjectName,
+            sourceDirs: (steps || []).map((step, index) => {
+                const key = `s${index}`;
+                return {
+                    moduleName: step.serviceName,
+                    propertyName: `pipeline.runtime.source.dir.${key}`,
+                    propertyRef: '${pipeline.runtime.source.dir.' + key + '}'
+                };
+            })
+        };
+        const pomContent = this.render('pipeline-runtime-svc-pom', context);
+        await fileCallback('pipeline-runtime-svc/pom.xml', pomContent);
+
+        const appPropsContent = this.render('application-properties', {
+            serviceName: 'pipeline-runtime-svc',
+            rootProjectName,
+            portOffset: 1
+        });
+        await fileCallback('pipeline-runtime-svc/src/main/resources/application.properties', appPropsContent);
+        const appDevProps = this.render('module-application-dev-properties', {});
+        await fileCallback('pipeline-runtime-svc/src/main/resources/application-dev.properties', appDevProps);
+        const beansXml = this.render('module-beans-xml', {}).trimEnd();
+        await fileCallback('pipeline-runtime-svc/src/main/resources/META-INF/beans.xml', beansXml);
+    }
+
+    async generateMonolithModule(
+        appName,
+        basePackage,
+        steps,
+        includePersistenceModule,
+        includeCacheInvalidationModule,
+        fileCallback
+    ) {
+        const rootProjectName = appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-');
+        const sourceDirs = (steps || []).map((step, index) => {
+            const key = `s${index}`;
+            return {
+                moduleName: step.serviceName,
+                propertyName: `monolith.source.dir.${key}`,
+                propertyRef: '${monolith.source.dir.' + key + '}'
+            };
+        });
+        sourceDirs.push({
+            moduleName: 'orchestrator-svc',
+            propertyName: 'monolith.source.dir.orchestrator',
+            propertyRef: '${monolith.source.dir.orchestrator}'
+        });
+        if (includePersistenceModule) {
+            sourceDirs.push({
+                moduleName: 'persistence-svc',
+                propertyName: 'monolith.source.dir.persistence',
+                propertyRef: '${monolith.source.dir.persistence}'
+            });
+        }
+        if (includeCacheInvalidationModule) {
+            sourceDirs.push({
+                moduleName: 'cache-invalidation-svc',
+                propertyName: 'monolith.source.dir.cache',
+                propertyRef: '${monolith.source.dir.cache}'
+            });
+        }
+
+        const context = {
+            basePackage,
+            rootProjectName,
+            includePersistenceModule,
+            includeCacheInvalidationModule,
+            sourceDirs
+        };
+        const pomContent = this.render('monolith-svc-pom', context);
+        await fileCallback('monolith-svc/pom.xml', pomContent);
+
+        const appPropsContent = this.render('application-properties', {
+            serviceName: 'monolith-svc',
+            rootProjectName,
+            portOffset: 0
+        });
+        await fileCallback('monolith-svc/src/main/resources/application.properties', appPropsContent);
+        const appDevProps = this.render('module-application-dev-properties', {});
+        await fileCallback('monolith-svc/src/main/resources/application-dev.properties', appDevProps);
+        const beansXml = this.render('module-beans-xml', {}).trimEnd();
+        await fileCallback('monolith-svc/src/main/resources/META-INF/beans.xml', beansXml);
     }
 
     async generatePersistenceModule(appName, basePackage, steps, fileCallback) {
@@ -341,10 +611,13 @@ class BrowserTemplateEngine {
         await fileCallback(`cache-invalidation-svc/src/main/java/${packagePath}/CachePluginHost.java`, cacheHostContent);
     }
 
-    async generateCommonPom(appName, basePackage, fileCallback) {
+    async generateCommonPom(appName, basePackage, transport, fileCallback) {
+        const transportMode = this.normalizeTransport(transport);
         const context = {
             basePackage,
-            rootProjectName: appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-')
+            rootProjectName: appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-'),
+            isRestTransport: transportMode === 'REST',
+            isGrpcTransport: transportMode === 'GRPC'
         };
 
         const rendered = this.render('common-pom', context);
@@ -492,7 +765,7 @@ class BrowserTemplateEngine {
         await fileCallback(filePath, rendered);
     }
 
-    async generateStepService(appName, basePackage, step, stepIndex, allSteps, fileCallback) {
+    async generateStepService(appName, basePackage, step, stepIndex, allSteps, transport, fileCallback) {
         // noinspection JSUnusedLocalSymbols
         const serviceNameForPackage = step.serviceName.replace('-svc', '').replace(/-/g, '_');
 
@@ -500,15 +773,21 @@ class BrowserTemplateEngine {
         step.rootProjectName = appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-');
 
         // Generate step POM
-        await this.generateStepPom(step, basePackage, fileCallback);
+        await this.generateStepPom(step, basePackage, transport, fileCallback);
 
         // Generate the service class
         await this.generateStepServiceClass(appName, basePackage, step, stepIndex, allSteps, fileCallback);
 
     }
 
-    async generateStepPom(step, basePackage, fileCallback) {
-        const context = { ...step, basePackage };
+    async generateStepPom(step, basePackage, transport, fileCallback) {
+        const transportMode = this.normalizeTransport(transport);
+        const context = {
+            ...step,
+            basePackage,
+            isRestTransport: transportMode === 'REST',
+            isGrpcTransport: transportMode === 'GRPC'
+        };
         const rendered = this.render('step-pom', context);
         const filePath = `${step.serviceName}/pom.xml`;
         await fileCallback(filePath, rendered);
@@ -577,6 +856,7 @@ class BrowserTemplateEngine {
         steps,
         includePersistenceModule,
         includeCacheInvalidationModule,
+        transport,
         fileCallback) {
         // Generate orchestrator POM
         await this.generateOrchestratorPom(
@@ -584,6 +864,7 @@ class BrowserTemplateEngine {
             basePackage,
             includePersistenceModule,
             includeCacheInvalidationModule,
+            transport,
             fileCallback);
 
     }
@@ -593,13 +874,17 @@ class BrowserTemplateEngine {
         basePackage,
         includePersistenceModule,
         includeCacheInvalidationModule,
+        transport,
         fileCallback) {
+        const transportMode = this.normalizeTransport(transport);
         const context = {
             basePackage,
             artifactId: 'orchestrator-svc',
             rootProjectName: appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-'),
             includePersistenceModule,
-            includeCacheInvalidationModule
+            includeCacheInvalidationModule,
+            isRestTransport: transportMode === 'REST',
+            isGrpcTransport: transportMode === 'GRPC'
         };
 
         const rendered = this.render('orchestrator-pom', context);
@@ -669,8 +954,151 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
             includePersistenceModule,
             includeCacheInvalidationModule
         };
-        const certScriptContent = this.render('generate-dev-certs', certScriptContext);
+        const certScriptContent = this.render('generate-dev-certs.sh', certScriptContext);
         await fileCallback('generate-dev-certs.sh', certScriptContent);
+
+        const duplicateScript = this.render('check-duplicate-sources.sh', {});
+        await fileCallback('build-tools/check-duplicate-sources.sh', duplicateScript);
+    }
+
+    async generateRuntimeMappingFiles(
+        steps,
+        includePersistenceModule,
+        includeCacheInvalidationModule,
+        runtimeLayout,
+        fileCallback
+    ) {
+        const layouts = ['modular', 'pipeline-runtime', 'monolith'];
+        const fileNames = {
+            modular: 'modular-auto.yaml',
+            'pipeline-runtime': 'pipeline-runtime.yaml',
+            monolith: 'monolith.yaml'
+        };
+        for (const layout of layouts) {
+            const mapping = this.buildRuntimeMapping(
+                layout,
+                steps,
+                includePersistenceModule,
+                includeCacheInvalidationModule
+            );
+            await fileCallback(
+                `config/runtime-mapping/${fileNames[layout]}`,
+                this.toYaml(mapping)
+            );
+        }
+        const active = this.buildRuntimeMapping(
+            runtimeLayout,
+            steps,
+            includePersistenceModule,
+            includeCacheInvalidationModule
+        );
+        await fileCallback('config/runtime-mapping/pipeline-runtime-active.yaml', this.toYaml(active));
+    }
+
+    buildRuntimeMapping(layout, steps, includePersistenceModule, includeCacheInvalidationModule) {
+        if (!buildRuntimeMappingCore) {
+            throw new Error('buildRuntimeMappingCore is not available in this environment.');
+        }
+        return buildRuntimeMappingCore({
+            layout,
+            steps,
+            includePersistenceModule,
+            includeCacheInvalidationModule,
+            isRuntimeLayout: this.isRuntimeLayout.bind(this),
+            normalizeRuntimeLayout: this.normalizeRuntimeLayout.bind(this),
+            stepId: this.stepId.bind(this)
+        });
+    }
+
+    toYaml(value, indent = 0) {
+        const prefix = ' '.repeat(indent);
+        if (value === null || value === undefined) {
+            return `${prefix}null`;
+        }
+        if (Array.isArray(value)) {
+            if (value.length === 0) {
+                return `${prefix}[]`;
+            }
+            return value.map(item => {
+                if (item && typeof item === 'object') {
+                    const itemYaml = this.toYaml(item, indent + 2);
+                    const lines = itemYaml.split('\n');
+                    const firstLine = lines[0].trimStart();
+                    if (lines.length === 1) {
+                        return `${prefix}- ${firstLine}`;
+                    }
+                    const rest = lines.slice(1).join('\n');
+                    return `${prefix}- ${firstLine}\n${rest}`;
+                }
+                return `${prefix}- ${this.toYamlScalar(item)}`;
+            }).join('\n');
+        }
+        if (typeof value === 'object') {
+            const entries = Object.entries(value);
+            if (entries.length === 0) {
+                return `${prefix}{}`;
+            }
+            return entries.map(([key, val]) => {
+                if (val && typeof val === 'object') {
+                    return `${prefix}${key}:\n${this.toYaml(val, indent + 2)}`;
+                }
+                return `${prefix}${key}: ${this.toYamlScalar(val)}`;
+            }).join('\n');
+        }
+        return `${prefix}${this.toYamlScalar(value)}`;
+    }
+
+    /**
+     * Convert a JavaScript value into a YAML scalar token.
+     *
+     * Nullish values become the literal `null`. Number and boolean values are emitted
+     * as plain scalars. String-like values are emitted unquoted only when they match
+     * the safe scalar pattern and are not YAML reserved words or numeric-looking text;
+     * otherwise they are double-quoted with embedded quotes escaped.
+     *
+     * @param {any} value Value to convert.
+     * @returns {string} YAML scalar representation of the input value.
+     */
+    toYamlScalar(value) {
+        if (value === null || value === undefined) {
+            return 'null';
+        }
+        if (typeof value === 'number' || typeof value === 'boolean') {
+            return String(value);
+        }
+        const text = String(value);
+        const textLower = text.toLowerCase();
+        const reservedWords = new Set(['null', '~', 'true', 'false', 'yes', 'no', 'on', 'off']);
+        const numericPattern = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
+        if (/^[A-Za-z0-9_.-]+$/.test(text) && !reservedWords.has(textLower) && !numericPattern.test(text)) {
+            return text;
+        }
+        const escaped = text.replace(/[\u0000-\u001F\\"]/g, (char) => {
+            switch (char) {
+                case '\n':
+                    return '\\n';
+                case '\r':
+                    return '\\r';
+                case '\t':
+                    return '\\t';
+                case '\b':
+                    return '\\b';
+                case '\f':
+                    return '\\f';
+                case '\\':
+                    return '\\\\';
+                case '"':
+                    return '\\"';
+                default: {
+                    const code = char.charCodeAt(0);
+                    if (code <= 0xff) {
+                        return `\\x${code.toString(16).padStart(2, '0')}`;
+                    }
+                    return `\\u${code.toString(16).padStart(4, '0')}`;
+                }
+            }
+        });
+        return `"${escaped}"`;
     }
 
     // Utility methods
@@ -710,6 +1138,43 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         }
         // For other cases, we'll default to the whole string
         return serviceNamePascal;
+    }
+
+    stepId(step) {
+        if (!step || typeof step.serviceName !== 'string') {
+            return '';
+        }
+        return step.serviceName.replace(/-svc$/, '');
+    }
+
+    isTransport(value) {
+        if (typeof value !== 'string') {
+            return false;
+        }
+        const normalized = value.trim().toUpperCase();
+        return normalized === 'GRPC' || normalized === 'REST' || normalized === 'LOCAL';
+    }
+
+    normalizeTransport(transport, runtimeLayout) {
+        if (this.isTransport(transport)) {
+            return transport.trim().toUpperCase();
+        }
+        return this.normalizeRuntimeLayout(runtimeLayout) === 'monolith' ? 'LOCAL' : 'GRPC';
+    }
+
+    isRuntimeLayout(value) {
+        if (typeof value !== 'string') {
+            return false;
+        }
+        const normalized = value.trim().toLowerCase().replace(/_/g, '-');
+        return normalized === 'modular' || normalized === 'pipeline-runtime' || normalized === 'monolith';
+    }
+
+    normalizeRuntimeLayout(runtimeLayout) {
+        if (!this.isRuntimeLayout(runtimeLayout)) {
+            return 'modular';
+        }
+        return runtimeLayout.trim().toLowerCase().replace(/_/g, '-');
     }
 
     isAspectEnabled(aspects, aspectName) {

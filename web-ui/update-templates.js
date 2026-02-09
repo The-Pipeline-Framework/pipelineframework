@@ -27,6 +27,7 @@ const __dirname = path.dirname(__filename);
 const nodeGeneratorPath = path.join(__dirname, '../template-generator-node');
 const templatesDir = path.join(nodeGeneratorPath, 'templates');
 const browserEnginePath = path.join(nodeGeneratorPath, 'src/browser-template-engine.js');
+const runtimeBuilderPath = path.join(nodeGeneratorPath, 'src/runtime-mapping-builder.js');
 const webUiBundlePath = path.join(__dirname, 'static/browser-bundle.js');
 
 function readTemplates() {
@@ -70,6 +71,22 @@ function readBrowserEngine() {
   }
 }
 
+function readRuntimeMappingBuilder() {
+  let code;
+  try {
+    code = fs.readFileSync(runtimeBuilderPath, 'utf8');
+  } catch (error) {
+    console.error(`Error reading runtime mapping builder file '${runtimeBuilderPath}': ${error.message}`);
+    process.exit(1);
+  }
+
+  // Convert CommonJS export to a global assignment for browser usage.
+  return code.replace(
+    /module\.exports\s*=\s*\{[\s\S]*?\};?/m,
+    'global.__TPF_RUNTIME_MAPPING_BUILDER__ = { buildRuntimeMappingCore, buildModularModules, buildPipelineModules, buildMonolithModules };'
+  );
+}
+
 function patchEngineTemplates(engineCode) {
   const templateDefaultRegex = /this\.templates\s*=\s*templates\s*\|\|\s*\{\};/;
   if (templateDefaultRegex.test(engineCode)) {
@@ -84,6 +101,7 @@ function patchEngineTemplates(engineCode) {
 
 const templates = readTemplates();
 const engineCode = patchEngineTemplates(readBrowserEngine());
+const runtimeBuilderCode = readRuntimeMappingBuilder();
 
 const header = `/*
  * Copyright (c) 2023-2025 Mariano Barcia
@@ -110,6 +128,13 @@ const header = `/*
 const templatesJsContent = `const TEMPLATES = ${JSON.stringify(templates, null, 2)};`;
 
 const bundleContent = `${header}${templatesJsContent}
+
+// Shared runtime-mapping builder (Node/browser compatible)
+(function(global, undefined) {
+  "use strict";
+
+${runtimeBuilderCode}
+})(this);
 
 // Handlebars template engine for the browser
 (function(global, undefined) {

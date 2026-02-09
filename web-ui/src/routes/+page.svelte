@@ -28,6 +28,8 @@
   let config = {
     appName: 'My Pipeline App',
     basePackage: 'com.example.mypipeline',
+    transport: 'GRPC',
+    runtimeLayout: 'modular',
     steps: [],
     aspects: {}
   };
@@ -97,6 +99,12 @@
     { value: 'SIDE_EFFECT', label: 'Side-effect' }
   ];
 
+  const runtimeLayoutOptions = [
+    { value: 'modular', label: 'Modular' },
+    { value: 'pipeline-runtime', label: 'Pipeline Runtime' },
+    { value: 'monolith', label: 'Monolith' }
+  ];
+
   function isAspectEnabled(aspects, aspectName) {
     if (!aspects || !Object.prototype.hasOwnProperty.call(aspects, aspectName)) {
       return false;
@@ -138,6 +146,27 @@
   function syncAspectTogglesFromConfig() {
     includePersistencePlugin = isAspectEnabled(config.aspects, 'persistence');
     includeCachePlugin = isAspectEnabled(config.aspects, 'cache');
+  }
+
+  function normalizeRuntimeLayout(value) {
+    if (typeof value !== 'string') {
+      return 'modular';
+    }
+    const normalized = value.trim().replace(/_/g, '-').toLowerCase();
+    if (normalized === 'pipeline-runtime' || normalized === 'monolith') {
+      return normalized;
+    }
+    return 'modular';
+  }
+
+  function normalizeTransport(value, runtimeLayout) {
+    if (typeof value === 'string') {
+      const normalized = value.trim().toUpperCase();
+      if (normalized === 'GRPC' || normalized === 'REST' || normalized === 'LOCAL') {
+        return normalized;
+      }
+    }
+    return normalizeRuntimeLayout(runtimeLayout) === 'monolith' ? 'LOCAL' : 'GRPC';
   }
 
   syncAspectTogglesFromConfig();
@@ -585,9 +614,13 @@
 
   // Generate YAML configuration content
   function generateYamlConfig() {
+    const normalizedLayout = normalizeRuntimeLayout(config.runtimeLayout);
+    const normalizedTransport = normalizeTransport(config.transport, normalizedLayout);
     const minimal = {
       appName: config.appName,
       basePackage: config.basePackage,
+      transport: normalizedTransport,
+      runtimeLayout: normalizedLayout,
       steps: config.steps.map((s) => ({
         stepType: s.stepType,
         serviceNameCamel: s.serviceNameCamel,
@@ -664,22 +697,18 @@
       
       // Generate the complete application using the template engine
       const stepsCopy = [...config.steps];
-      if (templateEngine.generateApplication.length >= 5) {
-        await templateEngine.generateApplication(
-          config.appName,
-          config.basePackage,
-          stepsCopy, // Use a copy to avoid potential mutation issues
-          config.aspects,
-          fileCallback
-        );
-      } else {
-        await templateEngine.generateApplication(
-          config.appName,
-          config.basePackage,
-          stepsCopy, // Use a copy to avoid potential mutation issues
-          fileCallback
-        );
-      }
+      const selectedLayout = normalizeRuntimeLayout(config.runtimeLayout);
+      const effectiveTransport = selectedLayout === 'monolith' ? 'LOCAL' : config.transport;
+      const selectedTransport = normalizeTransport(effectiveTransport, selectedLayout);
+      await templateEngine.generateApplication(
+        config.appName,
+        config.basePackage,
+        stepsCopy, // Use a copy to avoid potential mutation issues
+        config.aspects,
+        selectedTransport,
+        selectedLayout,
+        fileCallback
+      );
       
       // Generate the YAML configuration and add it to the ZIP
       const yamlContent = generateYamlConfig();
@@ -739,6 +768,28 @@
   
   // Process the upload after confirmation
   async function processUpload(file) {
+    const normalizeLoadedCardinality = (raw) => {
+      const value = String(raw || '').trim().toUpperCase().replace(/[-\s]+/g, '_');
+      if (value === 'EXPANSION' || value === 'REDUCTION' || value === 'MANY_TO_MANY' || value === 'SIDE_EFFECT' || value === 'ONE_TO_ONE') {
+        return value;
+      }
+      return 'ONE_TO_ONE';
+    };
+    const cardinalityToStepType = (cardinality) => {
+      switch (cardinality) {
+        case 'EXPANSION':
+          return 'StepOneToMany';
+        case 'REDUCTION':
+          return 'StepManyToOne';
+        case 'MANY_TO_MANY':
+          return 'StepManyToMany';
+        case 'SIDE_EFFECT':
+          return 'StepSideEffect';
+        default:
+          return 'StepOneToOne';
+      }
+    };
+
     const text = await file.text();
     try {
       const data = load(text);
@@ -763,6 +814,7 @@
         if (!step.cardinality) {
           throw new Error(`Invalid configuration file: step ${i+1} is missing required field (cardinality)`);
         }
+        step.cardinality = normalizeLoadedCardinality(step.cardinality);
         
         if (!step.inputTypeName) {
           throw new Error(`Invalid configuration file: step ${i+1} is missing required field (inputTypeName)`);
@@ -810,14 +862,6 @@
           step.serviceNameCamel = capitalizedCamelName;
         }
         
-        if (!step.inputFields || !Array.isArray(step.inputFields)) {
-          step.inputFields = [];
-        }
-        
-        if (!step.outputFields || !Array.isArray(step.outputFields)) {
-          step.outputFields = [];
-        }
-        
         // Validate fields have required properties and valid types
         for (let j = 0; j < step.inputFields.length; j++) {
           const field = step.inputFields[j];
@@ -847,26 +891,8 @@
           }
         }
         
-        // Set stepType based on cardinality
-        if (!step.stepType) {
-          switch (step.cardinality) {
-            case 'EXPANSION':
-              step.stepType = 'StepOneToMany';
-              break;
-            case 'REDUCTION':
-              step.stepType = 'StepManyToOne';
-              break;
-            case 'MANY_TO_MANY':
-              step.stepType = 'StepManyToMany';
-              break;
-            case 'SIDE_EFFECT':
-              step.stepType = 'StepSideEffect';
-              break;
-            default:
-              step.stepType = 'StepOneToOne';
-              break;
-          }
-        }
+        // Always derive shape from cardinality so loaded configs render consistently.
+        step.stepType = cardinalityToStepType(step.cardinality);
         
         // For Side-Effect steps, ensure input and output types are aligned
         if (step.cardinality === 'SIDE_EFFECT') {
@@ -876,8 +902,11 @@
         }
       }
       
+      const normalizedLayout = normalizeRuntimeLayout(data.runtimeLayout);
       config = {
         ...data,
+        runtimeLayout: normalizedLayout,
+        transport: normalizeTransport(data.transport, normalizedLayout),
         aspects: data.aspects || {}
       };
       if (!isAspectEnabled(config.aspects, 'persistence')) {
@@ -952,6 +981,9 @@
         break;
       case 'REDUCTION':
         step.stepType = 'StepManyToOne';
+        break;
+      case 'MANY_TO_MANY':
+        step.stepType = 'StepManyToMany';
         break;
       case 'SIDE_EFFECT':
         step.stepType = 'StepSideEffect';
@@ -1114,6 +1146,22 @@
             <span class="ml-2">Add cache plugin</span>
           </label>
         </div>
+      </div>
+
+      <div class="flex-1">
+        <label class="block text-sm font-medium text-gray-700 mb-1">Runtime Layout</label>
+        <select
+          bind:value={config.runtimeLayout}
+          class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+        >
+          {#each runtimeLayoutOptions as option}
+            <option value={option.value}>{option.label}</option>
+          {/each}
+        </select>
+        <p class="mt-1 text-xs text-gray-600">
+          Layout changes deployable topology, not where step source code is authored. Even in
+          <code>monolith</code>, step modules are scaffolded and <code>monolith-svc</code> assembles them at build time.
+        </p>
       </div>
     </div>
   </div>
