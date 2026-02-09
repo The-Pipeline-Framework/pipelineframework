@@ -32,6 +32,10 @@ Handlebars.registerHelper('replace', function(str, find, repl) {
   if (typeof str.replaceAll === 'function') return str.replaceAll(find, repl);
   return str.split(find).join(repl);
 });
+
+Handlebars.registerHelper('add', function(a, b) {
+    return Number(a) + Number(b);
+});
 // Register helper for converting to lowercase
 Handlebars.registerHelper('lowercase', function(str) {
     return typeof str === 'string' ? str.toLowerCase() : str;
@@ -133,6 +137,15 @@ Handlebars.registerHelper('hasUtilFields', function(fields) {
     return fields.some(field => field.type === 'List<String>');
 });
 
+Handlebars.registerHelper('hasMapFields', function(fields) {
+    if (!Array.isArray(fields)) return false;
+    return fields.some(field => {
+        if (!field || typeof field.type !== 'string') return false;
+        const t = field.type.trim();
+        return t === 'Map' || t.startsWith('Map<');
+    });
+});
+
 Handlebars.registerHelper('hasIdField', function(fields) {
     if (!Array.isArray(fields)) return false;
     return fields.some(field => field.name === 'id');
@@ -159,11 +172,92 @@ Handlebars.registerHelper('isIdField', function(fieldName) {
     return fieldName === 'id';
 });
 
+Handlebars.registerHelper('sanitizeJavaIdentifier', function(fieldName) {
+    if (typeof fieldName !== 'string' || fieldName.trim() === '') {
+        return 'field';
+    }
+    let sanitized = fieldName.replace(/[^a-zA-Z0-9_]/g, '_');
+    if (/^[0-9]/.test(sanitized)) {
+        sanitized = '_' + sanitized;
+    }
+    const reservedWords = [
+        'abstract', 'assert', 'boolean', 'break', 'byte', 'case', 'catch', 'char', 'class',
+        'const', 'continue', 'default', 'do', 'double', 'else', 'enum', 'extends', 'final',
+        'finally', 'float', 'for', 'goto', 'if', 'implements', 'import', 'instanceof', 'int',
+        'interface', 'long', 'native', 'new', 'package', 'private', 'protected', 'public',
+        'return', 'short', 'static', 'strictfp', 'super', 'switch', 'synchronized', 'this',
+        'throw', 'throws', 'transient', 'try', 'void', 'volatile', 'while'
+    ];
+    if (reservedWords.includes(sanitized.toLowerCase())) {
+        sanitized = '_' + sanitized;
+    }
+    return sanitized || 'field';
+});
+
 class BrowserTemplateEngine {
     constructor(templates) {
         this.templates = templates || {};
         this.compiledTemplates = new Map();
+        this.validateTemplateHelpers();
         this.loadTemplates();
+    }
+
+    validateTemplateHelpers() {
+        const builtInHelpers = new Set(['if', 'unless', 'each', 'with', 'lookup', 'log']);
+        const missing = new Map();
+        const visit = (node, acc) => {
+            if (!node || typeof node !== 'object') return;
+            if (Array.isArray(node)) {
+                for (const child of node) visit(child, acc);
+                return;
+            }
+            if (node.type === 'MustacheStatement') {
+                if (node.path && node.path.type === 'PathExpression' && node.params && node.params.length > 0) {
+                    acc.add(node.path.original);
+                }
+            } else if (node.type === 'BlockStatement') {
+                if (
+                    node.path
+                    && node.path.type === 'PathExpression'
+                    && (
+                        (node.params && node.params.length > 0)
+                        || (node.hash && node.hash.pairs && node.hash.pairs.length > 0)
+                    )
+                ) {
+                    acc.add(node.path.original);
+                }
+                visit(node.program, acc);
+                visit(node.inverse, acc);
+            } else if (node.type === 'SubExpression') {
+                if (node.path && node.path.type === 'PathExpression') {
+                    acc.add(node.path.original);
+                }
+            }
+            for (const value of Object.values(node)) {
+                visit(value, acc);
+            }
+        };
+
+        for (const [name, templateStr] of Object.entries(this.templates)) {
+            const ast = Handlebars.parse(templateStr);
+            const usedHelpers = new Set();
+            visit(ast, usedHelpers);
+            for (const helperName of usedHelpers) {
+                if (builtInHelpers.has(helperName)) continue;
+                if (Handlebars.helpers[helperName]) continue;
+                if (!missing.has(helperName)) {
+                    missing.set(helperName, []);
+                }
+                missing.get(helperName).push(name);
+            }
+        }
+
+        if (missing.size > 0) {
+            const detail = Array.from(missing.entries())
+                .map(([helper, templates]) => `${helper} (templates: ${templates.join(', ')})`)
+                .join('; ');
+            throw new Error(`Missing Handlebars helper registration(s): ${detail}`);
+        }
     }
 
     loadTemplates() {
@@ -183,27 +277,43 @@ class BrowserTemplateEngine {
     }
 
     async generateApplication(appName, basePackage, steps, aspects, transport, runtimeLayout, fileCallback) {
+        const options = {
+            aspects: {},
+            transport: 'GRPC',
+            runtimeLayout: 'modular',
+            fileCallback
+        };
         if (typeof aspects === 'function' && fileCallback === undefined) {
-            fileCallback = aspects;
-            aspects = {};
+            options.fileCallback = aspects;
+        } else if (aspects && typeof aspects === 'object') {
+            options.aspects = aspects;
         }
         if (typeof transport === 'function' && fileCallback === undefined) {
-            fileCallback = transport;
-            transport = 'GRPC';
-            runtimeLayout = 'modular';
+            options.fileCallback = transport;
+        } else if (typeof transport === 'string') {
+            if (this.isTransport(transport)) {
+                options.transport = transport;
+            } else if (fileCallback === undefined) {
+                if (typeof runtimeLayout === 'function') {
+                    options.fileCallback = runtimeLayout;
+                } else {
+                    console.warn(
+                        `Unknown transport '${transport}' received by browser generator. Falling back to 'GRPC'.`
+                    );
+                }
+            }
         }
         if (typeof runtimeLayout === 'function' && fileCallback === undefined) {
-            fileCallback = runtimeLayout;
-            runtimeLayout = 'modular';
+            options.fileCallback = runtimeLayout;
+        } else if (this.isRuntimeLayout(runtimeLayout)) {
+            options.runtimeLayout = runtimeLayout;
         }
-        if (typeof transport === 'string' && !this.isTransport(transport) && fileCallback === undefined) {
-            fileCallback = runtimeLayout;
-            runtimeLayout = 'modular';
-            transport = 'GRPC';
+        if (typeof options.fileCallback !== 'function') {
+            throw new Error('fileCallback must be provided as a function.');
         }
-        const normalizedRuntimeLayout = this.normalizeRuntimeLayout(runtimeLayout);
-        const transportMode = this.normalizeTransport(transport, normalizedRuntimeLayout);
-        const aspectConfig = aspects || {};
+        const normalizedRuntimeLayout = this.normalizeRuntimeLayout(options.runtimeLayout);
+        const transportMode = this.normalizeTransport(options.transport, normalizedRuntimeLayout);
+        const aspectConfig = options.aspects || {};
         const includePersistenceModule = this.isAspectEnabled(aspectConfig, 'persistence');
         const includeCacheInvalidationModule = this.isAspectEnabled(aspectConfig, 'cache')
             || this.isAspectEnabled(aspectConfig, 'cache-invalidate')
@@ -228,22 +338,22 @@ class BrowserTemplateEngine {
             includePersistenceModule,
             includeCacheInvalidationModule,
             normalizedRuntimeLayout,
-            fileCallback);
+            options.fileCallback);
 
         // Generate common module
-        await this.generateCommonModule(appName, basePackage, steps, transportMode, fileCallback);
+        await this.generateCommonModule(appName, basePackage, steps, transportMode, options.fileCallback);
 
         // Generate each step service
         for (let i = 0; i < steps.length; i++) {
-            await this.generateStepService(appName, basePackage, steps[i], i, steps, transportMode, fileCallback);
+            await this.generateStepService(appName, basePackage, steps[i], i, steps, transportMode, options.fileCallback);
         }
 
         if (includePersistenceModule) {
-            await this.generatePersistenceModule(appName, basePackage, steps, fileCallback);
+            await this.generatePersistenceModule(appName, basePackage, steps, options.fileCallback);
         }
 
         if (includeCacheInvalidationModule) {
-            await this.generateCacheInvalidationModule(appName, basePackage, fileCallback);
+            await this.generateCacheInvalidationModule(appName, basePackage, options.fileCallback);
         }
 
         // Generate orchestrator
@@ -254,14 +364,14 @@ class BrowserTemplateEngine {
             includePersistenceModule,
             includeCacheInvalidationModule,
             transportMode,
-            fileCallback);
+            options.fileCallback);
 
         if (normalizedRuntimeLayout === 'pipeline-runtime') {
             await this.generatePipelineRuntimeModule(
                 appName,
                 basePackage,
                 steps,
-                fileCallback
+                options.fileCallback
             );
         } else if (normalizedRuntimeLayout === 'monolith') {
             await this.generateMonolithModule(
@@ -270,7 +380,7 @@ class BrowserTemplateEngine {
                 steps,
                 includePersistenceModule,
                 includeCacheInvalidationModule,
-                fileCallback
+                options.fileCallback
             );
         }
 
@@ -279,7 +389,7 @@ class BrowserTemplateEngine {
             includePersistenceModule,
             includeCacheInvalidationModule,
             normalizedRuntimeLayout,
-            fileCallback
+            options.fileCallback
         );
 
         const configSnapshot = {
@@ -290,16 +400,13 @@ class BrowserTemplateEngine {
             steps,
             aspects: aspectConfig
         };
-        await fileCallback('pipeline-config.yaml', JSON.stringify(configSnapshot, null, 2));
-
-        // Generate utility scripts
-        await this.generateUtilityScripts(fileCallback);
+        await options.fileCallback('pipeline-config.yaml', JSON.stringify(configSnapshot, null, 2));
 
         // Generate mvnw files
-        await this.generateMvNWFiles(fileCallback);
+        await this.generateMvNWFiles(options.fileCallback);
 
         // Generate Maven wrapper files
-        await this.generateMavenWrapperFiles(fileCallback);
+        await this.generateMavenWrapperFiles(options.fileCallback);
 
         // Generate other files
         await this.generateOtherFiles(
@@ -307,7 +414,7 @@ class BrowserTemplateEngine {
             steps,
             includePersistenceModule,
             includeCacheInvalidationModule,
-            fileCallback);
+            options.fileCallback);
     }
 
     async generateParentPom(
@@ -367,7 +474,7 @@ class BrowserTemplateEngine {
                 return {
                     moduleName: step.serviceName,
                     propertyName: `pipeline.runtime.source.dir.${key}`,
-                    propertyRef: `\${${`pipeline.runtime.source.dir.${key}`}}`
+                    propertyRef: '${pipeline.runtime.source.dir.' + key + '}'
                 };
             })
         };
@@ -400,7 +507,7 @@ class BrowserTemplateEngine {
             return {
                 moduleName: step.serviceName,
                 propertyName: `monolith.source.dir.${key}`,
-                propertyRef: `\${${`monolith.source.dir.${key}`}}`
+                propertyRef: '${monolith.source.dir.' + key + '}'
             };
         });
         sourceDirs.push({
@@ -480,14 +587,12 @@ class BrowserTemplateEngine {
     }
 
     async generateCommonPom(appName, basePackage, transport, fileCallback) {
-        const transportMode = typeof transport === 'string' && transport.trim()
-            ? transport.trim().toUpperCase()
-            : 'GRPC';
+        const transportMode = this.normalizeTransport(transport);
         const context = {
             basePackage,
             rootProjectName: appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-'),
             isRestTransport: transportMode === 'REST',
-            isGrpcTransport: transportMode !== 'REST'
+            isGrpcTransport: transportMode === 'GRPC'
         };
 
         const rendered = this.render('common-pom', context);
@@ -651,14 +756,12 @@ class BrowserTemplateEngine {
     }
 
     async generateStepPom(step, basePackage, transport, fileCallback) {
-        const transportMode = typeof transport === 'string' && transport.trim()
-            ? transport.trim().toUpperCase()
-            : 'GRPC';
+        const transportMode = this.normalizeTransport(transport);
         const context = {
             ...step,
             basePackage,
             isRestTransport: transportMode === 'REST',
-            isGrpcTransport: transportMode !== 'REST'
+            isGrpcTransport: transportMode === 'GRPC'
         };
         const rendered = this.render('step-pom', context);
         const filePath = `${step.serviceName}/pom.xml`;
@@ -748,9 +851,7 @@ class BrowserTemplateEngine {
         includeCacheInvalidationModule,
         transport,
         fileCallback) {
-        const transportMode = typeof transport === 'string' && transport.trim()
-            ? transport.trim().toUpperCase()
-            : 'GRPC';
+        const transportMode = this.normalizeTransport(transport);
         const context = {
             basePackage,
             artifactId: 'orchestrator-svc',
@@ -758,7 +859,7 @@ class BrowserTemplateEngine {
             includePersistenceModule,
             includeCacheInvalidationModule,
             isRestTransport: transportMode === 'REST',
-            isGrpcTransport: transportMode !== 'REST'
+            isGrpcTransport: transportMode === 'GRPC'
         };
 
         const rendered = this.render('orchestrator-pom', context);
@@ -866,7 +967,7 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
             includePersistenceModule,
             includeCacheInvalidationModule
         );
-        await fileCallback('config/runtime-mapping/pipeline.runtime.yaml', this.toYaml(active));
+        await fileCallback('config/runtime-mapping/pipeline-runtime-active.yaml', this.toYaml(active));
     }
 
     buildRuntimeMapping(layout, steps, includePersistenceModule, includeCacheInvalidationModule) {
@@ -899,6 +1000,8 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
 
         modularModules['orchestrator-svc'] = { runtime: 'orchestrator-svc' };
         pipelineModules['orchestrator-svc'] = { runtime: 'orchestrator-svc' };
+        // Monolith layout runs orchestrator logic inside monolith-svc.
+        monolithModules['orchestrator-svc'] = { runtime: 'monolith-svc' };
 
         const monolithAspectTargets = [];
         if (includePersistenceModule) {
@@ -983,7 +1086,12 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
             return value.map(item => {
                 const itemYaml = this.toYaml(item, indent + 2);
                 if (item !== null && typeof item === 'object') {
-                    return `${prefix}-\n${itemYaml}`;
+                    const lines = itemYaml.split('\n');
+                    const firstLine = lines[0].slice(indent + 2);
+                    const restLines = lines
+                        .slice(1)
+                        .map(line => `${' '.repeat(indent + 2)}${line.slice(indent + 2)}`);
+                    return [`${prefix}- ${firstLine}`, ...restLines].join('\n');
                 }
                 return `${prefix}- ${this.toYamlScalar(item)}`;
             }).join('\n');
@@ -1012,7 +1120,10 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
             return String(value);
         }
         const text = String(value);
-        if (/^[A-Za-z0-9_.-]+$/.test(text)) {
+        const textLower = text.toLowerCase();
+        const reservedWords = new Set(['null', '~', 'true', 'false', 'yes', 'no', 'on', 'off']);
+        const numericPattern = /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/;
+        if (/^[A-Za-z0-9_.-]+$/.test(text) && !reservedWords.has(textLower) && !numericPattern.test(text)) {
             return text;
         }
         return `"${text.replace(/"/g, '\\"')}"`;
@@ -1083,7 +1194,7 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         if (typeof value !== 'string') {
             return false;
         }
-        const normalized = value.trim().toLowerCase();
+        const normalized = value.trim().toLowerCase().replace(/_/g, '-');
         return normalized === 'modular' || normalized === 'pipeline-runtime' || normalized === 'monolith';
     }
 
@@ -1091,7 +1202,7 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         if (!this.isRuntimeLayout(runtimeLayout)) {
             return 'modular';
         }
-        return runtimeLayout.trim().toLowerCase();
+        return runtimeLayout.trim().toLowerCase().replace(/_/g, '-');
     }
 
     isAspectEnabled(aspects, aspectName) {

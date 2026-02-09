@@ -22,8 +22,8 @@
     "runtimeLayout": {
       "type": "string",
       "description": "Target runtime layout intent for generated runtime-mapping files",
-      "enum": ["modular", "pipeline-runtime", "monolith"],
-      "default": "modular"
+      "enum": ["MODULAR", "PIPELINE_RUNTIME", "MONOLITH"],
+      "default": "MODULAR"
     },
     "steps": {
       "type": "array",

@@ -58,7 +58,7 @@ class PipelineGenerator {
             appName: 'Sample Pipeline App',
             basePackage: 'com.example.sample',
             transport: 'GRPC',
-            runtimeLayout: 'modular',
+            runtimeLayout: 'MODULAR',
             steps: [
                 {
                     name: 'Process Customer',
@@ -112,6 +112,13 @@ class PipelineGenerator {
     loadConfig(configPath) {
         const yamlStr = fs.readFileSync(configPath, 'utf8');
         const config = YAML.load(yamlStr);
+
+        if (typeof config.runtimeLayout === 'string') {
+            config.runtimeLayout = config.runtimeLayout.trim().toUpperCase().replace(/-/g, '_');
+        }
+        if (typeof config.transport === 'string') {
+            config.transport = config.transport.trim().toUpperCase();
+        }
         
         // Validate the configuration against the schema
         const ajv = new Ajv();
@@ -138,23 +145,37 @@ class PipelineGenerator {
 
     normalizeRuntimeLayout(runtimeLayout) {
         if (typeof runtimeLayout !== 'string') {
+            console.warn(
+                `Unknown runtimeLayout '${runtimeLayout}'. Falling back to 'modular'.`
+            );
             return 'modular';
         }
-        const normalized = runtimeLayout.trim().toLowerCase();
-        if (normalized === 'pipeline-runtime' || normalized === 'monolith') {
+        const normalized = runtimeLayout.trim().toLowerCase().replace(/_/g, '-');
+        if (normalized === 'modular' || normalized === 'pipeline-runtime' || normalized === 'monolith') {
             return normalized;
         }
+        console.warn(
+            `Unknown runtimeLayout '${runtimeLayout}'. Falling back to 'modular'.`
+        );
         return 'modular';
     }
 
     normalizeTransport(transport, runtimeLayout) {
+        const fallback = runtimeLayout === 'monolith' ? 'LOCAL' : 'GRPC';
         if (typeof transport === 'string') {
             const normalized = transport.trim().toUpperCase();
             if (normalized === 'GRPC' || normalized === 'REST' || normalized === 'LOCAL') {
                 return normalized;
             }
+            console.warn(
+                `Unknown transport '${transport}'. Falling back to '${fallback}'.`
+            );
+        } else {
+            console.warn(
+                `Unknown transport '${transport}'. Falling back to '${fallback}'.`
+            );
         }
-        return runtimeLayout === 'monolith' ? 'LOCAL' : 'GRPC';
+        return fallback;
     }
 
     /**
@@ -168,6 +189,17 @@ class PipelineGenerator {
         await fs.writeFile(outputPath, yamlStr);
     }
 
+    /**
+     * Writes the effective pipeline config into `<outputPath>/config/pipeline.yaml`.
+     *
+     * Creates the `config` directory when missing and serializes the provided config
+     * using `YAML.dump(..., { lineWidth: -1 })`.
+     *
+     * @param {Object} config The normalized pipeline configuration object.
+     * @param {string} outputPath The generated project root directory.
+     * @returns {Promise<void>} Resolves when the config file is written.
+     * @throws {Error} Propagates filesystem errors from directory creation/file writes.
+     */
     async copyConfig(config, outputPath) {
         const targetDir = path.join(outputPath, 'config');
         await fs.ensureDir(targetDir);

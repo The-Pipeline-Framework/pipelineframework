@@ -413,31 +413,68 @@ class HandlebarsTemplateEngine {
     }
 
     async generateApplication(appName, basePackage, steps, aspects, transport, runtimeLayout, outputPath) {
-        if (typeof aspects === 'string' && outputPath === undefined) {
-            outputPath = aspects;
-            aspects = {};
-            transport = 'GRPC';
+        const options = {
+            aspects: {},
+            transport: 'GRPC',
+            runtimeLayout: 'modular',
+            outputPath
+        };
+
+        if (typeof aspects === 'string') {
+            options.outputPath = aspects;
+        } else if (aspects && typeof aspects === 'object') {
+            options.aspects = aspects;
         }
-        if (typeof transport === 'string' && outputPath === undefined) {
+
+        if (typeof transport === 'string') {
             if (this.isTransport(transport)) {
-                outputPath = runtimeLayout;
+                options.transport = transport;
+                if (typeof runtimeLayout === 'string') {
+                    if (this.isRuntimeLayout(runtimeLayout)) {
+                        options.runtimeLayout = runtimeLayout;
+                        if (typeof outputPath === 'string') {
+                            options.outputPath = outputPath;
+                        }
+                    } else if (typeof outputPath === 'string') {
+                        options.outputPath = outputPath;
+                    } else {
+                        options.outputPath = runtimeLayout;
+                    }
+                } else if (typeof outputPath === 'string') {
+                    options.outputPath = outputPath;
+                }
+            } else if (typeof runtimeLayout === 'string' && this.isRuntimeLayout(runtimeLayout)) {
+                options.runtimeLayout = runtimeLayout;
+                if (typeof outputPath === 'string') {
+                    options.outputPath = outputPath;
+                } else {
+                    options.outputPath = transport;
+                }
+            } else if (typeof outputPath === 'string') {
+                options.outputPath = outputPath;
             } else {
-                outputPath = transport;
-                transport = 'GRPC';
+                options.outputPath = transport;
             }
-        }
-        if (typeof runtimeLayout === 'string' && outputPath === undefined) {
+        } else if (typeof runtimeLayout === 'string') {
             if (this.isRuntimeLayout(runtimeLayout)) {
-                outputPath = transport;
-                transport = 'GRPC';
+                options.runtimeLayout = runtimeLayout;
+                if (typeof outputPath === 'string') {
+                    options.outputPath = outputPath;
+                }
+            } else if (typeof outputPath === 'string') {
+                options.outputPath = outputPath;
             } else {
-                outputPath = runtimeLayout;
-                runtimeLayout = 'modular';
+                options.outputPath = runtimeLayout;
             }
         }
-        const aspectConfig = aspects || {};
-        const normalizedRuntimeLayout = this.normalizeRuntimeLayout(runtimeLayout);
-        const transportMode = this.normalizeTransport(transport, normalizedRuntimeLayout);
+
+        if (typeof options.outputPath !== 'string' || options.outputPath.trim() === '') {
+            throw new Error('outputPath must be provided as a non-empty string.');
+        }
+
+        const aspectConfig = options.aspects || {};
+        const normalizedRuntimeLayout = this.normalizeRuntimeLayout(options.runtimeLayout);
+        const transportMode = this.normalizeTransport(options.transport, normalizedRuntimeLayout);
         const includePersistenceModule = this.isAspectEnabled(aspectConfig, 'persistence');
         const includeCacheInvalidationModule = this.isAspectEnabled(aspectConfig, 'cache')
             || this.isAspectEnabled(aspectConfig, 'cache-invalidate')
@@ -456,7 +493,7 @@ class HandlebarsTemplateEngine {
         }
 
         // Create output directory
-        await fs.ensureDir(outputPath);
+        await fs.ensureDir(options.outputPath);
 
         // Generate parent POM
         await this.generateParentPom(
@@ -466,22 +503,22 @@ class HandlebarsTemplateEngine {
             includePersistenceModule,
             includeCacheInvalidationModule,
             normalizedRuntimeLayout,
-            outputPath);
+            options.outputPath);
 
         // Generate common module
-        await this.generateCommonModule(appName, basePackage, steps, aspectDefinitions, transportMode, outputPath);
+        await this.generateCommonModule(appName, basePackage, steps, aspectDefinitions, transportMode, options.outputPath);
 
         // Generate each step service
         for (let i = 0; i < steps.length; i++) {
-            await this.generateStepService(appName, basePackage, steps[i], outputPath, i, steps, transportMode);
+            await this.generateStepService(appName, basePackage, steps[i], options.outputPath, i, steps, transportMode);
         }
 
         if (includePersistenceModule) {
-            await this.generatePersistenceModule(appName, basePackage, steps, outputPath);
+            await this.generatePersistenceModule(appName, basePackage, steps, options.outputPath);
         }
 
         if (includeCacheInvalidationModule) {
-            await this.generateCacheInvalidationModule(appName, basePackage, steps, includePersistenceModule, outputPath);
+            await this.generateCacheInvalidationModule(appName, basePackage, steps, includePersistenceModule, options.outputPath);
         }
 
         // Generate orchestrator
@@ -493,14 +530,14 @@ class HandlebarsTemplateEngine {
             includeCacheInvalidationModule,
             aspectDefinitions,
             transportMode,
-            outputPath);
+            options.outputPath);
 
         if (normalizedRuntimeLayout === 'pipeline-runtime') {
             await this.generatePipelineRuntimeModule(
                 appName,
                 basePackage,
                 steps,
-                outputPath);
+                options.outputPath);
         } else if (normalizedRuntimeLayout === 'monolith') {
             await this.generateMonolithModule(
                 appName,
@@ -508,7 +545,7 @@ class HandlebarsTemplateEngine {
                 steps,
                 includePersistenceModule,
                 includeCacheInvalidationModule,
-                outputPath);
+                options.outputPath);
         }
 
         await this.generateRuntimeMappingFiles(
@@ -516,7 +553,7 @@ class HandlebarsTemplateEngine {
             includePersistenceModule,
             includeCacheInvalidationModule,
             normalizedRuntimeLayout,
-            outputPath
+            options.outputPath
         );
 
         // Generate utility scripts
@@ -610,7 +647,8 @@ class HandlebarsTemplateEngine {
                 return {
                     moduleName: step.serviceName,
                     propertyName: `pipeline.runtime.source.dir.${key}`,
-                    propertyRef: `\${${`pipeline.runtime.source.dir.${key}`}}`
+                    // Emit literal Maven property refs like ${pipeline.runtime.source.dir.s0}
+                    propertyRef: '${pipeline.runtime.source.dir.' + key + '}'
                 };
             })
         };
@@ -645,7 +683,7 @@ class HandlebarsTemplateEngine {
             return {
                 moduleName: step.serviceName,
                 propertyName: `monolith.source.dir.${key}`,
-                propertyRef: `\${${`monolith.source.dir.${key}`}}`
+                propertyRef: '${monolith.source.dir.' + key + '}'
             };
         });
         sourceDirs.push({
@@ -754,14 +792,12 @@ class HandlebarsTemplateEngine {
     }
 
     async generateCommonPom(appName, basePackage, commonPath, transport) {
-        const transportMode = typeof transport === 'string' && transport.trim()
-            ? transport.trim().toUpperCase()
-            : 'GRPC';
+        const transportMode = this.normalizeTransport(transport);
         const context = {
             basePackage,
             rootProjectName: appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-'),
             isRestTransport: transportMode === 'REST',
-            isGrpcTransport: transportMode !== 'REST'
+            isGrpcTransport: transportMode === 'GRPC'
         };
 
         const rendered = this.render('common-pom', context);
@@ -915,12 +951,10 @@ class HandlebarsTemplateEngine {
     }
 
     async generateCommonApplicationProperties(commonPath, transport) {
-        const transportMode = typeof transport === 'string' && transport.trim()
-            ? transport.trim().toUpperCase()
-            : 'GRPC';
+        const transportMode = this.normalizeTransport(transport);
         const context = {
             isRestTransport: transportMode === 'REST',
-            isGrpcTransport: transportMode !== 'REST'
+            isGrpcTransport: transportMode === 'GRPC'
         };
         const rendered = this.render('common-application-properties', context);
         const appPropsPath = path.join(commonPath, 'src/main/resources', 'application.properties');
@@ -979,14 +1013,12 @@ class HandlebarsTemplateEngine {
     }
 
     async generateStepPom(step, basePackage, stepPath, transport) {
-        const transportMode = typeof transport === 'string' && transport.trim()
-            ? transport.trim().toUpperCase()
-            : 'GRPC';
+        const transportMode = this.normalizeTransport(transport);
         const context = {
             ...step,
             basePackage,
             isRestTransport: transportMode === 'REST',
-            isGrpcTransport: transportMode !== 'REST'
+            isGrpcTransport: transportMode === 'GRPC'
         };
         const rendered = this.render('step-pom', context);
         const pomPath = path.join(stepPath, 'pom.xml');
@@ -1343,9 +1375,7 @@ class HandlebarsTemplateEngine {
         includeCacheInvalidationModule,
         transport,
         orchPath) {
-        const transportMode = typeof transport === 'string' && transport.trim()
-            ? transport.trim().toUpperCase()
-            : 'GRPC';
+        const transportMode = this.normalizeTransport(transport);
         const context = {
             basePackage,
             artifactId: 'orchestrator-svc',
@@ -1353,7 +1383,7 @@ class HandlebarsTemplateEngine {
             includePersistenceModule,
             includeCacheInvalidationModule,
             isRestTransport: transportMode === 'REST',
-            isGrpcTransport: transportMode !== 'REST'
+            isGrpcTransport: transportMode === 'GRPC'
         };
 
         const rendered = this.render('orchestrator-pom', context);
@@ -1603,7 +1633,7 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         if (typeof value !== 'string') {
             return false;
         }
-        const normalized = value.trim().toLowerCase();
+        const normalized = value.trim().toLowerCase().replace(/_/g, '-');
         return normalized === 'modular' || normalized === 'pipeline-runtime' || normalized === 'monolith';
     }
 
@@ -1611,7 +1641,7 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         if (!this.isRuntimeLayout(runtimeLayout)) {
             return 'modular';
         }
-        return runtimeLayout.trim().toLowerCase();
+        return runtimeLayout.trim().toLowerCase().replace(/_/g, '-');
     }
 
     stepId(step) {
@@ -1622,64 +1652,14 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
     }
 
     buildRuntimeMapping(layout, steps, includePersistenceModule, includeCacheInvalidationModule) {
-        const modularModules = {};
-        const pipelineModules = {};
-        const monolithModules = {};
+        if (!Array.isArray(steps)) {
+            throw new Error('buildRuntimeMapping requires steps to be an array.');
+        }
+        if (!this.isRuntimeLayout(layout)) {
+            throw new Error(`Unsupported runtime layout '${layout}'.`);
+        }
         const runtimeLayout = this.normalizeRuntimeLayout(layout);
-
-        for (const step of steps || []) {
-            const moduleName = step.serviceName;
-            const stepName = this.stepId(step);
-            if (!moduleName || !stepName) {
-                continue;
-            }
-            modularModules[moduleName] = {
-                runtime: moduleName,
-                steps: [stepName]
-            };
-            pipelineModules['pipeline-runtime-svc'] = pipelineModules['pipeline-runtime-svc'] || {
-                runtime: 'pipeline-runtime-svc',
-                steps: []
-            };
-            pipelineModules['pipeline-runtime-svc'].steps.push(stepName);
-            monolithModules['monolith-svc'] = monolithModules['monolith-svc'] || {
-                runtime: 'monolith-svc',
-                steps: []
-            };
-            monolithModules['monolith-svc'].steps.push(stepName);
-        }
-
-        modularModules['orchestrator-svc'] = { runtime: 'orchestrator-svc' };
-        pipelineModules['orchestrator-svc'] = { runtime: 'orchestrator-svc' };
-
-        const monolithAspectTargets = [];
-        if (includePersistenceModule) {
-            modularModules['persistence-svc'] = {
-                runtime: 'persistence-svc',
-                aspects: ['persistence']
-            };
-            pipelineModules['persistence-svc'] = {
-                runtime: 'persistence-svc',
-                aspects: ['persistence']
-            };
-            monolithAspectTargets.push('persistence');
-        }
-        if (includeCacheInvalidationModule) {
-            modularModules['cache-invalidation-svc'] = {
-                runtime: 'cache-invalidation-svc',
-                aspects: ['cache', 'cache-invalidate', 'cache-invalidate-all']
-            };
-            pipelineModules['cache-invalidation-svc'] = {
-                runtime: 'cache-invalidation-svc',
-                aspects: ['cache', 'cache-invalidate', 'cache-invalidate-all']
-            };
-            monolithAspectTargets.push('cache');
-            monolithAspectTargets.push('cache-invalidate');
-            monolithAspectTargets.push('cache-invalidate-all');
-        }
-        if (monolithAspectTargets.length > 0) {
-            monolithModules['monolith-svc'].aspects = monolithAspectTargets;
-        }
+        const validatedSteps = steps;
 
         const mappings = {
             modular: {
@@ -1692,7 +1672,7 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
                         module: includePersistenceModule ? 'persistence-svc' : 'orchestrator-svc'
                     }
                 },
-                modules: modularModules
+                modules: this.buildModularModules(validatedSteps, includePersistenceModule, includeCacheInvalidationModule)
             },
             'pipeline-runtime': {
                 layout: 'pipeline-runtime',
@@ -1708,7 +1688,7 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
                                 : 'pipeline-runtime-svc'
                     }
                 },
-                modules: pipelineModules
+                modules: this.buildPipelineModules(validatedSteps, includePersistenceModule, includeCacheInvalidationModule)
             },
             monolith: {
                 layout: 'monolith',
@@ -1720,10 +1700,103 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
                         module: 'monolith-svc'
                     }
                 },
-                modules: monolithModules
+                modules: this.buildMonolithModules(validatedSteps, includePersistenceModule, includeCacheInvalidationModule)
             }
         };
+
         return mappings[runtimeLayout];
+    }
+
+    buildModularModules(steps, includePersistenceModule, includeCacheInvalidationModule) {
+        const modules = {};
+        for (const step of steps) {
+            const moduleName = step.serviceName;
+            const stepName = this.stepId(step);
+            if (!moduleName || !stepName) {
+                continue;
+            }
+            modules[moduleName] = {
+                runtime: moduleName,
+                steps: [stepName]
+            };
+        }
+        modules['orchestrator-svc'] = { runtime: 'orchestrator-svc' };
+        if (includePersistenceModule) {
+            modules['persistence-svc'] = {
+                runtime: 'persistence-svc',
+                aspects: ['persistence']
+            };
+        }
+        if (includeCacheInvalidationModule) {
+            modules['cache-invalidation-svc'] = {
+                runtime: 'cache-invalidation-svc',
+                aspects: ['cache', 'cache-invalidate', 'cache-invalidate-all']
+            };
+        }
+        return modules;
+    }
+
+    buildPipelineModules(steps, includePersistenceModule, includeCacheInvalidationModule) {
+        const modules = {
+            'pipeline-runtime-svc': {
+                runtime: 'pipeline-runtime-svc',
+                steps: []
+            },
+            'orchestrator-svc': {
+                runtime: 'orchestrator-svc'
+            }
+        };
+        for (const step of steps) {
+            const stepName = this.stepId(step);
+            if (!stepName) {
+                continue;
+            }
+            modules['pipeline-runtime-svc'].steps.push(stepName);
+        }
+        if (includePersistenceModule) {
+            modules['persistence-svc'] = {
+                runtime: 'persistence-svc',
+                aspects: ['persistence']
+            };
+        }
+        if (includeCacheInvalidationModule) {
+            modules['cache-invalidation-svc'] = {
+                runtime: 'cache-invalidation-svc',
+                aspects: ['cache', 'cache-invalidate', 'cache-invalidate-all']
+            };
+        }
+        return modules;
+    }
+
+    buildMonolithModules(steps, includePersistenceModule, includeCacheInvalidationModule) {
+        const modules = {
+            'monolith-svc': {
+                runtime: 'monolith-svc',
+                steps: []
+            },
+            // Monolith folds orchestrator behavior into monolith-svc.
+            'orchestrator-svc': {
+                runtime: 'monolith-svc'
+            }
+        };
+        for (const step of steps) {
+            const stepName = this.stepId(step);
+            if (!stepName) {
+                continue;
+            }
+            modules['monolith-svc'].steps.push(stepName);
+        }
+        const monolithAspectTargets = [];
+        if (includePersistenceModule) {
+            monolithAspectTargets.push('persistence');
+        }
+        if (includeCacheInvalidationModule) {
+            monolithAspectTargets.push('cache', 'cache-invalidate', 'cache-invalidate-all');
+        }
+        if (monolithAspectTargets.length > 0) {
+            modules['monolith-svc'].aspects = monolithAspectTargets;
+        }
+        return modules;
     }
 
     async generateRuntimeMappingFiles(
@@ -1756,7 +1829,7 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
             includePersistenceModule,
             includeCacheInvalidationModule
         );
-        await fs.writeFile(path.join(runtimeMappingDir, 'pipeline.runtime.yaml'), YAML.dump(active, { lineWidth: -1 }));
+        await fs.writeFile(path.join(runtimeMappingDir, 'pipeline-runtime-active.yaml'), YAML.dump(active, { lineWidth: -1 }));
     }
 }
 

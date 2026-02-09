@@ -767,6 +767,28 @@
   
   // Process the upload after confirmation
   async function processUpload(file) {
+    const normalizeLoadedCardinality = (raw) => {
+      const value = String(raw || '').trim().toUpperCase().replace(/[-\s]+/g, '_');
+      if (value === 'EXPANSION' || value === 'REDUCTION' || value === 'MANY_TO_MANY' || value === 'SIDE_EFFECT' || value === 'ONE_TO_ONE') {
+        return value;
+      }
+      return 'ONE_TO_ONE';
+    };
+    const cardinalityToStepType = (cardinality) => {
+      switch (cardinality) {
+        case 'EXPANSION':
+          return 'StepOneToMany';
+        case 'REDUCTION':
+          return 'StepManyToOne';
+        case 'MANY_TO_MANY':
+          return 'StepManyToMany';
+        case 'SIDE_EFFECT':
+          return 'StepSideEffect';
+        default:
+          return 'StepOneToOne';
+      }
+    };
+
     const text = await file.text();
     try {
       const data = load(text);
@@ -791,6 +813,7 @@
         if (!step.cardinality) {
           throw new Error(`Invalid configuration file: step ${i+1} is missing required field (cardinality)`);
         }
+        step.cardinality = normalizeLoadedCardinality(step.cardinality);
         
         if (!step.inputTypeName) {
           throw new Error(`Invalid configuration file: step ${i+1} is missing required field (inputTypeName)`);
@@ -875,26 +898,8 @@
           }
         }
         
-        // Set stepType based on cardinality
-        if (!step.stepType) {
-          switch (step.cardinality) {
-            case 'EXPANSION':
-              step.stepType = 'StepOneToMany';
-              break;
-            case 'REDUCTION':
-              step.stepType = 'StepManyToOne';
-              break;
-            case 'MANY_TO_MANY':
-              step.stepType = 'StepManyToMany';
-              break;
-            case 'SIDE_EFFECT':
-              step.stepType = 'StepSideEffect';
-              break;
-            default:
-              step.stepType = 'StepOneToOne';
-              break;
-          }
-        }
+        // Always derive shape from cardinality so loaded configs render consistently.
+        step.stepType = cardinalityToStepType(step.cardinality);
         
         // For Side-Effect steps, ensure input and output types are aligned
         if (step.cardinality === 'SIDE_EFFECT') {
@@ -904,10 +909,11 @@
         }
       }
       
+      const normalizedLayout = normalizeRuntimeLayout(data.runtimeLayout);
       config = {
         ...data,
-        runtimeLayout: normalizeRuntimeLayout(data.runtimeLayout),
-        transport: normalizeTransport(data.transport, data.runtimeLayout),
+        runtimeLayout: normalizedLayout,
+        transport: normalizeTransport(data.transport, normalizedLayout),
         aspects: data.aspects || {}
       };
       if (!isAspectEnabled(config.aspects, 'persistence')) {
@@ -1134,6 +1140,10 @@
               <option value={option.value}>{option.label}</option>
             {/each}
           </select>
+          <p class="mt-1 text-xs text-gray-600">
+            Layout changes deployable topology, not where step source code is authored. Even in
+            <code>monolith</code>, step modules are scaffolded and <code>monolith-svc</code> assembles them at build time.
+          </p>
         </div>
         <div class="mt-2 flex flex-wrap gap-4 text-sm text-gray-700">
           <label class="inline-flex items-center">

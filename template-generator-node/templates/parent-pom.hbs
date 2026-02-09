@@ -28,23 +28,26 @@
         <module>cache-invalidation-svc</module>
             {{/if}}
         <module>orchestrator-svc</module>
-        {{/if}}
-        {{#if isPipelineRuntimeLayout}}
+        {{else}}
+            {{#if isPipelineRuntimeLayout}}
         <module>pipeline-runtime-svc</module>
-            {{#if includePersistenceModule}}
+                {{#if includePersistenceModule}}
         <module>persistence-svc</module>
-            {{/if}}
-            {{#if includeCacheInvalidationModule}}
+                {{/if}}
+                {{#if includeCacheInvalidationModule}}
         <module>cache-invalidation-svc</module>
-            {{/if}}
+                {{/if}}
         <module>orchestrator-svc</module>
-        {{/if}}
-        {{#if isMonolithLayout}}
+            {{else}}
+                {{#if isMonolithLayout}}
         <module>monolith-svc</module>
+                {{/if}}
+            {{/if}}
         {{/if}}
     </modules>
 
     <properties>
+        <revision>${project.version}</revision>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
@@ -58,6 +61,8 @@
         <mockito.version>5.21.0</mockito.version>
         <spotless.plugin.version>2.44.0</spotless.plugin.version>
         <google-java-format.version>1.25.0</google-java-format.version>
+        <lombok.version>1.18.36</lombok.version>
+        <mapstruct.version>1.5.5.Final</mapstruct.version>
         <surefireArgLine />
         <pipeline.generatedSourcesArg />
         <protobuf.descriptor.fileArg />

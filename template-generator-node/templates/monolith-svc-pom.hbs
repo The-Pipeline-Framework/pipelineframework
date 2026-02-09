@@ -7,7 +7,7 @@
     <parent>
         <groupId>{{basePackage}}</groupId>
         <artifactId>{{rootProjectName}}</artifactId>
-        <version>${project.version}</version>
+        <version>${revision}</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -20,6 +20,8 @@
         <protobuf.descriptor.fileArg>-Aprotobuf.descriptor.file=${protobuf.descriptor.path}</protobuf.descriptor.fileArg>
         <monolith.source.root>${project.basedir}/..</monolith.source.root>
         <monolith.duplicate.check.script>${monolith.source.root}/build-tools/check-duplicate-sources.sh</monolith.duplicate.check.script>
+        <lombok.version>1.18.36</lombok.version>
+        <mapstruct.version>1.5.5.Final</mapstruct.version>
 {{#each sourceDirs}}
         <{{propertyName}}>${monolith.source.root}/{{moduleName}}/src/main/java</{{propertyName}}>
 {{/each}}
@@ -80,17 +82,17 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.36</version>
+            <version>${lombok.version}</version>
         </dependency>
         <dependency>
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct</artifactId>
-            <version>1.5.5.Final</version>
+            <version>${mapstruct.version}</version>
         </dependency>
         <dependency>
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct-processor</artifactId>
-            <version>1.5.5.Final</version>
+            <version>${mapstruct.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -123,6 +125,7 @@
                 <artifactId>spotless-maven-plugin</artifactId>
             </plugin>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-antrun-plugin</artifactId>
                 <version>3.2.0</version>
                 <executions>
@@ -149,14 +152,14 @@
                         </goals>
                         <configuration>
                             <target>
-                                <delete dir="${project.build.directory}/monolith-sources"/>
-                                <mkdir dir="${project.build.directory}/monolith-sources"/>
                                 <condition property="is.windows">
                                     <os family="windows"/>
                                 </condition>
                                 <fail if="is.windows">
                                     monolith source aggregation runs a Unix shell script (`check-duplicate-sources.sh`). Use Linux/macOS/WSL for this module.
                                 </fail>
+                                <delete dir="${project.build.directory}/monolith-sources"/>
+                                <mkdir dir="${project.build.directory}/monolith-sources"/>
                                 <exec executable="bash" failonerror="true">
                                     <arg value="${monolith.duplicate.check.script}"/>
                                     <arg value="${project.build.directory}/monolith-sources"/>
@@ -179,6 +182,7 @@
                 <artifactId>build-helper-maven-plugin</artifactId>
                 <version>3.6.0</version>
                 <executions>
+                    <!-- Keep collect-monolith-sources ahead of add-monolith-sources; source dir must exist before add-source runs. -->
                     <execution>
                         <id>add-monolith-sources</id>
                         <phase>generate-sources</phase>

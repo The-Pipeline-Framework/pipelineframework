@@ -7,7 +7,7 @@
     <parent>
         <groupId>{{basePackage}}</groupId>
         <artifactId>{{rootProjectName}}</artifactId>
-        <version>${project.version}</version>
+        <version>${revision}</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -20,6 +20,8 @@
         <protobuf.descriptor.fileArg>-Aprotobuf.descriptor.file=${protobuf.descriptor.path}</protobuf.descriptor.fileArg>
         <pipeline.runtime.source.root>${project.basedir}/..</pipeline.runtime.source.root>
         <pipeline.runtime.duplicate.check.script>${pipeline.runtime.source.root}/build-tools/check-duplicate-sources.sh</pipeline.runtime.duplicate.check.script>
+        <lombok.version>1.18.36</lombok.version>
+        <mapstruct.version>1.5.5.Final</mapstruct.version>
 {{#each sourceDirs}}
         <{{propertyName}}>${pipeline.runtime.source.root}/{{moduleName}}/src/main/java</{{propertyName}}>
 {{/each}}
@@ -54,17 +56,17 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <version>1.18.36</version>
+            <version>${lombok.version}</version>
         </dependency>
         <dependency>
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct</artifactId>
-            <version>1.5.5.Final</version>
+            <version>${mapstruct.version}</version>
         </dependency>
         <dependency>
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct-processor</artifactId>
-            <version>1.5.5.Final</version>
+            <version>${mapstruct.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -97,6 +99,7 @@
                 <artifactId>spotless-maven-plugin</artifactId>
             </plugin>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-antrun-plugin</artifactId>
                 <version>3.2.0</version>
                 <executions>
@@ -153,6 +156,7 @@
                 <artifactId>build-helper-maven-plugin</artifactId>
                 <version>3.6.0</version>
                 <executions>
+                    <!-- collect-pipeline-runtime-sources must run before add-pipeline-runtime-sources; keep plugin order unchanged. -->
                     <execution>
                         <id>add-pipeline-runtime-sources</id>
                         <phase>generate-sources</phase>
