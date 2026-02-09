@@ -580,6 +580,39 @@ class HandlebarsTemplateEngine {
         }
 
         if (steps && typeof steps === 'object' && !Array.isArray(steps)) {
+            const isArrayLikeSteps = Number.isInteger(steps.length) && steps.length >= 0;
+            if (isArrayLikeSteps) {
+                return {
+                    appName,
+                    basePackage,
+                    steps: Array.from(steps),
+                    aspects: aspects && typeof aspects === 'object' ? aspects : {},
+                    transport: this.normalizeTransport(transport, this.normalizeRuntimeLayout(runtimeLayout)),
+                    runtimeLayout: this.normalizeRuntimeLayout(runtimeLayout),
+                    outputPath
+                };
+            }
+            const numericKeys = Object.keys(steps)
+                .filter(key => /^\d+$/.test(key))
+                .map(key => Number(key))
+                .sort((a, b) => a - b);
+            if (numericKeys.length > 0) {
+                const sequential = numericKeys.every((value, index) => value === index);
+                if (sequential) {
+                    return {
+                        appName,
+                        basePackage,
+                        steps: numericKeys.map(index => steps[index]),
+                        aspects: aspects && typeof aspects === 'object' ? aspects : {},
+                        transport: this.normalizeTransport(transport, this.normalizeRuntimeLayout(runtimeLayout)),
+                        runtimeLayout: this.normalizeRuntimeLayout(runtimeLayout),
+                        outputPath
+                    };
+                }
+            }
+            console.warn(
+                'Ambiguous positional usage detected: third argument is an object and will be treated as options.'
+            );
             const options = { appName, basePackage, ...steps };
             const normalizedLayout = this.normalizeRuntimeLayout(options.runtimeLayout);
             return {

@@ -698,10 +698,8 @@
       // Generate the complete application using the template engine
       const stepsCopy = [...config.steps];
       const selectedLayout = normalizeRuntimeLayout(config.runtimeLayout);
-      if (selectedLayout === 'monolith' && config.transport !== 'LOCAL') {
-        config = { ...config, transport: 'LOCAL' };
-      }
-      const selectedTransport = normalizeTransport(config.transport, selectedLayout);
+      const effectiveTransport = selectedLayout === 'monolith' ? 'LOCAL' : config.transport;
+      const selectedTransport = normalizeTransport(effectiveTransport, selectedLayout);
       await templateEngine.generateApplication(
         config.appName,
         config.basePackage,

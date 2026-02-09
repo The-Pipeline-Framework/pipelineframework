@@ -24,8 +24,146 @@ if (typeof window !== 'undefined' && window.Handlebars) {
     // Node.js environment
     Handlebars = require('handlebars');
 }
-const YAML = require('js-yaml');
-const { buildRuntimeMappingCore } = require('./runtime-mapping-builder');
+let buildRuntimeMappingCore;
+if (typeof require === 'function') {
+    try {
+        ({ buildRuntimeMappingCore } = require('./runtime-mapping-builder'));
+    } catch (_error) {
+        buildRuntimeMappingCore = null;
+    }
+}
+
+function buildRuntimeMappingCoreFallback(options) {
+    const {
+        layout,
+        steps,
+        includePersistenceModule,
+        includeCacheInvalidationModule,
+        isRuntimeLayout,
+        normalizeRuntimeLayout,
+        stepId
+    } = options;
+
+    if (!Array.isArray(steps)) {
+        throw new Error('buildRuntimeMapping requires steps to be an array.');
+    }
+    if (!isRuntimeLayout(layout)) {
+        throw new Error(`Unsupported runtime layout '${layout}'.`);
+    }
+
+    const runtimeLayout = normalizeRuntimeLayout(layout);
+    const modularModules = {};
+    for (const step of steps) {
+        const moduleName = step.serviceName;
+        const resolvedStepId = stepId(step);
+        if (!moduleName || !resolvedStepId) {
+            continue;
+        }
+        modularModules[moduleName] = {
+            runtime: moduleName,
+            steps: [resolvedStepId]
+        };
+    }
+    modularModules['orchestrator-svc'] = { runtime: 'orchestrator-svc' };
+    if (includePersistenceModule) {
+        modularModules['persistence-svc'] = { runtime: 'persistence-svc', aspects: ['persistence'] };
+    }
+    if (includeCacheInvalidationModule) {
+        modularModules['cache-invalidation-svc'] = {
+            runtime: 'cache-invalidation-svc',
+            aspects: ['cache', 'cache-invalidate', 'cache-invalidate-all']
+        };
+    }
+
+    const pipelineModules = {
+        'pipeline-runtime-svc': { runtime: 'pipeline-runtime-svc', steps: [] },
+        'orchestrator-svc': { runtime: 'orchestrator-svc' }
+    };
+    for (const step of steps) {
+        const resolvedStepId = stepId(step);
+        if (resolvedStepId) {
+            pipelineModules['pipeline-runtime-svc'].steps.push(resolvedStepId);
+        }
+    }
+    if (includePersistenceModule) {
+        pipelineModules['persistence-svc'] = { runtime: 'persistence-svc', aspects: ['persistence'] };
+    }
+    if (includeCacheInvalidationModule) {
+        pipelineModules['cache-invalidation-svc'] = {
+            runtime: 'cache-invalidation-svc',
+            aspects: ['cache', 'cache-invalidate', 'cache-invalidate-all']
+        };
+    }
+
+    const monolithModules = {
+        'monolith-svc': { runtime: 'monolith-svc', steps: [] },
+        'orchestrator-svc': { runtime: 'monolith-svc' }
+    };
+    for (const step of steps) {
+        const resolvedStepId = stepId(step);
+        if (resolvedStepId) {
+            monolithModules['monolith-svc'].steps.push(resolvedStepId);
+        }
+    }
+    const monolithAspects = [];
+    if (includePersistenceModule) {
+        monolithAspects.push('persistence');
+    }
+    if (includeCacheInvalidationModule) {
+        monolithAspects.push('cache', 'cache-invalidate', 'cache-invalidate-all');
+    }
+    if (monolithAspects.length > 0) {
+        monolithModules['monolith-svc'].aspects = monolithAspects;
+    }
+
+    switch (runtimeLayout) {
+        case 'modular':
+            return {
+                layout: 'modular',
+                validation: 'auto',
+                defaults: {
+                    runtime: 'orchestrator-svc',
+                    module: 'orchestrator-svc',
+                    synthetic: {
+                        module: includePersistenceModule ? 'persistence-svc' : 'orchestrator-svc'
+                    }
+                },
+                modules: modularModules
+            };
+        case 'pipeline-runtime':
+            return {
+                layout: 'pipeline-runtime',
+                validation: 'auto',
+                defaults: {
+                    runtime: 'pipeline-runtime-svc',
+                    module: 'pipeline-runtime-svc',
+                    synthetic: {
+                        module: includePersistenceModule
+                            ? 'persistence-svc'
+                            : includeCacheInvalidationModule
+                                ? 'cache-invalidation-svc'
+                                : 'pipeline-runtime-svc'
+                    }
+                },
+                modules: pipelineModules
+            };
+        case 'monolith':
+            return {
+                layout: 'monolith',
+                validation: 'auto',
+                defaults: {
+                    runtime: 'monolith-svc',
+                    module: 'monolith-svc',
+                    synthetic: {
+                        module: 'monolith-svc'
+                    }
+                },
+                modules: monolithModules
+            };
+        default:
+            throw new Error(`Unsupported runtime layout '${layout}'.`);
+    }
+}
 
 // Register helper for replacing characters in strings
 Handlebars.registerHelper('replace', function(str, find, repl) {
@@ -147,9 +285,7 @@ Handlebars.registerHelper('hasUtilFields', function(fields) {
 Handlebars.registerHelper('hasMapFields', function(fields) {
     if (!Array.isArray(fields)) return false;
     return fields.some(field => {
-        if (!field || typeof field.type !== 'string') return false;
-        const t = field.type.trim();
-        return t === 'Map' || t.startsWith('Map<');
+        return field && typeof field.type === 'string' && field.type.startsWith('Map<');
     });
 });
 
@@ -240,7 +376,10 @@ class BrowserTemplateEngine {
                     acc.add(node.path.original);
                 }
             }
-            for (const value of Object.values(node)) {
+            for (const [key, value] of Object.entries(node)) {
+                if (node.type === 'BlockStatement' && (key === 'program' || key === 'inverse')) {
+                    continue;
+                }
                 visit(value, acc);
             }
         };
@@ -415,7 +554,7 @@ class BrowserTemplateEngine {
             steps: stepsValue,
             aspects: aspectConfig
         };
-        await normalizedOptions.fileCallback('pipeline-config.yaml', JSON.stringify(configSnapshot, null, 2));
+        await normalizedOptions.fileCallback('pipeline-config.yaml', this.toYaml(configSnapshot));
 
         // Generate mvnw files
         await this.generateMvNWFiles(normalizedOptions.fileCallback);
@@ -986,7 +1125,8 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
     }
 
     buildRuntimeMapping(layout, steps, includePersistenceModule, includeCacheInvalidationModule) {
-        return buildRuntimeMappingCore({
+        const core = buildRuntimeMappingCore || buildRuntimeMappingCoreFallback;
+        return core({
             layout,
             steps,
             includePersistenceModule,
@@ -998,18 +1138,54 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
     }
 
     toYaml(value, indent = 0) {
-        const dumped = YAML.dump(value, { noRefs: true, lineWidth: -1 });
-        if (indent <= 0) {
-            return dumped.trimEnd();
-        }
         const prefix = ' '.repeat(indent);
-        return dumped
-            .trimEnd()
-            .split('\n')
-            .map(line => `${prefix}${line}`)
-            .join('\n');
+        if (value === null || value === undefined) {
+            return `${prefix}null`;
+        }
+        if (Array.isArray(value)) {
+            if (value.length === 0) {
+                return `${prefix}[]`;
+            }
+            return value.map(item => {
+                if (item && typeof item === 'object') {
+                    const itemYaml = this.toYaml(item, indent + 2);
+                    const lines = itemYaml.split('\n');
+                    const firstLine = lines[0].trimStart();
+                    if (lines.length === 1) {
+                        return `${prefix}- ${firstLine}`;
+                    }
+                    const rest = lines.slice(1).join('\n');
+                    return `${prefix}- ${firstLine}\n${rest}`;
+                }
+                return `${prefix}- ${this.toYamlScalar(item)}`;
+            }).join('\n');
+        }
+        if (typeof value === 'object') {
+            const entries = Object.entries(value);
+            if (entries.length === 0) {
+                return `${prefix}{}`;
+            }
+            return entries.map(([key, val]) => {
+                if (val && typeof val === 'object') {
+                    return `${prefix}${key}:\n${this.toYaml(val, indent + 2)}`;
+                }
+                return `${prefix}${key}: ${this.toYamlScalar(val)}`;
+            }).join('\n');
+        }
+        return `${prefix}${this.toYamlScalar(value)}`;
     }
 
+    /**
+     * Convert a JavaScript value into a YAML scalar token.
+     *
+     * Nullish values become the literal `null`. Number and boolean values are emitted
+     * as plain scalars. String-like values are emitted unquoted only when they match
+     * the safe scalar pattern and are not YAML reserved words or numeric-looking text;
+     * otherwise they are double-quoted with embedded quotes escaped.
+     *
+     * @param {any} value Value to convert.
+     * @returns {string} YAML scalar representation of the input value.
+     */
     toYamlScalar(value) {
         if (value === null || value === undefined) {
             return 'null';

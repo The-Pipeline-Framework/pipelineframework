@@ -140,6 +140,7 @@ function buildRuntimeMappingCore(options) {
                     runtime: 'pipeline-runtime-svc',
                     module: 'pipeline-runtime-svc',
                     synthetic: {
+                        // In pipeline-runtime layout, synthetic/plugin concerns prefer their dedicated plugin host runtime.
                         module: includePersistenceModule
                             ? 'persistence-svc'
                             : includeCacheInvalidationModule

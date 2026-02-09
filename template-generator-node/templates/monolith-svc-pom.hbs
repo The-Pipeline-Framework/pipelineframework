@@ -143,8 +143,8 @@
                         </configuration>
                     </execution>
                     <execution>
-                        <id>collect-monolith-sources</id>
-                        <phase>generate-sources</phase>
+                        <id>validate-platform</id>
+                        <phase>validate</phase>
                         <goals>
                             <goal>run</goal>
                         </goals>
@@ -156,6 +156,17 @@
                                 <fail if="is.windows">
                                     monolith source aggregation runs a Unix shell script (`check-duplicate-sources.sh`). Use Linux/macOS/WSL for this module.
                                 </fail>
+                            </target>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>collect-monolith-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
                                 <delete dir="${project.build.directory}/monolith-sources"/>
                                 <mkdir dir="${project.build.directory}/monolith-sources"/>
                                 <exec executable="bash" failonerror="true">
