@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>{{basePackage}}</groupId>
+        <artifactId>{{rootProjectName}}</artifactId>
+        <version>${project.version}</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>pipeline-runtime-svc</artifactId>
+    <name>{{rootProjectName}} grouped pipeline runtime</name>
+
+    <properties>
+        <pipeline.generatedSourcesArg>-Apipeline.generatedSourcesDir=${project.build.directory}/generated-sources/pipeline</pipeline.generatedSourcesArg>
+        <protobuf.descriptor.path>${project.basedir}/../common/target/generated-sources/grpc/descriptor_set.dsc</protobuf.descriptor.path>
+        <protobuf.descriptor.fileArg>-Aprotobuf.descriptor.file=${protobuf.descriptor.path}</protobuf.descriptor.fileArg>
+        <pipeline.runtime.source.root>${project.basedir}/..</pipeline.runtime.source.root>
+        <pipeline.runtime.duplicate.check.script>${pipeline.runtime.source.root}/build-tools/check-duplicate-sources.sh</pipeline.runtime.duplicate.check.script>
+{{#each sourceDirs}}
+        <{{propertyName}}>${pipeline.runtime.source.root}/{{moduleName}}/src/main/java</{{propertyName}}>
+{{/each}}
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>{{basePackage}}</groupId>
+            <artifactId>common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-arc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-grpc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-health</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-container-image-jib</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.36</version>
+        </dependency>
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct</artifactId>
+            <version>1.5.5.Final</version>
+        </dependency>
+        <dependency>
+            <groupId>org.mapstruct</groupId>
+            <artifactId>mapstruct-processor</artifactId>
+            <version>1.5.5.Final</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>io.smallrye</groupId>
+                <artifactId>jandex-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.2.0</version>
+                <executions>
+                    <execution>
+                        <id>validate-protobuf-descriptor</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <available file="${protobuf.descriptor.path}" property="protobuf.descriptor.exists"/>
+                                <fail unless="protobuf.descriptor.exists">
+                                    Missing protobuf descriptor file at ${protobuf.descriptor.path}. Build the common module first or override -Dprotobuf.descriptor.path.
+                                </fail>
+                            </target>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>collect-pipeline-runtime-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <delete dir="${project.build.directory}/pipeline-runtime-sources"/>
+                                <mkdir dir="${project.build.directory}/pipeline-runtime-sources"/>
+                                <condition property="is.windows">
+                                    <os family="windows"/>
+                                </condition>
+                                <fail if="is.windows">
+                                    pipeline-runtime source aggregation runs a Unix shell script (`check-duplicate-sources.sh`). Use Linux/macOS/WSL for this module.
+                                </fail>
+                                <exec executable="bash" failonerror="true">
+                                    <arg value="${pipeline.runtime.duplicate.check.script}"/>
+                                    <arg value="${project.build.directory}/pipeline-runtime-sources"/>
+{{#each sourceDirs}}
+                                    <arg value="{{propertyRef}}"/>
+{{/each}}
+                                </exec>
+{{#each sourceDirs}}
+                                <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                    <fileset dir="{{propertyRef}}"/>
+                                </copy>
+{{/each}}
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <id>add-pipeline-runtime-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${project.build.directory}/pipeline-runtime-sources</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

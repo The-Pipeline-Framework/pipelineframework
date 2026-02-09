@@ -17,16 +17,31 @@
 
     <modules>
         <module>common</module>
-        {{#steps}}
+        {{#if isModularLayout}}
+            {{#steps}}
         <module>{{serviceName}}</module>
-        {{/steps}}
-        {{#if includePersistenceModule}}
+            {{/steps}}
+            {{#if includePersistenceModule}}
         <module>persistence-svc</module>
-        {{/if}}
-        {{#if includeCacheInvalidationModule}}
+            {{/if}}
+            {{#if includeCacheInvalidationModule}}
         <module>cache-invalidation-svc</module>
-        {{/if}}
+            {{/if}}
         <module>orchestrator-svc</module>
+        {{/if}}
+        {{#if isPipelineRuntimeLayout}}
+        <module>pipeline-runtime-svc</module>
+            {{#if includePersistenceModule}}
+        <module>persistence-svc</module>
+            {{/if}}
+            {{#if includeCacheInvalidationModule}}
+        <module>cache-invalidation-svc</module>
+            {{/if}}
+        <module>orchestrator-svc</module>
+        {{/if}}
+        {{#if isMonolithLayout}}
+        <module>monolith-svc</module>
+        {{/if}}
     </modules>
 
     <properties>

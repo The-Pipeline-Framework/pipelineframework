@@ -35,9 +35,17 @@ class PipelineGenerator {
      */
     async generateFromConfig(configPath, outputPath) {
         const config = this.loadConfig(configPath);
-        const { appName, basePackage, steps, aspects, transport } = config;
-        await this.engine.generateApplication(appName, basePackage, steps, aspects, transport, outputPath);
-        await this.copyConfig(configPath, outputPath);
+        const { appName, basePackage, steps, aspects, transport, runtimeLayout } = config;
+        await this.engine.generateApplication(
+            appName,
+            basePackage,
+            steps,
+            aspects,
+            transport,
+            runtimeLayout,
+            outputPath
+        );
+        await this.copyConfig(config, outputPath);
     }
 
     /**
@@ -50,6 +58,7 @@ class PipelineGenerator {
             appName: 'Sample Pipeline App',
             basePackage: 'com.example.sample',
             transport: 'GRPC',
+            runtimeLayout: 'modular',
             steps: [
                 {
                     name: 'Process Customer',
@@ -121,8 +130,31 @@ class PipelineGenerator {
 
         // Process steps to add missing properties that are normally added by interactive mode
         config.steps = this.processSteps(config.steps);
+        config.runtimeLayout = this.normalizeRuntimeLayout(config.runtimeLayout);
+        config.transport = this.normalizeTransport(config.transport, config.runtimeLayout);
         
         return config;
+    }
+
+    normalizeRuntimeLayout(runtimeLayout) {
+        if (typeof runtimeLayout !== 'string') {
+            return 'modular';
+        }
+        const normalized = runtimeLayout.trim().toLowerCase();
+        if (normalized === 'pipeline-runtime' || normalized === 'monolith') {
+            return normalized;
+        }
+        return 'modular';
+    }
+
+    normalizeTransport(transport, runtimeLayout) {
+        if (typeof transport === 'string') {
+            const normalized = transport.trim().toUpperCase();
+            if (normalized === 'GRPC' || normalized === 'REST' || normalized === 'LOCAL') {
+                return normalized;
+            }
+        }
+        return runtimeLayout === 'monolith' ? 'LOCAL' : 'GRPC';
     }
 
     /**
@@ -136,11 +168,11 @@ class PipelineGenerator {
         await fs.writeFile(outputPath, yamlStr);
     }
 
-    async copyConfig(configPath, outputPath) {
+    async copyConfig(config, outputPath) {
         const targetDir = path.join(outputPath, 'config');
         await fs.ensureDir(targetDir);
         const targetPath = path.join(targetDir, 'pipeline.yaml');
-        await fs.copy(configPath, targetPath);
+        await fs.writeFile(targetPath, YAML.dump(config, { lineWidth: -1 }));
     }
 
     /**

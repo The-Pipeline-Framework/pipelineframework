@@ -182,11 +182,27 @@ class BrowserTemplateEngine {
         return template(context);
     }
 
-    async generateApplication(appName, basePackage, steps, aspects, fileCallback) {
+    async generateApplication(appName, basePackage, steps, aspects, transport, runtimeLayout, fileCallback) {
         if (typeof aspects === 'function' && fileCallback === undefined) {
             fileCallback = aspects;
             aspects = {};
         }
+        if (typeof transport === 'function' && fileCallback === undefined) {
+            fileCallback = transport;
+            transport = 'GRPC';
+            runtimeLayout = 'modular';
+        }
+        if (typeof runtimeLayout === 'function' && fileCallback === undefined) {
+            fileCallback = runtimeLayout;
+            runtimeLayout = 'modular';
+        }
+        if (typeof transport === 'string' && !this.isTransport(transport) && fileCallback === undefined) {
+            fileCallback = runtimeLayout;
+            runtimeLayout = 'modular';
+            transport = 'GRPC';
+        }
+        const normalizedRuntimeLayout = this.normalizeRuntimeLayout(runtimeLayout);
+        const transportMode = this.normalizeTransport(transport, normalizedRuntimeLayout);
         const aspectConfig = aspects || {};
         const includePersistenceModule = this.isAspectEnabled(aspectConfig, 'persistence');
         const includeCacheInvalidationModule = this.isAspectEnabled(aspectConfig, 'cache')
@@ -211,14 +227,15 @@ class BrowserTemplateEngine {
             steps,
             includePersistenceModule,
             includeCacheInvalidationModule,
+            normalizedRuntimeLayout,
             fileCallback);
 
         // Generate common module
-        await this.generateCommonModule(appName, basePackage, steps, fileCallback);
+        await this.generateCommonModule(appName, basePackage, steps, transportMode, fileCallback);
 
         // Generate each step service
         for (let i = 0; i < steps.length; i++) {
-            await this.generateStepService(appName, basePackage, steps[i], i, steps, fileCallback);
+            await this.generateStepService(appName, basePackage, steps[i], i, steps, transportMode, fileCallback);
         }
 
         if (includePersistenceModule) {
@@ -236,12 +253,40 @@ class BrowserTemplateEngine {
             steps,
             includePersistenceModule,
             includeCacheInvalidationModule,
+            transportMode,
             fileCallback);
+
+        if (normalizedRuntimeLayout === 'pipeline-runtime') {
+            await this.generatePipelineRuntimeModule(
+                appName,
+                basePackage,
+                steps,
+                fileCallback
+            );
+        } else if (normalizedRuntimeLayout === 'monolith') {
+            await this.generateMonolithModule(
+                appName,
+                basePackage,
+                steps,
+                includePersistenceModule,
+                includeCacheInvalidationModule,
+                fileCallback
+            );
+        }
+
+        await this.generateRuntimeMappingFiles(
+            steps,
+            includePersistenceModule,
+            includeCacheInvalidationModule,
+            normalizedRuntimeLayout,
+            fileCallback
+        );
 
         const configSnapshot = {
             appName,
             basePackage,
-            transport: 'GRPC',
+            transport: transportMode,
+            runtimeLayout: normalizedRuntimeLayout,
             steps,
             aspects: aspectConfig
         };
@@ -271,7 +316,9 @@ class BrowserTemplateEngine {
         steps,
         includePersistenceModule,
         includeCacheInvalidationModule,
+        runtimeLayout,
         fileCallback) {
+        const normalizedLayout = this.normalizeRuntimeLayout(runtimeLayout);
         const context = {
             basePackage,
             artifactId: appName
@@ -281,16 +328,19 @@ class BrowserTemplateEngine {
             name: appName,
             steps,
             includePersistenceModule,
-            includeCacheInvalidationModule
+            includeCacheInvalidationModule,
+            isModularLayout: normalizedLayout === 'modular',
+            isPipelineRuntimeLayout: normalizedLayout === 'pipeline-runtime',
+            isMonolithLayout: normalizedLayout === 'monolith'
         };
 
         const rendered = this.render('parent-pom', context);
         await fileCallback('pom.xml', rendered);
     }
 
-    async generateCommonModule(appName, basePackage, steps, fileCallback) {
+    async generateCommonModule(appName, basePackage, steps, transport, fileCallback) {
         // Generate common POM
-        await this.generateCommonPom(appName, basePackage, fileCallback);
+        await this.generateCommonPom(appName, basePackage, transport, fileCallback);
 
         // Generate entities, DTOs, and mappers for each step
         for (let i = 0; i < steps.length; i++) {
@@ -305,6 +355,94 @@ class BrowserTemplateEngine {
 
         // Generate common converters
         await this.generateCommonConverters(basePackage, fileCallback);
+    }
+
+    async generatePipelineRuntimeModule(appName, basePackage, steps, fileCallback) {
+        const rootProjectName = appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-');
+        const context = {
+            basePackage,
+            rootProjectName,
+            sourceDirs: (steps || []).map((step, index) => {
+                const key = `s${index}`;
+                return {
+                    moduleName: step.serviceName,
+                    propertyName: `pipeline.runtime.source.dir.${key}`,
+                    propertyRef: `\${${`pipeline.runtime.source.dir.${key}`}}`
+                };
+            })
+        };
+        const pomContent = this.render('pipeline-runtime-svc-pom', context);
+        await fileCallback('pipeline-runtime-svc/pom.xml', pomContent);
+
+        const appPropsContent = this.render('application-properties', {
+            serviceName: 'pipeline-runtime-svc',
+            rootProjectName,
+            portOffset: 1
+        });
+        await fileCallback('pipeline-runtime-svc/src/main/resources/application.properties', appPropsContent);
+        const appDevProps = this.render('module-application-dev-properties', {});
+        await fileCallback('pipeline-runtime-svc/src/main/resources/application-dev.properties', appDevProps);
+        const beansXml = this.render('module-beans-xml', {}).trimEnd();
+        await fileCallback('pipeline-runtime-svc/src/main/resources/META-INF/beans.xml', beansXml);
+    }
+
+    async generateMonolithModule(
+        appName,
+        basePackage,
+        steps,
+        includePersistenceModule,
+        includeCacheInvalidationModule,
+        fileCallback
+    ) {
+        const rootProjectName = appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-');
+        const sourceDirs = (steps || []).map((step, index) => {
+            const key = `s${index}`;
+            return {
+                moduleName: step.serviceName,
+                propertyName: `monolith.source.dir.${key}`,
+                propertyRef: `\${${`monolith.source.dir.${key}`}}`
+            };
+        });
+        sourceDirs.push({
+            moduleName: 'orchestrator-svc',
+            propertyName: 'monolith.source.dir.orchestrator',
+            propertyRef: '${monolith.source.dir.orchestrator}'
+        });
+        if (includePersistenceModule) {
+            sourceDirs.push({
+                moduleName: 'persistence-svc',
+                propertyName: 'monolith.source.dir.persistence',
+                propertyRef: '${monolith.source.dir.persistence}'
+            });
+        }
+        if (includeCacheInvalidationModule) {
+            sourceDirs.push({
+                moduleName: 'cache-invalidation-svc',
+                propertyName: 'monolith.source.dir.cache',
+                propertyRef: '${monolith.source.dir.cache}'
+            });
+        }
+
+        const context = {
+            basePackage,
+            rootProjectName,
+            includePersistenceModule,
+            includeCacheInvalidationModule,
+            sourceDirs
+        };
+        const pomContent = this.render('monolith-svc-pom', context);
+        await fileCallback('monolith-svc/pom.xml', pomContent);
+
+        const appPropsContent = this.render('application-properties', {
+            serviceName: 'monolith-svc',
+            rootProjectName,
+            portOffset: 0
+        });
+        await fileCallback('monolith-svc/src/main/resources/application.properties', appPropsContent);
+        const appDevProps = this.render('module-application-dev-properties', {});
+        await fileCallback('monolith-svc/src/main/resources/application-dev.properties', appDevProps);
+        const beansXml = this.render('module-beans-xml', {}).trimEnd();
+        await fileCallback('monolith-svc/src/main/resources/META-INF/beans.xml', beansXml);
     }
 
     async generatePersistenceModule(appName, basePackage, steps, fileCallback) {
@@ -341,10 +479,15 @@ class BrowserTemplateEngine {
         await fileCallback(`cache-invalidation-svc/src/main/java/${packagePath}/CachePluginHost.java`, cacheHostContent);
     }
 
-    async generateCommonPom(appName, basePackage, fileCallback) {
+    async generateCommonPom(appName, basePackage, transport, fileCallback) {
+        const transportMode = typeof transport === 'string' && transport.trim()
+            ? transport.trim().toUpperCase()
+            : 'GRPC';
         const context = {
             basePackage,
-            rootProjectName: appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-')
+            rootProjectName: appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-'),
+            isRestTransport: transportMode === 'REST',
+            isGrpcTransport: transportMode !== 'REST'
         };
 
         const rendered = this.render('common-pom', context);
@@ -492,7 +635,7 @@ class BrowserTemplateEngine {
         await fileCallback(filePath, rendered);
     }
 
-    async generateStepService(appName, basePackage, step, stepIndex, allSteps, fileCallback) {
+    async generateStepService(appName, basePackage, step, stepIndex, allSteps, transport, fileCallback) {
         // noinspection JSUnusedLocalSymbols
         const serviceNameForPackage = step.serviceName.replace('-svc', '').replace(/-/g, '_');
 
@@ -500,15 +643,23 @@ class BrowserTemplateEngine {
         step.rootProjectName = appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-');
 
         // Generate step POM
-        await this.generateStepPom(step, basePackage, fileCallback);
+        await this.generateStepPom(step, basePackage, transport, fileCallback);
 
         // Generate the service class
         await this.generateStepServiceClass(appName, basePackage, step, stepIndex, allSteps, fileCallback);
 
     }
 
-    async generateStepPom(step, basePackage, fileCallback) {
-        const context = { ...step, basePackage };
+    async generateStepPom(step, basePackage, transport, fileCallback) {
+        const transportMode = typeof transport === 'string' && transport.trim()
+            ? transport.trim().toUpperCase()
+            : 'GRPC';
+        const context = {
+            ...step,
+            basePackage,
+            isRestTransport: transportMode === 'REST',
+            isGrpcTransport: transportMode !== 'REST'
+        };
         const rendered = this.render('step-pom', context);
         const filePath = `${step.serviceName}/pom.xml`;
         await fileCallback(filePath, rendered);
@@ -577,6 +728,7 @@ class BrowserTemplateEngine {
         steps,
         includePersistenceModule,
         includeCacheInvalidationModule,
+        transport,
         fileCallback) {
         // Generate orchestrator POM
         await this.generateOrchestratorPom(
@@ -584,6 +736,7 @@ class BrowserTemplateEngine {
             basePackage,
             includePersistenceModule,
             includeCacheInvalidationModule,
+            transport,
             fileCallback);
 
     }
@@ -593,13 +746,19 @@ class BrowserTemplateEngine {
         basePackage,
         includePersistenceModule,
         includeCacheInvalidationModule,
+        transport,
         fileCallback) {
+        const transportMode = typeof transport === 'string' && transport.trim()
+            ? transport.trim().toUpperCase()
+            : 'GRPC';
         const context = {
             basePackage,
             artifactId: 'orchestrator-svc',
             rootProjectName: appName.toLowerCase().replace(/[^a-zA-Z0-9]/g, '-'),
             includePersistenceModule,
-            includeCacheInvalidationModule
+            includeCacheInvalidationModule,
+            isRestTransport: transportMode === 'REST',
+            isGrpcTransport: transportMode !== 'REST'
         };
 
         const rendered = this.render('orchestrator-pom', context);
@@ -669,8 +828,194 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
             includePersistenceModule,
             includeCacheInvalidationModule
         };
-        const certScriptContent = this.render('generate-dev-certs', certScriptContext);
+        const certScriptContent = this.render('generate-dev-certs.sh', certScriptContext);
         await fileCallback('generate-dev-certs.sh', certScriptContent);
+
+        const duplicateScript = this.render('check-duplicate-sources.sh', {});
+        await fileCallback('build-tools/check-duplicate-sources.sh', duplicateScript);
+    }
+
+    async generateRuntimeMappingFiles(
+        steps,
+        includePersistenceModule,
+        includeCacheInvalidationModule,
+        runtimeLayout,
+        fileCallback
+    ) {
+        const layouts = ['modular', 'pipeline-runtime', 'monolith'];
+        const fileNames = {
+            modular: 'modular-auto.yaml',
+            'pipeline-runtime': 'pipeline-runtime.yaml',
+            monolith: 'monolith.yaml'
+        };
+        for (const layout of layouts) {
+            const mapping = this.buildRuntimeMapping(
+                layout,
+                steps,
+                includePersistenceModule,
+                includeCacheInvalidationModule
+            );
+            await fileCallback(
+                `config/runtime-mapping/${fileNames[layout]}`,
+                this.toYaml(mapping)
+            );
+        }
+        const active = this.buildRuntimeMapping(
+            runtimeLayout,
+            steps,
+            includePersistenceModule,
+            includeCacheInvalidationModule
+        );
+        await fileCallback('config/runtime-mapping/pipeline.runtime.yaml', this.toYaml(active));
+    }
+
+    buildRuntimeMapping(layout, steps, includePersistenceModule, includeCacheInvalidationModule) {
+        const modularModules = {};
+        const pipelineModules = {};
+        const monolithModules = {};
+        const runtimeLayout = this.normalizeRuntimeLayout(layout);
+
+        for (const step of steps || []) {
+            const moduleName = step.serviceName;
+            const stepName = this.stepId(step);
+            if (!moduleName || !stepName) {
+                continue;
+            }
+            modularModules[moduleName] = {
+                runtime: moduleName,
+                steps: [stepName]
+            };
+            pipelineModules['pipeline-runtime-svc'] = pipelineModules['pipeline-runtime-svc'] || {
+                runtime: 'pipeline-runtime-svc',
+                steps: []
+            };
+            pipelineModules['pipeline-runtime-svc'].steps.push(stepName);
+            monolithModules['monolith-svc'] = monolithModules['monolith-svc'] || {
+                runtime: 'monolith-svc',
+                steps: []
+            };
+            monolithModules['monolith-svc'].steps.push(stepName);
+        }
+
+        modularModules['orchestrator-svc'] = { runtime: 'orchestrator-svc' };
+        pipelineModules['orchestrator-svc'] = { runtime: 'orchestrator-svc' };
+
+        const monolithAspectTargets = [];
+        if (includePersistenceModule) {
+            modularModules['persistence-svc'] = {
+                runtime: 'persistence-svc',
+                aspects: ['persistence']
+            };
+            pipelineModules['persistence-svc'] = {
+                runtime: 'persistence-svc',
+                aspects: ['persistence']
+            };
+            monolithAspectTargets.push('persistence');
+        }
+        if (includeCacheInvalidationModule) {
+            modularModules['cache-invalidation-svc'] = {
+                runtime: 'cache-invalidation-svc',
+                aspects: ['cache', 'cache-invalidate', 'cache-invalidate-all']
+            };
+            pipelineModules['cache-invalidation-svc'] = {
+                runtime: 'cache-invalidation-svc',
+                aspects: ['cache', 'cache-invalidate', 'cache-invalidate-all']
+            };
+            monolithAspectTargets.push('cache');
+            monolithAspectTargets.push('cache-invalidate');
+            monolithAspectTargets.push('cache-invalidate-all');
+        }
+        if (monolithAspectTargets.length > 0) {
+            monolithModules['monolith-svc'].aspects = monolithAspectTargets;
+        }
+
+        const mappings = {
+            modular: {
+                layout: 'modular',
+                validation: 'auto',
+                defaults: {
+                    runtime: 'orchestrator-svc',
+                    module: 'orchestrator-svc',
+                    synthetic: {
+                        module: includePersistenceModule ? 'persistence-svc' : 'orchestrator-svc'
+                    }
+                },
+                modules: modularModules
+            },
+            'pipeline-runtime': {
+                layout: 'pipeline-runtime',
+                validation: 'auto',
+                defaults: {
+                    runtime: 'pipeline-runtime-svc',
+                    module: 'pipeline-runtime-svc',
+                    synthetic: {
+                        module: includePersistenceModule
+                            ? 'persistence-svc'
+                            : includeCacheInvalidationModule
+                                ? 'cache-invalidation-svc'
+                                : 'pipeline-runtime-svc'
+                    }
+                },
+                modules: pipelineModules
+            },
+            monolith: {
+                layout: 'monolith',
+                validation: 'auto',
+                defaults: {
+                    runtime: 'monolith-svc',
+                    module: 'monolith-svc',
+                    synthetic: {
+                        module: 'monolith-svc'
+                    }
+                },
+                modules: monolithModules
+            }
+        };
+        return mappings[runtimeLayout];
+    }
+
+    toYaml(value, indent = 0) {
+        const prefix = ' '.repeat(indent);
+        if (Array.isArray(value)) {
+            if (value.length === 0) {
+                return `${prefix}[]`;
+            }
+            return value.map(item => {
+                const itemYaml = this.toYaml(item, indent + 2);
+                if (item !== null && typeof item === 'object') {
+                    return `${prefix}-\n${itemYaml}`;
+                }
+                return `${prefix}- ${this.toYamlScalar(item)}`;
+            }).join('\n');
+        }
+        if (value !== null && typeof value === 'object') {
+            const keys = Object.keys(value);
+            if (keys.length === 0) {
+                return `${prefix}{}`;
+            }
+            return keys.map(key => {
+                const entry = value[key];
+                if (entry !== null && typeof entry === 'object') {
+                    return `${prefix}${key}:\n${this.toYaml(entry, indent + 2)}`;
+                }
+                return `${prefix}${key}: ${this.toYamlScalar(entry)}`;
+            }).join('\n');
+        }
+        return `${prefix}${this.toYamlScalar(value)}`;
+    }
+
+    toYamlScalar(value) {
+        if (value === null || value === undefined) {
+            return 'null';
+        }
+        if (typeof value === 'number' || typeof value === 'boolean') {
+            return String(value);
+        }
+        const text = String(value);
+        if (/^[A-Za-z0-9_.-]+$/.test(text)) {
+            return text;
+        }
+        return `"${text.replace(/"/g, '\\"')}"`;
     }
 
     // Utility methods
@@ -710,6 +1055,43 @@ wrapperUrl=https://repo.maven.apache.org/maven2/org/apache/maven/wrapper/maven-w
         }
         // For other cases, we'll default to the whole string
         return serviceNamePascal;
+    }
+
+    stepId(step) {
+        if (!step || typeof step.serviceName !== 'string') {
+            return '';
+        }
+        return step.serviceName.replace(/-svc$/, '');
+    }
+
+    isTransport(value) {
+        if (typeof value !== 'string') {
+            return false;
+        }
+        const normalized = value.trim().toUpperCase();
+        return normalized === 'GRPC' || normalized === 'REST' || normalized === 'LOCAL';
+    }
+
+    normalizeTransport(transport, runtimeLayout) {
+        if (this.isTransport(transport)) {
+            return transport.trim().toUpperCase();
+        }
+        return this.normalizeRuntimeLayout(runtimeLayout) === 'monolith' ? 'LOCAL' : 'GRPC';
+    }
+
+    isRuntimeLayout(value) {
+        if (typeof value !== 'string') {
+            return false;
+        }
+        const normalized = value.trim().toLowerCase();
+        return normalized === 'modular' || normalized === 'pipeline-runtime' || normalized === 'monolith';
+    }
+
+    normalizeRuntimeLayout(runtimeLayout) {
+        if (!this.isRuntimeLayout(runtimeLayout)) {
+            return 'modular';
+        }
+        return runtimeLayout.trim().toLowerCase();
     }
 
     isAspectEnabled(aspects, aspectName) {
