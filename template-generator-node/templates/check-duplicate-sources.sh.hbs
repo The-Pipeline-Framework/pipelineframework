@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ "$#" -lt 2 ]; then
+  echo "Usage: $0 <target-dir> <source-dir> [<source-dir> ...]" >&2
+  exit 2
+fi
+
+target_dir="$1"
+shift
+
+tmp_file="${target_dir}/source-files.txt"
+mkdir -p "$target_dir"
+trap 'rm -f "$tmp_file"' EXIT
+
+{
+  for dir in "$@"; do
+    dir="${dir%/}"
+    if [ -d "$dir" ]; then
+      while IFS= read -r -d '' file; do
+        rel_path="${file#"${dir}/"}"
+        printf '%s\n' "$rel_path"
+      done < <(find "$dir" -type f -name '*.java' -print0)
+    else
+      printf 'Warning: source directory does not exist or is not a directory: %s\n' "$dir" >&2
+    fi
+  done
+} > "$tmp_file"
+
+duplicates="$(sort "$tmp_file" | uniq -d)"
+if [ -n "$duplicates" ]; then
+  echo "Duplicate Java source paths detected while collecting aggregated runtime sources into ${target_dir}:" >&2
+  echo "$duplicates" >&2
+  exit 1
+fi

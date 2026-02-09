@@ -9,6 +9,11 @@ This page documents the current monolith topology in `examples/csv-payments`.
 - Runtime mapping scenario: `examples/csv-payments/config/runtime-mapping/monolith.yaml`
 - Build script: `examples/csv-payments/build-monolith.sh`
 
+## Source layout clarification
+
+- Service source code remains in service modules.
+- `monolith-svc` aggregates those sources during the monolith build and packages the runnable runtime.
+
 ## Build the monolith runtime
 
 ```bash

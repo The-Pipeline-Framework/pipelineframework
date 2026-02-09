@@ -59,7 +59,11 @@ Both layers must be aligned to achieve your intended runtime shape.
 - Number of runtime artifacts produced.
 - CI lanes needed to build/test a new topology.
 
-For that work, use the migration playbook.
+::: note
+Choosing `monolith` does not remove per-step service modules from the scaffold. `monolith-svc` acts as the runtime packaging module and aggregates service sources at build time.
+:::
+
+For Maven topology changes, use the migration playbook.
 
 ## Start here
 
