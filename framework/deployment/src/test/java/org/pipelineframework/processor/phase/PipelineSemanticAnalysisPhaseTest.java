@@ -2,13 +2,17 @@ package org.pipelineframework.processor.phase;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.tools.Diagnostic;
 
 import com.squareup.javapoet.ClassName;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.pipelineframework.config.PlatformMode;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.DeploymentRole;
@@ -28,19 +32,29 @@ import static org.mockito.Mockito.*;
  * Tests for the PipelineSemanticAnalysisPhase.
  */
 public class PipelineSemanticAnalysisPhaseTest {
+    private PipelineSemanticAnalysisPhase phase;
+    private Messager messager;
+    private ProcessingEnvironment processingEnv;
+    private RoundEnvironment roundEnv;
+
+    @BeforeEach
+    public void setUp() {
+        phase = new PipelineSemanticAnalysisPhase();
+        messager = mock(Messager.class);
+        processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getMessager()).thenReturn(messager);
+        when(processingEnv.getOptions()).thenReturn(Map.of());
+        roundEnv = mock(RoundEnvironment.class);
+    }
 
     @Test
     public void testPipelineSemanticAnalysisPhaseCreation() {
-        PipelineSemanticAnalysisPhase phase = new PipelineSemanticAnalysisPhase();
-        
         assertNotNull(phase);
         assertEquals("Pipeline Semantic Analysis Phase", phase.name());
     }
 
     @Test
     public void testStreamingShapeMethods() {
-        PipelineSemanticAnalysisPhase phase = new PipelineSemanticAnalysisPhase();
-        
         // Test different cardinalities
         assertEquals(org.pipelineframework.processor.ir.StreamingShape.UNARY_STREAMING, 
                      phase.streamingShape("EXPANSION"));
@@ -54,8 +68,6 @@ public class PipelineSemanticAnalysisPhaseTest {
 
     @Test
     public void testIsStreamingInputCardinality() {
-        PipelineSemanticAnalysisPhase phase = new PipelineSemanticAnalysisPhase();
-        
         assertTrue(phase.isStreamingInputCardinality("REDUCTION"));
         assertTrue(phase.isStreamingInputCardinality("MANY_TO_MANY"));
         assertFalse(phase.isStreamingInputCardinality("EXPANSION"));
@@ -64,8 +76,6 @@ public class PipelineSemanticAnalysisPhaseTest {
 
     @Test
     public void testApplyCardinalityToStreaming() {
-        PipelineSemanticAnalysisPhase phase = new PipelineSemanticAnalysisPhase();
-        
         // Test EXPANSION turns streaming on
         assertTrue(phase.applyCardinalityToStreaming("EXPANSION", false));
         assertTrue(phase.applyCardinalityToStreaming("EXPANSION", true));
@@ -85,8 +95,6 @@ public class PipelineSemanticAnalysisPhaseTest {
 
     @Test
     public void testIsCacheAspect() {
-        PipelineSemanticAnalysisPhase phase = new PipelineSemanticAnalysisPhase();
-        
         // Create a mock aspect model for testing
         org.pipelineframework.processor.ir.PipelineAspectModel cacheAspect = 
             new org.pipelineframework.processor.ir.PipelineAspectModel(
@@ -109,14 +117,7 @@ public class PipelineSemanticAnalysisPhaseTest {
     }
 
     @Test
-    void lambdaPlatformRequiresRestTransport() throws Exception {
-        PipelineSemanticAnalysisPhase phase = new PipelineSemanticAnalysisPhase();
-        Messager messager = mock(Messager.class);
-        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        when(processingEnv.getMessager()).thenReturn(messager);
-        when(processingEnv.getOptions()).thenReturn(Map.of());
-        RoundEnvironment roundEnv = mock(RoundEnvironment.class);
-
+    public void lambdaPlatformRequiresRestTransport() throws Exception {
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
         context.setPlatformMode(PlatformMode.LAMBDA);
         context.setTransportMode(TransportMode.GRPC);
@@ -128,19 +129,15 @@ public class PipelineSemanticAnalysisPhaseTest {
             contains("requires pipeline.transport=REST"));
     }
 
-    @Test
-    void lambdaPlatformRejectsStreamingShapes() throws Exception {
-        PipelineSemanticAnalysisPhase phase = new PipelineSemanticAnalysisPhase();
-        Messager messager = mock(Messager.class);
-        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        when(processingEnv.getMessager()).thenReturn(messager);
-        when(processingEnv.getOptions()).thenReturn(Map.of());
-        RoundEnvironment roundEnv = mock(RoundEnvironment.class);
-
+    @ParameterizedTest
+    @EnumSource(
+        value = StreamingShape.class,
+        names = {"UNARY_STREAMING", "STREAMING_UNARY", "STREAMING_STREAMING"})
+    public void lambdaPlatformRejectsStreamingShapes(StreamingShape shape) throws Exception {
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
         context.setPlatformMode(PlatformMode.LAMBDA);
         context.setTransportMode(TransportMode.REST);
-        context.setStepModels(List.of(step(StreamingShape.UNARY_STREAMING)));
+        context.setStepModels(List.of(step(shape)));
 
         phase.execute(context);
 
@@ -149,14 +146,7 @@ public class PipelineSemanticAnalysisPhaseTest {
     }
 
     @Test
-    void lambdaPlatformAllowsUnaryRestSteps() throws Exception {
-        PipelineSemanticAnalysisPhase phase = new PipelineSemanticAnalysisPhase();
-        Messager messager = mock(Messager.class);
-        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        when(processingEnv.getMessager()).thenReturn(messager);
-        when(processingEnv.getOptions()).thenReturn(Map.of());
-        RoundEnvironment roundEnv = mock(RoundEnvironment.class);
-
+    public void lambdaPlatformAllowsUnaryRestSteps() throws Exception {
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
         context.setPlatformMode(PlatformMode.LAMBDA);
         context.setTransportMode(TransportMode.REST);
@@ -176,7 +166,7 @@ public class PipelineSemanticAnalysisPhaseTest {
             .streamingShape(streamingShape)
             .executionMode(ExecutionMode.DEFAULT)
             .deploymentRole(DeploymentRole.PIPELINE_SERVER)
-            .enabledTargets(java.util.Set.of(GenerationTarget.REST_RESOURCE))
+            .enabledTargets(Set.of(GenerationTarget.REST_RESOURCE))
             .inputMapping(new TypeMapping(
                 ClassName.get("org.pipelineframework.csv.common.domain", "PaymentStatus"),
                 ClassName.get("org.pipelineframework.csv.common.mapper", "PaymentStatusMapper"),

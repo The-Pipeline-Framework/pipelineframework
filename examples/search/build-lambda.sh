@@ -5,6 +5,11 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SEARCH_DIR="$ROOT_DIR/examples/search"
 MVN_BIN="${MVN_BIN:-$ROOT_DIR/mvnw}"
 
+if [[ ! -e "$MVN_BIN" ]]; then
+  echo "Maven launcher not found: $MVN_BIN" >&2
+  exit 1
+fi
+
 if [[ ! -x "$MVN_BIN" ]]; then
   echo "Maven launcher is not executable: $MVN_BIN" >&2
   exit 1

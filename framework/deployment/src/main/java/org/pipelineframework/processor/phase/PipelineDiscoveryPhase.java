@@ -31,6 +31,8 @@ import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
  * This phase focuses solely on discovery without performing validation or code generation.
  */
 public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
+    private static final PipelineStepConfigLoader.StepConfig DEFAULT_STEP_CONFIG =
+        new PipelineStepConfigLoader.StepConfig("", "GRPC", "STANDARD", List.of(), List.of());
 
     /**
      * Creates a new PipelineDiscoveryPhase.
@@ -159,7 +161,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         Path moduleDir = ctx.getModuleDir();
         Optional<Path> configPath = locator.locate(moduleDir);
         if (configPath.isEmpty()) {
-            return new PipelineStepConfigLoader.StepConfig("", "GRPC", "STANDARD", List.of(), List.of());
+            return DEFAULT_STEP_CONFIG;
         }
 
         PipelineStepConfigLoader stepLoader = new PipelineStepConfigLoader();
@@ -170,7 +172,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
                 ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
                     "Failed to load pipeline transport/platform from " + configPath.get() + ": " + e.getMessage());
             }
-            return new PipelineStepConfigLoader.StepConfig("", "GRPC", "STANDARD", List.of(), List.of());
+            return DEFAULT_STEP_CONFIG;
         }
     }
 

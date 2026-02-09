@@ -1,6 +1,6 @@
 # Search Lambda Walkthrough
 
-This walkthrough shows how to build the `examples/search` pipeline for AWS Lambda support using TPF platform mode.
+This walkthrough shows how to build the `examples/search` pipeline for AWS Lambda support using The Pipeline Framework (TPF) platform mode.
 
 ## Scope
 
@@ -12,7 +12,7 @@ This walkthrough shows how to build the `examples/search` pipeline for AWS Lambd
 
 - Java 21
 - Docker (for containerized integration lanes, optional for this walkthrough)
-- GraalVM (only for native build verification)
+- GraalVM (optional, only required for native build verification)
 
 ## Build in Lambda Mode
 
@@ -34,9 +34,13 @@ This script sets:
   -pl orchestrator-svc -am \
   -Dpipeline.platform=LAMBDA \
   -Dtest=LambdaMockEventServerSmokeTest \
-  -Dsurefire.failIfNoSpecifiedTests=false \
   test
 ```
+
+Success criteria for this command:
+- Maven finishes with `BUILD SUCCESS`.
+- `LambdaMockEventServerSmokeTest` is reported as passed in the console surefire summary.
+- Detailed output is available in `examples/search/orchestrator-svc/target/surefire-reports`.
 
 ## Verify Native Build in Lambda Mode
 
@@ -52,11 +56,13 @@ This script sets:
 
 ## REST Endpoint Naming in Search
 
-Search is currently all 1-1 steps, so `RESOURCEFUL` naming uses output types:
+Search is currently all 1-1 steps, so `RESOURCEFUL` naming uses output types: when each request produces exactly one output, naming the resource by that output keeps the URL unambiguous and stable.
 - `CrawlRequest -> RawDocument`: `/api/v1/raw-document/`
 - `RawDocument -> ParsedDocument`: `/api/v1/parsed-document/`
 - `ParsedDocument -> TokenBatch`: `/api/v1/token-batch/`
 - `TokenBatch -> IndexAck`: `/api/v1/index-ack/`
+
+For non-1-1 cardinalities, naming differs: 1-N and M-N shapes use input-type-based naming (or explicit disambiguators) to avoid collisions on collection-producing flows.
 
 Plugin/synthetic side effects append plugin tokens to avoid collisions, for example:
 - `/api/v1/parsed-document/cache-invalidate/`

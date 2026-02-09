@@ -23,6 +23,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junitpioneer.jupiter.SetSystemProperty;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -71,7 +72,7 @@ class PipelineTemplateConfigLoaderTest {
         assertEquals("Test App", config.appName());
         assertEquals("com.example.test", config.basePackage());
         assertEquals("GRPC", config.transport());
-        assertEquals("STANDARD", config.platform());
+        assertEquals(PipelinePlatform.STANDARD, config.platform());
         assertEquals(1, config.steps().size());
 
         PipelineTemplateStep step = config.steps().get(0);
@@ -103,6 +104,7 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
+    @SetSystemProperty(key = "pipeline.platform", value = "LAMBDA")
     void platformCanBeOverriddenViaSystemProperty() throws Exception {
         String yaml = """
             appName: "Test App"
@@ -114,19 +116,9 @@ class PipelineTemplateConfigLoaderTest {
         Path configPath = tempDir.resolve("pipeline-config.yaml");
         Files.writeString(configPath, yaml);
 
-        String previous = System.getProperty("pipeline.platform");
-        try {
-            System.setProperty("pipeline.platform", "LAMBDA");
-            PipelineTemplateConfigLoader loader = new PipelineTemplateConfigLoader();
-            PipelineTemplateConfig config = loader.load(configPath);
-            assertEquals("LAMBDA", config.platform());
-            assertEquals("REST", config.transport());
-        } finally {
-            if (previous == null) {
-                System.clearProperty("pipeline.platform");
-            } else {
-                System.setProperty("pipeline.platform", previous);
-            }
-        }
+        PipelineTemplateConfigLoader loader = new PipelineTemplateConfigLoader();
+        PipelineTemplateConfig config = loader.load(configPath);
+        assertEquals(PipelinePlatform.LAMBDA, config.platform());
+        assertEquals("REST", config.transport());
     }
 }

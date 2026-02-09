@@ -30,7 +30,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 
 @QuarkusIntegrationTest
-class ProcessIndexDocumentResourceIT {
+class IndexAckResourceIT {
 
     @BeforeAll
     static void setUp() {

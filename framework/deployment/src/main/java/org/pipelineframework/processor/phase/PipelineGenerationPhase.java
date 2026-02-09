@@ -62,14 +62,20 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 new PipelinePlatformMetadataGenerator(ctx.getProcessingEnv());
             try {
                 roleMetadataGenerator.writeRoleMetadata();
-                platformMetadataGenerator.writePlatformMetadata(ctx);
             } catch (Exception e) {
-                // Log the error but don't fail the entire compilation
-                // This can happen in test environments where the Filer doesn't properly create files
                 if (ctx.getProcessingEnv() != null) {
                     ctx.getProcessingEnv().getMessager().printMessage(
                         javax.tools.Diagnostic.Kind.WARNING,
-                        "Failed to write metadata: " + e.getMessage());
+                        "Failed to write role metadata: " + e.getMessage());
+                }
+            }
+            try {
+                platformMetadataGenerator.writePlatformMetadata(ctx);
+            } catch (Exception e) {
+                if (ctx.getProcessingEnv() != null) {
+                    ctx.getProcessingEnv().getMessager().printMessage(
+                        javax.tools.Diagnostic.Kind.WARNING,
+                        "Failed to write platform metadata: " + e.getMessage());
                 }
             }
             return;
@@ -152,9 +158,25 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         // Write role metadata
         try {
             roleMetadataGenerator.writeRoleMetadata();
+        } catch (Exception e) {
+            if (ctx.getProcessingEnv() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.WARNING,
+                    "Failed to write role metadata: " + e.getMessage());
+            }
+        }
+        try {
             PipelinePlatformMetadataGenerator platformMetadataGenerator =
                 new PipelinePlatformMetadataGenerator(ctx.getProcessingEnv());
             platformMetadataGenerator.writePlatformMetadata(ctx);
+        } catch (Exception e) {
+            if (ctx.getProcessingEnv() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.WARNING,
+                    "Failed to write platform metadata: " + e.getMessage());
+            }
+        }
+        try {
             if (ctx.isOrchestratorGenerated()) {
                 PipelineOrderMetadataGenerator orderMetadataGenerator =
                     new PipelineOrderMetadataGenerator(ctx.getProcessingEnv());
@@ -167,13 +189,10 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 clientPropertiesGenerator.writeClientProperties(ctx);
             }
         } catch (Exception e) {
-            // Log the error but don't fail the entire compilation
-            // This can happen in test environments where the Filer doesn't properly create files
-            // or when the file is already opened by another process
             if (ctx.getProcessingEnv() != null) {
                 ctx.getProcessingEnv().getMessager().printMessage(
                     javax.tools.Diagnostic.Kind.WARNING,
-                    "Failed to write metadata: " + e.getMessage());
+                    "Failed to write orchestrator metadata: " + e.getMessage());
             }
         }
     }

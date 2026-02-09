@@ -90,7 +90,7 @@ public final class RestPathResolver {
             return API_BASE_PATH + "/process";
         }
         String normalized = removeSuffix(className, "Service");
-        normalized = normalized.replace("Reactive", "");
+        normalized = removeSuffix(normalized, "Reactive");
         String pathPart = toKebabCase(normalized);
         if (pathPart == null || pathPart.isBlank()) {
             pathPart = "process";
@@ -117,7 +117,7 @@ public final class RestPathResolver {
     }
 
     private static TypeName preferredResourceType(PipelineStepModel model) {
-        StreamingShape shape = model.streamingShape() == null ? StreamingShape.UNARY_UNARY : model.streamingShape();
+        StreamingShape shape = resolvedStreamingShape(model);
         return switch (shape) {
             case UNARY_STREAMING, STREAMING_STREAMING -> model.inboundDomainType();
             default -> model.outboundDomainType();
@@ -125,15 +125,22 @@ public final class RestPathResolver {
     }
 
     private static TypeName alternateResourceType(PipelineStepModel model) {
-        StreamingShape shape = model.streamingShape() == null ? StreamingShape.UNARY_UNARY : model.streamingShape();
+        StreamingShape shape = resolvedStreamingShape(model);
         return switch (shape) {
             case UNARY_STREAMING, STREAMING_STREAMING -> model.outboundDomainType();
             default -> model.inboundDomainType();
         };
     }
 
+    private static StreamingShape resolvedStreamingShape(PipelineStepModel model) {
+        if (model == null || model.streamingShape() == null) {
+            return StreamingShape.UNARY_UNARY;
+        }
+        return model.streamingShape();
+    }
+
     private static String toPluginToken(PipelineStepModel model, String resourceToken) {
-        String raw = pluginNameBase(model);
+        String raw = baseName(model);
         if (raw == null || raw.isBlank()) {
             return null;
         }
@@ -173,22 +180,6 @@ public final class RestPathResolver {
             return "step";
         }
         return token;
-    }
-
-    private static String pluginNameBase(PipelineStepModel model) {
-        if (model == null) {
-            return null;
-        }
-        if (model.generatedName() != null && !model.generatedName().isBlank()) {
-            return model.generatedName();
-        }
-        if (model.serviceName() != null && !model.serviceName().isBlank()) {
-            return model.serviceName();
-        }
-        if (model.serviceClassName() != null) {
-            return model.serviceClassName().simpleName();
-        }
-        return null;
     }
 
     private static String baseName(PipelineStepModel model) {

@@ -231,6 +231,15 @@ public class PipelineCompilationContext {
     }
 
     /**
+     * Indicates whether the current platform mode is STANDARD.
+     *
+     * @return true when platform mode is STANDARD
+     */
+    public boolean isPlatformModeStandard() {
+        return platformMode == PlatformMode.STANDARD;
+    }
+
+    /**
      * Returns renderer bindings keyed by transport or target.
      *
      * @return renderer bindings keyed by transport or target

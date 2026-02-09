@@ -20,13 +20,11 @@ public enum PlatformMode {
             return Optional.empty();
         }
         String normalized = raw.trim();
-        if ("STANDARD".equalsIgnoreCase(normalized)) {
-            return Optional.of(STANDARD);
-        }
-        if ("LAMBDA".equalsIgnoreCase(normalized)) {
-            return Optional.of(LAMBDA);
+        for (PlatformMode mode : PlatformMode.values()) {
+            if (mode.name().equalsIgnoreCase(normalized)) {
+                return Optional.of(mode);
+            }
         }
         return Optional.empty();
     }
 }
-

@@ -25,7 +25,7 @@ import java.util.Map;
  * @param appName the application name
  * @param basePackage the base Java package
  * @param transport the global transport (GRPC, REST, or LOCAL)
- * @param platform the runtime/deployment platform mode (STANDARD or LAMBDA)
+ * @param platform the runtime/deployment platform mode
  * @param steps the pipeline steps defined in the template
  * @param aspects the aspect configurations keyed by aspect name
  */
@@ -33,7 +33,7 @@ public record PipelineTemplateConfig(
     String appName,
     String basePackage,
     String transport,
-    String platform,
+    PipelinePlatform platform,
     List<PipelineTemplateStep> steps,
     Map<String, PipelineTemplateAspect> aspects
 ) {
@@ -53,6 +53,6 @@ public record PipelineTemplateConfig(
         List<PipelineTemplateStep> steps,
         Map<String, PipelineTemplateAspect> aspects
     ) {
-        this(appName, basePackage, transport, "STANDARD", steps, aspects);
+        this(appName, basePackage, transport, PipelinePlatform.STANDARD, steps, aspects);
     }
 }

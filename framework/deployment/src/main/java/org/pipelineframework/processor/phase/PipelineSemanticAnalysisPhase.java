@@ -12,6 +12,7 @@ import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
+import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
 
 /**
@@ -58,13 +59,12 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
             ctx.getProcessingEnv().getMessager().printMessage(
                 Diagnostic.Kind.ERROR,
                 "pipeline.platform=LAMBDA currently requires pipeline.transport=REST.");
-            return;
         }
-        List<org.pipelineframework.processor.ir.PipelineStepModel> steps = ctx.getStepModels();
+        List<PipelineStepModel> steps = ctx.getStepModels();
         if (steps == null || steps.isEmpty()) {
             return;
         }
-        for (org.pipelineframework.processor.ir.PipelineStepModel model : steps) {
+        for (PipelineStepModel model : steps) {
             if (model == null) {
                 continue;
             }

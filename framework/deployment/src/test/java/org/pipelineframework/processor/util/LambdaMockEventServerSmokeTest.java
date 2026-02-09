@@ -11,13 +11,10 @@ class LambdaMockEventServerSmokeTest {
 
     @Test
     void startsAndStopsOnEphemeralPort() throws IOException {
-        MockHttpEventServer server = new MockHttpEventServer();
-        try {
+        try (MockHttpEventServer server = new MockHttpEventServer()) {
             server.start(0);
             int port = server.getPort();
             assertTrue(port > 0, "Expected mock lambda event server to bind to an ephemeral port");
-        } finally {
-            server.close();
         }
     }
 }

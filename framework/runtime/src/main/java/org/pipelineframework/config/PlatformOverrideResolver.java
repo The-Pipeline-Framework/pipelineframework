@@ -18,9 +18,17 @@ public final class PlatformOverrideResolver {
     /**
      * Resolve platform override using properties first, then environment.
      *
+     * <p>Looks up {@link #PLATFORM_PROPERTY_KEY} first and, if that result is null/blank, falls back to
+     * {@link #PLATFORM_ENV_KEY}. Either lookup function may be null; null lookups are treated as providers
+     * that always return null.</p>
+     *
+     * <p>This method may return {@code null} or a blank string if no override is configured. Callers should
+     * normalize/validate the returned value (for example with {@link #normalizeKnownPlatform(String)})
+     * before using it.</p>
+     *
      * @param propertyLookup property lookup
      * @param envLookup environment lookup
-     * @return resolved override value
+     * @return resolved override value (possibly null or blank)
      */
     public static String resolveOverride(Function<String, String> propertyLookup, Function<String, String> envLookup) {
         Function<String, String> properties = propertyLookup == null ? key -> null : propertyLookup;
@@ -50,4 +58,3 @@ public final class PlatformOverrideResolver {
         return KNOWN_PLATFORMS.contains(normalized) ? normalized : null;
     }
 }
-

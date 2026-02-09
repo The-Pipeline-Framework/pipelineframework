@@ -75,7 +75,7 @@ Pass via `maven-compiler-plugin` with `-A` arguments.
 
 Equivalent process-level overrides are also supported through:
 - system properties: `pipeline.transport`, `pipeline.platform`, `pipeline.rest.naming.strategy`
-- environment variables: `PIPELINE_TRANSPORT`, `PIPELINE_PLATFORM`
+- environment variables: `PIPELINE_TRANSPORT`, `PIPELINE_PLATFORM`, `PIPELINE_REST_NAMING_STRATEGY`
 
 ### REST Path Overrides (Build-Time)
 

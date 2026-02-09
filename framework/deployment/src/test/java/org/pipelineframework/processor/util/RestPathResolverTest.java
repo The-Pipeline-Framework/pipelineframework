@@ -4,6 +4,7 @@ import java.util.Set;
 
 import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.Test;
+import org.junitpioneer.jupiter.SetSystemProperty;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
@@ -56,27 +57,18 @@ class RestPathResolverTest {
     }
 
     @Test
+    @SetSystemProperty(key = RestPathResolver.REST_NAMING_STRATEGY_OPTION, value = "LEGACY")
     void legacyStrategyPreservesProcessNamingConvention() {
-        String previous = System.getProperty(RestPathResolver.REST_NAMING_STRATEGY_OPTION);
-        try {
-            System.setProperty(RestPathResolver.REST_NAMING_STRATEGY_OPTION, "LEGACY");
-            PipelineStepModel model = step(
-                "ProcessAckPaymentSentService",
-                "ProcessAckPaymentSentReactiveService",
-                StreamingShape.UNARY_UNARY,
-                false,
-                "AckPaymentSent",
-                "PaymentStatus");
+        PipelineStepModel model = step(
+            "ProcessAckPaymentSentService",
+            "ProcessAckPaymentSentReactiveService",
+            StreamingShape.UNARY_UNARY,
+            false,
+            "AckPaymentSent",
+            "PaymentStatus");
 
-            assertEquals("/api/v1/process-ack-payment-sent", RestPathResolver.resolveResourcePath(model, null));
-            assertEquals("/process", RestPathResolver.resolveOperationPath(null));
-        } finally {
-            if (previous == null) {
-                System.clearProperty(RestPathResolver.REST_NAMING_STRATEGY_OPTION);
-            } else {
-                System.setProperty(RestPathResolver.REST_NAMING_STRATEGY_OPTION, previous);
-            }
-        }
+        assertEquals("/api/v1/process-ack-payment-sent", RestPathResolver.resolveResourcePath(model, null));
+        assertEquals("/process", RestPathResolver.resolveOperationPath(null));
     }
 
     private PipelineStepModel step(

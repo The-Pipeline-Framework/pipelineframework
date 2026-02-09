@@ -88,7 +88,6 @@ jobs:
             -Dpipeline.transport=REST \
             -Dpipeline.rest.naming.strategy=RESOURCEFUL \
             -Dtest=LambdaMockEventServerSmokeTest \
-            -Dsurefire.failIfNoSpecifiedTests=false \
             test
 
       - name: Dump integration test reports on failure

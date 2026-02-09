@@ -23,6 +23,7 @@ import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.TransportMode;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -50,7 +51,7 @@ class PipelinePlatformMetadataGeneratorTest {
         assertEquals("LAMBDA", metadata.get("platform").getAsString());
         assertEquals("REST", metadata.get("transport").getAsString());
         assertEquals("orchestrator-svc", metadata.get("module").getAsString());
-        assertEquals(false, metadata.get("pluginHost").getAsBoolean());
+        assertFalse(metadata.get("pluginHost").getAsBoolean());
     }
 
     private static final class PathResourceFiler implements Filer {

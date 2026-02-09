@@ -30,7 +30,8 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 
 @QuarkusTest
-class ProcessParseDocumentResourceTest {
+class ParsedDocumentResourceTest {
+    private static final String PARSED_DOCUMENT_ENDPOINT = "/api/v1/parsed-document/";
 
     @BeforeAll
     static void setUp() {
@@ -62,7 +63,7 @@ class ProcessParseDocumentResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/parsed-document/")
+                .post(PARSED_DOCUMENT_ENDPOINT)
                 .then()
                 .statusCode(200)
                 .body("docId", notNullValue())
@@ -84,7 +85,7 @@ class ProcessParseDocumentResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/parsed-document/")
+                .post(PARSED_DOCUMENT_ENDPOINT)
                 .then()
                 .statusCode(400);
     }
@@ -102,7 +103,7 @@ class ProcessParseDocumentResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/parsed-document/")
+                .post(PARSED_DOCUMENT_ENDPOINT)
                 .then()
                 .statusCode(400);
     }

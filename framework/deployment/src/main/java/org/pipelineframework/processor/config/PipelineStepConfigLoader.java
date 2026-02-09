@@ -99,8 +99,6 @@ public class PipelineStepConfigLoader {
         String normalizedPlatform = PlatformOverrideResolver.normalizeKnownPlatform(platform);
         if (normalizedPlatform != null) {
             platform = normalizedPlatform;
-        } else if (platform == null || platform.isBlank()) {
-            platform = "STANDARD";
         } else {
             platform = "STANDARD";
         }

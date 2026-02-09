@@ -33,6 +33,8 @@ import org.yaml.snakeyaml.Yaml;
  * Loads the pipeline template configuration used by the template generator.
  */
 public class PipelineTemplateConfigLoader {
+    private static final String DEFAULT_TRANSPORT = "GRPC";
+    private static final PipelinePlatform DEFAULT_PLATFORM = PipelinePlatform.STANDARD;
 
     /**
      * Creates a new PipelineTemplateConfigLoader.
@@ -64,17 +66,19 @@ public class PipelineTemplateConfigLoader {
             transport = transportOverride.trim();
         }
         String normalizedTransport = TransportOverrideResolver.normalizeKnownTransport(transport);
-        transport = normalizedTransport != null ? normalizedTransport : "GRPC";
+        transport = normalizedTransport != null ? normalizedTransport : DEFAULT_TRANSPORT;
         String platformOverride = resolvePlatformOverride();
         if (platformOverride != null && !platformOverride.isBlank()) {
             platform = platformOverride.trim();
         }
         String normalizedPlatform = PlatformOverrideResolver.normalizeKnownPlatform(platform);
-        platform = normalizedPlatform != null ? normalizedPlatform : "STANDARD";
+        PipelinePlatform resolvedPlatform = normalizedPlatform != null
+            ? PipelinePlatform.valueOf(normalizedPlatform)
+            : DEFAULT_PLATFORM;
         List<PipelineTemplateStep> steps = readSteps(rootMap);
         Map<String, PipelineTemplateAspect> aspects = readAspects(rootMap);
 
-        return new PipelineTemplateConfig(appName, basePackage, transport, platform, steps, aspects);
+        return new PipelineTemplateConfig(appName, basePackage, transport, resolvedPlatform, steps, aspects);
     }
 
     private Object loadYaml(Path configPath) {
@@ -202,7 +206,10 @@ public class PipelineTemplateConfigLoader {
     /**
      * Resolve platform override from system property or environment variable.
      *
-     * @return resolved platform override, or {@code null} if unset
+     * Checks the JVM system property {@code pipeline.platform} first; if it is null or blank,
+     * falls back to the environment variable {@code PIPELINE_PLATFORM}.
+     *
+     * @return the resolved platform override value, or {@code null} if neither is set
      */
     private String resolvePlatformOverride() {
         return PlatformOverrideResolver.resolveOverride(System::getProperty, System::getenv);

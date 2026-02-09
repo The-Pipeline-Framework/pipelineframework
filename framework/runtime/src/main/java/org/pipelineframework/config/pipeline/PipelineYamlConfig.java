@@ -17,6 +17,8 @@
 package org.pipelineframework.config.pipeline;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * Pipeline configuration parsed from pipeline.yaml.
@@ -34,6 +36,25 @@ public record PipelineYamlConfig(
     List<PipelineYamlStep> steps,
     List<PipelineYamlAspect> aspects
 ) {
+    /**
+     * Creates a validated pipeline configuration.
+     *
+     * @throws IllegalArgumentException when platform is not STANDARD or LAMBDA
+     */
+    public PipelineYamlConfig {
+        String normalizedPlatform = platform == null ? "" : platform.trim();
+        if (normalizedPlatform.isBlank()) {
+            normalizedPlatform = "STANDARD";
+        } else {
+            normalizedPlatform = normalizedPlatform.toUpperCase(Locale.ROOT);
+        }
+        if (!Set.of("STANDARD", "LAMBDA").contains(normalizedPlatform)) {
+            throw new IllegalArgumentException(
+                "Invalid platform '" + platform + "'. Allowed values: STANDARD, LAMBDA.");
+        }
+        platform = normalizedPlatform;
+    }
+
     /**
      * Backward-compatible constructor used by existing callers that only set transport.
      *
