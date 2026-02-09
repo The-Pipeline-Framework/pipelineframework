@@ -80,4 +80,4 @@ For Maven topology changes, use the migration playbook.
 - [Maven Migration Playbook](/guide/build/runtime-layouts/maven-migration)
 - [CSV Payments Pipeline-Runtime Walkthrough](/guide/build/runtime-layouts/csv-payments-pipeline-runtime)
 - [CSV Payments Monolith Walkthrough](/guide/build/runtime-layouts/csv-payments-monolith)
-- [Search Lambda Walkthrough](/guide/build/runtime-layouts/search-lambda)
+- [Search Lambda Verification Lane](/guide/build/runtime-layouts/search-lambda)
