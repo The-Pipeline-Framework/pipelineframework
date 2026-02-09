@@ -23,13 +23,31 @@ import java.util.List;
  *
  * @param basePackage the base package for generated pipeline classes
  * @param transport the transport mode (GRPC, REST, or LOCAL)
+ * @param platform the runtime/deployment platform mode (STANDARD or LAMBDA)
  * @param steps the configured pipeline steps
  * @param aspects the configured pipeline aspects
  */
 public record PipelineYamlConfig(
     String basePackage,
     String transport,
+    String platform,
     List<PipelineYamlStep> steps,
     List<PipelineYamlAspect> aspects
 ) {
+    /**
+     * Backward-compatible constructor used by existing callers that only set transport.
+     *
+     * @param basePackage base package
+     * @param transport transport mode
+     * @param steps configured steps
+     * @param aspects configured aspects
+     */
+    public PipelineYamlConfig(
+        String basePackage,
+        String transport,
+        List<PipelineYamlStep> steps,
+        List<PipelineYamlAspect> aspects
+    ) {
+        this(basePackage, transport, "STANDARD", steps, aspects);
+    }
 }

@@ -43,6 +43,12 @@
         <surefireArgLine />
         <pipeline.generatedSourcesArg />
         <protobuf.descriptor.fileArg />
+        <pipeline.transport>REST</pipeline.transport>
+        <pipeline.transportArg>-Apipeline.transport=${pipeline.transport}</pipeline.transportArg>
+        <pipeline.platform>STANDARD</pipeline.platform>
+        <pipeline.platformArg>-Apipeline.platform=${pipeline.platform}</pipeline.platformArg>
+        <pipeline.rest.naming.strategy>RESOURCEFUL</pipeline.rest.naming.strategy>
+        <pipeline.rest.naming.strategyArg>-Apipeline.rest.naming.strategy=${pipeline.rest.naming.strategy}</pipeline.rest.naming.strategyArg>
         <pipeline.parallelism>PARALLEL</pipeline.parallelism>
         <quarkus.container-image.build>true</quarkus.container-image.build>
         <quarkus.container-image.registry>localhost</quarkus.container-image.registry>
@@ -304,6 +310,9 @@
                                 <compilerArgs>
                                     <arg>${pipeline.generatedSourcesArg}</arg>
                                     <arg>${protobuf.descriptor.fileArg}</arg>
+                                    <arg>${pipeline.transportArg}</arg>
+                                    <arg>${pipeline.platformArg}</arg>
+                                    <arg>${pipeline.rest.naming.strategyArg}</arg>
                                 </compilerArgs>
                             </configuration>
                         </execution>
@@ -579,6 +588,25 @@
     </build>
 
     <profiles>
+        <profile>
+            <id>lambda-platform</id>
+            <activation>
+                <property>
+                    <name>pipeline.platform</name>
+                    <value>LAMBDA</value>
+                </property>
+            </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-amazon-lambda</artifactId>
+                </dependency>
+                <dependency>
+                    <groupId>io.quarkus</groupId>
+                    <artifactId>quarkus-amazon-lambda-http</artifactId>
+                </dependency>
+            </dependencies>
+        </profile>
         <profile>
             <id>coverage</id>
             <activation>

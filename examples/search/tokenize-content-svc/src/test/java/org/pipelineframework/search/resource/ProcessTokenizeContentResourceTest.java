@@ -62,7 +62,7 @@ class ProcessTokenizeContentResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-tokenize-content/process")
+                .post("/api/v1/token-batch/")
                 .then()
                 .statusCode(200)
                 .body("docId", notNullValue())
@@ -83,7 +83,7 @@ class ProcessTokenizeContentResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-tokenize-content/process")
+                .post("/api/v1/token-batch/")
                 .then()
                 .statusCode(400);
     }
@@ -101,7 +101,7 @@ class ProcessTokenizeContentResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-tokenize-content/process")
+                .post("/api/v1/token-batch/")
                 .then()
                 .statusCode(400);
     }

@@ -16,6 +16,7 @@ import org.pipelineframework.processor.ir.*;
 import org.pipelineframework.processor.renderer.*;
 import org.pipelineframework.processor.util.OrchestratorClientPropertiesGenerator;
 import org.pipelineframework.processor.util.PipelineOrderMetadataGenerator;
+import org.pipelineframework.processor.util.PipelinePlatformMetadataGenerator;
 import org.pipelineframework.processor.util.PipelineTelemetryMetadataGenerator;
 import org.pipelineframework.processor.util.RoleMetadataGenerator;
 
@@ -57,15 +58,18 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         if (ctx.getStepModels().isEmpty() && !ctx.isOrchestratorGenerated()) {
             // Still need to write role metadata even if no models to process
             RoleMetadataGenerator roleMetadataGenerator = new RoleMetadataGenerator(ctx.getProcessingEnv());
+            PipelinePlatformMetadataGenerator platformMetadataGenerator =
+                new PipelinePlatformMetadataGenerator(ctx.getProcessingEnv());
             try {
                 roleMetadataGenerator.writeRoleMetadata();
+                platformMetadataGenerator.writePlatformMetadata(ctx);
             } catch (Exception e) {
                 // Log the error but don't fail the entire compilation
                 // This can happen in test environments where the Filer doesn't properly create files
                 if (ctx.getProcessingEnv() != null) {
                     ctx.getProcessingEnv().getMessager().printMessage(
                         javax.tools.Diagnostic.Kind.WARNING,
-                        "Failed to write role metadata: " + e.getMessage());
+                        "Failed to write metadata: " + e.getMessage());
                 }
             }
             return;
@@ -148,6 +152,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         // Write role metadata
         try {
             roleMetadataGenerator.writeRoleMetadata();
+            PipelinePlatformMetadataGenerator platformMetadataGenerator =
+                new PipelinePlatformMetadataGenerator(ctx.getProcessingEnv());
+            platformMetadataGenerator.writePlatformMetadata(ctx);
             if (ctx.isOrchestratorGenerated()) {
                 PipelineOrderMetadataGenerator orderMetadataGenerator =
                     new PipelineOrderMetadataGenerator(ctx.getProcessingEnv());
@@ -166,7 +173,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             if (ctx.getProcessingEnv() != null) {
                 ctx.getProcessingEnv().getMessager().printMessage(
                     javax.tools.Diagnostic.Kind.WARNING,
-                    "Failed to write role metadata: " + e.getMessage());
+                    "Failed to write metadata: " + e.getMessage());
             }
         }
     }

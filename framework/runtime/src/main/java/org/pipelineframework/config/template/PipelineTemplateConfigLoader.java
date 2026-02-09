@@ -25,6 +25,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.pipelineframework.config.PlatformOverrideResolver;
+import org.pipelineframework.config.TransportOverrideResolver;
 import org.yaml.snakeyaml.Yaml;
 
 /**
@@ -55,14 +57,24 @@ public class PipelineTemplateConfigLoader {
         String basePackage = readString(rootMap, "basePackage");
         String transport = readString(rootMap, "transport");
         transport = transport == null ? null : transport.trim();
+        String platform = readString(rootMap, "platform");
+        platform = platform == null ? null : platform.trim();
         String transportOverride = resolveTransportOverride();
         if (transportOverride != null && !transportOverride.isBlank()) {
             transport = transportOverride.trim();
         }
+        String normalizedTransport = TransportOverrideResolver.normalizeKnownTransport(transport);
+        transport = normalizedTransport != null ? normalizedTransport : "GRPC";
+        String platformOverride = resolvePlatformOverride();
+        if (platformOverride != null && !platformOverride.isBlank()) {
+            platform = platformOverride.trim();
+        }
+        String normalizedPlatform = PlatformOverrideResolver.normalizeKnownPlatform(platform);
+        platform = normalizedPlatform != null ? normalizedPlatform : "STANDARD";
         List<PipelineTemplateStep> steps = readSteps(rootMap);
         Map<String, PipelineTemplateAspect> aspects = readAspects(rootMap);
 
-        return new PipelineTemplateConfig(appName, basePackage, transport, steps, aspects);
+        return new PipelineTemplateConfig(appName, basePackage, transport, platform, steps, aspects);
     }
 
     private Object loadYaml(Path configPath) {
@@ -184,11 +196,16 @@ public class PipelineTemplateConfigLoader {
      * @return the resolved transport override value, or {@code null} if neither is set
      */
     private String resolveTransportOverride() {
-        String override = System.getProperty("pipeline.transport");
-        if (override == null || override.isBlank()) {
-            override = System.getenv("PIPELINE_TRANSPORT");
-        }
-        return override;
+        return TransportOverrideResolver.resolveOverride(System::getProperty, System::getenv);
+    }
+
+    /**
+     * Resolve platform override from system property or environment variable.
+     *
+     * @return resolved platform override, or {@code null} if unset
+     */
+    private String resolvePlatformOverride() {
+        return PlatformOverrideResolver.resolveOverride(System::getProperty, System::getenv);
     }
 
     /**

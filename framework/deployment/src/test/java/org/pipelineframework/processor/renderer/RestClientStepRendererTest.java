@@ -67,6 +67,7 @@ class RestClientStepRendererTest {
         assertTrue(interfaceSource.contains("@RegisterRestClient"));
         assertTrue(interfaceSource.contains("process-payment-status-reactive"));
         assertTrue(interfaceSource.contains("@Path(\"/ProcessPaymentStatusReactiveService/remoteProcess\")"));
+        assertTrue(interfaceSource.contains("@Path(\"/\")"));
         assertTrue(interfaceSource.contains("interface ProcessPaymentStatusRestClient"));
         assertTrue(interfaceSource.contains("@HeaderParam"));
         assertTrue(interfaceSource.contains("PipelineContextHeaders"));

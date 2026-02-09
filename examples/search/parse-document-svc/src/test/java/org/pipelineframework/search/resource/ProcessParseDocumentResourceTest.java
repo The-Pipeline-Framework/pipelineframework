@@ -62,7 +62,7 @@ class ProcessParseDocumentResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-parse-document/process")
+                .post("/api/v1/parsed-document/")
                 .then()
                 .statusCode(200)
                 .body("docId", notNullValue())
@@ -84,7 +84,7 @@ class ProcessParseDocumentResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-parse-document/process")
+                .post("/api/v1/parsed-document/")
                 .then()
                 .statusCode(400);
     }
@@ -102,7 +102,7 @@ class ProcessParseDocumentResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-parse-document/process")
+                .post("/api/v1/parsed-document/")
                 .then()
                 .statusCode(400);
     }

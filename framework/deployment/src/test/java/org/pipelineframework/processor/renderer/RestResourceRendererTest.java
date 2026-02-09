@@ -62,7 +62,7 @@ class RestResourceRendererTest {
         assertTrue(source.contains("PaymentStatusMapper paymentStatusMapper;"));
         assertTrue(source.contains("PaymentOutputMapper paymentOutputMapper;"));
         assertTrue(source.contains("@POST"));
-        assertTrue(source.contains("@Path(\"/process\")"));
+        assertTrue(source.contains("@Path(\"/\")"));
         assertTrue(source.contains("public Uni<PaymentOutputDto> process(PaymentStatusDto inputDto)"));
         assertTrue(source.contains("PaymentStatus inputDomain = paymentStatusMapper.fromDto(inputDto);"));
         assertTrue(source.contains("return domainService.process(inputDomain).map(output -> paymentOutputMapper.toDto(output));"));
@@ -100,6 +100,112 @@ class RestResourceRendererTest {
 
         RestResourceRenderer renderer = new RestResourceRenderer();
         assertDoesNotThrow(() -> renderer.render(binding, context));
+    }
+
+    @Test
+    void derivesResourcefulPathFromOutputTypeForUnaryUnary() throws IOException {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("ProcessAckPaymentSentService")
+            .servicePackage("org.pipelineframework.csv.service")
+            .serviceClassName(ClassName.get(
+                "org.pipelineframework.csv.service",
+                "ProcessAckPaymentSentService"))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.DEFAULT)
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.csv.common.domain", "AckPaymentSent"),
+                ClassName.get("org.pipelineframework.csv.common.mapper", "AckPaymentSentMapper"),
+                true))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.csv.common.domain", "PaymentStatus"),
+                ClassName.get("org.pipelineframework.csv.common.mapper", "PaymentStatusMapper"),
+                true))
+            .enabledTargets(java.util.Set.of(GenerationTarget.REST_RESOURCE))
+            .build();
+
+        RestBinding binding = new RestBinding(model, null);
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        GenerationContext context = new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+            java.util.Set.of(), null, null);
+
+        RestResourceRenderer renderer = new RestResourceRenderer();
+        renderer.render(binding, context);
+
+        Path generatedSource = tempDir.resolve("org/pipelineframework/csv/service/pipeline/ProcessAckPaymentSentResource.java");
+        String source = Files.readString(generatedSource);
+        assertTrue(source.contains("@Path(\"/api/v1/payment-status\")"));
+        assertTrue(source.contains("@Path(\"/\")"));
+    }
+
+    @Test
+    void derivesResourcefulPathFromInputTypeForUnaryStreaming() throws IOException {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("ProcessAckPaymentSentService")
+            .servicePackage("org.pipelineframework.csv.service")
+            .serviceClassName(ClassName.get(
+                "org.pipelineframework.csv.service",
+                "ProcessAckPaymentSentService"))
+            .streamingShape(StreamingShape.UNARY_STREAMING)
+            .executionMode(ExecutionMode.DEFAULT)
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.csv.common.domain", "AckPaymentSent"),
+                ClassName.get("org.pipelineframework.csv.common.mapper", "AckPaymentSentMapper"),
+                true))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.csv.common.domain", "PaymentStatus"),
+                ClassName.get("org.pipelineframework.csv.common.mapper", "PaymentStatusMapper"),
+                true))
+            .enabledTargets(java.util.Set.of(GenerationTarget.REST_RESOURCE))
+            .build();
+
+        RestBinding binding = new RestBinding(model, null);
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        GenerationContext context = new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+            java.util.Set.of(), null, null);
+
+        RestResourceRenderer renderer = new RestResourceRenderer();
+        renderer.render(binding, context);
+
+        Path generatedSource = tempDir.resolve("org/pipelineframework/csv/service/pipeline/ProcessAckPaymentSentResource.java");
+        String source = Files.readString(generatedSource);
+        assertTrue(source.contains("@Path(\"/api/v1/ack-payment-sent\")"));
+    }
+
+    @Test
+    void derivesPluginSegmentForSideEffectPaths() throws IOException {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("ObservePersistenceAckPaymentSentSideEffectService")
+            .generatedName("PersistenceAckPaymentSentSideEffect")
+            .servicePackage("org.pipelineframework.csv.service")
+            .serviceClassName(ClassName.get(
+                "org.pipelineframework.plugin.persistence",
+                "PersistenceService"))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.DEFAULT)
+            .sideEffect(true)
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.csv.common.domain", "AckPaymentSent"),
+                ClassName.get("org.pipelineframework.csv.common.mapper", "AckPaymentSentMapper"),
+                true))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.csv.common.domain", "AckPaymentSent"),
+                ClassName.get("org.pipelineframework.csv.common.mapper", "AckPaymentSentMapper"),
+                true))
+            .enabledTargets(java.util.Set.of(GenerationTarget.REST_RESOURCE))
+            .build();
+
+        RestBinding binding = new RestBinding(model, null);
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        GenerationContext context = new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+            java.util.Set.of(), null, null);
+
+        RestResourceRenderer renderer = new RestResourceRenderer();
+        renderer.render(binding, context);
+
+        Path generatedSource = tempDir.resolve(
+            "org/pipelineframework/csv/service/pipeline/PersistenceAckPaymentSentSideEffectResource.java");
+        String source = Files.readString(generatedSource);
+        assertTrue(source.contains("@Path(\"/api/v1/ack-payment-sent/persistence\")"));
     }
 
 }

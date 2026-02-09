@@ -1,6 +1,7 @@
 appName: "Search Pipeline"
 basePackage: "org.pipelineframework.search"
 transport: "REST"
+platform: "STANDARD"
 steps:
   - name: "Crawl Source"
     cardinality: "ONE_TO_ONE"

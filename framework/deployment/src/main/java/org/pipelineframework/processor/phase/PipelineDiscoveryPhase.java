@@ -10,6 +10,7 @@ import javax.lang.model.element.TypeElement;
 
 import org.pipelineframework.annotation.PipelineOrchestrator;
 import org.pipelineframework.annotation.PipelinePlugin;
+import org.pipelineframework.config.PlatformMode;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
@@ -83,9 +84,12 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         PipelineRuntimeMapping runtimeMapping = loadRuntimeMapping(ctx);
         ctx.setRuntimeMapping(runtimeMapping);
 
-        // Determine transport mode
-        TransportMode transportMode = loadPipelineTransport(ctx);
+        // Determine transport and platform modes
+        PipelineStepConfigLoader.StepConfig stepConfig = loadPipelineStepConfig(ctx);
+        TransportMode transportMode = loadPipelineTransport(ctx, stepConfig);
         ctx.setTransportMode(transportMode);
+        PlatformMode platformMode = loadPipelinePlatform(ctx, stepConfig);
+        ctx.setPlatformMode(platformMode);
 
         // Discover orchestrator models if present
         List<PipelineOrchestratorModel> orchestratorModels = discoverOrchestratorModels(ctx, orchestratorElements);
@@ -150,37 +154,60 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @param ctx the pipeline compilation context used to locate the module directory and to report warnings
      * @return the determined TransportMode; defaults to {@link TransportMode#GRPC} when configuration is missing, blank, unknown, or on load failure
      */
-    private TransportMode loadPipelineTransport(PipelineCompilationContext ctx) {
+    private PipelineStepConfigLoader.StepConfig loadPipelineStepConfig(PipelineCompilationContext ctx) {
         PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
         Path moduleDir = ctx.getModuleDir();
         Optional<Path> configPath = locator.locate(moduleDir);
         if (configPath.isEmpty()) {
-            return TransportMode.GRPC;
+            return new PipelineStepConfigLoader.StepConfig("", "GRPC", "STANDARD", List.of(), List.of());
         }
 
         PipelineStepConfigLoader stepLoader = new PipelineStepConfigLoader();
         try {
-            PipelineStepConfigLoader.StepConfig stepConfig = stepLoader.load(configPath.get());
-            String transport = stepConfig.transport();
-            if (transport == null || transport.isBlank()) {
-                return TransportMode.GRPC;
-            }
-            Optional<TransportMode> mode = TransportMode.fromStringOptional(transport);
-            if (mode.isEmpty()) {
-                if (ctx.getProcessingEnv() != null) {
-                    ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
-                        "Unknown pipeline transport '" + transport + "'; defaulting to GRPC.");
-                }
-                return TransportMode.GRPC;
-            }
-            return mode.get();
+            return stepLoader.load(configPath.get());
         } catch (Exception e) {
             if (ctx.getProcessingEnv() != null) {
                 ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
-                    "Failed to load pipeline transport from " + configPath.get() + ": " + e.getMessage());
+                    "Failed to load pipeline transport/platform from " + configPath.get() + ": " + e.getMessage());
             }
+            return new PipelineStepConfigLoader.StepConfig("", "GRPC", "STANDARD", List.of(), List.of());
         }
-        return TransportMode.GRPC;
+    }
+
+    private TransportMode loadPipelineTransport(
+        PipelineCompilationContext ctx,
+        PipelineStepConfigLoader.StepConfig stepConfig) {
+        String transport = stepConfig == null ? null : stepConfig.transport();
+        if (transport == null || transport.isBlank()) {
+            return TransportMode.GRPC;
+        }
+        Optional<TransportMode> mode = TransportMode.fromStringOptional(transport);
+        if (mode.isEmpty()) {
+            if (ctx.getProcessingEnv() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                    "Unknown pipeline transport '" + transport + "'; defaulting to GRPC.");
+            }
+            return TransportMode.GRPC;
+        }
+        return mode.get();
+    }
+
+    private PlatformMode loadPipelinePlatform(
+        PipelineCompilationContext ctx,
+        PipelineStepConfigLoader.StepConfig stepConfig) {
+        String platform = stepConfig == null ? null : stepConfig.platform();
+        if (platform == null || platform.isBlank()) {
+            return PlatformMode.STANDARD;
+        }
+        Optional<PlatformMode> mode = PlatformMode.fromStringOptional(platform);
+        if (mode.isEmpty()) {
+            if (ctx.getProcessingEnv() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                    "Unknown pipeline platform '" + platform + "'; defaulting to STANDARD.");
+            }
+            return PlatformMode.STANDARD;
+        }
+        return mode.get();
     }
 
     /**

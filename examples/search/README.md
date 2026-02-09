@@ -12,7 +12,7 @@ This is a generated pipeline application built with the Pipeline Framework.
 To verify that the application was generated correctly:
 
 ```bash
-cd Search Pipeline
+cd examples/search
 ./mvnw clean verify
 ```
 
@@ -26,6 +26,24 @@ Use the Quarkus plugin in IntelliJ IDEA or run with:
 
 ```bash
 ./mvnw compile quarkus:dev
+```
+
+### Lambda Platform Build (Local Mock Runtime)
+
+Build the search pipeline with Lambda platform mode and REST resourceful naming:
+
+```bash
+./build-lambda.sh -DskipTests
+```
+
+Run only the Lambda mock event server smoke test:
+
+```bash
+./mvnw -pl orchestrator-svc -am \
+  -Dpipeline.platform=LAMBDA \
+  -Dtest=LambdaMockEventServerSmokeTest \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
 ```
 
 ## Constructing crawl requests
@@ -46,4 +64,4 @@ CrawlRequest request = CrawlRequestOptions.builder()
 
 ## Architecture
 
-This application follows the pipeline pattern with multiple microservices, each responsible for a specific step in the processing workflow. Services communicate via gRPC, and the orchestrator coordinates the overall pipeline execution.
+This application follows the pipeline pattern with multiple microservices, each responsible for a specific step in the processing workflow. By default it uses REST transport with resource-oriented endpoints, and the orchestrator coordinates the overall pipeline execution.

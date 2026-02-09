@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.logging.Logger;
 
+import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
 import org.yaml.snakeyaml.Yaml;
 
@@ -120,8 +121,9 @@ public class PipelineYamlConfigLoader {
     /**
      * Parses the YAML root object and constructs a PipelineYamlConfig.
      *
-     * Reads top-level fields (basePackage, transport), applies a transport override if present,
-     * normalizes known transport values (defaults to "GRPC" for unknown transports), and
+     * Reads top-level fields (basePackage, transport, platform), applies overrides if present,
+     * normalizes known transport values (defaults to "GRPC" for unknown transports), normalizes known
+     * platform values (defaults to "STANDARD" for unknown values), and
      * reads pipeline steps and aspects from the root map.
      *
      * @param root   the deserialized YAML root; expected to be a Map
@@ -136,6 +138,7 @@ public class PipelineYamlConfigLoader {
 
         String basePackage = readString(rootMap, "basePackage");
         String transport = readString(rootMap, "transport");
+        String platform = readString(rootMap, "platform");
         boolean fromOverride = false;
         String transportOverride = resolveTransportOverride();
         if (transportOverride != null && !transportOverride.isBlank()) {
@@ -157,10 +160,33 @@ public class PipelineYamlConfigLoader {
                 transport = "GRPC";
             }
         }
+        boolean platformFromOverride = false;
+        String platformOverride = resolvePlatformOverride();
+        if (platformOverride != null && !platformOverride.isBlank()) {
+            platform = platformOverride;
+            platformFromOverride = true;
+        }
+        if (platform == null || platform.isBlank()) {
+            platform = "STANDARD";
+        } else {
+            String normalized = PlatformOverrideResolver.normalizeKnownPlatform(platform);
+            if (normalized != null) {
+                platform = normalized;
+            } else {
+                if (platformFromOverride) {
+                    LOG.warning("Unknown platform override '" + platform
+                        + "'; defaulting pipeline platform to STANDARD.");
+                } else {
+                    LOG.warning("Unknown platform in YAML config '" + platform
+                        + "'; defaulting pipeline platform to STANDARD.");
+                }
+                platform = "STANDARD";
+            }
+        }
         List<PipelineYamlStep> steps = readSteps(rootMap);
         List<PipelineYamlAspect> aspects = readAspects(rootMap);
 
-        return new PipelineYamlConfig(basePackage, transport, steps, aspects);
+        return new PipelineYamlConfig(basePackage, transport, platform, steps, aspects);
     }
 
     /**
@@ -170,6 +196,15 @@ public class PipelineYamlConfigLoader {
      */
     private String resolveTransportOverride() {
         return TransportOverrideResolver.resolveOverride(propertyLookup, envLookup);
+    }
+
+    /**
+     * Resolve a platform override using the configured property and environment lookups.
+     *
+     * @return the platform override value if present, or {@code null} when no override is configured
+     */
+    private String resolvePlatformOverride() {
+        return PlatformOverrideResolver.resolveOverride(propertyLookup, envLookup);
     }
 
     /**

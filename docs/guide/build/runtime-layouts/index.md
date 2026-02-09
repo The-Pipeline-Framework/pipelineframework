@@ -29,6 +29,14 @@ Values include `GRPC`, `REST`, and `LOCAL`.
 - Decides how steps are invoked.
 - Orthogonal to layout/topology.
 
+### Platform mode (deployment target)
+
+Values include `STANDARD` and `LAMBDA`.
+
+- Decides whether generation targets standard Quarkus runtimes or AWS Lambda packaging/runtime semantics.
+- Constrained by transport and step shapes (currently Lambda requires REST and unary-unary steps).
+- Orthogonal to runtime layout/topology.
+
 ## Who this guide is for
 
 Application developers using the normal onboarding path:
@@ -68,3 +76,4 @@ For that work, use the migration playbook.
 - [Maven Migration Playbook](/guide/build/runtime-layouts/maven-migration)
 - [CSV Payments Pipeline-Runtime Walkthrough](/guide/build/runtime-layouts/csv-payments-pipeline-runtime)
 - [CSV Payments Monolith Walkthrough](/guide/build/runtime-layouts/csv-payments-monolith)
+- [Search Lambda Walkthrough](/guide/build/runtime-layouts/search-lambda)

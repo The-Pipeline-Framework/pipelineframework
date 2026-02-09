@@ -62,7 +62,7 @@ class ProcessIndexDocumentResourceIT {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-index-document/process")
+                .post("/api/v1/index-ack/")
                 .then()
                 .statusCode(200)
                 .body("docId", notNullValue())
@@ -84,7 +84,7 @@ class ProcessIndexDocumentResourceIT {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-index-document/process")
+                .post("/api/v1/index-ack/")
                 .then()
                 .statusCode(500);
     }
@@ -102,7 +102,7 @@ class ProcessIndexDocumentResourceIT {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-index-document/process")
+                .post("/api/v1/index-ack/")
                 .then()
                 .statusCode(400);
     }

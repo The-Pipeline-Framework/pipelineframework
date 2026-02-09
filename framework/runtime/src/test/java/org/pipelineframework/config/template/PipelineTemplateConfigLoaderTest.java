@@ -71,6 +71,7 @@ class PipelineTemplateConfigLoaderTest {
         assertEquals("Test App", config.appName());
         assertEquals("com.example.test", config.basePackage());
         assertEquals("GRPC", config.transport());
+        assertEquals("STANDARD", config.platform());
         assertEquals(1, config.steps().size());
 
         PipelineTemplateStep step = config.steps().get(0);
@@ -99,5 +100,33 @@ class PipelineTemplateConfigLoaderTest {
         assertEquals("GLOBAL", cache.scope());
         assertEquals("AFTER_STEP", cache.position());
         assertEquals(0, cache.order());
+    }
+
+    @Test
+    void platformCanBeOverriddenViaSystemProperty() throws Exception {
+        String yaml = """
+            appName: "Test App"
+            basePackage: "com.example.test"
+            transport: "REST"
+            platform: "STANDARD"
+            steps: []
+            """;
+        Path configPath = tempDir.resolve("pipeline-config.yaml");
+        Files.writeString(configPath, yaml);
+
+        String previous = System.getProperty("pipeline.platform");
+        try {
+            System.setProperty("pipeline.platform", "LAMBDA");
+            PipelineTemplateConfigLoader loader = new PipelineTemplateConfigLoader();
+            PipelineTemplateConfig config = loader.load(configPath);
+            assertEquals("LAMBDA", config.platform());
+            assertEquals("REST", config.transport());
+        } finally {
+            if (previous == null) {
+                System.clearProperty("pipeline.platform");
+            } else {
+                System.setProperty("pipeline.platform", previous);
+            }
+        }
     }
 }

@@ -25,7 +25,8 @@ import javax.lang.model.element.TypeElement;
     "pipeline.generatedSourcesRoot", // Optional: legacy alias for generated sources base directory
     "pipeline.cache.keyGenerator", // Optional: fully-qualified CacheKeyGenerator class for @CacheResult
     "pipeline.orchestrator.generate", // Optional: enable orchestrator endpoint generation
-    "pipeline.module" // Optional: logical module name for runtime mapping
+    "pipeline.module", // Optional: logical module name for runtime mapping
+    "pipeline.platform" // Optional: target deployment platform (STANDARD|LAMBDA)
 })
 @SupportedSourceVersion(SourceVersion.RELEASE_21)
 @Deprecated(forRemoval = true)
