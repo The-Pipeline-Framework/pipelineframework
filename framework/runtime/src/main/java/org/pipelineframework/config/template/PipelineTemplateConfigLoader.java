@@ -82,11 +82,20 @@ public class PipelineTemplateConfigLoader {
         if (transportOverride != null && !transportOverride.isBlank()) {
             transport = transportOverride.trim();
         }
+        String originalTransport = transport;
         String normalizedTransport = TransportOverrideResolver.normalizeKnownTransport(transport);
-        transport = normalizedTransport != null ? normalizedTransport : DEFAULT_TRANSPORT;
+        if (normalizedTransport == null) {
+            if (originalTransport != null && !originalTransport.isBlank()) {
+                LOG.warning("Unknown transport '" + originalTransport + "'; defaulting to "
+                    + DEFAULT_TRANSPORT + ".");
+            }
+            transport = DEFAULT_TRANSPORT;
+        } else {
+            transport = normalizedTransport;
+        }
         String platformOverride = resolvePlatformOverride();
         boolean platformFromOverride = platformOverride != null && !platformOverride.isBlank();
-        if (platformOverride != null && !platformOverride.isBlank()) {
+        if (platformFromOverride) {
             platform = platformOverride.trim();
         }
         String normalizedPlatform = PlatformOverrideResolver.normalizeKnownPlatform(platform);

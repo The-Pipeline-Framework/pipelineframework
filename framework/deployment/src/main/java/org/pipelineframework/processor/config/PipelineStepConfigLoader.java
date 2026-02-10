@@ -105,6 +105,7 @@ public class PipelineStepConfigLoader {
         if (normalizedTransport != null) {
             transport = normalizedTransport;
         } else if (transport != null && !transport.isBlank()) {
+            warn("Unknown pipeline transport '" + transport + "' in step config; defaulting to GRPC.");
             transport = "GRPC";
         }
         String transportOverride = resolveTransportOverride();
@@ -112,6 +113,8 @@ public class PipelineStepConfigLoader {
             String normalizedOverride = TransportOverrideResolver.normalizeKnownTransport(transportOverride);
             if (normalizedOverride != null) {
                 transport = normalizedOverride;
+            } else {
+                warn("Unknown pipeline.transport override '" + transportOverride + "'; defaulting to GRPC.");
             }
         }
         String normalizedPlatform = PlatformOverrideResolver.normalizeKnownPlatform(platform);

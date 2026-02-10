@@ -612,8 +612,11 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         if (domainType == null) {
             return ClassName.OBJECT;
         }
+        if (!(domainType instanceof ClassName domainClass)) {
+            return ClassName.OBJECT;
+        }
 
-        String domainTypeStr = domainType.toString();
+        String domainTypeStr = domainClass.canonicalName();
 
         // Replace common domain package patterns with DTO equivalents and add Dto suffix
         String dtoTypeStr = domainTypeStr

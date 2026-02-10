@@ -5,7 +5,9 @@ import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.AnnotationSpec;
 import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
+import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeVariableName;
@@ -74,17 +76,24 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
                 .addMember("value", "$T.$L", roleEnum, "REST_SERVER")
                 .build())
             .addSuperinterface(ParameterizedTypeName.get(requestHandler, inputDto, outputDto))
-            .addField(com.squareup.javapoet.FieldSpec.builder(resourceType, "resource", Modifier.PRIVATE)
+            .addField(FieldSpec.builder(resourceType, "resource", Modifier.PRIVATE)
                 .addAnnotation(inject)
                 .build());
 
-        com.squareup.javapoet.MethodSpec handleRequest = com.squareup.javapoet.MethodSpec.methodBuilder("handleRequest")
+        MethodSpec handleRequest = MethodSpec.methodBuilder("handleRequest")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
             .returns(outputDto)
             .addParameter(inputDto, "input")
             .addParameter(lambdaContext, "context")
+            .beginControlFlow("try")
             .addStatement("return resource.process(input).await().indefinitely()")
+            .nextControlFlow("catch (Exception e)")
+            .addStatement(
+                "throw new $T($S + input, e)",
+                RuntimeException.class,
+                "Failed handleRequest -> resource.process for input: ")
+            .endControlFlow()
             .build();
         handler.addMethod(handleRequest);
 
@@ -98,7 +107,17 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
             return ClassName.OBJECT;
         }
         if (domainType instanceof ParameterizedTypeName parameterizedTypeName) {
-            return convertDomainToDtoType(parameterizedTypeName.rawType);
+            TypeName convertedRawType = convertDomainToDtoType(parameterizedTypeName.rawType);
+            if (!(convertedRawType instanceof ClassName convertedRawClassName)) {
+                throw new IllegalArgumentException(
+                    "Unsupported parameterized raw domain type for DTO conversion: "
+                        + parameterizedTypeName.rawType);
+            }
+            TypeName[] convertedArguments = new TypeName[parameterizedTypeName.typeArguments.size()];
+            for (int i = 0; i < parameterizedTypeName.typeArguments.size(); i++) {
+                convertedArguments[i] = convertDomainToDtoType(parameterizedTypeName.typeArguments.get(i));
+            }
+            return ParameterizedTypeName.get(convertedRawClassName, convertedArguments);
         }
         if (domainType instanceof ClassName className) {
             String dtoSimpleName = className.simpleName().endsWith("Dto")
@@ -130,7 +149,19 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
         return String.join(".", segments);
     }
 
-    private String removeSuffix(String value, String suffix) {
+    /**
+     * Returns the generated REST function handler fully-qualified class name.
+     *
+     * @param servicePackage service package
+     * @param generatedName generated service name
+     * @return handler FQCN
+     */
+    public static String handlerFqcn(String servicePackage, String generatedName) {
+        String baseName = removeSuffix(removeSuffix(generatedName, "Service"), "Reactive");
+        return servicePackage + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX + "." + baseName + "FunctionHandler";
+    }
+
+    private static String removeSuffix(String value, String suffix) {
         if (value == null || suffix == null || suffix.isBlank()) {
             return value;
         }
