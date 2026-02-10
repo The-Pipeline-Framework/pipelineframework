@@ -1,0 +1,88 @@
+package org.pipelineframework.processor.phase;
+
+import java.io.IOException;
+import java.util.Objects;
+import javax.tools.Diagnostic;
+
+import org.pipelineframework.processor.ir.DeploymentRole;
+import org.pipelineframework.processor.ir.GenerationTarget;
+import org.pipelineframework.processor.renderer.GenerationContext;
+import org.pipelineframework.processor.renderer.LocalClientStepRenderer;
+
+/**
+ * Target generator for local client step artifacts.
+ */
+public class LocalClientStepTargetGenerator implements TargetGenerator {
+
+    private final LocalClientStepRenderer renderer;
+    private final GenerationPolicy policy;
+    private final GenerationPathResolver pathResolver;
+    private final SideEffectBeanService sideEffectBeanService;
+
+    public LocalClientStepTargetGenerator(
+            LocalClientStepRenderer renderer,
+            GenerationPolicy policy,
+            GenerationPathResolver pathResolver,
+            SideEffectBeanService sideEffectBeanService) {
+        this.renderer = Objects.requireNonNull(renderer, "renderer must not be null");
+        this.policy = Objects.requireNonNull(policy, "policy must not be null");
+        this.pathResolver = Objects.requireNonNull(pathResolver, "pathResolver must not be null");
+        this.sideEffectBeanService = Objects.requireNonNull(
+            sideEffectBeanService, "sideEffectBeanService must not be null");
+    }
+
+    @Override
+    public GenerationTarget target() {
+        return GenerationTarget.LOCAL_CLIENT_STEP;
+    }
+
+    @Override
+    public void generate(GenerationRequest request) throws IOException {
+        var ctx = request.ctx();
+        var model = request.model();
+
+        if (model.deploymentRole() == DeploymentRole.PLUGIN_SERVER && ctx.isPluginHost()) {
+            return;
+        }
+
+        if (ctx.getProcessingEnv() == null) {
+            return;
+        }
+
+        if (model.sideEffect() && model.deploymentRole() == DeploymentRole.PLUGIN_SERVER) {
+            String key = model.servicePackage() + ".pipeline." + model.serviceName();
+            if (request.generatedSideEffectBeans().add(key)) {
+                sideEffectBeanService.generateSideEffectBean(
+                    ctx,
+                    model,
+                    DeploymentRole.PLUGIN_SERVER,
+                    DeploymentRole.ORCHESTRATOR_CLIENT,
+                    request.grpcBinding());
+            }
+        }
+
+        if (request.localBinding() == null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                Diagnostic.Kind.WARNING,
+                "Skipping local client step generation for '" + model.generatedName()
+                    + "' because no local binding is available.");
+            return;
+        }
+
+        DeploymentRole role = policy.resolveClientRole(model.deploymentRole());
+        renderer.render(request.localBinding(), new GenerationContext(
+            ctx.getProcessingEnv(),
+            pathResolver.resolveRoleOutputDir(ctx, role),
+            role,
+            request.enabledAspects(),
+            request.cacheKeyGenerator(),
+            request.descriptorSet()));
+
+        String generatedName = model.generatedName();
+        if (generatedName.endsWith("Service")) {
+            generatedName = generatedName.substring(0, generatedName.length() - "Service".length());
+        }
+        String className = model.servicePackage() + ".pipeline." + generatedName + "LocalClientStep";
+        request.roleMetadataGenerator().recordClassWithRole(className, role.name());
+    }
+}
