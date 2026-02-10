@@ -48,6 +48,22 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
         ClassName requestHandler = ClassName.get("com.amazonaws.services.lambda.runtime", "RequestHandler");
         ClassName generatedRole = ClassName.get("org.pipelineframework.annotation", "GeneratedRole");
         ClassName roleEnum = ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role");
+        ClassName functionTransportContext =
+            ClassName.get("org.pipelineframework.transport.function", "FunctionTransportContext");
+        ClassName sourceAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "FunctionSourceAdapter");
+        ClassName invokeAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "FunctionInvokeAdapter");
+        ClassName sinkAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "FunctionSinkAdapter");
+        ClassName defaultSourceAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "DefaultUnaryFunctionSourceAdapter");
+        ClassName localInvokeAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "LocalUnaryFunctionInvokeAdapter");
+        ClassName defaultSinkAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "DefaultUnaryFunctionSinkAdapter");
+        ClassName unaryBridge =
+            ClassName.get("org.pipelineframework.transport.function", "UnaryFunctionTransportBridge");
 
         String serviceClassName = model.generatedName();
         String baseName = removeSuffix(removeSuffix(serviceClassName, "Service"), "Reactive");
@@ -84,7 +100,20 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
             .returns(outputDto)
             .addParameter(inputDto, "input")
             .addParameter(lambdaContext, "context")
-            .addStatement("return resource.process(input).await().indefinitely()")
+            .addStatement("$T transportContext = $T.of("
+                    + "context != null ? context.getAwsRequestId() : $S, "
+                    + "context != null ? context.getFunctionName() : $S, "
+                    + "$S)",
+                functionTransportContext, functionTransportContext, "unknown-request", handlerClassName, "invoke-step")
+            .addStatement("$T<$T, $T> source = new $T<>($S, $S)",
+                sourceAdapter, inputDto, inputDto, defaultSourceAdapter,
+                baseName + ".input", "v1")
+            .addStatement("$T<$T, $T> invoke = new $T<>(payload -> resource.process(payload), $S, $S)",
+                invokeAdapter, inputDto, outputDto, localInvokeAdapter,
+                baseName + ".output", "v1")
+            .addStatement("$T<$T, $T> sink = new $T<>()",
+                sinkAdapter, outputDto, outputDto, defaultSinkAdapter)
+            .addStatement("return $T.invoke(input, transportContext, source, invoke, sink)", unaryBridge)
             .build();
         handler.addMethod(handleRequest);
 
