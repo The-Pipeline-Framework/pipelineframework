@@ -73,7 +73,13 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
             .returns(outputDto)
             .addParameter(inputDto, "input")
             .addParameter(lambdaContext, "context")
+            .beginControlFlow("try")
             .addStatement("return resource.run(input).await().indefinitely()")
+            .nextControlFlow("catch ($T e)", RuntimeException.class)
+            .addStatement(
+                "throw new $T(\"Failed handleRequest -> resource.run for input DTO\", e)",
+                RuntimeException.class)
+            .endControlFlow()
             .build();
 
         handler.addMethod(handleRequest);

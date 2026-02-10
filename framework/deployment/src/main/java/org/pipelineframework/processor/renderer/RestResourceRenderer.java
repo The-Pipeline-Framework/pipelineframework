@@ -210,7 +210,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     /**
          * Create the REST POST handler for the step's unary reactive "process" endpoint.
          *
-         * The generated method is a public POST endpoint at path "/process". When `cacheSideEffect`
+         * The generated method is a public POST endpoint at the resolved operation path. When `cacheSideEffect`
          * is true the method forwards the incoming DTO directly to the domain service; when false
          * it converts the incoming DTO to a domain value using the inbound mapper and converts the
          * service result back to a DTO using the outbound mapper.
@@ -222,7 +222,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
          * @param inboundMapperFieldName  name of the injected inbound mapper field used to convert DTO to domain (used when `cacheSideEffect` is false)
          * @param outboundMapperFieldName name of the injected outbound mapper field used to convert domain to DTO (used when `cacheSideEffect` is false)
          * @param cacheSideEffect         if true, bypass mapping and pass DTOs directly to/from the domain service
-         * @return                        a MethodSpec representing a POST "/process" handler that returns a `Uni` of the output DTO
+         * @return                        a MethodSpec representing a POST handler that returns a `Uni` of the output DTO
          */
     private MethodSpec createReactiveServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
@@ -267,7 +267,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-     * Exposes a POST /process endpoint that accepts a single input DTO and returns a JSON stream of output DTOs.
+     * Exposes a POST endpoint at the resolved operation path that accepts a single input DTO and returns a JSON stream of output DTOs.
      *
      * @param model                   the pipeline step model that provides domain types and execution mode
      * @param inboundMapperFieldName  name of the injected inbound mapper used to convert the input DTO to the domain type
@@ -320,7 +320,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     /**
      * Builds the reactive client-streaming JAX-RS "process" method for this REST resource.
      *
-     * The generated method is a public POST endpoint at path "/process" that accepts a Multi of input DTOs,
+     * The generated method is a public POST endpoint at the resolved operation path that accepts a Multi of input DTOs,
      * maps each input DTO to a domain object using the inbound mapper, delegates processing to the domain service,
      * maps the domain result to an output DTO using the outbound mapper, and returns a Uni of output DTOs.
      * If skipValidation is false, REST mappings are validated before generation. If the model's execution mode is
@@ -373,7 +373,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-     * Exposes a bidirectional streaming POST endpoint at "/process" that accepts a stream of input DTOs and returns a stream of output DTOs.
+     * Exposes a bidirectional streaming POST endpoint at the resolved operation path that accepts a stream of input DTOs and returns a stream of output DTOs.
      *
      * @param inputDtoClassName       the DTO type of incoming stream elements
      * @param outputDtoClassName      the DTO type of outgoing stream elements

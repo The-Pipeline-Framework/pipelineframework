@@ -58,19 +58,92 @@ class OrchestratorFunctionHandlerRendererTest {
             false,
             null
         );
-        return new OrchestratorBinding(
-            model,
-            "com.example",
-            "REST",
-            "InputType",
-            "OutputType",
-            false,
-            false,
-            "ProcessAlphaService",
-            StreamingShape.UNARY_UNARY,
-            null,
-            null,
-            null
-        );
+        return new TestOrchestratorBindingBuilder()
+            .model(model)
+            .basePackage("com.example")
+            .transport("REST")
+            .inputTypeName("InputType")
+            .outputTypeName("OutputType")
+            .inputStreaming(false)
+            .outputStreaming(false)
+            .firstStepServiceName("ProcessAlphaService")
+            .firstStepStreamingShape(StreamingShape.UNARY_UNARY)
+            .build();
+    }
+
+    private static final class TestOrchestratorBindingBuilder {
+        private PipelineStepModel model;
+        private String basePackage;
+        private String transport;
+        private String inputTypeName;
+        private String outputTypeName;
+        private boolean inputStreaming;
+        private boolean outputStreaming;
+        private String firstStepServiceName;
+        private StreamingShape firstStepStreamingShape;
+        private String cliName;
+        private String cliDescription;
+        private String cliVersion;
+
+        private TestOrchestratorBindingBuilder model(PipelineStepModel value) {
+            this.model = value;
+            return this;
+        }
+
+        private TestOrchestratorBindingBuilder basePackage(String value) {
+            this.basePackage = value;
+            return this;
+        }
+
+        private TestOrchestratorBindingBuilder transport(String value) {
+            this.transport = value;
+            return this;
+        }
+
+        private TestOrchestratorBindingBuilder inputTypeName(String value) {
+            this.inputTypeName = value;
+            return this;
+        }
+
+        private TestOrchestratorBindingBuilder outputTypeName(String value) {
+            this.outputTypeName = value;
+            return this;
+        }
+
+        private TestOrchestratorBindingBuilder inputStreaming(boolean value) {
+            this.inputStreaming = value;
+            return this;
+        }
+
+        private TestOrchestratorBindingBuilder outputStreaming(boolean value) {
+            this.outputStreaming = value;
+            return this;
+        }
+
+        private TestOrchestratorBindingBuilder firstStepServiceName(String value) {
+            this.firstStepServiceName = value;
+            return this;
+        }
+
+        private TestOrchestratorBindingBuilder firstStepStreamingShape(StreamingShape value) {
+            this.firstStepStreamingShape = value;
+            return this;
+        }
+
+        private OrchestratorBinding build() {
+            return new OrchestratorBinding(
+                model,
+                basePackage,
+                transport,
+                inputTypeName,
+                outputTypeName,
+                inputStreaming,
+                outputStreaming,
+                firstStepServiceName,
+                firstStepStreamingShape,
+                cliName,
+                cliDescription,
+                cliVersion);
+        }
     }
 }

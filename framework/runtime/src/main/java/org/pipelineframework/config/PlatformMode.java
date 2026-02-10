@@ -21,11 +21,13 @@ public enum PlatformMode {
             return Optional.empty();
         }
         String normalized = raw.trim().toUpperCase(Locale.ROOT);
-        return switch (normalized) {
-            case "STANDARD", "COMPUTE" -> Optional.of(COMPUTE);
-            case "LAMBDA", "FUNCTION" -> Optional.of(FUNCTION);
-            default -> Optional.empty();
-        };
+        for (PlatformMode mode : values()) {
+            if (mode.name().equalsIgnoreCase(normalized)
+                || mode.legacyExternalName().equalsIgnoreCase(normalized)) {
+                return Optional.of(mode);
+            }
+        }
+        return Optional.empty();
     }
 
     /**

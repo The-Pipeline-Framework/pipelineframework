@@ -59,6 +59,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
             ctx.getProcessingEnv().getMessager().printMessage(
                 Diagnostic.Kind.ERROR,
                 "pipeline.platform=FUNCTION currently requires pipeline.transport=REST.");
+            return;
         }
         List<PipelineStepModel> steps = ctx.getStepModels();
         if (steps == null || steps.isEmpty()) {

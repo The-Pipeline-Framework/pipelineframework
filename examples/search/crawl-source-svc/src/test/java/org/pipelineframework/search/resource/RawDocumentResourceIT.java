@@ -18,7 +18,7 @@ package org.pipelineframework.search.resource;
 
 import java.util.UUID;
 
-import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.QuarkusIntegrationTest;
 import io.restassured.RestAssured;
 import io.restassured.config.SSLConfig;
 import io.restassured.http.ContentType;
@@ -29,8 +29,8 @@ import org.junit.jupiter.api.Test;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 
-@QuarkusTest
-class ProcessCrawlSourceResourceTest {
+@QuarkusIntegrationTest
+class RawDocumentResourceIT {
 
     @BeforeAll
     static void setUp() {
@@ -49,7 +49,7 @@ class ProcessCrawlSourceResourceTest {
     }
 
     @Test
-    void testProcessCrawlSourceWithValidData() {
+    void testRawDocumentWithValidData() {
         String requestBody =
                 """
                 {
@@ -71,7 +71,7 @@ class ProcessCrawlSourceResourceTest {
     }
 
     @Test
-    void testProcessCrawlSourceWithInvalidUUID() {
+    void testRawDocumentWithInvalidUUID() {
         String requestBody =
                 """
                 {
@@ -89,7 +89,7 @@ class ProcessCrawlSourceResourceTest {
     }
 
     @Test
-    void testProcessCrawlSourceWithMissingRequiredFields() {
+    void testRawDocumentWithMissingRequiredFields() {
         String requestBody =
                 """
                 {

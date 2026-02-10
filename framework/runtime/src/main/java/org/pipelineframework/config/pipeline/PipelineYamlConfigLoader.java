@@ -26,6 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.logging.Logger;
 
 import org.pipelineframework.config.PlatformOverrideResolver;
@@ -137,52 +138,18 @@ public class PipelineYamlConfigLoader {
         }
 
         String basePackage = readString(rootMap, "basePackage");
-        String transport = readString(rootMap, "transport");
-        String platform = readString(rootMap, "platform");
-        boolean fromOverride = false;
-        String transportOverride = resolveTransportOverride();
-        if (transportOverride != null && !transportOverride.isBlank()) {
-            transport = transportOverride;
-            fromOverride = true;
-        }
-        if (transport != null && !transport.isBlank()) {
-            String normalized = TransportOverrideResolver.normalizeKnownTransport(transport);
-            if (normalized != null) {
-                transport = normalized;
-            } else {
-                if (fromOverride) {
-                    LOG.warning("Unknown transport override '" + transport
-                        + "'; defaulting pipeline transport to GRPC.");
-                } else {
-                    LOG.warning("Unknown transport in YAML config '" + transport
-                        + "'; defaulting pipeline transport to GRPC.");
-                }
-                transport = "GRPC";
-            }
-        }
-        boolean platformFromOverride = false;
-        String platformOverride = resolvePlatformOverride();
-        if (platformOverride != null && !platformOverride.isBlank()) {
-            platform = platformOverride;
-            platformFromOverride = true;
-        }
-        if (platform == null || platform.isBlank()) {
-            platform = "COMPUTE";
-        } else {
-            String normalized = PlatformOverrideResolver.normalizeKnownPlatform(platform);
-            if (normalized != null) {
-                platform = normalized;
-            } else {
-                if (platformFromOverride) {
-                    LOG.warning("Unknown platform override '" + platform
-                        + "'; defaulting pipeline platform to COMPUTE.");
-                } else {
-                    LOG.warning("Unknown platform in YAML config '" + platform
-                        + "'; defaulting pipeline platform to COMPUTE.");
-                }
-                platform = "COMPUTE";
-            }
-        }
+        String transport = resolveConfigValue(
+            readString(rootMap, "transport"),
+            this::resolveTransportOverride,
+            TransportOverrideResolver::normalizeKnownTransport,
+            "GRPC",
+            "transport");
+        String platform = resolveConfigValue(
+            readString(rootMap, "platform"),
+            this::resolvePlatformOverride,
+            PlatformOverrideResolver::normalizeKnownPlatform,
+            "COMPUTE",
+            "platform");
         List<PipelineYamlStep> steps = readSteps(rootMap);
         List<PipelineYamlAspect> aspects = readAspects(rootMap);
 
@@ -205,6 +172,37 @@ public class PipelineYamlConfigLoader {
      */
     private String resolvePlatformOverride() {
         return PlatformOverrideResolver.resolveOverride(propertyLookup, envLookup);
+    }
+
+    private String resolveConfigValue(
+            String rawValue,
+            Supplier<String> overrideSupplier,
+            Function<String, String> normalizer,
+            String defaultValue,
+            String label) {
+        String effectiveValue = rawValue;
+        String overrideValue = overrideSupplier == null ? null : overrideSupplier.get();
+        boolean fromOverride = overrideValue != null && !overrideValue.isBlank();
+        if (fromOverride) {
+            effectiveValue = overrideValue;
+        }
+        if (effectiveValue == null || effectiveValue.isBlank()) {
+            return defaultValue;
+        }
+
+        String normalized = normalizer.apply(effectiveValue);
+        if (normalized != null) {
+            return normalized;
+        }
+
+        if (fromOverride) {
+            LOG.warning("Unknown " + label + " override '" + effectiveValue
+                + "'; defaulting pipeline " + label + " to " + defaultValue + ".");
+        } else {
+            LOG.warning("Unknown " + label + " in YAML config '" + effectiveValue
+                + "'; defaulting pipeline " + label + " to " + defaultValue + ".");
+        }
+        return defaultValue;
     }
 
     /**

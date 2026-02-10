@@ -60,33 +60,20 @@ class RestFunctionHandlerRendererTest {
     }
 
     private PipelineStepModel unaryModel() {
-        return new PipelineStepModel.Builder()
-            .serviceName("ProcessParsedDocumentService")
-            .generatedName("ParsedDocumentService")
-            .servicePackage("org.example.search.parse.service")
-            .serviceClassName(ClassName.get("org.example.search.parse.service", "ProcessParsedDocumentService"))
-            .streamingShape(StreamingShape.UNARY_UNARY)
-            .executionMode(ExecutionMode.DEFAULT)
-            .deploymentRole(DeploymentRole.PIPELINE_SERVER)
-            .enabledTargets(java.util.Set.of(GenerationTarget.REST_RESOURCE))
-            .inputMapping(new TypeMapping(
-                ClassName.get("org.example.search.common.domain", "ParsedDocument"),
-                ClassName.get("org.example.search.common.mapper", "ParsedDocumentMapper"),
-                true))
-            .outputMapping(new TypeMapping(
-                ClassName.get("org.example.search.common.domain", "IndexAck"),
-                ClassName.get("org.example.search.common.mapper", "IndexAckMapper"),
-                true))
-            .build();
+        return buildModel(StreamingShape.UNARY_UNARY);
     }
 
     private PipelineStepModel streamingModel() {
+        return buildModel(StreamingShape.UNARY_STREAMING);
+    }
+
+    private PipelineStepModel buildModel(StreamingShape shape) {
         return new PipelineStepModel.Builder()
             .serviceName("ProcessParsedDocumentService")
             .generatedName("ParsedDocumentService")
             .servicePackage("org.example.search.parse.service")
             .serviceClassName(ClassName.get("org.example.search.parse.service", "ProcessParsedDocumentService"))
-            .streamingShape(StreamingShape.UNARY_STREAMING)
+            .streamingShape(shape)
             .executionMode(ExecutionMode.DEFAULT)
             .deploymentRole(DeploymentRole.PIPELINE_SERVER)
             .enabledTargets(java.util.Set.of(GenerationTarget.REST_RESOURCE))

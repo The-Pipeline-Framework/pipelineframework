@@ -19,6 +19,7 @@ package org.pipelineframework.config;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PlatformModeTest {
@@ -27,8 +28,29 @@ class PlatformModeTest {
     void parsesCanonicalAndLegacyAliases() {
         assertEquals(PlatformMode.COMPUTE, PlatformMode.fromStringOptional("COMPUTE").orElseThrow());
         assertEquals(PlatformMode.COMPUTE, PlatformMode.fromStringOptional("STANDARD").orElseThrow());
+        assertEquals(PlatformMode.COMPUTE, PlatformMode.fromStringOptional("compute").orElseThrow());
         assertEquals(PlatformMode.FUNCTION, PlatformMode.fromStringOptional("FUNCTION").orElseThrow());
         assertEquals(PlatformMode.FUNCTION, PlatformMode.fromStringOptional("LAMBDA").orElseThrow());
+        assertEquals(PlatformMode.FUNCTION, PlatformMode.fromStringOptional("lambda").orElseThrow());
+    }
+
+    @Test
+    void rejectsNullBlankAndUnknown() {
+        assertTrue(PlatformMode.fromStringOptional(null).isEmpty());
+        assertTrue(PlatformMode.fromStringOptional("").isEmpty());
+        assertTrue(PlatformMode.fromStringOptional("UNKNOWN").isEmpty());
+    }
+
+    @Test
+    void exposesExpectedPredicatesAndExternalNames() {
+        assertTrue(PlatformMode.FUNCTION.isFunction());
+        assertFalse(PlatformMode.FUNCTION.isCompute());
+        assertTrue(PlatformMode.COMPUTE.isCompute());
+        assertFalse(PlatformMode.COMPUTE.isFunction());
+        assertEquals("FUNCTION", PlatformMode.FUNCTION.externalName());
+        assertEquals("LAMBDA", PlatformMode.FUNCTION.legacyExternalName());
+        assertEquals("COMPUTE", PlatformMode.COMPUTE.externalName());
+        assertEquals("STANDARD", PlatformMode.COMPUTE.legacyExternalName());
     }
 
     @Test
@@ -37,4 +59,3 @@ class PlatformModeTest {
         assertTrue(PlatformMode.COMPUTE.isStandard());
     }
 }
-

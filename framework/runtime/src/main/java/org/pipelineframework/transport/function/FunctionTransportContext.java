@@ -38,6 +38,7 @@ public record FunctionTransportContext(
      * Creates a context with immutable attributes.
      */
     public FunctionTransportContext {
+        Objects.requireNonNull(requestId, "requestId must not be null");
         attributes = attributes == null
             ? Map.of()
             : Map.copyOf(new LinkedHashMap<>(attributes));
@@ -53,10 +54,9 @@ public record FunctionTransportContext(
      */
     public static FunctionTransportContext of(String requestId, String functionName, String stage) {
         return new FunctionTransportContext(
-            requestId,
+            Objects.requireNonNull(requestId, "requestId must not be null"),
             Objects.requireNonNullElse(functionName, ""),
             Objects.requireNonNullElse(stage, ""),
             Map.of());
     }
 }
-

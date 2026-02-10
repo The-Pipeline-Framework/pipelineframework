@@ -60,6 +60,9 @@ public record BatchingPolicy(
             throw new IllegalArgumentException("maxInFlight must be > 0");
         }
         Objects.requireNonNull(maxWait, "maxWait is required");
+        if (maxWait.compareTo(Duration.ZERO) <= 0) {
+            throw new IllegalArgumentException("maxWait must be > 0");
+        }
         Objects.requireNonNull(overflowPolicy, "overflowPolicy is required");
     }
 
@@ -77,4 +80,3 @@ public record BatchingPolicy(
             BatchOverflowPolicy.BUFFER);
     }
 }
-

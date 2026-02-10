@@ -102,6 +102,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
 
         // Initialize role metadata generator
         RoleMetadataGenerator roleMetadataGenerator = new RoleMetadataGenerator(ctx.getProcessingEnv());
+        PipelinePlatformMetadataGenerator platformMetadataGenerator =
+            new PipelinePlatformMetadataGenerator(ctx.getProcessingEnv());
 
         // Get the cache key generator
         ClassName cacheKeyGenerator = resolveCacheKeyGenerator(ctx);
@@ -171,8 +173,6 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             }
         }
         try {
-            PipelinePlatformMetadataGenerator platformMetadataGenerator =
-                new PipelinePlatformMetadataGenerator(ctx.getProcessingEnv());
             platformMetadataGenerator.writePlatformMetadata(ctx);
         } catch (Exception e) {
             if (ctx.getProcessingEnv() != null) {

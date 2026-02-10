@@ -74,4 +74,4 @@ CrawlRequest request = CrawlRequestOptions.builder()
 
 ## Architecture
 
-This application follows the pipeline pattern with multiple microservices, each responsible for a specific step in the processing workflow. By default it uses REST transport with resource-oriented endpoints, and the orchestrator coordinates the overall pipeline execution.
+This application follows the pipeline pattern with multiple microservices, each responsible for a specific step in the processing workflow. By default, it uses REST transport with resource-oriented endpoints, and the orchestrator coordinates the overall pipeline execution.

@@ -14,22 +14,17 @@
  * limitations under the License.
  */
 
-package org.pipelineframework.search.orchestrator.service;
+package org.pipelineframework.search.lambda;
 
-import java.io.IOException;
+import com.amazonaws.services.lambda.runtime.Context;
+import com.amazonaws.services.lambda.runtime.RequestHandler;
 
-import io.quarkus.amazon.lambda.runtime.MockEventServer;
-import org.junit.jupiter.api.Test;
-
-import static org.junit.jupiter.api.Assertions.assertTrue;
-
-class LambdaMockEventServerSmokeTest {
-
-    @Test
-    void startsAndStopsOnEphemeralPort() throws IOException {
-        try (MockEventServer server = new MockEventServer()) {
-            server.start(0);
-            assertTrue(server.getPort() > 0, "Expected mock lambda event server to bind to an ephemeral port");
-        }
+/**
+ * Test-time fallback handler so Quarkus Lambda augmentation can run in COMPUTE mode modules.
+ */
+public class NoopLambdaHandler implements RequestHandler<Object, Object> {
+    @Override
+    public Object handleRequest(Object input, Context context) {
+        return input;
     }
 }

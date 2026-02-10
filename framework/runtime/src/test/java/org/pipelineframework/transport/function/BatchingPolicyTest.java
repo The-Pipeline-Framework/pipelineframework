@@ -29,6 +29,8 @@ class BatchingPolicyTest {
     void createsDefaultPolicy() {
         BatchingPolicy policy = BatchingPolicy.defaultPolicy();
         assertEquals(128, policy.maxItems());
+        assertEquals(1_048_576, policy.maxBytes());
+        assertEquals(Duration.ofMillis(250), policy.maxWait());
         assertEquals(16, policy.maxInFlight());
         assertEquals(BatchOverflowPolicy.BUFFER, policy.overflowPolicy());
     }
@@ -38,5 +40,22 @@ class BatchingPolicyTest {
         assertThrows(IllegalArgumentException.class, () ->
             new BatchingPolicy(0, 1024, Duration.ofMillis(100), 1, BatchOverflowPolicy.BUFFER));
     }
-}
 
+    @Test
+    void rejectsNonPositiveMaxBytes() {
+        assertThrows(IllegalArgumentException.class, () ->
+            new BatchingPolicy(1, 0, Duration.ofMillis(100), 1, BatchOverflowPolicy.BUFFER));
+    }
+
+    @Test
+    void rejectsNonPositiveMaxWait() {
+        assertThrows(IllegalArgumentException.class, () ->
+            new BatchingPolicy(1, 1024, Duration.ZERO, 1, BatchOverflowPolicy.BUFFER));
+    }
+
+    @Test
+    void rejectsNullOverflowPolicy() {
+        assertThrows(NullPointerException.class, () ->
+            new BatchingPolicy(1, 1024, Duration.ofMillis(100), 1, null));
+    }
+}

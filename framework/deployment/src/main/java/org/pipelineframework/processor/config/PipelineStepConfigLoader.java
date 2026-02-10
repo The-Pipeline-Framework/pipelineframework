@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import javax.annotation.processing.Messager;
+import javax.tools.Diagnostic;
 
 import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
@@ -20,12 +22,13 @@ import org.yaml.snakeyaml.Yaml;
 public class PipelineStepConfigLoader {
     private final Function<String, String> propertyLookup;
     private final Function<String, String> envLookup;
+    private final Messager messager;
 
     /**
      * Construct a PipelineStepConfigLoader that uses system properties and environment variables.
      */
     public PipelineStepConfigLoader() {
-        this(System::getProperty, System::getenv);
+        this(System::getProperty, System::getenv, null);
     }
 
     /**
@@ -35,8 +38,23 @@ public class PipelineStepConfigLoader {
      * @param envLookup function that accepts an environment variable name and returns its value; if `null`, a lookup that always returns `null` is used
      */
     public PipelineStepConfigLoader(Function<String, String> propertyLookup, Function<String, String> envLookup) {
+        this(propertyLookup, envLookup, null);
+    }
+
+    /**
+     * Create a PipelineStepConfigLoader with injectable lookups and optional messager.
+     *
+     * @param propertyLookup function that accepts a property name and returns its value; if `null`, a lookup that always returns `null` is used
+     * @param envLookup function that accepts an environment variable name and returns its value; if `null`, a lookup that always returns `null` is used
+     * @param messager optional annotation processing messager for warnings
+     */
+    public PipelineStepConfigLoader(
+            Function<String, String> propertyLookup,
+            Function<String, String> envLookup,
+            Messager messager) {
         this.propertyLookup = propertyLookup == null ? key -> null : propertyLookup;
         this.envLookup = envLookup == null ? key -> null : envLookup;
+        this.messager = messager;
     }
 
     /**
@@ -100,6 +118,9 @@ public class PipelineStepConfigLoader {
         if (normalizedPlatform != null) {
             platform = normalizedPlatform;
         } else {
+            if (platform != null && !platform.isBlank()) {
+                warn("Unknown pipeline platform '" + platform + "' in step config; defaulting to COMPUTE.");
+            }
             platform = "COMPUTE";
         }
         String platformOverride = resolvePlatformOverride();
@@ -107,6 +128,8 @@ public class PipelineStepConfigLoader {
             String normalizedOverride = PlatformOverrideResolver.normalizeKnownPlatform(platformOverride);
             if (normalizedOverride != null) {
                 platform = normalizedOverride;
+            } else {
+                warn("Unknown pipeline.platform override '" + platformOverride + "'; defaulting to COMPUTE.");
             }
         }
         Object stepsValue = rootMap.get("steps");
@@ -171,5 +194,11 @@ public class PipelineStepConfigLoader {
      */
     private String resolvePlatformOverride() {
         return PlatformOverrideResolver.resolveOverride(propertyLookup, envLookup);
+    }
+
+    private void warn(String message) {
+        if (messager != null) {
+            messager.printMessage(Diagnostic.Kind.WARNING, message);
+        }
     }
 }

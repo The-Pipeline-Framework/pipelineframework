@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
@@ -35,11 +36,25 @@ import org.yaml.snakeyaml.Yaml;
 public class PipelineTemplateConfigLoader {
     private static final String DEFAULT_TRANSPORT = "GRPC";
     private static final PipelinePlatform DEFAULT_PLATFORM = PipelinePlatform.COMPUTE;
+    private final Function<String, String> propertyLookup;
+    private final Function<String, String> envLookup;
 
     /**
      * Creates a new PipelineTemplateConfigLoader.
      */
     public PipelineTemplateConfigLoader() {
+        this(System::getProperty, System::getenv);
+    }
+
+    /**
+     * Creates a loader with custom property/environment lookup functions.
+     *
+     * @param propertyLookup lookup used for system properties
+     * @param envLookup lookup used for environment variables
+     */
+    public PipelineTemplateConfigLoader(Function<String, String> propertyLookup, Function<String, String> envLookup) {
+        this.propertyLookup = propertyLookup == null ? key -> null : propertyLookup;
+        this.envLookup = envLookup == null ? key -> null : envLookup;
     }
 
     /**
@@ -199,7 +214,7 @@ public class PipelineTemplateConfigLoader {
      * @return the resolved transport override value, or {@code null} if neither is set
      */
     private String resolveTransportOverride() {
-        return TransportOverrideResolver.resolveOverride(System::getProperty, System::getenv);
+        return TransportOverrideResolver.resolveOverride(propertyLookup, envLookup);
     }
 
     /**
@@ -211,7 +226,7 @@ public class PipelineTemplateConfigLoader {
      * @return the resolved platform override value, or {@code null} if neither is set
      */
     private String resolvePlatformOverride() {
-        return PlatformOverrideResolver.resolveOverride(System::getProperty, System::getenv);
+        return PlatformOverrideResolver.resolveOverride(propertyLookup, envLookup);
     }
 
     /**

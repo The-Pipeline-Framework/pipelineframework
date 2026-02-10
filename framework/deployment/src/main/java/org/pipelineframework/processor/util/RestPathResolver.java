@@ -3,6 +3,7 @@ package org.pipelineframework.processor.util;
 import java.util.Locale;
 import java.util.Map;
 import javax.annotation.processing.ProcessingEnvironment;
+import javax.tools.Diagnostic;
 
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.TypeName;
@@ -56,8 +57,24 @@ public final class RestPathResolver {
         if (raw == null || raw.isBlank()) {
             raw = System.getProperty(REST_NAMING_STRATEGY_OPTION);
         }
-        if (raw != null && "LEGACY".equalsIgnoreCase(raw.trim())) {
+        if (raw == null || raw.isBlank()) {
+            raw = System.getenv(REST_NAMING_STRATEGY_OPTION);
+        }
+        if (raw == null || raw.isBlank()) {
+            return NamingStrategy.RESOURCEFUL;
+        }
+        String trimmed = raw.trim();
+        if ("LEGACY".equalsIgnoreCase(trimmed)) {
             return NamingStrategy.LEGACY;
+        }
+        if ("RESOURCEFUL".equalsIgnoreCase(trimmed)) {
+            return NamingStrategy.RESOURCEFUL;
+        }
+        String warning = "Unknown REST naming strategy '" + trimmed + "'; defaulting to RESOURCEFUL.";
+        if (processingEnv != null && processingEnv.getMessager() != null) {
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.WARNING, warning);
+        } else {
+            System.err.println(warning);
         }
         return NamingStrategy.RESOURCEFUL;
     }
@@ -204,6 +221,7 @@ public final class RestPathResolver {
             return base;
         }
         String result = base;
+        // Remove repeated trailing type suffixes while ensuring at least one non-type token remains.
         while (result.endsWith(typeName) && result.length() > typeName.length()) {
             result = result.substring(0, result.length() - typeName.length());
         }
@@ -255,6 +273,7 @@ public final class RestPathResolver {
             .replaceAll("([A-Z]+)([A-Z][a-z])", "$1-$2")
             .replaceAll("([a-z0-9])([A-Z])", "$1-$2")
             .replaceAll("[^A-Za-z0-9]+", "-")
+            .replaceAll("-{2,}", "-")
             .toLowerCase(Locale.ROOT);
         boundaryNormalized = boundaryNormalized.replaceAll("^-+", "").replaceAll("-+$", "");
         return boundaryNormalized;

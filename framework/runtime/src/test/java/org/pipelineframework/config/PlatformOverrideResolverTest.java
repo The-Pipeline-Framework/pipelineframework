@@ -35,5 +35,14 @@ class PlatformOverrideResolverTest {
     void rejectsUnknownPlatform() {
         assertNull(PlatformOverrideResolver.normalizeKnownPlatform("EDGE"));
     }
-}
 
+    @Test
+    void rejectsNullPlatform() {
+        assertNull(PlatformOverrideResolver.normalizeKnownPlatform(null));
+    }
+
+    @Test
+    void rejectsEmptyPlatform() {
+        assertNull(PlatformOverrideResolver.normalizeKnownPlatform(""));
+    }
+}

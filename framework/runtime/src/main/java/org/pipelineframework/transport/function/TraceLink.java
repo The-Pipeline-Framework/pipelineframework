@@ -16,6 +16,8 @@
 
 package org.pipelineframework.transport.function;
 
+import java.util.Objects;
+
 /**
  * Link to the previous lineage item.
  *
@@ -58,7 +60,7 @@ public record TraceLink(
      * @return inline link
      */
     public static TraceLink inline(String previousItemId, Object previousPayloadInline) {
+        Objects.requireNonNull(previousPayloadInline, "previousPayloadInline must not be null");
         return new TraceLink(previousItemId, previousPayloadInline, TraceLineageMode.INLINE);
     }
 }
-

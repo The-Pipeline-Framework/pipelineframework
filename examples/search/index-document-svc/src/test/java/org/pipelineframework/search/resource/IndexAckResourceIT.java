@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Mariano Barcia
+ * Copyright (c) 2023-2026 Mariano Barcia
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -49,7 +49,7 @@ class IndexAckResourceIT {
     }
 
     @Test
-    void testProcessIndexDocumentWithValidData() {
+    void testIndexAckWithValidData() {
         String requestBody =
                 """
                 {
@@ -72,7 +72,7 @@ class IndexAckResourceIT {
     }
 
     @Test
-    void testProcessIndexDocumentWithInvalidUUID() {
+    void testIndexAckWithInvalidUUID() {
         String requestBody =
                 """
                 {
@@ -86,11 +86,11 @@ class IndexAckResourceIT {
                 .when()
                 .post("/api/v1/index-ack/")
                 .then()
-                .statusCode(500);
+                .statusCode(400);
     }
 
     @Test
-    void testProcessIndexDocumentWithMissingRequiredFields() {
+    void testIndexAckWithMissingRequiredFields() {
         String requestBody =
                 """
                 {

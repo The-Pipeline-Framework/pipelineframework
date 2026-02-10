@@ -1,8 +1,9 @@
 package org.pipelineframework.config;
 
-import java.util.Locale;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Shared platform override and normalization helpers.
@@ -10,7 +11,9 @@ import java.util.function.Function;
 public final class PlatformOverrideResolver {
     public static final String PLATFORM_PROPERTY_KEY = "pipeline.platform";
     public static final String PLATFORM_ENV_KEY = "PIPELINE_PLATFORM";
-    public static final Set<String> KNOWN_PLATFORMS = Set.of("COMPUTE", "FUNCTION");
+    public static final Set<String> KNOWN_PLATFORMS = Stream.of(PlatformMode.values())
+        .map(PlatformMode::name)
+        .collect(Collectors.toUnmodifiableSet());
 
     private PlatformOverrideResolver() {
     }
@@ -47,18 +50,6 @@ public final class PlatformOverrideResolver {
      * @return normalized platform or null when unknown
      */
     public static String normalizeKnownPlatform(String rawPlatform) {
-        if (rawPlatform == null) {
-            return null;
-        }
-        String trimmed = rawPlatform.trim();
-        if (trimmed.isBlank()) {
-            return null;
-        }
-        String normalized = trimmed.toUpperCase(Locale.ROOT);
-        return switch (normalized) {
-            case "STANDARD", "COMPUTE" -> "COMPUTE";
-            case "LAMBDA", "FUNCTION" -> "FUNCTION";
-            default -> null;
-        };
+        return PlatformMode.fromStringOptional(rawPlatform).map(Enum::name).orElse(null);
     }
 }

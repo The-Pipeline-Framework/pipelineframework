@@ -38,9 +38,16 @@ class PipelineYamlConfigPlatformTest {
             "FUNCTION",
             List.of(),
             List.of());
+        PipelineYamlConfig fromStandard = new PipelineYamlConfig(
+            "org.example",
+            "REST",
+            "STANDARD",
+            List.of(),
+            List.of());
 
         assertEquals("FUNCTION", fromLegacy.platform());
         assertEquals("FUNCTION", fromCanonical.platform());
+        assertEquals("COMPUTE", fromStandard.platform());
     }
 
     @Test
@@ -54,4 +61,3 @@ class PipelineYamlConfigPlatformTest {
         assertEquals("COMPUTE", config.platform());
     }
 }
-

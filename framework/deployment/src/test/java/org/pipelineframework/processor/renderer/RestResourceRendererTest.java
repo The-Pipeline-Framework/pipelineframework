@@ -169,17 +169,9 @@ class RestResourceRendererTest {
                 true))
             .build();
 
-        RestBinding binding = new RestBinding(model, null);
-        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        GenerationContext context = new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
-            java.util.Set.of(), null, null);
-
-        RestResourceRenderer renderer = new RestResourceRenderer();
-        renderer.render(binding, context);
-
-        Path generatedSource = tempDir.resolve(
+        String source = renderAndReadSource(
+            new RestBinding(model, null),
             "org/pipelineframework/csv/service/pipeline/PersistenceAckPaymentSentSideEffectResource.java");
-        String source = Files.readString(generatedSource);
         assertTrue(source.contains("@Path(\"/api/v1/ack-payment-sent/persistence\")"));
     }
 

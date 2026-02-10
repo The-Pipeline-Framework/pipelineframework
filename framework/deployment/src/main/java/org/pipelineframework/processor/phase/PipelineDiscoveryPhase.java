@@ -145,16 +145,14 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Resolve the pipeline transport mode from the module's pipeline step configuration.
+     * Resolve pipeline step configuration from the module's pipeline YAML.
      *
-     * Locates a pipeline YAML under the context's module directory, reads the configured
-     * transport name and converts it to a TransportMode. If the configuration is missing,
-     * the transport value is blank, unrecognized, or an error occurs while loading the
-     * configuration, this method returns TransportMode.GRPC and emits a warning via the
-     * processing environment when available.
+     * Locates a pipeline YAML under the context's module directory and loads its step-level
+     * configuration (base package, transport, platform, input/output types). When the file is
+     * missing or cannot be loaded, returns a default non-null configuration.
      *
      * @param ctx the pipeline compilation context used to locate the module directory and to report warnings
-     * @return the determined TransportMode; defaults to {@link TransportMode#GRPC} when configuration is missing, blank, unknown, or on load failure
+     * @return a non-null {@link org.pipelineframework.processor.config.PipelineStepConfigLoader.StepConfig}
      */
     private PipelineStepConfigLoader.StepConfig loadPipelineStepConfig(PipelineCompilationContext ctx) {
         PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
@@ -164,7 +162,10 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
             return DEFAULT_STEP_CONFIG;
         }
 
-        PipelineStepConfigLoader stepLoader = new PipelineStepConfigLoader();
+        PipelineStepConfigLoader stepLoader = new PipelineStepConfigLoader(
+            System::getProperty,
+            System::getenv,
+            ctx.getProcessingEnv() == null ? null : ctx.getProcessingEnv().getMessager());
         try {
             return stepLoader.load(configPath.get());
         } catch (Exception e) {
@@ -179,7 +180,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     private TransportMode loadPipelineTransport(
         PipelineCompilationContext ctx,
         PipelineStepConfigLoader.StepConfig stepConfig) {
-        String transport = stepConfig == null ? null : stepConfig.transport();
+        String transport = stepConfig.transport();
         if (transport == null || transport.isBlank()) {
             return TransportMode.GRPC;
         }
@@ -197,7 +198,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     private PlatformMode loadPipelinePlatform(
         PipelineCompilationContext ctx,
         PipelineStepConfigLoader.StepConfig stepConfig) {
-        String platform = stepConfig == null ? null : stepConfig.platform();
+        String platform = stepConfig.platform();
         if (platform == null || platform.isBlank()) {
             return PlatformMode.COMPUTE;
         }
@@ -229,7 +230,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         List<PipelineOrchestratorModel> models = new ArrayList<>();
         
         for (Element element : orchestratorElements) {
-            PipelineOrchestrator annotation = resolveOrchestratorAnnotation(orchestratorElements);
+            PipelineOrchestrator annotation = resolveOrchestratorAnnotation(element);
             if (annotation != null) {
                 // For now, we'll create a simple model based on the annotation
                 // In a real implementation, this would extract more detailed information
@@ -266,17 +267,11 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @param orchestratorElements elements to search for a `PipelineOrchestrator` annotation; may be null or empty
      * @return the `PipelineOrchestrator` annotation from the first element that has one, or `null` if none is found
      */
-    private PipelineOrchestrator resolveOrchestratorAnnotation(Set<? extends Element> orchestratorElements) {
-        if (orchestratorElements == null || orchestratorElements.isEmpty()) {
+    private PipelineOrchestrator resolveOrchestratorAnnotation(Element orchestratorElement) {
+        if (orchestratorElement == null) {
             return null;
         }
-        for (Element element : orchestratorElements) {
-            PipelineOrchestrator annotation = element.getAnnotation(PipelineOrchestrator.class);
-            if (annotation != null) {
-                return annotation;
-            }
-        }
-        return null;
+        return orchestratorElement.getAnnotation(PipelineOrchestrator.class);
     }
 
     /**

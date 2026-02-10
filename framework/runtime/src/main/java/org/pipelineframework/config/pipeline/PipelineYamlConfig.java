@@ -52,10 +52,6 @@ public record PipelineYamlConfig(
                         + "(legacy aliases: STANDARD, LAMBDA).");
             }
         }
-        if (normalizedPlatform.isBlank()) {
-            throw new IllegalArgumentException(
-                "Invalid platform '" + platform + "'. Allowed values: COMPUTE, FUNCTION.");
-        }
         platform = normalizedPlatform;
     }
 

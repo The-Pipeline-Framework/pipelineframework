@@ -48,10 +48,7 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
         ClassName roleEnum = ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role");
 
         String serviceClassName = model.generatedName();
-        String baseName = serviceClassName.replace("Service", "");
-        if (baseName.endsWith("Reactive")) {
-            baseName = baseName.substring(0, baseName.length() - "Reactive".length());
-        }
+        String baseName = removeSuffix(removeSuffix(serviceClassName, "Service"), "Reactive");
         String resourceClassName = baseName + PipelineStepProcessor.REST_RESOURCE_SUFFIX;
         String handlerClassName = baseName + "FunctionHandler";
 
@@ -98,21 +95,39 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
         if (domainType == null) {
             return ClassName.OBJECT;
         }
-        String domainTypeStr = domainType.toString();
-        String dtoTypeStr = domainTypeStr
-            .replace(".domain.", ".dto.")
-            .replace(".service.", ".dto.");
-        if (!dtoTypeStr.equals(domainTypeStr)) {
-            int lastDot = dtoTypeStr.lastIndexOf('.');
-            String packageName = lastDot > 0 ? dtoTypeStr.substring(0, lastDot) : "";
-            String simpleName = lastDot > 0 ? dtoTypeStr.substring(lastDot + 1) : dtoTypeStr;
-            String dtoSimpleName = simpleName.endsWith("Dto") ? simpleName : simpleName + "Dto";
-            return ClassName.get(packageName, dtoSimpleName);
+        if (domainType instanceof ClassName className) {
+            String dtoSimpleName = className.simpleName().endsWith("Dto")
+                ? className.simpleName()
+                : className.simpleName() + "Dto";
+            return ClassName.get(rewritePackageToDto(className.packageName()), dtoSimpleName);
         }
+
+        String domainTypeStr = domainType.toString();
         int lastDot = domainTypeStr.lastIndexOf('.');
         String packageName = lastDot > 0 ? domainTypeStr.substring(0, lastDot) : "";
         String simpleName = lastDot > 0 ? domainTypeStr.substring(lastDot + 1) : domainTypeStr;
         String dtoSimpleName = simpleName.endsWith("Dto") ? simpleName : simpleName + "Dto";
-        return ClassName.get(packageName, dtoSimpleName);
+        return ClassName.get(rewritePackageToDto(packageName), dtoSimpleName);
+    }
+
+    private String rewritePackageToDto(String packageName) {
+        if (packageName == null || packageName.isBlank()) {
+            return "";
+        }
+        String[] segments = packageName.split("\\.");
+        for (int i = 0; i < segments.length; i++) {
+            if ("domain".equals(segments[i]) || "service".equals(segments[i])) {
+                segments[i] = "dto";
+                break;
+            }
+        }
+        return String.join(".", segments);
+    }
+
+    private String removeSuffix(String value, String suffix) {
+        if (value == null || suffix == null || suffix.isBlank()) {
+            return value;
+        }
+        return value.endsWith(suffix) ? value.substring(0, value.length() - suffix.length()) : value;
     }
 }

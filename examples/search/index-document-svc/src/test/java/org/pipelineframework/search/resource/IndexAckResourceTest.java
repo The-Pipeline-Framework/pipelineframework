@@ -30,7 +30,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 
 @QuarkusTest
-class ProcessTokenizeContentResourceTest {
+class IndexAckResourceTest {
 
     @BeforeAll
     static void setUp() {
@@ -39,7 +39,7 @@ class ProcessTokenizeContentResourceTest {
         RestAssured.config =
                 RestAssured.config().sslConfig(SSLConfig.sslConfig().relaxedHTTPSValidation());
         RestAssured.port =
-                Integer.parseInt(System.getProperty("quarkus.http.test-ssl-port", "8446"));
+                Integer.parseInt(System.getProperty("quarkus.http.test-ssl-port", "8447"));
     }
 
     @AfterAll
@@ -49,12 +49,12 @@ class ProcessTokenizeContentResourceTest {
     }
 
     @Test
-    void testProcessTokenizeContentWithValidData() {
+    void testIndexAckWithValidData() {
         String requestBody =
                 """
                 {
                   "docId": "%s",
-                  "content": "Search pipeline content for tokenization."
+                  "tokens": "search pipeline tokens"
                 }
                 """
                         .formatted(UUID.randomUUID());
@@ -62,34 +62,35 @@ class ProcessTokenizeContentResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/token-batch/")
+                .post("/api/v1/index-ack/")
                 .then()
                 .statusCode(200)
                 .body("docId", notNullValue())
-                .body("tokens", notNullValue())
-                .body("tokenizedAt", notNullValue());
+                .body("indexVersion", notNullValue())
+                .body("indexedAt", notNullValue())
+                .body("success", notNullValue());
     }
 
     @Test
-    void testProcessTokenizeContentWithInvalidUUID() {
+    void testIndexAckWithInvalidUUID() {
         String requestBody =
                 """
                 {
                   "docId": "invalid-uuid",
-                  "content": "Search pipeline content for tokenization."
+                  "tokens": "search pipeline tokens"
                 }
                 """;
 
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/token-batch/")
+                .post("/api/v1/index-ack/")
                 .then()
                 .statusCode(400);
     }
 
     @Test
-    void testProcessTokenizeContentWithMissingRequiredFields() {
+    void testIndexAckWithMissingRequiredFields() {
         String requestBody =
                 """
                 {
@@ -101,7 +102,7 @@ class ProcessTokenizeContentResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/token-batch/")
+                .post("/api/v1/index-ack/")
                 .then()
                 .statusCode(400);
     }

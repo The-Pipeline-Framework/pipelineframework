@@ -52,11 +52,6 @@ public class RestExceptionMapper {
      */
     @ServerExceptionMapper
     public RestResponse<String> handleException(Exception ex) {
-        Throwable rootCause = rootCause(ex);
-        if (rootCause instanceof IllegalArgumentException) {
-            LOG.warn("Invalid request", ex);
-            return RestResponse.status(Response.Status.BAD_REQUEST, "Invalid request");
-        }
         if (ex instanceof CacheMissException) {
             LOG.warn("Required cache entry missing", ex);
             return RestResponse.status(Response.Status.PRECONDITION_FAILED, ex.getMessage());
@@ -68,6 +63,11 @@ public class RestExceptionMapper {
         if (ex instanceof NotFoundException) {
             LOG.debug("Request did not match a REST endpoint", ex);
             return RestResponse.status(Response.Status.NOT_FOUND, "Not Found");
+        }
+        Throwable rootCause = rootCause(ex);
+        if (rootCause instanceof IllegalArgumentException) {
+            LOG.warn("Invalid request", ex);
+            return RestResponse.status(Response.Status.BAD_REQUEST, "Invalid request");
         }
         LOG.error("Unexpected error processing request", ex);
         return RestResponse.status(Response.Status.INTERNAL_SERVER_ERROR, "An unexpected error occurred");

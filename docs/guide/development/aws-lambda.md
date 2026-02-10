@@ -60,9 +60,9 @@ TPF now defines function-transport runtime contracts for native Lambda/event-dri
 
 These abstractions separate:
 
-1. Event ingress -> reactive stream (`SourceAdapter`)
+1. Event ingress → reactive stream (`SourceAdapter`)
 2. Orchestrator-to-step invocation across function boundaries (`InvokeAdapter`)
-3. Reactive output -> egress target (`SinkAdapter`)
+3. Reactive output → egress target (`SinkAdapter`)
 
 `TraceEnvelope` carries lineage, payload model/version, and idempotency metadata without forcing
 application DTOs to become envelope types.

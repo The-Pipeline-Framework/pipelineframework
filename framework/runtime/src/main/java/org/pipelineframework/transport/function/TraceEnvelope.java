@@ -47,6 +47,32 @@ public record TraceEnvelope<T>(
     Instant occurredAt,
     Map<String, String> meta
 ) {
+    private TraceEnvelope(
+        String traceId,
+        String spanId,
+        String itemId,
+        TraceLink previousItemRef,
+        String payloadModel,
+        String payloadModelVersion,
+        String idempotencyKey,
+        T payload,
+        Instant occurredAt,
+        Map<String, String> meta,
+        boolean immutableMeta
+    ) {
+        this(
+            traceId,
+            spanId,
+            itemId,
+            previousItemRef,
+            payloadModel,
+            payloadModelVersion,
+            idempotencyKey,
+            payload,
+            occurredAt,
+            immutableMeta ? meta : meta == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(meta)));
+    }
+
     /**
      * Creates a validated immutable envelope.
      */
@@ -133,7 +159,7 @@ public record TraceEnvelope<T>(
             newIdempotencyKey,
             newPayload,
             Instant.now(),
-            meta);
+            meta,
+            true);
     }
 }
-

@@ -277,18 +277,7 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-amazon-lambda-deployment</artifactId>
-            <optional>true</optional>
-        </dependency>
-        <!-- Quarkus core/dev & security (needed by Lambda dev/test integration) -->
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-devservices-deployment</artifactId>
-            <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-security-deployment</artifactId>
-            <optional>true</optional>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

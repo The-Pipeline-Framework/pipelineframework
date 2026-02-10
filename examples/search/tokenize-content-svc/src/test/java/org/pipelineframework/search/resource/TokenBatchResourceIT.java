@@ -30,7 +30,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 
 @QuarkusIntegrationTest
-class ProcessTokenizeContentResourceIT {
+class TokenBatchResourceIT {
 
     @BeforeAll
     static void setUp() {
@@ -49,7 +49,7 @@ class ProcessTokenizeContentResourceIT {
     }
 
     @Test
-    void testProcessTokenizeContentWithValidData() {
+    void testTokenBatchWithValidData() {
         String requestBody =
                 """
                 {
@@ -71,7 +71,7 @@ class ProcessTokenizeContentResourceIT {
     }
 
     @Test
-    void testProcessTokenizeContentWithInvalidUUID() {
+    void testTokenBatchWithInvalidUUID() {
         String requestBody =
                 """
                 {
@@ -85,11 +85,11 @@ class ProcessTokenizeContentResourceIT {
                 .when()
                 .post("/api/v1/token-batch/")
                 .then()
-                .statusCode(500);
+                .statusCode(400);
     }
 
     @Test
-    void testProcessTokenizeContentWithMissingRequiredFields() {
+    void testTokenBatchWithMissingRequiredFields() {
         String requestBody =
                 """
                 {
