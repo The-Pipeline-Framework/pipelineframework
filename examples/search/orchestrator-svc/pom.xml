@@ -51,6 +51,11 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-grpc</artifactId>
         </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-amazon-lambda</artifactId>
+            <scope>${pipeline.lambda.dependency.scope}</scope>
+        </dependency>
         <!-- Tests -->
         <dependency>
             <groupId>io.quarkus</groupId>

@@ -87,6 +87,7 @@ jobs:
             -Dpipeline.platform=FUNCTION \
             -Dpipeline.transport=REST \
             -Dpipeline.rest.naming.strategy=RESOURCEFUL \
+            -Dpipeline.lambda.dependency.scope=compile \
             -DskipTests \
             compile
           ./mvnw "${maven_args[@]}" -f examples/search/pom.xml \
@@ -94,6 +95,7 @@ jobs:
             -Dpipeline.platform=FUNCTION \
             -Dpipeline.transport=REST \
             -Dpipeline.rest.naming.strategy=RESOURCEFUL \
+            -Dpipeline.lambda.dependency.scope=compile \
             -Dtest=LambdaMockEventServerSmokeTest \
             test
 
@@ -171,6 +173,7 @@ jobs:
             -Dpipeline.platform=FUNCTION \
             -Dpipeline.transport=REST \
             -Dpipeline.rest.naming.strategy=RESOURCEFUL \
+            -Dpipeline.lambda.dependency.scope=compile \
             -Dquarkus.container-image.build=false \
             -Dquarkus.native.enabled=true \
             -Pnative \

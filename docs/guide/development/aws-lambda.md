@@ -11,7 +11,11 @@ This page is the canonical TPF guide for building pipeline applications for AWS 
 Set platform mode during build:
 
 ```bash
-./mvnw -f <app-parent>/pom.xml -Dpipeline.platform=FUNCTION -Dpipeline.transport=REST clean verify
+./mvnw -f <app-parent>/pom.xml \
+  -Dpipeline.platform=FUNCTION \
+  -Dpipeline.transport=REST \
+  -Dpipeline.lambda.dependency.scope=compile \
+  clean verify
 ```
 
 TPF uses build switches for this mode. It does not require a dedicated Maven profile.

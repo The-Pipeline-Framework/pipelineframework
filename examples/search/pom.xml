@@ -47,6 +47,7 @@
         <pipeline.transportArg>-Apipeline.transport=${pipeline.transport}</pipeline.transportArg>
         <pipeline.platform>COMPUTE</pipeline.platform>
         <pipeline.platformArg>-Apipeline.platform=${pipeline.platform}</pipeline.platformArg>
+        <pipeline.lambda.dependency.scope>provided</pipeline.lambda.dependency.scope>
         <pipeline.rest.naming.strategy>RESOURCEFUL</pipeline.rest.naming.strategy>
         <pipeline.rest.naming.strategyArg>-Apipeline.rest.naming.strategy=${pipeline.rest.naming.strategy}</pipeline.rest.naming.strategyArg>
         <pipeline.parallelism>PARALLEL</pipeline.parallelism>
@@ -79,14 +80,6 @@
 
         </dependencies>
     </dependencyManagement>
-
-    <dependencies>
-        <!-- Required for generated FUNCTION-mode handlers and Lambda runtime integration. -->
-        <dependency>
-            <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-amazon-lambda</artifactId>
-        </dependency>
-    </dependencies>
 
     <build>
         <resources>

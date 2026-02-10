@@ -43,6 +43,7 @@ Run only the Lambda mock event server smoke test:
   -Dpipeline.platform=FUNCTION \
   -Dpipeline.transport=REST \
   -Dpipeline.rest.naming.strategy=RESOURCEFUL \
+  -Dpipeline.lambda.dependency.scope=compile \
   -DskipTests \
   compile
 
@@ -50,6 +51,7 @@ Run only the Lambda mock event server smoke test:
   -Dpipeline.platform=FUNCTION \
   -Dpipeline.transport=REST \
   -Dpipeline.rest.naming.strategy=RESOURCEFUL \
+  -Dpipeline.lambda.dependency.scope=compile \
   -Dtest=LambdaMockEventServerSmokeTest \
   test
 ```
