@@ -1,7 +1,6 @@
 package org.pipelineframework.processor;
 
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -122,13 +121,8 @@ class PipelineGenerationPhaseIntegrationTest {
         }
         try (var stream = Files.walk(rootDir)) {
             return stream.filter(path -> path.toString().endsWith(".java"))
-                .anyMatch(path -> {
-                    try {
-                        return Files.readString(path).contains("class " + className);
-                    } catch (IOException e) {
-                        throw new UncheckedIOException(e);
-                    }
-                });
+                .anyMatch(path -> path.getFileName() != null
+                    && path.getFileName().toString().equals(className + ".java"));
         }
     }
 }

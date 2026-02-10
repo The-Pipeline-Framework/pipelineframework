@@ -34,9 +34,9 @@ public class GenerationPathResolver {
         try {
             Files.createDirectories(outputDir);
         } catch (IOException e) {
-            if (ctx.getProcessingEnv() != null) {
+            if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
                 ctx.getProcessingEnv().getMessager().printMessage(
-                    Diagnostic.Kind.WARNING,
+                    Diagnostic.Kind.ERROR,
                     "Failed to create output directory '" + outputDir + "': " + e.getMessage());
             }
             throw new IllegalStateException("Failed to create output directory '" + outputDir + "'", e);

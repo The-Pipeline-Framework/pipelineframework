@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.Collections;
 
 import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
@@ -168,7 +169,7 @@ public class ProtobufParserService {
                     built.put(fileName, fileDescriptor);
                     progress = true;
                 } catch (Descriptors.DescriptorValidationException e) {
-                    LOG.debug("Skipping invalid descriptor while building file descriptors", e);
+                    LOG.warn("Skipping invalid descriptor while building file descriptors", e);
                 }
             }
         }
@@ -197,9 +198,10 @@ public class ProtobufParserService {
         List<String> nesting = new ArrayList<>();
         Descriptors.Descriptor current = descriptor;
         while (current != null) {
-            nesting.add(0, current.getName());
+            nesting.add(current.getName());
             current = current.getContainingType();
         }
+        Collections.reverse(nesting);
 
         if (fileDescriptor.getOptions().getJavaMultipleFiles()) {
             String outer = nesting.get(0);

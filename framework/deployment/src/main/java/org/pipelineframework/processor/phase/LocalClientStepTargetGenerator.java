@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.Objects;
 import javax.tools.Diagnostic;
 
+import org.jboss.logging.Logger;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.renderer.GenerationContext;
@@ -13,6 +14,8 @@ import org.pipelineframework.processor.renderer.LocalClientStepRenderer;
  * Target generator for local client step artifacts.
  */
 public class LocalClientStepTargetGenerator implements TargetGenerator {
+
+    private static final Logger LOG = Logger.getLogger(LocalClientStepTargetGenerator.class);
 
     private final LocalClientStepRenderer renderer;
     private final GenerationPolicy policy;
@@ -46,6 +49,9 @@ public class LocalClientStepTargetGenerator implements TargetGenerator {
         }
 
         if (ctx.getProcessingEnv() == null) {
+            LOG.warnf(
+                "Skipping local client step generation for '%s' because processing environment is null.",
+                model.generatedName());
             return;
         }
 

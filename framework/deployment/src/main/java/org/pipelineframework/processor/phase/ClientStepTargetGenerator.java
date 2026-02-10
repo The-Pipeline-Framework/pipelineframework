@@ -50,10 +50,17 @@ public class ClientStepTargetGenerator implements TargetGenerator {
             request.descriptorSet()));
 
         String generatedName = model.generatedName();
+        if (generatedName == null) {
+            throw new IllegalStateException("PipelineStepModel.generatedName() must not be null");
+        }
+        String servicePackage = model.servicePackage();
+        if (servicePackage == null) {
+            throw new IllegalStateException("PipelineStepModel.servicePackage() must not be null");
+        }
         if (generatedName.endsWith("Service")) {
             generatedName = generatedName.substring(0, generatedName.length() - "Service".length());
         }
-        String className = model.servicePackage() + ".pipeline." + generatedName + "GrpcClientStep";
+        String className = servicePackage + ".pipeline." + generatedName + "GrpcClientStep";
         request.roleMetadataGenerator().recordClassWithRole(className, role.name());
     }
 }

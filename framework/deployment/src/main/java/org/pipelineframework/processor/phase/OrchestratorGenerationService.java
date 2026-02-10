@@ -7,6 +7,7 @@ import javax.tools.Diagnostic;
 
 import com.google.protobuf.DescriptorProtos;
 import com.squareup.javapoet.ClassName;
+import org.jboss.logging.Logger;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.OrchestratorBinding;
@@ -20,6 +21,8 @@ import org.pipelineframework.processor.renderer.OrchestratorRestResourceRenderer
  * Generates orchestrator artifacts based on orchestrator transport configuration.
  */
 public class OrchestratorGenerationService {
+
+    private static final Logger LOG = Logger.getLogger(OrchestratorGenerationService.class);
 
     private final GenerationPathResolver pathResolver;
     private final OrchestratorGrpcRenderer grpcRenderer;
@@ -48,6 +51,10 @@ public class OrchestratorGenerationService {
             PipelineCompilationContext ctx,
             DescriptorProtos.FileDescriptorSet descriptorSet,
             ClassName cacheKeyGenerator) {
+        if (ctx.getProcessingEnv() == null) {
+            LOG.error("Skipping orchestrator artifact generation because processing environment is null.");
+            return;
+        }
         Object bindingObj = ctx.getRendererBindings().get("orchestrator");
         if (!(bindingObj instanceof OrchestratorBinding binding)) {
             return;
@@ -76,11 +83,10 @@ public class OrchestratorGenerationService {
                 ingestClientRenderer.render(binding, createContext(ctx, role, cacheKeyGenerator, descriptorSet));
             }
         } catch (IOException e) {
-            if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "Failed to generate orchestrator artifacts: " + e.getMessage());
-            }
+            ctx.getProcessingEnv().getMessager().printMessage(
+                Diagnostic.Kind.ERROR,
+                "Failed to generate orchestrator artifacts: " + e.toString());
+            LOG.error("Failed to generate orchestrator artifacts.", e);
         }
     }
 

@@ -80,6 +80,11 @@ public class RestResourceTargetGenerator implements TargetGenerator {
         if (baseName.endsWith("Reactive")) {
             baseName = baseName.substring(0, baseName.length() - "Reactive".length());
         }
+        if (baseName.isBlank()) {
+            baseName = model.generatedName() == null || model.generatedName().isBlank()
+                ? "Unnamed"
+                : model.generatedName();
+        }
         String className = model.servicePackage() + ".pipeline." + baseName + "Resource";
         request.roleMetadataGenerator().recordClassWithRole(className, role.name());
     }

@@ -48,6 +48,7 @@ public class SideEffectBeanService {
             DeploymentRole role,
             DeploymentRole outputRole,
             GrpcBinding grpcBinding) {
+        Objects.requireNonNull(role, "role must not be null");
         if (model == null || model.serviceClassName() == null) {
             return;
         }
@@ -85,10 +86,8 @@ public class SideEffectBeanService {
                 .build()
                 .writeTo(pathResolver.resolveRoleOutputDir(ctx, outputRole == null ? role : outputRole));
         } catch (IOException e) {
-            if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
-                    "Failed to generate side-effect bean for '" + model.serviceName() + "': " + e.getMessage());
-            }
+            ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                "Failed to generate side-effect bean for '" + model.serviceName() + "': " + e.getMessage());
         }
     }
 
@@ -150,6 +149,10 @@ public class SideEffectBeanService {
                 return constructor;
             }
         }
+        LOG.warnf(
+            "No @Inject or no-arg constructor found for %s; falling back to first constructor out of %d.",
+            constructors.get(0).getEnclosingElement(),
+            constructors.size());
         return constructors.get(0);
     }
 
@@ -200,7 +203,12 @@ public class SideEffectBeanService {
                             }
                         }
                     }
-                    return grpcTypes.grpcReturnType();
+                    LOG.warnf(
+                        "Observed type '%s' for service '%s' did not match gRPC input/output descriptors; "
+                            + "falling back to observed type.",
+                        observedType,
+                        model.serviceName());
+                    return observedType;
                 }
             } catch (ClassCastException | IllegalStateException e) {
                 LOG.warnf(e, "Failed to resolve observed gRPC type for %s; falling back to domain type",
@@ -223,17 +231,26 @@ public class SideEffectBeanService {
             return ClassName.OBJECT;
         }
         String domainTypeStr = domainType.toString();
-        String dtoTypeStr = domainTypeStr.replace(".domain.", ".dto.").replace(".service.", ".dto.");
-        if (!dtoTypeStr.equals(domainTypeStr)) {
-            int lastDot = dtoTypeStr.lastIndexOf('.');
-            String packageName = lastDot > 0 ? dtoTypeStr.substring(0, lastDot) : "";
-            String simpleName = lastDot > 0 ? dtoTypeStr.substring(lastDot + 1) : dtoTypeStr;
-            String dtoSimpleName = simpleName.endsWith("Dto") ? simpleName : simpleName + "Dto";
-            return ClassName.get(packageName, dtoSimpleName);
+        String dtoTypeStr = replaceFirstPackageSegment(domainTypeStr, "domain", "dto");
+        if (dtoTypeStr.equals(domainTypeStr)) {
+            dtoTypeStr = replaceFirstPackageSegment(domainTypeStr, "service", "dto");
         }
-        int lastDot = domainTypeStr.lastIndexOf('.');
-        String packageName = lastDot > 0 ? domainTypeStr.substring(0, lastDot) : "";
-        String simpleName = lastDot > 0 ? domainTypeStr.substring(lastDot + 1) : domainTypeStr;
+        return buildDtoClassName(dtoTypeStr);
+    }
+
+    private String replaceFirstPackageSegment(String fqcn, String fromSegment, String toSegment) {
+        String needle = "." + fromSegment + ".";
+        int index = fqcn.indexOf(needle);
+        if (index < 0) {
+            return fqcn;
+        }
+        return fqcn.substring(0, index) + "." + toSegment + fqcn.substring(index + fromSegment.length() + 1);
+    }
+
+    private ClassName buildDtoClassName(String fqName) {
+        int lastDot = fqName.lastIndexOf('.');
+        String packageName = lastDot > 0 ? fqName.substring(0, lastDot) : "";
+        String simpleName = lastDot > 0 ? fqName.substring(lastDot + 1) : fqName;
         String dtoSimpleName = simpleName.endsWith("Dto") ? simpleName : simpleName + "Dto";
         return ClassName.get(packageName, dtoSimpleName);
     }

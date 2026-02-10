@@ -13,7 +13,10 @@ import org.pipelineframework.processor.ir.RestBinding;
 import org.pipelineframework.processor.util.RoleMetadataGenerator;
 
 /**
- * Immutable request context for per-target generation.
+ * Request context for per-target generation.
+ *
+ * <p>All fields are immutable except {@code generatedSideEffectBeans}, which is intentionally shared and mutable
+ * to support de-duplication across target generators during a single phase execution.</p>
  */
 public record GenerationRequest(
     PipelineCompilationContext ctx,

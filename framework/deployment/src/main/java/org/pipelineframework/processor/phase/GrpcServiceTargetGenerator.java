@@ -40,8 +40,9 @@ public class GrpcServiceTargetGenerator implements TargetGenerator {
 
     @Override
     public void generate(GenerationRequest request) throws IOException {
-        var ctx = request.ctx();
-        var model = request.model();
+        Objects.requireNonNull(request, "request must not be null");
+        var ctx = Objects.requireNonNull(request.ctx(), "GenerationRequest.ctx() must not be null");
+        var model = Objects.requireNonNull(request.model(), "GenerationRequest.model() must not be null");
 
         if (model.deploymentRole() == DeploymentRole.PLUGIN_SERVER && !policy.allowPluginServerArtifacts(ctx)) {
             return;

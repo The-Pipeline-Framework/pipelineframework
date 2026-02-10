@@ -16,6 +16,7 @@ import org.pipelineframework.processor.renderer.RestClientStepRenderer;
 public class RestClientStepTargetGenerator implements TargetGenerator {
 
     private static final Logger LOG = Logger.getLogger(RestClientStepTargetGenerator.class);
+    private static final String SERVICE_SUFFIX = "Service";
 
     private final RestClientStepRenderer renderer;
     private final GenerationPolicy policy;
@@ -68,8 +69,8 @@ public class RestClientStepTargetGenerator implements TargetGenerator {
             request.descriptorSet()));
 
         String generatedName = model.generatedName();
-        if (generatedName.endsWith("Service")) {
-            generatedName = generatedName.substring(0, generatedName.length() - "Service".length());
+        if (generatedName.endsWith(SERVICE_SUFFIX)) {
+            generatedName = generatedName.substring(0, generatedName.length() - SERVICE_SUFFIX.length());
         }
         String className = model.servicePackage() + ".pipeline." + generatedName + "RestClientStep";
         request.roleMetadataGenerator().recordClassWithRole(className, role.name());

@@ -163,36 +163,70 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         try {
             roleMetadataGenerator.writeRoleMetadata();
         } catch (Exception e) {
-            if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.WARNING,
-                    "Failed to write role metadata: " + e.getMessage());
-            }
+            emitWarning(ctx, "Failed to write role metadata", e);
         }
     }
 
     private void writeMetadataSafely(PipelineCompilationContext ctx, RoleMetadataGenerator roleMetadataGenerator) {
+        Exception roleError = null;
+        Exception orderError = null;
+        Exception telemetryError = null;
+        Exception clientPropsError = null;
+
         try {
             roleMetadataGenerator.writeRoleMetadata();
-            if (ctx.isOrchestratorGenerated()) {
-                PipelineOrderMetadataGenerator orderMetadataGenerator =
-                    new PipelineOrderMetadataGenerator(ctx.getProcessingEnv());
-                orderMetadataGenerator.writeOrderMetadata(ctx);
-
-                PipelineTelemetryMetadataGenerator telemetryMetadataGenerator =
-                    new PipelineTelemetryMetadataGenerator(ctx.getProcessingEnv());
-                telemetryMetadataGenerator.writeTelemetryMetadata(ctx);
-
-                OrchestratorClientPropertiesGenerator clientPropertiesGenerator =
-                    new OrchestratorClientPropertiesGenerator(ctx.getProcessingEnv());
-                clientPropertiesGenerator.writeClientProperties(ctx);
-            }
         } catch (Exception e) {
-            if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.WARNING,
-                    "Failed to write role metadata: " + e.getMessage());
-            }
+            roleError = e;
+            emitWarning(ctx, "Failed to write role metadata", e);
+        }
+
+        if (!ctx.isOrchestratorGenerated()) {
+            return;
+        }
+
+        PipelineOrderMetadataGenerator orderMetadataGenerator =
+            new PipelineOrderMetadataGenerator(ctx.getProcessingEnv());
+        try {
+            orderMetadataGenerator.writeOrderMetadata(ctx);
+        } catch (Exception e) {
+            orderError = e;
+            emitWarning(ctx, "Failed to write pipeline order metadata", e);
+        }
+
+        PipelineTelemetryMetadataGenerator telemetryMetadataGenerator =
+            new PipelineTelemetryMetadataGenerator(ctx.getProcessingEnv());
+        try {
+            telemetryMetadataGenerator.writeTelemetryMetadata(ctx);
+        } catch (Exception e) {
+            telemetryError = e;
+            emitWarning(ctx, "Failed to write pipeline telemetry metadata", e);
+        }
+
+        OrchestratorClientPropertiesGenerator clientPropertiesGenerator =
+            new OrchestratorClientPropertiesGenerator(ctx.getProcessingEnv());
+        try {
+            clientPropertiesGenerator.writeClientProperties(ctx);
+        } catch (Exception e) {
+            clientPropsError = e;
+            emitWarning(ctx, "Failed to write orchestrator client properties", e);
+        }
+
+        if (roleError != null || orderError != null || telemetryError != null || clientPropsError != null) {
+            LOG.debugf(
+                "Failed to write pipeline metadata (roles, order, telemetry, client properties). "
+                    + "roleError=%s, orderError=%s, telemetryError=%s, clientPropsError=%s",
+                roleError == null ? "none" : roleError.toString(),
+                orderError == null ? "none" : orderError.toString(),
+                telemetryError == null ? "none" : telemetryError.toString(),
+                clientPropsError == null ? "none" : clientPropsError.toString());
+        }
+    }
+
+    private void emitWarning(PipelineCompilationContext ctx, String message, Exception e) {
+        if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.WARNING,
+                message + (e == null ? "" : ": " + e.getMessage()));
         }
     }
 }
