@@ -39,6 +39,8 @@ public record FunctionTransportContext(
      */
     public FunctionTransportContext {
         Objects.requireNonNull(requestId, "requestId must not be null");
+        functionName = functionName == null ? "" : functionName;
+        stage = stage == null ? "" : stage;
         attributes = attributes == null
             ? Map.of()
             : Map.copyOf(new LinkedHashMap<>(attributes));

@@ -5,6 +5,7 @@ import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.AnnotationSpec;
 import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
@@ -20,8 +21,18 @@ import org.pipelineframework.processor.ir.OrchestratorBinding;
  */
 public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<OrchestratorBinding> {
 
-    private static final String HANDLER_CLASS = "PipelineRunFunctionHandler";
+    public static final String HANDLER_CLASS = "PipelineRunFunctionHandler";
     private static final String RESOURCE_CLASS = "PipelineRunResource";
+
+    /**
+     * Resolve fully-qualified orchestrator function handler class name for a base package.
+     *
+     * @param basePackage base package
+     * @return generated handler FQCN
+     */
+    public static String handlerFqcn(String basePackage) {
+        return basePackage + ".orchestrator.service." + HANDLER_CLASS;
+    }
 
     /**
      * Creates a new OrchestratorFunctionHandlerRenderer.
@@ -63,7 +74,7 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
                 .addMember("value", "$T.$L", roleEnum, "REST_SERVER")
                 .build())
             .addSuperinterface(ParameterizedTypeName.get(requestHandler, inputDto, outputDto))
-            .addField(com.squareup.javapoet.FieldSpec.builder(resourceType, "resource", Modifier.PRIVATE)
+            .addField(FieldSpec.builder(resourceType, "resource", Modifier.PRIVATE)
                 .addAnnotation(inject)
                 .build());
 

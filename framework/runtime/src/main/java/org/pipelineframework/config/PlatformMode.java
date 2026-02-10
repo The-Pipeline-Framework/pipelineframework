@@ -22,8 +22,8 @@ public enum PlatformMode {
         }
         String normalized = raw.trim().toUpperCase(Locale.ROOT);
         for (PlatformMode mode : values()) {
-            if (mode.name().equalsIgnoreCase(normalized)
-                || mode.legacyExternalName().equalsIgnoreCase(normalized)) {
+            if (mode.name().equals(normalized)
+                || mode.legacyExternalName().equals(normalized)) {
                 return Optional.of(mode);
             }
         }

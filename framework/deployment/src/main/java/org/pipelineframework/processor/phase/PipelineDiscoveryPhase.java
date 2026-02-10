@@ -262,10 +262,10 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Finds and returns the first `PipelineOrchestrator` annotation present on the provided elements.
+     * Returns the {@code PipelineOrchestrator} annotation from the given element, if present.
      *
-     * @param orchestratorElements elements to search for a `PipelineOrchestrator` annotation; may be null or empty
-     * @return the `PipelineOrchestrator` annotation from the first element that has one, or `null` if none is found
+     * @param orchestratorElement element to inspect; may be null
+     * @return the {@code PipelineOrchestrator} annotation, or {@code null} if the element is null or not annotated
      */
     private PipelineOrchestrator resolveOrchestratorAnnotation(Element orchestratorElement) {
         if (orchestratorElement == null) {

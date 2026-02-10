@@ -199,6 +199,8 @@ public class PipelineStepConfigLoader {
     private void warn(String message) {
         if (messager != null) {
             messager.printMessage(Diagnostic.Kind.WARNING, message);
+        } else {
+            System.err.println(Diagnostic.Kind.WARNING + ": " + message);
         }
     }
 }

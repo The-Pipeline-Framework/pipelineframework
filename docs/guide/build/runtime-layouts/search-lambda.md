@@ -60,6 +60,8 @@ Expected result:
 ./mvnw -f examples/search/pom.xml \
   -pl crawl-source-svc -am \
   -Dpipeline.platform=FUNCTION \
+  -Dpipeline.transport=REST \
+  -Dpipeline.rest.naming.strategy=RESOURCEFUL \
   -Dpipeline.lambda.dependency.scope=compile \
   -DskipTests \
   -Dquarkus.native.enabled=true \

@@ -18,7 +18,6 @@ package org.pipelineframework.search.resource;
 
 import java.util.UUID;
 
-import io.quarkus.test.junit.QuarkusIntegrationTest;
 import io.restassured.RestAssured;
 import io.restassured.config.SSLConfig;
 import io.restassured.http.ContentType;
@@ -29,32 +28,29 @@ import org.junit.jupiter.api.Test;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 
-@QuarkusIntegrationTest
-class RawDocumentResourceIT {
+abstract class AbstractTokenBatchResourceTest {
 
     @BeforeAll
     static void setUp() {
-        // Configure RestAssured to use HTTPS and trust all certificates for testing
         RestAssured.useRelaxedHTTPSValidation();
         RestAssured.config =
                 RestAssured.config().sslConfig(SSLConfig.sslConfig().relaxedHTTPSValidation());
         RestAssured.port =
-                Integer.parseInt(System.getProperty("quarkus.http.test-ssl-port", "8444"));
+                Integer.parseInt(System.getProperty("quarkus.http.test-ssl-port", "8446"));
     }
 
     @AfterAll
     static void tearDown() {
-        // Reset RestAssured to default configuration
         RestAssured.reset();
     }
 
     @Test
-    void testRawDocumentWithValidData() {
+    void testTokenBatchWithValidData() {
         String requestBody =
                 """
                 {
                   "docId": "%s",
-                  "sourceUrl": "https://example.com/docs/alpha"
+                  "content": "Search pipeline content for tokenization."
                 }
                 """
                         .formatted(UUID.randomUUID());
@@ -62,34 +58,34 @@ class RawDocumentResourceIT {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/raw-document/")
+                .post("/api/v1/token-batch/")
                 .then()
                 .statusCode(200)
                 .body("docId", notNullValue())
-                .body("rawContent", notNullValue())
-                .body("fetchedAt", notNullValue());
+                .body("tokens", notNullValue())
+                .body("tokenizedAt", notNullValue());
     }
 
     @Test
-    void testRawDocumentWithInvalidUUID() {
+    void testTokenBatchWithInvalidUUID() {
         String requestBody =
                 """
                 {
                   "docId": "invalid-uuid",
-                  "sourceUrl": "https://example.com/docs/alpha"
+                  "content": "Search pipeline content for tokenization."
                 }
                 """;
 
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/raw-document/")
+                .post("/api/v1/token-batch/")
                 .then()
                 .statusCode(400);
     }
 
     @Test
-    void testRawDocumentWithMissingRequiredFields() {
+    void testTokenBatchWithMissingRequiredFields() {
         String requestBody =
                 """
                 {
@@ -101,7 +97,7 @@ class RawDocumentResourceIT {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/raw-document/")
+                .post("/api/v1/token-batch/")
                 .then()
                 .statusCode(400);
     }
