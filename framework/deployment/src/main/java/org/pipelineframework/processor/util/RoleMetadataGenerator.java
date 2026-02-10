@@ -71,7 +71,7 @@ public class RoleMetadataGenerator {
 
         // Write to file
         javax.tools.FileObject resourceFile = processingEnv.getFiler()
-            .createResource(StandardLocation.CLASS_OUTPUT, "", "META-INF/pipeline/roles.json", (javax.lang.model.element.Element[]) null);
+            .createResource(StandardLocation.CLASS_OUTPUT, "", "META-INF/pipeline/roles.json");
 
         try (var writer = resourceFile.openWriter()) {
             writer.write(gson.toJson(metadata));

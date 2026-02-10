@@ -20,6 +20,8 @@ import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
+import javax.tools.FileObject;
+import javax.tools.StandardLocation;
 
 import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
@@ -32,6 +34,8 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -54,7 +58,19 @@ class PipelineGenerationPhaseTest {
         when(processingEnv.getMessager()).thenReturn(messager);
         when(processingEnv.getElementUtils())
                 .thenReturn(mock(javax.lang.model.util.Elements.class));
-        when(processingEnv.getFiler()).thenReturn(mock(javax.annotation.processing.Filer.class));
+        javax.annotation.processing.Filer filer = mock(javax.annotation.processing.Filer.class);
+        FileObject fileObject = mock(FileObject.class);
+        try {
+            when(fileObject.openWriter()).thenReturn(new java.io.StringWriter());
+            when(filer.createResource(
+                any(StandardLocation.class), anyString(), anyString(), any(javax.lang.model.element.Element[].class)))
+                .thenReturn(fileObject);
+            when(filer.createResource(any(StandardLocation.class), anyString(), anyString()))
+                .thenReturn(fileObject);
+        } catch (java.io.IOException e) {
+            throw new RuntimeException(e);
+        }
+        when(processingEnv.getFiler()).thenReturn(filer);
         when(processingEnv.getSourceVersion()).thenReturn(SourceVersion.RELEASE_21);
     }
 
