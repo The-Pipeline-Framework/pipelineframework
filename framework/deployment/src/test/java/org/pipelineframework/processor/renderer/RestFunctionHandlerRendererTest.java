@@ -44,7 +44,11 @@ class RestFunctionHandlerRendererTest {
         assertTrue(source.contains("@Named(\"ParsedDocumentFunctionHandler\")"));
         assertTrue(source.contains("ParsedDocumentResource resource"));
         assertTrue(source.contains("handleRequest(ParsedDocumentDto input, Context context)"));
-        assertTrue(source.contains("return resource.process(input).await().indefinitely()"));
+        assertTrue(source.contains("FunctionTransportContext transportContext = FunctionTransportContext.of("));
+        assertTrue(source.contains("FunctionSourceAdapter<ParsedDocumentDto, ParsedDocumentDto> source"));
+        assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invoke"));
+        assertTrue(source.contains("FunctionSinkAdapter<IndexAckDto, IndexAckDto> sink"));
+        assertTrue(source.contains("return UnaryFunctionTransportBridge.invoke(input, transportContext, source, invoke, sink)"));
     }
 
     @Test

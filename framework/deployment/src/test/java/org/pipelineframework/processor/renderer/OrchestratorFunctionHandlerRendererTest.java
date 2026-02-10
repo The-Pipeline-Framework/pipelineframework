@@ -41,7 +41,11 @@ class OrchestratorFunctionHandlerRendererTest {
         assertTrue(source.contains("@Named(\"PipelineRunFunctionHandler\")"));
         assertTrue(source.contains("PipelineRunResource resource"));
         assertTrue(source.contains("handleRequest(InputTypeDto input, Context context)"));
-        assertTrue(source.contains("return resource.run(input).await().indefinitely()"));
+        assertTrue(source.contains("FunctionTransportContext transportContext = FunctionTransportContext.of("));
+        assertTrue(source.contains("FunctionSourceAdapter<InputTypeDto, InputTypeDto> source"));
+        assertTrue(source.contains("FunctionInvokeAdapter<InputTypeDto, OutputTypeDto> invoke"));
+        assertTrue(source.contains("FunctionSinkAdapter<OutputTypeDto, OutputTypeDto> sink"));
+        assertTrue(source.contains("return UnaryFunctionTransportBridge.invoke(input, transportContext, source, invoke, sink)"));
     }
 
     @Test

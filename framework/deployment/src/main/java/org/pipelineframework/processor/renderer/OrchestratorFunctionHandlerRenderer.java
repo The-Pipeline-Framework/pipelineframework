@@ -59,6 +59,22 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
         ClassName requestHandler = ClassName.get("com.amazonaws.services.lambda.runtime", "RequestHandler");
         ClassName generatedRole = ClassName.get("org.pipelineframework.annotation", "GeneratedRole");
         ClassName roleEnum = ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role");
+        ClassName functionTransportContext =
+            ClassName.get("org.pipelineframework.transport.function", "FunctionTransportContext");
+        ClassName sourceAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "FunctionSourceAdapter");
+        ClassName invokeAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "FunctionInvokeAdapter");
+        ClassName sinkAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "FunctionSinkAdapter");
+        ClassName defaultSourceAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "DefaultUnaryFunctionSourceAdapter");
+        ClassName localInvokeAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "LocalUnaryFunctionInvokeAdapter");
+        ClassName defaultSinkAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "DefaultUnaryFunctionSinkAdapter");
+        ClassName unaryBridge =
+            ClassName.get("org.pipelineframework.transport.function", "UnaryFunctionTransportBridge");
 
         ClassName inputDto = ClassName.get(binding.basePackage() + ".common.dto", binding.inputTypeName() + "Dto");
         ClassName outputDto = ClassName.get(binding.basePackage() + ".common.dto", binding.outputTypeName() + "Dto");
@@ -85,7 +101,20 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
             .addParameter(inputDto, "input")
             .addParameter(lambdaContext, "context")
             .beginControlFlow("try")
-            .addStatement("return resource.run(input).await().indefinitely()")
+            .addStatement("$T transportContext = $T.of("
+                    + "context != null ? context.getAwsRequestId() : $S, "
+                    + "context != null ? context.getFunctionName() : $S, "
+                    + "$S)",
+                functionTransportContext, functionTransportContext, "unknown-request", HANDLER_CLASS, "ingress")
+            .addStatement("$T<$T, $T> source = new $T<>($S, $S)",
+                sourceAdapter, inputDto, inputDto, defaultSourceAdapter,
+                "orchestrator." + binding.inputTypeName(), "v1")
+            .addStatement("$T<$T, $T> invoke = new $T<>(payload -> resource.run(payload), $S, $S)",
+                invokeAdapter, inputDto, outputDto, localInvokeAdapter,
+                "orchestrator." + binding.outputTypeName(), "v1")
+            .addStatement("$T<$T, $T> sink = new $T<>()",
+                sinkAdapter, outputDto, outputDto, defaultSinkAdapter)
+            .addStatement("return $T.invoke(input, transportContext, source, invoke, sink)", unaryBridge)
             .nextControlFlow("catch ($T e)", RuntimeException.class)
             .addStatement(
                 "throw new $T(\"Failed handleRequest -> resource.run for input DTO\", e)",
