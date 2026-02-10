@@ -58,4 +58,10 @@ class BatchingPolicyTest {
         assertThrows(NullPointerException.class, () ->
             new BatchingPolicy(1, 1024, Duration.ofMillis(100), 1, null));
     }
+
+    @Test
+    void rejectsNonPositiveMaxInFlight() {
+        assertThrows(IllegalArgumentException.class, () ->
+            new BatchingPolicy(1, 1024, Duration.ofMillis(100), 0, BatchOverflowPolicy.BUFFER));
+    }
 }

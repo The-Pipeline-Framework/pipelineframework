@@ -45,4 +45,34 @@ class PlatformOverrideResolverTest {
     void rejectsEmptyPlatform() {
         assertNull(PlatformOverrideResolver.normalizeKnownPlatform(""));
     }
+
+    @Test
+    void resolveOverridePrefersPropertyOverEnvironment() {
+        String resolved = PlatformOverrideResolver.resolveOverride(
+            key -> PlatformOverrideResolver.PLATFORM_PROPERTY_KEY.equals(key) ? "FUNCTION" : null,
+            key -> PlatformOverrideResolver.PLATFORM_ENV_KEY.equals(key) ? "COMPUTE" : null);
+
+        assertEquals("FUNCTION", PlatformOverrideResolver.normalizeKnownPlatform(resolved));
+    }
+
+    @Test
+    void resolveOverrideUsesEnvironmentWhenPropertyMissingOrBlank() {
+        String fromMissingProperty = PlatformOverrideResolver.resolveOverride(
+            key -> null,
+            key -> PlatformOverrideResolver.PLATFORM_ENV_KEY.equals(key) ? "LAMBDA" : null);
+        assertEquals("FUNCTION", PlatformOverrideResolver.normalizeKnownPlatform(fromMissingProperty));
+
+        String fromBlankProperty = PlatformOverrideResolver.resolveOverride(
+            key -> PlatformOverrideResolver.PLATFORM_PROPERTY_KEY.equals(key) ? "  " : null,
+            key -> PlatformOverrideResolver.PLATFORM_ENV_KEY.equals(key) ? "STANDARD" : null);
+        assertEquals("COMPUTE", PlatformOverrideResolver.normalizeKnownPlatform(fromBlankProperty));
+    }
+
+    @Test
+    void resolveOverrideReturnsNullWhenPropertyAndEnvironmentMissing() {
+        String resolved = PlatformOverrideResolver.resolveOverride(key -> null, key -> null);
+
+        assertNull(resolved);
+        assertNull(PlatformOverrideResolver.normalizeKnownPlatform(resolved));
+    }
 }

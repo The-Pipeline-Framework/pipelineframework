@@ -8,7 +8,9 @@ import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeName;
+import com.squareup.javapoet.TypeVariableName;
 import com.squareup.javapoet.TypeSpec;
+import com.squareup.javapoet.WildcardTypeName;
 import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
@@ -95,19 +97,23 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
         if (domainType == null) {
             return ClassName.OBJECT;
         }
+        if (domainType instanceof ParameterizedTypeName parameterizedTypeName) {
+            return convertDomainToDtoType(parameterizedTypeName.rawType);
+        }
         if (domainType instanceof ClassName className) {
             String dtoSimpleName = className.simpleName().endsWith("Dto")
                 ? className.simpleName()
                 : className.simpleName() + "Dto";
             return ClassName.get(rewritePackageToDto(className.packageName()), dtoSimpleName);
         }
-
-        String domainTypeStr = domainType.toString();
-        int lastDot = domainTypeStr.lastIndexOf('.');
-        String packageName = lastDot > 0 ? domainTypeStr.substring(0, lastDot) : "";
-        String simpleName = lastDot > 0 ? domainTypeStr.substring(lastDot + 1) : domainTypeStr;
-        String dtoSimpleName = simpleName.endsWith("Dto") ? simpleName : simpleName + "Dto";
-        return ClassName.get(rewritePackageToDto(packageName), dtoSimpleName);
+        if (domainType instanceof TypeVariableName
+            || domainType instanceof WildcardTypeName
+            || domainType.isPrimitive()) {
+            throw new IllegalArgumentException(
+                "Unsupported domain type for DTO conversion: " + domainType);
+        }
+        throw new IllegalArgumentException(
+            "Unsupported domain type for DTO conversion: " + domainType);
     }
 
     private String rewritePackageToDto(String packageName) {

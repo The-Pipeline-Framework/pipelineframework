@@ -2,6 +2,7 @@ package org.pipelineframework.processor.util;
 
 import java.util.Locale;
 import java.util.Map;
+import java.util.logging.Logger;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.tools.Diagnostic;
 
@@ -17,6 +18,7 @@ public final class RestPathResolver {
 
     public static final String REST_NAMING_STRATEGY_OPTION = "pipeline.rest.naming.strategy";
     private static final String API_BASE_PATH = "/api/v1";
+    private static final Logger LOG = Logger.getLogger(RestPathResolver.class.getName());
 
     private RestPathResolver() {
     }
@@ -82,6 +84,8 @@ public final class RestPathResolver {
     private static String resourcefulResourcePath(PipelineStepModel model) {
         String resourceToken = toResourceToken(model);
         if (resourceToken == null || resourceToken.isBlank()) {
+            LOG.warning("RESOURCEFUL naming fallback to LEGACY path for model '"
+                + modelIdentity(model) + "' due to unresolved resource token.");
             return legacyResourcePath(model);
         }
         String basePath = API_BASE_PATH + "/" + resourceToken;
@@ -282,5 +286,18 @@ public final class RestPathResolver {
     private enum NamingStrategy {
         LEGACY,
         RESOURCEFUL
+    }
+
+    private static String modelIdentity(PipelineStepModel model) {
+        if (model == null) {
+            return "unknown";
+        }
+        if (model.serviceName() != null && !model.serviceName().isBlank()) {
+            return model.serviceName();
+        }
+        if (model.generatedName() != null && !model.generatedName().isBlank()) {
+            return model.generatedName();
+        }
+        return model.serviceClassName() == null ? "unknown" : model.serviceClassName().toString();
     }
 }

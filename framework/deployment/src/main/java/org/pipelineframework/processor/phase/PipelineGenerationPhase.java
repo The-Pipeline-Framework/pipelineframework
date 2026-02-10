@@ -62,7 +62,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 new PipelinePlatformMetadataGenerator(ctx.getProcessingEnv());
             try {
                 roleMetadataGenerator.writeRoleMetadata();
-            } catch (Exception e) {
+            } catch (IOException e) {
                 if (ctx.getProcessingEnv() != null) {
                     ctx.getProcessingEnv().getMessager().printMessage(
                         javax.tools.Diagnostic.Kind.WARNING,
@@ -71,7 +71,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             }
             try {
                 platformMetadataGenerator.writePlatformMetadata(ctx);
-            } catch (Exception e) {
+            } catch (IOException e) {
                 if (ctx.getProcessingEnv() != null) {
                     ctx.getProcessingEnv().getMessager().printMessage(
                         javax.tools.Diagnostic.Kind.WARNING,
@@ -165,7 +165,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         // Write role metadata
         try {
             roleMetadataGenerator.writeRoleMetadata();
-        } catch (Exception e) {
+        } catch (IOException e) {
             if (ctx.getProcessingEnv() != null) {
                 ctx.getProcessingEnv().getMessager().printMessage(
                     javax.tools.Diagnostic.Kind.WARNING,
@@ -174,7 +174,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         }
         try {
             platformMetadataGenerator.writePlatformMetadata(ctx);
-        } catch (Exception e) {
+        } catch (IOException e) {
             if (ctx.getProcessingEnv() != null) {
                 ctx.getProcessingEnv().getMessager().printMessage(
                     javax.tools.Diagnostic.Kind.WARNING,
@@ -1027,7 +1027,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                         cacheKeyGenerator,
                         descriptorSet));
                     roleMetadataGenerator.recordClassWithRole(
-                        binding.basePackage() + ".orchestrator.service.PipelineRunFunctionHandler",
+                        OrchestratorFunctionHandlerRenderer.handlerFqcn(binding.basePackage()),
                         role.name());
                 }
             } else if (!local) {

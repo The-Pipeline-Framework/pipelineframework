@@ -25,6 +25,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.logging.Logger;
 
 import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
@@ -34,6 +35,7 @@ import org.yaml.snakeyaml.Yaml;
  * Loads the pipeline template configuration used by the template generator.
  */
 public class PipelineTemplateConfigLoader {
+    private static final Logger LOG = Logger.getLogger(PipelineTemplateConfigLoader.class.getName());
     private static final String DEFAULT_TRANSPORT = "GRPC";
     private static final PipelinePlatform DEFAULT_PLATFORM = PipelinePlatform.COMPUTE;
     private final Function<String, String> propertyLookup;
@@ -83,10 +85,19 @@ public class PipelineTemplateConfigLoader {
         String normalizedTransport = TransportOverrideResolver.normalizeKnownTransport(transport);
         transport = normalizedTransport != null ? normalizedTransport : DEFAULT_TRANSPORT;
         String platformOverride = resolvePlatformOverride();
+        boolean platformFromOverride = platformOverride != null && !platformOverride.isBlank();
         if (platformOverride != null && !platformOverride.isBlank()) {
             platform = platformOverride.trim();
         }
         String normalizedPlatform = PlatformOverrideResolver.normalizeKnownPlatform(platform);
+        if (normalizedPlatform == null && platform != null && !platform.isBlank()) {
+            if (platformFromOverride) {
+                LOG.warning("Unknown platform override '" + platform + "'; defaulting to " + DEFAULT_PLATFORM + ".");
+            } else {
+                LOG.warning("Unknown platform in template config '" + platform
+                    + "'; defaulting to " + DEFAULT_PLATFORM + ".");
+            }
+        }
         PipelinePlatform resolvedPlatform = PipelinePlatform.fromStringOptional(normalizedPlatform)
             .orElse(DEFAULT_PLATFORM);
         List<PipelineTemplateStep> steps = readSteps(rootMap);

@@ -15,6 +15,7 @@ import org.pipelineframework.processor.ir.OrchestratorBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -41,6 +42,43 @@ class OrchestratorFunctionHandlerRendererTest {
         assertTrue(source.contains("PipelineRunResource resource"));
         assertTrue(source.contains("handleRequest(InputTypeDto input, Context context)"));
         assertTrue(source.contains("return resource.run(input).await().indefinitely()"));
+    }
+
+    @Test
+    void rejectsStreamingOrchestratorBinding() {
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
+
+        OrchestratorFunctionHandlerRenderer renderer = new OrchestratorFunctionHandlerRenderer();
+        OrchestratorBinding streamingBinding = new TestOrchestratorBindingBuilder()
+            .model(new PipelineStepModel(
+                "OrchestratorService",
+                "OrchestratorService",
+                "com.example.orchestrator.service",
+                ClassName.get("com.example.orchestrator.service", "OrchestratorService"),
+                null,
+                null,
+                StreamingShape.UNARY_UNARY,
+                java.util.Set.of(GenerationTarget.REST_RESOURCE),
+                ExecutionMode.DEFAULT,
+                DeploymentRole.ORCHESTRATOR_CLIENT,
+                false,
+                null
+            ))
+            .basePackage("com.example")
+            .transport("REST")
+            .inputTypeName("InputType")
+            .outputTypeName("OutputType")
+            .inputStreaming(true)
+            .outputStreaming(false)
+            .firstStepServiceName("ProcessAlphaService")
+            .firstStepStreamingShape(StreamingShape.UNARY_UNARY)
+            .build();
+
+        assertThrows(
+            IllegalStateException.class,
+            () -> renderer.render(streamingBinding, new GenerationContext(
+                processingEnv, tempDir, DeploymentRole.REST_SERVER, java.util.Set.of(), null, null)));
     }
 
     private OrchestratorBinding buildBinding() {
@@ -127,6 +165,21 @@ class OrchestratorFunctionHandlerRendererTest {
 
         private TestOrchestratorBindingBuilder firstStepStreamingShape(StreamingShape value) {
             this.firstStepStreamingShape = value;
+            return this;
+        }
+
+        private TestOrchestratorBindingBuilder cliName(String value) {
+            this.cliName = value;
+            return this;
+        }
+
+        private TestOrchestratorBindingBuilder cliDescription(String value) {
+            this.cliDescription = value;
+            return this;
+        }
+
+        private TestOrchestratorBindingBuilder cliVersion(String value) {
+            this.cliVersion = value;
             return this;
         }
 

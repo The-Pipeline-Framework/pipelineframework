@@ -20,7 +20,7 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 
 /**
- * Test-time fallback handler so Quarkus Lambda augmentation can run in COMPUTE mode modules.
+ * Shared fallback handler used by search service modules during non-function test runs.
  */
 public class NoopLambdaHandler implements RequestHandler<Object, Object> {
     @Override

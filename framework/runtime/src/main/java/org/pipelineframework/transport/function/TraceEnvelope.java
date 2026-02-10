@@ -17,7 +17,6 @@
 package org.pipelineframework.transport.function;
 
 import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -70,7 +69,7 @@ public record TraceEnvelope<T>(
             idempotencyKey,
             payload,
             occurredAt,
-            immutableMeta ? meta : meta == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(meta)));
+            immutableMeta ? (meta == null ? Map.of() : Map.copyOf(meta)) : meta);
     }
 
     /**
@@ -95,7 +94,7 @@ public record TraceEnvelope<T>(
         if (occurredAt == null) {
             occurredAt = Instant.now();
         }
-        meta = meta == null ? Map.of() : Map.copyOf(new LinkedHashMap<>(meta));
+        meta = meta == null ? Map.of() : Map.copyOf(meta);
     }
 
     /**
