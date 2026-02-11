@@ -3,6 +3,7 @@ package org.pipelineframework.checkout.create_order.connector;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import com.google.protobuf.Message;
 import io.quarkus.runtime.StartupEvent;
@@ -11,6 +12,7 @@ import io.smallrye.mutiny.subscription.Cancellable;
 import java.util.Objects;
 import org.jboss.logging.Logger;
 import org.pipelineframework.PipelineOutputBus;
+import org.pipelineframework.checkout.common.connector.IdempotencyGuard;
 import org.pipelineframework.checkout.createorder.grpc.OrderReadySvc;
 import org.pipelineframework.checkout.deliverorder.grpc.OrderDispatchSvc;
 
@@ -24,6 +26,8 @@ public class CreateToDeliverIngestBridge {
 
     private final PipelineOutputBus outputBus;
     private final DeliverOrderIngestClient deliverOrderIngestClient;
+    private final boolean idempotencyEnabled;
+    private final IdempotencyGuard idempotencyGuard;
 
     private Cancellable forwardingSubscription;
 
@@ -32,12 +36,23 @@ public class CreateToDeliverIngestBridge {
      *
      * @param outputBus the source of pipeline checkpoint outputs; must not be null
      * @param deliverOrderIngestClient the gRPC client used to forward ready orders; must not be null
+     * @param idempotencyEnabled whether duplicate order ids should be filtered before forwarding
+     * @param idempotencyMaxKeys max in-memory keys retained for duplicate filtering
      * @throws NullPointerException if {@code outputBus} or {@code deliverOrderIngestClient} is null
      */
-    public CreateToDeliverIngestBridge(PipelineOutputBus outputBus, DeliverOrderIngestClient deliverOrderIngestClient) {
+    public CreateToDeliverIngestBridge(
+        PipelineOutputBus outputBus,
+        DeliverOrderIngestClient deliverOrderIngestClient,
+        @ConfigProperty(name = "checkout.create-to-deliver.idempotency.enabled", defaultValue = "true")
+        boolean idempotencyEnabled,
+        @ConfigProperty(name = "checkout.create-to-deliver.idempotency.max-keys", defaultValue = "10000")
+        int idempotencyMaxKeys
+    ) {
         this.outputBus = Objects.requireNonNull(outputBus, "outputBus must not be null");
         this.deliverOrderIngestClient =
             Objects.requireNonNull(deliverOrderIngestClient, "deliverOrderIngestClient must not be null");
+        this.idempotencyEnabled = idempotencyEnabled;
+        this.idempotencyGuard = idempotencyEnabled ? new IdempotencyGuard(idempotencyMaxKeys) : null;
     }
 
     /**
@@ -89,6 +104,9 @@ public class CreateToDeliverIngestBridge {
      */
     private OrderDispatchSvc.ReadyOrder toDeliverReadyOrder(Object item) {
         if (item instanceof OrderReadySvc.ReadyOrder readyOrder) {
+            if (isDuplicateOrderId(readyOrder.getOrderId())) {
+                return null;
+            }
             return OrderDispatchSvc.ReadyOrder.newBuilder()
                 .setOrderId(readyOrder.getOrderId())
                 .setCustomerId(readyOrder.getCustomerId())
@@ -100,6 +118,9 @@ public class CreateToDeliverIngestBridge {
             String customerId = readField(message, "customer_id");
             String readyAt = readField(message, "ready_at");
             if (!orderId.isBlank() && !customerId.isBlank() && !readyAt.isBlank()) {
+                if (isDuplicateOrderId(orderId)) {
+                    return null;
+                }
                 LOG.debugf(
                     "Mapped Message -> ReadyOrder messageType=%s orderId=%s customerId=%s readyAt=%s",
                     message.getClass().getName(), orderId, customerId, readyAt);
@@ -121,6 +142,20 @@ public class CreateToDeliverIngestBridge {
         return null;
     }
 
+    private boolean isDuplicateOrderId(String orderId) {
+        if (!idempotencyEnabled || orderId == null || orderId.isBlank()) {
+            return false;
+        }
+        if (idempotencyGuard == null) {
+            return false;
+        }
+        boolean firstOccurrence = idempotencyGuard.markIfNew(orderId);
+        if (!firstOccurrence) {
+            LOG.debugf("Dropped duplicate create->deliver handoff orderId=%s", orderId);
+        }
+        return !firstOccurrence;
+    }
+
     /**
      * Extracts the named field's value from a protobuf Message and returns it as a String.
      *
@@ -139,9 +174,6 @@ public class CreateToDeliverIngestBridge {
             return "";
         }
         Object value = message.getField(field);
-        if (value == null) {
-            return "";
-        }
         return switch (field.getJavaType()) {
             case STRING, INT, LONG, FLOAT, DOUBLE, BOOLEAN, ENUM -> String.valueOf(value);
             case BYTE_STRING, MESSAGE -> "";

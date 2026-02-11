@@ -7,11 +7,14 @@ import io.smallrye.mutiny.subscription.Cancellable;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
+import java.util.HashSet;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.Set;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.pipelineframework.PipelineOutputBus;
+import org.pipelineframework.checkout.common.connector.IdempotencyGuard;
 import org.pipelineframework.checkout.deliverorder.grpc.OrderDeliveredSvc;
 
 @ApplicationScoped
@@ -22,6 +25,9 @@ public class DeliverToNextIngestBridge {
     private final PipelineOutputBus outputBus;
     private final DeliveredOrderForwardClient forwardClient;
     private final boolean enabled;
+    private final boolean idempotencyEnabled;
+    private final IdempotencyGuard idempotencyGuard;
+    private final Set<String> inFlightOrderIds = new HashSet<>();
 
     private Cancellable forwardingSubscription;
 
@@ -31,15 +37,23 @@ public class DeliverToNextIngestBridge {
      * @param outputBus the pipeline output bus to consume delivered-order events from
      * @param forwardClient the client used to forward delivered orders onward
      * @param enabled configuration flag; `true` enables forwarding, `false` disables it
+     * @param idempotencyEnabled whether duplicate order ids should be filtered before forwarding
+     * @param idempotencyMaxKeys max in-memory keys retained for duplicate filtering
      */
     public DeliverToNextIngestBridge(
         PipelineOutputBus outputBus,
         DeliveredOrderForwardClient forwardClient,
-        @ConfigProperty(name = "checkout.deliver.forward.enabled", defaultValue = "false") boolean enabled
+        @ConfigProperty(name = "checkout.deliver.forward.enabled", defaultValue = "false") boolean enabled,
+        @ConfigProperty(name = "checkout.deliver.forward.idempotency.enabled", defaultValue = "true")
+        boolean idempotencyEnabled,
+        @ConfigProperty(name = "checkout.deliver.forward.idempotency.max-keys", defaultValue = "10000")
+        int idempotencyMaxKeys
     ) {
-        this.outputBus = outputBus;
-        this.forwardClient = forwardClient;
+        this.outputBus = Objects.requireNonNull(outputBus, "outputBus must not be null");
+        this.forwardClient = Objects.requireNonNull(forwardClient, "forwardClient must not be null");
         this.enabled = enabled;
+        this.idempotencyEnabled = idempotencyEnabled;
+        this.idempotencyGuard = idempotencyEnabled ? new IdempotencyGuard(idempotencyMaxKeys) : null;
     }
 
     /**
@@ -58,9 +72,15 @@ public class DeliverToNextIngestBridge {
         }
 
         Multi<OrderDeliveredSvc.DeliveredOrder> deliveredStream = outputBus.stream(Object.class)
-            .onItem().transform(this::toDeliveredOrder)
-            .select().where(Objects::nonNull)
-            .onFailure().invoke(error -> LOG.error("Deliver->next stream failed before forwarding", error))
+            .onItem().transformToMulti(item -> {
+                OrderDeliveredSvc.DeliveredOrder mapped = toDeliveredOrder(item);
+                return mapped == null ? Multi.createFrom().empty() : Multi.createFrom().item(mapped);
+            }).concatenate()
+            .onItem().invoke(order -> markForwarded(order.getOrderId()))
+            .onFailure().invoke(error -> {
+                clearInFlightReservations();
+                LOG.error("Deliver->next stream failed before forwarding", error);
+            })
             .onFailure().retry().withBackOff(Duration.ofMillis(100), Duration.ofSeconds(1)).atMost(5);
 
         forwardingSubscription = forwardClient.forward(deliveredStream);
@@ -95,6 +115,9 @@ public class DeliverToNextIngestBridge {
      */
     private OrderDeliveredSvc.DeliveredOrder toDeliveredOrder(Object item) {
         if (item instanceof OrderDeliveredSvc.DeliveredOrder delivered) {
+            if (isDuplicateOrInFlight(delivered.getOrderId())) {
+                return null;
+            }
             return delivered;
         }
         if (item instanceof Message message) {
@@ -106,6 +129,9 @@ public class DeliverToNextIngestBridge {
             String deliveredAt = readField(message, "delivered_at");
             if (!orderId.isBlank() && !customerId.isBlank() && !readyAt.isBlank()
                 && !dispatchId.isBlank() && !dispatchedAt.isBlank() && !deliveredAt.isBlank()) {
+                if (isDuplicateOrInFlight(orderId)) {
+                    return null;
+                }
                 return OrderDeliveredSvc.DeliveredOrder.newBuilder()
                     .setOrderId(orderId)
                     .setCustomerId(customerId)
@@ -124,6 +150,39 @@ public class DeliverToNextIngestBridge {
             "Dropped unsupported deliver->next item type=%s",
             item == null ? "null" : item.getClass().getName());
         return null;
+    }
+
+    private boolean isDuplicateOrInFlight(String orderId) {
+        if (!idempotencyEnabled || orderId == null || orderId.isBlank()) {
+            return false;
+        }
+        if (idempotencyGuard == null) {
+            return false;
+        }
+        synchronized (inFlightOrderIds) {
+            if (idempotencyGuard.contains(orderId) || inFlightOrderIds.contains(orderId)) {
+                LOG.debugf("Dropped duplicate deliver->next handoff orderId=%s", orderId);
+                return true;
+            }
+            inFlightOrderIds.add(orderId);
+        }
+        return false;
+    }
+
+    private void markForwarded(String orderId) {
+        if (!idempotencyEnabled || orderId == null || orderId.isBlank() || idempotencyGuard == null) {
+            return;
+        }
+        synchronized (inFlightOrderIds) {
+            inFlightOrderIds.remove(orderId);
+            idempotencyGuard.markIfNew(orderId);
+        }
+    }
+
+    private void clearInFlightReservations() {
+        synchronized (inFlightOrderIds) {
+            inFlightOrderIds.clear();
+        }
     }
 
     /**

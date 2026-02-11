@@ -47,6 +47,28 @@ class DeliverForwardBridgeE2ETest {
     }
 
     @Test
+    void bridgeDropsDuplicateDeliveredCheckpointByOrderId() {
+        OrderDeliveredSvc.DeliveredOrder checkpoint = OrderDeliveredSvc.DeliveredOrder.newBuilder()
+            .setOrderId("10101010-aaaa-bbbb-cccc-121212121212")
+            .setCustomerId("34343434-dddd-eeee-ffff-565656565656")
+            .setReadyAt("2026-02-09T20:20:00Z")
+            .setDispatchId("78787878-1111-2222-3333-909090909090")
+            .setDispatchedAt("2026-02-09T20:21:00Z")
+            .setDeliveredAt("2026-02-09T20:22:00Z")
+            .build();
+
+        pipelineOutputBus.publish(checkpoint);
+        pipelineOutputBus.publish(checkpoint);
+
+        OrderDeliveredSvc.DeliveredOrder firstForwarded = waitForForwarded(Duration.ofSeconds(3));
+        OrderDeliveredSvc.DeliveredOrder duplicateForwarded = waitForForwarded(Duration.ofMillis(250));
+
+        assertNotNull(firstForwarded, "Expected first delivered checkpoint to be forwarded");
+        assertEquals(checkpoint.getOrderId(), firstForwarded.getOrderId());
+        assertNull(duplicateForwarded, "Expected duplicate delivered checkpoint to be dropped by idempotency guard");
+    }
+
+    @Test
     void bridgeDropsDeliveredCheckpointWhenForwardingFails() {
         LocalDeliveredOrderForwardClient.setFailForward(true);
 
