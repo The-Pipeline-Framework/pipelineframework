@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Mariano Barcia
+ * Copyright (c) 2023-2026 Mariano Barcia
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 
 @QuarkusIntegrationTest
-class ProcessCrawlSourceResourceIT {
+class RawDocumentResourceIT {
 
     @BeforeAll
     static void setUp() {
@@ -49,7 +49,7 @@ class ProcessCrawlSourceResourceIT {
     }
 
     @Test
-    void testProcessCrawlSourceWithValidData() {
+    void testRawDocumentWithValidData() {
         String requestBody =
                 """
                 {
@@ -62,7 +62,7 @@ class ProcessCrawlSourceResourceIT {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-crawl-source/process")
+                .post("/api/v1/raw-document/")
                 .then()
                 .statusCode(200)
                 .body("docId", notNullValue())
@@ -71,7 +71,7 @@ class ProcessCrawlSourceResourceIT {
     }
 
     @Test
-    void testProcessCrawlSourceWithInvalidUUID() {
+    void testRawDocumentWithInvalidUUID() {
         String requestBody =
                 """
                 {
@@ -83,13 +83,13 @@ class ProcessCrawlSourceResourceIT {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-crawl-source/process")
+                .post("/api/v1/raw-document/")
                 .then()
-                .statusCode(500);
+                .statusCode(400);
     }
 
     @Test
-    void testProcessCrawlSourceWithMissingRequiredFields() {
+    void testRawDocumentWithMissingRequiredFields() {
         String requestBody =
                 """
                 {
@@ -101,7 +101,7 @@ class ProcessCrawlSourceResourceIT {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-crawl-source/process")
+                .post("/api/v1/raw-document/")
                 .then()
                 .statusCode(400);
     }

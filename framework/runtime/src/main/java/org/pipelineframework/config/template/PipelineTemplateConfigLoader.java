@@ -24,18 +24,39 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.logging.Logger;
 
+import org.pipelineframework.config.PlatformOverrideResolver;
+import org.pipelineframework.config.TransportOverrideResolver;
 import org.yaml.snakeyaml.Yaml;
 
 /**
  * Loads the pipeline template configuration used by the template generator.
  */
 public class PipelineTemplateConfigLoader {
+    private static final Logger LOG = Logger.getLogger(PipelineTemplateConfigLoader.class.getName());
+    private static final String DEFAULT_TRANSPORT = "GRPC";
+    private static final PipelinePlatform DEFAULT_PLATFORM = PipelinePlatform.COMPUTE;
+    private final Function<String, String> propertyLookup;
+    private final Function<String, String> envLookup;
 
     /**
      * Creates a new PipelineTemplateConfigLoader.
      */
     public PipelineTemplateConfigLoader() {
+        this(System::getProperty, System::getenv);
+    }
+
+    /**
+     * Creates a loader with custom property/environment lookup functions.
+     *
+     * @param propertyLookup lookup used for system properties
+     * @param envLookup lookup used for environment variables
+     */
+    public PipelineTemplateConfigLoader(Function<String, String> propertyLookup, Function<String, String> envLookup) {
+        this.propertyLookup = propertyLookup == null ? key -> null : propertyLookup;
+        this.envLookup = envLookup == null ? key -> null : envLookup;
     }
 
     /**
@@ -55,14 +76,49 @@ public class PipelineTemplateConfigLoader {
         String basePackage = readString(rootMap, "basePackage");
         String transport = readString(rootMap, "transport");
         transport = transport == null ? null : transport.trim();
+        String platform = readString(rootMap, "platform");
+        platform = platform == null ? null : platform.trim();
         String transportOverride = resolveTransportOverride();
+        boolean transportFromOverride = transportOverride != null && !transportOverride.isBlank();
         if (transportOverride != null && !transportOverride.isBlank()) {
             transport = transportOverride.trim();
         }
+        String originalTransport = transport;
+        String normalizedTransport = TransportOverrideResolver.normalizeKnownTransport(transport);
+        if (normalizedTransport == null) {
+            if (originalTransport != null && !originalTransport.isBlank()) {
+                if (transportFromOverride) {
+                    LOG.warning("Unknown transport override '" + originalTransport + "'; defaulting to "
+                        + DEFAULT_TRANSPORT + ".");
+                } else {
+                    LOG.warning("Unknown transport in template config '" + originalTransport + "'; defaulting to "
+                        + DEFAULT_TRANSPORT + ".");
+                }
+            }
+            transport = DEFAULT_TRANSPORT;
+        } else {
+            transport = normalizedTransport;
+        }
+        String platformOverride = resolvePlatformOverride();
+        boolean platformFromOverride = platformOverride != null && !platformOverride.isBlank();
+        if (platformFromOverride) {
+            platform = platformOverride.trim();
+        }
+        String normalizedPlatform = PlatformOverrideResolver.normalizeKnownPlatform(platform);
+        if (normalizedPlatform == null && platform != null && !platform.isBlank()) {
+            if (platformFromOverride) {
+                LOG.warning("Unknown platform override '" + platform + "'; defaulting to " + DEFAULT_PLATFORM + ".");
+            } else {
+                LOG.warning("Unknown platform in template config '" + platform
+                    + "'; defaulting to " + DEFAULT_PLATFORM + ".");
+            }
+        }
+        PipelinePlatform resolvedPlatform = PipelinePlatform.fromStringOptional(normalizedPlatform)
+            .orElse(DEFAULT_PLATFORM);
         List<PipelineTemplateStep> steps = readSteps(rootMap);
         Map<String, PipelineTemplateAspect> aspects = readAspects(rootMap);
 
-        return new PipelineTemplateConfig(appName, basePackage, transport, steps, aspects);
+        return new PipelineTemplateConfig(appName, basePackage, transport, resolvedPlatform, steps, aspects);
     }
 
     private Object loadYaml(Path configPath) {
@@ -184,11 +240,19 @@ public class PipelineTemplateConfigLoader {
      * @return the resolved transport override value, or {@code null} if neither is set
      */
     private String resolveTransportOverride() {
-        String override = System.getProperty("pipeline.transport");
-        if (override == null || override.isBlank()) {
-            override = System.getenv("PIPELINE_TRANSPORT");
-        }
-        return override;
+        return TransportOverrideResolver.resolveOverride(propertyLookup, envLookup);
+    }
+
+    /**
+     * Resolve platform override from system property or environment variable.
+     *
+     * Checks the JVM system property {@code pipeline.platform} first; if it is null or blank,
+     * falls back to the environment variable {@code PIPELINE_PLATFORM}.
+     *
+     * @return the resolved platform override value, or {@code null} if neither is set
+     */
+    private String resolvePlatformOverride() {
+        return PlatformOverrideResolver.resolveOverride(propertyLookup, envLookup);
     }
 
     /**

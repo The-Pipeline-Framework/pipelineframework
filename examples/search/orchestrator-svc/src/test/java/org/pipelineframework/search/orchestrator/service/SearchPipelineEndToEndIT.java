@@ -497,7 +497,7 @@ class SearchPipelineEndToEndIT {
     private void invalidateParsedDocument(UUID docId, String rawContentHash, String versionTag) throws Exception {
         String url = "http://" + cacheInvalidationService.getHost() + ":" +
             cacheInvalidationService.getMappedPort(8080) +
-            "/api/v1/cache-invalidate-parsed-document-side-effect/process";
+            "/api/v1/parsed-document/cache-invalidate/";
         String payload = "{\"docId\":\"" + docId + "\",\"rawContentHash\":\"" + rawContentHash + "\"}";
         HttpRequest request = HttpRequest.newBuilder(URI.create(url))
             .header("Content-Type", "application/json")

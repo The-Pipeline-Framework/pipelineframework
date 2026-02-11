@@ -12,6 +12,7 @@ import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
+import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
 
 /**
@@ -44,9 +45,39 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
 
         validateParallelismHints(ctx);
         validateProviderHints(ctx);
+        validateFunctionPlatformConstraints(ctx);
 
         // Analyze streaming shapes and other semantic properties
         // This phase focuses on semantic analysis without building bindings or calling renderers
+    }
+
+    private void validateFunctionPlatformConstraints(PipelineCompilationContext ctx) {
+        if (ctx == null || ctx.getProcessingEnv() == null || !ctx.isPlatformModeFunction()) {
+            return;
+        }
+        if (!ctx.isTransportModeRest()) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                Diagnostic.Kind.ERROR,
+                "pipeline.platform=FUNCTION currently requires pipeline.transport=REST.");
+            return;
+        }
+        List<PipelineStepModel> steps = ctx.getStepModels();
+        if (steps == null || steps.isEmpty()) {
+            return;
+        }
+        for (PipelineStepModel model : steps) {
+            if (model == null) {
+                continue;
+            }
+            if (model.streamingShape() != StreamingShape.UNARY_UNARY) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "pipeline.platform=FUNCTION currently supports only UNARY_UNARY steps in REST mode. "
+                        + "This corresponds to ONE_TO_ONE-style steps in pipeline.yaml cardinality terms. "
+                        + "Unsupported streaming shape '" + model.streamingShape()
+                        + "' for step '" + model.serviceName() + "'.");
+            }
+        }
     }
 
     private void validateParallelismHints(PipelineCompilationContext ctx) {

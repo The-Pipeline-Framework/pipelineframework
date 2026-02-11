@@ -10,6 +10,7 @@ import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.RestBinding;
+import org.pipelineframework.processor.util.RestPathResolver;
 
 /**
  * Renderer for REST resource implementations based on PipelineStepModel and RestBinding
@@ -92,8 +93,10 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
                         role.name())
                     .build());
 
-        // Add @Path annotation - derive path from service class name or use provided path
-        String servicePath = binding.restPathOverride() != null ? binding.restPathOverride() : deriveResourcePath(serviceClassName);
+        // Add @Path annotation - derive path from REST naming strategy or use provided path override
+        String servicePath = binding.restPathOverride() != null
+            ? binding.restPathOverride()
+            : RestPathResolver.resolveResourcePath(model, ctx.processingEnv());
         resourceBuilder.addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Path"))
             .addMember("value", "$S", servicePath)
             .build());
@@ -181,19 +184,22 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         resourceBuilder.addMethod(createFromDtoMethod(model, inputDtoClassName, inboundMapperFieldName, cacheSideEffect));
         resourceBuilder.addMethod(createToDtoMethod(model, outputDtoClassName, outboundMapperFieldName, cacheSideEffect));
 
+        String operationPath = RestPathResolver.resolveOperationPath(ctx.processingEnv());
+
         // Create the process method based on service type (determined from streaming shape)
         MethodSpec processMethod = switch (model.streamingShape()) {
             case UNARY_STREAMING -> createReactiveStreamingServiceProcessMethod(
                     inputDtoClassName, outputDtoClassName, model, inboundMapperFieldName, outboundMapperFieldName,
-                    cachePluginSideEffect);
+                    cachePluginSideEffect, operationPath);
             case STREAMING_UNARY -> createReactiveStreamingClientServiceProcessMethod(
                     inputDtoClassName, outputDtoClassName, model, inboundMapperFieldName, outboundMapperFieldName,
-                    cachePluginSideEffect);
+                    cachePluginSideEffect, operationPath);
             case STREAMING_STREAMING -> createReactiveBidirectionalStreamingServiceProcessMethod(
                     inputDtoClassName, outputDtoClassName, model, inboundMapperFieldName, outboundMapperFieldName,
-                    cachePluginSideEffect);
+                    cachePluginSideEffect, operationPath);
             default -> createReactiveServiceProcessMethod(
-                    inputDtoClassName, outputDtoClassName, model, ctx, inboundMapperFieldName, outboundMapperFieldName, cacheSideEffect);
+                    inputDtoClassName, outputDtoClassName, model, inboundMapperFieldName,
+                    outboundMapperFieldName, cacheSideEffect, operationPath);
         };
 
         resourceBuilder.addMethod(processMethod);
@@ -204,7 +210,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     /**
          * Create the REST POST handler for the step's unary reactive "process" endpoint.
          *
-         * The generated method is a public POST endpoint at path "/process". When `cacheSideEffect`
+         * The generated method is a public POST endpoint at the resolved operation path. When `cacheSideEffect`
          * is true the method forwards the incoming DTO directly to the domain service; when false
          * it converts the incoming DTO to a domain value using the inbound mapper and converts the
          * service result back to a DTO using the outbound mapper.
@@ -216,15 +222,15 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
          * @param inboundMapperFieldName  name of the injected inbound mapper field used to convert DTO to domain (used when `cacheSideEffect` is false)
          * @param outboundMapperFieldName name of the injected outbound mapper field used to convert domain to DTO (used when `cacheSideEffect` is false)
          * @param cacheSideEffect         if true, bypass mapping and pass DTOs directly to/from the domain service
-         * @return                        a MethodSpec representing a POST "/process" handler that returns a `Uni` of the output DTO
+         * @return                        a MethodSpec representing a POST handler that returns a `Uni` of the output DTO
          */
     private MethodSpec createReactiveServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             PipelineStepModel model,
-            GenerationContext ctx,
             String inboundMapperFieldName,
             String outboundMapperFieldName,
-            boolean cacheSideEffect) {
+            boolean cacheSideEffect,
+            String operationPath) {
         if (!cacheSideEffect) {
             validateRestMappings(model);
         }
@@ -234,7 +240,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST"))
                 .build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Path"))
-                .addMember("value", "$S", "/process")
+                .addMember("value", "$S", operationPath)
                 .build())
             .addModifiers(Modifier.PUBLIC)
             .returns(uniOutputDto)
@@ -261,7 +267,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-     * Exposes a POST /process endpoint that accepts a single input DTO and returns a JSON stream of output DTOs.
+     * Exposes a POST endpoint at the resolved operation path that accepts a single input DTO and returns a JSON stream of output DTOs.
      *
      * @param model                   the pipeline step model that provides domain types and execution mode
      * @param inboundMapperFieldName  name of the injected inbound mapper used to convert the input DTO to the domain type
@@ -274,7 +280,8 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             PipelineStepModel model,
             String inboundMapperFieldName,
             String outboundMapperFieldName,
-            boolean skipValidation) {
+            boolean skipValidation,
+            String operationPath) {
         if (!skipValidation) {
             validateRestMappings(model);
         }
@@ -285,7 +292,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST"))
                 .build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Path"))
-                .addMember("value", "$S", "/process")
+                .addMember("value", "$S", operationPath)
                 .build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("org.jboss.resteasy.reactive", "RestStreamElementType"))
                 .addMember("value", "$S", "application/json")
@@ -313,7 +320,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     /**
      * Builds the reactive client-streaming JAX-RS "process" method for this REST resource.
      *
-     * The generated method is a public POST endpoint at path "/process" that accepts a Multi of input DTOs,
+     * The generated method is a public POST endpoint at the resolved operation path that accepts a Multi of input DTOs,
      * maps each input DTO to a domain object using the inbound mapper, delegates processing to the domain service,
      * maps the domain result to an output DTO using the outbound mapper, and returns a Uni of output DTOs.
      * If skipValidation is false, REST mappings are validated before generation. If the model's execution mode is
@@ -332,7 +339,8 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             PipelineStepModel model,
             String inboundMapperFieldName,
             String outboundMapperFieldName,
-            boolean skipValidation) {
+            boolean skipValidation,
+            String operationPath) {
         if (!skipValidation) {
             validateRestMappings(model);
         }
@@ -344,7 +352,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST"))
                 .build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Path"))
-                .addMember("value", "$S", "/process")
+                .addMember("value", "$S", operationPath)
                 .build())
             .addModifiers(Modifier.PUBLIC)
             .returns(uniOutputDto)
@@ -365,7 +373,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-     * Exposes a bidirectional streaming POST endpoint at "/process" that accepts a stream of input DTOs and returns a stream of output DTOs.
+     * Exposes a bidirectional streaming POST endpoint at the resolved operation path that accepts a stream of input DTOs and returns a stream of output DTOs.
      *
      * @param inputDtoClassName       the DTO type of incoming stream elements
      * @param outputDtoClassName      the DTO type of outgoing stream elements
@@ -380,7 +388,8 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             PipelineStepModel model,
             String inboundMapperFieldName,
             String outboundMapperFieldName,
-            boolean skipValidation) {
+            boolean skipValidation,
+            String operationPath) {
         if (!skipValidation) {
             validateRestMappings(model);
         }
@@ -392,7 +401,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST"))
                 .build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Path"))
-                .addMember("value", "$S", "/process")
+                .addMember("value", "$S", operationPath)
                 .build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Consumes"))
                 .addMember("value", "$S",  "application/x-ndjson")
@@ -589,34 +598,6 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-     * Derives the REST resource path for a given service class name.
-     *
-     * The method removes a trailing "Service" suffix and any "Reactive" substring,
-     * converts the resulting PascalCase name to kebab-case, and prefixes it with
-     * "/api/v1/".
-     *
-     * @param className the original service class name (for example "ProcessPaymentReactiveService")
-     * @return the resource path beginning with "/api/v1/" followed by the kebab-case name
-     */
-    private String deriveResourcePath(String className) {
-        // Remove "Service" suffix if present
-        if (className.endsWith("Service")) {
-            className = className.substring(0, className.length() - 7);
-        }
-
-        // Remove "Reactive" if present (for service names like "ProcessPaymentReactiveService")
-        className = className.replace("Reactive", "");
-
-        // Convert from PascalCase to kebab-case
-        // Handle sequences like "ProcessPaymentStatus" -> "process-payment-status"
-        String pathPart = className.replaceAll("([a-z])([A-Z])", "$1-$2")
-            .replaceAll("([A-Z]+)([A-Z][a-z])", "$1-$2")
-            .toLowerCase();
-
-        return "/api/v1/" + pathPart;
-    }
-
-    /**
      * Derives the DTO TypeName for a given domain TypeName.
      *
      * <p>If {@code domainType} is {@code null} the method returns {@code ClassName.OBJECT}. Otherwise
@@ -631,32 +612,20 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         if (domainType == null) {
             return ClassName.OBJECT;
         }
+        if (!(domainType instanceof ClassName domainClass)) {
+            return ClassName.OBJECT;
+        }
 
-        String domainTypeStr = domainType.toString();
+        String domainTypeStr = domainClass.canonicalName();
 
         // Replace common domain package patterns with DTO equivalents and add Dto suffix
         String dtoTypeStr = domainTypeStr
             .replace(".domain.", ".dto.")
             .replace(".service.", ".dto.");
-
-        // If domain-to-dto package conversion succeeded, add Dto suffix to the class name
-        if (!dtoTypeStr.equals(domainTypeStr)) {
-            int lastDot = dtoTypeStr.lastIndexOf('.');
-            String packageName = lastDot > 0 ? dtoTypeStr.substring(0, lastDot) : "";
-            String simpleName = lastDot > 0 ? dtoTypeStr.substring(lastDot + 1) : dtoTypeStr;
-            // Add Dto suffix to the class name
-            String dtoSimpleName = simpleName + "Dto";
-            return ClassName.get(packageName, dtoSimpleName);
-        } else {
-            // If domain/dto conversion didn't work (no standard domain package),
-            // just add Dto suffix to the simple name
-            int lastDot = domainTypeStr.lastIndexOf('.');
-            String packageName = lastDot > 0 ? domainTypeStr.substring(0, lastDot) : "";
-            String simpleName = lastDot > 0 ? domainTypeStr.substring(lastDot + 1) : domainTypeStr;
-            // Add Dto suffix to the class name
-            String dtoSimpleName = simpleName + "Dto";
-            return ClassName.get(packageName, dtoSimpleName);
-        }
+        int lastDot = dtoTypeStr.lastIndexOf('.');
+        String packageName = lastDot > 0 ? dtoTypeStr.substring(0, lastDot) : "";
+        String simpleName = lastDot > 0 ? dtoTypeStr.substring(lastDot + 1) : dtoTypeStr;
+        return ClassName.get(packageName, simpleName + "Dto");
     }
 
     private void validateRestMappings(PipelineStepModel model) {

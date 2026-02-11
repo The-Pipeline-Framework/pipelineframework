@@ -95,6 +95,7 @@ To get started with The Pipeline Framework, explore these guides:
 - [Mappers and DTOs](/guide/development/mappers-and-dtos): Type conversions and mappings
 - [Testing with Testcontainers](/guide/development/testing): Application testing with real dependencies
 - [Orchestrator Runtime](/guide/development/orchestrator-runtime): Coordinate pipeline execution
+- [AWS Lambda Platform](/guide/development/aws-lambda): Lambda platform mode, gateway options, and Quarkus integrations
 
 ### Operate
 - [Observability Overview](/guide/operations/observability/): Metrics, tracing, logs, and security notes
@@ -105,6 +106,7 @@ To get started with The Pipeline Framework, explore these guides:
 - [Alerting](/guide/operations/observability/alerting): Alerts and noise reduction
 - [Security Notes](/guide/operations/observability/security): Protect telemetry data
 - [Error Handling & DLQ](/guide/operations/error-handling): Managing errors and dead letter queues
+- [AWS Lambda SnapStart](/guide/operations/aws-lambda-snapstart): SnapStart runtime guidance and startup tuning
 
 ### Extend
 - [Writing a Plugin](/guide/plugins/writing-a-plugin): Build your own aspects

@@ -3,6 +3,7 @@ package org.pipelineframework.processor.renderer;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import javax.annotation.processing.ProcessingEnvironment;
 
 import com.squareup.javapoet.ClassName;
@@ -12,6 +13,7 @@ import org.pipelineframework.processor.ir.*;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class RestClientStepRendererTest {
 
@@ -44,6 +46,7 @@ class RestClientStepRendererTest {
             "/ProcessPaymentStatusReactiveService/remoteProcess");
 
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(Map.of());
         GenerationContext context = new GenerationContext(
             processingEnv,
             tempDir,
@@ -67,6 +70,7 @@ class RestClientStepRendererTest {
         assertTrue(interfaceSource.contains("@RegisterRestClient"));
         assertTrue(interfaceSource.contains("process-payment-status-reactive"));
         assertTrue(interfaceSource.contains("@Path(\"/ProcessPaymentStatusReactiveService/remoteProcess\")"));
+        assertTrue(interfaceSource.contains("@Path(\"/\")"));
         assertTrue(interfaceSource.contains("interface ProcessPaymentStatusRestClient"));
         assertTrue(interfaceSource.contains("@HeaderParam"));
         assertTrue(interfaceSource.contains("PipelineContextHeaders"));
@@ -109,6 +113,7 @@ class RestClientStepRendererTest {
             "/ProcessPaymentStatusReactiveService/remoteProcess");
 
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(Map.of());
         GenerationContext context = new GenerationContext(
             processingEnv,
             tempDir,
