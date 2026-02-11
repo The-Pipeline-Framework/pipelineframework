@@ -175,7 +175,7 @@ public final class FunctionTransportBridge {
     }
 
     private static <T> T requireExactlyOne(List<T> items, String stage) {
-        if (items == null || items.isEmpty()) {
+        if (items.isEmpty()) {
             throw new IllegalStateException(
                 "Function transport expected exactly one " + stage + " item but received 0.");
         }

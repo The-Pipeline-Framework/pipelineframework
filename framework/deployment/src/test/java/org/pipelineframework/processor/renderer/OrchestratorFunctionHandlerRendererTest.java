@@ -99,6 +99,46 @@ class OrchestratorFunctionHandlerRendererTest {
         assertTrue(source.contains("return FunctionTransportBridge.invokeManyToOne(input, transportContext, source, invoke, sink)"));
     }
 
+    @Test
+    void rendersStreamingManyToManyOrchestratorBinding() throws IOException {
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
+
+        OrchestratorFunctionHandlerRenderer renderer = new OrchestratorFunctionHandlerRenderer();
+        OrchestratorBinding streamingBinding = new TestOrchestratorBindingBuilder()
+            .model(new PipelineStepModel(
+                "OrchestratorService",
+                "OrchestratorService",
+                "com.example.orchestrator.service",
+                ClassName.get("com.example.orchestrator.service", "OrchestratorService"),
+                null,
+                null,
+                StreamingShape.UNARY_UNARY,
+                java.util.Set.of(GenerationTarget.REST_RESOURCE),
+                ExecutionMode.DEFAULT,
+                DeploymentRole.ORCHESTRATOR_CLIENT,
+                false,
+                null
+            ))
+            .basePackage("com.example")
+            .transport("REST")
+            .inputTypeName("InputType")
+            .outputTypeName("OutputType")
+            .inputStreaming(true)
+            .outputStreaming(true)
+            .firstStepServiceName("ProcessAlphaService")
+            .firstStepStreamingShape(StreamingShape.UNARY_UNARY)
+            .build();
+
+        renderer.render(streamingBinding, new GenerationContext(
+            processingEnv, tempDir, DeploymentRole.REST_SERVER, java.util.Set.of(), null, null));
+
+        Path generatedSource = tempDir.resolve("com/example/orchestrator/service/PipelineRunFunctionHandler.java");
+        String source = Files.readString(generatedSource);
+        assertTrue(source.contains("implements RequestHandler<Multi<InputTypeDto>, List<OutputTypeDto>>"));
+        assertTrue(source.contains("return FunctionTransportBridge.invokeManyToMany(input, transportContext, source, invoke, sink)"));
+    }
+
     private OrchestratorBinding buildBinding() {
         PipelineStepModel model = new PipelineStepModel(
             "OrchestratorService",

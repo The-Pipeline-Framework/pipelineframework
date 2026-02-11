@@ -88,6 +88,23 @@ class RestFunctionHandlerRendererTest {
         assertTrue(source.contains("return FunctionTransportBridge.invokeManyToOne(input, transportContext, source, invoke, sink)"));
     }
 
+    @Test
+    void rendersStreamingManyToManyShape() throws IOException {
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
+
+        RestFunctionHandlerRenderer renderer = new RestFunctionHandlerRenderer();
+        renderer.render(new RestBinding(streamingManyToManyModel(), null),
+            new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+                java.util.Set.of(), null, null));
+
+        Path generatedSource =
+            tempDir.resolve("org/example/search/parse/service/pipeline/ParsedDocumentFunctionHandler.java");
+        String source = Files.readString(generatedSource);
+        assertTrue(source.contains("implements RequestHandler<Multi<ParsedDocumentDto>, List<IndexAckDto>>"));
+        assertTrue(source.contains("return FunctionTransportBridge.invokeManyToMany(input, transportContext, source, invoke, sink)"));
+    }
+
     private PipelineStepModel unaryModel() {
         return buildModel(StreamingShape.UNARY_UNARY);
     }
@@ -98,6 +115,10 @@ class RestFunctionHandlerRendererTest {
 
     private PipelineStepModel streamingUnaryModel() {
         return buildModel(StreamingShape.STREAMING_UNARY);
+    }
+
+    private PipelineStepModel streamingManyToManyModel() {
+        return buildModel(StreamingShape.STREAMING_STREAMING);
     }
 
     private PipelineStepModel buildModel(StreamingShape shape) {

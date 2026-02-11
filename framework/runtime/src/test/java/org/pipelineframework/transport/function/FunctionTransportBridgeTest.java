@@ -16,6 +16,7 @@
 
 package org.pipelineframework.transport.function;
 
+import java.time.Duration;
 import java.util.List;
 
 import io.smallrye.mutiny.Multi;
@@ -233,6 +234,35 @@ class FunctionTransportBridgeTest {
         Integer result = FunctionTransportBridge.invokeManyToOne(
             "event", localContext, createStreamingSourceAdapter(1), manyToOneNullPayloadInvoke, unarySinkAdapter());
         assertNull(result);
+    }
+
+    @Test
+    void rejectsNonPositiveTimeoutForOneToOne() {
+        IllegalArgumentException zero = assertThrows(IllegalArgumentException.class,
+            () -> FunctionTransportBridge.invokeOneToOne(
+                "event",
+                context,
+                createUnarySourceAdapter("search.raw-document", "v1"),
+                new LocalUnaryFunctionInvokeAdapter<>(
+                    payload -> Uni.createFrom().item(payload.length()),
+                    "search.out",
+                    "v1"),
+                unarySinkAdapter(),
+                Duration.ZERO));
+        assertEquals("timeout must be > 0", zero.getMessage());
+
+        IllegalArgumentException negative = assertThrows(IllegalArgumentException.class,
+            () -> FunctionTransportBridge.invokeOneToOne(
+                "event",
+                context,
+                createUnarySourceAdapter("search.raw-document", "v1"),
+                new LocalUnaryFunctionInvokeAdapter<>(
+                    payload -> Uni.createFrom().item(payload.length()),
+                    "search.out",
+                    "v1"),
+                unarySinkAdapter(),
+                Duration.ofMillis(-1)));
+        assertEquals("timeout must be > 0", negative.getMessage());
     }
 
     private FunctionSourceAdapter<String, String> createUnarySourceAdapter(String model, String version) {
