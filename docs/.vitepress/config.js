@@ -134,7 +134,19 @@ const mainSidebar = [
         collapsed: true,
         items: [
             {text: 'Architecture', link: '/guide/evolve/architecture'},
-            {text: 'Annotation Processor Architecture', link: '/guide/evolve/annotation-processor-architecture'},
+            {
+                text: 'Annotation Processor Guide',
+                link: '/guide/evolve/annotation-processor/',
+                collapsed: true,
+                items: [
+                    {text: 'Overview', link: '/guide/evolve/annotation-processor/'},
+                    {text: 'Phases and Flow', link: '/guide/evolve/annotation-processor/phases-and-flow'},
+                    {text: 'Models and Bindings', link: '/guide/evolve/annotation-processor/models-and-bindings'},
+                    {text: 'Generation and Rendering', link: '/guide/evolve/annotation-processor/generation-and-rendering'},
+                    {text: 'Current State and Migration', link: '/guide/evolve/annotation-processor/current-state-and-migration'}
+                ]
+            },
+            {text: 'Annotation Processor Architecture (Compat)', link: '/guide/evolve/annotation-processor-architecture'},
             {text: 'Compiler Pipeline Architecture', link: '/guide/evolve/compiler-pipeline-architecture'},
             {text: 'Data Types', link: '/guide/evolve/data-types'},
             {
@@ -279,6 +291,13 @@ export default withMermaid(
     },
 
     cleanUrls: true,
+    // Keep historical version snapshots immutable even if they contain stale links.
+    // This suppresses dead-link failures for `/versions/**` pages and known
+    // relative links that only appear within version snapshots.
+    ignoreDeadLinks: [
+      /^\/versions\//,
+      /^(?:\.\/)?\.\.\/\.\.\/evolve\/annotation-processor-architecture(?:\.md)?$/
+    ],
 
     vite: {
       optimizeDeps: { 
