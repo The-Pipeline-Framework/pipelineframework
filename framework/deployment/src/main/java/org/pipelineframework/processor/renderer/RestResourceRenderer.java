@@ -10,6 +10,7 @@ import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.RestBinding;
+import org.pipelineframework.processor.util.ResourceNameUtils;
 
 /**
  * Renderer for REST resource implementations based on PipelineStepModel and RestBinding
@@ -74,12 +75,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         }
 
         String serviceClassName = model.generatedName();
-
-        // Determine the resource class name - remove "Service" and optionally "Reactive" for cleaner naming
-        String baseName = serviceClassName.replace("Service", "");
-        if (baseName.endsWith("Reactive")) {
-            baseName = baseName.substring(0, baseName.length() - "Reactive".length());
-        }
+        String baseName = ResourceNameUtils.normalizeBaseName(serviceClassName);
         String resourceClassName = baseName + PipelineStepProcessor.REST_RESOURCE_SUFFIX;
 
         // Create the REST resource class
@@ -87,8 +83,8 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             .addModifiers(Modifier.PUBLIC)
             // Add the GeneratedRole annotation to indicate this is a REST server
             .addAnnotation(AnnotationSpec.builder(ClassName.get("org.pipelineframework.annotation", "GeneratedRole"))
-                    .addMember("value", "$T.$L",
-                        ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role"),
+                .addMember("value", "$T.$L",
+                        ClassName.get("org.pipelineframework.annotation", "GeneratedRole", "Role"),
                         role.name())
                     .build());
 
@@ -599,13 +595,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
      * @return the resource path beginning with "/api/v1/" followed by the kebab-case name
      */
     private String deriveResourcePath(String className) {
-        // Remove "Service" suffix if present
-        if (className.endsWith("Service")) {
-            className = className.substring(0, className.length() - 7);
-        }
-
-        // Remove "Reactive" if present (for service names like "ProcessPaymentReactiveService")
-        className = className.replace("Reactive", "");
+        className = ResourceNameUtils.normalizeBaseName(className);
 
         // Convert from PascalCase to kebab-case
         // Handle sequences like "ProcessPaymentStatus" -> "process-payment-status"

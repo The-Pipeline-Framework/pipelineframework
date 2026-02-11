@@ -20,8 +20,6 @@ import org.pipelineframework.processor.ir.TransportMode;
  */
 public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
 
-    private final TargetResolutionStrategy clientRoleStrategy;
-    private final TargetResolutionStrategy serverRoleStrategy;
     private final EnumMap<DeploymentRole, TargetResolutionStrategy> strategiesByRole;
 
     /**
@@ -37,11 +35,14 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
     public PipelineTargetResolutionPhase(
             TargetResolutionStrategy clientRoleStrategy,
             TargetResolutionStrategy serverRoleStrategy) {
-        this.clientRoleStrategy = Objects.requireNonNull(clientRoleStrategy, "clientRoleStrategy must not be null");
-        this.serverRoleStrategy = Objects.requireNonNull(serverRoleStrategy, "serverRoleStrategy must not be null");
+        Objects.requireNonNull(clientRoleStrategy, "clientRoleStrategy must not be null");
+        Objects.requireNonNull(serverRoleStrategy, "serverRoleStrategy must not be null");
         this.strategiesByRole = new EnumMap<>(DeploymentRole.class);
-        this.strategiesByRole.put(DeploymentRole.ORCHESTRATOR_CLIENT, this.clientRoleStrategy);
-        this.strategiesByRole.put(DeploymentRole.PLUGIN_CLIENT, this.clientRoleStrategy);
+        this.strategiesByRole.put(DeploymentRole.ORCHESTRATOR_CLIENT, clientRoleStrategy);
+        this.strategiesByRole.put(DeploymentRole.PLUGIN_CLIENT, clientRoleStrategy);
+        this.strategiesByRole.put(DeploymentRole.PIPELINE_SERVER, serverRoleStrategy);
+        this.strategiesByRole.put(DeploymentRole.PLUGIN_SERVER, serverRoleStrategy);
+        this.strategiesByRole.put(DeploymentRole.REST_SERVER, serverRoleStrategy);
     }
 
     @Override
@@ -96,8 +97,8 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
      * <p>Client roles return the client-side generation target corresponding to the transport
      * (REST -> REST_CLIENT_STEP, LOCAL -> LOCAL_CLIENT_STEP, GRPC -> CLIENT_STEP). Non-client
      * roles return the resource/service target for the transport (REST -> REST_RESOURCE,
-     * GRPC -> GRPC_SERVICE). Note: for non-client roles with transportMode == LOCAL this method
-     * returns GRPC_SERVICE to drive side-effect bean generation.
+     * GRPC -> GRPC_SERVICE). For non-client roles with transportMode == LOCAL this method returns
+     * GRPC_SERVICE_SIDE_EFFECT_ONLY to drive side-effect bean generation without full gRPC adapter emission.
      *
      * @param role the deployment role to resolve targets for
      * @param transportMode the transport mode that influences which targets are selected
@@ -105,7 +106,10 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
      */
     private Set<GenerationTarget> resolveTargetsForRole(
             DeploymentRole role, TransportMode transportMode) {
-        TargetResolutionStrategy strategy = strategiesByRole.getOrDefault(role, serverRoleStrategy);
+        TargetResolutionStrategy strategy = strategiesByRole.get(role);
+        if (strategy == null) {
+            throw new IllegalArgumentException("Unsupported deployment role: " + role);
+        }
         return strategy.resolve(transportMode);
     }
 }

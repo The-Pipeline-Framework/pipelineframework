@@ -55,7 +55,8 @@ class PipelineGenerationPhaseIntegrationTest {
             .withProcessors(new PipelineStepProcessor())
             .withOptions(
                 "-Apipeline.generatedSourcesDir=" + generatedSourcesDir,
-                "-Aprotobuf.descriptor.file=" + resourcePath("descriptor_set_search.dsc"))
+                "-Aprotobuf.descriptor.file="
+                    + resourcePath("descriptor_set_search.dsc").toString().replace('\\', '/'))
             .compile(
                 JavaFileObjects.forSourceString(
                     "org.pipelineframework.search.service.ProcessCrawlSourceService",

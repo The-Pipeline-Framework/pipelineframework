@@ -16,9 +16,8 @@ public class ServerRoleTargetResolutionStrategy implements TargetResolutionStrat
         Objects.requireNonNull(transportMode, "transportMode must not be null");
         return switch (transportMode) {
             case REST -> Set.of(GenerationTarget.REST_RESOURCE);
-            // LOCAL keeps GRPC_SERVICE here only to drive side-effect bean generation.
-            // PipelineGenerationPhase intentionally skips full gRPC adapter emission when transportMode == LOCAL.
-            case LOCAL, GRPC -> Set.of(GenerationTarget.GRPC_SERVICE);
+            case LOCAL -> Set.of(GenerationTarget.GRPC_SERVICE_SIDE_EFFECT_ONLY);
+            case GRPC -> Set.of(GenerationTarget.GRPC_SERVICE);
         };
     }
 }

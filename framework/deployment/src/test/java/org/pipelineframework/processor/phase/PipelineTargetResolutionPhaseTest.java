@@ -54,21 +54,21 @@ class PipelineTargetResolutionPhaseTest {
         assertResolvedTargets(DeploymentRole.PIPELINE_SERVER, TransportMode.REST,
             Set.of(GenerationTarget.REST_RESOURCE));
         assertResolvedTargets(DeploymentRole.PIPELINE_SERVER, TransportMode.LOCAL,
-            Set.of(GenerationTarget.GRPC_SERVICE));
+            Set.of(GenerationTarget.GRPC_SERVICE_SIDE_EFFECT_ONLY));
 
         assertResolvedTargets(DeploymentRole.PLUGIN_SERVER, TransportMode.GRPC,
             Set.of(GenerationTarget.GRPC_SERVICE));
         assertResolvedTargets(DeploymentRole.PLUGIN_SERVER, TransportMode.REST,
             Set.of(GenerationTarget.REST_RESOURCE));
         assertResolvedTargets(DeploymentRole.PLUGIN_SERVER, TransportMode.LOCAL,
-            Set.of(GenerationTarget.GRPC_SERVICE));
+            Set.of(GenerationTarget.GRPC_SERVICE_SIDE_EFFECT_ONLY));
 
         assertResolvedTargets(DeploymentRole.REST_SERVER, TransportMode.GRPC,
             Set.of(GenerationTarget.GRPC_SERVICE));
         assertResolvedTargets(DeploymentRole.REST_SERVER, TransportMode.REST,
             Set.of(GenerationTarget.REST_RESOURCE));
         assertResolvedTargets(DeploymentRole.REST_SERVER, TransportMode.LOCAL,
-            Set.of(GenerationTarget.GRPC_SERVICE));
+            Set.of(GenerationTarget.GRPC_SERVICE_SIDE_EFFECT_ONLY));
     }
 
     @Test

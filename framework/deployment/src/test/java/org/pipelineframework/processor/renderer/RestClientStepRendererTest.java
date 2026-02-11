@@ -74,7 +74,8 @@ class RestClientStepRendererTest {
         assertTrue(interfaceSource.contains("PaymentStatusDto inputDto"));
 
         assertTrue(stepSource.contains("package org.pipelineframework.csv.service.pipeline;"));
-        assertTrue(stepSource.contains("@GeneratedRole(Role.ORCHESTRATOR_CLIENT)"));
+        assertTrue(stepSource.contains("@GeneratedRole("));
+        assertTrue(stepSource.contains("ORCHESTRATOR_CLIENT"));
         assertTrue(stepSource.contains("class ProcessPaymentStatusReactiveRestClientStep"));
         assertTrue(stepSource.contains("@RestClient"));
         assertTrue(stepSource.contains("ProcessPaymentStatusRestClient restClient;"));

@@ -40,9 +40,8 @@ public class GrpcServiceTargetGenerator implements TargetGenerator {
 
     @Override
     public void generate(GenerationRequest request) throws IOException {
-        Objects.requireNonNull(request, "request must not be null");
-        var ctx = Objects.requireNonNull(request.ctx(), "GenerationRequest.ctx() must not be null");
-        var model = Objects.requireNonNull(request.model(), "GenerationRequest.model() must not be null");
+        var ctx = request.ctx();
+        var model = request.model();
 
         if (model.deploymentRole() == DeploymentRole.PLUGIN_SERVER && !policy.allowPluginServerArtifacts(ctx)) {
             return;
@@ -90,7 +89,15 @@ public class GrpcServiceTargetGenerator implements TargetGenerator {
             request.cacheKeyGenerator(),
             request.descriptorSet()));
 
-        String className = model.servicePackage() + PIPELINE_PACKAGE_SEGMENT + model.generatedName() + "GrpcService";
+        String servicePackage = model.servicePackage();
+        if (servicePackage == null || servicePackage.isBlank()) {
+            throw new IllegalArgumentException("PipelineStepModel.servicePackage() must not be null/blank");
+        }
+        String generatedName = model.generatedName();
+        if (generatedName == null || generatedName.isBlank()) {
+            throw new IllegalArgumentException("PipelineStepModel.generatedName() must not be null/blank");
+        }
+        String className = servicePackage + PIPELINE_PACKAGE_SEGMENT + generatedName + "GrpcService";
         request.roleMetadataGenerator().recordClassWithRole(className, role.name());
     }
 }

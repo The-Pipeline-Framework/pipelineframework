@@ -23,6 +23,7 @@ import org.pipelineframework.processor.renderer.OrchestratorRestResourceRenderer
 public class OrchestratorGenerationService {
 
     private static final Logger LOG = Logger.getLogger(OrchestratorGenerationService.class);
+    private static final String ORCHESTRATOR_BINDING_KEY = "orchestrator";
 
     private final GenerationPathResolver pathResolver;
     private final OrchestratorGrpcRenderer grpcRenderer;
@@ -55,7 +56,7 @@ public class OrchestratorGenerationService {
             LOG.error("Skipping orchestrator artifact generation because processing environment is null.");
             return;
         }
-        Object bindingObj = ctx.getRendererBindings().get("orchestrator");
+        Object bindingObj = ctx.getRendererBindings().get(ORCHESTRATOR_BINDING_KEY);
         if (!(bindingObj instanceof OrchestratorBinding binding)) {
             return;
         }
@@ -85,7 +86,7 @@ public class OrchestratorGenerationService {
         } catch (IOException e) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 Diagnostic.Kind.ERROR,
-                "Failed to generate orchestrator artifacts: " + e.toString());
+                "Failed to generate orchestrator artifacts: " + e.getMessage());
             LOG.error("Failed to generate orchestrator artifacts.", e);
         }
     }

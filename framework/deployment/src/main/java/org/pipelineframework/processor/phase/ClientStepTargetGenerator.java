@@ -13,6 +13,8 @@ import org.pipelineframework.processor.renderer.GenerationContext;
  */
 public class ClientStepTargetGenerator implements TargetGenerator {
 
+    private static final String SERVICE_SUFFIX = "Service";
+
     private final ClientStepRenderer renderer;
     private final GenerationPolicy policy;
     private final GenerationPathResolver pathResolver;
@@ -35,8 +37,20 @@ public class ClientStepTargetGenerator implements TargetGenerator {
     public void generate(GenerationRequest request) throws IOException {
         var ctx = request.ctx();
         var model = request.model();
+        String generatedName = model.generatedName();
+        if (generatedName == null) {
+            throw new IllegalStateException("PipelineStepModel.generatedName() must not be null");
+        }
+        String servicePackage = model.servicePackage();
+        if (servicePackage == null) {
+            throw new IllegalStateException("PipelineStepModel.servicePackage() must not be null");
+        }
 
         if (model.deploymentRole() == DeploymentRole.PLUGIN_SERVER && ctx.isPluginHost()) {
+            return;
+        }
+        if (request.grpcBinding() == null) {
+            // No gRPC binding available for client-step generation; skip safely.
             return;
         }
 
@@ -49,16 +63,8 @@ public class ClientStepTargetGenerator implements TargetGenerator {
             request.cacheKeyGenerator(),
             request.descriptorSet()));
 
-        String generatedName = model.generatedName();
-        if (generatedName == null) {
-            throw new IllegalStateException("PipelineStepModel.generatedName() must not be null");
-        }
-        String servicePackage = model.servicePackage();
-        if (servicePackage == null) {
-            throw new IllegalStateException("PipelineStepModel.servicePackage() must not be null");
-        }
-        if (generatedName.endsWith("Service")) {
-            generatedName = generatedName.substring(0, generatedName.length() - "Service".length());
+        if (generatedName.endsWith(SERVICE_SUFFIX)) {
+            generatedName = generatedName.substring(0, generatedName.length() - SERVICE_SUFFIX.length());
         }
         String className = servicePackage + ".pipeline." + generatedName + "GrpcClientStep";
         request.roleMetadataGenerator().recordClassWithRole(className, role.name());

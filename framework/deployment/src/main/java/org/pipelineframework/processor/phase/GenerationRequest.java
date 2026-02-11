@@ -31,7 +31,9 @@ public record GenerationRequest(
     Set<String> enabledAspects
 ) {
     public GenerationRequest {
-        generatedSideEffectBeans = generatedSideEffectBeans == null ? new HashSet<>() : generatedSideEffectBeans;
+        generatedSideEffectBeans = generatedSideEffectBeans == null
+            ? new HashSet<>()
+            : new HashSet<>(generatedSideEffectBeans);
         enabledAspects = enabledAspects == null ? Set.of() : Set.copyOf(enabledAspects);
     }
 }

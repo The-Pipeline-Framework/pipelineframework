@@ -46,7 +46,6 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         GenerationPathResolver pathResolver = new GenerationPathResolver();
         GenerationPolicy policy = new GenerationPolicy();
         SideEffectBeanService sideEffectBeanService = new SideEffectBeanService(pathResolver);
-
         this.protobufParserService = new ProtobufParserService(pathResolver);
         this.orchestratorGenerationService = new OrchestratorGenerationService(
             pathResolver,
@@ -54,13 +53,37 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             new OrchestratorRestResourceRenderer(),
             new OrchestratorCliRenderer(),
             new OrchestratorIngestClientRenderer());
+        this.targetGenerators = buildTargetGenerators(pathResolver, policy, sideEffectBeanService);
+    }
 
+    PipelineGenerationPhase(SideEffectBeanService sideEffectBeanService) {
+        GenerationPathResolver pathResolver = new GenerationPathResolver();
+        GenerationPolicy policy = new GenerationPolicy();
+        this.protobufParserService = new ProtobufParserService(pathResolver);
+        this.orchestratorGenerationService = new OrchestratorGenerationService(
+            pathResolver,
+            new OrchestratorGrpcRenderer(),
+            new OrchestratorRestResourceRenderer(),
+            new OrchestratorCliRenderer(),
+            new OrchestratorIngestClientRenderer());
+        this.targetGenerators = buildTargetGenerators(
+            pathResolver,
+            policy,
+            sideEffectBeanService == null ? new SideEffectBeanService(pathResolver) : sideEffectBeanService);
+    }
+
+    private Map<GenerationTarget, TargetGenerator> buildTargetGenerators(
+            GenerationPathResolver pathResolver,
+            GenerationPolicy policy,
+            SideEffectBeanService sideEffectBeanService) {
         Map<GenerationTarget, TargetGenerator> generators = new HashMap<>();
-        register(generators, new GrpcServiceTargetGenerator(
+        GrpcServiceTargetGenerator grpcGenerator = new GrpcServiceTargetGenerator(
             new GrpcServiceAdapterRenderer(GenerationTarget.GRPC_SERVICE),
             policy,
             pathResolver,
-            sideEffectBeanService));
+            sideEffectBeanService);
+        register(generators, grpcGenerator);
+        generators.put(GenerationTarget.GRPC_SERVICE_SIDE_EFFECT_ONLY, grpcGenerator);
         register(generators, new ClientStepTargetGenerator(
             new ClientStepRenderer(GenerationTarget.CLIENT_STEP),
             policy,
@@ -79,7 +102,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             new RestClientStepRenderer(),
             policy,
             pathResolver));
-        this.targetGenerators = Map.copyOf(generators);
+        return Map.copyOf(generators);
     }
 
     @Override
@@ -129,6 +152,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 }
                 generator.generate(request);
             }
+            generatedSideEffectBeans.addAll(request.generatedSideEffectBeans());
         }
 
         if (ctx.isTransportModeGrpc() && descriptorSet != null) {

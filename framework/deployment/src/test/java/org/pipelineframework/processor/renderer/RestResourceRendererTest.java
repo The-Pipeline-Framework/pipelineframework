@@ -55,7 +55,8 @@ class RestResourceRendererTest {
         String source = Files.readString(generatedSource);
 
         assertTrue(source.contains("package org.pipelineframework.csv.service.pipeline;"));
-        assertTrue(source.contains("@GeneratedRole(Role.REST_SERVER)"));
+        assertTrue(source.contains("@GeneratedRole("));
+        assertTrue(source.contains("REST_SERVER"));
         assertTrue(source.contains("@Path(\"/ProcessPaymentStatusReactiveService/remoteProcess\")"));
         assertTrue(source.contains("class ProcessPaymentStatusResource"));
         assertTrue(source.contains("ProcessPaymentStatusReactiveService domainService;"));

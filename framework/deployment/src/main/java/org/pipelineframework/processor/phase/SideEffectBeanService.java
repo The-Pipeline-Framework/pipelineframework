@@ -69,7 +69,7 @@ public class SideEffectBeanService {
             .addAnnotation(AnnotationSpec.builder(ClassName.get("io.quarkus.arc", "Unremovable")).build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("org.pipelineframework.annotation", "GeneratedRole"))
                 .addMember("value", "$T.$L",
-                    ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role"),
+                    ClassName.get("org.pipelineframework.annotation", "GeneratedRole", "Role"),
                     role.name())
                 .build());
 
@@ -172,6 +172,15 @@ public class SideEffectBeanService {
                 org.pipelineframework.processor.util.GrpcJavaTypeResolver resolver =
                     new org.pipelineframework.processor.util.GrpcJavaTypeResolver();
                 var grpcTypes = resolver.resolve(grpcBinding);
+                if (grpcTypes != null
+                    && (grpcTypes.grpcParameterType() == null || grpcTypes.grpcReturnType() == null)) {
+                    LOG.warnf(
+                        "Partial gRPC type resolution for service '%s' and method descriptor '%s'; "
+                            + "falling back to observed type.",
+                        model.serviceName(),
+                        grpcBinding.methodDescriptor());
+                    return observedType;
+                }
                 if (grpcTypes != null && grpcTypes.grpcParameterType() != null && grpcTypes.grpcReturnType() != null) {
                     Object methodDescriptorObj = grpcBinding.methodDescriptor();
                     if (methodDescriptorObj == null) {
@@ -226,6 +235,17 @@ public class SideEffectBeanService {
         return CACHE_SERVICE_CLASS.equals(model.serviceClassName().canonicalName());
     }
 
+    /**
+     * Converts a domain type reference into its DTO counterpart using package naming conventions.
+     *
+     * <p>This conversion assumes the source type contains a {@code .domain.} or {@code .service.} package segment.
+     * The first matching package segment is replaced with {@code .dto.} via
+     * {@link #replaceFirstPackageSegment(String, String, String)}, and the resulting simple type name is normalized
+     * to end with {@code Dto} via {@link #buildDtoClassName(String)}.</p>
+     *
+     * <p>Projects that do not follow this package convention should provide their own mapping. When conventions do not
+     * match, generated DTO types may be invalid and fail compilation.</p>
+     */
     private TypeName convertDomainToDtoType(TypeName domainType) {
         if (domainType == null) {
             return ClassName.OBJECT;

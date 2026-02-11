@@ -16,6 +16,7 @@ import org.pipelineframework.processor.renderer.LocalClientStepRenderer;
 public class LocalClientStepTargetGenerator implements TargetGenerator {
 
     private static final Logger LOG = Logger.getLogger(LocalClientStepTargetGenerator.class);
+    private static final String SERVICE_SUFFIX = "Service";
 
     private final LocalClientStepRenderer renderer;
     private final GenerationPolicy policy;
@@ -57,7 +58,7 @@ public class LocalClientStepTargetGenerator implements TargetGenerator {
 
         if (model.sideEffect() && model.deploymentRole() == DeploymentRole.PLUGIN_SERVER) {
             String key = model.servicePackage() + ".pipeline." + model.serviceName();
-            if (request.generatedSideEffectBeans().add(key)) {
+            if (request.grpcBinding() != null && request.generatedSideEffectBeans().add(key)) {
                 sideEffectBeanService.generateSideEffectBean(
                     ctx,
                     model,
@@ -85,10 +86,17 @@ public class LocalClientStepTargetGenerator implements TargetGenerator {
             request.descriptorSet()));
 
         String generatedName = model.generatedName();
-        if (generatedName.endsWith("Service")) {
-            generatedName = generatedName.substring(0, generatedName.length() - "Service".length());
+        if (generatedName == null || generatedName.isBlank()) {
+            throw new IllegalArgumentException("PipelineStepModel.generatedName() must not be null/blank");
         }
-        String className = model.servicePackage() + ".pipeline." + generatedName + "LocalClientStep";
+        String servicePackage = model.servicePackage();
+        if (servicePackage == null || servicePackage.isBlank()) {
+            throw new IllegalArgumentException("PipelineStepModel.servicePackage() must not be null/blank");
+        }
+        if (generatedName.endsWith(SERVICE_SUFFIX)) {
+            generatedName = generatedName.substring(0, generatedName.length() - SERVICE_SUFFIX.length());
+        }
+        String className = servicePackage + ".pipeline." + generatedName + "LocalClientStep";
         request.roleMetadataGenerator().recordClassWithRole(className, role.name());
     }
 }

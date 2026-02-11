@@ -13,6 +13,8 @@ public enum GenerationTarget {
     REST_CLIENT_STEP,
     /** gRPC server adapter */
     GRPC_SERVICE,
+    /** Side-effect-only path for server roles under LOCAL transport */
+    GRPC_SERVICE_SIDE_EFFECT_ONLY,
     /** JAX-RS resource */
     REST_RESOURCE,
     /** Orchestrator CLI entrypoint */

@@ -59,6 +59,7 @@ import org.pipelineframework.processor.ir.TypeMapping;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
@@ -386,7 +387,8 @@ class PipelineGenerationPhaseTest {
 
     @Test
     void generatesPluginSideEffectBeanForLocalTransport(@TempDir Path tempDir) throws Exception {
-        PipelineGenerationPhase phase = new PipelineGenerationPhase();
+        SideEffectBeanService sideEffectBeanService = mock(SideEffectBeanService.class);
+        PipelineGenerationPhase phase = new PipelineGenerationPhase(sideEffectBeanService);
         PipelineStepModel model = buildStepModel(
             Set.of(GenerationTarget.GRPC_SERVICE),
             DeploymentRole.PLUGIN_SERVER,
@@ -407,8 +409,12 @@ class PipelineGenerationPhaseTest {
 
         phase.execute(ctx);
 
-        assertTrue(Files.exists(tempDir.resolve(
-            "orchestrator-client/com/example/service/pipeline/TestService.java")));
+        verify(sideEffectBeanService).generateSideEffectBean(
+            eq(ctx),
+            eq(model),
+            eq(DeploymentRole.PLUGIN_SERVER),
+            eq(DeploymentRole.ORCHESTRATOR_CLIENT),
+            any());
     }
 
     @Test

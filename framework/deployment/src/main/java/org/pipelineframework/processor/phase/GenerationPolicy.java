@@ -38,8 +38,9 @@ public class GenerationPolicy {
         return switch (serverRole) {
             case PLUGIN_SERVER -> DeploymentRole.PLUGIN_CLIENT;
             case PIPELINE_SERVER -> DeploymentRole.ORCHESTRATOR_CLIENT;
-            case ORCHESTRATOR_CLIENT, PLUGIN_CLIENT, REST_SERVER -> serverRole;
-            default -> throw new IllegalArgumentException("Unexpected deployment role: " + serverRole);
+            case ORCHESTRATOR_CLIENT -> DeploymentRole.ORCHESTRATOR_CLIENT;
+            case PLUGIN_CLIENT -> DeploymentRole.PLUGIN_CLIENT;
+            case REST_SERVER -> DeploymentRole.ORCHESTRATOR_CLIENT;
         };
     }
 }

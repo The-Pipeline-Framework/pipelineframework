@@ -8,6 +8,7 @@ import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.renderer.GenerationContext;
 import org.pipelineframework.processor.renderer.RestResourceRenderer;
+import org.pipelineframework.processor.util.ResourceNameUtils;
 
 /**
  * Target generator for REST resource artifacts.
@@ -45,15 +46,6 @@ public class RestResourceTargetGenerator implements TargetGenerator {
             return;
         }
 
-        if (model.sideEffect() && model.deploymentRole() == DeploymentRole.PLUGIN_SERVER) {
-            sideEffectBeanService.generateSideEffectBean(
-                ctx,
-                model,
-                DeploymentRole.REST_SERVER,
-                DeploymentRole.REST_SERVER,
-                request.grpcBinding());
-        }
-
         if (request.restBinding() == null) {
             if (ctx.getProcessingEnv() != null) {
                 ctx.getProcessingEnv().getMessager().printMessage(
@@ -62,6 +54,14 @@ public class RestResourceTargetGenerator implements TargetGenerator {
                         + "' because no REST binding is available.");
             }
             return;
+        }
+        if (model.sideEffect() && model.deploymentRole() == DeploymentRole.PLUGIN_SERVER) {
+            sideEffectBeanService.generateSideEffectBean(
+                ctx,
+                model,
+                DeploymentRole.REST_SERVER,
+                DeploymentRole.REST_SERVER,
+                request.grpcBinding());
         }
 
         DeploymentRole role = DeploymentRole.REST_SERVER;
@@ -73,18 +73,7 @@ public class RestResourceTargetGenerator implements TargetGenerator {
             request.cacheKeyGenerator(),
             request.descriptorSet()));
 
-        String baseName = model.generatedName();
-        if (baseName.endsWith("Service")) {
-            baseName = baseName.substring(0, baseName.length() - "Service".length());
-        }
-        if (baseName.endsWith("Reactive")) {
-            baseName = baseName.substring(0, baseName.length() - "Reactive".length());
-        }
-        if (baseName.isBlank()) {
-            baseName = model.generatedName() == null || model.generatedName().isBlank()
-                ? "Unnamed"
-                : model.generatedName();
-        }
+        String baseName = ResourceNameUtils.normalizeBaseName(model.generatedName());
         String className = model.servicePackage() + ".pipeline." + baseName + "Resource";
         request.roleMetadataGenerator().recordClassWithRole(className, role.name());
     }

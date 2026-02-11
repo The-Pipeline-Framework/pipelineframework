@@ -96,7 +96,7 @@ public class LocalClientStepRenderer implements PipelineRenderer<LocalBinding> {
                 .build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("org.pipelineframework.annotation", "GeneratedRole"))
                 .addMember("value", "$T.$L",
-                    ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role"),
+                    ClassName.get("org.pipelineframework.annotation", "GeneratedRole", "Role"),
                     role.name())
                 .build());
         if (model.sideEffect()) {

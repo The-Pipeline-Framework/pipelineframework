@@ -2,6 +2,9 @@ package org.pipelineframework.processor.phase;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -43,6 +46,9 @@ public class ProtobufParserService {
     public void generateProtobufParsers(PipelineCompilationContext ctx, DescriptorProtos.FileDescriptorSet descriptorSet) {
         if (ctx == null) {
             throw new IllegalArgumentException("ctx must not be null");
+        }
+        if (descriptorSet == null) {
+            throw new IllegalArgumentException("descriptorSet must not be null");
         }
         Map<String, Descriptors.FileDescriptor> fileDescriptors = buildFileDescriptors(descriptorSet);
         if (fileDescriptors.isEmpty()) {
@@ -242,8 +248,23 @@ public class ProtobufParserService {
             }
         }
         if (sb.length() == 0) {
-            return "ProtoFile" + Integer.toHexString(fileDescriptor.getName().hashCode()).toUpperCase();
+            return "ProtoFile" + hashSuffix(fileDescriptor.getName());
         }
         return sb.toString();
+    }
+
+    private String hashSuffix(String input) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                hex.append(Character.forDigit((b >> 4) & 0xF, 16));
+                hex.append(Character.forDigit(b & 0xF, 16));
+            }
+            return hex.toString().toUpperCase();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 algorithm is not available", e);
+        }
     }
 }
