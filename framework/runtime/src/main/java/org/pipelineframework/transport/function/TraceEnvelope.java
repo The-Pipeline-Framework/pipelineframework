@@ -91,7 +91,7 @@ public record TraceEnvelope<T>(
             payload,
             occurredAt,
             immutableMeta
-                ? new PreNormalizedMeta(meta == null ? Map.of() : Map.copyOf(meta))
+                ? new PreNormalizedMeta(meta == null ? Map.of() : meta)
                 : meta);
     }
 
@@ -185,7 +185,6 @@ public record TraceEnvelope<T>(
             true);
     }
 
-    @SuppressWarnings("unchecked")
     private static Map<String, String> normalizeMeta(Map<String, String> meta) {
         if (meta == null) {
             return Map.of();

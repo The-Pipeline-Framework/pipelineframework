@@ -89,10 +89,11 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
             .beginControlFlow("try")
             .addStatement("return resource.process(input).await().indefinitely()")
             .nextControlFlow("catch (Exception e)")
+            .addStatement("$T inputType = (input == null) ? \"null\" : input.getClass().getName()", String.class)
             .addStatement(
-                "throw new $T($S + input, e)",
+                "throw new $T($S + inputType, e)",
                 RuntimeException.class,
-                "Failed handleRequest -> resource.process for input: ")
+                "Failed handleRequest -> resource.process for input type: ")
             .endControlFlow()
             .build();
         handler.addMethod(handleRequest);

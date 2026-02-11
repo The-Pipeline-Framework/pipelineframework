@@ -90,7 +90,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         PipelineStepConfigLoader.StepConfig stepConfig = loadPipelineStepConfig(ctx);
         TransportMode transportMode = loadPipelineTransport(ctx, stepConfig);
         ctx.setTransportMode(transportMode);
-        PlatformMode platformMode = loadPipelinePlatform(stepConfig);
+        PlatformMode platformMode = loadPipelinePlatform(ctx, stepConfig);
         ctx.setPlatformMode(platformMode);
 
         // Discover orchestrator models if present
@@ -195,12 +195,23 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         return mode.get();
     }
 
-    private PlatformMode loadPipelinePlatform(PipelineStepConfigLoader.StepConfig stepConfig) {
+    private PlatformMode loadPipelinePlatform(
+        PipelineCompilationContext ctx,
+        PipelineStepConfigLoader.StepConfig stepConfig) {
         String platform = stepConfig.platform();
         if (platform == null || platform.isBlank()) {
             return PlatformMode.COMPUTE;
         }
-        return PlatformMode.fromStringOptional(platform).orElse(PlatformMode.COMPUTE);
+        Optional<PlatformMode> mode = PlatformMode.fromStringOptional(platform);
+        if (mode.isEmpty()) {
+            if (ctx.getProcessingEnv() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.WARNING,
+                    "Unknown pipeline platform '" + platform + "'; defaulting to COMPUTE.");
+            }
+            return PlatformMode.COMPUTE;
+        }
+        return mode.get();
     }
 
     /**

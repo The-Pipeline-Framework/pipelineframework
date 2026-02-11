@@ -25,6 +25,7 @@ This sets:
 - `pipeline.transport=REST`
 - `pipeline.rest.naming.strategy=RESOURCEFUL`
 - `pipeline.lambda.dependency.scope=compile`
+- `quarkus.profile=lambda`
 
 ## Mock Event-Server Smoke Test
 
@@ -35,6 +36,7 @@ This sets:
   -Dpipeline.transport=REST \
   -Dpipeline.rest.naming.strategy=RESOURCEFUL \
   -Dpipeline.lambda.dependency.scope=compile \
+  -Dquarkus.profile=lambda \
   -DskipTests \
   compile
 
@@ -44,6 +46,7 @@ This sets:
   -Dpipeline.transport=REST \
   -Dpipeline.rest.naming.strategy=RESOURCEFUL \
   -Dpipeline.lambda.dependency.scope=compile \
+  -Dquarkus.profile=lambda \
   -Dtest=LambdaMockEventServerSmokeTest \
   test
 ```
@@ -63,6 +66,7 @@ Expected result:
   -Dpipeline.transport=REST \
   -Dpipeline.rest.naming.strategy=RESOURCEFUL \
   -Dpipeline.lambda.dependency.scope=compile \
+  -Dquarkus.profile=lambda \
   -DskipTests \
   -Dquarkus.native.enabled=true \
   -Pnative \
