@@ -22,6 +22,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /**
  * Locates pipeline.yaml configuration files starting from a module directory.
@@ -47,6 +48,15 @@ public class PipelineYamlConfigLocator {
      * @return the resolved config path if found
      */
     public Optional<Path> locate(Path moduleDir) {
+        List<Path> moduleMatches = new ArrayList<>();
+        scanDirectory(moduleDir, moduleMatches);
+        scanDirectory(moduleDir.resolve("config"), moduleMatches);
+        scanDirectory(moduleDir.resolve("src").resolve("main").resolve("resources"), moduleMatches);
+        if (!moduleMatches.isEmpty()) {
+            validateSingleMatch(moduleMatches);
+            return Optional.of(moduleMatches.get(0));
+        }
+
         Path projectRoot = findNearestParentPom(moduleDir);
         if (projectRoot == null) {
             return Optional.empty();
@@ -56,16 +66,19 @@ public class PipelineYamlConfigLocator {
         scanDirectory(projectRoot, matches);
         scanDirectory(projectRoot.resolve("config"), matches);
 
+        validateSingleMatch(matches);
+
+        return matches.isEmpty() ? Optional.empty() : Optional.of(matches.get(0));
+    }
+
+    private void validateSingleMatch(List<Path> matches) {
         if (matches.size() > 1) {
             String names = matches.stream()
                 .map(Path::toString)
                 .sorted()
-                .reduce((a, b) -> a + ", " + b)
-                .orElse("");
+                .collect(Collectors.joining(", "));
             throw new IllegalStateException("Multiple pipeline config files found: " + names);
         }
-
-        return matches.isEmpty() ? Optional.empty() : Optional.of(matches.get(0));
     }
 
     private Path findNearestParentPom(Path moduleDir) {

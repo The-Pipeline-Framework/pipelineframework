@@ -1,0 +1,39 @@
+package org.pipelineframework.checkout.createorder.order_create.service;
+
+import org.pipelineframework.checkout.createorder.common.domain.OrderLineItem;
+import org.pipelineframework.checkout.createorder.common.domain.InitialOrder;
+import org.pipelineframework.annotation.PipelineStep;
+import jakarta.enterprise.context.ApplicationScoped;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
+import io.smallrye.mutiny.Uni;
+import org.pipelineframework.service.ReactiveService;
+
+@PipelineStep(
+    inputType = OrderLineItem.class,
+    outputType = InitialOrder.class,
+    stepType = org.pipelineframework.step.StepOneToOne.class,
+    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
+    inboundMapper = org.pipelineframework.checkout.createorder.common.mapper.OrderLineItemMapper.class,
+    outboundMapper = org.pipelineframework.checkout.createorder.common.mapper.InitialOrderMapper.class
+)
+@ApplicationScoped
+public class ProcessOrderCreateService
+    implements ReactiveService<OrderLineItem, InitialOrder> {
+
+  @Override
+  public Uni<InitialOrder> process(OrderLineItem input) {
+    if (input == null) {
+      return Uni.createFrom().failure(new IllegalArgumentException("lineItem must not be null"));
+    }
+    if (input.requestId() == null || input.customerId() == null || input.sku() == null || input.sku().isBlank()) {
+      return Uni.createFrom().failure(new IllegalArgumentException(
+          "lineItem.requestId, lineItem.customerId and lineItem.sku must not be null/blank"));
+    }
+    int normalizedQuantity = input.quantity() <= 0 ? 1 : input.quantity();
+    String seed = input.requestId() + "|" + input.customerId() + "|" + input.sku().trim() + "|" + normalizedQuantity;
+    UUID orderId = UUID.nameUUIDFromBytes(seed.getBytes(StandardCharsets.UTF_8));
+    InitialOrder output = new InitialOrder(orderId, input.customerId(), normalizedQuantity);
+    return Uni.createFrom().item(output);
+  }
+}
