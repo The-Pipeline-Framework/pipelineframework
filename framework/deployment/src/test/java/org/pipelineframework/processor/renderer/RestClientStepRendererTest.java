@@ -58,7 +58,7 @@ class RestClientStepRendererTest {
         Path clientInterface = tempDir.resolve(
             "org/pipelineframework/csv/service/pipeline/ProcessPaymentStatusRestClient.java");
         Path clientStep = tempDir.resolve(
-            "org/pipelineframework/csv/service/pipeline/ProcessPaymentStatusReactiveRestClientStep.java");
+            "org/pipelineframework/csv/service/pipeline/ProcessPaymentStatusRestClientStep.java");
 
         String interfaceSource = Files.readString(clientInterface);
         String stepSource = Files.readString(clientStep);
@@ -76,7 +76,7 @@ class RestClientStepRendererTest {
         assertTrue(stepSource.contains("package org.pipelineframework.csv.service.pipeline;"));
         assertTrue(stepSource.contains("@GeneratedRole("));
         assertTrue(stepSource.contains("ORCHESTRATOR_CLIENT"));
-        assertTrue(stepSource.contains("class ProcessPaymentStatusReactiveRestClientStep"));
+        assertTrue(stepSource.contains("class ProcessPaymentStatusRestClientStep"));
         assertTrue(stepSource.contains("@RestClient"));
         assertTrue(stepSource.contains("ProcessPaymentStatusRestClient restClient;"));
         assertTrue(stepSource.contains("public Uni<PaymentOutputDto> applyOneToOne(PaymentStatusDto input)"));
@@ -122,7 +122,7 @@ class RestClientStepRendererTest {
         renderer.render(binding, context);
 
         Path clientStep = tempDir.resolve(
-            "org/pipelineframework/csv/service/pipeline/ProcessPaymentStatusReactiveRestClientStep.java");
+            "org/pipelineframework/csv/service/pipeline/ProcessPaymentStatusRestClientStep.java");
 
         String stepSource = Files.readString(clientStep);
         assertTrue(stepSource.contains("CacheReadBypass"));

@@ -30,6 +30,7 @@ import org.pipelineframework.processor.ir.DeploymentRole;
 public class ProtobufParserService {
 
     private static final Logger LOG = Logger.getLogger(ProtobufParserService.class);
+    private static final int HASH_SUFFIX_LENGTH = 12;
 
     private final GenerationPathResolver pathResolver;
 
@@ -144,9 +145,6 @@ public class ProtobufParserService {
 
     private Map<String, Descriptors.FileDescriptor> buildFileDescriptors(DescriptorProtos.FileDescriptorSet descriptorSet) {
         Map<String, Descriptors.FileDescriptor> built = new HashMap<>();
-        if (descriptorSet == null) {
-            return built;
-        }
         boolean progress = true;
         while (built.size() < descriptorSet.getFileCount() && progress) {
             progress = false;
@@ -262,7 +260,8 @@ public class ProtobufParserService {
                 hex.append(Character.forDigit((b >> 4) & 0xF, 16));
                 hex.append(Character.forDigit(b & 0xF, 16));
             }
-            return hex.toString().toUpperCase();
+            int limit = Math.min(HASH_SUFFIX_LENGTH, hex.length());
+            return hex.substring(0, limit).toUpperCase();
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 algorithm is not available", e);
         }

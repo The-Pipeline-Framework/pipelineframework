@@ -10,6 +10,7 @@ import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.RestBinding;
+import org.pipelineframework.processor.util.DtoTypeUtils;
 import org.pipelineframework.processor.util.ResourceNameUtils;
 
 /**
@@ -618,35 +619,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
      * @return the corresponding DTO TypeName, or {@code ClassName.OBJECT} when {@code domainType} is {@code null}
      */
     private TypeName convertDomainToDtoType(TypeName domainType) {
-        if (domainType == null) {
-            return ClassName.OBJECT;
-        }
-
-        String domainTypeStr = domainType.toString();
-
-        // Replace common domain package patterns with DTO equivalents and add Dto suffix
-        String dtoTypeStr = domainTypeStr
-            .replace(".domain.", ".dto.")
-            .replace(".service.", ".dto.");
-
-        // If domain-to-dto package conversion succeeded, add Dto suffix to the class name
-        if (!dtoTypeStr.equals(domainTypeStr)) {
-            int lastDot = dtoTypeStr.lastIndexOf('.');
-            String packageName = lastDot > 0 ? dtoTypeStr.substring(0, lastDot) : "";
-            String simpleName = lastDot > 0 ? dtoTypeStr.substring(lastDot + 1) : dtoTypeStr;
-            // Add Dto suffix to the class name
-            String dtoSimpleName = simpleName + "Dto";
-            return ClassName.get(packageName, dtoSimpleName);
-        } else {
-            // If domain/dto conversion didn't work (no standard domain package),
-            // just add Dto suffix to the simple name
-            int lastDot = domainTypeStr.lastIndexOf('.');
-            String packageName = lastDot > 0 ? domainTypeStr.substring(0, lastDot) : "";
-            String simpleName = lastDot > 0 ? domainTypeStr.substring(lastDot + 1) : domainTypeStr;
-            // Add Dto suffix to the class name
-            String dtoSimpleName = simpleName + "Dto";
-            return ClassName.get(packageName, dtoSimpleName);
-        }
+        return DtoTypeUtils.toDtoType(domainType);
     }
 
     private void validateRestMappings(PipelineStepModel model) {

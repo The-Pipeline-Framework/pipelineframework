@@ -114,11 +114,23 @@ class PipelineGenerationPhaseTest {
     @Test
     void testGenerationPhaseExecutionWithModels() throws Exception {
         PipelineGenerationPhase phase = new PipelineGenerationPhase();
-        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        GrpcDescriptors grpcDescriptors = createGrpcDescriptors();
+        PipelineStepModel model = buildStepModel(
+            Set.of(GenerationTarget.CLIENT_STEP),
+            DeploymentRole.PIPELINE_SERVER,
+            false,
+            false
+        );
+        Path tempDir = Files.createTempDirectory("pipeline-generation-phase-test");
+        PipelineCompilationContext context = newContext(tempDir, List.of(model), TransportMode.GRPC);
+        context.setRendererBindings(Map.of(
+            model.serviceName() + "_grpc",
+            new GrpcBinding(model, grpcDescriptors.service(), grpcDescriptors.method())
+        ));
 
-        // Execute the phase with an empty context (no models)
-        // This should not throw exceptions and should handle the empty case gracefully
         assertDoesNotThrow(() -> phase.execute(context));
+        assertTrue(Files.exists(tempDir.resolve(
+            "orchestrator-client/com/example/service/pipeline/TestGrpcClientStep.java")));
     }
 
     @Test

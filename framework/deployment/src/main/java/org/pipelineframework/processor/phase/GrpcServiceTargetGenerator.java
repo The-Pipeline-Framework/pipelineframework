@@ -80,6 +80,15 @@ public class GrpcServiceTargetGenerator implements TargetGenerator {
             return;
         }
 
+        String servicePackage = model.servicePackage();
+        if (servicePackage == null || servicePackage.isBlank()) {
+            throw new IllegalArgumentException("PipelineStepModel.servicePackage() must not be null/blank");
+        }
+        String generatedName = model.generatedName();
+        if (generatedName == null || generatedName.isBlank()) {
+            throw new IllegalArgumentException("PipelineStepModel.generatedName() must not be null/blank");
+        }
+
         DeploymentRole role = model.deploymentRole();
         renderer.render(request.grpcBinding(), new GenerationContext(
             ctx.getProcessingEnv(),
@@ -89,14 +98,6 @@ public class GrpcServiceTargetGenerator implements TargetGenerator {
             request.cacheKeyGenerator(),
             request.descriptorSet()));
 
-        String servicePackage = model.servicePackage();
-        if (servicePackage == null || servicePackage.isBlank()) {
-            throw new IllegalArgumentException("PipelineStepModel.servicePackage() must not be null/blank");
-        }
-        String generatedName = model.generatedName();
-        if (generatedName == null || generatedName.isBlank()) {
-            throw new IllegalArgumentException("PipelineStepModel.generatedName() must not be null/blank");
-        }
         String className = servicePackage + PIPELINE_PACKAGE_SEGMENT + generatedName + "GrpcService";
         request.roleMetadataGenerator().recordClassWithRole(className, role.name());
     }

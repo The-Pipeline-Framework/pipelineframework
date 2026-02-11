@@ -41,6 +41,10 @@ public class RestResourceTargetGenerator implements TargetGenerator {
     public void generate(GenerationRequest request) throws IOException {
         var ctx = request.ctx();
         var model = request.model();
+        String servicePackage = model.servicePackage();
+        if (servicePackage == null) {
+            throw new IllegalStateException("PipelineStepModel.servicePackage() must not be null");
+        }
 
         if (model.deploymentRole() == DeploymentRole.PLUGIN_SERVER && !policy.allowPluginServerArtifacts(ctx)) {
             return;
@@ -74,7 +78,7 @@ public class RestResourceTargetGenerator implements TargetGenerator {
             request.descriptorSet()));
 
         String baseName = ResourceNameUtils.normalizeBaseName(model.generatedName());
-        String className = model.servicePackage() + ".pipeline." + baseName + "Resource";
+        String className = servicePackage + ".pipeline." + baseName + "Resource";
         request.roleMetadataGenerator().recordClassWithRole(className, role.name());
     }
 }

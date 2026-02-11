@@ -54,7 +54,7 @@ class PipelineGenerationPhaseIntegrationTest {
         Compilation compilation = Compiler.javac()
             .withProcessors(new PipelineStepProcessor())
             .withOptions(
-                "-Apipeline.generatedSourcesDir=" + generatedSourcesDir,
+                "-Apipeline.generatedSourcesDir=" + generatedSourcesDir.toString().replace('\\', '/'),
                 "-Aprotobuf.descriptor.file="
                     + resourcePath("descriptor_set_search.dsc").toString().replace('\\', '/'))
             .compile(

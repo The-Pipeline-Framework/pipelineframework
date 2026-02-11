@@ -2,8 +2,10 @@ package org.pipelineframework.processor.phase;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -69,7 +71,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         this.targetGenerators = buildTargetGenerators(
             pathResolver,
             policy,
-            sideEffectBeanService == null ? new SideEffectBeanService(pathResolver) : sideEffectBeanService);
+            Objects.requireNonNull(sideEffectBeanService, "sideEffectBeanService must not be null"));
     }
 
     private Map<GenerationTarget, TargetGenerator> buildTargetGenerators(
@@ -123,7 +125,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         ClassName cacheKeyGenerator = CacheKeyGeneratorResolver.resolve(ctx);
         DescriptorProtos.FileDescriptorSet descriptorSet = ctx.getDescriptorSet();
         Set<String> generatedSideEffectBeans = new HashSet<>();
-        Set<String> enabledAspects = ctx.getAspectModels().stream()
+        List<org.pipelineframework.processor.ir.PipelineAspectModel> aspectModels =
+            ctx.getAspectModels() == null ? List.of() : ctx.getAspectModels();
+        Set<String> enabledAspects = aspectModels.stream()
             .map(aspect -> aspect.name().toLowerCase(Locale.ROOT))
             .collect(Collectors.toUnmodifiableSet());
 
@@ -191,6 +195,11 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         }
     }
 
+    /**
+     * Writes pipeline metadata in best-effort mode.
+     *
+     * <p>Failures are reported as warnings and logged, but do not abort compilation.</p>
+     */
     private void writeMetadataSafely(PipelineCompilationContext ctx, RoleMetadataGenerator roleMetadataGenerator) {
         Exception roleError = null;
         Exception orderError = null;

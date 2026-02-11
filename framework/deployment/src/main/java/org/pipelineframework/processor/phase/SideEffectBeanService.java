@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.phase;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -81,13 +82,15 @@ public class SideEffectBeanService {
         }
 
         TypeSpec beanClass = beanBuilder.build();
+        Path outputDir = pathResolver.resolveRoleOutputDir(ctx, outputRole == null ? role : outputRole);
         try {
             JavaFile.builder(packageName, beanClass)
                 .build()
-                .writeTo(pathResolver.resolveRoleOutputDir(ctx, outputRole == null ? role : outputRole));
+                .writeTo(outputDir);
         } catch (IOException e) {
-            ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
-                "Failed to generate side-effect bean for '" + model.serviceName() + "': " + e.getMessage());
+            ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR,
+                "Failed to generate side-effect bean for '" + model.serviceName() + "' at '" + outputDir
+                    + "': " + e.getMessage());
         }
     }
 
@@ -182,35 +185,9 @@ public class SideEffectBeanService {
                     return observedType;
                 }
                 if (grpcTypes != null && grpcTypes.grpcParameterType() != null && grpcTypes.grpcReturnType() != null) {
-                    Object methodDescriptorObj = grpcBinding.methodDescriptor();
-                    if (methodDescriptorObj == null) {
-                        LOG.warnf("Failed to resolve observed gRPC type for %s; missing method descriptor",
-                            model.serviceName());
-                        return observedType;
-                    }
-                    if (methodDescriptorObj instanceof com.google.protobuf.Descriptors.MethodDescriptor methodDescriptor) {
-                        String inputFullName = methodDescriptor.getInputType().getFullName();
-                        String outputFullName = methodDescriptor.getOutputType().getFullName();
-                        String inputName = methodDescriptor.getInputType().getName();
-                        String outputName = methodDescriptor.getOutputType().getName();
-                        String observedTypeName = observedType.toString();
-
-                        if (observedTypeName.equals(inputFullName) || observedTypeName.endsWith("." + inputName)) {
-                            return grpcTypes.grpcParameterType();
-                        }
-                        if (observedTypeName.equals(outputFullName) || observedTypeName.endsWith("." + outputName)) {
-                            return grpcTypes.grpcReturnType();
-                        }
-
-                        String serviceName = model.serviceName();
-                        if (serviceName != null) {
-                            if (serviceName.equals(inputFullName) || serviceName.equals(inputName)) {
-                                return grpcTypes.grpcParameterType();
-                            }
-                            if (serviceName.equals(outputFullName) || serviceName.equals(outputName)) {
-                                return grpcTypes.grpcReturnType();
-                            }
-                        }
+                    TypeName matchedType = matchObservedTypeToGrpcDescriptor(model, observedType, grpcBinding, grpcTypes);
+                    if (matchedType != null) {
+                        return matchedType;
                     }
                     LOG.warnf(
                         "Observed type '%s' for service '%s' did not match gRPC input/output descriptors; "
@@ -226,6 +203,46 @@ public class SideEffectBeanService {
             }
         }
         return observedType;
+    }
+
+    private TypeName matchObservedTypeToGrpcDescriptor(
+            PipelineStepModel model,
+            TypeName observedType,
+            GrpcBinding grpcBinding,
+            org.pipelineframework.processor.util.GrpcJavaTypeResolver.GrpcJavaTypes grpcTypes) {
+        Object methodDescriptorObj = grpcBinding.methodDescriptor();
+        if (methodDescriptorObj == null) {
+            LOG.warnf("Failed to resolve observed gRPC type for %s; missing method descriptor",
+                model.serviceName());
+            return null;
+        }
+        if (!(methodDescriptorObj instanceof com.google.protobuf.Descriptors.MethodDescriptor methodDescriptor)) {
+            return null;
+        }
+
+        String inputFullName = methodDescriptor.getInputType().getFullName();
+        String outputFullName = methodDescriptor.getOutputType().getFullName();
+        String inputName = methodDescriptor.getInputType().getName();
+        String outputName = methodDescriptor.getOutputType().getName();
+        String observedTypeName = observedType.toString();
+
+        if (observedTypeName.equals(inputFullName) || observedTypeName.endsWith("." + inputName)) {
+            return grpcTypes.grpcParameterType();
+        }
+        if (observedTypeName.equals(outputFullName) || observedTypeName.endsWith("." + outputName)) {
+            return grpcTypes.grpcReturnType();
+        }
+
+        String serviceName = model.serviceName();
+        if (serviceName != null) {
+            if (serviceName.equals(inputFullName) || serviceName.equals(inputName)) {
+                return grpcTypes.grpcParameterType();
+            }
+            if (serviceName.equals(outputFullName) || serviceName.equals(outputName)) {
+                return grpcTypes.grpcReturnType();
+            }
+        }
+        return null;
     }
 
     private boolean isCachePlugin(PipelineStepModel model) {

@@ -44,6 +44,14 @@ public class LocalClientStepTargetGenerator implements TargetGenerator {
     public void generate(GenerationRequest request) throws IOException {
         var ctx = request.ctx();
         var model = request.model();
+        String generatedName = model.generatedName();
+        if (generatedName == null || generatedName.isBlank()) {
+            throw new IllegalArgumentException("PipelineStepModel.generatedName() must not be null/blank");
+        }
+        String servicePackage = model.servicePackage();
+        if (servicePackage == null || servicePackage.isBlank()) {
+            throw new IllegalArgumentException("PipelineStepModel.servicePackage() must not be null/blank");
+        }
 
         if (model.deploymentRole() == DeploymentRole.PLUGIN_SERVER && ctx.isPluginHost()) {
             return;
@@ -85,14 +93,6 @@ public class LocalClientStepTargetGenerator implements TargetGenerator {
             request.cacheKeyGenerator(),
             request.descriptorSet()));
 
-        String generatedName = model.generatedName();
-        if (generatedName == null || generatedName.isBlank()) {
-            throw new IllegalArgumentException("PipelineStepModel.generatedName() must not be null/blank");
-        }
-        String servicePackage = model.servicePackage();
-        if (servicePackage == null || servicePackage.isBlank()) {
-            throw new IllegalArgumentException("PipelineStepModel.servicePackage() must not be null/blank");
-        }
         if (generatedName.endsWith(SERVICE_SUFFIX)) {
             generatedName = generatedName.substring(0, generatedName.length() - SERVICE_SUFFIX.length());
         }

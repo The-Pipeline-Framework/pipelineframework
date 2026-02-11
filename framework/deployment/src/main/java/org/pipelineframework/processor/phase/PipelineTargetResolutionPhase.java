@@ -5,6 +5,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
@@ -87,7 +88,7 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
         // Set the resolved targets in the context
         Set<GenerationTarget> resolvedTargets = updatedModels.stream()
             .flatMap(model -> model.enabledTargets().stream())
-            .collect(java.util.stream.Collectors.toSet());
+            .collect(Collectors.toSet());
         ctx.setResolvedTargets(resolvedTargets);
     }
 
