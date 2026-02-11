@@ -24,38 +24,47 @@ import java.util.UUID;
 import io.smallrye.mutiny.Multi;
 
 /**
- * Default unary source adapter that wraps one inbound event into one trace envelope.
+ * Source adapter for streaming ingress events represented as {@code Multi<I>}.
  *
- * @param <I> inbound payload type
+ * @param <I> payload type
  */
-public final class DefaultUnaryFunctionSourceAdapter<I> implements FunctionSourceAdapter<I, I> {
+public final class MultiFunctionSourceAdapter<I> implements FunctionSourceAdapter<Multi<I>, I> {
     private final String payloadModel;
     private final String payloadModelVersion;
 
     /**
-     * Creates a source adapter.
+     * Creates an adapter.
      *
-     * @param payloadModel payload model id
+     * @param payloadModel payload model
      * @param payloadModelVersion payload model version
      */
-    public DefaultUnaryFunctionSourceAdapter(String payloadModel, String payloadModelVersion) {
+    public MultiFunctionSourceAdapter(String payloadModel, String payloadModelVersion) {
         this.payloadModel = normalizeOrDefault(payloadModel, "unknown.input");
         this.payloadModelVersion = normalizeOrDefault(payloadModelVersion, "v1");
     }
 
     @Override
-    public Multi<TraceEnvelope<I>> adapt(I event, FunctionTransportContext context) {
+    public Multi<TraceEnvelope<I>> adapt(Multi<I> event, FunctionTransportContext context) {
+        Objects.requireNonNull(event, "event must not be null");
         Objects.requireNonNull(context, "context must not be null");
-        String requestId = context.requestId();
-        String traceId;
-        if (requestId == null || requestId.isBlank()) {
-            traceId = normalizeOrDefault(null, UUID.randomUUID().toString());
-        } else {
-            traceId = normalizeOrDefault(requestId, "");
-        }
-        String itemId = UUID.randomUUID().toString();
-        String idempotencyKey = traceId + ":" + payloadModel + ":" + itemId;
+        String traceId = normalizeOrDefault(context.requestId(), UUID.randomUUID().toString());
+        Map<String, String> meta = buildMeta(context);
 
+        return event.onItem().transform(item -> new TraceEnvelope<>(
+            traceId,
+            null,
+            UUID.randomUUID().toString(),
+            null,
+            payloadModel,
+            payloadModelVersion,
+            traceId + ":" + payloadModel + ":" + UUID.randomUUID(),
+            item,
+            null,
+            meta
+        ));
+    }
+
+    private static Map<String, String> buildMeta(FunctionTransportContext context) {
         Map<String, String> meta = new LinkedHashMap<>();
         meta.put("functionName", normalizeOrDefault(context.functionName(), ""));
         meta.put("stage", normalizeOrDefault(context.stage(), ""));
@@ -69,19 +78,7 @@ public final class DefaultUnaryFunctionSourceAdapter<I> implements FunctionSourc
                 }
             });
         }
-
-        TraceEnvelope<I> envelope = new TraceEnvelope<>(
-            traceId,
-            null,
-            itemId,
-            null,
-            payloadModel,
-            payloadModelVersion,
-            idempotencyKey,
-            event,
-            null,
-            meta);
-        return Multi.createFrom().item(envelope);
+        return meta;
     }
 
     private static String normalizeOrDefault(String value, String fallback) {

@@ -15,7 +15,6 @@ import org.pipelineframework.processor.ir.OrchestratorBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -59,7 +58,7 @@ class OrchestratorFunctionHandlerRendererTest {
     }
 
     @Test
-    void rejectsStreamingOrchestratorBinding() {
+    void rendersStreamingOrchestratorBinding() throws IOException {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
 
@@ -89,10 +88,15 @@ class OrchestratorFunctionHandlerRendererTest {
             .firstStepStreamingShape(StreamingShape.UNARY_UNARY)
             .build();
 
-        assertThrows(
-            IllegalStateException.class,
-            () -> renderer.render(streamingBinding, new GenerationContext(
-                processingEnv, tempDir, DeploymentRole.REST_SERVER, java.util.Set.of(), null, null)));
+        renderer.render(streamingBinding, new GenerationContext(
+            processingEnv, tempDir, DeploymentRole.REST_SERVER, java.util.Set.of(), null, null));
+
+        Path generatedSource = tempDir.resolve("com/example/orchestrator/service/PipelineRunFunctionHandler.java");
+        String source = Files.readString(generatedSource);
+        assertTrue(source.contains("implements RequestHandler<"));
+        assertTrue(source.contains("Multi<InputTypeDto>"));
+        assertTrue(source.contains("OutputTypeDto>"));
+        assertTrue(source.contains("return FunctionTransportBridge.invokeManyToOne(input, transportContext, source, invoke, sink)"));
     }
 
     private OrchestratorBinding buildBinding() {

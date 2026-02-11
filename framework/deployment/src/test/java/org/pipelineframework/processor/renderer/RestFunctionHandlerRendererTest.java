@@ -16,7 +16,6 @@ import org.pipelineframework.processor.ir.RestBinding;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TypeMapping;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -54,15 +53,41 @@ class RestFunctionHandlerRendererTest {
     }
 
     @Test
-    void rejectsStreamingShape() {
+    void rendersOneToManyStreamingShape() throws IOException {
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
         RestFunctionHandlerRenderer renderer = new RestFunctionHandlerRenderer();
+
+        renderer.render(new RestBinding(streamingModel(), null),
+            new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+                java.util.Set.of(), null, null));
+
+        Path generatedSource =
+            tempDir.resolve("org/example/search/parse/service/pipeline/ParsedDocumentFunctionHandler.java");
+        String source = Files.readString(generatedSource);
+
+        assertTrue(source.contains("implements RequestHandler<ParsedDocumentDto,"));
+        assertTrue(source.contains("List<IndexAckDto>"));
+        assertTrue(source.contains("return FunctionTransportBridge.invokeOneToMany(input, transportContext, source, invoke, sink)"));
+    }
+
+    @Test
+    void rendersStreamingUnaryShape() throws IOException {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
 
-        assertThrows(IllegalStateException.class, () ->
-            renderer.render(new RestBinding(streamingModel(), null),
-                new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
-                    java.util.Set.of(), null, null)));
+        RestFunctionHandlerRenderer renderer = new RestFunctionHandlerRenderer();
+        renderer.render(new RestBinding(streamingUnaryModel(), null),
+            new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+                java.util.Set.of(), null, null));
+
+        Path generatedSource =
+            tempDir.resolve("org/example/search/parse/service/pipeline/ParsedDocumentFunctionHandler.java");
+        String source = Files.readString(generatedSource);
+        assertTrue(source.contains("implements RequestHandler<"));
+        assertTrue(source.contains("Multi<ParsedDocumentDto>"));
+        assertTrue(source.contains("IndexAckDto>"));
+        assertTrue(source.contains("return FunctionTransportBridge.invokeManyToOne(input, transportContext, source, invoke, sink)"));
     }
 
     private PipelineStepModel unaryModel() {
@@ -71,6 +96,10 @@ class RestFunctionHandlerRendererTest {
 
     private PipelineStepModel streamingModel() {
         return buildModel(StreamingShape.UNARY_STREAMING);
+    }
+
+    private PipelineStepModel streamingUnaryModel() {
+        return buildModel(StreamingShape.STREAMING_UNARY);
     }
 
     private PipelineStepModel buildModel(StreamingShape shape) {

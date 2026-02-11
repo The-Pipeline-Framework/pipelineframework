@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.renderer;
 
 import java.io.IOException;
+import java.util.List;
 import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.AnnotationSpec;
@@ -9,6 +10,7 @@ import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
+import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.OrchestratorBinding;
@@ -51,20 +53,21 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
 
     @Override
     public void render(OrchestratorBinding binding, GenerationContext ctx) throws IOException {
-        if (binding.inputStreaming() || binding.outputStreaming()) {
-            throw new IllegalStateException(
-                "Function orchestrator handler currently supports only unary-unary shape.");
-        }
+        boolean streamingInput = binding.inputStreaming();
+        boolean streamingOutput = binding.outputStreaming();
 
         ClassName applicationScoped = ClassName.get("jakarta.enterprise.context", "ApplicationScoped");
         ClassName inject = ClassName.get("jakarta.inject", "Inject");
         ClassName named = ClassName.get("jakarta.inject", "Named");
+        ClassName multi = ClassName.get("io.smallrye.mutiny", "Multi");
         ClassName lambdaContext = ClassName.get("com.amazonaws.services.lambda.runtime", "Context");
         ClassName requestHandler = ClassName.get("com.amazonaws.services.lambda.runtime", "RequestHandler");
         ClassName generatedRole = ClassName.get("org.pipelineframework.annotation", "GeneratedRole");
         ClassName roleEnum = ClassName.get("org.pipelineframework.annotation", "GeneratedRole", "Role");
         ClassName functionTransportContext =
             ClassName.get("org.pipelineframework.transport.function", "FunctionTransportContext");
+        ClassName functionTransportBridge =
+            ClassName.get("org.pipelineframework.transport.function", "FunctionTransportBridge");
         ClassName sourceAdapter =
             ClassName.get("org.pipelineframework.transport.function", "FunctionSourceAdapter");
         ClassName invokeAdapter =
@@ -73,15 +76,31 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
             ClassName.get("org.pipelineframework.transport.function", "FunctionSinkAdapter");
         ClassName defaultSourceAdapter =
             ClassName.get("org.pipelineframework.transport.function", "DefaultUnaryFunctionSourceAdapter");
+        ClassName multiSourceAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "MultiFunctionSourceAdapter");
         ClassName localInvokeAdapter =
             ClassName.get("org.pipelineframework.transport.function", "LocalUnaryFunctionInvokeAdapter");
+        ClassName localOneToManyInvokeAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "LocalOneToManyFunctionInvokeAdapter");
+        ClassName localManyToOneInvokeAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "LocalManyToOneFunctionInvokeAdapter");
+        ClassName localManyToManyInvokeAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "LocalManyToManyFunctionInvokeAdapter");
         ClassName defaultSinkAdapter =
             ClassName.get("org.pipelineframework.transport.function", "DefaultUnaryFunctionSinkAdapter");
+        ClassName collectListSinkAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "CollectListFunctionSinkAdapter");
         ClassName unaryBridge =
             ClassName.get("org.pipelineframework.transport.function", "UnaryFunctionTransportBridge");
 
         ClassName inputDto = ClassName.get(binding.basePackage() + ".common.dto", binding.inputTypeName() + "Dto");
         ClassName outputDto = ClassName.get(binding.basePackage() + ".common.dto", binding.outputTypeName() + "Dto");
+        TypeName inputEventType = streamingInput
+            ? ParameterizedTypeName.get(multi, inputDto)
+            : inputDto;
+        TypeName handlerOutputType = streamingOutput
+            ? ParameterizedTypeName.get(ClassName.get(List.class), outputDto)
+            : outputDto;
         ClassName resourceType = ClassName.get(binding.basePackage() + ".orchestrator.service", RESOURCE_CLASS);
 
         TypeSpec.Builder handler = TypeSpec.classBuilder(HANDLER_CLASS)
@@ -93,7 +112,7 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
             .addAnnotation(AnnotationSpec.builder(generatedRole)
                 .addMember("value", "$T.$L", roleEnum, "REST_SERVER")
                 .build())
-            .addSuperinterface(ParameterizedTypeName.get(requestHandler, inputDto, outputDto))
+            .addSuperinterface(ParameterizedTypeName.get(requestHandler, inputEventType, handlerOutputType))
             .addField(FieldSpec.builder(resourceType, "resource", Modifier.PRIVATE)
                 .addAnnotation(inject)
                 .build());
@@ -101,8 +120,8 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
         MethodSpec handleRequest = MethodSpec.methodBuilder("handleRequest")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
-            .returns(outputDto)
-            .addParameter(inputDto, "input")
+            .returns(handlerOutputType)
+            .addParameter(inputEventType, "input")
             .addParameter(lambdaContext, "context")
             .beginControlFlow("try")
             .addStatement("$T transportContext = $T.of("
@@ -111,14 +130,37 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
                     + "$S)",
                 functionTransportContext, functionTransportContext, UNKNOWN_REQUEST, HANDLER_CLASS, INGRESS)
             .addStatement("$T<$T, $T> source = new $T<>($S, $S)",
-                sourceAdapter, inputDto, inputDto, defaultSourceAdapter,
+                sourceAdapter, inputEventType, inputDto, streamingInput ? multiSourceAdapter : defaultSourceAdapter,
                 ORCHESTRATOR_PREFIX + binding.inputTypeName(), API_VERSION)
-            .addStatement("$T<$T, $T> invoke = new $T<>(payload -> resource.run(payload), $S, $S)",
-                invokeAdapter, inputDto, outputDto, localInvokeAdapter,
+            .addStatement(
+                !streamingInput && !streamingOutput
+                    ? "$T<$T, $T> invoke = new $T<>(resource::run, $S, $S)"
+                    : !streamingInput
+                        ? "$T<$T, $T> invoke = new $T<>(resource::run, $S, $S)"
+                        : !streamingOutput
+                            ? "$T<$T, $T> invoke = new $T<>(resource::run, $S, $S)"
+                            : "$T<$T, $T> invoke = new $T<>(resource::run, $S, $S)",
+                invokeAdapter, inputDto, outputDto,
+                !streamingInput && !streamingOutput
+                    ? localInvokeAdapter
+                    : !streamingInput
+                        ? localOneToManyInvokeAdapter
+                        : !streamingOutput
+                            ? localManyToOneInvokeAdapter
+                            : localManyToManyInvokeAdapter,
                 ORCHESTRATOR_PREFIX + binding.outputTypeName(), API_VERSION)
             .addStatement("$T<$T, $T> sink = new $T<>()",
-                sinkAdapter, outputDto, outputDto, defaultSinkAdapter)
-            .addStatement("return $T.invoke(input, transportContext, source, invoke, sink)", unaryBridge)
+                sinkAdapter, outputDto, handlerOutputType,
+                streamingOutput ? collectListSinkAdapter : defaultSinkAdapter)
+            .addStatement(
+                !streamingInput && !streamingOutput
+                    ? "return $T.invoke(input, transportContext, source, invoke, sink)"
+                    : !streamingInput
+                        ? "return $T.invokeOneToMany(input, transportContext, source, invoke, sink)"
+                        : !streamingOutput
+                            ? "return $T.invokeManyToOne(input, transportContext, source, invoke, sink)"
+                            : "return $T.invokeManyToMany(input, transportContext, source, invoke, sink)",
+                !streamingInput && !streamingOutput ? unaryBridge : functionTransportBridge)
             .nextControlFlow("catch ($T e)", RuntimeException.class)
             .addStatement(
                 "throw new $T(\"Failed handleRequest -> resource.run for input DTO\", e)",

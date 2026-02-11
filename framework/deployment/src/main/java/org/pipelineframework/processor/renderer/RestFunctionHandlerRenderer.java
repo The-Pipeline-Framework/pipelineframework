@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.renderer;
 
 import java.io.IOException;
+import java.util.List;
 import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.AnnotationSpec;
@@ -41,20 +42,22 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
     @Override
     public void render(RestBinding binding, GenerationContext ctx) throws IOException {
         PipelineStepModel model = binding.model();
-        if (model.streamingShape() != StreamingShape.UNARY_UNARY) {
-            throw new IllegalStateException(
-                "Function step handler currently supports only UNARY_UNARY shape.");
-        }
+        StreamingShape shape = model.streamingShape() == null ? StreamingShape.UNARY_UNARY : model.streamingShape();
+        boolean streamingInput = shape == StreamingShape.STREAMING_UNARY || shape == StreamingShape.STREAMING_STREAMING;
+        boolean streamingOutput = shape == StreamingShape.UNARY_STREAMING || shape == StreamingShape.STREAMING_STREAMING;
 
         ClassName applicationScoped = ClassName.get("jakarta.enterprise.context", "ApplicationScoped");
         ClassName inject = ClassName.get("jakarta.inject", "Inject");
         ClassName named = ClassName.get("jakarta.inject", "Named");
+        ClassName multi = ClassName.get("io.smallrye.mutiny", "Multi");
         ClassName lambdaContext = ClassName.get("com.amazonaws.services.lambda.runtime", "Context");
         ClassName requestHandler = ClassName.get("com.amazonaws.services.lambda.runtime", "RequestHandler");
         ClassName generatedRole = ClassName.get("org.pipelineframework.annotation", "GeneratedRole");
         ClassName roleEnum = ClassName.get("org.pipelineframework.annotation", "GeneratedRole", "Role");
         ClassName functionTransportContext =
             ClassName.get("org.pipelineframework.transport.function", "FunctionTransportContext");
+        ClassName functionTransportBridge =
+            ClassName.get("org.pipelineframework.transport.function", "FunctionTransportBridge");
         ClassName sourceAdapter =
             ClassName.get("org.pipelineframework.transport.function", "FunctionSourceAdapter");
         ClassName invokeAdapter =
@@ -63,10 +66,20 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
             ClassName.get("org.pipelineframework.transport.function", "FunctionSinkAdapter");
         ClassName defaultSourceAdapter =
             ClassName.get("org.pipelineframework.transport.function", "DefaultUnaryFunctionSourceAdapter");
+        ClassName multiSourceAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "MultiFunctionSourceAdapter");
         ClassName localInvokeAdapter =
             ClassName.get("org.pipelineframework.transport.function", "LocalUnaryFunctionInvokeAdapter");
+        ClassName localOneToManyInvokeAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "LocalOneToManyFunctionInvokeAdapter");
+        ClassName localManyToOneInvokeAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "LocalManyToOneFunctionInvokeAdapter");
+        ClassName localManyToManyInvokeAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "LocalManyToManyFunctionInvokeAdapter");
         ClassName defaultSinkAdapter =
             ClassName.get("org.pipelineframework.transport.function", "DefaultUnaryFunctionSinkAdapter");
+        ClassName collectListSinkAdapter =
+            ClassName.get("org.pipelineframework.transport.function", "CollectListFunctionSinkAdapter");
         ClassName unaryBridge =
             ClassName.get("org.pipelineframework.transport.function", "UnaryFunctionTransportBridge");
 
@@ -81,6 +94,12 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
         TypeName outputDto = model.outboundDomainType() != null
             ? convertDomainToDtoType(model.outboundDomainType())
             : ClassName.OBJECT;
+        TypeName inputEventType = streamingInput
+            ? ParameterizedTypeName.get(multi, inputDto)
+            : inputDto;
+        TypeName handlerOutputType = streamingOutput
+            ? ParameterizedTypeName.get(ClassName.get(List.class), outputDto)
+            : outputDto;
         ClassName resourceType = ClassName.get(
             binding.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
             resourceClassName);
@@ -94,7 +113,7 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
             .addAnnotation(AnnotationSpec.builder(generatedRole)
                 .addMember("value", "$T.$L", roleEnum, "REST_SERVER")
                 .build())
-            .addSuperinterface(ParameterizedTypeName.get(requestHandler, inputDto, outputDto))
+            .addSuperinterface(ParameterizedTypeName.get(requestHandler, inputEventType, handlerOutputType))
             .addField(FieldSpec.builder(resourceType, "resource", Modifier.PRIVATE)
                 .addAnnotation(inject)
                 .build());
@@ -102,8 +121,8 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
         MethodSpec handleRequest = MethodSpec.methodBuilder("handleRequest")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
-            .returns(outputDto)
-            .addParameter(inputDto, "input")
+            .returns(handlerOutputType)
+            .addParameter(inputEventType, "input")
             .addParameter(lambdaContext, "context")
             .beginControlFlow("try")
             .addStatement("$T transportContext = $T.of("
@@ -111,15 +130,47 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
                     + "context != null ? context.getFunctionName() : $S, "
                     + "$S)",
                 functionTransportContext, functionTransportContext, UNKNOWN_REQUEST, handlerClassName, INVOKE_STEP)
-            .addStatement("$T<$T, $T> source = new $T<>($S, $S)",
-                sourceAdapter, inputDto, inputDto, defaultSourceAdapter,
-                baseName + ".input", API_VERSION)
-            .addStatement("$T<$T, $T> invoke = new $T<>(resource::process, $S, $S)",
-                invokeAdapter, inputDto, outputDto, localInvokeAdapter,
-                baseName + ".output", API_VERSION)
-            .addStatement("$T<$T, $T> sink = new $T<>()",
-                sinkAdapter, outputDto, outputDto, defaultSinkAdapter)
-            .addStatement("return $T.invoke(input, transportContext, source, invoke, sink)", unaryBridge)
+            .addStatement(
+                streamingInput
+                    ? "$T<$T, $T> source = new $T<>($S, $S)"
+                    : "$T<$T, $T> source = new $T<>($S, $S)",
+                sourceAdapter, inputEventType, inputDto,
+                streamingInput ? multiSourceAdapter : defaultSourceAdapter,
+                baseName + ".input",
+                API_VERSION)
+            .addStatement(
+                shape == StreamingShape.UNARY_UNARY
+                    ? "$T<$T, $T> invoke = new $T<>(resource::process, $S, $S)"
+                    : shape == StreamingShape.UNARY_STREAMING
+                        ? "$T<$T, $T> invoke = new $T<>(resource::process, $S, $S)"
+                        : shape == StreamingShape.STREAMING_UNARY
+                            ? "$T<$T, $T> invoke = new $T<>(resource::process, $S, $S)"
+                            : "$T<$T, $T> invoke = new $T<>(resource::process, $S, $S)",
+                invokeAdapter, inputDto, outputDto,
+                shape == StreamingShape.UNARY_UNARY
+                    ? localInvokeAdapter
+                    : shape == StreamingShape.UNARY_STREAMING
+                        ? localOneToManyInvokeAdapter
+                        : shape == StreamingShape.STREAMING_UNARY
+                            ? localManyToOneInvokeAdapter
+                            : localManyToManyInvokeAdapter,
+                baseName + ".output",
+                API_VERSION)
+            .addStatement(
+                streamingOutput
+                    ? "$T<$T, $T> sink = new $T<>()"
+                    : "$T<$T, $T> sink = new $T<>()",
+                sinkAdapter, outputDto, handlerOutputType,
+                streamingOutput ? collectListSinkAdapter : defaultSinkAdapter)
+            .addStatement(
+                shape == StreamingShape.UNARY_UNARY
+                    ? "return $T.invoke(input, transportContext, source, invoke, sink)"
+                    : shape == StreamingShape.UNARY_STREAMING
+                        ? "return $T.invokeOneToMany(input, transportContext, source, invoke, sink)"
+                        : shape == StreamingShape.STREAMING_UNARY
+                            ? "return $T.invokeManyToOne(input, transportContext, source, invoke, sink)"
+                            : "return $T.invokeManyToMany(input, transportContext, source, invoke, sink)",
+                shape == StreamingShape.UNARY_UNARY ? unaryBridge : functionTransportBridge)
             .nextControlFlow("catch (Exception e)")
             .addStatement("$T inputType = (input == null) ? \"null\" : input.getClass().getName()", String.class)
             .addStatement(
