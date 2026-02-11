@@ -71,7 +71,7 @@ In short: the generator defines the **type menu**; the proto generator emits the
 
 ### Enums and Optional
 - Enum -> protobuf enum (or string if you choose to map as text).
-- Optional<T> -> represent presence using proto3 optional/oneof or wrapper types, and map to nullable DTO fields.
+- `Optional<T>` -> represent presence using proto3 optional/oneof or wrapper types, and map to nullable DTO fields.
 
 ## Conversions
 

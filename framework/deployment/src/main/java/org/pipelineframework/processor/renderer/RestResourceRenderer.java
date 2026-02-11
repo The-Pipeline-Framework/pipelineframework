@@ -10,6 +10,8 @@ import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.RestBinding;
+import org.pipelineframework.processor.util.DtoTypeUtils;
+import org.pipelineframework.processor.util.ResourceNameUtils;
 import org.pipelineframework.processor.util.RestPathResolver;
 
 /**
@@ -76,11 +78,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
 
         String serviceClassName = model.generatedName();
 
-        // Determine the resource class name - remove "Service" and optionally "Reactive" for cleaner naming
-        String baseName = serviceClassName.replace("Service", "");
-        if (baseName.endsWith("Reactive")) {
-            baseName = baseName.substring(0, baseName.length() - "Reactive".length());
-        }
+        String baseName = ResourceNameUtils.normalizeBaseName(serviceClassName);
         String resourceClassName = baseName + PipelineStepProcessor.REST_RESOURCE_SUFFIX;
 
         // Create the REST resource class
@@ -89,7 +87,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             // Add the GeneratedRole annotation to indicate this is a REST server
             .addAnnotation(AnnotationSpec.builder(ClassName.get("org.pipelineframework.annotation", "GeneratedRole"))
                     .addMember("value", "$T.$L",
-                        ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role"),
+                        ClassName.get("org.pipelineframework.annotation", "GeneratedRole", "Role"),
                         role.name())
                     .build());
 
@@ -609,23 +607,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
      * @return the corresponding DTO TypeName, or {@code ClassName.OBJECT} when {@code domainType} is {@code null}
      */
     private TypeName convertDomainToDtoType(TypeName domainType) {
-        if (domainType == null) {
-            return ClassName.OBJECT;
-        }
-        if (!(domainType instanceof ClassName domainClass)) {
-            return ClassName.OBJECT;
-        }
-
-        String domainTypeStr = domainClass.canonicalName();
-
-        // Replace common domain package patterns with DTO equivalents and add Dto suffix
-        String dtoTypeStr = domainTypeStr
-            .replace(".domain.", ".dto.")
-            .replace(".service.", ".dto.");
-        int lastDot = dtoTypeStr.lastIndexOf('.');
-        String packageName = lastDot > 0 ? dtoTypeStr.substring(0, lastDot) : "";
-        String simpleName = lastDot > 0 ? dtoTypeStr.substring(lastDot + 1) : dtoTypeStr;
-        return ClassName.get(packageName, simpleName + "Dto");
+        return DtoTypeUtils.toDtoType(domainType);
     }
 
     private void validateRestMappings(PipelineStepModel model) {

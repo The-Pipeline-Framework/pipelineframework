@@ -18,6 +18,7 @@ import org.pipelineframework.processor.util.OrchestratorClientPropertiesGenerato
 import org.pipelineframework.processor.util.PipelineOrderMetadataGenerator;
 import org.pipelineframework.processor.util.PipelinePlatformMetadataGenerator;
 import org.pipelineframework.processor.util.PipelineTelemetryMetadataGenerator;
+import org.pipelineframework.processor.util.ResourceNameUtils;
 import org.pipelineframework.processor.util.RoleMetadataGenerator;
 
 /**
@@ -30,6 +31,8 @@ import org.pipelineframework.processor.util.RoleMetadataGenerator;
 public class PipelineGenerationPhase implements PipelineCompilationPhase {
 
     private static final Logger LOG = Logger.getLogger(PipelineGenerationPhase.class);
+    private static final String ORCHESTRATOR_BINDING_KEY = "orchestrator";
+    private static final String SERVICE_SUFFIX = "Service";
 
     /**
      * Creates a new PipelineGenerationPhase.
@@ -145,7 +148,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
 
         // Generate orchestrator artifacts if needed
         if (ctx.isOrchestratorGenerated()) {
-            OrchestratorBinding orchestratorBinding = (OrchestratorBinding) bindingsMap.get("orchestrator");
+            OrchestratorBinding orchestratorBinding = (OrchestratorBinding) bindingsMap.get(ORCHESTRATOR_BINDING_KEY);
             if (orchestratorBinding != null) {
                 generateOrchestratorServer(
                     ctx,
@@ -468,6 +471,13 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         return sb.toString();
     }
 
+    private String trimServiceSuffix(String generatedName) {
+        if (generatedName != null && generatedName.endsWith(SERVICE_SUFFIX)) {
+            return generatedName.substring(0, generatedName.length() - SERVICE_SUFFIX.length());
+        }
+        return generatedName;
+    }
+
     /**
      * Generate all source and metadata artifacts for a single pipeline step according to its enabled generation targets.
      *
@@ -509,8 +519,10 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             RestResourceRenderer restRenderer,
             RestFunctionHandlerRenderer restFunctionHandlerRenderer) throws IOException {
         
-        Set<String> enabledAspects = ctx.getAspectModels().stream()
-            .map(aspect -> aspect.name().toLowerCase())
+        Set<String> enabledAspects = Optional.ofNullable(ctx.getAspectModels())
+            .orElse(List.of())
+            .stream()
+            .map(aspect -> aspect.name().toLowerCase(Locale.ROOT))
             .collect(java.util.stream.Collectors.toUnmodifiableSet());
 
         for (GenerationTarget target : model.enabledTargets()) {
@@ -568,8 +580,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     if (model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER && ctx.isPluginHost()) {
                         break;
                     }
-                    String clientClassName = model.servicePackage() + ".pipeline." +
-                            model.generatedName().replace("Service", "") + "GrpcClientStep";
+                    String clientClassName = model.servicePackage() + ".pipeline."
+                        + trimServiceSuffix(model.generatedName()) + "GrpcClientStep";
                     org.pipelineframework.processor.ir.DeploymentRole clientRole = resolveClientRole(model.deploymentRole());
                     clientRenderer.render(grpcBinding, new GenerationContext(
                         ctx.getProcessingEnv(),
@@ -605,8 +617,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                                 "' because no local binding is available.");
                         break;
                     }
-                    String localClientClassName = model.servicePackage() + ".pipeline." +
-                        model.generatedName().replace("Service", "") + "LocalClientStep";
+                    String localClientClassName = model.servicePackage() + ".pipeline."
+                        + trimServiceSuffix(model.generatedName()) + "LocalClientStep";
                     org.pipelineframework.processor.ir.DeploymentRole localClientRole = resolveClientRole(model.deploymentRole());
                     localClientRenderer.render(localBinding, new GenerationContext(
                         ctx.getProcessingEnv(),
@@ -636,8 +648,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                                 "' because no REST binding is available.");
                         break;
                     }
-                    String restClassName = model.servicePackage() + ".pipeline." +
-                            model.generatedName().replace("Service", "").replace("Reactive", "") + "Resource";
+                    String restClassName = model.servicePackage() + ".pipeline."
+                        + ResourceNameUtils.normalizeBaseName(model.generatedName()) + "Resource";
                     org.pipelineframework.processor.ir.DeploymentRole restRole = org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER;
                     restRenderer.render(restBinding, new GenerationContext(
                         ctx.getProcessingEnv(),
@@ -671,8 +683,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                                 "' because no REST binding is available.");
                         break;
                     }
-                    String restClientClassName = model.servicePackage() + ".pipeline." +
-                            model.generatedName().replace("Service", "") + "RestClientStep";
+                    String restClientClassName = model.servicePackage() + ".pipeline."
+                        + trimServiceSuffix(model.generatedName()) + "RestClientStep";
                     org.pipelineframework.processor.ir.DeploymentRole restClientRole = resolveClientRole(model.deploymentRole());
                     restClientRenderer.render(restBinding, new GenerationContext(
                         ctx.getProcessingEnv(),
@@ -735,7 +747,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 .addAnnotation(com.squareup.javapoet.AnnotationSpec.builder(
                     com.squareup.javapoet.ClassName.get("org.pipelineframework.annotation", "GeneratedRole"))
                 .addMember("value", "$T.$L",
-                    com.squareup.javapoet.ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role"),
+                    com.squareup.javapoet.ClassName.get("org.pipelineframework.annotation", "GeneratedRole", "Role"),
                     role.name())
                 .build());
 

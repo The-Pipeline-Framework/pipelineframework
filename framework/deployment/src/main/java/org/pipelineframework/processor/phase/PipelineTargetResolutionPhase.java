@@ -1,9 +1,11 @@
 package org.pipelineframework.processor.phase;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
@@ -19,10 +21,29 @@ import org.pipelineframework.processor.ir.TransportMode;
  */
 public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
 
+    private final EnumMap<DeploymentRole, TargetResolutionStrategy> strategiesByRole;
+
     /**
      * Creates a new PipelineTargetResolutionPhase.
      */
     public PipelineTargetResolutionPhase() {
+        this(new ClientRoleTargetResolutionStrategy(), new ServerRoleTargetResolutionStrategy());
+    }
+
+    /**
+     * Creates a new PipelineTargetResolutionPhase with explicit strategies.
+     */
+    public PipelineTargetResolutionPhase(
+            TargetResolutionStrategy clientRoleStrategy,
+            TargetResolutionStrategy serverRoleStrategy) {
+        Objects.requireNonNull(clientRoleStrategy, "clientRoleStrategy must not be null");
+        Objects.requireNonNull(serverRoleStrategy, "serverRoleStrategy must not be null");
+        this.strategiesByRole = new EnumMap<>(DeploymentRole.class);
+        this.strategiesByRole.put(DeploymentRole.ORCHESTRATOR_CLIENT, clientRoleStrategy);
+        this.strategiesByRole.put(DeploymentRole.PLUGIN_CLIENT, clientRoleStrategy);
+        this.strategiesByRole.put(DeploymentRole.PIPELINE_SERVER, serverRoleStrategy);
+        this.strategiesByRole.put(DeploymentRole.PLUGIN_SERVER, serverRoleStrategy);
+        this.strategiesByRole.put(DeploymentRole.REST_SERVER, serverRoleStrategy);
     }
 
     @Override
@@ -67,7 +88,7 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
         // Set the resolved targets in the context
         Set<GenerationTarget> resolvedTargets = updatedModels.stream()
             .flatMap(model -> model.enabledTargets().stream())
-            .collect(java.util.stream.Collectors.toSet());
+            .collect(Collectors.toSet());
         ctx.setResolvedTargets(resolvedTargets);
     }
 
@@ -77,8 +98,8 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
      * <p>Client roles return the client-side generation target corresponding to the transport
      * (REST -> REST_CLIENT_STEP, LOCAL -> LOCAL_CLIENT_STEP, GRPC -> CLIENT_STEP). Non-client
      * roles return the resource/service target for the transport (REST -> REST_RESOURCE,
-     * GRPC -> GRPC_SERVICE). Note: for non-client roles with transportMode == LOCAL this method
-     * returns GRPC_SERVICE to drive side-effect bean generation.
+     * GRPC -> GRPC_SERVICE). For non-client roles with transportMode == LOCAL this method returns
+     * GRPC_SERVICE_SIDE_EFFECT_ONLY to drive side-effect bean generation without full gRPC adapter emission.
      *
      * @param role the deployment role to resolve targets for
      * @param transportMode the transport mode that influences which targets are selected
@@ -86,19 +107,10 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
      */
     private Set<GenerationTarget> resolveTargetsForRole(
             DeploymentRole role, TransportMode transportMode) {
-        boolean clientRole = role == DeploymentRole.ORCHESTRATOR_CLIENT || role == DeploymentRole.PLUGIN_CLIENT;
-        if (clientRole) {
-            return switch (transportMode) {
-                case REST -> Set.of(GenerationTarget.REST_CLIENT_STEP);
-                case LOCAL -> Set.of(GenerationTarget.LOCAL_CLIENT_STEP);
-                case GRPC -> Set.of(GenerationTarget.CLIENT_STEP);
-            };
+        TargetResolutionStrategy strategy = strategiesByRole.get(role);
+        if (strategy == null) {
+            throw new IllegalArgumentException("Unsupported deployment role: " + role);
         }
-        return switch (transportMode) {
-            case REST -> Set.of(GenerationTarget.REST_RESOURCE);
-            // LOCAL keeps GRPC_SERVICE here only to drive side-effect bean generation.
-            // PipelineGenerationPhase intentionally skips full gRPC adapter emission when transportMode == LOCAL.
-            case LOCAL, GRPC -> Set.of(GenerationTarget.GRPC_SERVICE);
-        };
+        return strategy.resolve(transportMode);
     }
 }

@@ -117,7 +117,7 @@ To get started with The Pipeline Framework, explore these guides:
 
 ### Evolve
 - [Functional Architecture](/guide/evolve/architecture): Architectural decisions and trade-offs
-- [Annotation Processor Architecture](/guide/evolve/annotation-processor-architecture): Build-time IR, bindings, and renderers
+- [Annotation Processor Guide](/guide/evolve/annotation-processor/): Build-time IR, phases, bindings, and renderers
 - [Plugins Architecture](/guide/evolve/plugins-architecture): Cross-cutting behavior model
 - [Aspect Semantics](/guide/evolve/aspects/semantics): Aspect expansion rules
 - [Aspect Ordering](/guide/evolve/aspects/ordering): Ordering guarantees and constraints

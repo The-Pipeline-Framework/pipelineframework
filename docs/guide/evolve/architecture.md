@@ -4,7 +4,7 @@ The Pipeline Framework is designed as a modular, extensible system for building 
 
 ## Related Architecture Topics
 
-- [Annotation Processor Architecture](/guide/evolve/annotation-processor-architecture): Deep dive into the build-time IR, bindings, and renderers
+- [Annotation Processor Guide](/guide/evolve/annotation-processor/): Deep dive into build-time phases, IR, bindings, and renderers
 
 ## Core Concepts
 
