@@ -265,25 +265,64 @@ public class PipelineTelemetryMetadataGenerator {
     }
 
     /**
-     * Loads the pipeline YAML configuration from the module directory in the provided compilation context.
+     * Loads the pipeline YAML configuration using the compilation context's resolved pipeline config path.
      *
-     * If the context has no module directory or no pipeline config file is located, this method returns {@code null}.
+     * If no pipeline config path can be resolved (for example when no module directory is available and no explicit
+     * configuration option is provided), this method returns {@code null}.
      *
-     * @param ctx the pipeline compilation context used to determine the module directory
-     * @return the loaded {@link PipelineYamlConfig}, or {@code null} if no module directory is present or no config file is found
+     * @param ctx the pipeline compilation context used to resolve the pipeline config path
+     * @return the loaded {@link PipelineYamlConfig}, or {@code null} if no config path could be resolved
      */
     private PipelineYamlConfig loadPipelineConfig(PipelineCompilationContext ctx) {
-        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
-        Path moduleDir = ctx.getModuleDir();
-        if (moduleDir == null) {
-            return null;
-        }
-        var configPath = locator.locate(moduleDir);
+        var configPath = resolvePipelineConfigPath(ctx);
         if (configPath.isEmpty()) {
             return null;
         }
         PipelineYamlConfigLoader loader = new PipelineYamlConfigLoader();
         return loader.load(configPath.get());
+    }
+
+    /**
+     * Resolve the filesystem path to the pipeline YAML configuration for the given compilation context.
+     *
+     * <p>Prefers an explicit processor option "pipeline.config" (resolving a relative value against the
+     * context's module directory when present). If the explicit path is absent or not found, falls back
+     * to locating a pipeline config under the module directory. Compiler warnings are emitted via the
+     * processing environment when a relative explicit path cannot be resolved or when an explicit path
+     * is not found.
+     *
+     * @param ctx the pipeline compilation context providing module directory and processor options
+     * @return an Optional containing the resolved config Path if found, otherwise an empty Optional
+     */
+    private Optional<Path> resolvePipelineConfigPath(PipelineCompilationContext ctx) {
+        Map<String, String> options = processingEnv != null ? processingEnv.getOptions() : Map.of();
+        String explicit = options.get("pipeline.config");
+        if (explicit != null && !explicit.isBlank()) {
+            Path explicitPath = Path.of(explicit.trim());
+            if (!explicitPath.isAbsolute()) {
+                if (ctx.getModuleDir() != null) {
+                    explicitPath = ctx.getModuleDir().resolve(explicitPath).normalize();
+                } else if (processingEnv != null) {
+                    processingEnv.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                        "pipeline.config is relative but moduleDir is null: '" + explicit + "'");
+                }
+            }
+            if (Files.exists(explicitPath)) {
+                return Optional.of(explicitPath);
+            }
+            if (processingEnv != null) {
+                processingEnv.getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.WARNING,
+                    "pipeline.config not found at '" + explicitPath + "' (resolved from '" + explicit +
+                        "', moduleDir=" + ctx.getModuleDir() + "); falling back to PipelineYamlConfigLocator");
+            }
+        }
+        Path moduleDir = ctx.getModuleDir();
+        if (moduleDir == null) {
+            return Optional.empty();
+        }
+        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
+        return locator.locate(moduleDir);
     }
 
     /**
