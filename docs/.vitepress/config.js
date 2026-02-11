@@ -143,7 +143,7 @@ const mainSidebar = [
                     {text: 'Phases and Flow', link: '/guide/evolve/annotation-processor/phases-and-flow'},
                     {text: 'Models and Bindings', link: '/guide/evolve/annotation-processor/models-and-bindings'},
                     {text: 'Generation and Rendering', link: '/guide/evolve/annotation-processor/generation-and-rendering'},
-                    {text: 'Current State and Migration', link: '/guide/evolve/annotation-processor/current-state-and-migration'}
+                    {text: 'Current Architecture', link: '/guide/evolve/annotation-processor/current-architecture'}
                 ]
             },
             {text: 'Annotation Processor Architecture (Compat)', link: '/guide/evolve/annotation-processor-architecture'},
