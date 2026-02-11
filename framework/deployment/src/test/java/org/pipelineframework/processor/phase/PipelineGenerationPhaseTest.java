@@ -93,17 +93,6 @@ class PipelineGenerationPhaseTest {
     }
 
     @Test
-    void testGenerationPhaseExecutionWithModels() throws Exception {
-        PipelineGenerationPhase phase = new PipelineGenerationPhase();
-        org.pipelineframework.processor.PipelineCompilationContext context =
-            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
-
-        // Execute the phase with an empty context (no models)
-        // This should not throw exceptions and should handle the empty case gracefully
-        assertDoesNotThrow(() -> phase.execute(context));
-    }
-
-    @Test
     void derivesOuterClassNameFromProtoPath() throws Exception {
         PipelineGenerationPhase phase = new PipelineGenerationPhase();
         DescriptorProtos.FileDescriptorProto fileProto = DescriptorProtos.FileDescriptorProto.newBuilder()

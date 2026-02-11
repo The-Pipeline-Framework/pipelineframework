@@ -53,7 +53,7 @@ For example, `layout: monolith` with modular Maven still yields modular artifact
 
 See:
 
-- [Runtime Layouts and Build Topologies](/guide/build/runtime-layouts)
+- [Runtime Layouts and Build Topologies](/guide/build/runtime-layouts/)
 - [Using Runtime Mapping](/guide/build/runtime-layouts/using-runtime-mapping)
 - [Maven Migration Playbook](/guide/build/runtime-layouts/maven-migration)
 

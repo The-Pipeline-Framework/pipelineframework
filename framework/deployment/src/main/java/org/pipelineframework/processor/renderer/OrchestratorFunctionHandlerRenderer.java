@@ -58,7 +58,7 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
         ClassName lambdaContext = ClassName.get("com.amazonaws.services.lambda.runtime", "Context");
         ClassName requestHandler = ClassName.get("com.amazonaws.services.lambda.runtime", "RequestHandler");
         ClassName generatedRole = ClassName.get("org.pipelineframework.annotation", "GeneratedRole");
-        ClassName roleEnum = ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role");
+        ClassName roleEnum = ClassName.get("org.pipelineframework.annotation", "GeneratedRole", "Role");
 
         ClassName inputDto = ClassName.get(binding.basePackage() + ".common.dto", binding.inputTypeName() + "Dto");
         ClassName outputDto = ClassName.get(binding.basePackage() + ".common.dto", binding.outputTypeName() + "Dto");

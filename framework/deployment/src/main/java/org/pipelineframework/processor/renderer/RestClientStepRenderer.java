@@ -14,6 +14,8 @@ import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.RestBinding;
+import org.pipelineframework.processor.util.DtoTypeUtils;
+import org.pipelineframework.processor.util.ResourceNameUtils;
 import org.pipelineframework.processor.util.RestPathResolver;
 import org.pipelineframework.step.StepManyToOne;
 import org.pipelineframework.step.StepOneToOne;
@@ -68,10 +70,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
         validateRestMappings(model);
 
         String serviceClassName = model.generatedName();
-        String baseName = serviceClassName.replace("Service", "");
-        if (baseName.endsWith("Reactive")) {
-            baseName = baseName.substring(0, baseName.length() - "Reactive".length());
-        }
+        String baseName = ResourceNameUtils.normalizeBaseName(serviceClassName);
         String interfaceName = baseName + "RestClient";
 
         TypeName inputDto = model.inboundDomainType() != null
@@ -137,7 +136,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
     private TypeSpec buildRestClientStepClass(RestBinding binding, GenerationContext ctx, String restClientInterfaceName) {
         PipelineStepModel model = binding.model();
         DeploymentRole role = ctx.role();
-        String clientStepClassName = model.generatedName().replace("Service", "")
+        String clientStepClassName = ResourceNameUtils.normalizeBaseName(model.generatedName())
             + PipelineStepProcessor.REST_CLIENT_STEP_SUFFIX;
 
         TypeName inputDto = model.inboundDomainType() != null
@@ -163,7 +162,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                 .build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("org.pipelineframework.annotation", "GeneratedRole"))
                 .addMember("value", "$T.$L",
-                    ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role"),
+                    ClassName.get("org.pipelineframework.annotation", "GeneratedRole", "Role"),
                     role.name())
                 .build());
         if (model.sideEffect()) {
@@ -431,28 +430,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
     }
 
     private TypeName convertDomainToDtoType(TypeName domainType) {
-        if (domainType == null) {
-            return ClassName.OBJECT;
-        }
-
-        String domainTypeStr = domainType.toString();
-        String dtoTypeStr = domainTypeStr
-            .replace(".domain.", ".dto.")
-            .replace(".service.", ".dto.");
-
-        if (!dtoTypeStr.equals(domainTypeStr)) {
-            int lastDot = dtoTypeStr.lastIndexOf('.');
-            String packageName = lastDot > 0 ? dtoTypeStr.substring(0, lastDot) : "";
-            String simpleName = lastDot > 0 ? dtoTypeStr.substring(lastDot + 1) : dtoTypeStr;
-            String dtoSimpleName = simpleName + "Dto";
-            return ClassName.get(packageName, dtoSimpleName);
-        }
-
-        int lastDot = domainTypeStr.lastIndexOf('.');
-        String packageName = lastDot > 0 ? domainTypeStr.substring(0, lastDot) : "";
-        String simpleName = lastDot > 0 ? domainTypeStr.substring(lastDot + 1) : domainTypeStr;
-        String dtoSimpleName = simpleName + "Dto";
-        return ClassName.get(packageName, dtoSimpleName);
+        return DtoTypeUtils.toDtoType(domainType);
     }
 
     private void validateRestMappings(PipelineStepModel model) {

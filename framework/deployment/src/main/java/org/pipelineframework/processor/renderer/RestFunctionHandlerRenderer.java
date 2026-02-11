@@ -49,7 +49,7 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
         ClassName lambdaContext = ClassName.get("com.amazonaws.services.lambda.runtime", "Context");
         ClassName requestHandler = ClassName.get("com.amazonaws.services.lambda.runtime", "RequestHandler");
         ClassName generatedRole = ClassName.get("org.pipelineframework.annotation", "GeneratedRole");
-        ClassName roleEnum = ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role");
+        ClassName roleEnum = ClassName.get("org.pipelineframework.annotation", "GeneratedRole", "Role");
 
         String serviceClassName = model.generatedName();
         String baseName = removeSuffix(removeSuffix(serviceClassName, "Service"), "Reactive");
