@@ -15,11 +15,22 @@ public class NoopDeliveredOrderForwardClient implements DeliveredOrderForwardCli
 
     private static final Logger LOG = Logger.getLogger(NoopDeliveredOrderForwardClient.class);
 
+    /**
+     * Log that the noop delivered-order forward client is enabled and will drain checkpoints without forwarding.
+     */
     @PostConstruct
     void init() {
         LOG.info("Noop delivered-order forward client enabled; draining checkpoints without forwarding");
     }
 
+    /**
+     * Consumes and drains a stream of delivered orders without forwarding them.
+     *
+     * Subscribes to the provided stream, ignores each item, logs any failure and logs when the stream completes.
+     *
+     * @param deliveredOrderStream the stream of delivered orders to consume and drain
+     * @return a {@code Cancellable} that can be used to cancel the subscription
+     */
     @Override
     public Cancellable forward(Multi<OrderDeliveredSvc.DeliveredOrder> deliveredOrderStream) {
         return deliveredOrderStream.subscribe().with(item -> {

@@ -10,6 +10,13 @@ import org.pipelineframework.mapper.Mapper;
 @ApplicationScoped
 public class DeliveredOrderGrpcMapper implements Mapper<OrderDeliveredSvc.DeliveredOrder, DeliveredOrderDto, DeliveredOrderDto> {
 
+    /**
+     * Convert a gRPC OrderDeliveredSvc.DeliveredOrder message to a DeliveredOrderDto.
+     *
+     * @param grpc the gRPC DeliveredOrder to convert
+     * @return the resulting DeliveredOrderDto with corresponding identifiers and timestamps
+     * @throws IllegalArgumentException if {@code grpc} is null
+     */
     @Override
     public DeliveredOrderDto fromGrpc(OrderDeliveredSvc.DeliveredOrder grpc) {
         if (grpc == null) {
@@ -24,6 +31,13 @@ public class DeliveredOrderGrpcMapper implements Mapper<OrderDeliveredSvc.Delive
             ReadyOrderGrpcMapper.asInstant(grpc.getDeliveredAt(), "deliveredAt"));
     }
 
+    /**
+     * Converts a DeliveredOrderDto into its gRPC representation OrderDeliveredSvc.DeliveredOrder.
+     *
+     * @param dto the delivered order DTO to convert; must not be null
+     * @return the corresponding OrderDeliveredSvc.DeliveredOrder populated from the DTO
+     * @throws IllegalArgumentException if {@code dto} is null
+     */
     @Override
     public OrderDeliveredSvc.DeliveredOrder toGrpc(DeliveredOrderDto dto) {
         if (dto == null) {
@@ -39,11 +53,23 @@ public class DeliveredOrderGrpcMapper implements Mapper<OrderDeliveredSvc.Delive
             .build();
     }
 
+    /**
+     * Return the provided DeliveredOrderDto unchanged.
+     *
+     * @param dto the DeliveredOrderDto to return
+     * @return the same DeliveredOrderDto instance passed in
+     */
     @Override
     public DeliveredOrderDto fromDto(DeliveredOrderDto dto) {
         return dto;
     }
 
+    /**
+     * Return the provided DeliveredOrderDto unchanged.
+     *
+     * @param domain the DeliveredOrderDto to return
+     * @return the same DeliveredOrderDto instance passed in {@code domain}
+     */
     @Override
     public DeliveredOrderDto toDto(DeliveredOrderDto domain) {
         return domain;

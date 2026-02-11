@@ -168,6 +168,21 @@ public class PipelineProtoGenerator {
         return copy;
     }
 
+    /**
+     * Builds the complete .proto file content for a single pipeline step.
+     *
+     * The generated content includes the proto syntax declaration, package and
+     * java_package options, an import of the previous step's proto when
+     * appropriate, the input message for the first step, the output message,
+     * the step service, and any aspect-related services.
+     *
+     * @param basePackage the protobuf package and base Java package to use
+     * @param step the resolved step to render
+     * @param previous the previously resolved step whose proto may be imported; may be null
+     * @param firstStep true if this step is the first in the pipeline (causes input message rendering)
+     * @param aspects optional list of aspect definitions used to render aspect services
+     * @return the textual content of the .proto file for the given step
+     */
     private String renderStepProto(
         String basePackage,
         ResolvedStep step,
@@ -637,6 +652,11 @@ public class PipelineProtoGenerator {
             return new Arguments(moduleDir, configPath, outputDir);
         }
 
+        /**
+         * Prints the command-line usage instructions for PipelineProtoGenerator to standard output.
+         *
+         * The message describes supported flags: --module-dir, --config, and --output-dir.
+         */
         static void printUsage() {
             System.out.println("Usage: PipelineProtoGenerator [--module-dir DIR] [--config PATH] [--output-dir DIR]");
         }

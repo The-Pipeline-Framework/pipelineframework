@@ -14,6 +14,12 @@ import org.pipelineframework.HealthCheckService;
 @Priority(1)
 @ApplicationScoped
 public class TestHealthCheckService extends HealthCheckService {
+    /**
+     * Always reports dependent services as healthy to bypass real dependency health checks during E2E tests.
+     *
+     * @param steps list of health-check steps (ignored by this test stub)
+     * @return `true` indicating dependent services are considered healthy
+     */
     @Override
     public boolean checkHealthOfDependentServices(List<Object> steps) {
         return true;

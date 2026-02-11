@@ -25,11 +25,25 @@ public class ProcessOrderDeliveredService
 
   private final Clock clock;
 
+  /**
+   * Creates a ProcessOrderDeliveredService that uses the provided clock to obtain current instants for delivered orders.
+   *
+   * @param clock the clock used to produce timestamps for delivered orders
+   * @throws NullPointerException if {@code clock} is {@code null}
+   */
   @Inject
   public ProcessOrderDeliveredService(Clock clock) {
     this.clock = Objects.requireNonNull(clock, "clock must not be null");
   }
 
+  /**
+   * Builds a DeliveredOrder from a DispatchedOrder, setting the delivered timestamp to the current instant from the injected clock.
+   *
+   * If {@code input} is null the method yields a failed Uni containing an {@link IllegalArgumentException}.
+   *
+   * @param input the dispatched order to convert
+   * @return the DeliveredOrder with its delivery time set to the current instant
+   */
   @Override
   public Uni<DeliveredOrder> process(DispatchedOrder input) {
     if (input == null) {

@@ -9,5 +9,11 @@ import org.pipelineframework.checkout.deliverorder.grpc.OrderDeliveredSvc;
  */
 public interface DeliveredOrderForwardClient {
 
-    Cancellable forward(Multi<OrderDeliveredSvc.DeliveredOrder> deliveredOrderStream);
+    /**
+ * Forward delivered-order checkpoints from the provided stream to a downstream consumer.
+ *
+ * @param deliveredOrderStream a stream of delivered-order messages to be forwarded
+ * @return a {@link Cancellable} that can be used to cancel the forwarding subscription
+ */
+Cancellable forward(Multi<OrderDeliveredSvc.DeliveredOrder> deliveredOrderStream);
 }

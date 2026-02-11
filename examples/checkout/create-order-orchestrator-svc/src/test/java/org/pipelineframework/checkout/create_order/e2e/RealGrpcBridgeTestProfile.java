@@ -6,6 +6,14 @@ import io.quarkus.test.junit.QuarkusTestProfile;
 
 public class RealGrpcBridgeTestProfile implements QuarkusTestProfile {
 
+    /**
+     * Provide Quarkus configuration overrides for the gRPC bridge end-to-end test profile.
+     *
+     * @return a map of configuration properties that:
+     *         - excludes the local ingest client from Arc
+     *         - enables and configures a separate gRPC server on port 9001
+     *         - configures the deliver-order-orchestrator gRPC client (host localhost, port 9001, 10s deadline, plain-text)
+     */
     @Override
     public Map<String, String> getConfigOverrides() {
         return Map.of(

@@ -22,6 +22,16 @@ public class ProcessOrderRequestProcessService
 
   private static final Logger LOG = Logger.getLogger(ProcessOrderRequestProcessService.class);
 
+  /**
+   * Processes an OrderRequest and produces an OrderLineItem based on the first comma-separated item.
+   *
+   * The created OrderLineItem uses the requestId and customerId from the input, the SKU parsed from the
+   * first item token (defaults to "unknown-sku" if blank), and a parsed quantity (defaults to 1 for null,
+   * non-numeric, or non-positive values).
+   *
+   * @param input the incoming order request (the first item of input.items() is used); may be null
+   * @return the resulting OrderLineItem containing requestId, customerId, resolved SKU, and quantity
+   */
   @Override
   public Uni<OrderLineItem> process(OrderRequest input) {
     if (input == null) {
@@ -40,6 +50,12 @@ public class ProcessOrderRequestProcessService
     return Uni.createFrom().item(output);
   }
 
+  /**
+   * Parse a quantity string into a positive integer, defaulting to 1 for null, non-numeric, or non-positive inputs.
+   *
+   * @param value the quantity string to parse; may be null, blank, or malformed
+   * @return the parsed integer if greater than zero, otherwise 1
+   */
   private static int parseQuantity(String value) {
     if (value == null) {
       LOG.warn("Invalid quantity value <null>; defaulting to 1");

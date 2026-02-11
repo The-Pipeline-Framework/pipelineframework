@@ -7,6 +7,11 @@ import org.pipelineframework.annotation.PipelineOrchestrator;
  */
 @PipelineOrchestrator(generateCli = false)
 public final class CreateOrderOrchestratorHost {
+    /**
+     * Prevents instantiation of this marker host class.
+     *
+     * The private no-argument constructor enforces non-instantiability.
+     */
     private CreateOrderOrchestratorHost() {
     }
 }
