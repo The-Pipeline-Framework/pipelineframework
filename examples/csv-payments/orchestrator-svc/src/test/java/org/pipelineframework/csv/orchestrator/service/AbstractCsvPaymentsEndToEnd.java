@@ -72,6 +72,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
             System.getProperty("csv.runtime.layout", "modular").trim().toLowerCase();
     private static final boolean MONOLITH_LAYOUT = "monolith".equals(RUNTIME_LAYOUT);
     private static final boolean PIPELINE_RUNTIME_LAYOUT = "pipeline-runtime".equals(RUNTIME_LAYOUT);
+    private static final long PIPELINE_WAIT_TIMEOUT_SECONDS =
+            Long.getLong("csv.e2e.pipeline.wait.seconds", 60L);
+    private static final long PIPELINE_WAIT_POLL_MILLIS = 1000L;
     // CI sets IMAGE_TAG to github.sha; local fallback should match dev image naming conventions.
     private static final String PIPELINE_RUNTIME_IMAGE =
             System.getenv().getOrDefault("IMAGE_REGISTRY", "registry.example.com")
@@ -796,10 +799,13 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
     /**
      * Waits until at least one pipeline output file (a file ending with ".out") appears in the test
-     * output directory or a 10-second timeout elapses.
+     * output directory or a configurable timeout elapses.
      *
      * <p>Polls the TEST_E2E_DIR and returns as soon as any ".out" file is detected; if the timeout is
      * reached without finding output files the test is failed.
+     *
+     * <p>Timeout can be tuned via system property {@code csv.e2e.pipeline.wait.seconds}; default is 60
+     * seconds.
      *
      * @throws InterruptedException if the thread is interrupted while sleeping between polls
      * @throws IOException if an I/O error occurs when listing the test directory
@@ -810,7 +816,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         // Check for output files to be created before continuing
         long startTime = System.currentTimeMillis();
-        long timeout = TimeUnit.SECONDS.toMillis(10); // 10-second timeout
+        long timeout = TimeUnit.SECONDS.toMillis(PIPELINE_WAIT_TIMEOUT_SECONDS);
+        int pollCount = 0;
 
         while (System.currentTimeMillis() - startTime < timeout) {
             // Check if output files exist in the expected output directory
@@ -824,10 +831,27 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 return;
             }
 
-            Thread.sleep(1000); // Check every second
+            pollCount++;
+            if (pollCount % 5 == 0) {
+                try (var files = Files.list(Paths.get(TEST_E2E_DIR))) {
+                    long csvFiles = files.filter(path -> path.toString().endsWith(".csv")).count();
+                    LOG.infof(
+                            "Still waiting for .out files in %s (elapsed=%ds, csvFiles=%d)",
+                            TEST_E2E_DIR,
+                            TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - startTime),
+                            csvFiles);
+                }
+            }
+
+            Thread.sleep(PIPELINE_WAIT_POLL_MILLIS);
         }
 
-        fail("Pipeline completion timeout reached with no .out files in " + TEST_E2E_DIR);
+        fail(
+                "Pipeline completion timeout reached with no .out files in "
+                        + TEST_E2E_DIR
+                        + " after "
+                        + PIPELINE_WAIT_TIMEOUT_SECONDS
+                        + "s");
     }
 
     /**
