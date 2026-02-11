@@ -279,6 +279,13 @@ export default withMermaid(
     },
 
     cleanUrls: true,
+    // Keep historical version snapshots immutable even if they contain stale links.
+    // This suppresses dead-link failures for `/versions/**` pages and known
+    // relative links that only appear within version snapshots.
+    ignoreDeadLinks: [
+      /^\/versions\//,
+      /^(?:\.\/)?\.\.\/\.\.\/evolve\/annotation-processor-architecture(?:\.md)?$/
+    ],
 
     vite: {
       optimizeDeps: { 
