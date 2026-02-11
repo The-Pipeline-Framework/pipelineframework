@@ -9,7 +9,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import javax.annotation.processing.Messager;
+import javax.tools.Diagnostic;
 
+import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
 import org.yaml.snakeyaml.Yaml;
 
@@ -19,12 +22,13 @@ import org.yaml.snakeyaml.Yaml;
 public class PipelineStepConfigLoader {
     private final Function<String, String> propertyLookup;
     private final Function<String, String> envLookup;
+    private final Messager messager;
 
     /**
      * Construct a PipelineStepConfigLoader that uses system properties and environment variables.
      */
     public PipelineStepConfigLoader() {
-        this(System::getProperty, System::getenv);
+        this(System::getProperty, System::getenv, null);
     }
 
     /**
@@ -34,8 +38,23 @@ public class PipelineStepConfigLoader {
      * @param envLookup function that accepts an environment variable name and returns its value; if `null`, a lookup that always returns `null` is used
      */
     public PipelineStepConfigLoader(Function<String, String> propertyLookup, Function<String, String> envLookup) {
+        this(propertyLookup, envLookup, null);
+    }
+
+    /**
+     * Create a PipelineStepConfigLoader with injectable lookups and optional messager.
+     *
+     * @param propertyLookup function that accepts a property name and returns its value; if `null`, a lookup that always returns `null` is used
+     * @param envLookup function that accepts an environment variable name and returns its value; if `null`, a lookup that always returns `null` is used
+     * @param messager optional annotation processing messager for warnings
+     */
+    public PipelineStepConfigLoader(
+            Function<String, String> propertyLookup,
+            Function<String, String> envLookup,
+            Messager messager) {
         this.propertyLookup = propertyLookup == null ? key -> null : propertyLookup;
         this.envLookup = envLookup == null ? key -> null : envLookup;
+        this.messager = messager;
     }
 
     /**
@@ -43,10 +62,23 @@ public class PipelineStepConfigLoader {
      *
      * @param basePackage the configured base package
      * @param transport the configured transport name
+     * @param platform the configured platform name
      * @param inputTypes the list of input type names declared in steps
      * @param outputTypes the list of output type names declared in steps
      */
-    public record StepConfig(String basePackage, String transport, List<String> inputTypes, List<String> outputTypes) {}
+    public record StepConfig(String basePackage, String transport, String platform, List<String> inputTypes, List<String> outputTypes) {
+        /**
+         * Backward-compatible constructor used by existing tests/callers.
+         *
+         * @param basePackage base package
+         * @param transport transport
+         * @param inputTypes input types
+         * @param outputTypes output types
+         */
+        public StepConfig(String basePackage, String transport, List<String> inputTypes, List<String> outputTypes) {
+            this(basePackage, transport, "COMPUTE", inputTypes, outputTypes);
+        }
+    }
 
     /**
      * Load pipeline step configuration from a YAML file.
@@ -68,20 +100,46 @@ public class PipelineStepConfigLoader {
 
         String basePackage = getString(rootMap.get("basePackage"));
         String transport = getString(rootMap.get("transport"));
+        String platform = getString(rootMap.get("platform"));
         String normalizedTransport = TransportOverrideResolver.normalizeKnownTransport(transport);
         if (normalizedTransport != null) {
             transport = normalizedTransport;
+        } else if (transport != null && !transport.isBlank()) {
+            warn("Unknown pipeline transport '" + transport + "' in step config; defaulting to GRPC.");
+            transport = "GRPC";
         }
         String transportOverride = resolveTransportOverride();
         if (transportOverride != null && !transportOverride.isBlank()) {
             String normalizedOverride = TransportOverrideResolver.normalizeKnownTransport(transportOverride);
             if (normalizedOverride != null) {
                 transport = normalizedOverride;
+            } else {
+                warn("Unknown pipeline.transport override '" + transportOverride
+                    + "'; ignoring override and retaining existing value '" + transport + "'.");
+            }
+        }
+        String normalizedPlatform = PlatformOverrideResolver.normalizeKnownPlatform(platform);
+        if (normalizedPlatform != null) {
+            platform = normalizedPlatform;
+        } else {
+            if (platform != null && !platform.isBlank()) {
+                warn("Unknown pipeline platform '" + platform + "' in step config; defaulting to COMPUTE.");
+            }
+            platform = "COMPUTE";
+        }
+        String platformOverride = resolvePlatformOverride();
+        if (platformOverride != null && !platformOverride.isBlank()) {
+            String normalizedOverride = PlatformOverrideResolver.normalizeKnownPlatform(platformOverride);
+            if (normalizedOverride != null) {
+                platform = normalizedOverride;
+            } else {
+                warn("Unknown pipeline.platform override '" + platformOverride
+                    + "'; ignoring override and retaining existing value '" + platform + "'.");
             }
         }
         Object stepsValue = rootMap.get("steps");
         if (!(stepsValue instanceof List<?> steps)) {
-            return new StepConfig(basePackage, transport, List.of(), List.of());
+            return new StepConfig(basePackage, transport, platform, List.of(), List.of());
         }
 
         List<String> inputTypes = new ArrayList<>();
@@ -100,7 +158,7 @@ public class PipelineStepConfigLoader {
             }
         }
 
-        return new StepConfig(basePackage, transport, inputTypes, outputTypes);
+        return new StepConfig(basePackage, transport, platform, inputTypes, outputTypes);
     }
 
     private Object loadYaml(Path configPath) {
@@ -132,5 +190,22 @@ public class PipelineStepConfigLoader {
      */
     private String resolveTransportOverride() {
         return TransportOverrideResolver.resolveOverride(propertyLookup, envLookup);
+    }
+
+    /**
+     * Resolve platform override value from configured lookup functions.
+     *
+     * @return resolved platform override
+     */
+    private String resolvePlatformOverride() {
+        return PlatformOverrideResolver.resolveOverride(propertyLookup, envLookup);
+    }
+
+    private void warn(String message) {
+        if (messager != null) {
+            messager.printMessage(Diagnostic.Kind.WARNING, message);
+        } else {
+            System.err.println(Diagnostic.Kind.WARNING + ": " + message);
+        }
     }
 }

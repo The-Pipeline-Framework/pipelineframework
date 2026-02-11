@@ -26,8 +26,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import java.util.logging.Logger;
 
+import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
 import org.yaml.snakeyaml.Yaml;
 
@@ -120,8 +122,9 @@ public class PipelineYamlConfigLoader {
     /**
      * Parses the YAML root object and constructs a PipelineYamlConfig.
      *
-     * Reads top-level fields (basePackage, transport), applies a transport override if present,
-     * normalizes known transport values (defaults to "GRPC" for unknown transports), and
+     * Reads top-level fields (basePackage, transport, platform), applies overrides if present,
+     * normalizes known transport values (defaults to "GRPC" for unknown transports), normalizes known
+     * platform values (defaults to "COMPUTE" for unknown values), and
      * reads pipeline steps and aspects from the root map.
      *
      * @param root   the deserialized YAML root; expected to be a Map
@@ -135,32 +138,22 @@ public class PipelineYamlConfigLoader {
         }
 
         String basePackage = readString(rootMap, "basePackage");
-        String transport = readString(rootMap, "transport");
-        boolean fromOverride = false;
-        String transportOverride = resolveTransportOverride();
-        if (transportOverride != null && !transportOverride.isBlank()) {
-            transport = transportOverride;
-            fromOverride = true;
-        }
-        if (transport != null && !transport.isBlank()) {
-            String normalized = TransportOverrideResolver.normalizeKnownTransport(transport);
-            if (normalized != null) {
-                transport = normalized;
-            } else {
-                if (fromOverride) {
-                    LOG.warning("Unknown transport override '" + transport
-                        + "'; defaulting pipeline transport to GRPC.");
-                } else {
-                    LOG.warning("Unknown transport in YAML config '" + transport
-                        + "'; defaulting pipeline transport to GRPC.");
-                }
-                transport = "GRPC";
-            }
-        }
+        String transport = resolveConfigValue(
+            readString(rootMap, "transport"),
+            this::resolveTransportOverride,
+            TransportOverrideResolver::normalizeKnownTransport,
+            "GRPC",
+            "transport");
+        String platform = resolveConfigValue(
+            readString(rootMap, "platform"),
+            this::resolvePlatformOverride,
+            PlatformOverrideResolver::normalizeKnownPlatform,
+            "COMPUTE",
+            "platform");
         List<PipelineYamlStep> steps = readSteps(rootMap);
         List<PipelineYamlAspect> aspects = readAspects(rootMap);
 
-        return new PipelineYamlConfig(basePackage, transport, steps, aspects);
+        return new PipelineYamlConfig(basePackage, transport, platform, steps, aspects);
     }
 
     /**
@@ -170,6 +163,46 @@ public class PipelineYamlConfigLoader {
      */
     private String resolveTransportOverride() {
         return TransportOverrideResolver.resolveOverride(propertyLookup, envLookup);
+    }
+
+    /**
+     * Resolve a platform override using the configured property and environment lookups.
+     *
+     * @return the platform override value if present, or {@code null} when no override is configured
+     */
+    private String resolvePlatformOverride() {
+        return PlatformOverrideResolver.resolveOverride(propertyLookup, envLookup);
+    }
+
+    private String resolveConfigValue(
+            String rawValue,
+            Supplier<String> overrideSupplier,
+            Function<String, String> normalizer,
+            String defaultValue,
+            String label) {
+        String effectiveValue = rawValue;
+        String overrideValue = overrideSupplier == null ? null : overrideSupplier.get();
+        boolean fromOverride = overrideValue != null && !overrideValue.isBlank();
+        if (fromOverride) {
+            effectiveValue = overrideValue;
+        }
+        if (effectiveValue == null || effectiveValue.isBlank()) {
+            return defaultValue;
+        }
+
+        String normalized = normalizer.apply(effectiveValue);
+        if (normalized != null) {
+            return normalized;
+        }
+
+        if (fromOverride) {
+            LOG.warning("Unknown " + label + " override '" + effectiveValue
+                + "'; defaulting pipeline " + label + " to " + defaultValue + ".");
+        } else {
+            LOG.warning("Unknown " + label + " in YAML config '" + effectiveValue
+                + "'; defaulting pipeline " + label + " to " + defaultValue + ".");
+        }
+        return defaultValue;
     }
 
     /**

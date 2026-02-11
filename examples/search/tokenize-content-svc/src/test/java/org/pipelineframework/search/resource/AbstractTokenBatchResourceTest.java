@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Mariano Barcia
+ * Copyright (c) 2023-2026 Mariano Barcia
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ package org.pipelineframework.search.resource;
 
 import java.util.UUID;
 
-import io.quarkus.test.junit.QuarkusIntegrationTest;
 import io.restassured.RestAssured;
 import io.restassured.config.SSLConfig;
 import io.restassured.http.ContentType;
@@ -29,32 +28,29 @@ import org.junit.jupiter.api.Test;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 
-@QuarkusIntegrationTest
-class ProcessIndexDocumentResourceIT {
+abstract class AbstractTokenBatchResourceTest {
 
     @BeforeAll
     static void setUp() {
-        // Configure RestAssured to use HTTPS and trust all certificates for testing
         RestAssured.useRelaxedHTTPSValidation();
         RestAssured.config =
                 RestAssured.config().sslConfig(SSLConfig.sslConfig().relaxedHTTPSValidation());
         RestAssured.port =
-                Integer.parseInt(System.getProperty("quarkus.http.test-ssl-port", "8447"));
+                Integer.parseInt(System.getProperty("quarkus.http.test-ssl-port", "8446"));
     }
 
     @AfterAll
     static void tearDown() {
-        // Reset RestAssured to default configuration
         RestAssured.reset();
     }
 
     @Test
-    void testProcessIndexDocumentWithValidData() {
+    void testTokenBatchWithValidData() {
         String requestBody =
                 """
                 {
                   "docId": "%s",
-                  "tokens": "search pipeline tokens"
+                  "content": "Search pipeline content for tokenization."
                 }
                 """
                         .formatted(UUID.randomUUID());
@@ -62,35 +58,34 @@ class ProcessIndexDocumentResourceIT {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-index-document/process")
+                .post("/api/v1/token-batch/")
                 .then()
                 .statusCode(200)
                 .body("docId", notNullValue())
-                .body("indexVersion", notNullValue())
-                .body("indexedAt", notNullValue())
-                .body("success", notNullValue());
+                .body("tokens", notNullValue())
+                .body("tokenizedAt", notNullValue());
     }
 
     @Test
-    void testProcessIndexDocumentWithInvalidUUID() {
+    void testTokenBatchWithInvalidUUID() {
         String requestBody =
                 """
                 {
                   "docId": "invalid-uuid",
-                  "tokens": "search pipeline tokens"
+                  "content": "Search pipeline content for tokenization."
                 }
                 """;
 
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-index-document/process")
+                .post("/api/v1/token-batch/")
                 .then()
-                .statusCode(500);
+                .statusCode(400);
     }
 
     @Test
-    void testProcessIndexDocumentWithMissingRequiredFields() {
+    void testTokenBatchWithMissingRequiredFields() {
         String requestBody =
                 """
                 {
@@ -102,7 +97,7 @@ class ProcessIndexDocumentResourceIT {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-index-document/process")
+                .post("/api/v1/token-batch/")
                 .then()
                 .statusCode(400);
     }

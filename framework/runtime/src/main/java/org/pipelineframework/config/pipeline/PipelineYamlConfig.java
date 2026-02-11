@@ -18,18 +18,57 @@ package org.pipelineframework.config.pipeline;
 
 import java.util.List;
 
+import org.pipelineframework.config.PlatformOverrideResolver;
+
 /**
  * Pipeline configuration parsed from pipeline.yaml.
  *
  * @param basePackage the base package for generated pipeline classes
  * @param transport the transport mode (GRPC, REST, or LOCAL)
+ * @param platform the runtime/deployment platform mode (COMPUTE or FUNCTION)
  * @param steps the configured pipeline steps
  * @param aspects the configured pipeline aspects
  */
 public record PipelineYamlConfig(
     String basePackage,
     String transport,
+    String platform,
     List<PipelineYamlStep> steps,
     List<PipelineYamlAspect> aspects
 ) {
+    /**
+     * Creates a validated pipeline configuration.
+     *
+     * @throws IllegalArgumentException when platform is not COMPUTE or FUNCTION
+     */
+    public PipelineYamlConfig {
+        String normalizedPlatform = PlatformOverrideResolver.normalizeKnownPlatform(platform);
+        if (normalizedPlatform == null) {
+            if (platform == null || platform.isBlank()) {
+                normalizedPlatform = "COMPUTE";
+            } else {
+                throw new IllegalArgumentException(
+                    "Invalid platform '" + platform + "'. Allowed values: COMPUTE, FUNCTION "
+                        + "(legacy aliases: STANDARD, LAMBDA).");
+            }
+        }
+        platform = normalizedPlatform;
+    }
+
+    /**
+     * Backward-compatible constructor used by existing callers that only set transport.
+     *
+     * @param basePackage base package
+     * @param transport transport mode
+     * @param steps configured steps
+     * @param aspects configured aspects
+     */
+    public PipelineYamlConfig(
+        String basePackage,
+        String transport,
+        List<PipelineYamlStep> steps,
+        List<PipelineYamlAspect> aspects
+    ) {
+        this(basePackage, transport, "COMPUTE", steps, aspects);
+    }
 }

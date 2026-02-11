@@ -30,7 +30,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 
 @QuarkusTest
-class ProcessTokenizeContentResourceTest {
+class RawDocumentResourceTest {
 
     @BeforeAll
     static void setUp() {
@@ -39,7 +39,7 @@ class ProcessTokenizeContentResourceTest {
         RestAssured.config =
                 RestAssured.config().sslConfig(SSLConfig.sslConfig().relaxedHTTPSValidation());
         RestAssured.port =
-                Integer.parseInt(System.getProperty("quarkus.http.test-ssl-port", "8446"));
+                Integer.parseInt(System.getProperty("quarkus.http.test-ssl-port", "8444"));
     }
 
     @AfterAll
@@ -49,12 +49,12 @@ class ProcessTokenizeContentResourceTest {
     }
 
     @Test
-    void testProcessTokenizeContentWithValidData() {
+    void testRawDocumentWithValidData() {
         String requestBody =
                 """
                 {
                   "docId": "%s",
-                  "content": "Search pipeline content for tokenization."
+                  "sourceUrl": "https://example.com/docs/alpha"
                 }
                 """
                         .formatted(UUID.randomUUID());
@@ -62,34 +62,34 @@ class ProcessTokenizeContentResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-tokenize-content/process")
+                .post("/api/v1/raw-document/")
                 .then()
                 .statusCode(200)
                 .body("docId", notNullValue())
-                .body("tokens", notNullValue())
-                .body("tokenizedAt", notNullValue());
+                .body("rawContent", notNullValue())
+                .body("fetchedAt", notNullValue());
     }
 
     @Test
-    void testProcessTokenizeContentWithInvalidUUID() {
+    void testRawDocumentWithInvalidUUID() {
         String requestBody =
                 """
                 {
                   "docId": "invalid-uuid",
-                  "content": "Search pipeline content for tokenization."
+                  "sourceUrl": "https://example.com/docs/alpha"
                 }
                 """;
 
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-tokenize-content/process")
+                .post("/api/v1/raw-document/")
                 .then()
                 .statusCode(400);
     }
 
     @Test
-    void testProcessTokenizeContentWithMissingRequiredFields() {
+    void testRawDocumentWithMissingRequiredFields() {
         String requestBody =
                 """
                 {
@@ -101,7 +101,7 @@ class ProcessTokenizeContentResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-tokenize-content/process")
+                .post("/api/v1/raw-document/")
                 .then()
                 .statusCode(400);
     }

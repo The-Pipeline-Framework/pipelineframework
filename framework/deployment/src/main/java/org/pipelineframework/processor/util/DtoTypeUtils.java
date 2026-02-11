@@ -21,8 +21,11 @@ public final class DtoTypeUtils {
         if (domainType == null) {
             return ClassName.OBJECT;
         }
+        if (!(domainType instanceof ClassName domainClass)) {
+            return ClassName.OBJECT;
+        }
 
-        String dtoPackagePath = domainType.toString()
+        String dtoPackagePath = domainClass.canonicalName()
             .replace(".domain.", ".dto.")
             .replace(".service.", ".dto.");
 

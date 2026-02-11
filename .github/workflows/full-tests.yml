@@ -78,6 +78,29 @@ jobs:
             -Dit.test=CsvPaymentsPipelineRuntimeEndToEndIT \
             verify
 
+      - name: Run search Lambda mock-server smoke test
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f examples/search/pom.xml \
+            -pl orchestrator-svc \
+            -am \
+            -Dpipeline.platform=FUNCTION \
+            -Dpipeline.transport=REST \
+            -Dpipeline.rest.naming.strategy=RESOURCEFUL \
+            -Dpipeline.lambda.dependency.scope=compile \
+            -Dquarkus.profile=lambda \
+            -DskipTests \
+            compile
+          ./mvnw "${maven_args[@]}" -f examples/search/pom.xml \
+            -pl orchestrator-svc \
+            -Dpipeline.platform=FUNCTION \
+            -Dpipeline.transport=REST \
+            -Dpipeline.rest.naming.strategy=RESOURCEFUL \
+            -Dpipeline.lambda.dependency.scope=compile \
+            -Dquarkus.profile=lambda \
+            -Dtest=LambdaMockEventServerSmokeTest \
+            test
+
       - name: Dump integration test reports on failure
         if: failure()
         run: |
@@ -141,6 +164,23 @@ jobs:
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" -DskipTests -Dquarkus.container-image.build=false -Dquarkus.native.enabled=true -Pnative package
+
+      - name: Search Lambda native smoke build
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f examples/search/pom.xml \
+            -pl crawl-source-svc \
+            -am \
+            -DskipTests \
+            -Dpipeline.platform=FUNCTION \
+            -Dpipeline.transport=REST \
+            -Dpipeline.rest.naming.strategy=RESOURCEFUL \
+            -Dpipeline.lambda.dependency.scope=compile \
+            -Dquarkus.profile=lambda \
+            -Dquarkus.container-image.build=false \
+            -Dquarkus.native.enabled=true \
+            -Pnative \
+            package
 
       - name: Upload native orchestrator artifact
         uses: actions/upload-artifact@v4

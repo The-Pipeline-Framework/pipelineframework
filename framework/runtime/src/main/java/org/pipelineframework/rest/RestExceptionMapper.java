@@ -64,11 +64,20 @@ public class RestExceptionMapper {
             LOG.debug("Request did not match a REST endpoint", ex);
             return RestResponse.status(Response.Status.NOT_FOUND, "Not Found");
         }
-        if (ex instanceof IllegalArgumentException) {
+        Throwable rootCause = rootCause(ex);
+        if (rootCause instanceof IllegalArgumentException) {
             LOG.warn("Invalid request", ex);
             return RestResponse.status(Response.Status.BAD_REQUEST, "Invalid request");
         }
         LOG.error("Unexpected error processing request", ex);
         return RestResponse.status(Response.Status.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
+    }
+
+    private Throwable rootCause(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null && current.getCause() != null && current.getCause() != current) {
+            current = current.getCause();
+        }
+        return current;
     }
 }
