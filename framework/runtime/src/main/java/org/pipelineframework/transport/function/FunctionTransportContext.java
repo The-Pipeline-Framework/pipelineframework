@@ -55,10 +55,6 @@ public record FunctionTransportContext(
      * @return context with no custom attributes
      */
     public static FunctionTransportContext of(String requestId, String functionName, String stage) {
-        return new FunctionTransportContext(
-            Objects.requireNonNull(requestId, "requestId must not be null"),
-            Objects.requireNonNullElse(functionName, ""),
-            Objects.requireNonNullElse(stage, ""),
-            Map.of());
+        return new FunctionTransportContext(requestId, functionName, stage, Map.of());
     }
 }

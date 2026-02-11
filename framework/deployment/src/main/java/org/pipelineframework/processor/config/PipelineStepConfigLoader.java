@@ -105,6 +105,7 @@ public class PipelineStepConfigLoader {
         if (normalizedTransport != null) {
             transport = normalizedTransport;
         } else if (transport != null && !transport.isBlank()) {
+            warn("Unknown pipeline transport '" + transport + "' in step config; defaulting to GRPC.");
             transport = "GRPC";
         }
         String transportOverride = resolveTransportOverride();
@@ -112,6 +113,9 @@ public class PipelineStepConfigLoader {
             String normalizedOverride = TransportOverrideResolver.normalizeKnownTransport(transportOverride);
             if (normalizedOverride != null) {
                 transport = normalizedOverride;
+            } else {
+                warn("Unknown pipeline.transport override '" + transportOverride
+                    + "'; ignoring override and retaining existing value '" + transport + "'.");
             }
         }
         String normalizedPlatform = PlatformOverrideResolver.normalizeKnownPlatform(platform);
@@ -129,7 +133,8 @@ public class PipelineStepConfigLoader {
             if (normalizedOverride != null) {
                 platform = normalizedOverride;
             } else {
-                warn("Unknown pipeline.platform override '" + platformOverride + "'; defaulting to COMPUTE.");
+                warn("Unknown pipeline.platform override '" + platformOverride
+                    + "'; ignoring override and retaining existing value '" + platform + "'.");
             }
         }
         Object stepsValue = rootMap.get("steps");

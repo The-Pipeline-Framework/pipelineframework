@@ -25,4 +25,5 @@ PIPELINE_LAMBDA_DEPENDENCY_SCOPE="${PIPELINE_LAMBDA_DEPENDENCY_SCOPE:-compile}"
   -Dpipeline.transport="$PIPELINE_TRANSPORT" \
   -Dpipeline.rest.naming.strategy="$PIPELINE_REST_NAMING_STRATEGY" \
   -Dpipeline.lambda.dependency.scope="$PIPELINE_LAMBDA_DEPENDENCY_SCOPE" \
+  -Dquarkus.profile=lambda \
   clean install "$@"

@@ -17,6 +17,7 @@ import org.pipelineframework.processor.ir.StreamingShape;
 public final class RestPathResolver {
 
     public static final String REST_NAMING_STRATEGY_OPTION = "pipeline.rest.naming.strategy";
+    public static final String REST_NAMING_STRATEGY_ENV = "PIPELINE_REST_NAMING_STRATEGY";
     private static final String API_BASE_PATH = "/api/v1";
     private static final Logger LOG = Logger.getLogger(RestPathResolver.class.getName());
 
@@ -58,6 +59,9 @@ public final class RestPathResolver {
         }
         if (raw == null || raw.isBlank()) {
             raw = System.getProperty(REST_NAMING_STRATEGY_OPTION);
+        }
+        if (raw == null || raw.isBlank()) {
+            raw = System.getenv(REST_NAMING_STRATEGY_ENV);
         }
         if (raw == null || raw.isBlank()) {
             raw = System.getenv(REST_NAMING_STRATEGY_OPTION);
@@ -161,14 +165,10 @@ public final class RestPathResolver {
     }
 
     private static String toPluginToken(PipelineStepModel model, String resourceToken) {
-        String raw = baseName(model);
+        String raw = normalizeStepBaseName(model);
         if (raw == null || raw.isBlank()) {
             return null;
         }
-        raw = removePrefix(raw, "Observe");
-        raw = removeSuffix(raw, "SideEffect");
-        raw = removeSuffix(raw, "Service");
-        raw = removeSuffix(raw, "Reactive");
 
         String inbound = simpleTypeName(model.inboundDomainType());
         String outbound = simpleTypeName(model.outboundDomainType());
@@ -188,14 +188,10 @@ public final class RestPathResolver {
     }
 
     private static String toFallbackDisambiguationToken(PipelineStepModel model, String resourceToken) {
-        String raw = baseName(model);
+        String raw = normalizeStepBaseName(model);
         if (raw == null || raw.isBlank()) {
             return null;
         }
-        raw = removePrefix(raw, "Observe");
-        raw = removeSuffix(raw, "SideEffect");
-        raw = removeSuffix(raw, "Service");
-        raw = removeSuffix(raw, "Reactive");
         String token = toKebabCase(raw);
         if (token == null || token.isBlank() || token.equals(resourceToken)) {
             return "step";
@@ -218,6 +214,17 @@ public final class RestPathResolver {
 
     private static boolean isSideEffect(PipelineStepModel model) {
         return model != null && model.sideEffect();
+    }
+
+    private static String normalizeStepBaseName(PipelineStepModel model) {
+        String raw = baseName(model);
+        if (raw == null || raw.isBlank()) {
+            return raw;
+        }
+        raw = removePrefix(raw, "Observe");
+        raw = removeSuffix(raw, "SideEffect");
+        raw = removeSuffix(raw, "Service");
+        return removeSuffix(raw, "Reactive");
     }
 
     private static String stripTypeSuffix(String base, String typeName) {
@@ -292,11 +299,11 @@ public final class RestPathResolver {
         if (model == null) {
             return "unknown";
         }
-        if (model.serviceName() != null && !model.serviceName().isBlank()) {
-            return model.serviceName();
-        }
         if (model.generatedName() != null && !model.generatedName().isBlank()) {
             return model.generatedName();
+        }
+        if (model.serviceName() != null && !model.serviceName().isBlank()) {
+            return model.serviceName();
         }
         return model.serviceClassName() == null ? "unknown" : model.serviceClassName().toString();
     }

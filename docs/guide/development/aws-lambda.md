@@ -15,6 +15,7 @@ Set platform mode during build:
   -Dpipeline.platform=FUNCTION \
   -Dpipeline.transport=REST \
   -Dpipeline.lambda.dependency.scope=compile \
+  -Dquarkus.profile=lambda \
   clean verify
 ```
 

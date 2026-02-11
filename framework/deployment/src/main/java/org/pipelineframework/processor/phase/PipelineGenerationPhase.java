@@ -193,7 +193,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     new OrchestratorClientPropertiesGenerator(ctx.getProcessingEnv());
                 clientPropertiesGenerator.writeClientProperties(ctx);
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             if (ctx.getProcessingEnv() != null) {
                 ctx.getProcessingEnv().getMessager().printMessage(
                     javax.tools.Diagnostic.Kind.WARNING,
@@ -649,9 +649,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     roleMetadataGenerator.recordClassWithRole(restClassName, restRole.name());
 
                     if (ctx.isPlatformModeFunction() && model.streamingShape() == StreamingShape.UNARY_UNARY) {
-                        String handlerClassName = model.servicePackage() + ".pipeline."
-                            + model.generatedName().replace("Service", "").replace("Reactive", "")
-                            + "FunctionHandler";
+                        String handlerClassName =
+                            RestFunctionHandlerRenderer.handlerFqcn(model.servicePackage(), model.generatedName());
                         restFunctionHandlerRenderer.render(restBinding, new GenerationContext(
                             ctx.getProcessingEnv(),
                             resolveRoleOutputDir(ctx, restRole),

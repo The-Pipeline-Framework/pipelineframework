@@ -205,7 +205,8 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         Optional<PlatformMode> mode = PlatformMode.fromStringOptional(platform);
         if (mode.isEmpty()) {
             if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.WARNING,
                     "Unknown pipeline platform '" + platform + "'; defaulting to COMPUTE.");
             }
             return PlatformMode.COMPUTE;

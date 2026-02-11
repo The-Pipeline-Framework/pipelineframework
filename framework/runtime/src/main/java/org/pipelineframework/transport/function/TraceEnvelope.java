@@ -16,8 +16,12 @@
 
 package org.pipelineframework.transport.function;
 
+import java.util.AbstractMap;
 import java.time.Instant;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Transport-neutral lineage envelope used by function adapters.
@@ -46,6 +50,23 @@ public record TraceEnvelope<T>(
     Instant occurredAt,
     Map<String, String> meta
 ) {
+    private static final class PreNormalizedMeta extends AbstractMap<String, String> {
+        private final Map<String, String> value;
+
+        private PreNormalizedMeta(Map<String, String> value) {
+            this.value = value;
+        }
+
+        private Map<String, String> value() {
+            return value;
+        }
+
+        @Override
+        public Set<Entry<String, String>> entrySet() {
+            return value.entrySet();
+        }
+    }
+
     private TraceEnvelope(
         String traceId,
         String spanId,
@@ -69,7 +90,9 @@ public record TraceEnvelope<T>(
             idempotencyKey,
             payload,
             occurredAt,
-            immutableMeta ? (meta == null ? Map.of() : Map.copyOf(meta)) : meta);
+            immutableMeta
+                ? new PreNormalizedMeta(meta == null ? Map.of() : meta)
+                : meta);
     }
 
     /**
@@ -94,7 +117,7 @@ public record TraceEnvelope<T>(
         if (occurredAt == null) {
             occurredAt = Instant.now();
         }
-        meta = meta == null ? Map.of() : Map.copyOf(meta);
+        meta = normalizeMeta(meta);
     }
 
     /**
@@ -160,5 +183,16 @@ public record TraceEnvelope<T>(
             Instant.now(),
             meta,
             true);
+    }
+
+    private static Map<String, String> normalizeMeta(Map<String, String> meta) {
+        if (meta == null) {
+            return Map.of();
+        }
+        if (meta instanceof PreNormalizedMeta preNormalizedMeta) {
+            return preNormalizedMeta.value();
+        }
+        // Preserve insertion order for mutable inputs while publishing an immutable view.
+        return Collections.unmodifiableMap(new LinkedHashMap<>(meta));
     }
 }

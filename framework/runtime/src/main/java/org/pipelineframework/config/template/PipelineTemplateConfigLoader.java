@@ -79,14 +79,29 @@ public class PipelineTemplateConfigLoader {
         String platform = readString(rootMap, "platform");
         platform = platform == null ? null : platform.trim();
         String transportOverride = resolveTransportOverride();
+        boolean transportFromOverride = transportOverride != null && !transportOverride.isBlank();
         if (transportOverride != null && !transportOverride.isBlank()) {
             transport = transportOverride.trim();
         }
+        String originalTransport = transport;
         String normalizedTransport = TransportOverrideResolver.normalizeKnownTransport(transport);
-        transport = normalizedTransport != null ? normalizedTransport : DEFAULT_TRANSPORT;
+        if (normalizedTransport == null) {
+            if (originalTransport != null && !originalTransport.isBlank()) {
+                if (transportFromOverride) {
+                    LOG.warning("Unknown transport override '" + originalTransport + "'; defaulting to "
+                        + DEFAULT_TRANSPORT + ".");
+                } else {
+                    LOG.warning("Unknown transport in template config '" + originalTransport + "'; defaulting to "
+                        + DEFAULT_TRANSPORT + ".");
+                }
+            }
+            transport = DEFAULT_TRANSPORT;
+        } else {
+            transport = normalizedTransport;
+        }
         String platformOverride = resolvePlatformOverride();
         boolean platformFromOverride = platformOverride != null && !platformOverride.isBlank();
-        if (platformOverride != null && !platformOverride.isBlank()) {
+        if (platformFromOverride) {
             platform = platformOverride.trim();
         }
         String normalizedPlatform = PlatformOverrideResolver.normalizeKnownPlatform(platform);
