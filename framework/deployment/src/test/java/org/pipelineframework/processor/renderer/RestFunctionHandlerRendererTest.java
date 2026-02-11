@@ -17,6 +17,7 @@ import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TypeMapping;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -49,6 +50,7 @@ class RestFunctionHandlerRendererTest {
         assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invoke"));
         assertTrue(source.contains("FunctionSinkAdapter<IndexAckDto, IndexAckDto> sink"));
         assertTrue(source.contains("return UnaryFunctionTransportBridge.invoke(input, transportContext, source, invoke, sink)"));
+        assertFalse(source.contains("resource.process(input).await().indefinitely()"));
     }
 
     @Test

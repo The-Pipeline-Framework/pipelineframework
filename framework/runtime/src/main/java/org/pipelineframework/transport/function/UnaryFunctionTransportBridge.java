@@ -16,10 +16,7 @@
 
 package org.pipelineframework.transport.function;
 
-import java.util.List;
 import java.util.Objects;
-
-import io.smallrye.mutiny.Uni;
 
 /**
  * Executes a unary function transport pipeline: source -> invoke -> sink.
@@ -46,32 +43,7 @@ public final class UnaryFunctionTransportBridge {
             FunctionSourceAdapter<I, I> sourceAdapter,
             FunctionInvokeAdapter<I, O> invokeAdapter,
             FunctionSinkAdapter<O, O> sinkAdapter) {
-        Objects.requireNonNull(context, "context must not be null");
-        Objects.requireNonNull(sourceAdapter, "sourceAdapter must not be null");
-        Objects.requireNonNull(invokeAdapter, "invokeAdapter must not be null");
-        Objects.requireNonNull(sinkAdapter, "sinkAdapter must not be null");
-
-        Uni<TraceEnvelope<I>> inbound = sourceAdapter.adapt(event, context)
-            .collect().asList()
-            .onItem().transform(items -> requireExactlyOne(items, "source"));
-
-        Uni<TraceEnvelope<O>> outbound = inbound.onItem()
-            .transformToUni(envelope -> invokeAdapter.invokeOneToOne(envelope, context));
-
-        return outbound.onItem()
-            .transformToUni(envelope -> sinkAdapter.emitOne(envelope, context))
-            .await().indefinitely();
-    }
-
-    private static <T> T requireExactlyOne(List<T> items, String stage) {
-        if (items == null || items.isEmpty()) {
-            throw new IllegalStateException(
-                "Unary function transport expected exactly one " + stage + " item but received none.");
-        }
-        if (items.size() > 1) {
-            throw new IllegalStateException(
-                "Unary function transport expected exactly one " + stage + " item but received " + items.size() + ".");
-        }
-        return items.get(0);
+        Objects.requireNonNull(event, "event must not be null");
+        return FunctionTransportBridge.invokeOneToOne(event, context, sourceAdapter, invokeAdapter, sinkAdapter);
     }
 }

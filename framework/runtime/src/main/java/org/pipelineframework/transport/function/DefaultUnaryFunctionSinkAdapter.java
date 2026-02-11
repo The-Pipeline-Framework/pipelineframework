@@ -44,6 +44,10 @@ public final class DefaultUnaryFunctionSinkAdapter<O> implements FunctionSinkAda
             throw new IllegalStateException("Function sink expected exactly one output envelope but received "
                 + envelopes.size() + ".");
         }
-        return envelopes.get(0).payload();
+        TraceEnvelope<O> envelope = envelopes.get(0);
+        if (envelope == null) {
+            throw new IllegalStateException("Function sink expected non-null output envelope but received null.");
+        }
+        return envelope.payload();
     }
 }

@@ -41,11 +41,21 @@ class OrchestratorFunctionHandlerRendererTest {
         assertTrue(source.contains("@Named(\"PipelineRunFunctionHandler\")"));
         assertTrue(source.contains("PipelineRunResource resource"));
         assertTrue(source.contains("handleRequest(InputTypeDto input, Context context)"));
-        assertTrue(source.contains("FunctionTransportContext transportContext = FunctionTransportContext.of("));
-        assertTrue(source.contains("FunctionSourceAdapter<InputTypeDto, InputTypeDto> source"));
-        assertTrue(source.contains("FunctionInvokeAdapter<InputTypeDto, OutputTypeDto> invoke"));
-        assertTrue(source.contains("FunctionSinkAdapter<OutputTypeDto, OutputTypeDto> sink"));
-        assertTrue(source.contains("return UnaryFunctionTransportBridge.invoke(input, transportContext, source, invoke, sink)"));
+        assertTrue(
+            source.contains("FunctionTransportContext transportContext = FunctionTransportContext.of("),
+            () -> "expected FunctionTransportContext fragment missing. source:\n" + source);
+        assertTrue(
+            source.contains("FunctionSourceAdapter<InputTypeDto, InputTypeDto> source"),
+            () -> "expected FunctionSourceAdapter fragment missing. source:\n" + source);
+        assertTrue(
+            source.contains("FunctionInvokeAdapter<InputTypeDto, OutputTypeDto> invoke"),
+            () -> "expected FunctionInvokeAdapter fragment missing. source:\n" + source);
+        assertTrue(
+            source.contains("FunctionSinkAdapter<OutputTypeDto, OutputTypeDto> sink"),
+            () -> "expected FunctionSinkAdapter fragment missing. source:\n" + source);
+        assertTrue(
+            source.contains("return UnaryFunctionTransportBridge.invoke(input, transportContext, source, invoke, sink)"),
+            () -> "expected UnaryFunctionTransportBridge invocation fragment missing. source:\n" + source);
     }
 
     @Test

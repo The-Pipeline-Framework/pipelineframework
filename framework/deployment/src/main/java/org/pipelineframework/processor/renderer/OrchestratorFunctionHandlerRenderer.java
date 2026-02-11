@@ -22,6 +22,10 @@ import org.pipelineframework.processor.ir.OrchestratorBinding;
 public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<OrchestratorBinding> {
 
     public static final String HANDLER_CLASS = "PipelineRunFunctionHandler";
+    private static final String API_VERSION = "v1";
+    private static final String ORCHESTRATOR_PREFIX = "orchestrator.";
+    private static final String UNKNOWN_REQUEST = "unknown-request";
+    private static final String INGRESS = "ingress";
     private static final String RESOURCE_CLASS = "PipelineRunResource";
 
     /**
@@ -105,13 +109,13 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
                     + "context != null ? context.getAwsRequestId() : $S, "
                     + "context != null ? context.getFunctionName() : $S, "
                     + "$S)",
-                functionTransportContext, functionTransportContext, "unknown-request", HANDLER_CLASS, "ingress")
+                functionTransportContext, functionTransportContext, UNKNOWN_REQUEST, HANDLER_CLASS, INGRESS)
             .addStatement("$T<$T, $T> source = new $T<>($S, $S)",
                 sourceAdapter, inputDto, inputDto, defaultSourceAdapter,
-                "orchestrator." + binding.inputTypeName(), "v1")
+                ORCHESTRATOR_PREFIX + binding.inputTypeName(), API_VERSION)
             .addStatement("$T<$T, $T> invoke = new $T<>(payload -> resource.run(payload), $S, $S)",
                 invokeAdapter, inputDto, outputDto, localInvokeAdapter,
-                "orchestrator." + binding.outputTypeName(), "v1")
+                ORCHESTRATOR_PREFIX + binding.outputTypeName(), API_VERSION)
             .addStatement("$T<$T, $T> sink = new $T<>()",
                 sinkAdapter, outputDto, outputDto, defaultSinkAdapter)
             .addStatement("return $T.invoke(input, transportContext, source, invoke, sink)", unaryBridge)

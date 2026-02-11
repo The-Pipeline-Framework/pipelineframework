@@ -57,6 +57,22 @@ class UnaryFunctionTransportBridgeTest {
         IllegalStateException ex = assertThrows(
             IllegalStateException.class,
             () -> UnaryFunctionTransportBridge.invoke("hello", context, source, invoke, sink));
-        assertEquals("Unary function transport expected exactly one source item but received 2.", ex.getMessage());
+        assertEquals("Function transport expected exactly one source item but received 2.", ex.getMessage());
+    }
+
+    @Test
+    void rejectsEmptyIngressShape() {
+        FunctionTransportContext context = FunctionTransportContext.of("req-3", "search-handler", "ingress");
+        FunctionSourceAdapter<String, String> source = (event, ctx) -> Multi.createFrom().empty();
+        LocalUnaryFunctionInvokeAdapter<String, Integer> invoke = new LocalUnaryFunctionInvokeAdapter<>(
+            payload -> Uni.createFrom().item(payload.length()),
+            "search.raw-document.length",
+            "v1");
+        DefaultUnaryFunctionSinkAdapter<Integer> sink = new DefaultUnaryFunctionSinkAdapter<>();
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> UnaryFunctionTransportBridge.invoke("hello", context, source, invoke, sink));
+        assertEquals("Function transport expected exactly one source item but received 0.", ex.getMessage());
     }
 }

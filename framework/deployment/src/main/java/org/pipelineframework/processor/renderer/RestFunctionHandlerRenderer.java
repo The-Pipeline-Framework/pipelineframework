@@ -23,6 +23,9 @@ import org.pipelineframework.processor.ir.StreamingShape;
  * Generates native AWS Lambda RequestHandler wrappers for unary REST resources.
  */
 public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding> {
+    private static final String API_VERSION = "v1";
+    private static final String UNKNOWN_REQUEST = "unknown-request";
+    private static final String INVOKE_STEP = "invoke-step";
 
     /**
      * Creates a new RestFunctionHandlerRenderer.
@@ -107,13 +110,13 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
                     + "context != null ? context.getAwsRequestId() : $S, "
                     + "context != null ? context.getFunctionName() : $S, "
                     + "$S)",
-                functionTransportContext, functionTransportContext, "unknown-request", handlerClassName, "invoke-step")
+                functionTransportContext, functionTransportContext, UNKNOWN_REQUEST, handlerClassName, INVOKE_STEP)
             .addStatement("$T<$T, $T> source = new $T<>($S, $S)",
                 sourceAdapter, inputDto, inputDto, defaultSourceAdapter,
-                baseName + ".input", "v1")
-            .addStatement("$T<$T, $T> invoke = new $T<>(payload -> resource.process(payload), $S, $S)",
+                baseName + ".input", API_VERSION)
+            .addStatement("$T<$T, $T> invoke = new $T<>(resource::process, $S, $S)",
                 invokeAdapter, inputDto, outputDto, localInvokeAdapter,
-                baseName + ".output", "v1")
+                baseName + ".output", API_VERSION)
             .addStatement("$T<$T, $T> sink = new $T<>()",
                 sinkAdapter, outputDto, outputDto, defaultSinkAdapter)
             .addStatement("return $T.invoke(input, transportContext, source, invoke, sink)", unaryBridge)

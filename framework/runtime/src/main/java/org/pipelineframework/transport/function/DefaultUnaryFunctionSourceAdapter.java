@@ -46,7 +46,13 @@ public final class DefaultUnaryFunctionSourceAdapter<I> implements FunctionSourc
     @Override
     public Multi<TraceEnvelope<I>> adapt(I event, FunctionTransportContext context) {
         Objects.requireNonNull(context, "context must not be null");
-        String traceId = normalizeOrDefault(context.requestId(), UUID.randomUUID().toString());
+        String requestId = context.requestId();
+        String traceId;
+        if (requestId == null || requestId.isBlank()) {
+            traceId = normalizeOrDefault(null, UUID.randomUUID().toString());
+        } else {
+            traceId = normalizeOrDefault(requestId, UUID.randomUUID().toString());
+        }
         String itemId = UUID.randomUUID().toString();
         String idempotencyKey = traceId + ":" + payloadModel + ":" + itemId;
 
@@ -55,7 +61,13 @@ public final class DefaultUnaryFunctionSourceAdapter<I> implements FunctionSourc
         meta.put("stage", normalizeOrDefault(context.stage(), ""));
         meta.put("requestId", normalizeOrDefault(context.requestId(), ""));
         if (context.attributes() != null && !context.attributes().isEmpty()) {
-            meta.putAll(context.attributes());
+            context.attributes().forEach((key, value) -> {
+                if (!"functionName".equals(key)
+                    && !"stage".equals(key)
+                    && !"requestId".equals(key)) {
+                    meta.put(key, value);
+                }
+            });
         }
 
         TraceEnvelope<I> envelope = new TraceEnvelope<>(
