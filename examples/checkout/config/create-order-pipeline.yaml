@@ -1,5 +1,5 @@
-appName: "Checkout Pipeline"
-basePackage: "org.pipelineframework.checkout"
+appName: "Checkout Create Order Pipeline"
+basePackage: "org.pipelineframework.checkout.createorder"
 transport: "GRPC"
 steps:
   - name: "Order Request Process"

@@ -85,6 +85,7 @@ class PipelineProtoGeneratorTest {
         assertTrue(Files.exists(orchestratorProtoPath));
 
         String fooProto = Files.readString(fooProtoPath);
+        assertTrue(fooProto.contains("package com.example.test;"));
         assertTrue(fooProto.contains("option java_package = \"com.example.test.grpc\";"));
         assertTrue(fooProto.contains("message FooInput"));
         assertTrue(fooProto.contains("string id = 1;"));
@@ -102,6 +103,7 @@ class PipelineProtoGeneratorTest {
         assertTrue(barProto.contains("service ObservePersistenceBarOutputSideEffectService"));
 
         String orchestratorProto = Files.readString(orchestratorProtoPath);
+        assertTrue(orchestratorProto.contains("package com.example.test;"));
         assertTrue(orchestratorProto.contains("import \"process-foo-svc.proto\";"));
         assertTrue(orchestratorProto.contains("import \"process-bar-svc.proto\";"));
         assertTrue(orchestratorProto.contains("service OrchestratorService"));

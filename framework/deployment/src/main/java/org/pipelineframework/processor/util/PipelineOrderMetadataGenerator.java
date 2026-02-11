@@ -1,10 +1,15 @@
 package org.pipelineframework.processor.util;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.logging.Logger;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.tools.StandardLocation;
 
@@ -21,6 +26,7 @@ import org.pipelineframework.processor.ir.PipelineStepModel;
 public class PipelineOrderMetadataGenerator {
 
     private static final String ORDER_RESOURCE = "META-INF/pipeline/order.json";
+    private static final Logger LOGGER = Logger.getLogger(PipelineOrderMetadataGenerator.class.getName());
     private final ProcessingEnvironment processingEnv;
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
@@ -34,10 +40,12 @@ public class PipelineOrderMetadataGenerator {
     }
 
     /**
-     * Writes the resolved pipeline order to META-INF/pipeline/order.json if possible.
+     * Generate the pipeline order metadata file at META-INF/pipeline/order.json when an orchestrator is generated and a pipeline configuration with steps is available.
      *
-     * @param ctx the compilation context
-     * @throws IOException if writing the resource fails
+     * The method resolves the pipeline configuration and base client steps from the compilation context, determines an ordered list of functional steps according to the YAML config, expands that order, and writes the resulting order JSON to the class output resources. If any resolution step fails or yields no steps, no file is written.
+     *
+     * @param ctx the compilation context used to locate pipeline configuration and step models
+     * @throws IOException if creating or writing the resource file fails
      */
     public void writeOrderMetadata(PipelineCompilationContext ctx) throws IOException {
         if (!ctx.isOrchestratorGenerated()) {
@@ -79,18 +87,61 @@ public class PipelineOrderMetadataGenerator {
         }
     }
 
+    /**
+     * Loads the pipeline YAML configuration associated with the given compilation context.
+     *
+     * @param ctx the compilation context used to locate the pipeline configuration (may provide module directory)
+     * @return the loaded PipelineYamlConfig, or `null` if no configuration path could be resolved
+     */
     private PipelineYamlConfig loadPipelineConfig(PipelineCompilationContext ctx) {
-        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
-        java.nio.file.Path moduleDir = ctx.getModuleDir();
-        if (moduleDir == null) {
-            return null;
-        }
-        java.util.Optional<java.nio.file.Path> configPath = locator.locate(moduleDir);
+        Optional<Path> configPath = resolvePipelineConfigPath(ctx);
         if (configPath.isEmpty()) {
             return null;
         }
         PipelineYamlConfigLoader loader = new PipelineYamlConfigLoader();
         return loader.load(configPath.get());
+    }
+
+    /**
+     * Resolve the filesystem path to the pipeline YAML configuration, honoring an explicit
+     * "pipeline.config" compiler option and falling back to discovery within the module.
+     *
+     * If the "pipeline.config" option is provided and is an absolute path, that path is used
+     * when it exists. If it is a relative path, it is resolved against the compilation
+     * context's module directory; if the module directory is unavailable or the resolved path
+     * does not exist, a warning is logged and discovery is attempted. When no explicit option
+     * is provided, discovery starts from the compilation context's module directory.
+     *
+     * @param ctx the compilation context whose module directory is used to resolve relative paths
+     *            and as the starting point for configuration discovery
+     * @return an Optional containing the resolved configuration Path when found, or an empty
+     *         Optional if no valid configuration path could be determined
+     */
+    private Optional<Path> resolvePipelineConfigPath(PipelineCompilationContext ctx) {
+        Map<String, String> options = processingEnv != null ? processingEnv.getOptions() : Map.of();
+        String explicit = options.get("pipeline.config");
+        if (explicit != null && !explicit.isBlank()) {
+            Path explicitPath = Path.of(explicit.trim());
+            if (!explicitPath.isAbsolute()) {
+                if (ctx.getModuleDir() == null) {
+                    LOGGER.warning("pipeline.config provided as relative path but moduleDir is null: " + explicit);
+                    return Optional.empty();
+                }
+                explicitPath = ctx.getModuleDir().resolve(explicitPath).normalize();
+            }
+            if (Files.exists(explicitPath)) {
+                return Optional.of(explicitPath);
+            }
+            LOGGER.warning(
+                "pipeline.config path not found: provided='" + explicit + "', resolved='" + explicitPath +
+                    "'. Falling back to pipeline.yaml discovery.");
+        }
+        Path moduleDir = ctx.getModuleDir();
+        if (moduleDir == null) {
+            return Optional.empty();
+        }
+        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
+        return locator.locate(moduleDir);
     }
 
     /**
@@ -187,6 +238,11 @@ public class PipelineOrderMetadataGenerator {
     private static class PipelineOrderMetadata {
         List<String> order;
 
+        /**
+         * Creates a PipelineOrderMetadata that holds the resolved pipeline execution order.
+         *
+         * @param order the ordered list of fully qualified step class names to include in the metadata; may be empty
+         */
         PipelineOrderMetadata(List<String> order) {
             this.order = order;
         }

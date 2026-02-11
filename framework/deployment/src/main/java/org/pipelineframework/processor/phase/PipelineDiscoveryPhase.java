@@ -1,12 +1,15 @@
 package org.pipelineframework.processor.phase;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
+import javax.tools.Diagnostic;
 
 import org.pipelineframework.annotation.PipelineOrchestrator;
 import org.pipelineframework.annotation.PipelinePlugin;
@@ -46,12 +49,12 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Discover pipeline annotated elements, configuration files, aspects, transport mode, and orchestrator models,
-     * then store the discovered artifacts on the provided compilation context.
+     * Discovers pipeline annotations, configuration files, aspects, transport/platform modes, and orchestrator models,
+     * then stores the discovered artifacts on the provided compilation context.
      *
      * @param ctx the compilation context used to read the processing environment and options and to receive discovered
      *            artifacts (generated sources root, module directory/name, plugin host flag, aspect models,
-     *            template config, runtime mapping, transport mode, and orchestrator models)
+     *            template config, runtime mapping, transport/platform modes, and orchestrator models)
      * @throws Exception if a fatal error occurs while locating or loading required configuration or models
      */
     @Override
@@ -98,10 +101,15 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         ctx.setOrchestratorModels(orchestratorModels);
     }
 
+    /**
+     * Loads pipeline aspect models from the resolved pipeline configuration file.
+     *
+     * @param ctx the pipeline compilation context used to resolve the config path and report diagnostics
+     * @return a list of loaded {@code PipelineAspectModel} instances; an empty list if no pipeline config is found
+     * @throws Exception if loading fails; an error diagnostic is reported to the processing environment's messager when available
+     */
     private List<PipelineAspectModel> loadPipelineAspects(PipelineCompilationContext ctx) {
-        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
-        Path moduleDir = ctx.getModuleDir();
-        Optional<Path> configPath = locator.locate(moduleDir);
+        Optional<Path> configPath = resolvePipelineConfigPath(ctx);
         if (configPath.isEmpty()) {
             return List.of();
         }
@@ -125,9 +133,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @return the loaded PipelineTemplateConfig, or `null` if no configuration is present or if loading fails (a warning is emitted via the processing environment when available)
      */
     private PipelineTemplateConfig loadPipelineTemplateConfig(PipelineCompilationContext ctx) {
-        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
-        Path moduleDir = ctx.getModuleDir();
-        Optional<Path> configPath = locator.locate(moduleDir);
+        Optional<Path> configPath = resolvePipelineConfigPath(ctx);
         if (configPath.isEmpty()) {
             return null;
         }
@@ -155,9 +161,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @return a non-null {@link org.pipelineframework.processor.config.PipelineStepConfigLoader.StepConfig}
      */
     private PipelineStepConfigLoader.StepConfig loadPipelineStepConfig(PipelineCompilationContext ctx) {
-        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
-        Path moduleDir = ctx.getModuleDir();
-        Optional<Path> configPath = locator.locate(moduleDir);
+        Optional<Path> configPath = resolvePipelineConfigPath(ctx);
         if (configPath.isEmpty()) {
             return DEFAULT_STEP_CONFIG;
         }
@@ -307,6 +311,49 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
             }
             throw e;
         }
+    }
+
+    /**
+     * Resolve the pipeline configuration file path from the processing options or by locating
+     * a pipeline YAML within the current module directory.
+     *
+     * <p>The method first checks the processing option `pipeline.config`. If present and non-blank,
+     * the value is interpreted as a filesystem path (relative paths are resolved against the
+     * context's module directory). If the explicit path exists it is returned; if it does not exist
+     * an error message is emitted via the processing environment messager (when available) and an
+     * empty Optional is returned. If no explicit option is provided, the method attempts to locate
+     * a pipeline YAML using {@code PipelineYamlConfigLocator} within the module directory. If the
+     * module directory is not available or no config is found, an empty Optional is returned.
+     *
+     * @param ctx the compilation context used to read processing options and module directory
+     * @return an Optional containing the resolved configuration Path if found, or an empty Optional
+     *         if no configuration could be located or an explicit path was missing
+     */
+    private Optional<Path> resolvePipelineConfigPath(PipelineCompilationContext ctx) {
+        Map<String, String> options = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getOptions() : Map.of();
+        String explicitConfig = options.get("pipeline.config");
+        if (explicitConfig != null && !explicitConfig.isBlank()) {
+            Path explicitPath = Path.of(explicitConfig.trim());
+            if (!explicitPath.isAbsolute() && ctx.getModuleDir() != null) {
+                explicitPath = ctx.getModuleDir().resolve(explicitPath).normalize();
+            }
+            if (Files.exists(explicitPath)) {
+                return Optional.of(explicitPath);
+            }
+            if (ctx.getProcessingEnv() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "pipeline.config points to a missing path: '" + explicitConfig + "' (resolved to '" +
+                        explicitPath + "')");
+            }
+            return Optional.empty();
+        }
+        Path moduleDir = ctx.getModuleDir();
+        if (moduleDir == null) {
+            return Optional.empty();
+        }
+        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
+        return locator.locate(moduleDir);
     }
 
     /**

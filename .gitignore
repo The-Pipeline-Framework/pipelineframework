@@ -82,3 +82,7 @@ pom.xml.releaseBackup
 
 # flatten plugin
 **/.flattened-pom.xml
+
+# Local classpath dumps
+*-cp.txt
+*deliver-cp.txt

@@ -21,6 +21,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -41,12 +42,25 @@ public class PipelineYamlConfigLocator {
     );
 
     /**
-     * Locate the pipeline configuration file for the given module.
+     * Locate the pipeline configuration file for a module by searching the module first and falling back to the nearest parent Maven project.
      *
-     * @param moduleDir the module directory to search from
-     * @return the resolved config path if found
+     * Searches the following locations in order: the module directory, moduleDir/config, and moduleDir/src/main/resources. If none are found, it locates the nearest ancestor directory that contains a pom.xml with packaging "pom" and searches that project root and its config subdirectory.
+     *
+     * @param moduleDir the module directory to search from; must not be null
+     * @return an Optional containing the matched pipeline configuration file path, or empty if no match is found
+     * @throws IllegalStateException if multiple candidate pipeline configuration files are found
      */
     public Optional<Path> locate(Path moduleDir) {
+        Objects.requireNonNull(moduleDir, "moduleDir must not be null");
+        List<Path> moduleMatches = new ArrayList<>();
+        scanDirectory(moduleDir, moduleMatches);
+        scanDirectory(moduleDir.resolve("config"), moduleMatches);
+        scanDirectory(moduleDir.resolve("src").resolve("main").resolve("resources"), moduleMatches);
+        if (!moduleMatches.isEmpty()) {
+            validateSingleMatch(moduleMatches);
+            return Optional.of(moduleMatches.get(0));
+        }
+
         Path projectRoot = findNearestParentPom(moduleDir);
         if (projectRoot == null) {
             return Optional.empty();
@@ -56,18 +70,36 @@ public class PipelineYamlConfigLocator {
         scanDirectory(projectRoot, matches);
         scanDirectory(projectRoot.resolve("config"), matches);
 
-        if (matches.size() > 1) {
-            String names = matches.stream()
-                .map(Path::toString)
-                .sorted()
-                .reduce((a, b) -> a + ", " + b)
-                .orElse("");
-            throw new IllegalStateException("Multiple pipeline config files found: " + names);
-        }
+        validateSingleMatch(matches);
 
         return matches.isEmpty() ? Optional.empty() : Optional.of(matches.get(0));
     }
 
+    /**
+     * Ensures at most one pipeline configuration file is present among the provided matches.
+     *
+     * @param matches list of candidate paths for pipeline configuration files
+     * @throws IllegalStateException if more than one candidate is present; the exception message lists the conflicting paths
+     */
+    private void validateSingleMatch(List<Path> matches) {
+        if (matches.size() > 1) {
+            List<String> namesList = matches.stream()
+                .map(Path::toString)
+                .sorted()
+                .toList();
+            String names = String.join(", ", namesList);
+            throw new IllegalStateException("Multiple pipeline config files found: " + names);
+        }
+    }
+
+    /**
+     * Locate the nearest ancestor directory (including the given directory) that contains a pom.xml
+     * whose <packaging> element is "pom".
+     *
+     * @param moduleDir the directory to start searching upward from
+     * @return the ancestor directory Path whose pom.xml contains "<packaging>pom</packaging>", or
+     *         null if no such ancestor is found
+     */
     private Path findNearestParentPom(Path moduleDir) {
         Path current = moduleDir;
         while (current != null) {

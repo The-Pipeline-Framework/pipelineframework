@@ -1,0 +1,85 @@
+package org.pipelineframework.checkout.order_ready.service;
+
+import jakarta.enterprise.context.ApplicationScoped;
+
+import org.pipelineframework.checkout.common.dto.ReadyOrderDto;
+import org.pipelineframework.checkout.createorder.grpc.OrderReadySvc;
+import org.pipelineframework.checkout.order_request_process.service.OrderRequestGrpcMapper;
+import org.pipelineframework.mapper.Mapper;
+
+@ApplicationScoped
+public class ReadyOrderGrpcMapper implements Mapper<OrderReadySvc.ReadyOrder, ReadyOrderDto, ReadyOrderDto> {
+
+    /**
+     * Convert a gRPC ReadyOrder message to a ReadyOrderDto.
+     *
+     * @param grpc the gRPC OrderReadySvc.ReadyOrder message to convert
+     * @return a ReadyOrderDto populated with orderId, customerId, and readyAt from the gRPC message
+     * @throws IllegalArgumentException if {@code grpc} is null or if any of orderId, customerId, or readyAt is missing or cannot be parsed
+     */
+    @Override
+    public ReadyOrderDto fromGrpc(OrderReadySvc.ReadyOrder grpc) {
+        if (grpc == null) {
+            throw new IllegalArgumentException("grpc must not be null");
+        }
+        var orderId = OrderRequestGrpcMapper.asUuid(grpc.getOrderId());
+        var customerId = OrderRequestGrpcMapper.asUuid(grpc.getCustomerId());
+        var readyAt = OrderRequestGrpcMapper.asInstant(grpc.getReadyAt());
+        if (orderId == null || customerId == null || readyAt == null) {
+            throw new IllegalArgumentException("grpc must include orderId, customerId and readyAt");
+        }
+        return new ReadyOrderDto(
+            orderId,
+            customerId,
+            readyAt);
+    }
+
+    /**
+     * Convert a ReadyOrderDto into its gRPC OrderReadySvc.ReadyOrder representation.
+     *
+     * @param dto the ReadyOrderDto to convert; must contain non-null orderId, customerId, and readyAt
+     * @return    an OrderReadySvc.ReadyOrder with orderId, customerId, and readyAt populated
+     * @throws IllegalArgumentException if dto is null or any of dto.orderId, dto.customerId, or dto.readyAt is null
+     */
+    @Override
+    public OrderReadySvc.ReadyOrder toGrpc(ReadyOrderDto dto) {
+        if (dto == null) {
+            throw new IllegalArgumentException("dto must not be null");
+        }
+        if (dto.orderId() == null) {
+            throw new IllegalArgumentException("dto.orderId must not be null");
+        }
+        if (dto.customerId() == null) {
+            throw new IllegalArgumentException("dto.customerId must not be null");
+        }
+        if (dto.readyAt() == null) {
+            throw new IllegalArgumentException("dto.readyAt must not be null");
+        }
+        return OrderReadySvc.ReadyOrder.newBuilder()
+            .setOrderId(OrderRequestGrpcMapper.asString(dto.orderId()))
+            .setCustomerId(OrderRequestGrpcMapper.asString(dto.customerId()))
+            .setReadyAt(OrderRequestGrpcMapper.asString(dto.readyAt()))
+            .build();
+    }
+
+    /**
+     * Return the given ReadyOrderDto without modification.
+     *
+     * @param dto the DTO to return
+     * @return the same ReadyOrderDto instance that was passed in
+     */
+    @Override
+    public ReadyOrderDto fromDto(ReadyOrderDto dto) {
+        return dto;
+    }
+
+    /**
+     * Return the given ReadyOrderDto unchanged.
+     *
+     * @return the same ReadyOrderDto instance provided as input
+     */
+    @Override
+    public ReadyOrderDto toDto(ReadyOrderDto domain) {
+        return domain;
+    }
+}
