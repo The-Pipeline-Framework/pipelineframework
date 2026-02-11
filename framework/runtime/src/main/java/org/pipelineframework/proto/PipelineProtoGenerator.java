@@ -177,6 +177,7 @@ public class PipelineProtoGenerator {
     ) {
         StringBuilder builder = new StringBuilder();
         builder.append("syntax = \"proto3\";\n\n");
+        builder.append("package ").append(basePackage).append(";\n\n");
         builder.append("option java_package = \"")
             .append(basePackage)
             .append(".grpc\";\n\n");
@@ -354,6 +355,7 @@ public class PipelineProtoGenerator {
 
         StringBuilder builder = new StringBuilder();
         builder.append("syntax = \"proto3\";\n\n");
+        builder.append("package ").append(basePackage).append(";\n\n");
         builder.append("option java_package = \"")
             .append(basePackage)
             .append(".grpc\";\n\n");

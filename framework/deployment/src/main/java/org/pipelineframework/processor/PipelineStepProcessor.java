@@ -23,6 +23,7 @@ import javax.lang.model.element.TypeElement;
     "protobuf.descriptor.file",  // Optional: path to a specific descriptor file
     "pipeline.generatedSourcesDir", // Optional: base directory for role-specific generated sources
     "pipeline.generatedSourcesRoot", // Optional: legacy alias for generated sources base directory
+    "pipeline.config", // Optional: explicit pipeline.yaml path
     "pipeline.cache.keyGenerator", // Optional: fully-qualified CacheKeyGenerator class for @CacheResult
     "pipeline.orchestrator.generate", // Optional: enable orchestrator endpoint generation
     "pipeline.module" // Optional: logical module name for runtime mapping
