@@ -7,6 +7,11 @@ import java.time.Clock;
 @ApplicationScoped
 public class ClockProducer {
 
+    /**
+     * Provides an application-scoped {@link Clock} set to UTC for injection.
+     *
+     * @return the system {@link Clock} configured to UTC
+     */
     @Produces
     @ApplicationScoped
     Clock clock() {

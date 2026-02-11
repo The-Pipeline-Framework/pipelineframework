@@ -10,6 +10,13 @@ import org.pipelineframework.mapper.Mapper;
 @ApplicationScoped
 public class ReadyOrderGrpcMapper implements Mapper<OrderReadySvc.ReadyOrder, ReadyOrderDto, ReadyOrderDto> {
 
+    /**
+     * Convert a gRPC ReadyOrder message to a ReadyOrderDto.
+     *
+     * @param grpc the gRPC OrderReadySvc.ReadyOrder message to convert
+     * @return a ReadyOrderDto populated with orderId, customerId, and readyAt from the gRPC message
+     * @throws IllegalArgumentException if {@code grpc} is null or if any of orderId, customerId, or readyAt is missing or cannot be parsed
+     */
     @Override
     public ReadyOrderDto fromGrpc(OrderReadySvc.ReadyOrder grpc) {
         if (grpc == null) {
@@ -27,6 +34,13 @@ public class ReadyOrderGrpcMapper implements Mapper<OrderReadySvc.ReadyOrder, Re
             readyAt);
     }
 
+    /**
+     * Convert a ReadyOrderDto into its gRPC OrderReadySvc.ReadyOrder representation.
+     *
+     * @param dto the ReadyOrderDto to convert; must contain non-null orderId, customerId, and readyAt
+     * @return    an OrderReadySvc.ReadyOrder with orderId, customerId, and readyAt populated
+     * @throws IllegalArgumentException if dto is null or any of dto.orderId, dto.customerId, or dto.readyAt is null
+     */
     @Override
     public OrderReadySvc.ReadyOrder toGrpc(ReadyOrderDto dto) {
         if (dto == null) {
@@ -48,11 +62,22 @@ public class ReadyOrderGrpcMapper implements Mapper<OrderReadySvc.ReadyOrder, Re
             .build();
     }
 
+    /**
+     * Return the given ReadyOrderDto without modification.
+     *
+     * @param dto the DTO to return
+     * @return the same ReadyOrderDto instance that was passed in
+     */
     @Override
     public ReadyOrderDto fromDto(ReadyOrderDto dto) {
         return dto;
     }
 
+    /**
+     * Return the given ReadyOrderDto unchanged.
+     *
+     * @return the same ReadyOrderDto instance provided as input
+     */
     @Override
     public ReadyOrderDto toDto(ReadyOrderDto domain) {
         return domain;

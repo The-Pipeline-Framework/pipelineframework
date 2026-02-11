@@ -31,12 +31,27 @@ public class ProcessOrderDispatchService
   private final Clock clock;
   private final Supplier<UUID> uuidSupplier;
 
+  /**
+   * Creates a ProcessOrderDispatchService configured with the given clock and UUID supplier.
+   *
+   * @param clock          clock used to obtain current instants for dispatch timestamps
+   * @param uuidSupplier   supplier that provides UUIDs to assign as dispatch identifiers
+   * @throws NullPointerException if {@code clock} or {@code uuidSupplier} is {@code null}
+   */
   @Inject
   public ProcessOrderDispatchService(Clock clock, Supplier<UUID> uuidSupplier) {
     this.clock = Objects.requireNonNull(clock, "clock must not be null");
     this.uuidSupplier = Objects.requireNonNull(uuidSupplier, "uuidSupplier must not be null");
   }
 
+  /**
+   * Transforms a ReadyOrder into a DispatchedOrder.
+   *
+   * If input is null, returns a failed Uni with an IllegalArgumentException.
+   *
+   * @param input the ReadyOrder to convert into a DispatchedOrder
+   * @return the created DispatchedOrder
+   */
   @Override
   public Uni<DispatchedOrder> process(ReadyOrder input) {
     if (input == null) {

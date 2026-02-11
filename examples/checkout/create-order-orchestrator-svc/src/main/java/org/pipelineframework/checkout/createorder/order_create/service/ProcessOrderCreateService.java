@@ -21,6 +21,16 @@ import org.pipelineframework.service.ReactiveService;
 public class ProcessOrderCreateService
     implements ReactiveService<OrderLineItem, InitialOrder> {
 
+  /**
+   * Builds an InitialOrder using fields from the given OrderLineItem and a deterministic UUID derived from those fields.
+   *
+   * <p>Validates that the input and its required fields (requestId, customerId, sku) are present and sku is not blank;
+   * if validation fails the method returns a failed Uni with an IllegalArgumentException.</p>
+   *
+   * @param input the order line item to process; must have non-null requestId and customerId, and a non-blank sku
+   * @return an InitialOrder containing a deterministic orderId (derived from requestId, customerId, sku, and quantity),
+   *         the input's customerId, and the normalized quantity
+   */
   @Override
   public Uni<InitialOrder> process(OrderLineItem input) {
     if (input == null) {

@@ -15,6 +15,12 @@ import org.pipelineframework.HealthCheckService;
 @ApplicationScoped
 public class TestHealthCheckService extends HealthCheckService {
 
+    /**
+     * Always reports dependent services as healthy to bypass real health checks during end-to-end tests.
+     *
+     * @param steps a list of health-check steps (ignored by this test implementation)
+     * @return true indicating dependent services are considered healthy
+     */
     @Override
     public boolean checkHealthOfDependentServices(List<Object> steps) {
         return true;

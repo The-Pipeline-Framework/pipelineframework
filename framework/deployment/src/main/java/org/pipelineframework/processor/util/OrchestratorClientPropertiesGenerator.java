@@ -192,6 +192,19 @@ public class OrchestratorClientPropertiesGenerator {
         return baseDirs;
     }
 
+    /**
+     * Order non-side-effect pipeline steps according to the pipeline.yaml configuration.
+     *
+     * If no pipeline configuration is found or it contains no steps, the original
+     * order of non-side-effect models is returned. When a configuration is present,
+     * each configured step name is matched (by normalized token) to the best
+     * corresponding model; matched models are emitted in configuration order and
+     * any remaining models are appended in their original order.
+     *
+     * @param ctx the compilation context used to locate and load the pipeline configuration
+     * @param models the list of compiled pipeline step models to order
+     * @return a list of non-side-effect `PipelineStepModel` objects ordered by the pipeline configuration with unmatched models appended afterward
+     */
     private List<PipelineStepModel> orderBaseSteps(
         PipelineCompilationContext ctx,
         List<PipelineStepModel> models
@@ -224,6 +237,12 @@ public class OrchestratorClientPropertiesGenerator {
         return ordered;
     }
 
+    /**
+     * Loads the pipeline YAML configuration associated with the given compilation context.
+     *
+     * @param ctx the pipeline compilation context used to locate and read the configuration
+     * @return the loaded PipelineYamlConfig, or {@code null} if no pipeline configuration is found
+     */
     private PipelineYamlConfig loadPipelineConfig(PipelineCompilationContext ctx) {
         Optional<Path> configPath = resolvePipelineConfigPath(ctx);
         if (configPath.isEmpty()) {
@@ -233,6 +252,13 @@ public class OrchestratorClientPropertiesGenerator {
         return loader.load(configPath.get());
     }
 
+    /**
+     * Resolve the filesystem path to the pipeline YAML configuration, preferring an explicit
+     * `pipeline.config` compiler option and falling back to locating `pipeline.yaml` in the module directory.
+     *
+     * @param ctx the pipeline compilation context; its moduleDir is used to resolve relative explicit paths
+     * @return an Optional containing the resolved, readable config Path if found, or empty if no usable path is available
+     */
     private Optional<Path> resolvePipelineConfigPath(PipelineCompilationContext ctx) {
         Map<String, String> options = processingEnv != null ? processingEnv.getOptions() : Map.of();
         String explicit = options.get("pipeline.config");
@@ -263,6 +289,16 @@ public class OrchestratorClientPropertiesGenerator {
         return locator.locate(moduleDir);
     }
 
+    /**
+     * Selects the PipelineStepModel whose normalized service name best matches the given token.
+     *
+     * The match is determined by checking whether a candidate's normalized service name contains
+     * the token and preferring the candidate when the token length is longer than previous matches.
+     *
+     * @param candidates the candidate step models to evaluate; null entries are ignored
+     * @param token the substring token to match against each candidate's normalized service name
+     * @return the best-matching PipelineStepModel, or `null` if no candidate contains the token
+     */
     private PipelineStepModel selectBestMatch(List<PipelineStepModel> candidates, String token) {
         PipelineStepModel best = null;
         int bestLength = -1;
@@ -364,6 +400,19 @@ public class OrchestratorClientPropertiesGenerator {
         }
     }
 
+    /**
+     * Append REST client properties for the given step models to the provided writer.
+     *
+     * For each model that has a resolved client configuration, writes a comment header and
+     * a `quarkus.rest-client.<name>.url` property (HTTPS host:port). If the client specifies
+     * a TLS configuration name, also writes `quarkus.rest-client.<name>.tls-configuration-name`
+     * using a `${pipeline.client.tls-configuration-name:<default>}` fallback expression.
+     *
+     * @param writer the StringWriter to append properties to
+     * @param baseSteps ordered list of base pipeline step models to render
+     * @param sideEffects list of side-effect pipeline step models to render after base steps
+     * @param mapping mapping used to resolve a client configuration for each step model
+     */
     private void renderRestClients(
         StringWriter writer,
         List<PipelineStepModel> baseSteps,

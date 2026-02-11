@@ -7,6 +7,12 @@ import org.pipelineframework.annotation.PipelineOrchestrator;
  */
 @PipelineOrchestrator(generateCli = false)
 public final class DeliverOrderOrchestratorHost {
+    /**
+     * Prevents instantiation of this orchestrator host class.
+     *
+     * This private constructor enforces that the class is used only as a marker for pipeline generation
+     * and should not be instantiated.
+     */
     private DeliverOrderOrchestratorHost() {
     }
 }

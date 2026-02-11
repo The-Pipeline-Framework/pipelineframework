@@ -25,11 +25,25 @@ public class ProcessOrderReadyService
 
   private final Clock clock;
 
+  /**
+   * Creates a ProcessOrderReadyService configured with the provided clock.
+   *
+   * @param clock the clock used to obtain current timestamps for produced ReadyOrder instances
+   * @throws NullPointerException if {@code clock} is null
+   */
   @Inject
   public ProcessOrderReadyService(Clock clock) {
     this.clock = Objects.requireNonNull(clock, "clock must not be null");
   }
 
+  /**
+   * Creates a ReadyOrder from the provided InitialOrder using the service clock.
+   *
+   * If {@code input} is {@code null}, the method produces an {@link IllegalArgumentException} failure.
+   *
+   * @param input the source InitialOrder whose {@code orderId} and {@code customerId} are used; must not be {@code null}
+   * @return the ReadyOrder built from the input's orderId and customerId with its timestamp set to the current instant from the injected clock
+   */
   @Override
   public Uni<ReadyOrder> process(InitialOrder input) {
     if (input == null) {

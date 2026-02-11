@@ -17,6 +17,12 @@ public class GrpcDeliverOrderIngestClient implements DeliverOrderIngestClient {
     @GrpcClient("deliver-order-orchestrator")
     MutinyOrchestratorServiceGrpc.MutinyOrchestratorServiceStub deliverOrchestratorClient;
 
+    /**
+     * Starts forwarding a stream of ready orders to the deliver-order orchestrator ingest.
+     *
+     * @param readyOrderStream a reactive stream of ReadyOrder messages to send to the orchestrator
+     * @return a {@link Cancellable} representing the active subscription; cancelling it stops the forwarding
+     */
     @Override
     public Cancellable forward(Multi<OrderDispatchSvc.ReadyOrder> readyOrderStream) {
         LOG.info("Starting gRPC forwarding stream to deliver-order orchestrator ingest");

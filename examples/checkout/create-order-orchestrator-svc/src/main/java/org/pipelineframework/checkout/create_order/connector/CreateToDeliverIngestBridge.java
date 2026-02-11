@@ -27,12 +27,29 @@ public class CreateToDeliverIngestBridge {
 
     private Cancellable forwardingSubscription;
 
+    /**
+     * Creates a bridge that forwards checkpoint outputs from the CreateOrder pipeline to the DeliverOrder ingest client.
+     *
+     * @param outputBus the source of pipeline checkpoint outputs; must not be null
+     * @param deliverOrderIngestClient the gRPC client used to forward ready orders; must not be null
+     * @throws NullPointerException if {@code outputBus} or {@code deliverOrderIngestClient} is null
+     */
     public CreateToDeliverIngestBridge(PipelineOutputBus outputBus, DeliverOrderIngestClient deliverOrderIngestClient) {
         this.outputBus = Objects.requireNonNull(outputBus, "outputBus must not be null");
         this.deliverOrderIngestClient =
             Objects.requireNonNull(deliverOrderIngestClient, "deliverOrderIngestClient must not be null");
     }
 
+    /**
+     * Start forwarding ReadyOrder events from the pipeline output bus to the DeliverOrder ingest client.
+     *
+     * <p>Subscribes to the application PipelineOutputBus, maps emitted items to
+     * OrderDispatchSvc.ReadyOrder when possible, forwards the resulting stream to
+     * the DeliverOrderIngestClient, stores the resulting cancellable subscription, and
+     * logs the bridge startup.</p>
+     *
+     * @param ignored the startup event (unused)
+     */
     void onStartup(@Observes StartupEvent ignored) {
         Multi<OrderDispatchSvc.ReadyOrder> readyOrderStream = outputBus.stream(Object.class)
             .onItem().transformToMulti(item -> {
@@ -46,6 +63,11 @@ public class CreateToDeliverIngestBridge {
             deliverOrderIngestClient.getClass().getName());
     }
 
+    /**
+     * Stops the active forwarding to the DeliverOrder ingest by cancelling the subscription if one exists.
+     *
+     * Invoked during bean shutdown to release the forwarding resource.
+     */
     @PreDestroy
     void onShutdown() {
         if (forwardingSubscription != null) {
@@ -53,6 +75,18 @@ public class CreateToDeliverIngestBridge {
         }
     }
 
+    /**
+     * Convert a pipeline output item into an OrderDispatchSvc.ReadyOrder suitable for the DeliverOrder pipeline.
+     *
+     * <p>Supports two input shapes:
+     * <ul>
+     *   <li>OrderReadySvc.ReadyOrder — mapped directly to the dispatch ReadyOrder.</li>
+     *   <li>com.google.protobuf.Message — reads string fields "order_id", "customer_id", and "ready_at" and maps them when all are present and non-blank.</li>
+     * </ul>
+     *
+     * @param item the pipeline output item to map; may be an OrderReadySvc.ReadyOrder, a protobuf Message, or any other type
+     * @return the mapped OrderDispatchSvc.ReadyOrder if mapping succeeds; `null` if the item type is unsupported or required fields are missing
+     */
     private OrderDispatchSvc.ReadyOrder toDeliverReadyOrder(Object item) {
         if (item instanceof OrderReadySvc.ReadyOrder readyOrder) {
             return OrderDispatchSvc.ReadyOrder.newBuilder()
@@ -87,6 +121,18 @@ public class CreateToDeliverIngestBridge {
         return null;
     }
 
+    /**
+     * Extracts the named field's value from a protobuf Message and returns it as a String.
+     *
+     * If the field does not exist, is unset, or is a bytes or nested message type, an empty
+     * string is returned. Numeric, boolean, string, and enum field values are converted to
+     * their String representation.
+     *
+     * @param message the protobuf Message to read from
+     * @param fieldName the name of the field to read
+     * @return the field's string representation if present and of type string, numeric, boolean,
+     *         or enum; otherwise an empty string
+     */
     private static String readField(Message message, String fieldName) {
         var field = message.getDescriptorForType().findFieldByName(fieldName);
         if (field == null) {

@@ -13,5 +13,11 @@ import org.pipelineframework.checkout.deliverorder.grpc.OrderDispatchSvc;
 @FunctionalInterface
 public interface DeliverOrderIngestClient {
 
-    Cancellable forward(Multi<OrderDispatchSvc.ReadyOrder> readyOrderStream);
+    /**
+ * Forwards ReadyOrder items from the provided stream into the deliver-order ingest path while preserving downstream backpressure.
+ *
+ * @param readyOrderStream the Reactive stream of ReadyOrder checkpoints to forward
+ * @return the active subscription for the forwarding operation; callers can cancel it and receive terminal failures via its failure callback
+ */
+Cancellable forward(Multi<OrderDispatchSvc.ReadyOrder> readyOrderStream);
 }
