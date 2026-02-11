@@ -3,10 +3,12 @@ package org.pipelineframework.processor.phase;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
+import javax.tools.Diagnostic;
 
 import org.pipelineframework.annotation.PipelineOrchestrator;
 import org.pipelineframework.annotation.PipelinePlugin;
@@ -93,9 +95,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     }
 
     private List<PipelineAspectModel> loadPipelineAspects(PipelineCompilationContext ctx) {
-        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
-        Path moduleDir = ctx.getModuleDir();
-        Optional<Path> configPath = locator.locate(moduleDir);
+        Optional<Path> configPath = resolvePipelineConfigPath(ctx);
         if (configPath.isEmpty()) {
             return List.of();
         }
@@ -119,9 +119,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @return the loaded PipelineTemplateConfig, or `null` if no configuration is present or if loading fails (a warning is emitted via the processing environment when available)
      */
     private PipelineTemplateConfig loadPipelineTemplateConfig(PipelineCompilationContext ctx) {
-        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
-        Path moduleDir = ctx.getModuleDir();
-        Optional<Path> configPath = locator.locate(moduleDir);
+        Optional<Path> configPath = resolvePipelineConfigPath(ctx);
         if (configPath.isEmpty()) {
             return null;
         }
@@ -151,9 +149,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @return the determined TransportMode; defaults to {@link TransportMode#GRPC} when configuration is missing, blank, unknown, or on load failure
      */
     private TransportMode loadPipelineTransport(PipelineCompilationContext ctx) {
-        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
-        Path moduleDir = ctx.getModuleDir();
-        Optional<Path> configPath = locator.locate(moduleDir);
+        Optional<Path> configPath = resolvePipelineConfigPath(ctx);
         if (configPath.isEmpty()) {
             return TransportMode.GRPC;
         }
@@ -282,6 +278,33 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
             }
             throw e;
         }
+    }
+
+    private Optional<Path> resolvePipelineConfigPath(PipelineCompilationContext ctx) {
+        Map<String, String> options = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getOptions() : Map.of();
+        String explicitConfig = options.get("pipeline.config");
+        if (explicitConfig != null && !explicitConfig.isBlank()) {
+            Path explicitPath = Path.of(explicitConfig.trim());
+            if (!explicitPath.isAbsolute() && ctx.getModuleDir() != null) {
+                explicitPath = ctx.getModuleDir().resolve(explicitPath).normalize();
+            }
+            if (java.nio.file.Files.exists(explicitPath)) {
+                return Optional.of(explicitPath);
+            }
+            if (ctx.getProcessingEnv() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    Diagnostic.Kind.WARNING,
+                    "pipeline.config points to a missing path: '" + explicitConfig + "' (resolved to '" +
+                        explicitPath + "')");
+            }
+            return Optional.empty();
+        }
+        Path moduleDir = ctx.getModuleDir();
+        if (moduleDir == null) {
+            return Optional.empty();
+        }
+        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
+        return locator.locate(moduleDir);
     }
 
     /**

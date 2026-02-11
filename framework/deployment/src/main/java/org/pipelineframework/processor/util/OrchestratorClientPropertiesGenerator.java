@@ -225,17 +225,42 @@ public class OrchestratorClientPropertiesGenerator {
     }
 
     private PipelineYamlConfig loadPipelineConfig(PipelineCompilationContext ctx) {
-        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
-        Path moduleDir = ctx.getModuleDir();
-        if (moduleDir == null) {
-            return null;
-        }
-        java.util.Optional<Path> configPath = locator.locate(moduleDir);
+        Optional<Path> configPath = resolvePipelineConfigPath(ctx);
         if (configPath.isEmpty()) {
             return null;
         }
         PipelineYamlConfigLoader loader = new PipelineYamlConfigLoader();
         return loader.load(configPath.get());
+    }
+
+    private Optional<Path> resolvePipelineConfigPath(PipelineCompilationContext ctx) {
+        Map<String, String> options = processingEnv != null ? processingEnv.getOptions() : Map.of();
+        String explicit = options.get("pipeline.config");
+        if (explicit != null && !explicit.isBlank()) {
+            Path explicitPath = Path.of(explicit.trim());
+            if (!explicitPath.isAbsolute()) {
+                if (ctx.getModuleDir() != null) {
+                    explicitPath = ctx.getModuleDir().resolve(explicitPath).normalize();
+                } else if (processingEnv != null) {
+                    processingEnv.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                        "pipeline.config is relative but moduleDir is null: '" + explicit + "'");
+                }
+            }
+            if (Files.exists(explicitPath) && Files.isReadable(explicitPath)) {
+                return Optional.of(explicitPath);
+            }
+            if (processingEnv != null) {
+                processingEnv.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                    "pipeline.config not found/readable at '" + explicitPath + "' (from '" + explicit +
+                        "'); falling back to discovered pipeline.yaml");
+            }
+        }
+        Path moduleDir = ctx.getModuleDir();
+        if (moduleDir == null) {
+            return Optional.empty();
+        }
+        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
+        return locator.locate(moduleDir);
     }
 
     private PipelineStepModel selectBestMatch(List<PipelineStepModel> candidates, String token) {

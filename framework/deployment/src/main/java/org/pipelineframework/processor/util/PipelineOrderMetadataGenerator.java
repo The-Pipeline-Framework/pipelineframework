@@ -1,10 +1,15 @@
 package org.pipelineframework.processor.util;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.logging.Logger;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.tools.StandardLocation;
 
@@ -21,6 +26,7 @@ import org.pipelineframework.processor.ir.PipelineStepModel;
 public class PipelineOrderMetadataGenerator {
 
     private static final String ORDER_RESOURCE = "META-INF/pipeline/order.json";
+    private static final Logger LOGGER = Logger.getLogger(PipelineOrderMetadataGenerator.class.getName());
     private final ProcessingEnvironment processingEnv;
     private final Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
@@ -80,17 +86,39 @@ public class PipelineOrderMetadataGenerator {
     }
 
     private PipelineYamlConfig loadPipelineConfig(PipelineCompilationContext ctx) {
-        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
-        java.nio.file.Path moduleDir = ctx.getModuleDir();
-        if (moduleDir == null) {
-            return null;
-        }
-        java.util.Optional<java.nio.file.Path> configPath = locator.locate(moduleDir);
+        Optional<Path> configPath = resolvePipelineConfigPath(ctx);
         if (configPath.isEmpty()) {
             return null;
         }
         PipelineYamlConfigLoader loader = new PipelineYamlConfigLoader();
         return loader.load(configPath.get());
+    }
+
+    private Optional<Path> resolvePipelineConfigPath(PipelineCompilationContext ctx) {
+        Map<String, String> options = processingEnv != null ? processingEnv.getOptions() : Map.of();
+        String explicit = options.get("pipeline.config");
+        if (explicit != null && !explicit.isBlank()) {
+            Path explicitPath = Path.of(explicit.trim());
+            if (!explicitPath.isAbsolute()) {
+                if (ctx.getModuleDir() == null) {
+                    LOGGER.warning("pipeline.config provided as relative path but moduleDir is null: " + explicit);
+                    return Optional.empty();
+                }
+                explicitPath = ctx.getModuleDir().resolve(explicitPath).normalize();
+            }
+            if (Files.exists(explicitPath)) {
+                return Optional.of(explicitPath);
+            }
+            LOGGER.warning(
+                "pipeline.config path not found: provided='" + explicit + "', resolved='" + explicitPath +
+                    "'. Falling back to pipeline.yaml discovery.");
+        }
+        Path moduleDir = ctx.getModuleDir();
+        if (moduleDir == null) {
+            return Optional.empty();
+        }
+        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
+        return locator.locate(moduleDir);
     }
 
     /**

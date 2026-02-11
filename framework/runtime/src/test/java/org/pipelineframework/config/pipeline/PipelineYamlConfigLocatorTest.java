@@ -57,6 +57,47 @@ class PipelineYamlConfigLocatorTest {
         assertTrue(locator.locate(moduleDir).isEmpty());
     }
 
+    @Test
+    void throwsWhenModuleDirIsNull() {
+        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
+        assertThrows(NullPointerException.class, () -> locator.locate(null));
+    }
+
+    @Test
+    void returnsEmptyForNonExistentModuleDir() {
+        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
+        Path missing = tempDir.resolve("does-not-exist").resolve("module-a");
+        assertTrue(locator.locate(missing).isEmpty());
+    }
+
+    @Test
+    void resolvesConfigFromGrandparentProject() throws IOException {
+        Path grandparent = createPomProject(tempDir.resolve("grandparent"));
+        Path grandparentConfigDir = grandparent.resolve("config");
+        Files.createDirectories(grandparentConfigDir);
+        Path grandparentPipeline = grandparentConfigDir.resolve("pipeline.yaml");
+        Files.writeString(grandparentPipeline, "appName: \"grandparent\"\n");
+
+        Path parent = grandparent.resolve("parent");
+        Files.createDirectories(parent);
+        Files.writeString(parent.resolve("pom.xml"), """
+            <project>
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>test</groupId>
+              <artifactId>parent</artifactId>
+              <version>1.0.0</version>
+              <packaging>jar</packaging>
+            </project>
+            """);
+
+        Path moduleDir = createModule(parent.resolve("service-a").resolve("nested-module"));
+
+        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
+        Path resolved = locator.locate(moduleDir).orElseThrow();
+
+        assertEquals(grandparentPipeline, resolved);
+    }
+
     private Path createPomProject(Path dir) throws IOException {
         Files.createDirectories(dir);
         Files.writeString(dir.resolve("pom.xml"), """

@@ -1,5 +1,6 @@
 package org.pipelineframework.config.template;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -66,18 +67,36 @@ class CheckoutReferenceContractTest {
     }
 
     private Path resolveFromWorkspaceRoot(String relativePath) {
+        String workspaceRoot = System.getProperty("workspace.root");
+        if (workspaceRoot == null || workspaceRoot.isBlank()) {
+            workspaceRoot = System.getenv("WORKSPACE_ROOT");
+        }
+        if (workspaceRoot != null && !workspaceRoot.isBlank()) {
+            Path explicitRoot = Path.of(workspaceRoot).normalize();
+            Path explicitCandidate = explicitRoot.resolve(relativePath).normalize();
+            if (Files.exists(explicitCandidate)) {
+                return explicitCandidate;
+            }
+        }
+
+        var classpathResource = CheckoutReferenceContractTest.class.getClassLoader().getResource(relativePath);
+        if (classpathResource != null && "file".equalsIgnoreCase(classpathResource.getProtocol())) {
+            return Path.of(java.net.URI.create(classpathResource.toString())).normalize();
+        }
+
         Path userDir = Path.of(System.getProperty("user.dir")).normalize();
         List<Path> candidates = List.of(
             userDir.resolve(relativePath).normalize(),
             userDir.resolve("..").resolve(relativePath).normalize(),
             userDir.resolve("..").resolve("..").resolve(relativePath).normalize());
 
-        Optional<Path> resolved = candidates.stream().filter(java.nio.file.Files::exists).findFirst();
+        Optional<Path> resolved = candidates.stream().filter(Files::exists).findFirst();
         if (resolved.isPresent()) {
             return resolved.get();
         }
 
-        throw new AssertionError("Could not resolve checkout reference config file from user.dir=" + userDir +
-            ". Tried: " + candidates);
+        throw new AssertionError("Could not resolve checkout reference config file for '" + relativePath +
+            "'. Set system property 'workspace.root' (or env WORKSPACE_ROOT), or ensure file is available in test resources. " +
+            "user.dir=" + userDir + ", tried: " + candidates);
     }
 }

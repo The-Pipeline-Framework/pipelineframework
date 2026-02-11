@@ -273,17 +273,43 @@ public class PipelineTelemetryMetadataGenerator {
      * @return the loaded {@link PipelineYamlConfig}, or {@code null} if no module directory is present or no config file is found
      */
     private PipelineYamlConfig loadPipelineConfig(PipelineCompilationContext ctx) {
-        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
-        Path moduleDir = ctx.getModuleDir();
-        if (moduleDir == null) {
-            return null;
-        }
-        var configPath = locator.locate(moduleDir);
+        var configPath = resolvePipelineConfigPath(ctx);
         if (configPath.isEmpty()) {
             return null;
         }
         PipelineYamlConfigLoader loader = new PipelineYamlConfigLoader();
         return loader.load(configPath.get());
+    }
+
+    private Optional<Path> resolvePipelineConfigPath(PipelineCompilationContext ctx) {
+        Map<String, String> options = processingEnv != null ? processingEnv.getOptions() : Map.of();
+        String explicit = options.get("pipeline.config");
+        if (explicit != null && !explicit.isBlank()) {
+            Path explicitPath = Path.of(explicit.trim());
+            if (!explicitPath.isAbsolute()) {
+                if (ctx.getModuleDir() != null) {
+                    explicitPath = ctx.getModuleDir().resolve(explicitPath).normalize();
+                } else if (processingEnv != null) {
+                    processingEnv.getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                        "pipeline.config is relative but moduleDir is null: '" + explicit + "'");
+                }
+            }
+            if (Files.exists(explicitPath)) {
+                return Optional.of(explicitPath);
+            }
+            if (processingEnv != null) {
+                processingEnv.getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.WARNING,
+                    "pipeline.config not found at '" + explicitPath + "' (resolved from '" + explicit +
+                        "', moduleDir=" + ctx.getModuleDir() + "); falling back to PipelineYamlConfigLocator");
+            }
+        }
+        Path moduleDir = ctx.getModuleDir();
+        if (moduleDir == null) {
+            return Optional.empty();
+        }
+        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
+        return locator.locate(moduleDir);
     }
 
     /**

@@ -21,8 +21,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
-import java.util.stream.Collectors;
 
 /**
  * Locates pipeline.yaml configuration files starting from a module directory.
@@ -48,6 +48,7 @@ public class PipelineYamlConfigLocator {
      * @return the resolved config path if found
      */
     public Optional<Path> locate(Path moduleDir) {
+        Objects.requireNonNull(moduleDir, "moduleDir must not be null");
         List<Path> moduleMatches = new ArrayList<>();
         scanDirectory(moduleDir, moduleMatches);
         scanDirectory(moduleDir.resolve("config"), moduleMatches);
@@ -73,10 +74,11 @@ public class PipelineYamlConfigLocator {
 
     private void validateSingleMatch(List<Path> matches) {
         if (matches.size() > 1) {
-            String names = matches.stream()
+            List<String> namesList = matches.stream()
                 .map(Path::toString)
                 .sorted()
-                .collect(Collectors.joining(", "));
+                .toList();
+            String names = String.join(", ", namesList);
             throw new IllegalStateException("Multiple pipeline config files found: " + names);
         }
     }
