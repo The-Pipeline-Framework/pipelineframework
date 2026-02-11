@@ -7,4 +7,9 @@ public record InitialOrderDto(
     UUID customerId,
     int itemCount
 ) {
+    public InitialOrderDto {
+        if (itemCount <= 0) {
+            throw new IllegalArgumentException("itemCount must be > 0");
+        }
+    }
 }

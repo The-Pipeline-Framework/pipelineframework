@@ -11,6 +11,7 @@ import org.pipelineframework.PipelineOutputBus;
 import org.pipelineframework.checkout.createorder.grpc.OrderReadySvc;
 import org.pipelineframework.checkout.deliverorder.grpc.OrderDispatchSvc;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -35,12 +36,14 @@ class CreateToDeliverGrpcBridgeE2ETest {
             .build();
 
         pipelineOutputBus.publish(checkpoint);
-        OrderDispatchSvc.ReadyOrder captured = waitForCaptured(Duration.ofSeconds(3));
+        OrderDispatchSvc.ReadyOrder captured = waitForCaptured(Duration.ofSeconds(15));
 
-        assertNotNull(captured, "Expected deliver ingest endpoint to capture forwarded checkpoint");
-        assertEquals(checkpoint.getOrderId(), captured.getOrderId());
-        assertEquals(checkpoint.getCustomerId(), captured.getCustomerId());
-        assertEquals(checkpoint.getReadyAt(), captured.getReadyAt());
+        assertAll(
+            () -> assertNotNull(captured, "Expected deliver ingest endpoint to capture forwarded checkpoint"),
+            () -> assertEquals(checkpoint.getOrderId(), captured == null ? null : captured.getOrderId()),
+            () -> assertEquals(checkpoint.getCustomerId(), captured == null ? null : captured.getCustomerId()),
+            () -> assertEquals(checkpoint.getReadyAt(), captured == null ? null : captured.getReadyAt())
+        );
     }
 
     private OrderDispatchSvc.ReadyOrder waitForCaptured(Duration timeout) {

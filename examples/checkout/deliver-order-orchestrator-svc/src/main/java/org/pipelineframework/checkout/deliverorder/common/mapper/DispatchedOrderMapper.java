@@ -23,7 +23,7 @@ public class DispatchedOrderMapper implements Mapper<OrderDispatchSvc.Dispatched
     @Override
     public OrderDispatchSvc.DispatchedOrder toGrpc(DispatchedOrder dto) {
         if (dto == null) {
-            return null;
+            throw new IllegalArgumentException("dto must not be null");
         }
         return OrderDispatchSvc.DispatchedOrder.newBuilder()
             .setOrderId(ReadyOrderMapper.str(dto.orderId()))
@@ -42,6 +42,7 @@ public class DispatchedOrderMapper implements Mapper<OrderDispatchSvc.Dispatched
 
     @Override
     public DispatchedOrder toDto(DispatchedOrder domain) {
+        // Intentional identity mapping: domain and DTO share the same structure.
         return domain;
     }
 }

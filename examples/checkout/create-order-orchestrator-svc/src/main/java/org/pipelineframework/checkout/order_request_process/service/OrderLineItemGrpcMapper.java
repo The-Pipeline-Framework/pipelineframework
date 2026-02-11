@@ -20,21 +20,30 @@ public class OrderLineItemGrpcMapper implements Mapper<OrderRequestProcessSvc.Or
         if (grpc.getCustomerId() == null || grpc.getCustomerId().isBlank()) {
             throw new IllegalArgumentException("grpc.customerId must not be blank");
         }
+        if (grpc.getQuantity() <= 0) {
+            throw new IllegalArgumentException("grpc.quantity must be > 0 but was " + grpc.getQuantity());
+        }
         return new OrderLineItemDto(
             OrderRequestGrpcMapper.asUuid(grpc.getRequestId()),
             OrderRequestGrpcMapper.asUuid(grpc.getCustomerId()),
             OrderRequestGrpcMapper.defaultString(grpc.getSku()),
-            grpc.getQuantity() <= 0 ? 1 : grpc.getQuantity());
+            grpc.getQuantity());
     }
 
     @Override
     public OrderRequestProcessSvc.OrderLineItem toGrpc(OrderLineItemDto dto) {
         if (dto == null) {
-            return null;
+            throw new IllegalArgumentException("dto must not be null");
+        }
+        if (dto.requestId() == null) {
+            throw new IllegalArgumentException("dto.requestId must not be null");
+        }
+        if (dto.customerId() == null) {
+            throw new IllegalArgumentException("dto.customerId must not be null");
         }
         return OrderRequestProcessSvc.OrderLineItem.newBuilder()
-            .setRequestId(dto.requestId() == null ? "" : OrderRequestGrpcMapper.asString(dto.requestId()))
-            .setCustomerId(dto.customerId() == null ? "" : OrderRequestGrpcMapper.asString(dto.customerId()))
+            .setRequestId(OrderRequestGrpcMapper.asString(dto.requestId()))
+            .setCustomerId(OrderRequestGrpcMapper.asString(dto.customerId()))
             .setSku(dto.sku() == null ? "" : dto.sku())
             .setQuantity(dto.quantity())
             .build();

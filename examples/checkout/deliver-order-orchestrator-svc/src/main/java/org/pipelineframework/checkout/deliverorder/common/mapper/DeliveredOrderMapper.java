@@ -24,7 +24,7 @@ public class DeliveredOrderMapper implements Mapper<OrderDeliveredSvc.DeliveredO
     @Override
     public OrderDeliveredSvc.DeliveredOrder toGrpc(DeliveredOrder dto) {
         if (dto == null) {
-            return null;
+            throw new IllegalArgumentException("dto must not be null");
         }
         return OrderDeliveredSvc.DeliveredOrder.newBuilder()
             .setOrderId(ReadyOrderMapper.str(dto.orderId()))

@@ -2,6 +2,7 @@ package org.pipelineframework.checkout.createorder.common.mapper;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.UUID;
 import org.pipelineframework.checkout.createorder.common.domain.OrderRequest;
 import org.pipelineframework.checkout.createorder.grpc.OrderRequestProcessSvc;
@@ -23,7 +24,7 @@ public class OrderRequestMapper implements Mapper<OrderRequestProcessSvc.OrderRe
     @Override
     public OrderRequestProcessSvc.OrderRequest toGrpc(OrderRequest dto) {
         if (dto == null) {
-            return null;
+            throw new IllegalArgumentException("dto must not be null");
         }
         return OrderRequestProcessSvc.OrderRequest.newBuilder()
             .setRequestId(str(dto.requestId()))
@@ -63,7 +64,7 @@ public class OrderRequestMapper implements Mapper<OrderRequestProcessSvc.OrderRe
         }
         try {
             return Instant.parse(value);
-        } catch (Exception e) {
+        } catch (DateTimeParseException e) {
             throw new IllegalArgumentException("Invalid Instant for " + fieldName + ": " + value, e);
         }
     }

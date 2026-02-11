@@ -27,15 +27,15 @@ public class DeliveredOrderGrpcMapper implements Mapper<OrderDeliveredSvc.Delive
     @Override
     public OrderDeliveredSvc.DeliveredOrder toGrpc(DeliveredOrderDto dto) {
         if (dto == null) {
-            return null;
+            throw new IllegalArgumentException("dto must not be null");
         }
         return OrderDeliveredSvc.DeliveredOrder.newBuilder()
-            .setOrderId(dto.orderId() == null ? "" : ReadyOrderGrpcMapper.asString(dto.orderId()))
-            .setCustomerId(dto.customerId() == null ? "" : ReadyOrderGrpcMapper.asString(dto.customerId()))
-            .setReadyAt(dto.readyAt() == null ? "" : ReadyOrderGrpcMapper.asString(dto.readyAt()))
-            .setDispatchId(dto.dispatchId() == null ? "" : ReadyOrderGrpcMapper.asString(dto.dispatchId()))
-            .setDispatchedAt(dto.dispatchedAt() == null ? "" : ReadyOrderGrpcMapper.asString(dto.dispatchedAt()))
-            .setDeliveredAt(dto.deliveredAt() == null ? "" : ReadyOrderGrpcMapper.asString(dto.deliveredAt()))
+            .setOrderId(ReadyOrderGrpcMapper.asString(dto.orderId()))
+            .setCustomerId(ReadyOrderGrpcMapper.asString(dto.customerId()))
+            .setReadyAt(ReadyOrderGrpcMapper.asString(dto.readyAt()))
+            .setDispatchId(ReadyOrderGrpcMapper.asString(dto.dispatchId()))
+            .setDispatchedAt(ReadyOrderGrpcMapper.asString(dto.dispatchedAt()))
+            .setDeliveredAt(ReadyOrderGrpcMapper.asString(dto.deliveredAt()))
             .build();
     }
 

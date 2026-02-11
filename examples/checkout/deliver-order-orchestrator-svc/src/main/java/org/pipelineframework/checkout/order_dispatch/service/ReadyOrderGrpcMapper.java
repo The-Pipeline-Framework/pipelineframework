@@ -26,12 +26,12 @@ public class ReadyOrderGrpcMapper implements Mapper<OrderDispatchSvc.ReadyOrder,
     @Override
     public OrderDispatchSvc.ReadyOrder toGrpc(ReadyOrderDto dto) {
         if (dto == null) {
-            return null;
+            throw new IllegalArgumentException("dto must not be null");
         }
         return OrderDispatchSvc.ReadyOrder.newBuilder()
-            .setOrderId(dto.orderId() == null ? "" : asString(dto.orderId()))
-            .setCustomerId(dto.customerId() == null ? "" : asString(dto.customerId()))
-            .setReadyAt(dto.readyAt() == null ? "" : asString(dto.readyAt()))
+            .setOrderId(asString(dto.orderId()))
+            .setCustomerId(asString(dto.customerId()))
+            .setReadyAt(asString(dto.readyAt()))
             .build();
     }
 

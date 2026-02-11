@@ -41,6 +41,7 @@ public class EmbeddedDeliverOrchestratorGrpcService extends MutinyOrchestratorSe
 
     @Override
     public Multi<OrderDeliveredSvc.DeliveredOrder> subscribe(Empty request) {
+        // Intentional for this test stub: subscription stream is unused in current E2E coverage.
         return Multi.createFrom().empty();
     }
 

@@ -9,6 +9,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.function.Supplier;
 import java.util.UUID;
 import org.jboss.logging.Logger;
@@ -32,8 +33,8 @@ public class ProcessOrderDispatchService
 
   @Inject
   public ProcessOrderDispatchService(Clock clock, Supplier<UUID> uuidSupplier) {
-    this.clock = clock;
-    this.uuidSupplier = uuidSupplier;
+    this.clock = Objects.requireNonNull(clock, "clock must not be null");
+    this.uuidSupplier = Objects.requireNonNull(uuidSupplier, "uuidSupplier must not be null");
   }
 
   @Override

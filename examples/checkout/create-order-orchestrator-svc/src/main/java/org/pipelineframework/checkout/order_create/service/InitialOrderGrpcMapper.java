@@ -15,20 +15,29 @@ public class InitialOrderGrpcMapper implements Mapper<OrderCreateSvc.InitialOrde
         if (grpc == null) {
             throw new IllegalArgumentException("grpc must not be null");
         }
+        if (grpc.getItemCount() < 0) {
+            throw new IllegalArgumentException("grpc.itemCount must be >= 0 but was " + grpc.getItemCount());
+        }
         return new InitialOrderDto(
             OrderRequestGrpcMapper.asUuid(grpc.getOrderId()),
             OrderRequestGrpcMapper.asUuid(grpc.getCustomerId()),
-            Math.max(0, grpc.getItemCount()));
+            grpc.getItemCount());
     }
 
     @Override
     public OrderCreateSvc.InitialOrder toGrpc(InitialOrderDto dto) {
         if (dto == null) {
-            return null;
+            throw new IllegalArgumentException("dto must not be null");
+        }
+        if (dto.orderId() == null) {
+            throw new IllegalArgumentException("dto.orderId must not be null");
+        }
+        if (dto.customerId() == null) {
+            throw new IllegalArgumentException("dto.customerId must not be null");
         }
         return OrderCreateSvc.InitialOrder.newBuilder()
-            .setOrderId(dto.orderId() == null ? "" : OrderRequestGrpcMapper.asString(dto.orderId()))
-            .setCustomerId(dto.customerId() == null ? "" : OrderRequestGrpcMapper.asString(dto.customerId()))
+            .setOrderId(OrderRequestGrpcMapper.asString(dto.orderId()))
+            .setCustomerId(OrderRequestGrpcMapper.asString(dto.customerId()))
             .setItemCount(Math.max(0, dto.itemCount()))
             .build();
     }

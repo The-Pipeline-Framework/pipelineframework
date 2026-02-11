@@ -12,16 +12,19 @@ public class InitialOrderMapper implements Mapper<OrderCreateSvc.InitialOrder, I
         if (grpc == null) {
             throw new IllegalArgumentException("grpc must not be null");
         }
+        if (grpc.getItemCount() < 0) {
+            throw new IllegalArgumentException("itemCount must be >= 0 but was " + grpc.getItemCount());
+        }
         return new InitialOrder(
             OrderRequestMapper.uuid(grpc.getOrderId(), "orderId"),
             OrderRequestMapper.uuid(grpc.getCustomerId(), "customerId"),
-            Math.max(0, grpc.getItemCount()));
+            grpc.getItemCount());
     }
 
     @Override
     public OrderCreateSvc.InitialOrder toGrpc(InitialOrder dto) {
         if (dto == null) {
-            return null;
+            throw new IllegalArgumentException("dto must not be null");
         }
         return OrderCreateSvc.InitialOrder.newBuilder()
             .setOrderId(OrderRequestMapper.str(dto.orderId()))

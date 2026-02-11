@@ -22,7 +22,7 @@ public class ReadyOrderMapper implements Mapper<OrderReadySvc.ReadyOrder, ReadyO
     @Override
     public OrderReadySvc.ReadyOrder toGrpc(ReadyOrder dto) {
         if (dto == null) {
-            return null;
+            throw new IllegalArgumentException("dto must not be null");
         }
         return OrderReadySvc.ReadyOrder.newBuilder()
             .setOrderId(OrderRequestMapper.str(dto.orderId()))
@@ -41,11 +41,11 @@ public class ReadyOrderMapper implements Mapper<OrderReadySvc.ReadyOrder, ReadyO
         return domain;
     }
 
-    public static Instant instant(String value) {
+    private static Instant instant(String value) {
         return OrderRequestMapper.instant(value, "readyAt");
     }
 
-    public static String str(Instant value) {
+    private static String str(Instant value) {
         return OrderRequestMapper.str(value);
     }
 }

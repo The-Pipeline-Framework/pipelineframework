@@ -12,7 +12,10 @@ public class OrderLineItemMapper implements Mapper<OrderRequestProcessSvc.OrderL
         if (grpc == null) {
             throw new IllegalArgumentException("grpc must not be null");
         }
-        int quantity = grpc.getQuantity() <= 0 ? 1 : grpc.getQuantity();
+        int quantity = grpc.getQuantity();
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("quantity must be > 0 but was " + quantity);
+        }
         return new OrderLineItem(
             OrderRequestMapper.uuid(grpc.getRequestId(), "requestId"),
             OrderRequestMapper.uuid(grpc.getCustomerId(), "customerId"),
@@ -23,7 +26,10 @@ public class OrderLineItemMapper implements Mapper<OrderRequestProcessSvc.OrderL
     @Override
     public OrderRequestProcessSvc.OrderLineItem toGrpc(OrderLineItem dto) {
         if (dto == null) {
-            return null;
+            throw new IllegalArgumentException("dto must not be null");
+        }
+        if (dto.sku() == null || dto.sku().isBlank()) {
+            throw new IllegalArgumentException("dto.sku must not be blank");
         }
         return OrderRequestProcessSvc.OrderLineItem.newBuilder()
             .setRequestId(OrderRequestMapper.str(dto.requestId()))

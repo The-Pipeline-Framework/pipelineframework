@@ -26,7 +26,13 @@ public class OrderRequestGrpcMapper implements Mapper<OrderRequestProcessSvc.Ord
     @Override
     public OrderRequestProcessSvc.OrderRequest toGrpc(OrderRequestDto dto) {
         if (dto == null) {
-            return null;
+            throw new IllegalArgumentException("dto must not be null");
+        }
+        if (dto.requestId() == null) {
+            throw new IllegalArgumentException("dto.requestId must not be null");
+        }
+        if (dto.customerId() == null) {
+            throw new IllegalArgumentException("dto.customerId must not be null");
         }
         return OrderRequestProcessSvc.OrderRequest.newBuilder()
             .setRequestId(asString(dto.requestId()))
@@ -57,7 +63,10 @@ public class OrderRequestGrpcMapper implements Mapper<OrderRequestProcessSvc.Ord
     }
 
     public static String asString(UUID value) {
-        return value == null ? "" : value.toString();
+        if (value == null) {
+            throw new IllegalArgumentException("UUID value must not be null");
+        }
+        return value.toString();
     }
 
     public static String asString(Instant value) {

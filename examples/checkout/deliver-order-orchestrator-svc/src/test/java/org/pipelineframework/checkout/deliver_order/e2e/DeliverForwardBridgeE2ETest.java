@@ -10,9 +10,9 @@ import org.junit.jupiter.api.Test;
 import org.pipelineframework.checkout.deliverorder.grpc.OrderDeliveredSvc;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @QuarkusTest
 class DeliverForwardBridgeE2ETest {
@@ -40,7 +40,7 @@ class DeliverForwardBridgeE2ETest {
         OrderDeliveredSvc.DeliveredOrder forwarded = waitForForwarded(Duration.ofSeconds(3));
 
         assertNotNull(forwarded, "Expected delivered checkpoint forwarded to downstream sink");
-        assertTrue(!forwarded.getOrderId().isBlank(), "forwarded orderId must not be blank");
+        assertFalse(forwarded.getOrderId().isBlank(), "forwarded orderId must not be blank");
         assertEquals(checkpoint.getOrderId(), forwarded.getOrderId());
         assertEquals(checkpoint.getDeliveredAt(), forwarded.getDeliveredAt());
     }

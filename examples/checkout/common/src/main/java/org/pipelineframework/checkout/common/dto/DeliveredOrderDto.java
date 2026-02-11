@@ -1,6 +1,7 @@
 package org.pipelineframework.checkout.common.dto;
 
 import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 
 public record DeliveredOrderDto(
@@ -11,4 +12,8 @@ public record DeliveredOrderDto(
     Instant dispatchedAt,
     Instant deliveredAt
 ) {
+    public DeliveredOrderDto {
+        Objects.requireNonNull(orderId, "orderId must not be null");
+        Objects.requireNonNull(customerId, "customerId must not be null");
+    }
 }

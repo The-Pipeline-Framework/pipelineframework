@@ -15,16 +15,22 @@ public class ReadyOrderMapper implements Mapper<OrderDispatchSvc.ReadyOrder, Rea
         if (grpc == null) {
             throw new IllegalArgumentException("grpc ReadyOrder is null");
         }
+        UUID orderId = uuid(grpc.getOrderId(), "orderId");
+        UUID customerId = uuid(grpc.getCustomerId(), "customerId");
+        Instant readyAt = instant(grpc.getReadyAt(), "readyAt");
+        if (orderId == null || customerId == null || readyAt == null) {
+            throw new IllegalArgumentException("grpc ReadyOrder must include orderId, customerId and readyAt");
+        }
         return new ReadyOrder(
-            uuid(grpc.getOrderId(), "orderId"),
-            uuid(grpc.getCustomerId(), "customerId"),
-            instant(grpc.getReadyAt(), "readyAt"));
+            orderId,
+            customerId,
+            readyAt);
     }
 
     @Override
     public OrderDispatchSvc.ReadyOrder toGrpc(ReadyOrder dto) {
         if (dto == null) {
-            return null;
+            throw new IllegalArgumentException("dto must not be null");
         }
         return OrderDispatchSvc.ReadyOrder.newBuilder()
             .setOrderId(str(dto.orderId()))

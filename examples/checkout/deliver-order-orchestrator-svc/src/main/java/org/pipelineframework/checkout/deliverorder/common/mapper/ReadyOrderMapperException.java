@@ -1,8 +1,27 @@
 package org.pipelineframework.checkout.deliverorder.common.mapper;
 
 public class ReadyOrderMapperException extends RuntimeException {
+    public ReadyOrderMapperException() {
+    }
+
+    public ReadyOrderMapperException(String message) {
+        super(message);
+    }
+
+    public ReadyOrderMapperException(Throwable cause) {
+        super(cause);
+    }
 
     public ReadyOrderMapperException(String message, Throwable cause) {
         super(message, cause);
+    }
+
+    protected ReadyOrderMapperException(
+        String message,
+        Throwable cause,
+        boolean enableSuppression,
+        boolean writableStackTrace
+    ) {
+        super(message, cause, enableSuppression, writableStackTrace);
     }
 }

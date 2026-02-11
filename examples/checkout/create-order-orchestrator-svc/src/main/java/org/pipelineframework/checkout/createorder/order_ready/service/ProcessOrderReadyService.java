@@ -9,6 +9,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.time.Clock;
 import java.time.Instant;
+import java.util.Objects;
 
 @PipelineStep(
     inputType = InitialOrder.class,
@@ -26,7 +27,7 @@ public class ProcessOrderReadyService
 
   @Inject
   public ProcessOrderReadyService(Clock clock) {
-    this.clock = clock;
+    this.clock = Objects.requireNonNull(clock, "clock must not be null");
   }
 
   @Override
