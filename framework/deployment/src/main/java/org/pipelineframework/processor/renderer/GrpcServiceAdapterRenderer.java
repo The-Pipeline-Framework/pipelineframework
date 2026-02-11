@@ -76,7 +76,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 // Add the GeneratedRole annotation to indicate the target role
                 .addAnnotation(AnnotationSpec.builder(ClassName.get("org.pipelineframework.annotation", "GeneratedRole"))
                         .addMember("value", "$T.$L",
-                            ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role"),
+                            ClassName.get("org.pipelineframework.annotation", "GeneratedRole", "Role"),
                             role.name())
                         .build())
                 .superclass(grpcBaseClassName); // Extend the actual gRPC service base class

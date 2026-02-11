@@ -7,7 +7,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import io.smallrye.mutiny.Uni;
-import org.jboss.logging.Logger;
 import org.pipelineframework.service.ReactiveService;
 
 @PipelineStep(
@@ -22,8 +21,6 @@ import org.pipelineframework.service.ReactiveService;
 public class ProcessOrderCreateService
     implements ReactiveService<OrderLineItem, InitialOrder> {
 
-  private static final Logger LOG = Logger.getLogger(ProcessOrderCreateService.class);
-
   @Override
   public Uni<InitialOrder> process(OrderLineItem input) {
     if (input == null) {
@@ -34,13 +31,6 @@ public class ProcessOrderCreateService
           "lineItem.requestId, lineItem.customerId and lineItem.sku must not be null/blank"));
     }
     int normalizedQuantity = input.quantity();
-    if (normalizedQuantity <= 0) {
-      LOG.warnf(
-          "Non-positive quantity=%s for requestId=%s, defaulting to 1",
-          normalizedQuantity,
-          input.requestId());
-      normalizedQuantity = 1;
-    }
     String trimmedSku = input.sku().trim();
     String requestPart = input.requestId().toString();
     String customerPart = input.customerId().toString();

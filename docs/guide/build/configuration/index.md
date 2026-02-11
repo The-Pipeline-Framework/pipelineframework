@@ -16,7 +16,8 @@ The pipeline YAML controls global settings used by the annotation processor.
 
 | Property    | Type | Default | Description                                                 |
 |-------------|------|---------|-------------------------------------------------------------|
-| `transport` | enum | `GRPC`  | Global transport for generated adapters (`GRPC` or `REST`). |
+| `transport` | enum | `GRPC`  | Global transport for generated adapters (`GRPC`, `REST`, or `LOCAL`). |
+| `platform`  | enum | `COMPUTE` | Target deployment platform (`COMPUTE` or `FUNCTION`; legacy aliases: `STANDARD`, `LAMBDA`). |
 
 If `pipeline-config.yaml` (the template configuration produced by Canvas or the template generator) is present,
 the build can also use it to generate protobuf definitions and orchestrator endpoints at compile time.
@@ -63,11 +64,18 @@ Examples:
 
 Pass via `maven-compiler-plugin` with `-A` arguments.
 
-| Option                             | Type    | Default | Description                                                                                                        |
-|------------------------------------|---------|---------|--------------------------------------------------------------------------------------------------------------------|
-| `-Apipeline.generatedSourcesDir`   | path    | none    | Base directory for role-specific generated sources.                                                                |
-| `-Apipeline.generatedSourcesRoot`  | path    | none    | Legacy alias of `pipeline.generatedSourcesDir`.                                                                    |
-| `-Apipeline.orchestrator.generate` | boolean | `false` | Generate orchestrator endpoint even without `@PipelineOrchestrator`. CLI generation still requires the annotation. |
+| Option                                  | Type    | Default | Description                                                                                                        |
+|-----------------------------------------|---------|---------|--------------------------------------------------------------------------------------------------------------------|
+| `-Apipeline.generatedSourcesDir`        | path    | none    | Base directory for role-specific generated sources.                                                                |
+| `-Apipeline.generatedSourcesRoot`       | path    | none    | Legacy alias of `pipeline.generatedSourcesDir`.                                                                    |
+| `-Apipeline.orchestrator.generate`      | boolean | `false` | Generate orchestrator endpoint even without `@PipelineOrchestrator`. CLI generation still requires the annotation. |
+| `-Apipeline.transport`                  | enum    | from YAML (`GRPC`) | Build-time transport override.                                                                                |
+| `-Apipeline.platform`                   | enum    | from YAML (`COMPUTE`) | Build-time platform override (`COMPUTE` or `FUNCTION`; legacy aliases: `STANDARD`, `LAMBDA`).                                                      |
+| `-Apipeline.rest.naming.strategy`       | enum    | `RESOURCEFUL` | REST endpoint naming strategy (`RESOURCEFUL` or `LEGACY`).                                                     |
+
+Equivalent process-level overrides are also supported through:
+- system properties: `pipeline.transport`, `pipeline.platform`, `pipeline.rest.naming.strategy`
+- environment variables: `PIPELINE_TRANSPORT`, `PIPELINE_PLATFORM`, `PIPELINE_REST_NAMING_STRATEGY`
 
 ### REST Path Overrides (Build-Time)
 
@@ -77,6 +85,14 @@ The annotation processor reads `src/main/resources/application.properties` durin
 |-----------------------------------------------------|--------|---------|--------------------------------------------|
 | `pipeline.rest.path.<ServiceName>`                  | string | none    | Overrides REST path by service name.       |
 | `pipeline.rest.path.<fully.qualified.ServiceClass>` | string | none    | Overrides REST path by service class name. |
+
+When `pipeline.rest.naming.strategy=RESOURCEFUL` (default), generated REST paths are:
+- 1-1 (`UNARY_UNARY`) and N-1 (`STREAMING_UNARY`): `/api/v1/<output-type>/`
+- 1-N (`UNARY_STREAMING`) and M-N (`STREAMING_STREAMING`): `/api/v1/<input-type>/`
+- side effects append plugin token when available (for example `/api/v1/ack-payment-sent/persistence`)
+
+When `pipeline.rest.naming.strategy=LEGACY`, generated REST paths stay in the older form:
+- `/api/v1/process-<service>/process`
 
 ## Runtime Configuration
 

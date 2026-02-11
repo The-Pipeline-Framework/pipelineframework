@@ -28,7 +28,11 @@ public class ProcessOrderRequestProcessService
       return Uni.createFrom().failure(new IllegalArgumentException("input must not be null"));
     }
     String raw = input.items() == null ? "" : input.items().trim();
-    String first = raw.isEmpty() ? "" : raw.split(",")[0];
+    String[] tokens = raw.isEmpty() ? new String[0] : raw.split(",");
+    String first = tokens.length == 0 ? "" : tokens[0];
+    if (tokens.length > 1) {
+      LOG.debugf("Multiple line items received '%s'; processing first token '%s'", raw, first);
+    }
     String[] parts = first.trim().split(":");
     String sku = !parts[0].isBlank() ? parts[0].trim() : "unknown-sku";
     int quantity = parts.length > 1 ? parseQuantity(parts[1]) : 1;
@@ -43,7 +47,11 @@ public class ProcessOrderRequestProcessService
     }
     try {
       int parsed = Integer.parseInt(value.trim());
-      return parsed <= 0 ? 1 : parsed;
+      if (parsed <= 0) {
+        LOG.warnf("Non-positive quantity value '%s' parsed as %s; defaulting to 1", value, parsed);
+        return 1;
+      }
+      return parsed;
     } catch (NumberFormatException e) {
       LOG.warnf("Invalid quantity value '%s'; defaulting to 1. Cause: %s", value, e.getMessage());
       return 1;

@@ -26,6 +26,9 @@ public class InitialOrderMapper implements Mapper<OrderCreateSvc.InitialOrder, I
         if (dto == null) {
             throw new IllegalArgumentException("dto must not be null");
         }
+        if (dto.itemCount() <= 0) {
+            throw new IllegalArgumentException("itemCount must be > 0");
+        }
         return OrderCreateSvc.InitialOrder.newBuilder()
             .setOrderId(OrderRequestMapper.str(dto.orderId()))
             .setCustomerId(OrderRequestMapper.str(dto.customerId()))

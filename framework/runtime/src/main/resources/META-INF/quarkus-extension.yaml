@@ -9,6 +9,8 @@ metadata:
     - "processing"
     - "reactive"
     - "grpc"
+    - "rest"
+    - "lambda"
   guide: "https://pipelineframework.org"
   categories:
     - "reactive"

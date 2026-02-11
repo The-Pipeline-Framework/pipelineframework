@@ -3,6 +3,7 @@ package org.pipelineframework.checkout.create_order.e2e;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.UUID;
 
 import jakarta.inject.Singleton;
 
@@ -53,11 +54,12 @@ public class EmbeddedDeliverOrchestratorGrpcService extends MutinyOrchestratorSe
     }
 
     private OrderDeliveredSvc.DeliveredOrder toDelivered(OrderDispatchSvc.ReadyOrder readyOrder) {
+        String dispatchId = UUID.nameUUIDFromBytes(readyOrder.getOrderId().getBytes()).toString();
         return OrderDeliveredSvc.DeliveredOrder.newBuilder()
             .setOrderId(readyOrder.getOrderId())
             .setCustomerId(readyOrder.getCustomerId())
             .setReadyAt(readyOrder.getReadyAt())
-            .setDispatchId("dispatch-" + readyOrder.getOrderId())
+            .setDispatchId(dispatchId)
             .setDispatchedAt(FIXED_TEST_TIME)
             .setDeliveredAt(FIXED_TEST_TIME)
             .build();

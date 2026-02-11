@@ -8,6 +8,7 @@ import com.google.protobuf.Message;
 import io.quarkus.runtime.StartupEvent;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.subscription.Cancellable;
+import java.util.Objects;
 import org.jboss.logging.Logger;
 import org.pipelineframework.PipelineOutputBus;
 import org.pipelineframework.checkout.createorder.grpc.OrderReadySvc;
@@ -27,8 +28,9 @@ public class CreateToDeliverIngestBridge {
     private Cancellable forwardingSubscription;
 
     public CreateToDeliverIngestBridge(PipelineOutputBus outputBus, DeliverOrderIngestClient deliverOrderIngestClient) {
-        this.outputBus = outputBus;
-        this.deliverOrderIngestClient = deliverOrderIngestClient;
+        this.outputBus = Objects.requireNonNull(outputBus, "outputBus must not be null");
+        this.deliverOrderIngestClient =
+            Objects.requireNonNull(deliverOrderIngestClient, "deliverOrderIngestClient must not be null");
     }
 
     void onStartup(@Observes StartupEvent ignored) {
@@ -64,6 +66,9 @@ public class CreateToDeliverIngestBridge {
             String customerId = readField(message, "customer_id");
             String readyAt = readField(message, "ready_at");
             if (!orderId.isBlank() && !customerId.isBlank() && !readyAt.isBlank()) {
+                LOG.debugf(
+                    "Mapped Message -> ReadyOrder messageType=%s orderId=%s customerId=%s readyAt=%s",
+                    message.getClass().getName(), orderId, customerId, readyAt);
                 return OrderDispatchSvc.ReadyOrder.newBuilder()
                     .setOrderId(orderId)
                     .setCustomerId(customerId)

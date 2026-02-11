@@ -17,10 +17,16 @@ public class ReadyOrderGrpcMapper implements Mapper<OrderDispatchSvc.ReadyOrder,
         if (grpc == null) {
             throw new IllegalArgumentException("grpc must not be null");
         }
+        var orderId = asUuid(grpc.getOrderId(), "orderId");
+        var customerId = asUuid(grpc.getCustomerId(), "customerId");
+        var readyAt = asInstant(grpc.getReadyAt(), "readyAt");
+        if (orderId == null || customerId == null || readyAt == null) {
+            throw new IllegalArgumentException("grpc must include orderId, customerId and readyAt");
+        }
         return new ReadyOrderDto(
-            asUuid(grpc.getOrderId(), "orderId"),
-            asUuid(grpc.getCustomerId(), "customerId"),
-            asInstant(grpc.getReadyAt(), "readyAt"));
+            orderId,
+            customerId,
+            readyAt);
     }
 
     @Override

@@ -33,7 +33,7 @@ public class ProcessOrderReadyService
   @Override
   public Uni<ReadyOrder> process(InitialOrder input) {
     if (input == null) {
-      return Uni.createFrom().failure(new IllegalArgumentException("initialOrder must not be null"));
+      return Uni.createFrom().failure(new IllegalArgumentException("input must not be null"));
     }
     ReadyOrder output = new ReadyOrder(input.orderId(), input.customerId(), Instant.now(clock));
     return Uni.createFrom().item(output);

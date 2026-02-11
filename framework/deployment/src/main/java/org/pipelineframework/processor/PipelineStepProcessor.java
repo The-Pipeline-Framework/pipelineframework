@@ -26,7 +26,8 @@ import javax.lang.model.element.TypeElement;
     "pipeline.config", // Optional: explicit pipeline.yaml path
     "pipeline.cache.keyGenerator", // Optional: fully-qualified CacheKeyGenerator class for @CacheResult
     "pipeline.orchestrator.generate", // Optional: enable orchestrator endpoint generation
-    "pipeline.module" // Optional: logical module name for runtime mapping
+    "pipeline.module", // Optional: logical module name for runtime mapping
+    "pipeline.platform" // Optional: target deployment platform (COMPUTE|FUNCTION; legacy: STANDARD|LAMBDA)
 })
 @SupportedSourceVersion(SourceVersion.RELEASE_21)
 @Deprecated(forRemoval = true)

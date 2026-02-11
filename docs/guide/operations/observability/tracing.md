@@ -43,3 +43,17 @@ For streaming pipelines, ensure context is carried across async boundaries and e
 3. Avoid logging sensitive payloads in span attributes
 4. Record step class and pipeline run attributes (`tpf.*`)
 5. Enable per-item spans only when needed (`pipeline.telemetry.tracing.per-item=true`)
+
+## AWS Lambda and X-Ray
+
+For Lambda deployments that use AWS X-Ray, add Quarkus Lambda X-Ray support:
+
+```xml
+<dependency>
+  <groupId>io.quarkus</groupId>
+  <artifactId>quarkus-amazon-lambda-xray</artifactId>
+</dependency>
+```
+
+For SnapStart/tiered compilation operational guidance, see:
+- [AWS Lambda SnapStart (Operate)](/guide/operations/aws-lambda-snapstart)

@@ -14,10 +14,10 @@ public class OrderLineItemGrpcMapper implements Mapper<OrderRequestProcessSvc.Or
         if (grpc == null) {
             throw new IllegalArgumentException("grpc must not be null");
         }
-        if (grpc.getRequestId() == null || grpc.getRequestId().isBlank()) {
+        if (grpc.getRequestId().isBlank()) {
             throw new IllegalArgumentException("grpc.requestId must not be blank");
         }
-        if (grpc.getCustomerId() == null || grpc.getCustomerId().isBlank()) {
+        if (grpc.getCustomerId().isBlank()) {
             throw new IllegalArgumentException("grpc.customerId must not be blank");
         }
         if (grpc.getQuantity() <= 0) {

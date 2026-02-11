@@ -35,10 +35,13 @@ public class InitialOrderGrpcMapper implements Mapper<OrderCreateSvc.InitialOrde
         if (dto.customerId() == null) {
             throw new IllegalArgumentException("dto.customerId must not be null");
         }
+        if (dto.itemCount() < 0) {
+            throw new IllegalArgumentException("itemCount must be non-negative");
+        }
         return OrderCreateSvc.InitialOrder.newBuilder()
             .setOrderId(OrderRequestGrpcMapper.asString(dto.orderId()))
             .setCustomerId(OrderRequestGrpcMapper.asString(dto.customerId()))
-            .setItemCount(Math.max(0, dto.itemCount()))
+            .setItemCount(dto.itemCount())
             .build();
     }
 

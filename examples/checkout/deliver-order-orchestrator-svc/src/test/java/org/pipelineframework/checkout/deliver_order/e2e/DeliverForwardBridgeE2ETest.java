@@ -13,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @QuarkusTest
 class DeliverForwardBridgeE2ETest {
@@ -62,7 +63,7 @@ class DeliverForwardBridgeE2ETest {
         pipelineOutputBus.publish(checkpoint);
 
         assertNull(waitForForwarded(Duration.ofSeconds(2)));
-        assertEquals(initialFailures + 1, LocalDeliveredOrderForwardClient.forwardFailures());
+        assertTrue(waitForFailureCount(initialFailures + 1, Duration.ofSeconds(2)));
     }
 
     private OrderDeliveredSvc.DeliveredOrder waitForForwarded(Duration timeout) {
@@ -73,5 +74,21 @@ class DeliverForwardBridgeE2ETest {
             Thread.currentThread().interrupt();
             return null;
         }
+    }
+
+    private boolean waitForFailureCount(int expected, Duration timeout) {
+        long deadlineNanos = System.nanoTime() + timeout.toNanos();
+        while (System.nanoTime() < deadlineNanos) {
+            if (LocalDeliveredOrderForwardClient.forwardFailures() >= expected) {
+                return true;
+            }
+            try {
+                TimeUnit.MILLISECONDS.sleep(25);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return LocalDeliveredOrderForwardClient.forwardFailures() >= expected;
     }
 }

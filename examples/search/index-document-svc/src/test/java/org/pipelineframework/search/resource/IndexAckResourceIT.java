@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Mariano Barcia
+ * Copyright (c) 2023-2026 Mariano Barcia
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ package org.pipelineframework.search.resource;
 
 import java.util.UUID;
 
-import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.QuarkusIntegrationTest;
 import io.restassured.RestAssured;
 import io.restassured.config.SSLConfig;
 import io.restassured.http.ContentType;
@@ -29,8 +29,8 @@ import org.junit.jupiter.api.Test;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 
-@QuarkusTest
-class ProcessIndexDocumentResourceTest {
+@QuarkusIntegrationTest
+class IndexAckResourceIT {
 
     @BeforeAll
     static void setUp() {
@@ -49,7 +49,7 @@ class ProcessIndexDocumentResourceTest {
     }
 
     @Test
-    void testProcessIndexDocumentWithValidData() {
+    void testIndexAckWithValidData() {
         String requestBody =
                 """
                 {
@@ -62,7 +62,7 @@ class ProcessIndexDocumentResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-index-document/process")
+                .post("/api/v1/index-ack/")
                 .then()
                 .statusCode(200)
                 .body("docId", notNullValue())
@@ -72,7 +72,7 @@ class ProcessIndexDocumentResourceTest {
     }
 
     @Test
-    void testProcessIndexDocumentWithInvalidUUID() {
+    void testIndexAckWithInvalidUUID() {
         String requestBody =
                 """
                 {
@@ -84,13 +84,13 @@ class ProcessIndexDocumentResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-index-document/process")
+                .post("/api/v1/index-ack/")
                 .then()
                 .statusCode(400);
     }
 
     @Test
-    void testProcessIndexDocumentWithMissingRequiredFields() {
+    void testIndexAckWithMissingRequiredFields() {
         String requestBody =
                 """
                 {
@@ -102,7 +102,7 @@ class ProcessIndexDocumentResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-index-document/process")
+                .post("/api/v1/index-ack/")
                 .then()
                 .statusCode(400);
     }

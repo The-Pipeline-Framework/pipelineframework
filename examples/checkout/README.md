@@ -5,7 +5,7 @@ This folder is the FTGo-inspired checkout starter for TPFGo.
 It intentionally starts as two separate checkpoint pipelines:
 
 - Pipeline A: `create-order-pipeline.yaml`
-- Pipeline B: `deliver-order-pipeline.yaml`
+- Pipeline B: `deliver-order-orchestrator-svc/pipeline.yaml`
 
 ## Intent
 
@@ -21,7 +21,7 @@ This mirrors the TPF checkpoint model:
 ## Config files
 
 - `config/create-order-pipeline.yaml`
-- `config/deliver-order-pipeline.yaml`
+- `deliver-order-orchestrator-svc/pipeline.yaml`
 
 ## Current module scaffold
 

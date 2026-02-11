@@ -14,6 +14,9 @@ import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.RestBinding;
+import org.pipelineframework.processor.util.DtoTypeUtils;
+import org.pipelineframework.processor.util.ResourceNameUtils;
+import org.pipelineframework.processor.util.RestPathResolver;
 import org.pipelineframework.step.StepManyToOne;
 import org.pipelineframework.step.StepOneToOne;
 
@@ -35,7 +38,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
 
     @Override
     public void render(RestBinding binding, GenerationContext ctx) throws IOException {
-        TypeSpec restClientInterface = buildRestClientInterface(binding);
+        TypeSpec restClientInterface = buildRestClientInterface(binding, ctx);
         TypeSpec restClientStep = buildRestClientStepClass(binding, ctx, restClientInterface.name);
 
         JavaFile clientInterfaceFile = JavaFile.builder(
@@ -62,15 +65,12 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
      * @param binding the RestBinding that provides the pipeline model, DTO type information, and optional path override
      * @return a TypeSpec representing the generated REST client interface
      */
-    private TypeSpec buildRestClientInterface(RestBinding binding) {
+    private TypeSpec buildRestClientInterface(RestBinding binding, GenerationContext ctx) {
         PipelineStepModel model = binding.model();
         validateRestMappings(model);
 
         String serviceClassName = model.generatedName();
-        String baseName = serviceClassName.replace("Service", "");
-        if (baseName.endsWith("Reactive")) {
-            baseName = baseName.substring(0, baseName.length() - "Reactive".length());
-        }
+        String baseName = ResourceNameUtils.normalizeBaseName(serviceClassName);
         String interfaceName = baseName + "RestClient";
 
         TypeName inputDto = model.inboundDomainType() != null
@@ -82,7 +82,8 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
 
         String basePath = binding.restPathOverride() != null
             ? binding.restPathOverride()
-            : deriveResourcePath(serviceClassName);
+            : RestPathResolver.resolveResourcePath(model, ctx.processingEnv());
+        String operationPath = RestPathResolver.resolveOperationPath(ctx.processingEnv());
 
         AnnotationSpec registerRestClient = AnnotationSpec.builder(
                 ClassName.get("org.eclipse.microprofile.rest.client.inject", "RegisterRestClient"))
@@ -109,10 +110,10 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                 .build());
 
         MethodSpec processMethod = switch (model.streamingShape()) {
-            case UNARY_STREAMING -> buildUnaryStreamingMethod(inputDto, outputDto);
-            case STREAMING_UNARY -> buildStreamingUnaryMethod(inputDto, outputDto);
-            case STREAMING_STREAMING -> buildStreamingStreamingMethod(inputDto, outputDto);
-            default -> buildUnaryUnaryMethod(inputDto, outputDto);
+            case UNARY_STREAMING -> buildUnaryStreamingMethod(inputDto, outputDto, operationPath);
+            case STREAMING_UNARY -> buildStreamingUnaryMethod(inputDto, outputDto, operationPath);
+            case STREAMING_STREAMING -> buildStreamingStreamingMethod(inputDto, outputDto, operationPath);
+            default -> buildUnaryUnaryMethod(inputDto, outputDto, operationPath);
         };
 
         interfaceBuilder.addMethod(processMethod);
@@ -135,7 +136,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
     private TypeSpec buildRestClientStepClass(RestBinding binding, GenerationContext ctx, String restClientInterfaceName) {
         PipelineStepModel model = binding.model();
         DeploymentRole role = ctx.role();
-        String clientStepClassName = model.generatedName().replace("Service", "")
+        String clientStepClassName = ResourceNameUtils.normalizeBaseName(model.generatedName())
             + PipelineStepProcessor.REST_CLIENT_STEP_SUFFIX;
 
         TypeName inputDto = model.inboundDomainType() != null
@@ -161,7 +162,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                 .build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("org.pipelineframework.annotation", "GeneratedRole"))
                 .addMember("value", "$T.$L",
-                    ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role"),
+                    ClassName.get("org.pipelineframework.annotation", "GeneratedRole", "Role"),
                     role.name())
                 .build());
         if (model.sideEffect()) {
@@ -300,11 +301,11 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
      * @param outputDto the DTO type used as the method's response entity
      * @return          a MethodSpec for the abstract `process` REST method (POST /process) returning `Uni<outputDto>`
      */
-    private MethodSpec buildUnaryUnaryMethod(TypeName inputDto, TypeName outputDto) {
+    private MethodSpec buildUnaryUnaryMethod(TypeName inputDto, TypeName outputDto, String operationPath) {
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("process")
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST")).build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Path"))
-                .addMember("value", "$S", "/process")
+                .addMember("value", "$S", operationPath)
                 .build())
             .addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)
             .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputDto))
@@ -324,11 +325,11 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
      * @param inputDto the input DTO to process
      * @return a Multi that emits output DTOs produced by processing the input DTO
      */
-    private MethodSpec buildUnaryStreamingMethod(TypeName inputDto, TypeName outputDto) {
+    private MethodSpec buildUnaryStreamingMethod(TypeName inputDto, TypeName outputDto, String operationPath) {
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("process")
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST")).build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Path"))
-                .addMember("value", "$S", "/process")
+                .addMember("value", "$S", operationPath)
                 .build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("org.jboss.resteasy.reactive", "RestStreamElementType"))
                 .addMember("value", "$S", "application/json")
@@ -351,11 +352,11 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
      * @param inputDtos a stream of input DTOs to be processed
      * @return a Uni that emits the single output DTO produced from the streamed inputs
      */
-    private MethodSpec buildStreamingUnaryMethod(TypeName inputDto, TypeName outputDto) {
+    private MethodSpec buildStreamingUnaryMethod(TypeName inputDto, TypeName outputDto, String operationPath) {
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("process")
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST")).build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Path"))
-                .addMember("value", "$S", "/process")
+                .addMember("value", "$S", operationPath)
                 .build())
             .addModifiers(Modifier.PUBLIC, Modifier.ABSTRACT)
             .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputDto))
@@ -376,11 +377,11 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
      * @return a MethodSpec for a public abstract `process` method that accepts `versionTag`, `replayMode`, `cachePolicy`
      *         header parameters and a `Multi<inputDto>` named `inputDtos`, returning `Multi<outputDto>`
      */
-    private MethodSpec buildStreamingStreamingMethod(TypeName inputDto, TypeName outputDto) {
+    private MethodSpec buildStreamingStreamingMethod(TypeName inputDto, TypeName outputDto, String operationPath) {
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("process")
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST")).build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Path"))
-                .addMember("value", "$S", "/process")
+                .addMember("value", "$S", operationPath)
                 .build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Consumes"))
                 .addMember("value", "$S", "application/x-ndjson")
@@ -428,43 +429,8 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
             .build();
     }
 
-    private String deriveResourcePath(String className) {
-        if (className.endsWith("Service")) {
-            className = className.substring(0, className.length() - 7);
-        }
-
-        className = className.replace("Reactive", "");
-
-        String pathPart = className.replaceAll("([a-z])([A-Z])", "$1-$2")
-            .replaceAll("([A-Z]+)([A-Z][a-z])", "$1-$2")
-            .toLowerCase();
-
-        return "/api/v1/" + pathPart;
-    }
-
     private TypeName convertDomainToDtoType(TypeName domainType) {
-        if (domainType == null) {
-            return ClassName.OBJECT;
-        }
-
-        String domainTypeStr = domainType.toString();
-        String dtoTypeStr = domainTypeStr
-            .replace(".domain.", ".dto.")
-            .replace(".service.", ".dto.");
-
-        if (!dtoTypeStr.equals(domainTypeStr)) {
-            int lastDot = dtoTypeStr.lastIndexOf('.');
-            String packageName = lastDot > 0 ? dtoTypeStr.substring(0, lastDot) : "";
-            String simpleName = lastDot > 0 ? dtoTypeStr.substring(lastDot + 1) : dtoTypeStr;
-            String dtoSimpleName = simpleName + "Dto";
-            return ClassName.get(packageName, dtoSimpleName);
-        }
-
-        int lastDot = domainTypeStr.lastIndexOf('.');
-        String packageName = lastDot > 0 ? domainTypeStr.substring(0, lastDot) : "";
-        String simpleName = lastDot > 0 ? domainTypeStr.substring(lastDot + 1) : domainTypeStr;
-        String dtoSimpleName = simpleName + "Dto";
-        return ClassName.get(packageName, dtoSimpleName);
+        return DtoTypeUtils.toDtoType(domainType);
     }
 
     private void validateRestMappings(PipelineStepModel model) {

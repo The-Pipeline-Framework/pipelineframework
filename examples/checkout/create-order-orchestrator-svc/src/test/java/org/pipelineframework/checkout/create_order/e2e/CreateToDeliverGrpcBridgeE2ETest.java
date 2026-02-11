@@ -7,6 +7,8 @@ import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.pipelineframework.PipelineOutputBus;
 import org.pipelineframework.checkout.createorder.grpc.OrderReadySvc;
 import org.pipelineframework.checkout.deliverorder.grpc.OrderDispatchSvc;
@@ -17,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 @QuarkusTest
 @TestProfile(RealGrpcBridgeTestProfile.class)
+@Execution(ExecutionMode.SAME_THREAD)
 class CreateToDeliverGrpcBridgeE2ETest {
 
     @Inject
@@ -38,11 +41,11 @@ class CreateToDeliverGrpcBridgeE2ETest {
         pipelineOutputBus.publish(checkpoint);
         OrderDispatchSvc.ReadyOrder captured = waitForCaptured(Duration.ofSeconds(15));
 
+        assertNotNull(captured, "Expected deliver ingest endpoint to capture forwarded checkpoint");
         assertAll(
-            () -> assertNotNull(captured, "Expected deliver ingest endpoint to capture forwarded checkpoint"),
-            () -> assertEquals(checkpoint.getOrderId(), captured == null ? null : captured.getOrderId()),
-            () -> assertEquals(checkpoint.getCustomerId(), captured == null ? null : captured.getCustomerId()),
-            () -> assertEquals(checkpoint.getReadyAt(), captured == null ? null : captured.getReadyAt())
+            () -> assertEquals(checkpoint.getOrderId(), captured.getOrderId()),
+            () -> assertEquals(checkpoint.getCustomerId(), captured.getCustomerId()),
+            () -> assertEquals(checkpoint.getReadyAt(), captured.getReadyAt())
         );
     }
 

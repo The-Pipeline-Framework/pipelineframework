@@ -28,6 +28,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.pipelineframework.config.PlatformMode;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
@@ -91,5 +92,6 @@ class PipelineDiscoveryPhaseTest {
         assertNotNull(context.getModuleDir()); // Should be set to default path
         assertFalse(context.isPluginHost()); // Should be false since no plugin elements
         assertTrue(context.isTransportModeGrpc()); // Should be true by default
+        assertEquals(PlatformMode.COMPUTE, context.getPlatformMode()); // Should default to COMPUTE
     }
 }

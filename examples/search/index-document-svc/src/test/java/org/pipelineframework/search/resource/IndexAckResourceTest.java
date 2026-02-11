@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Mariano Barcia
+ * Copyright (c) 2023-2026 Mariano Barcia
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 
 @QuarkusTest
-class ProcessCrawlSourceResourceTest {
+class IndexAckResourceTest {
 
     @BeforeAll
     static void setUp() {
@@ -39,7 +39,7 @@ class ProcessCrawlSourceResourceTest {
         RestAssured.config =
                 RestAssured.config().sslConfig(SSLConfig.sslConfig().relaxedHTTPSValidation());
         RestAssured.port =
-                Integer.parseInt(System.getProperty("quarkus.http.test-ssl-port", "8444"));
+                Integer.parseInt(System.getProperty("quarkus.http.test-ssl-port", "8447"));
     }
 
     @AfterAll
@@ -49,12 +49,12 @@ class ProcessCrawlSourceResourceTest {
     }
 
     @Test
-    void testProcessCrawlSourceWithValidData() {
+    void testIndexAckWithValidData() {
         String requestBody =
                 """
                 {
                   "docId": "%s",
-                  "sourceUrl": "https://example.com/docs/alpha"
+                  "tokens": "search pipeline tokens"
                 }
                 """
                         .formatted(UUID.randomUUID());
@@ -62,34 +62,35 @@ class ProcessCrawlSourceResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-crawl-source/process")
+                .post("/api/v1/index-ack/")
                 .then()
                 .statusCode(200)
                 .body("docId", notNullValue())
-                .body("rawContent", notNullValue())
-                .body("fetchedAt", notNullValue());
+                .body("indexVersion", notNullValue())
+                .body("indexedAt", notNullValue())
+                .body("success", notNullValue());
     }
 
     @Test
-    void testProcessCrawlSourceWithInvalidUUID() {
+    void testIndexAckWithInvalidUUID() {
         String requestBody =
                 """
                 {
                   "docId": "invalid-uuid",
-                  "sourceUrl": "https://example.com/docs/alpha"
+                  "tokens": "search pipeline tokens"
                 }
                 """;
 
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-crawl-source/process")
+                .post("/api/v1/index-ack/")
                 .then()
                 .statusCode(400);
     }
 
     @Test
-    void testProcessCrawlSourceWithMissingRequiredFields() {
+    void testIndexAckWithMissingRequiredFields() {
         String requestBody =
                 """
                 {
@@ -101,7 +102,7 @@ class ProcessCrawlSourceResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-crawl-source/process")
+                .post("/api/v1/index-ack/")
                 .then()
                 .statusCode(400);
     }

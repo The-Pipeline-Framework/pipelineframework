@@ -10,6 +10,7 @@ import javax.annotation.processing.RoundEnvironment;
 import com.google.protobuf.DescriptorProtos;
 import lombok.Getter;
 import lombok.Setter;
+import org.pipelineframework.config.PlatformMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
 import org.pipelineframework.processor.ir.PipelineOrchestratorModel;
@@ -66,6 +67,7 @@ public class PipelineCompilationContext {
     @Setter
     private boolean orchestratorGenerated;
     private TransportMode transportMode;
+    private PlatformMode platformMode;
 
     @Setter
     private DescriptorProtos.FileDescriptorSet descriptorSet;
@@ -89,6 +91,7 @@ public class PipelineCompilationContext {
         this.pluginHost = false;
         this.orchestratorGenerated = false;
         this.transportMode = TransportMode.GRPC;
+        this.platformMode = PlatformMode.COMPUTE;
     }
 
     // Getters for additional properties
@@ -210,6 +213,53 @@ public class PipelineCompilationContext {
     }
 
     /**
+     * Returns the configured deployment platform mode.
+     *
+     * @return current platform mode
+     */
+    public PlatformMode getPlatformMode() {
+        return platformMode;
+    }
+
+    /**
+     * Indicates whether the current platform mode is FUNCTION.
+     *
+     * @return true when platform mode is FUNCTION
+     */
+    public boolean isPlatformModeFunction() {
+        return platformMode == PlatformMode.FUNCTION;
+    }
+
+    /**
+     * Indicates whether the current platform mode is COMPUTE.
+     *
+     * @return true when platform mode is COMPUTE
+     */
+    public boolean isPlatformModeCompute() {
+        return platformMode == PlatformMode.COMPUTE;
+    }
+
+    /**
+     * Backward-compatible alias for FUNCTION checks.
+     *
+     * @return true when platform mode is FUNCTION
+     */
+    @Deprecated(forRemoval = false)
+    public boolean isPlatformModeLambda() {
+        return isPlatformModeFunction();
+    }
+
+    /**
+     * Backward-compatible alias for COMPUTE checks.
+     *
+     * @return true when platform mode is COMPUTE
+     */
+    @Deprecated(forRemoval = false)
+    public boolean isPlatformModeStandard() {
+        return isPlatformModeCompute();
+    }
+
+    /**
      * Returns renderer bindings keyed by transport or target.
      *
      * @return renderer bindings keyed by transport or target
@@ -299,6 +349,15 @@ public class PipelineCompilationContext {
      */
     public void setTransportMode(TransportMode transportMode) {
         this.transportMode = transportMode == null ? TransportMode.GRPC : transportMode;
+    }
+
+    /**
+     * Sets the deployment platform mode, defaulting to COMPUTE when null.
+     *
+     * @param platformMode platform mode
+     */
+    public void setPlatformMode(PlatformMode platformMode) {
+        this.platformMode = platformMode == null ? PlatformMode.COMPUTE : platformMode;
     }
 
     /**

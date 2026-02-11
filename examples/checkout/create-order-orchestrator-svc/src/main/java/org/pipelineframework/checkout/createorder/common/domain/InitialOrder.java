@@ -11,8 +11,8 @@ public record InitialOrder(
     public InitialOrder {
         Objects.requireNonNull(orderId, "orderId must not be null");
         Objects.requireNonNull(customerId, "customerId must not be null");
-        if (itemCount < 0) {
-            throw new IllegalArgumentException("itemCount must be >= 0");
+        if (itemCount <= 0) {
+            throw new IllegalArgumentException("itemCount must be > 0");
         }
     }
 }

@@ -16,7 +16,9 @@ import org.pipelineframework.processor.ir.*;
 import org.pipelineframework.processor.renderer.*;
 import org.pipelineframework.processor.util.OrchestratorClientPropertiesGenerator;
 import org.pipelineframework.processor.util.PipelineOrderMetadataGenerator;
+import org.pipelineframework.processor.util.PipelinePlatformMetadataGenerator;
 import org.pipelineframework.processor.util.PipelineTelemetryMetadataGenerator;
+import org.pipelineframework.processor.util.ResourceNameUtils;
 import org.pipelineframework.processor.util.RoleMetadataGenerator;
 
 /**
@@ -29,6 +31,8 @@ import org.pipelineframework.processor.util.RoleMetadataGenerator;
 public class PipelineGenerationPhase implements PipelineCompilationPhase {
 
     private static final Logger LOG = Logger.getLogger(PipelineGenerationPhase.class);
+    private static final String ORCHESTRATOR_BINDING_KEY = "orchestrator";
+    private static final String SERVICE_SUFFIX = "Service";
 
     /**
      * Creates a new PipelineGenerationPhase.
@@ -57,15 +61,24 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         if (ctx.getStepModels().isEmpty() && !ctx.isOrchestratorGenerated()) {
             // Still need to write role metadata even if no models to process
             RoleMetadataGenerator roleMetadataGenerator = new RoleMetadataGenerator(ctx.getProcessingEnv());
+            PipelinePlatformMetadataGenerator platformMetadataGenerator =
+                new PipelinePlatformMetadataGenerator(ctx.getProcessingEnv());
             try {
                 roleMetadataGenerator.writeRoleMetadata();
-            } catch (Exception e) {
-                // Log the error but don't fail the entire compilation
-                // This can happen in test environments where the Filer doesn't properly create files
+            } catch (IOException e) {
                 if (ctx.getProcessingEnv() != null) {
                     ctx.getProcessingEnv().getMessager().printMessage(
                         javax.tools.Diagnostic.Kind.WARNING,
                         "Failed to write role metadata: " + e.getMessage());
+                }
+            }
+            try {
+                platformMetadataGenerator.writePlatformMetadata(ctx);
+            } catch (IOException e) {
+                if (ctx.getProcessingEnv() != null) {
+                    ctx.getProcessingEnv().getMessager().printMessage(
+                        javax.tools.Diagnostic.Kind.WARNING,
+                        "Failed to write platform metadata: " + e.getMessage());
                 }
             }
             return;
@@ -82,13 +95,18 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             new org.pipelineframework.processor.renderer.LocalClientStepRenderer();
         RestClientStepRenderer restClientRenderer = new RestClientStepRenderer();
         RestResourceRenderer restRenderer = new RestResourceRenderer();
+        RestFunctionHandlerRenderer restFunctionHandlerRenderer = new RestFunctionHandlerRenderer();
         OrchestratorGrpcRenderer orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
         OrchestratorRestResourceRenderer orchestratorRestRenderer = new OrchestratorRestResourceRenderer();
+        OrchestratorFunctionHandlerRenderer orchestratorFunctionHandlerRenderer =
+            new OrchestratorFunctionHandlerRenderer();
         OrchestratorCliRenderer orchestratorCliRenderer = new OrchestratorCliRenderer();
         OrchestratorIngestClientRenderer orchestratorIngestClientRenderer = new OrchestratorIngestClientRenderer();
 
         // Initialize role metadata generator
         RoleMetadataGenerator roleMetadataGenerator = new RoleMetadataGenerator(ctx.getProcessingEnv());
+        PipelinePlatformMetadataGenerator platformMetadataGenerator =
+            new PipelinePlatformMetadataGenerator(ctx.getProcessingEnv());
 
         // Get the cache key generator
         ClassName cacheKeyGenerator = resolveCacheKeyGenerator(ctx);
@@ -119,7 +137,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 clientRenderer,
                 localClientRenderer,
                 restClientRenderer,
-                restRenderer
+                restRenderer,
+                restFunctionHandlerRenderer
             );
         }
 
@@ -129,7 +148,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
 
         // Generate orchestrator artifacts if needed
         if (ctx.isOrchestratorGenerated()) {
-            OrchestratorBinding orchestratorBinding = (OrchestratorBinding) bindingsMap.get("orchestrator");
+            OrchestratorBinding orchestratorBinding = (OrchestratorBinding) bindingsMap.get(ORCHESTRATOR_BINDING_KEY);
             if (orchestratorBinding != null) {
                 generateOrchestratorServer(
                     ctx,
@@ -137,6 +156,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     orchestratorBinding.cliName() != null, // Using cliName as indicator for CLI generation
                     orchestratorGrpcRenderer,
                     orchestratorRestRenderer,
+                    orchestratorFunctionHandlerRenderer,
                     orchestratorCliRenderer,
                     orchestratorIngestClientRenderer,
                     roleMetadataGenerator,
@@ -148,6 +168,23 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         // Write role metadata
         try {
             roleMetadataGenerator.writeRoleMetadata();
+        } catch (IOException e) {
+            if (ctx.getProcessingEnv() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.WARNING,
+                    "Failed to write role metadata: " + e.getMessage());
+            }
+        }
+        try {
+            platformMetadataGenerator.writePlatformMetadata(ctx);
+        } catch (IOException e) {
+            if (ctx.getProcessingEnv() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.WARNING,
+                    "Failed to write platform metadata: " + e.getMessage());
+            }
+        }
+        try {
             if (ctx.isOrchestratorGenerated()) {
                 PipelineOrderMetadataGenerator orderMetadataGenerator =
                     new PipelineOrderMetadataGenerator(ctx.getProcessingEnv());
@@ -159,14 +196,11 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     new OrchestratorClientPropertiesGenerator(ctx.getProcessingEnv());
                 clientPropertiesGenerator.writeClientProperties(ctx);
             }
-        } catch (Exception e) {
-            // Log the error but don't fail the entire compilation
-            // This can happen in test environments where the Filer doesn't properly create files
-            // or when the file is already opened by another process
+        } catch (IOException e) {
             if (ctx.getProcessingEnv() != null) {
                 ctx.getProcessingEnv().getMessager().printMessage(
                     javax.tools.Diagnostic.Kind.WARNING,
-                    "Failed to write role metadata: " + e.getMessage());
+                    "Failed to write orchestrator metadata: " + e.getMessage());
             }
         }
     }
@@ -437,6 +471,13 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         return sb.toString();
     }
 
+    private String trimServiceSuffix(String generatedName) {
+        if (generatedName != null && generatedName.endsWith(SERVICE_SUFFIX)) {
+            return generatedName.substring(0, generatedName.length() - SERVICE_SUFFIX.length());
+        }
+        return generatedName;
+    }
+
     /**
      * Generate all source and metadata artifacts for a single pipeline step according to its enabled generation targets.
      *
@@ -458,6 +499,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
      * @param localClientRenderer renderer responsible for producing local-transport client step classes
      * @param restClientRenderer renderer responsible for producing REST client step classes
      * @param restRenderer renderer responsible for producing REST resource classes
+     * @param restFunctionHandlerRenderer renderer responsible for producing native function handlers for unary REST resources
      * @throws IOException if an I/O error occurs while writing generated sources or renderers perform IO
      */
     private void generateArtifacts(
@@ -474,10 +516,13 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             org.pipelineframework.processor.renderer.ClientStepRenderer clientRenderer,
             org.pipelineframework.processor.renderer.LocalClientStepRenderer localClientRenderer,
             RestClientStepRenderer restClientRenderer,
-            RestResourceRenderer restRenderer) throws IOException {
+            RestResourceRenderer restRenderer,
+            RestFunctionHandlerRenderer restFunctionHandlerRenderer) throws IOException {
         
-        Set<String> enabledAspects = ctx.getAspectModels().stream()
-            .map(aspect -> aspect.name().toLowerCase())
+        Set<String> enabledAspects = Optional.ofNullable(ctx.getAspectModels())
+            .orElse(List.of())
+            .stream()
+            .map(aspect -> aspect.name().toLowerCase(Locale.ROOT))
             .collect(java.util.stream.Collectors.toUnmodifiableSet());
 
         for (GenerationTarget target : model.enabledTargets()) {
@@ -535,8 +580,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     if (model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER && ctx.isPluginHost()) {
                         break;
                     }
-                    String clientClassName = model.servicePackage() + ".pipeline." +
-                            model.generatedName().replace("Service", "") + "GrpcClientStep";
+                    String clientClassName = model.servicePackage() + ".pipeline."
+                        + trimServiceSuffix(model.generatedName()) + "GrpcClientStep";
                     org.pipelineframework.processor.ir.DeploymentRole clientRole = resolveClientRole(model.deploymentRole());
                     clientRenderer.render(grpcBinding, new GenerationContext(
                         ctx.getProcessingEnv(),
@@ -572,8 +617,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                                 "' because no local binding is available.");
                         break;
                     }
-                    String localClientClassName = model.servicePackage() + ".pipeline." +
-                        model.generatedName().replace("Service", "") + "LocalClientStep";
+                    String localClientClassName = model.servicePackage() + ".pipeline."
+                        + trimServiceSuffix(model.generatedName()) + "LocalClientStep";
                     org.pipelineframework.processor.ir.DeploymentRole localClientRole = resolveClientRole(model.deploymentRole());
                     localClientRenderer.render(localBinding, new GenerationContext(
                         ctx.getProcessingEnv(),
@@ -603,8 +648,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                                 "' because no REST binding is available.");
                         break;
                     }
-                    String restClassName = model.servicePackage() + ".pipeline." +
-                            model.generatedName().replace("Service", "").replace("Reactive", "") + "Resource";
+                    String restClassName = model.servicePackage() + ".pipeline."
+                        + ResourceNameUtils.normalizeBaseName(model.generatedName()) + "Resource";
                     org.pipelineframework.processor.ir.DeploymentRole restRole = org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER;
                     restRenderer.render(restBinding, new GenerationContext(
                         ctx.getProcessingEnv(),
@@ -614,6 +659,19 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                         cacheKeyGenerator,
                         descriptorSet));
                     roleMetadataGenerator.recordClassWithRole(restClassName, restRole.name());
+
+                    if (ctx.isPlatformModeFunction() && model.streamingShape() == StreamingShape.UNARY_UNARY) {
+                        String handlerClassName =
+                            RestFunctionHandlerRenderer.handlerFqcn(model.servicePackage(), model.generatedName());
+                        restFunctionHandlerRenderer.render(restBinding, new GenerationContext(
+                            ctx.getProcessingEnv(),
+                            resolveRoleOutputDir(ctx, restRole),
+                            restRole,
+                            enabledAspects,
+                            cacheKeyGenerator,
+                            descriptorSet));
+                        roleMetadataGenerator.recordClassWithRole(handlerClassName, restRole.name());
+                    }
                 }
                 case REST_CLIENT_STEP -> {
                     if (model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER && ctx.isPluginHost()) {
@@ -625,8 +683,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                                 "' because no REST binding is available.");
                         break;
                     }
-                    String restClientClassName = model.servicePackage() + ".pipeline." +
-                            model.generatedName().replace("Service", "") + "RestClientStep";
+                    String restClientClassName = model.servicePackage() + ".pipeline."
+                        + trimServiceSuffix(model.generatedName()) + "RestClientStep";
                     org.pipelineframework.processor.ir.DeploymentRole restClientRole = resolveClientRole(model.deploymentRole());
                     restClientRenderer.render(restBinding, new GenerationContext(
                         ctx.getProcessingEnv(),
@@ -689,7 +747,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 .addAnnotation(com.squareup.javapoet.AnnotationSpec.builder(
                     com.squareup.javapoet.ClassName.get("org.pipelineframework.annotation", "GeneratedRole"))
                 .addMember("value", "$T.$L",
-                    com.squareup.javapoet.ClassName.get("org.pipelineframework.annotation.GeneratedRole", "Role"),
+                    com.squareup.javapoet.ClassName.get("org.pipelineframework.annotation", "GeneratedRole", "Role"),
                     role.name())
                 .build());
 
@@ -935,6 +993,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
      * @param generateCli whether to generate the CLI orchestrator client
      * @param orchestratorGrpcRenderer renderer for gRPC orchestrator server artifacts
      * @param orchestratorRestRenderer renderer for REST orchestrator server artifacts
+     * @param orchestratorFunctionHandlerRenderer renderer for native function orchestrator handlers
      * @param orchestratorCliRenderer renderer for CLI orchestrator client artifacts
      * @param orchestratorIngestClientRenderer renderer for orchestrator ingest client artifacts
      * @param roleMetadataGenerator generator that records generated classes by deployment role
@@ -946,6 +1005,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             boolean generateCli,
             OrchestratorGrpcRenderer orchestratorGrpcRenderer,
             OrchestratorRestResourceRenderer orchestratorRestRenderer,
+            OrchestratorFunctionHandlerRenderer orchestratorFunctionHandlerRenderer,
             OrchestratorCliRenderer orchestratorCliRenderer,
             OrchestratorIngestClientRenderer orchestratorIngestClientRenderer,
             RoleMetadataGenerator roleMetadataGenerator,
@@ -969,6 +1029,18 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     java.util.Set.of(),
                     cacheKeyGenerator,
                     descriptorSet));
+                if (ctx.isPlatformModeFunction() && !binding.inputStreaming() && !binding.outputStreaming()) {
+                    orchestratorFunctionHandlerRenderer.render(binding, new GenerationContext(
+                        ctx.getProcessingEnv(),
+                        resolveRoleOutputDir(ctx, role),
+                        role,
+                        java.util.Set.of(),
+                        cacheKeyGenerator,
+                        descriptorSet));
+                    roleMetadataGenerator.recordClassWithRole(
+                        OrchestratorFunctionHandlerRenderer.handlerFqcn(binding.basePackage()),
+                        role.name());
+                }
             } else if (!local) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.PIPELINE_SERVER;
                 orchestratorGrpcRenderer.render(binding, new GenerationContext(

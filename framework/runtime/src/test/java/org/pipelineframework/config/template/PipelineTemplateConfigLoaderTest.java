@@ -20,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -71,6 +72,7 @@ class PipelineTemplateConfigLoaderTest {
         assertEquals("Test App", config.appName());
         assertEquals("com.example.test", config.basePackage());
         assertEquals("GRPC", config.transport());
+        assertEquals(PipelinePlatform.COMPUTE, config.platform());
         assertEquals(1, config.steps().size());
 
         PipelineTemplateStep step = config.steps().get(0);
@@ -99,5 +101,43 @@ class PipelineTemplateConfigLoaderTest {
         assertEquals("GLOBAL", cache.scope());
         assertEquals("AFTER_STEP", cache.position());
         assertEquals(0, cache.order());
+    }
+
+    @Test
+    void platformCanBeOverriddenViaSystemProperty() throws Exception {
+        String yaml = """
+            appName: "Test App"
+            basePackage: "com.example.test"
+            transport: "REST"
+            platform: "COMPUTE"
+            steps: []
+            """;
+        Path configPath = tempDir.resolve("pipeline-config.yaml");
+        Files.writeString(configPath, yaml);
+
+        Function<String, String> propertyLookup = key -> "pipeline.platform".equals(key) ? "LAMBDA" : null;
+        PipelineTemplateConfigLoader loader = new PipelineTemplateConfigLoader(propertyLookup, key -> null);
+        PipelineTemplateConfig config = loader.load(configPath);
+        assertEquals(PipelinePlatform.FUNCTION, config.platform());
+        assertEquals("REST", config.transport());
+    }
+
+    @Test
+    void loadsExplicitComputePlatformWithoutOverrides() throws Exception {
+        String yaml = """
+            appName: "Test App"
+            basePackage: "com.example.test"
+            transport: "REST"
+            platform: "COMPUTE"
+            steps: []
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-explicit-compute.yaml");
+        Files.writeString(configPath, yaml);
+
+        PipelineTemplateConfigLoader loader = new PipelineTemplateConfigLoader(key -> null, key -> null);
+        PipelineTemplateConfig config = loader.load(configPath);
+
+        assertEquals(PipelinePlatform.COMPUTE, config.platform());
+        assertEquals("REST", config.transport());
     }
 }

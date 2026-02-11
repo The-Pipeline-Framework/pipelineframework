@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class CheckoutReferenceContractTest {
 
     private static final String CREATE_ORDER_CONFIG = "examples/checkout/config/create-order-pipeline.yaml";
-    private static final String DELIVER_ORDER_CONFIG = "examples/checkout/config/deliver-order-pipeline.yaml";
+    private static final String DELIVER_ORDER_CONFIG = "examples/checkout/deliver-order-orchestrator-svc/pipeline.yaml";
 
     @Test
     void checkpointOutputMatchesNextPipelineInputContract() {
@@ -74,6 +74,9 @@ class CheckoutReferenceContractTest {
         if (workspaceRoot != null && !workspaceRoot.isBlank()) {
             Path explicitRoot = Path.of(workspaceRoot).normalize();
             Path explicitCandidate = explicitRoot.resolve(relativePath).normalize();
+            if (!Files.exists(explicitCandidate)) {
+                throw new AssertionError("workspace.root/WORKSPACE_ROOT is set but file was not found: " + explicitCandidate);
+            }
             if (Files.exists(explicitCandidate)) {
                 return explicitCandidate;
             }
@@ -81,7 +84,11 @@ class CheckoutReferenceContractTest {
 
         var classpathResource = CheckoutReferenceContractTest.class.getClassLoader().getResource(relativePath);
         if (classpathResource != null && "file".equalsIgnoreCase(classpathResource.getProtocol())) {
-            return Path.of(java.net.URI.create(classpathResource.toString())).normalize();
+            try {
+                return Path.of(classpathResource.toURI()).normalize();
+            } catch (java.net.URISyntaxException e) {
+                throw new AssertionError("Could not convert classpath resource URI: " + classpathResource, e);
+            }
         }
 
         Path userDir = Path.of(System.getProperty("user.dir")).normalize();

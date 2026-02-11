@@ -25,6 +25,7 @@ import java.util.Map;
  * @param appName the application name
  * @param basePackage the base Java package
  * @param transport the global transport (GRPC, REST, or LOCAL)
+ * @param platform the runtime/deployment platform mode
  * @param steps the pipeline steps defined in the template
  * @param aspects the aspect configurations keyed by aspect name
  */
@@ -32,7 +33,26 @@ public record PipelineTemplateConfig(
     String appName,
     String basePackage,
     String transport,
+    PipelinePlatform platform,
     List<PipelineTemplateStep> steps,
     Map<String, PipelineTemplateAspect> aspects
 ) {
+    /**
+     * Backward-compatible constructor used by existing code paths.
+     *
+     * @param appName app name
+     * @param basePackage base package
+     * @param transport transport
+     * @param steps steps
+     * @param aspects aspects
+     */
+    public PipelineTemplateConfig(
+        String appName,
+        String basePackage,
+        String transport,
+        List<PipelineTemplateStep> steps,
+        Map<String, PipelineTemplateAspect> aspects
+    ) {
+        this(appName, basePackage, transport, PipelinePlatform.COMPUTE, steps, aspects);
+    }
 }

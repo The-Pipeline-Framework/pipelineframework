@@ -7,6 +7,8 @@ import io.smallrye.mutiny.subscription.Cancellable;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
+import java.time.Duration;
+import java.util.Objects;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.pipelineframework.PipelineOutputBus;
@@ -40,22 +42,23 @@ public class DeliverToNextIngestBridge {
         }
 
         Multi<OrderDeliveredSvc.DeliveredOrder> deliveredStream = outputBus.stream(Object.class)
-            .onItem().transformToMulti(item -> {
-                OrderDeliveredSvc.DeliveredOrder mapped = toDeliveredOrder(item);
-                return mapped == null ? Multi.createFrom().empty() : Multi.createFrom().item(mapped);
-            }).concatenate();
+            .onItem().transform(this::toDeliveredOrder)
+            .select().where(Objects::nonNull)
+            .onFailure().invoke(error -> LOG.error("Deliver->next stream failed before forwarding", error))
+            .onFailure().retry().withBackOff(Duration.ofMillis(100), Duration.ofSeconds(1)).atMost(5);
 
-        forwardingSubscription = forwardClient.forward(
-            deliveredStream.onFailure().invoke(error ->
-                LOG.error("Deliver->next stream failed before forwarding", error))
-        );
+        forwardingSubscription = forwardClient.forward(deliveredStream);
         LOG.infof("Deliver->next forwarding bridge started using client %s", forwardClient.getClass().getName());
     }
 
     @PreDestroy
     void onShutdown() {
         if (forwardingSubscription != null) {
+            LOG.infof("Cancelling deliver->next forwarding subscription %s", forwardingSubscription);
             forwardingSubscription.cancel();
+            LOG.info("Deliver->next forwarding subscription cancelled");
+        } else {
+            LOG.info("Deliver->next forwarding subscription was not active at shutdown");
         }
     }
 
@@ -87,9 +90,8 @@ public class DeliverToNextIngestBridge {
             return null;
         }
         LOG.debugf(
-            "Dropped unsupported deliver->next item type=%s value=%s",
-            item == null ? "null" : item.getClass().getName(),
-            item);
+            "Dropped unsupported deliver->next item type=%s",
+            item == null ? "null" : item.getClass().getName());
         return null;
     }
 
@@ -99,9 +101,6 @@ public class DeliverToNextIngestBridge {
             return "";
         }
         Object value = message.getField(field);
-        if (value == null) {
-            return "";
-        }
         return switch (field.getJavaType()) {
             case STRING, INT, LONG, FLOAT, DOUBLE, BOOLEAN, ENUM -> String.valueOf(value);
             case BYTE_STRING, MESSAGE -> "";

@@ -15,10 +15,16 @@ public class ReadyOrderGrpcMapper implements Mapper<OrderReadySvc.ReadyOrder, Re
         if (grpc == null) {
             throw new IllegalArgumentException("grpc must not be null");
         }
+        var orderId = OrderRequestGrpcMapper.asUuid(grpc.getOrderId());
+        var customerId = OrderRequestGrpcMapper.asUuid(grpc.getCustomerId());
+        var readyAt = OrderRequestGrpcMapper.asInstant(grpc.getReadyAt());
+        if (orderId == null || customerId == null || readyAt == null) {
+            throw new IllegalArgumentException("grpc must include orderId, customerId and readyAt");
+        }
         return new ReadyOrderDto(
-            OrderRequestGrpcMapper.asUuid(grpc.getOrderId()),
-            OrderRequestGrpcMapper.asUuid(grpc.getCustomerId()),
-            OrderRequestGrpcMapper.asInstant(grpc.getReadyAt()));
+            orderId,
+            customerId,
+            readyAt);
     }
 
     @Override

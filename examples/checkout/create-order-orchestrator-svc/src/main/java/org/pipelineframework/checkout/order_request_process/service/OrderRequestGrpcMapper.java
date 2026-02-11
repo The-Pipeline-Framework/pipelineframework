@@ -63,10 +63,7 @@ public class OrderRequestGrpcMapper implements Mapper<OrderRequestProcessSvc.Ord
     }
 
     public static String asString(UUID value) {
-        if (value == null) {
-            throw new IllegalArgumentException("UUID value must not be null");
-        }
-        return value.toString();
+        return value == null ? "" : value.toString();
     }
 
     public static String asString(Instant value) {

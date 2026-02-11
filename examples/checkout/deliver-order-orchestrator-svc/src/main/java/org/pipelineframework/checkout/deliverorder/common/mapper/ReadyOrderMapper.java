@@ -19,7 +19,7 @@ public class ReadyOrderMapper implements Mapper<OrderDispatchSvc.ReadyOrder, Rea
         UUID customerId = uuid(grpc.getCustomerId(), "customerId");
         Instant readyAt = instant(grpc.getReadyAt(), "readyAt");
         if (orderId == null || customerId == null || readyAt == null) {
-            throw new IllegalArgumentException("grpc ReadyOrder must include orderId, customerId and readyAt");
+            throw new ReadyOrderMapperException("grpc ReadyOrder must include orderId, customerId and readyAt");
         }
         return new ReadyOrder(
             orderId,

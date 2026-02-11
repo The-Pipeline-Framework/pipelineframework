@@ -18,7 +18,7 @@ package org.pipelineframework.search.resource;
 
 import java.util.UUID;
 
-import io.quarkus.test.junit.QuarkusIntegrationTest;
+import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.RestAssured;
 import io.restassured.config.SSLConfig;
 import io.restassured.http.ContentType;
@@ -29,8 +29,9 @@ import org.junit.jupiter.api.Test;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 
-@QuarkusIntegrationTest
-class ProcessParseDocumentResourceIT {
+@QuarkusTest
+class ParsedDocumentResourceTest {
+    private static final String PARSED_DOCUMENT_ENDPOINT = "/api/v1/parsed-document/";
 
     @BeforeAll
     static void setUp() {
@@ -62,7 +63,7 @@ class ProcessParseDocumentResourceIT {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-parse-document/process")
+                .post(PARSED_DOCUMENT_ENDPOINT)
                 .then()
                 .statusCode(200)
                 .body("docId", notNullValue())
@@ -84,9 +85,9 @@ class ProcessParseDocumentResourceIT {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-parse-document/process")
+                .post(PARSED_DOCUMENT_ENDPOINT)
                 .then()
-                .statusCode(500);
+                .statusCode(400);
     }
 
     @Test
@@ -102,7 +103,7 @@ class ProcessParseDocumentResourceIT {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/process-parse-document/process")
+                .post(PARSED_DOCUMENT_ENDPOINT)
                 .then()
                 .statusCode(400);
     }
