@@ -84,9 +84,7 @@ class RestFunctionHandlerRendererTest {
         Path generatedSource =
             tempDir.resolve("org/example/search/parse/service/pipeline/ParsedDocumentFunctionHandler.java");
         String source = Files.readString(generatedSource);
-        assertTrue(source.contains("implements RequestHandler<"));
-        assertTrue(source.contains("Multi<ParsedDocumentDto>"));
-        assertTrue(source.contains("IndexAckDto>"));
+        assertTrue(source.contains("implements RequestHandler<Multi<ParsedDocumentDto>, IndexAckDto>"));
         assertTrue(source.contains("return FunctionTransportBridge.invokeManyToOne(input, transportContext, source, invoke, sink)"));
     }
 

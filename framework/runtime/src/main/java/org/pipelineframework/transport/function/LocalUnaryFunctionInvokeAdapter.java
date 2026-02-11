@@ -52,7 +52,13 @@ public final class LocalUnaryFunctionInvokeAdapter<I, O> implements FunctionInvo
     @Override
     public Uni<TraceEnvelope<O>> invokeOneToOne(TraceEnvelope<I> input, FunctionTransportContext context) {
         Objects.requireNonNull(input, "input envelope must not be null");
-        return delegate.apply(input.payload())
+        Objects.requireNonNull(context, "context must not be null");
+        I payload = input.payload();
+        if (payload == null) {
+            return Uni.createFrom().failure(new NullPointerException(
+                "LocalUnaryFunctionInvokeAdapter input payload must not be null"));
+        }
+        return delegate.apply(payload)
             .onItem().ifNull().failWith(() -> new NullPointerException(
                 "LocalUnaryFunctionInvokeAdapter delegate emitted null output"))
             .onItem()

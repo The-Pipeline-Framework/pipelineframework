@@ -37,7 +37,7 @@ public final class DefaultUnaryFunctionSinkAdapter<O> implements FunctionSinkAda
     }
 
     private O extractUnaryPayload(List<TraceEnvelope<O>> envelopes) {
-        if (envelopes == null || envelopes.isEmpty()) {
+        if (envelopes.isEmpty()) {
             throw new IllegalStateException("Function sink expected exactly one output envelope but received none.");
         }
         if (envelopes.size() > 1) {

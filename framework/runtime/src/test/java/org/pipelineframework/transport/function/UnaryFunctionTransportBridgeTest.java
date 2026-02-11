@@ -18,12 +18,24 @@ package org.pipelineframework.transport.function;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class UnaryFunctionTransportBridgeTest {
+    private LocalUnaryFunctionInvokeAdapter<String, Integer> invokeAdapter;
+    private DefaultUnaryFunctionSinkAdapter<Integer> sinkAdapter;
+
+    @BeforeEach
+    void setUp() {
+        invokeAdapter = new LocalUnaryFunctionInvokeAdapter<>(
+            payload -> Uni.createFrom().item(payload.length()),
+            "search.raw-document.length",
+            "v1");
+        sinkAdapter = new DefaultUnaryFunctionSinkAdapter<>();
+    }
 
     @Test
     void executesUnarySourceInvokeSinkFlow() {
@@ -31,13 +43,8 @@ class UnaryFunctionTransportBridgeTest {
         DefaultUnaryFunctionSourceAdapter<String> source = new DefaultUnaryFunctionSourceAdapter<>(
             "search.raw-document",
             "v1");
-        LocalUnaryFunctionInvokeAdapter<String, Integer> invoke = new LocalUnaryFunctionInvokeAdapter<>(
-            payload -> Uni.createFrom().item(payload.length()),
-            "search.raw-document.length",
-            "v1");
-        DefaultUnaryFunctionSinkAdapter<Integer> sink = new DefaultUnaryFunctionSinkAdapter<>();
 
-        Integer response = UnaryFunctionTransportBridge.invoke("hello", context, source, invoke, sink);
+        Integer response = UnaryFunctionTransportBridge.invoke("hello", context, source, invokeAdapter, sinkAdapter);
 
         assertEquals(5, response);
     }
@@ -48,15 +55,9 @@ class UnaryFunctionTransportBridgeTest {
         FunctionSourceAdapter<String, String> source = (event, ctx) -> Multi.createFrom().items(
             TraceEnvelope.root("trace-a", "item-a", "search.raw-document", "v1", "idem-a", event),
             TraceEnvelope.root("trace-b", "item-b", "search.raw-document", "v1", "idem-b", event));
-        LocalUnaryFunctionInvokeAdapter<String, Integer> invoke = new LocalUnaryFunctionInvokeAdapter<>(
-            payload -> Uni.createFrom().item(payload.length()),
-            "search.raw-document.length",
-            "v1");
-        DefaultUnaryFunctionSinkAdapter<Integer> sink = new DefaultUnaryFunctionSinkAdapter<>();
-
         IllegalStateException ex = assertThrows(
             IllegalStateException.class,
-            () -> UnaryFunctionTransportBridge.invoke("hello", context, source, invoke, sink));
+            () -> UnaryFunctionTransportBridge.invoke("hello", context, source, invokeAdapter, sinkAdapter));
         assertEquals("Function transport expected exactly one source item but received 2.", ex.getMessage());
     }
 
@@ -64,15 +65,9 @@ class UnaryFunctionTransportBridgeTest {
     void rejectsEmptyIngressShape() {
         FunctionTransportContext context = FunctionTransportContext.of("req-3", "search-handler", "ingress");
         FunctionSourceAdapter<String, String> source = (event, ctx) -> Multi.createFrom().empty();
-        LocalUnaryFunctionInvokeAdapter<String, Integer> invoke = new LocalUnaryFunctionInvokeAdapter<>(
-            payload -> Uni.createFrom().item(payload.length()),
-            "search.raw-document.length",
-            "v1");
-        DefaultUnaryFunctionSinkAdapter<Integer> sink = new DefaultUnaryFunctionSinkAdapter<>();
-
         IllegalStateException ex = assertThrows(
             IllegalStateException.class,
-            () -> UnaryFunctionTransportBridge.invoke("hello", context, source, invoke, sink));
+            () -> UnaryFunctionTransportBridge.invoke("hello", context, source, invokeAdapter, sinkAdapter));
         assertEquals("Function transport expected exactly one source item but received 0.", ex.getMessage());
     }
 }

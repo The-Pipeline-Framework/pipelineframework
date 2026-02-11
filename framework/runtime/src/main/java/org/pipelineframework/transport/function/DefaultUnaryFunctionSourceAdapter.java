@@ -46,13 +46,7 @@ public final class DefaultUnaryFunctionSourceAdapter<I> implements FunctionSourc
     @Override
     public Multi<TraceEnvelope<I>> adapt(I event, FunctionTransportContext context) {
         Objects.requireNonNull(context, "context must not be null");
-        String requestId = context.requestId();
-        String traceId;
-        if (requestId == null || requestId.isBlank()) {
-            traceId = normalizeOrDefault(null, UUID.randomUUID().toString());
-        } else {
-            traceId = normalizeOrDefault(requestId, "");
-        }
+        String traceId = deriveTraceId(context.requestId());
         String itemId = UUID.randomUUID().toString();
         String idempotencyKey = traceId + ":" + payloadModel + ":" + itemId;
 
@@ -90,5 +84,12 @@ public final class DefaultUnaryFunctionSourceAdapter<I> implements FunctionSourc
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? fallback : trimmed;
+    }
+
+    private static String deriveTraceId(String requestId) {
+        if (requestId == null || requestId.isBlank()) {
+            return UUID.randomUUID().toString();
+        }
+        return normalizeOrDefault(requestId, "");
     }
 }

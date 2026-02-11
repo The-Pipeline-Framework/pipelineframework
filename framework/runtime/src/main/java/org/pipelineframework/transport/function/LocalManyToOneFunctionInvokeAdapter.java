@@ -55,6 +55,8 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
     @Override
     public Uni<TraceEnvelope<O>> invokeManyToOne(Multi<TraceEnvelope<I>> input, FunctionTransportContext context) {
         Objects.requireNonNull(input, "input stream must not be null");
+        Objects.requireNonNull(context, "context must not be null");
+        // Materialization is intentional for N->1 collapse to build one correlated output envelope.
         return input.collect().asList().onItem().transformToUni(envelopes -> {
             Multi<I> payloadStream = Multi.createFrom().iterable(envelopes).onItem().transform(TraceEnvelope::payload);
             return delegate.apply(payloadStream)
@@ -65,12 +67,9 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
     }
 
     private TraceEnvelope<O> createOutputEnvelope(List<TraceEnvelope<I>> envelopes, O output) {
-        String traceId = envelopes.isEmpty() ? UUID.randomUUID().toString() : normalizeOrDefault(envelopes.get(0).traceId(), UUID.randomUUID().toString());
-        String idempotencyKey = envelopes.isEmpty()
-            ? traceId + ":" + outputPayloadModel + ":" + UUID.randomUUID()
-            : normalizeOrDefault(envelopes.get(0).idempotencyKey(), traceId + ":" + outputPayloadModel + ":" + UUID.randomUUID());
-        String previousItemId = envelopes.isEmpty() ? null : envelopes.get(envelopes.size() - 1).itemId();
-        TraceLink previous = previousItemId == null ? null : TraceLink.reference(previousItemId);
+        String traceId = computeTraceId(envelopes);
+        String idempotencyKey = computeIdempotencyKey(envelopes, traceId);
+        TraceLink previous = computePreviousTraceLink(envelopes);
         return new TraceEnvelope<>(
             traceId,
             null,
@@ -82,6 +81,29 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
             output,
             null,
             Map.of());
+    }
+
+    private String computeTraceId(List<TraceEnvelope<I>> envelopes) {
+        if (envelopes.isEmpty()) {
+            return UUID.randomUUID().toString();
+        }
+        return normalizeOrDefault(envelopes.get(0).traceId(), UUID.randomUUID().toString());
+    }
+
+    private String computeIdempotencyKey(List<TraceEnvelope<I>> envelopes, String traceId) {
+        String fallback = traceId + ":" + outputPayloadModel + ":" + UUID.randomUUID();
+        if (envelopes.isEmpty()) {
+            return fallback;
+        }
+        return normalizeOrDefault(envelopes.get(0).idempotencyKey(), fallback);
+    }
+
+    private TraceLink computePreviousTraceLink(List<TraceEnvelope<I>> envelopes) {
+        if (envelopes.isEmpty()) {
+            return null;
+        }
+        String previousItemId = envelopes.get(envelopes.size() - 1).itemId();
+        return previousItemId == null ? null : TraceLink.reference(previousItemId);
     }
 
     private static String normalizeOrDefault(String value, String fallback) {

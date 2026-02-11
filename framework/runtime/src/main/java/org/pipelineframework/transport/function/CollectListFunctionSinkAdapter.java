@@ -17,7 +17,6 @@
 package org.pipelineframework.transport.function;
 
 import java.util.List;
-import java.util.Objects;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
@@ -31,8 +30,9 @@ public final class CollectListFunctionSinkAdapter<O> implements FunctionSinkAdap
 
     @Override
     public Uni<List<O>> emitMany(Multi<TraceEnvelope<O>> items, FunctionTransportContext context) {
-        Objects.requireNonNull(items, "items must not be null");
-        Objects.requireNonNull(context, "context must not be null");
+        if (items == null) {
+            return Uni.createFrom().failure(new NullPointerException("items must not be null"));
+        }
         return items.onItem().transform(envelope -> envelope == null ? null : envelope.payload()).collect().asList();
     }
 }

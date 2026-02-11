@@ -50,18 +50,21 @@ public final class MultiFunctionSourceAdapter<I> implements FunctionSourceAdapte
         String traceId = normalizeOrDefault(context.requestId(), UUID.randomUUID().toString());
         Map<String, String> meta = buildMeta(context);
 
-        return event.onItem().transform(item -> new TraceEnvelope<>(
-            traceId,
-            null,
-            UUID.randomUUID().toString(),
-            null,
-            payloadModel,
-            payloadModelVersion,
-            traceId + ":" + payloadModel + ":" + UUID.randomUUID(),
-            item,
-            null,
-            meta
-        ));
+        return event.onItem().transform(item -> {
+            String envelopeId = UUID.randomUUID().toString();
+            return new TraceEnvelope<>(
+                traceId,
+                null,
+                envelopeId,
+                null,
+                payloadModel,
+                payloadModelVersion,
+                traceId + ":" + payloadModel + ":" + envelopeId,
+                item,
+                null,
+                meta
+            );
+        });
     }
 
     private static Map<String, String> buildMeta(FunctionTransportContext context) {
@@ -74,7 +77,7 @@ public final class MultiFunctionSourceAdapter<I> implements FunctionSourceAdapte
                 if (!"functionName".equals(key)
                     && !"stage".equals(key)
                     && !"requestId".equals(key)) {
-                    meta.put(key, value);
+                    meta.put(key, normalizeOrDefault(value, ""));
                 }
             });
         }

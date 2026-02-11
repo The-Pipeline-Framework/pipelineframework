@@ -44,6 +44,10 @@ public final class UnaryFunctionTransportBridge {
             FunctionInvokeAdapter<I, O> invokeAdapter,
             FunctionSinkAdapter<O, O> sinkAdapter) {
         Objects.requireNonNull(event, "event must not be null");
+        Objects.requireNonNull(context, "context must not be null");
+        Objects.requireNonNull(sourceAdapter, "sourceAdapter must not be null");
+        Objects.requireNonNull(invokeAdapter, "invokeAdapter must not be null");
+        Objects.requireNonNull(sinkAdapter, "sinkAdapter must not be null");
         return FunctionTransportBridge.invokeOneToOne(event, context, sourceAdapter, invokeAdapter, sinkAdapter);
     }
 }

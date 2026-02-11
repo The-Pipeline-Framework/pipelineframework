@@ -132,35 +132,20 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
             .addStatement("$T<$T, $T> source = new $T<>($S, $S)",
                 sourceAdapter, inputEventType, inputDto, streamingInput ? multiSourceAdapter : defaultSourceAdapter,
                 ORCHESTRATOR_PREFIX + binding.inputTypeName(), API_VERSION)
-            .addStatement(
-                !streamingInput && !streamingOutput
-                    ? "$T<$T, $T> invoke = new $T<>(resource::run, $S, $S)"
-                    : !streamingInput
-                        ? "$T<$T, $T> invoke = new $T<>(resource::run, $S, $S)"
-                        : !streamingOutput
-                            ? "$T<$T, $T> invoke = new $T<>(resource::run, $S, $S)"
-                            : "$T<$T, $T> invoke = new $T<>(resource::run, $S, $S)",
+            .addStatement("$T<$T, $T> invoke = new $T<>(resource::run, $S, $S)",
                 invokeAdapter, inputDto, outputDto,
-                !streamingInput && !streamingOutput
-                    ? localInvokeAdapter
-                    : !streamingInput
-                        ? localOneToManyInvokeAdapter
-                        : !streamingOutput
-                            ? localManyToOneInvokeAdapter
-                            : localManyToManyInvokeAdapter,
+                selectInvokeAdapter(streamingInput, streamingOutput,
+                    localInvokeAdapter,
+                    localOneToManyInvokeAdapter,
+                    localManyToOneInvokeAdapter,
+                    localManyToManyInvokeAdapter),
                 ORCHESTRATOR_PREFIX + binding.outputTypeName(), API_VERSION)
             .addStatement("$T<$T, $T> sink = new $T<>()",
                 sinkAdapter, outputDto, handlerOutputType,
                 streamingOutput ? collectListSinkAdapter : defaultSinkAdapter)
-            .addStatement(
-                !streamingInput && !streamingOutput
-                    ? "return $T.invoke(input, transportContext, source, invoke, sink)"
-                    : !streamingInput
-                        ? "return $T.invokeOneToMany(input, transportContext, source, invoke, sink)"
-                        : !streamingOutput
-                            ? "return $T.invokeManyToOne(input, transportContext, source, invoke, sink)"
-                            : "return $T.invokeManyToMany(input, transportContext, source, invoke, sink)",
-                !streamingInput && !streamingOutput ? unaryBridge : functionTransportBridge)
+            .addStatement("return $T.$L(input, transportContext, source, invoke, sink)",
+                bridgeClass(streamingInput, streamingOutput, unaryBridge, functionTransportBridge),
+                bridgeMethodName(streamingInput, streamingOutput))
             .nextControlFlow("catch ($T e)", RuntimeException.class)
             .addStatement(
                 "throw new $T(\"Failed handleRequest -> resource.run for input DTO\", e)",
@@ -173,5 +158,45 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
         JavaFile.builder(binding.basePackage() + ".orchestrator.service", handler.build())
             .build()
             .writeTo(ctx.outputDir());
+    }
+
+    private static ClassName selectInvokeAdapter(
+            boolean streamingInput,
+            boolean streamingOutput,
+            ClassName localInvokeAdapter,
+            ClassName localOneToManyInvokeAdapter,
+            ClassName localManyToOneInvokeAdapter,
+            ClassName localManyToManyInvokeAdapter) {
+        if (!streamingInput && !streamingOutput) {
+            return localInvokeAdapter;
+        }
+        if (!streamingInput) {
+            return localOneToManyInvokeAdapter;
+        }
+        if (!streamingOutput) {
+            return localManyToOneInvokeAdapter;
+        }
+        return localManyToManyInvokeAdapter;
+    }
+
+    private static ClassName bridgeClass(
+            boolean streamingInput,
+            boolean streamingOutput,
+            ClassName unaryBridge,
+            ClassName functionTransportBridge) {
+        return (!streamingInput && !streamingOutput) ? unaryBridge : functionTransportBridge;
+    }
+
+    private static String bridgeMethodName(boolean streamingInput, boolean streamingOutput) {
+        if (!streamingInput && !streamingOutput) {
+            return "invoke";
+        }
+        if (!streamingInput) {
+            return "invokeOneToMany";
+        }
+        if (!streamingOutput) {
+            return "invokeManyToOne";
+        }
+        return "invokeManyToMany";
     }
 }

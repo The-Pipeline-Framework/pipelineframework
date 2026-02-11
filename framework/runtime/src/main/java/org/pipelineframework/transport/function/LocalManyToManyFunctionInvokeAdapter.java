@@ -16,7 +16,6 @@
 
 package org.pipelineframework.transport.function;
 
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -54,33 +53,30 @@ public final class LocalManyToManyFunctionInvokeAdapter<I, O> implements Functio
     @Override
     public Multi<TraceEnvelope<O>> invokeManyToMany(Multi<TraceEnvelope<I>> input, FunctionTransportContext context) {
         Objects.requireNonNull(input, "input stream must not be null");
-        return input.collect().asList().onItem().transformToMulti(envelopes -> {
-            Multi<I> payloadStream = Multi.createFrom().iterable(envelopes).onItem().transform(TraceEnvelope::payload);
-            String traceId = envelopes.isEmpty() ? UUID.randomUUID().toString() : normalizeOrDefault(envelopes.get(0).traceId(), UUID.randomUUID().toString());
-            String idempotencyKey = envelopes.isEmpty()
-                ? traceId + ":" + outputPayloadModel + ":" + UUID.randomUUID()
-                : normalizeOrDefault(envelopes.get(0).idempotencyKey(), traceId + ":" + outputPayloadModel + ":" + UUID.randomUUID());
-            String previousItemId = envelopes.isEmpty() ? null : envelopes.get(envelopes.size() - 1).itemId();
-            TraceLink previous = previousItemId == null ? null : TraceLink.reference(previousItemId);
+        Objects.requireNonNull(context, "context must not be null");
 
-            return delegate.apply(payloadStream)
-                .onItem().transform(output -> {
-                    if (output == null) {
-                        throw new NullPointerException("LocalManyToManyFunctionInvokeAdapter delegate emitted null output");
-                    }
-                    return new TraceEnvelope<>(
-                        traceId,
-                        null,
-                        UUID.randomUUID().toString(),
-                        previous,
-                        outputPayloadModel,
-                        outputPayloadModelVersion,
-                        idempotencyKey,
-                        output,
-                        null,
-                        Map.of());
-                });
-        });
+        Multi<I> payloadStream = input.onItem().transform(TraceEnvelope::payload);
+        String traceId = normalizeOrDefault(context.requestId(), UUID.randomUUID().toString());
+
+        return delegate.apply(payloadStream)
+            .onItem().transform(output -> {
+                if (output == null) {
+                    throw new NullPointerException("LocalManyToManyFunctionInvokeAdapter delegate emitted null output");
+                }
+                String envelopeId = UUID.randomUUID().toString();
+                String idempotencyKey = traceId + ":" + outputPayloadModel + ":" + envelopeId;
+                return new TraceEnvelope<>(
+                    traceId,
+                    null,
+                    envelopeId,
+                    null,
+                    outputPayloadModel,
+                    outputPayloadModelVersion,
+                    idempotencyKey,
+                    output,
+                    null,
+                    Map.of());
+            });
     }
 
     private static String normalizeOrDefault(String value, String fallback) {

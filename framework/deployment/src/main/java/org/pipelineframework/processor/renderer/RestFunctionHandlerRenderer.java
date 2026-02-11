@@ -130,46 +130,25 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
                     + "context != null ? context.getFunctionName() : $S, "
                     + "$S)",
                 functionTransportContext, functionTransportContext, UNKNOWN_REQUEST, handlerClassName, INVOKE_STEP)
-            .addStatement(
-                streamingInput
-                    ? "$T<$T, $T> source = new $T<>($S, $S)"
-                    : "$T<$T, $T> source = new $T<>($S, $S)",
+            .addStatement("$T<$T, $T> source = new $T<>($S, $S)",
                 sourceAdapter, inputEventType, inputDto,
                 streamingInput ? multiSourceAdapter : defaultSourceAdapter,
                 baseName + ".input",
                 API_VERSION)
-            .addStatement(
-                shape == StreamingShape.UNARY_UNARY
-                    ? "$T<$T, $T> invoke = new $T<>(resource::process, $S, $S)"
-                    : shape == StreamingShape.UNARY_STREAMING
-                        ? "$T<$T, $T> invoke = new $T<>(resource::process, $S, $S)"
-                        : shape == StreamingShape.STREAMING_UNARY
-                            ? "$T<$T, $T> invoke = new $T<>(resource::process, $S, $S)"
-                            : "$T<$T, $T> invoke = new $T<>(resource::process, $S, $S)",
+            .addStatement("$T<$T, $T> invoke = new $T<>(resource::process, $S, $S)",
                 invokeAdapter, inputDto, outputDto,
-                shape == StreamingShape.UNARY_UNARY
-                    ? localInvokeAdapter
-                    : shape == StreamingShape.UNARY_STREAMING
-                        ? localOneToManyInvokeAdapter
-                        : shape == StreamingShape.STREAMING_UNARY
-                            ? localManyToOneInvokeAdapter
-                            : localManyToManyInvokeAdapter,
+                selectInvokeAdapterForShape(shape,
+                    localInvokeAdapter,
+                    localOneToManyInvokeAdapter,
+                    localManyToOneInvokeAdapter,
+                    localManyToManyInvokeAdapter),
                 baseName + ".output",
                 API_VERSION)
-            .addStatement(
-                streamingOutput
-                    ? "$T<$T, $T> sink = new $T<>()"
-                    : "$T<$T, $T> sink = new $T<>()",
+            .addStatement("$T<$T, $T> sink = new $T<>()",
                 sinkAdapter, outputDto, handlerOutputType,
                 streamingOutput ? collectListSinkAdapter : defaultSinkAdapter)
             .addStatement(
-                shape == StreamingShape.UNARY_UNARY
-                    ? "return $T.invoke(input, transportContext, source, invoke, sink)"
-                    : shape == StreamingShape.UNARY_STREAMING
-                        ? "return $T.invokeOneToMany(input, transportContext, source, invoke, sink)"
-                        : shape == StreamingShape.STREAMING_UNARY
-                            ? "return $T.invokeManyToOne(input, transportContext, source, invoke, sink)"
-                            : "return $T.invokeManyToMany(input, transportContext, source, invoke, sink)",
+                bridgeInvocationFormat(shape),
                 shape == StreamingShape.UNARY_UNARY ? unaryBridge : functionTransportBridge)
             .nextControlFlow("catch (Exception e)")
             .addStatement("$T inputType = (input == null) ? \"null\" : input.getClass().getName()", String.class)
@@ -243,6 +222,29 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
     public static String handlerFqcn(String servicePackage, String generatedName) {
         String baseName = removeSuffix(removeSuffix(generatedName, "Service"), "Reactive");
         return servicePackage + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX + "." + baseName + "FunctionHandler";
+    }
+
+    private static ClassName selectInvokeAdapterForShape(
+            StreamingShape shape,
+            ClassName localInvokeAdapter,
+            ClassName localOneToManyInvokeAdapter,
+            ClassName localManyToOneInvokeAdapter,
+            ClassName localManyToManyInvokeAdapter) {
+        return switch (shape) {
+            case UNARY_UNARY -> localInvokeAdapter;
+            case UNARY_STREAMING -> localOneToManyInvokeAdapter;
+            case STREAMING_UNARY -> localManyToOneInvokeAdapter;
+            case STREAMING_STREAMING -> localManyToManyInvokeAdapter;
+        };
+    }
+
+    private static String bridgeInvocationFormat(StreamingShape shape) {
+        return switch (shape) {
+            case UNARY_UNARY -> "return $T.invoke(input, transportContext, source, invoke, sink)";
+            case UNARY_STREAMING -> "return $T.invokeOneToMany(input, transportContext, source, invoke, sink)";
+            case STREAMING_UNARY -> "return $T.invokeManyToOne(input, transportContext, source, invoke, sink)";
+            case STREAMING_STREAMING -> "return $T.invokeManyToMany(input, transportContext, source, invoke, sink)";
+        };
     }
 
     private static String removeSuffix(String value, String suffix) {

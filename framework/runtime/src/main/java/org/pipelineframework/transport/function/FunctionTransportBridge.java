@@ -25,6 +25,11 @@ import io.smallrye.mutiny.Uni;
 
 /**
  * Executes function transport flows for unary and streaming cardinalities.
+ *
+ * <p>All invoke methods in this bridge block the caller by using {@code await().atMost(timeout)}.
+ * Calls may block for up to {@link #DEFAULT_WAIT_TIMEOUT} (or a supplied timeout), so callers in
+ * reactive/non-blocking contexts should offload execution to worker threads or use non-blocking
+ * alternatives at a higher layer.</p>
  */
 public final class FunctionTransportBridge {
     private static final Duration DEFAULT_WAIT_TIMEOUT = Duration.ofSeconds(30);
@@ -55,9 +60,10 @@ public final class FunctionTransportBridge {
             FunctionSinkAdapter<O, R> sinkAdapter,
             Duration timeout) {
         validateParameters(event, context, sourceAdapter, invokeAdapter, sinkAdapter);
-        Objects.requireNonNull(timeout, "timeout must not be null");
+        validateTimeout(timeout);
 
         Uni<TraceEnvelope<I>> inbound = sourceAdapter.adapt(event, context)
+            .select().first(2)
             .collect().asList()
             .onItem().transform(items -> requireExactlyOne(items, "source"));
 
@@ -92,9 +98,10 @@ public final class FunctionTransportBridge {
             FunctionSinkAdapter<O, R> sinkAdapter,
             Duration timeout) {
         validateParameters(event, context, sourceAdapter, invokeAdapter, sinkAdapter);
-        Objects.requireNonNull(timeout, "timeout must not be null");
+        validateTimeout(timeout);
 
         Uni<TraceEnvelope<I>> inbound = sourceAdapter.adapt(event, context)
+            .select().first(2)
             .collect().asList()
             .onItem().transform(items -> requireExactlyOne(items, "source"));
 
@@ -127,7 +134,7 @@ public final class FunctionTransportBridge {
             FunctionSinkAdapter<O, R> sinkAdapter,
             Duration timeout) {
         validateParameters(event, context, sourceAdapter, invokeAdapter, sinkAdapter);
-        Objects.requireNonNull(timeout, "timeout must not be null");
+        validateTimeout(timeout);
 
         Multi<TraceEnvelope<I>> inbound = sourceAdapter.adapt(event, context);
         Uni<TraceEnvelope<O>> outbound = invokeAdapter.invokeManyToOne(inbound, context);
@@ -160,7 +167,7 @@ public final class FunctionTransportBridge {
             FunctionSinkAdapter<O, R> sinkAdapter,
             Duration timeout) {
         validateParameters(event, context, sourceAdapter, invokeAdapter, sinkAdapter);
-        Objects.requireNonNull(timeout, "timeout must not be null");
+        validateTimeout(timeout);
 
         Multi<TraceEnvelope<I>> inbound = sourceAdapter.adapt(event, context);
         Multi<TraceEnvelope<O>> outbound = invokeAdapter.invokeManyToMany(inbound, context);
@@ -190,5 +197,12 @@ public final class FunctionTransportBridge {
         Objects.requireNonNull(sourceAdapter, "sourceAdapter must not be null");
         Objects.requireNonNull(invokeAdapter, "invokeAdapter must not be null");
         Objects.requireNonNull(sinkAdapter, "sinkAdapter must not be null");
+    }
+
+    private static void validateTimeout(Duration timeout) {
+        Objects.requireNonNull(timeout, "timeout must not be null");
+        if (timeout.isZero() || timeout.isNegative()) {
+            throw new IllegalArgumentException("timeout must be > 0");
+        }
     }
 }
