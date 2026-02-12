@@ -79,6 +79,43 @@ kbd {
   font-family: var(--vp-font-family-mono);
 }
 
+.vp-doc .value-lead {
+  margin-top: 0.5rem;
+  margin-bottom: 1.35rem;
+  max-width: 72ch;
+  font-size: 1.1rem;
+  line-height: 1.65;
+  color: var(--vp-c-text-2);
+}
+
+.vp-doc .value-glance {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.85rem;
+  margin: 0.75rem 0 1.5rem;
+}
+
+.vp-doc .value-glance-item {
+  border: 1px solid var(--vp-c-border);
+  border-radius: 12px;
+  padding: 0.9rem 0.95rem;
+  background:
+    radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 45%),
+    var(--vp-c-bg);
+}
+
+.vp-doc .value-glance-item strong {
+  display: block;
+  margin-bottom: 0.25rem;
+  color: var(--vp-c-text-1);
+  font-family: var(--vp-font-family-display);
+  font-size: 0.97rem;
+}
+
+.vp-doc .value-links {
+  margin-top: 0.25rem;
+}
+
 .dark:root {
   --vp-c-bg: #1a1a1a;
   --vp-c-bg-soft: #222222;
@@ -91,13 +128,6 @@ kbd {
   --vp-c-border: #363636;
   --vp-c-divider: #363636;
   --vp-code-block-bg: #2d2d2d;
-  /* Adjust brand colors for better dark theme contrast */
-  --vp-c-brand: #3b82f6; /* Lighter blue */
-  --vp-c-brand-light: #60a5fa;
-  --vp-c-brand-dark: #2563eb;
-  --vp-c-brand-1: #3b82f6;
-  --vp-c-brand-2: #60a5fa;
-  --vp-c-brand-3: #93c5fd;
 }
 
 /* Navigation header */
@@ -110,6 +140,78 @@ kbd {
 .nav-bar-link,
 .nav-bar-dropdown {
   font-weight: 600;
+}
+
+/* Top-nav only mode: keep dropdown/button styling consistent and readable */
+.VPNavBarMenu .VPNavBarMenuLink,
+.VPNavBarMenu .VPFlyout .button {
+  position: relative;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent !important;
+  color: var(--vp-c-text-1);
+  box-shadow: none !important;
+  overflow: visible;
+}
+
+.VPNavBarMenu .VPNavBarMenuLink:hover,
+.VPNavBarMenu .VPFlyout .button:hover {
+  border-color: transparent;
+  background: rgba(37, 99, 235, 0.08) !important;
+  color: var(--vp-c-brand);
+}
+
+.VPNavBarMenu .VPNavBarMenuLink.active,
+.VPNavBarMenu .VPFlyout.active .button {
+  border-color: transparent;
+  background: transparent !important;
+  color: var(--vp-c-brand);
+  box-shadow: none !important;
+}
+
+.VPNavBarMenu .VPNavBarMenuLink.active::after,
+.VPNavBarMenu .VPFlyout.active .button::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 6px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--vp-c-brand);
+  pointer-events: none;
+}
+
+.VPNavBarMenu .VPFlyout .text,
+.VPNavBarMenu .VPFlyout .button .text {
+  color: inherit;
+}
+
+.VPNavBarMenu .VPFlyout .menu {
+  border: 1px solid var(--vp-c-border);
+  border-radius: 12px;
+  background: var(--vp-c-bg);
+  box-shadow: 0 14px 34px rgba(2, 6, 23, 0.12);
+}
+
+.dark .VPNavBarMenu .VPFlyout .menu {
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.42);
+}
+
+/* Keep sidebar model for prev/next links, but hide sidebar UI */
+@media (min-width: 960px) {
+  .VPSidebar,
+  .VPLocalNav {
+    display: none !important;
+  }
+
+  .VPContent.has-sidebar,
+  .VPDoc.has-sidebar .content-container,
+  .VPDoc.has-sidebar .container {
+    padding-left: 0 !important;
+    margin-left: auto !important;
+    width: 100% !important;
+  }
 }
 
 /* Hero section styling */
@@ -131,11 +233,6 @@ kbd {
 
 .vp-doc h2, .vp-doc h3, .vp-doc h4, .vp-doc h5, .vp-doc h6 {
   color: var(--vp-c-brand-3);
-}
-
-/* Dark theme header contrast fix */
-.dark .vp-doc h2, .dark .vp-doc h3, .dark .vp-doc h4, .dark .vp-doc h5, .dark .vp-doc h6 {
-  color: var(--vp-c-brand-light);
 }
 
 /* Links */
@@ -235,6 +332,82 @@ kbd {
   font-weight: 800;
 }
 
+/* Home feature cards: motion + gradients + depth */
+.VPHomeFeatures .VPFeature {
+  animation: feature-fade-in 0.45s ease both;
+}
+
+.VPHomeFeatures .VPFeature .box {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--vp-c-border);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.12), transparent 48%),
+    linear-gradient(165deg, var(--vp-c-bg) 0%, var(--vp-c-bg-soft) 100%);
+  box-shadow: 0 10px 28px rgba(2, 6, 23, 0.08);
+  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+
+.VPHomeFeatures .VPFeature .box::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, rgba(37, 99, 235, 0.05), transparent 55%);
+  pointer-events: none;
+}
+
+.VPHomeFeatures .VPFeature:hover .box {
+  transform: translateY(-6px);
+  border-color: var(--vp-c-brand-light);
+  box-shadow: 0 16px 34px rgba(37, 99, 235, 0.18);
+}
+
+.dark .VPHomeFeatures .VPFeature .box {
+  background:
+    radial-gradient(circle at 0% 0%, rgba(96, 165, 250, 0.18), transparent 46%),
+    linear-gradient(165deg, rgba(30, 41, 59, 0.9) 0%, rgba(17, 24, 39, 0.9) 100%);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+}
+
+.dark .VPHomeFeatures .VPFeature:hover .box {
+  box-shadow: 0 18px 40px rgba(59, 130, 246, 0.28);
+}
+
+@keyframes feature-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Search: wider field and right-aligned shortcut keys */
+.VPNavBarSearch .DocSearch-Button {
+  width: 248px;
+  max-width: 248px;
+}
+
+.VPNavBarSearch .DocSearch-Button-Container {
+  flex: 1 1 auto;
+}
+
+.VPNavBarSearch .DocSearch-Button-Keys {
+  margin-left: auto;
+  justify-content: flex-end;
+  min-width: 56px;
+}
+
+@media (max-width: 960px) {
+  .VPNavBarSearch .DocSearch-Button {
+    width: auto;
+    max-width: none;
+  }
+}
+
 /* Sidebar */
 .VPSidebar {
   padding-top: 1.5rem;
@@ -297,43 +470,6 @@ kbd {
 .callout.danger .callout-header {
   background-color: rgba(239, 68, 68, 0.15);
   color: #ef4444;
-}
-
-/* Dark theme callout contrast fixes */
-.dark .callout.info {
-  background-color: rgba(59, 130, 246, 0.1);
-}
-
-.dark .callout.info .callout-header {
-  background-color: rgba(59, 130, 246, 0.2);
-  color: #93c5fd;
-}
-
-.dark .callout.tip {
-  background-color: rgba(16, 185, 129, 0.1);
-}
-
-.dark .callout.tip .callout-header {
-  background-color: rgba(16, 185, 129, 0.2);
-  color: #6ee7b7;
-}
-
-.dark .callout.warning {
-  background-color: rgba(245, 158, 11, 0.1);
-}
-
-.dark .callout.warning .callout-header {
-  background-color: rgba(245, 158, 11, 0.2);
-  color: #fcd34d;
-}
-
-.dark .callout.danger {
-  background-color: rgba(239, 68, 68, 0.1);
-}
-
-.dark .callout.danger .callout-header {
-  background-color: rgba(239, 68, 68, 0.2);
-  color: #fca5a5;
 }
 
 /* Footer */

@@ -113,6 +113,19 @@ const mainSidebar = [
         ]
     },
     {
+        text: 'Value',
+        collapsed: true,
+        items: [
+            {text: 'Overview', link: '/value/'},
+            {text: 'Developer Joy', link: '/value/developer-experience'},
+            {text: 'Performance', link: '/value/runtime-efficiency'},
+            {text: 'Transport Choice', link: '/value/integration-flexibility'},
+            {text: 'Start Monolith, Split Later', link: '/value/deployment-evolution'},
+            {text: 'Kube-Native', link: '/value/operational-confidence'},
+            {text: 'Plugins, Not Glue', link: '/value/extensibility-and-platform'}
+        ]
+    },
+    {
         text: 'Plugins',
         collapsed: true,
         items: [
@@ -199,10 +212,29 @@ const mainSidebar = [
         text: 'Additional Resources',
         collapsed: true,
         items: [
-            {text: 'Versions', link: '/versions'}
+            {text: 'Versions', link: '/versions/'}
         ]
     },
 ]
+
+const toNavItems = (items = []) =>
+    items.map((item) => {
+        const navItem = {text: item.text}
+        if (item.link) {
+            navItem.link = item.link
+        }
+        if (item.items?.length) {
+            navItem.items = toNavItems(item.items)
+        }
+        return navItem
+    })
+
+const topNavSections = mainSidebar
+    .filter((section) => section.text !== 'Additional Resources')
+    .map((section) => ({
+        text: section.text,
+        items: toNavItems(section.items ?? []),
+    }))
 
 export default withMermaid(
   defineConfig({
@@ -216,12 +248,8 @@ export default withMermaid(
     // Register custom theme
     themeConfig: {
         nav: [
-            {text: 'Home', link: '/'},
-            {text: 'Build', link: '/guide/getting-started/'},
-            {text: 'Design', link: '/guide/design/application-structure'},
-            {text: 'Develop', link: '/guide/development/pipeline-step'},
-            {text: 'Operate', link: '/guide/operations/error-handling'},
-            {text: 'Versions', link: '/versions'}
+            ...topNavSections,
+            {text: 'Versions', link: '/versions/', activeMatch: '^/versions(?:/|$)'}
         ],
 
         sidebar: {
@@ -229,7 +257,7 @@ export default withMermaid(
                 {
                     text: 'Versioned Docs',
                     items: [
-                        {text: 'Versions', link: '/versions'}
+                        {text: 'Versions', link: '/versions/'}
                     ]
                 }
             ],
