@@ -53,7 +53,7 @@ public final class LocalOneToManyFunctionInvokeAdapter<I, O> implements Function
     @Override
     public Multi<TraceEnvelope<O>> invokeOneToMany(TraceEnvelope<I> input, FunctionTransportContext context) {
         Objects.requireNonNull(input, "input envelope must not be null");
-        // Context is required by the FunctionInvokeAdapter contract but not used for local 1->N invocation.
+        // Context is required by the FunctionInvokeAdapter contract and is used for trace/idempotency derivation.
         Objects.requireNonNull(context, "context must not be null");
         Objects.requireNonNull(input.payload(), "LocalOneToManyFunctionInvokeAdapter input payload must not be null");
         String rawTraceId = input.traceId();
@@ -61,7 +61,12 @@ public final class LocalOneToManyFunctionInvokeAdapter<I, O> implements Function
             ? AdapterUtils.deriveTraceId(context.requestId())
             : rawTraceId.strip();
         AtomicLong outputIndex = new AtomicLong(0L);
-        return delegate.apply(input.payload())
+        Multi<O> outputStream = delegate.apply(input.payload());
+        if (outputStream == null) {
+            throw new NullPointerException(
+                "LocalOneToManyFunctionInvokeAdapter delegate returned null Multi from apply");
+        }
+        return outputStream
             .onItem().transform(output -> {
                 if (output == null) {
                     throw new NullPointerException("LocalOneToManyFunctionInvokeAdapter delegate emitted null output");

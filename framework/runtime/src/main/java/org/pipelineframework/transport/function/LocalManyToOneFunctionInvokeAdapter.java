@@ -123,7 +123,7 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
         if (incomingTraceId == null || incomingTraceId.isBlank()) {
             return UUID.randomUUID().toString();
         }
-        return incomingTraceId.trim();
+        return incomingTraceId.strip();
     }
 
     private String computeIdempotencyKey(
@@ -146,7 +146,13 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
         LinkedHashMap<String, String> merged = new LinkedHashMap<>();
         for (TraceEnvelope<I> envelope : envelopes) {
             if (envelope != null && envelope.meta() != null && !envelope.meta().isEmpty()) {
-                merged.putAll(envelope.meta());
+                for (Map.Entry<String, String> entry : envelope.meta().entrySet()) {
+                    if (entry.getKey() == null) {
+                        continue;
+                    }
+                    String incoming = AdapterUtils.normalizeOrDefault(entry.getValue(), "");
+                    merged.merge(entry.getKey(), incoming, this::mergeMetaValues);
+                }
             }
         }
         String previousIds = envelopes.stream()
@@ -160,6 +166,18 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
             merged.putIfAbsent("previousItemId", previous.previousItemId());
         }
         return Map.copyOf(merged);
+    }
+
+    private String mergeMetaValues(String existing, String incoming) {
+        String normalizedExisting = AdapterUtils.normalizeOrDefault(existing, "");
+        String normalizedIncoming = AdapterUtils.normalizeOrDefault(incoming, "");
+        if (normalizedExisting.isEmpty()) {
+            return normalizedIncoming;
+        }
+        if (normalizedIncoming.isEmpty()) {
+            return normalizedExisting;
+        }
+        return normalizedExisting + "," + normalizedIncoming;
     }
 
     private String deterministicFallbackIdempotencyKey(List<TraceEnvelope<I>> envelopes, String traceId) {

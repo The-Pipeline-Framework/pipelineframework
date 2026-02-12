@@ -16,9 +16,17 @@
 
 package org.pipelineframework.transport.function;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 final class AdapterUtils {
+    private static final String KEY_FUNCTION_NAME = "functionName";
+    private static final String KEY_STAGE = "stage";
+    private static final String KEY_REQUEST_ID = "requestId";
+    private static final Set<String> RESERVED_CONTEXT_META_KEYS = Set.of(KEY_FUNCTION_NAME, KEY_STAGE, KEY_REQUEST_ID);
+
     private AdapterUtils() {
     }
 
@@ -35,5 +43,22 @@ final class AdapterUtils {
             return UUID.randomUUID().toString();
         }
         return requestId.strip();
+    }
+
+    static Map<String, String> buildContextMeta(FunctionTransportContext context) {
+        LinkedHashMap<String, String> meta = new LinkedHashMap<>();
+        meta.put(KEY_FUNCTION_NAME, normalizeOrDefault(context.functionName(), ""));
+        meta.put(KEY_STAGE, normalizeOrDefault(context.stage(), ""));
+        meta.put(KEY_REQUEST_ID, normalizeOrDefault(context.requestId(), ""));
+        if (context.attributes() != null && !context.attributes().isEmpty()) {
+            context.attributes().forEach((key, value) -> {
+                if (key != null
+                        && !RESERVED_CONTEXT_META_KEYS.contains(key)
+                        && !key.startsWith("tpf.")) {
+                    meta.put(key, normalizeOrDefault(value, ""));
+                }
+            });
+        }
+        return meta;
     }
 }

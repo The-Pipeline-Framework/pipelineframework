@@ -16,10 +16,8 @@
 
 package org.pipelineframework.transport.function;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 import java.util.logging.Logger;
 
@@ -32,7 +30,6 @@ import io.smallrye.mutiny.Multi;
  */
 public final class DefaultUnaryFunctionSourceAdapter<I> implements FunctionSourceAdapter<I, I> {
     private static final Logger LOG = Logger.getLogger(DefaultUnaryFunctionSourceAdapter.class.getName());
-    private static final Set<String> RESERVED_KEYS = Set.of("functionName", "stage", "requestId");
     private final String payloadModel;
     private final String payloadModelVersion;
 
@@ -55,18 +52,7 @@ public final class DefaultUnaryFunctionSourceAdapter<I> implements FunctionSourc
         String itemId = UUID.randomUUID().toString();
         String idempotencyKey = resolveIdempotencyKey(context, traceId);
 
-        Map<String, String> meta = new LinkedHashMap<>();
-        meta.put("functionName", AdapterUtils.normalizeOrDefault(context.functionName(), ""));
-        meta.put("stage", AdapterUtils.normalizeOrDefault(context.stage(), ""));
-        meta.put("requestId", AdapterUtils.normalizeOrDefault(context.requestId(), ""));
-        if (context.attributes() != null && !context.attributes().isEmpty()) {
-            context.attributes().forEach((key, value) -> {
-                if (!RESERVED_KEYS.contains(key)
-                    && !key.startsWith("tpf.")) {
-                    meta.put(key, AdapterUtils.normalizeOrDefault(value, ""));
-                }
-            });
-        }
+        Map<String, String> meta = AdapterUtils.buildContextMeta(context);
 
         TraceEnvelope<I> envelope = TraceEnvelope.rootWithMeta(
             traceId,
