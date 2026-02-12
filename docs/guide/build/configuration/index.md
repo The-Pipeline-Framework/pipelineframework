@@ -222,6 +222,20 @@ Prefix: `pipeline.defaults`
 
 These defaults apply to every step unless a step-level override is present.
 
+### Function Transport Context Attributes (Function Handlers/Adapters)
+
+These values are carried in `FunctionTransportContext` attributes by function handlers/adapters in Lambda deployments.
+They are not `application.properties` keys.
+
+| Attribute Key              | Type   | Default  | Description                                                                 |
+|---------------------------|--------|----------|-----------------------------------------------------------------------------|
+| `tpf.idempotency.policy`  | enum   | `CONTEXT_STABLE` | Function transport idempotency policy (`CONTEXT_STABLE` or `EXPLICIT`; legacy `RANDOM` alias accepted).            |
+| `tpf.idempotency.key`     | string | none     | Explicit caller-provided idempotency key used when policy is `EXPLICIT`.   |
+
+Important:
+- The Pipeline Framework (TPF) transport idempotency is a boundary-level aid.
+- Authoritative duplicate prevention must still be enforced in business/data layers (domain constraints, DB primary/unique keys, warehouse controls).
+
 ### Build-Time Validation (Annotation Processor)
 
 These are build-time options passed to the annotation processor (not runtime config).

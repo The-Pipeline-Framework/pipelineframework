@@ -41,6 +41,7 @@ const mainSidebar = [
                 items: [
                     {text: 'Using Runtime Mapping', link: '/guide/build/runtime-layouts/using-runtime-mapping'},
                     {text: 'Maven Migration Playbook', link: '/guide/build/runtime-layouts/maven-migration'},
+                    {text: 'Search Lambda Verification Lane', link: '/guide/build/runtime-layouts/search-lambda'},
                     {text: 'POM vs Layout Matrix', link: '/guide/build/runtime-layouts/pom-layout-matrix'},
                     {text: 'CSV Payments Pipeline-Runtime Walkthrough', link: '/guide/build/runtime-layouts/csv-payments-pipeline-runtime'},
                     {text: 'CSV Payments Monolith Walkthrough', link: '/guide/build/runtime-layouts/csv-payments-monolith'}
@@ -75,6 +76,7 @@ const mainSidebar = [
             {text: 'Handling File Operations', link: '/guide/development/handling-file-operations'},
             {text: 'Testing with Testcontainers', link: '/guide/development/testing'},
             {text: 'Orchestrator Runtime', link: '/guide/development/orchestrator-runtime'},
+            {text: 'AWS Lambda Platform', link: '/guide/development/aws-lambda'},
             {text: 'Performance', link: '/guide/development/performance'},
             {
                 text: 'Extensions',
@@ -94,6 +96,7 @@ const mainSidebar = [
         items: [
             {text: 'Error Handling & DLQ', link: '/guide/operations/error-handling'},
             {text: 'In-flight Probe', link: '/guide/operations/in-flight-probe'},
+            {text: 'AWS Lambda SnapStart', link: '/guide/operations/aws-lambda-snapstart'},
             {
                 text: 'Observability',
                 link: '/guide/operations/observability/',

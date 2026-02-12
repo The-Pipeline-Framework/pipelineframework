@@ -660,7 +660,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                         descriptorSet));
                     roleMetadataGenerator.recordClassWithRole(restClassName, restRole.name());
 
-                    if (ctx.isPlatformModeFunction() && model.streamingShape() == StreamingShape.UNARY_UNARY) {
+                    if (ctx.isPlatformModeFunction()) {
                         String handlerClassName =
                             RestFunctionHandlerRenderer.handlerFqcn(model.servicePackage(), model.generatedName());
                         restFunctionHandlerRenderer.render(restBinding, new GenerationContext(

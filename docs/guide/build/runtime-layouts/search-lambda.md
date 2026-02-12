@@ -12,6 +12,9 @@ Canonical Lambda development and operations guidance lives here:
 - Verifies TPF Function platform wiring on a concrete example
 - Verifies Quarkus Lambda mock event-server behavior locally
 - Does not require provisioning a live AWS stack
+- Uses current unary-only FUNCTION shape support (`UNARY_UNARY` only)
+- For shape/bridge mapping and failure semantics, see [AWS Lambda Platform (Development)](/guide/development/aws-lambda)
+- Keep Lambda timeout and retry budget bounded for this verification lane; do not assume unbounded waits at function boundaries.
 
 ## Build
 

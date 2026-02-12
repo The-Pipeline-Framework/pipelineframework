@@ -154,6 +154,41 @@ public record TraceEnvelope<T>(
     }
 
     /**
+     * Creates a root envelope (no previous item link) with metadata.
+     *
+     * @param traceId trace id
+     * @param itemId item id
+     * @param payloadModel model id
+     * @param payloadModelVersion model version
+     * @param idempotencyKey idempotency key
+     * @param payload payload
+     * @param meta metadata
+     * @param <T> payload type
+     * @return root envelope with metadata
+     */
+    public static <T> TraceEnvelope<T> rootWithMeta(
+        String traceId,
+        String itemId,
+        String payloadModel,
+        String payloadModelVersion,
+        String idempotencyKey,
+        T payload,
+        Map<String, String> meta
+    ) {
+        return new TraceEnvelope<>(
+            traceId,
+            null,
+            itemId,
+            null,
+            payloadModel,
+            payloadModelVersion,
+            idempotencyKey,
+            payload,
+            Instant.now(),
+            meta == null ? Map.of() : meta);
+    }
+
+    /**
      * Builds the next envelope in the chain from this item.
      *
      * @param newItemId new item id
