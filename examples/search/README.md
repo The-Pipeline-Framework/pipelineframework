@@ -78,6 +78,12 @@ Bridge mapping exercised by targeted tests:
 - `ONE_TO_MANY` -> `FunctionTransportBridge.invokeOneToMany(...)`
 - `MANY_TO_ONE` -> `FunctionTransportBridge.invokeManyToOne(...)`
 
+Cardinality guarantees covered by tests:
+
+- `SearchPipelineEndToEndIT#tokenizeFanOutAndIndexFanInPersistPerDocumentCardinality` verifies one `docId` flows
+  through `RawDocument`/`ParsedDocument`, fans out to multiple `TokenBatch` rows, then merges into exactly one `IndexAck`.
+- `IndexAckResourceTest#testIndexAckRejectsMixedDocIdsAcrossBatches` verifies fan-in rejects mixed `docId` input.
+
 ### Handler Selection For Modules With Multiple Generated Handlers
 
 Some modules can contain more than one generated function handler (for example, step handlers plus side effect handlers).

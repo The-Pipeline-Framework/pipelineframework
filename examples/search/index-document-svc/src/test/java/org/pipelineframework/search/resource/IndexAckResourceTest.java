@@ -114,4 +114,31 @@ class IndexAckResourceTest {
                 .then()
                 .statusCode(400);
     }
+
+    @Test
+    void testIndexAckRejectsMixedDocIdsAcrossBatches() {
+        String requestBody =
+                """
+                [
+                  {
+                    "docId": "%s",
+                    "tokens": "search pipeline tokens one",
+                    "tokensHash": "seed-hash-1"
+                  },
+                  {
+                    "docId": "%s",
+                    "tokens": "search pipeline tokens two",
+                    "tokensHash": "seed-hash-2"
+                  }
+                ]
+                """
+                        .formatted(UUID.randomUUID(), UUID.randomUUID());
+
+        given().contentType(ContentType.JSON)
+                .body(requestBody)
+                .when()
+                .post("/api/v1/index-ack/")
+                .then()
+                .statusCode(400);
+    }
 }
