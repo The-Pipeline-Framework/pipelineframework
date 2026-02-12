@@ -599,14 +599,17 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     if (ctx.getProcessingEnv() == null) {
                         break;
                     }
-                    if (model.sideEffect()
-                        && model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER) {
+                    if (model.sideEffect()) {
                         String sideEffectBeanKey = model.servicePackage() + ".pipeline." + model.serviceName();
                         if (generatedSideEffectBeans.add(sideEffectBeanKey)) {
+                            org.pipelineframework.processor.ir.DeploymentRole sideEffectRole =
+                                model.deploymentRole() == null
+                                    ? org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT
+                                    : model.deploymentRole();
                             generateSideEffectBean(
                                 ctx,
                                 model,
-                                org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER,
+                                sideEffectRole,
                                 org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT,
                                 grpcBinding);
                         }
@@ -1101,6 +1104,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
      */
     private org.pipelineframework.processor.ir.DeploymentRole resolveClientRole(
             org.pipelineframework.processor.ir.DeploymentRole serverRole) {
+        if (serverRole == null) {
+            return org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT;
+        }
         return switch (serverRole) {
             case PLUGIN_SERVER -> org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_CLIENT;
             case PIPELINE_SERVER -> org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT;
