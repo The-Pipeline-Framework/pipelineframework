@@ -70,4 +70,17 @@ class UnaryFunctionTransportBridgeTest {
             () -> UnaryFunctionTransportBridge.invoke("hello", context, source, invokeAdapter, sinkAdapter));
         assertEquals("Function transport expected exactly one source item but received 0.", ex.getMessage());
     }
+
+    @Test
+    void rejectsNullIngressEvent() {
+        FunctionTransportContext context = FunctionTransportContext.of("req-4", "search-handler", "ingress");
+        DefaultUnaryFunctionSourceAdapter<String> source = new DefaultUnaryFunctionSourceAdapter<>(
+            "search.raw-document",
+            "v1");
+
+        NullPointerException ex = assertThrows(
+            NullPointerException.class,
+            () -> UnaryFunctionTransportBridge.invoke(null, context, source, invokeAdapter, sinkAdapter));
+        assertEquals("event must not be null", ex.getMessage());
+    }
 }

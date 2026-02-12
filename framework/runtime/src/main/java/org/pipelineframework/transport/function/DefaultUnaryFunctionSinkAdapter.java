@@ -32,6 +32,7 @@ public final class DefaultUnaryFunctionSinkAdapter<O> implements FunctionSinkAda
     @Override
     public Uni<O> emitMany(Multi<TraceEnvelope<O>> items, FunctionTransportContext context) {
         Objects.requireNonNull(items, "items must not be null");
+        // Context is validated for contract consistency and reserved for future sink-side telemetry hooks.
         Objects.requireNonNull(context, "context must not be null");
         return items.collect().asList().onItem().transform(this::extractUnaryPayload);
     }

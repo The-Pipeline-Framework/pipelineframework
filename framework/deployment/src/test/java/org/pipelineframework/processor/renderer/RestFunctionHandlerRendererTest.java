@@ -66,8 +66,11 @@ class RestFunctionHandlerRendererTest {
             tempDir.resolve("org/example/search/parse/service/pipeline/ParsedDocumentFunctionHandler.java");
         String source = Files.readString(generatedSource);
 
-        assertTrue(source.contains("implements RequestHandler<ParsedDocumentDto,"));
-        assertTrue(source.contains("List<IndexAckDto>"));
+        assertTrue(source.contains("implements RequestHandler<ParsedDocumentDto, List<IndexAckDto>>"));
+        assertTrue(source.contains("FunctionTransportContext transportContext = FunctionTransportContext.of("));
+        assertTrue(source.contains("FunctionSourceAdapter<ParsedDocumentDto, ParsedDocumentDto> source"));
+        assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invoke"));
+        assertTrue(source.contains("FunctionSinkAdapter<IndexAckDto, List<IndexAckDto>> sink"));
         assertTrue(source.contains("return FunctionTransportBridge.invokeOneToMany(input, transportContext, source, invoke, sink)"));
     }
 
@@ -85,6 +88,10 @@ class RestFunctionHandlerRendererTest {
             tempDir.resolve("org/example/search/parse/service/pipeline/ParsedDocumentFunctionHandler.java");
         String source = Files.readString(generatedSource);
         assertTrue(source.contains("implements RequestHandler<Multi<ParsedDocumentDto>, IndexAckDto>"));
+        assertTrue(source.contains("FunctionTransportContext transportContext = FunctionTransportContext.of("));
+        assertTrue(source.contains("FunctionSourceAdapter<Multi<ParsedDocumentDto>, ParsedDocumentDto> source"));
+        assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invoke"));
+        assertTrue(source.contains("FunctionSinkAdapter<IndexAckDto, IndexAckDto> sink"));
         assertTrue(source.contains("return FunctionTransportBridge.invokeManyToOne(input, transportContext, source, invoke, sink)"));
     }
 
@@ -102,6 +109,10 @@ class RestFunctionHandlerRendererTest {
             tempDir.resolve("org/example/search/parse/service/pipeline/ParsedDocumentFunctionHandler.java");
         String source = Files.readString(generatedSource);
         assertTrue(source.contains("implements RequestHandler<Multi<ParsedDocumentDto>, List<IndexAckDto>>"));
+        assertTrue(source.contains("FunctionTransportContext transportContext = FunctionTransportContext.of("));
+        assertTrue(source.contains("FunctionSourceAdapter<Multi<ParsedDocumentDto>, ParsedDocumentDto> source"));
+        assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invoke"));
+        assertTrue(source.contains("FunctionSinkAdapter<IndexAckDto, List<IndexAckDto>> sink"));
         assertTrue(source.contains("return FunctionTransportBridge.invokeManyToMany(input, transportContext, source, invoke, sink)"));
     }
 

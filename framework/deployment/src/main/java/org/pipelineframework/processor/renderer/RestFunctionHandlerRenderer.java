@@ -27,6 +27,50 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
     private static final String API_VERSION = "v1";
     private static final String UNKNOWN_REQUEST = "unknown-request";
     private static final String INVOKE_STEP = "invoke-step";
+    private static final ClassName APPLICATION_SCOPED =
+        ClassName.get("jakarta.enterprise.context", "ApplicationScoped");
+    private static final ClassName INJECT =
+        ClassName.get("jakarta.inject", "Inject");
+    private static final ClassName NAMED =
+        ClassName.get("jakarta.inject", "Named");
+    private static final ClassName MULTI =
+        ClassName.get("io.smallrye.mutiny", "Multi");
+    private static final ClassName LAMBDA_CONTEXT =
+        ClassName.get("com.amazonaws.services.lambda.runtime", "Context");
+    private static final ClassName REQUEST_HANDLER =
+        ClassName.get("com.amazonaws.services.lambda.runtime", "RequestHandler");
+    private static final ClassName GENERATED_ROLE =
+        ClassName.get("org.pipelineframework.annotation", "GeneratedRole");
+    private static final ClassName ROLE_ENUM =
+        ClassName.get("org.pipelineframework.annotation", "GeneratedRole", "Role");
+    private static final ClassName FUNCTION_TRANSPORT_CONTEXT =
+        ClassName.get("org.pipelineframework.transport.function", "FunctionTransportContext");
+    private static final ClassName FUNCTION_TRANSPORT_BRIDGE =
+        ClassName.get("org.pipelineframework.transport.function", "FunctionTransportBridge");
+    private static final ClassName FUNCTION_SOURCE_ADAPTER =
+        ClassName.get("org.pipelineframework.transport.function", "FunctionSourceAdapter");
+    private static final ClassName FUNCTION_INVOKE_ADAPTER =
+        ClassName.get("org.pipelineframework.transport.function", "FunctionInvokeAdapter");
+    private static final ClassName FUNCTION_SINK_ADAPTER =
+        ClassName.get("org.pipelineframework.transport.function", "FunctionSinkAdapter");
+    private static final ClassName DEFAULT_UNARY_SOURCE_ADAPTER =
+        ClassName.get("org.pipelineframework.transport.function", "DefaultUnaryFunctionSourceAdapter");
+    private static final ClassName MULTI_SOURCE_ADAPTER =
+        ClassName.get("org.pipelineframework.transport.function", "MultiFunctionSourceAdapter");
+    private static final ClassName LOCAL_UNARY_INVOKE_ADAPTER =
+        ClassName.get("org.pipelineframework.transport.function", "LocalUnaryFunctionInvokeAdapter");
+    private static final ClassName LOCAL_ONE_TO_MANY_INVOKE_ADAPTER =
+        ClassName.get("org.pipelineframework.transport.function", "LocalOneToManyFunctionInvokeAdapter");
+    private static final ClassName LOCAL_MANY_TO_ONE_INVOKE_ADAPTER =
+        ClassName.get("org.pipelineframework.transport.function", "LocalManyToOneFunctionInvokeAdapter");
+    private static final ClassName LOCAL_MANY_TO_MANY_INVOKE_ADAPTER =
+        ClassName.get("org.pipelineframework.transport.function", "LocalManyToManyFunctionInvokeAdapter");
+    private static final ClassName DEFAULT_UNARY_SINK_ADAPTER =
+        ClassName.get("org.pipelineframework.transport.function", "DefaultUnaryFunctionSinkAdapter");
+    private static final ClassName COLLECT_LIST_SINK_ADAPTER =
+        ClassName.get("org.pipelineframework.transport.function", "CollectListFunctionSinkAdapter");
+    private static final ClassName UNARY_FUNCTION_TRANSPORT_BRIDGE =
+        ClassName.get("org.pipelineframework.transport.function", "UnaryFunctionTransportBridge");
 
     /**
      * Creates a new RestFunctionHandlerRenderer.
@@ -46,43 +90,6 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
         boolean streamingInput = shape == StreamingShape.STREAMING_UNARY || shape == StreamingShape.STREAMING_STREAMING;
         boolean streamingOutput = shape == StreamingShape.UNARY_STREAMING || shape == StreamingShape.STREAMING_STREAMING;
 
-        ClassName applicationScoped = ClassName.get("jakarta.enterprise.context", "ApplicationScoped");
-        ClassName inject = ClassName.get("jakarta.inject", "Inject");
-        ClassName named = ClassName.get("jakarta.inject", "Named");
-        ClassName multi = ClassName.get("io.smallrye.mutiny", "Multi");
-        ClassName lambdaContext = ClassName.get("com.amazonaws.services.lambda.runtime", "Context");
-        ClassName requestHandler = ClassName.get("com.amazonaws.services.lambda.runtime", "RequestHandler");
-        ClassName generatedRole = ClassName.get("org.pipelineframework.annotation", "GeneratedRole");
-        ClassName roleEnum = ClassName.get("org.pipelineframework.annotation", "GeneratedRole", "Role");
-        ClassName functionTransportContext =
-            ClassName.get("org.pipelineframework.transport.function", "FunctionTransportContext");
-        ClassName functionTransportBridge =
-            ClassName.get("org.pipelineframework.transport.function", "FunctionTransportBridge");
-        ClassName sourceAdapter =
-            ClassName.get("org.pipelineframework.transport.function", "FunctionSourceAdapter");
-        ClassName invokeAdapter =
-            ClassName.get("org.pipelineframework.transport.function", "FunctionInvokeAdapter");
-        ClassName sinkAdapter =
-            ClassName.get("org.pipelineframework.transport.function", "FunctionSinkAdapter");
-        ClassName defaultSourceAdapter =
-            ClassName.get("org.pipelineframework.transport.function", "DefaultUnaryFunctionSourceAdapter");
-        ClassName multiSourceAdapter =
-            ClassName.get("org.pipelineframework.transport.function", "MultiFunctionSourceAdapter");
-        ClassName localInvokeAdapter =
-            ClassName.get("org.pipelineframework.transport.function", "LocalUnaryFunctionInvokeAdapter");
-        ClassName localOneToManyInvokeAdapter =
-            ClassName.get("org.pipelineframework.transport.function", "LocalOneToManyFunctionInvokeAdapter");
-        ClassName localManyToOneInvokeAdapter =
-            ClassName.get("org.pipelineframework.transport.function", "LocalManyToOneFunctionInvokeAdapter");
-        ClassName localManyToManyInvokeAdapter =
-            ClassName.get("org.pipelineframework.transport.function", "LocalManyToManyFunctionInvokeAdapter");
-        ClassName defaultSinkAdapter =
-            ClassName.get("org.pipelineframework.transport.function", "DefaultUnaryFunctionSinkAdapter");
-        ClassName collectListSinkAdapter =
-            ClassName.get("org.pipelineframework.transport.function", "CollectListFunctionSinkAdapter");
-        ClassName unaryBridge =
-            ClassName.get("org.pipelineframework.transport.function", "UnaryFunctionTransportBridge");
-
         String serviceClassName = model.generatedName();
         String baseName = removeSuffix(removeSuffix(serviceClassName, "Service"), "Reactive");
         String resourceClassName = baseName + PipelineStepProcessor.REST_RESOURCE_SUFFIX;
@@ -95,7 +102,7 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
             ? convertDomainToDtoType(model.outboundDomainType())
             : ClassName.OBJECT;
         TypeName inputEventType = streamingInput
-            ? ParameterizedTypeName.get(multi, inputDto)
+            ? ParameterizedTypeName.get(MULTI, inputDto)
             : inputDto;
         TypeName handlerOutputType = streamingOutput
             ? ParameterizedTypeName.get(ClassName.get(List.class), outputDto)
@@ -106,16 +113,16 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
 
         TypeSpec.Builder handler = TypeSpec.classBuilder(handlerClassName)
             .addModifiers(Modifier.PUBLIC)
-            .addAnnotation(applicationScoped)
-            .addAnnotation(AnnotationSpec.builder(named)
+            .addAnnotation(APPLICATION_SCOPED)
+            .addAnnotation(AnnotationSpec.builder(NAMED)
                 .addMember("value", "$S", handlerClassName)
                 .build())
-            .addAnnotation(AnnotationSpec.builder(generatedRole)
-                .addMember("value", "$T.$L", roleEnum, "REST_SERVER")
+            .addAnnotation(AnnotationSpec.builder(GENERATED_ROLE)
+                .addMember("value", "$T.$L", ROLE_ENUM, "REST_SERVER")
                 .build())
-            .addSuperinterface(ParameterizedTypeName.get(requestHandler, inputEventType, handlerOutputType))
+            .addSuperinterface(ParameterizedTypeName.get(REQUEST_HANDLER, inputEventType, handlerOutputType))
             .addField(FieldSpec.builder(resourceType, "resource", Modifier.PRIVATE)
-                .addAnnotation(inject)
+                .addAnnotation(INJECT)
                 .build());
 
         MethodSpec handleRequest = MethodSpec.methodBuilder("handleRequest")
@@ -123,33 +130,33 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
             .addModifiers(Modifier.PUBLIC)
             .returns(handlerOutputType)
             .addParameter(inputEventType, "input")
-            .addParameter(lambdaContext, "context")
+            .addParameter(LAMBDA_CONTEXT, "context")
             .beginControlFlow("try")
             .addStatement("$T transportContext = $T.of("
                     + "context != null ? context.getAwsRequestId() : $S, "
                     + "context != null ? context.getFunctionName() : $S, "
                     + "$S)",
-                functionTransportContext, functionTransportContext, UNKNOWN_REQUEST, handlerClassName, INVOKE_STEP)
+                FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT, UNKNOWN_REQUEST, handlerClassName, INVOKE_STEP)
             .addStatement("$T<$T, $T> source = new $T<>($S, $S)",
-                sourceAdapter, inputEventType, inputDto,
-                streamingInput ? multiSourceAdapter : defaultSourceAdapter,
+                FUNCTION_SOURCE_ADAPTER, inputEventType, inputDto,
+                streamingInput ? MULTI_SOURCE_ADAPTER : DEFAULT_UNARY_SOURCE_ADAPTER,
                 baseName + ".input",
                 API_VERSION)
             .addStatement("$T<$T, $T> invoke = new $T<>(resource::process, $S, $S)",
-                invokeAdapter, inputDto, outputDto,
+                FUNCTION_INVOKE_ADAPTER, inputDto, outputDto,
                 selectInvokeAdapterForShape(shape,
-                    localInvokeAdapter,
-                    localOneToManyInvokeAdapter,
-                    localManyToOneInvokeAdapter,
-                    localManyToManyInvokeAdapter),
+                    LOCAL_UNARY_INVOKE_ADAPTER,
+                    LOCAL_ONE_TO_MANY_INVOKE_ADAPTER,
+                    LOCAL_MANY_TO_ONE_INVOKE_ADAPTER,
+                    LOCAL_MANY_TO_MANY_INVOKE_ADAPTER),
                 baseName + ".output",
                 API_VERSION)
             .addStatement("$T<$T, $T> sink = new $T<>()",
-                sinkAdapter, outputDto, handlerOutputType,
-                streamingOutput ? collectListSinkAdapter : defaultSinkAdapter)
+                FUNCTION_SINK_ADAPTER, outputDto, handlerOutputType,
+                streamingOutput ? COLLECT_LIST_SINK_ADAPTER : DEFAULT_UNARY_SINK_ADAPTER)
             .addStatement(
                 bridgeInvocationFormat(shape),
-                shape == StreamingShape.UNARY_UNARY ? unaryBridge : functionTransportBridge)
+                shape == StreamingShape.UNARY_UNARY ? UNARY_FUNCTION_TRANSPORT_BRIDGE : FUNCTION_TRANSPORT_BRIDGE)
             .nextControlFlow("catch (Exception e)")
             .addStatement("$T inputType = (input == null) ? \"null\" : input.getClass().getName()", String.class)
             .addStatement(

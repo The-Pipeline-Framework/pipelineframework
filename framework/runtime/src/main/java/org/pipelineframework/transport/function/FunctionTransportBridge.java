@@ -62,10 +62,7 @@ public final class FunctionTransportBridge {
         validateParameters(event, context, sourceAdapter, invokeAdapter, sinkAdapter);
         validateTimeout(timeout);
 
-        Uni<TraceEnvelope<I>> inbound = sourceAdapter.adapt(event, context)
-            .select().first(2)
-            .collect().asList()
-            .onItem().transform(items -> requireExactlyOne(items, "source"));
+        Uni<TraceEnvelope<I>> inbound = requireSingleSource(event, context, sourceAdapter);
 
         Uni<TraceEnvelope<O>> outbound = inbound.onItem()
             .transformToUni(envelope -> invokeAdapter.invokeOneToOne(envelope, context));
@@ -100,10 +97,7 @@ public final class FunctionTransportBridge {
         validateParameters(event, context, sourceAdapter, invokeAdapter, sinkAdapter);
         validateTimeout(timeout);
 
-        Uni<TraceEnvelope<I>> inbound = sourceAdapter.adapt(event, context)
-            .select().first(2)
-            .collect().asList()
-            .onItem().transform(items -> requireExactlyOne(items, "source"));
+        Uni<TraceEnvelope<I>> inbound = requireSingleSource(event, context, sourceAdapter);
 
         Multi<TraceEnvelope<O>> outbound = inbound.onItem()
             .transformToMulti(envelope -> invokeAdapter.invokeOneToMany(envelope, context));
@@ -184,6 +178,16 @@ public final class FunctionTransportBridge {
                 "Function transport expected exactly one " + stage + " item but received " + items.size() + ".");
         }
         return items.get(0);
+    }
+
+    private static <E, I> Uni<TraceEnvelope<I>> requireSingleSource(
+            E event,
+            FunctionTransportContext context,
+            FunctionSourceAdapter<E, I> sourceAdapter) {
+        return sourceAdapter.adapt(event, context)
+            .select().first(2)
+            .collect().asList()
+            .onItem().transform(items -> requireExactlyOne(items, "source"));
     }
 
     private static <E, I, O, R> void validateParameters(

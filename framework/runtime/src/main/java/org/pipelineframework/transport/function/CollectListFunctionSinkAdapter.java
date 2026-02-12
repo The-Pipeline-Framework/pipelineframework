@@ -17,6 +17,7 @@
 package org.pipelineframework.transport.function;
 
 import java.util.List;
+import java.util.Objects;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
@@ -27,12 +28,43 @@ import io.smallrye.mutiny.Uni;
  * @param <O> output payload type
  */
 public final class CollectListFunctionSinkAdapter<O> implements FunctionSinkAdapter<O, List<O>> {
+    private final BatchingPolicy batchingPolicy;
+
+    public CollectListFunctionSinkAdapter() {
+        this(BatchingPolicy.defaultPolicy());
+    }
+
+    public CollectListFunctionSinkAdapter(BatchingPolicy batchingPolicy) {
+        this.batchingPolicy = Objects.requireNonNull(batchingPolicy, "batchingPolicy must not be null");
+    }
 
     @Override
     public Uni<List<O>> emitMany(Multi<TraceEnvelope<O>> items, FunctionTransportContext context) {
         if (items == null) {
             return Uni.createFrom().failure(new NullPointerException("items must not be null"));
         }
-        return items.onItem().transform(envelope -> envelope == null ? null : envelope.payload()).collect().asList();
+        // Context is currently not consumed by this sink; reserved for future boundary telemetry/extensions.
+        return boundedItems(items)
+            .select().where(Objects::nonNull)
+            .collect().asList()
+            .onItem().transform(envelopes -> envelopes.stream()
+                .map(TraceEnvelope::payload)
+                .toList());
+    }
+
+    private Multi<TraceEnvelope<O>> boundedItems(Multi<TraceEnvelope<O>> items) {
+        int maxItems = batchingPolicy.maxItems();
+        return switch (batchingPolicy.overflowPolicy()) {
+            case FAIL -> items.select().first(maxItems + 1).collect().asList()
+                .onItem().transformToMulti(collected -> {
+                    if (collected.size() > maxItems) {
+                        return Multi.createFrom().failure(new IllegalStateException(
+                            "Function sink overflow: received " + collected.size()
+                                + " items with maxItems=" + maxItems + " and overflowPolicy=FAIL"));
+                    }
+                    return Multi.createFrom().iterable(collected);
+                });
+            case DROP, BUFFER -> items.select().first(maxItems);
+        };
     }
 }

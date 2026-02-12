@@ -17,8 +17,11 @@
 package org.pipelineframework.transport.function;
 
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.logging.Logger;
 
 /**
  * Context propagated at function transport boundaries.
@@ -34,6 +37,10 @@ public record FunctionTransportContext(
     String stage,
     Map<String, String> attributes
 ) {
+    private static final Logger LOG = Logger.getLogger(FunctionTransportContext.class.getName());
+    public static final String ATTR_IDEMPOTENCY_POLICY = "tpf.idempotency.policy";
+    public static final String ATTR_IDEMPOTENCY_KEY = "tpf.idempotency.key";
+
     /**
      * Creates a context with immutable attributes.
      */
@@ -56,5 +63,38 @@ public record FunctionTransportContext(
      */
     public static FunctionTransportContext of(String requestId, String functionName, String stage) {
         return new FunctionTransportContext(requestId, functionName, stage, Map.of());
+    }
+
+    /**
+     * Resolves idempotency policy from context attributes.
+     *
+     * @return resolved policy; defaults to RANDOM when unset/unknown. Unknown values are logged and
+     *     treated as RANDOM.
+     */
+    public IdempotencyPolicy idempotencyPolicy() {
+        String raw = attributes.get(ATTR_IDEMPOTENCY_POLICY);
+        if (raw == null || raw.isBlank()) {
+            return IdempotencyPolicy.RANDOM;
+        }
+        try {
+            return IdempotencyPolicy.valueOf(raw.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ignored) {
+            LOG.warning(() -> "Unknown idempotency policy '" + raw
+                + "'; falling back to " + IdempotencyPolicy.RANDOM);
+            return IdempotencyPolicy.RANDOM;
+        }
+    }
+
+    /**
+     * Returns explicit caller-supplied idempotency key if present.
+     *
+     * @return explicit key
+     */
+    public Optional<String> explicitIdempotencyKey() {
+        String raw = attributes.get(ATTR_IDEMPOTENCY_KEY);
+        if (raw == null || raw.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(raw.trim());
     }
 }

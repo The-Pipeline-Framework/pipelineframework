@@ -45,10 +45,11 @@ public final class DefaultUnaryFunctionSourceAdapter<I> implements FunctionSourc
 
     @Override
     public Multi<TraceEnvelope<I>> adapt(I event, FunctionTransportContext context) {
+        Objects.requireNonNull(event, "event must not be null");
         Objects.requireNonNull(context, "context must not be null");
         String traceId = deriveTraceId(context.requestId());
         String itemId = UUID.randomUUID().toString();
-        String idempotencyKey = traceId + ":" + payloadModel + ":" + itemId;
+        String idempotencyKey = resolveIdempotencyKey(context, traceId, itemId);
 
         Map<String, String> meta = new LinkedHashMap<>();
         meta.put("functionName", normalizeOrDefault(context.functionName(), ""));
@@ -59,7 +60,7 @@ public final class DefaultUnaryFunctionSourceAdapter<I> implements FunctionSourc
                 if (!"functionName".equals(key)
                     && !"stage".equals(key)
                     && !"requestId".equals(key)) {
-                    meta.put(key, value);
+                    meta.put(key, normalizeOrDefault(value, ""));
                 }
             });
         }
@@ -90,6 +91,14 @@ public final class DefaultUnaryFunctionSourceAdapter<I> implements FunctionSourc
         if (requestId == null || requestId.isBlank()) {
             return UUID.randomUUID().toString();
         }
-        return normalizeOrDefault(requestId, "");
+        return requestId.trim();
+    }
+
+    private String resolveIdempotencyKey(FunctionTransportContext context, String traceId, String itemId) {
+        if (context.idempotencyPolicy() == IdempotencyPolicy.EXPLICIT) {
+            return context.explicitIdempotencyKey()
+                .orElse(traceId + ":" + payloadModel + ":" + itemId);
+        }
+        return traceId + ":" + payloadModel + ":" + itemId;
     }
 }

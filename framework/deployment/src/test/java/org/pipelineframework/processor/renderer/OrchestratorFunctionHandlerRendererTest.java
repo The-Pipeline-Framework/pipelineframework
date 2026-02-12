@@ -63,40 +63,19 @@ class OrchestratorFunctionHandlerRendererTest {
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
 
         OrchestratorFunctionHandlerRenderer renderer = new OrchestratorFunctionHandlerRenderer();
-        OrchestratorBinding streamingBinding = new TestOrchestratorBindingBuilder()
-            .model(new PipelineStepModel(
-                "OrchestratorService",
-                "OrchestratorService",
-                "com.example.orchestrator.service",
-                ClassName.get("com.example.orchestrator.service", "OrchestratorService"),
-                null,
-                null,
-                StreamingShape.UNARY_UNARY,
-                java.util.Set.of(GenerationTarget.REST_RESOURCE),
-                ExecutionMode.DEFAULT,
-                DeploymentRole.ORCHESTRATOR_CLIENT,
-                false,
-                null
-            ))
-            .basePackage("com.example")
-            .transport("REST")
-            .inputTypeName("InputType")
-            .outputTypeName("OutputType")
-            .inputStreaming(true)
-            .outputStreaming(false)
-            .firstStepServiceName("ProcessAlphaService")
-            .firstStepStreamingShape(StreamingShape.UNARY_UNARY)
-            .build();
+        OrchestratorBinding streamingBinding = buildStreamingBinding(true, false);
 
         renderer.render(streamingBinding, new GenerationContext(
             processingEnv, tempDir, DeploymentRole.REST_SERVER, java.util.Set.of(), null, null));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/PipelineRunFunctionHandler.java");
         String source = Files.readString(generatedSource);
-        assertTrue(source.contains("implements RequestHandler<"));
-        assertTrue(source.contains("Multi<InputTypeDto>"));
-        assertTrue(source.contains("OutputTypeDto>"));
-        assertTrue(source.contains("return FunctionTransportBridge.invokeManyToOne(input, transportContext, source, invoke, sink)"));
+        assertTrue(
+            source.contains("implements RequestHandler<Multi<InputTypeDto>, OutputTypeDto>"),
+            () -> "expected full RequestHandler signature missing. source:\n" + source);
+        assertTrue(
+            source.contains("return FunctionTransportBridge.invokeManyToOne(input, transportContext, source, invoke, sink)"),
+            () -> "expected FunctionTransportBridge.invokeManyToOne invocation missing. source:\n" + source);
     }
 
     @Test
@@ -105,41 +84,26 @@ class OrchestratorFunctionHandlerRendererTest {
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
 
         OrchestratorFunctionHandlerRenderer renderer = new OrchestratorFunctionHandlerRenderer();
-        OrchestratorBinding streamingBinding = new TestOrchestratorBindingBuilder()
-            .model(new PipelineStepModel(
-                "OrchestratorService",
-                "OrchestratorService",
-                "com.example.orchestrator.service",
-                ClassName.get("com.example.orchestrator.service", "OrchestratorService"),
-                null,
-                null,
-                StreamingShape.UNARY_UNARY,
-                java.util.Set.of(GenerationTarget.REST_RESOURCE),
-                ExecutionMode.DEFAULT,
-                DeploymentRole.ORCHESTRATOR_CLIENT,
-                false,
-                null
-            ))
-            .basePackage("com.example")
-            .transport("REST")
-            .inputTypeName("InputType")
-            .outputTypeName("OutputType")
-            .inputStreaming(true)
-            .outputStreaming(true)
-            .firstStepServiceName("ProcessAlphaService")
-            .firstStepStreamingShape(StreamingShape.UNARY_UNARY)
-            .build();
+        OrchestratorBinding streamingBinding = buildStreamingBinding(true, true);
 
         renderer.render(streamingBinding, new GenerationContext(
             processingEnv, tempDir, DeploymentRole.REST_SERVER, java.util.Set.of(), null, null));
 
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/PipelineRunFunctionHandler.java");
         String source = Files.readString(generatedSource);
-        assertTrue(source.contains("implements RequestHandler<Multi<InputTypeDto>, List<OutputTypeDto>>"));
-        assertTrue(source.contains("return FunctionTransportBridge.invokeManyToMany(input, transportContext, source, invoke, sink)"));
+        assertTrue(
+            source.contains("implements RequestHandler<Multi<InputTypeDto>, List<OutputTypeDto>>"),
+            () -> "expected full RequestHandler signature missing. source:\n" + source);
+        assertTrue(
+            source.contains("return FunctionTransportBridge.invokeManyToMany(input, transportContext, source, invoke, sink)"),
+            () -> "expected FunctionTransportBridge.invokeManyToMany invocation missing. source:\n" + source);
     }
 
     private OrchestratorBinding buildBinding() {
+        return buildStreamingBinding(false, false);
+    }
+
+    private OrchestratorBinding buildStreamingBinding(boolean inputStreaming, boolean outputStreaming) {
         PipelineStepModel model = new PipelineStepModel(
             "OrchestratorService",
             "OrchestratorService",
@@ -160,8 +124,8 @@ class OrchestratorFunctionHandlerRendererTest {
             .transport("REST")
             .inputTypeName("InputType")
             .outputTypeName("OutputType")
-            .inputStreaming(false)
-            .outputStreaming(false)
+            .inputStreaming(inputStreaming)
+            .outputStreaming(outputStreaming)
             .firstStepServiceName("ProcessAlphaService")
             .firstStepStreamingShape(StreamingShape.UNARY_UNARY)
             .build();

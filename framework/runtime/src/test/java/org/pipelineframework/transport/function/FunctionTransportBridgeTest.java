@@ -111,6 +111,38 @@ class FunctionTransportBridgeTest {
     }
 
     @Test
+    void appliesDropOverflowPolicyForStreamingSinkInManyToManyFlow() {
+        CollectListFunctionSinkAdapter<Integer> sink = new CollectListFunctionSinkAdapter<>(
+            new BatchingPolicy(2, 1024, Duration.ofMillis(50), 1, BatchOverflowPolicy.DROP));
+
+        List<Integer> result = FunctionTransportBridge.invokeManyToMany(
+            "event",
+            context,
+            createStreamingSourceAdapter(1, 2, 3),
+            createManyToManyInvokeAdapter(),
+            sink);
+
+        assertEquals(List.of(10, 20), result);
+    }
+
+    @Test
+    void appliesFailOverflowPolicyForStreamingSinkInManyToManyFlow() {
+        CollectListFunctionSinkAdapter<Integer> sink = new CollectListFunctionSinkAdapter<>(
+            new BatchingPolicy(2, 1024, Duration.ofMillis(50), 1, BatchOverflowPolicy.FAIL));
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> FunctionTransportBridge.invokeManyToMany(
+                "event",
+                context,
+                createStreamingSourceAdapter(1, 2, 3),
+                createManyToManyInvokeAdapter(),
+                sink));
+
+        assertEquals("Function sink overflow: received 3 items with maxItems=2 and overflowPolicy=FAIL", ex.getMessage());
+    }
+
+    @Test
     void propagatesInvokeExceptionsAcrossShapes() {
         RuntimeException boom = new RuntimeException("invoke boom");
 
