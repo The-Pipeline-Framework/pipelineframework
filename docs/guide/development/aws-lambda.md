@@ -98,7 +98,7 @@ Behavior:
 - `CONTEXT_STABLE` (default): adapter-generated deterministic transport keys from stable context/envelope identifiers (non-authoritative dedupe behavior).
   These keys provide transport-level correlation and can reduce duplicate processing attempts, but they do not guarantee business/data uniqueness and do not replace explicit business idempotency rules.
 - `EXPLICIT`: uses caller-provided key where supported; this is the recommended mode when the application already has stable business identifiers.
-  If the key is missing, adapters log a warning and fall back to `CONTEXT_STABLE` derivation.
+  If the key is missing (or an adapter/runtime path does not support explicit override), adapters log a warning and fall back to `CONTEXT_STABLE` derivation.
 - `RANDOM`: legacy compatibility alias mapped to `CONTEXT_STABLE`.
 
 `EXPLICIT` is an opt-in transport assist, not a replacement for business/data-level uniqueness enforcement.

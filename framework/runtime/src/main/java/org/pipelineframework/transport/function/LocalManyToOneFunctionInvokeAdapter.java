@@ -167,8 +167,8 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
             return "empty";
         }
         TraceEnvelope<I> first = envelopes.get(0);
-        String stable = AdapterUtils.normalizeOrDefault(first.idempotencyKey(),
+        String deterministicSuffix = AdapterUtils.normalizeOrDefault(first.idempotencyKey(),
             AdapterUtils.normalizeOrDefault(first.itemId(), "item0"));
-        return stable;
+        return deterministicSuffix;
     }
 }

@@ -90,8 +90,8 @@ public final class MultiFunctionSourceAdapter<I> implements FunctionSourceAdapte
                 .onItem().transformToMulti(collected -> {
                     if (collected.size() > maxItems) {
                         return Multi.createFrom().failure(new IllegalStateException(
-                            "Function source overflow: received " + collected.size()
-                                + " items with maxItems=" + maxItems + " and overflowPolicy=FAIL"));
+                            "Function source overflow detected with overflowPolicy=FAIL: received more than "
+                                + maxItems + " items; collected at least " + collected.size()));
                     }
                     return Multi.createFrom().iterable(collected);
                 });

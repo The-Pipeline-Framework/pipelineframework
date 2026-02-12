@@ -52,16 +52,6 @@ class FunctionTransportContextTest {
         assertEquals(IdempotencyPolicy.CONTEXT_STABLE, context.idempotencyPolicy());
     }
 
-    @Test
-    void resolvesExplicitPolicy() {
-        FunctionTransportContext context = new FunctionTransportContext(
-            "req-4",
-            "fn",
-            "ingress",
-            Map.of(FunctionTransportContext.ATTR_IDEMPOTENCY_POLICY, "explicit"));
-        assertEquals(IdempotencyPolicy.EXPLICIT, context.idempotencyPolicy());
-    }
-
     @ParameterizedTest
     @ValueSource(strings = {"explicit", "EXPLICIT", "Explicit"})
     void resolvesExplicitPolicyCaseInsensitively(String rawPolicy) {

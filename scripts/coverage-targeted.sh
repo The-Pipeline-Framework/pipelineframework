@@ -61,7 +61,7 @@ if [[ ! -f "$JACOCO_AGENT_JAR" ]]; then
   (
     cd "$ROOT_DIR"
     ./mvnw -q org.apache.maven.plugins:maven-dependency-plugin:3.8.1:get \
-      -Dartifact=org.jacoco:org.jacoco.agent:${JACOCO_VERSION}:jar:runtime
+      -Dartifact="org.jacoco:org.jacoco.agent:${JACOCO_VERSION}:jar:runtime"
   )
 fi
 
@@ -87,8 +87,8 @@ extract_counter_pair() {
     my $ctype = $ENV{"COV_TYPE"};
     my $missed;
     my $covered;
-    # Use only root-level <report> counters (exclude per-package/class/method counters).
-    my ($root_block) = $_ =~ /<report\b[^>]*>(.*?)(?:<package\b|<\/report>)/s;
+    # Use root-level <report> counters from the tail after the last </package>.
+    my ($root_block) = $_ =~ /<report\b[^>]*>(?:.*<\/package>)?(.*?)(?:<\/report>)/s;
     $root_block = $_ unless defined $root_block;
     while ($root_block =~ /<counter type="\Q$ctype\E" missed="([0-9]+)" covered="([0-9]+)"\/>/g) {
       $missed = $1;

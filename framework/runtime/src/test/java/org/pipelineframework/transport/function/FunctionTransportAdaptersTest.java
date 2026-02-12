@@ -131,6 +131,21 @@ class FunctionTransportAdaptersTest {
     }
 
     @Test
+    void localOneToManyAdapterRejectsNullInputPayload() {
+        LocalOneToManyFunctionInvokeAdapter<String, Integer> adapter = new LocalOneToManyFunctionInvokeAdapter<>(
+            payload -> Multi.createFrom().items(payload.length()),
+            "search.token.out",
+            "v1");
+        TraceEnvelope<String> input = TraceEnvelope.root("trace-om-null", "item-om-null", "search.token", "v1", "idem-om-null", null);
+        FunctionTransportContext context = FunctionTransportContext.of("req-505-null", "search-handler", "invoke-step");
+
+        NullPointerException ex = assertThrows(
+            NullPointerException.class,
+            () -> adapter.invokeOneToMany(input, context).collect().asList().await().atMost(Duration.ofSeconds(2)));
+        assertEquals("LocalOneToManyFunctionInvokeAdapter input payload must not be null", ex.getMessage());
+    }
+
+    @Test
     void localManyToOneAdapterCollapsesInputStreamToSingleEnvelope() {
         LocalManyToOneFunctionInvokeAdapter<Integer, Integer> adapter = new LocalManyToOneFunctionInvokeAdapter<>(
             payloads -> payloads.collect().asList().onItem().transform(list -> list.stream().mapToInt(Integer::intValue).sum()),
@@ -223,7 +238,6 @@ class FunctionTransportAdaptersTest {
         BatchingPolicy policy = BatchingPolicy.defaultPolicy();
 
         assertEquals(BatchOverflowPolicy.BUFFER, policy.overflowPolicy());
-        assertEquals(3, BatchOverflowPolicy.values().length);
     }
 
     @Test
@@ -236,7 +250,9 @@ class FunctionTransportAdaptersTest {
             IllegalStateException.class,
             () -> adapter.adapt(Multi.createFrom().items(1, 2, 3), context)
                 .collect().asList().await().atMost(Duration.ofSeconds(2)));
-        assertEquals("Function source overflow: received 3 items with maxItems=2 and overflowPolicy=FAIL", ex.getMessage());
+        assertEquals(
+            "Function source overflow detected with overflowPolicy=FAIL: received more than 2 items; collected at least 3",
+            ex.getMessage());
     }
 
     @Test

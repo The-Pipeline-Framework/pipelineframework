@@ -64,6 +64,20 @@ public final class FunctionTransportBridge {
             .await().atMost(timeout);
     }
 
+    /**
+     * Executes a non-blocking reactive 1 -> 1 flow and returns a {@link Uni} for the sink result.
+     *
+     * @param event inbound event payload
+     * @param context function transport context
+     * @param sourceAdapter source adapter
+     * @param invokeAdapter invoke adapter
+     * @param sinkAdapter sink adapter
+     * @param <E> event type
+     * @param <I> inbound payload type
+     * @param <O> outbound payload type
+     * @param <R> sink result type
+     * @return reactive sink result
+     */
     public static <E, I, O, R> Uni<R> invokeOneToOneReactive(
             E event,
             FunctionTransportContext context,
@@ -108,6 +122,20 @@ public final class FunctionTransportBridge {
             .await().atMost(timeout);
     }
 
+    /**
+     * Executes a non-blocking reactive 1 -> N flow and returns a {@link Uni} for the sink result.
+     *
+     * @param event inbound event payload
+     * @param context function transport context
+     * @param sourceAdapter source adapter
+     * @param invokeAdapter invoke adapter
+     * @param sinkAdapter sink adapter
+     * @param <E> event type
+     * @param <I> inbound payload type
+     * @param <O> outbound payload type
+     * @param <R> sink result type
+     * @return reactive sink result
+     */
     public static <E, I, O, R> Uni<R> invokeOneToManyReactive(
             E event,
             FunctionTransportContext context,
@@ -151,6 +179,20 @@ public final class FunctionTransportBridge {
             .await().atMost(timeout);
     }
 
+    /**
+     * Executes a non-blocking reactive N -> 1 flow and returns a {@link Uni} for the sink result.
+     *
+     * @param event inbound event payload
+     * @param context function transport context
+     * @param sourceAdapter source adapter
+     * @param invokeAdapter invoke adapter
+     * @param sinkAdapter sink adapter
+     * @param <E> event type
+     * @param <I> inbound payload type
+     * @param <O> outbound payload type
+     * @param <R> sink result type
+     * @return reactive sink result
+     */
     public static <E, I, O, R> Uni<R> invokeManyToOneReactive(
             E event,
             FunctionTransportContext context,
@@ -193,6 +235,20 @@ public final class FunctionTransportBridge {
             .await().atMost(timeout);
     }
 
+    /**
+     * Executes a non-blocking reactive N -> M flow and returns a {@link Uni} for the sink result.
+     *
+     * @param event inbound event payload
+     * @param context function transport context
+     * @param sourceAdapter source adapter
+     * @param invokeAdapter invoke adapter
+     * @param sinkAdapter sink adapter
+     * @param <E> event type
+     * @param <I> inbound payload type
+     * @param <O> outbound payload type
+     * @param <R> sink result type
+     * @return reactive sink result
+     */
     public static <E, I, O, R> Uni<R> invokeManyToManyReactive(
             E event,
             FunctionTransportContext context,

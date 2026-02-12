@@ -58,7 +58,14 @@ public final class LocalUnaryFunctionInvokeAdapter<I, O> implements FunctionInvo
             return Uni.createFrom().failure(new NullPointerException(
                 "LocalUnaryFunctionInvokeAdapter input payload must not be null"));
         }
-        return Uni.createFrom().deferred(() -> delegate.apply(payload))
+        return Uni.createFrom().deferred(() -> {
+                Uni<O> result = delegate.apply(payload);
+                if (result == null) {
+                    return Uni.createFrom().failure(new NullPointerException(
+                        "LocalUnaryFunctionInvokeAdapter delegate returned null Uni from apply"));
+                }
+                return result;
+            })
             .onItem().ifNull().failWith(() -> new NullPointerException(
                 "LocalUnaryFunctionInvokeAdapter delegate emitted null output"))
             .onItem()

@@ -68,16 +68,13 @@ public final class DefaultUnaryFunctionSourceAdapter<I> implements FunctionSourc
             });
         }
 
-        TraceEnvelope<I> envelope = new TraceEnvelope<>(
+        TraceEnvelope<I> envelope = TraceEnvelope.rootWithMeta(
             traceId,
-            null,
             itemId,
-            null,
             payloadModel,
             payloadModelVersion,
             idempotencyKey,
             event,
-            null,
             meta);
         return Multi.createFrom().item(envelope);
     }

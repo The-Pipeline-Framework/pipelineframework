@@ -55,8 +55,11 @@ public final class LocalOneToManyFunctionInvokeAdapter<I, O> implements Function
         Objects.requireNonNull(input, "input envelope must not be null");
         // Context is required by the FunctionInvokeAdapter contract but not used for local 1->N invocation.
         Objects.requireNonNull(context, "context must not be null");
-        Objects.requireNonNull(input.payload(), "LocalUnaryFunctionInvokeAdapter input payload must not be null");
-        String traceId = AdapterUtils.normalizeOrDefault(input.traceId(), AdapterUtils.deriveTraceId(context.requestId()));
+        Objects.requireNonNull(input.payload(), "LocalOneToManyFunctionInvokeAdapter input payload must not be null");
+        String rawTraceId = input.traceId();
+        String traceId = (rawTraceId == null || rawTraceId.isBlank())
+            ? AdapterUtils.deriveTraceId(context.requestId())
+            : rawTraceId.strip();
         AtomicLong outputIndex = new AtomicLong(0L);
         return delegate.apply(input.payload())
             .onItem().transform(output -> {

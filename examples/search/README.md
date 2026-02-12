@@ -66,6 +66,11 @@ The current search Function platform lane is intentionally unary-only.
 - The current `examples/search/config/pipeline.yaml` uses `ONE_TO_ONE` cardinality for all functional steps.
 - Non-unary (`ONE_TO_MANY`, `MANY_TO_ONE`, `MANY_TO_MANY`) function bridge E2E is therefore not enabled yet in this reference.
 
+In this lane, treat `UNARY_UNARY` and `ONE_TO_ONE` as equivalent:
+`UNARY_UNARY` is the method/transport shape term used by runtime/generation, while `ONE_TO_ONE`
+is the pipeline-cardinality term used in `examples/search/config/pipeline.yaml` when
+`pipeline.platform=FUNCTION`.
+
 When function streaming/cardinality support is expanded, add one explicit non-unary path and a dedicated end-to-end test lane.
 
 ### Handler Selection For Modules With Multiple Generated Handlers
