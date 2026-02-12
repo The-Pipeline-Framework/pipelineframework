@@ -357,6 +357,24 @@ class SearchPipelineEndToEndIT {
     }
 
     @Test
+    void tokenizeFanOutAndIndexFanInPersistPerDocumentCardinality() throws Exception {
+        String input = "https://example.com/fanout-" + UUID.randomUUID();
+        String version = "fanout-fanin-" + UUID.randomUUID();
+        ProcessResult result = orchestratorTriggerRun(input, "prefer-cache", version, false);
+        assertExitSuccess(result, "Expected pipeline run to succeed");
+
+        UUID docId = stableDocId(input);
+        int tokenBatchCount = awaitRowCountAtLeastForDocId("tokenbatch", docId, 2, Duration.ofSeconds(10));
+        int indexAckCount = awaitRowCountAtLeastForDocId("indexack", docId, 1, Duration.ofSeconds(10));
+
+        assertTrue(tokenBatchCount >= 2,
+            "Expected ONE_TO_MANY fan-out to persist at least two TokenBatch rows for docId " + docId);
+        assertTrue(indexAckCount == 1,
+            "Expected MANY_TO_ONE fan-in to persist exactly one IndexAck row for docId " + docId
+                + " but found " + indexAckCount);
+    }
+
+    @Test
     void invalidationClearsDownstreamCacheEntry() throws Exception {
         String input = "https://example.com";
         String version = "invalidate-" + UUID.randomUUID();
@@ -484,6 +502,52 @@ class SearchPipelineEndToEndIT {
             return Integer.parseInt(matcher.group(1));
         }
         throw new SQLException("Unexpected count output for " + table + ": " + trimmed);
+    }
+
+    private int countRowsForDocId(String table, UUID docId) throws SQLException {
+        Container.ExecResult result;
+        try {
+            result = postgres.execInContainer(
+                "psql",
+                "-t",
+                "-A",
+                "-U",
+                postgres.getUsername(),
+                "-d",
+                postgres.getDatabaseName(),
+                "-c",
+                "select count(*) from " + table + " where doc_id = '" + docId + "'");
+        } catch (Exception e) {
+            throw new SQLException("Failed to query row count for " + table + " docId=" + docId, e);
+        }
+        if (result.getExitCode() != 0) {
+            throw new SQLException("Count query failed for " + table + " docId=" + docId + ": " + result.getStderr());
+        }
+        String output = result.getStdout();
+        String stderr = result.getStderr();
+        String trimmed = (output == null ? "" : output).trim();
+        if (trimmed.isBlank() && stderr != null && !stderr.isBlank()) {
+            throw new SQLException("Unexpected count output for " + table + " docId=" + docId + ": " + stderr.trim());
+        }
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(\\d+)").matcher(trimmed);
+        if (matcher.find()) {
+            return Integer.parseInt(matcher.group(1));
+        }
+        throw new SQLException("Unexpected count output for " + table + " docId=" + docId + ": " + trimmed);
+    }
+
+    private int awaitRowCountAtLeastForDocId(String table, UUID docId, int minCount, Duration timeout)
+        throws Exception {
+        long deadlineNanos = System.nanoTime() + timeout.toNanos();
+        int count = 0;
+        do {
+            count = countRowsForDocId(table, docId);
+            if (count >= minCount) {
+                return count;
+            }
+            Thread.sleep(200);
+        } while (System.nanoTime() < deadlineNanos);
+        return countRowsForDocId(table, docId);
     }
 
     private void assertExitSuccess(ProcessResult result, String message) {
