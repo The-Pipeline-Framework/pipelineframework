@@ -42,6 +42,7 @@ import org.testcontainers.containers.*;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.lifecycle.Startables;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SearchPipelineEndToEndIT {
@@ -369,7 +370,7 @@ class SearchPipelineEndToEndIT {
 
         assertTrue(tokenBatchCount >= 2,
             "Expected ONE_TO_MANY fan-out to persist at least two TokenBatch rows for docId " + docId);
-        assertTrue(indexAckCount == 1,
+        assertEquals(1, indexAckCount,
             "Expected MANY_TO_ONE fan-in to persist exactly one IndexAck row for docId " + docId
                 + " but found " + indexAckCount);
     }
@@ -473,38 +474,16 @@ class SearchPipelineEndToEndIT {
     }
 
     private int countRows(String table) throws SQLException {
-        Container.ExecResult result;
-        try {
-            result = postgres.execInContainer(
-                "psql",
-                "-t",
-                "-A",
-                "-U",
-                postgres.getUsername(),
-                "-d",
-                postgres.getDatabaseName(),
-                "-c",
-                "select count(*) from " + table);
-        } catch (Exception e) {
-            throw new SQLException("Failed to query row count for " + table, e);
-        }
-        if (result.getExitCode() != 0) {
-            throw new SQLException("Count query failed for " + table + ": " + result.getStderr());
-        }
-        String output = result.getStdout();
-        String stderr = result.getStderr();
-        String trimmed = (output == null ? "" : output).trim();
-        if (trimmed.isBlank() && stderr != null && !stderr.isBlank()) {
-            throw new SQLException("Unexpected count output for " + table + ": " + stderr.trim());
-        }
-        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(\\d+)").matcher(trimmed);
-        if (matcher.find()) {
-            return Integer.parseInt(matcher.group(1));
-        }
-        throw new SQLException("Unexpected count output for " + table + ": " + trimmed);
+        String query = "select count(*) from " + table;
+        return executeCountQuery(query, "table " + table);
     }
 
     private int countRowsForDocId(String table, UUID docId) throws SQLException {
+        String query = "select count(*) from " + table + " where doc_id = '" + docId + "'";
+        return executeCountQuery(query, "table " + table + " docId=" + docId);
+    }
+
+    private int executeCountQuery(String query, String context) throws SQLException {
         Container.ExecResult result;
         try {
             result = postgres.execInContainer(
@@ -516,24 +495,24 @@ class SearchPipelineEndToEndIT {
                 "-d",
                 postgres.getDatabaseName(),
                 "-c",
-                "select count(*) from " + table + " where doc_id = '" + docId + "'");
+                query);
         } catch (Exception e) {
-            throw new SQLException("Failed to query row count for " + table + " docId=" + docId, e);
+            throw new SQLException("Failed to query row count for " + context, e);
         }
         if (result.getExitCode() != 0) {
-            throw new SQLException("Count query failed for " + table + " docId=" + docId + ": " + result.getStderr());
+            throw new SQLException("Count query failed for " + context + ": " + result.getStderr());
         }
         String output = result.getStdout();
         String stderr = result.getStderr();
         String trimmed = (output == null ? "" : output).trim();
         if (trimmed.isBlank() && stderr != null && !stderr.isBlank()) {
-            throw new SQLException("Unexpected count output for " + table + " docId=" + docId + ": " + stderr.trim());
+            throw new SQLException("Unexpected count output for " + context + ": " + stderr.trim());
         }
         java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(\\d+)").matcher(trimmed);
         if (matcher.find()) {
             return Integer.parseInt(matcher.group(1));
         }
-        throw new SQLException("Unexpected count output for " + table + " docId=" + docId + ": " + trimmed);
+        throw new SQLException("Unexpected count output for " + context + ": " + trimmed);
     }
 
     private int awaitRowCountAtLeastForDocId(String table, UUID docId, int minCount, Duration timeout)
