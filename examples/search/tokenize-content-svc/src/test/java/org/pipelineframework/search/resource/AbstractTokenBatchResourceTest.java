@@ -20,19 +20,22 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import io.restassured.path.json.JsonPath;
 import io.restassured.RestAssured;
 import io.restassured.config.SSLConfig;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.search.tokenize_content.service.ProcessTokenizeContentService;
 
 import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.notNullValue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 abstract class AbstractTokenBatchResourceTest {
-    private static final int LONG_CONTENT_REPEAT_COUNT = 40;
+    private static final int LONG_CONTENT_REPEAT_COUNT =
+            (ProcessTokenizeContentService.TOKENS_PER_BATCH * 3) + 1;
     private static final Pattern TOKENS_HASH_PATTERN = Pattern.compile("tokensHash");
 
     @BeforeAll
@@ -60,15 +63,20 @@ abstract class AbstractTokenBatchResourceTest {
                 """
                         .formatted(UUID.randomUUID());
 
-        given().contentType(ContentType.JSON)
+        String responseBody = given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
                 .post("/api/v1/parsed-document/")
                 .then()
                 .statusCode(200)
-                .body("docId", notNullValue())
-                .body("tokens", notNullValue())
-                .body("tokenizedAt", notNullValue());
+                .extract()
+                .asString();
+
+        String firstPayload = firstSsePayload(responseBody);
+        JsonPath json = JsonPath.from(firstPayload);
+        assertNotNull(json.getString("docId"));
+        assertNotNull(json.getString("tokens"));
+        assertNotNull(json.getString("tokenizedAt"));
     }
 
     @Test
@@ -91,7 +99,7 @@ abstract class AbstractTokenBatchResourceTest {
 
     @Test
     void testTokenBatchStreamsMultipleBatchesForLongContent() {
-        // Repeat enough tokens to exceed the service batch size and force multiple emitted batches.
+        // Tie payload length to the service batch size so the test always forces multiple batches.
         String longContent = String.join(" ", java.util.Collections.nCopies(
                 LONG_CONTENT_REPEAT_COUNT, "tokenizable-content-for-batch-splitting"));
         String requestBody =
@@ -118,10 +126,15 @@ abstract class AbstractTokenBatchResourceTest {
 
     private static int countOccurrences(String value, Pattern pattern) {
         Matcher matcher = pattern.matcher(value);
-        int count = 0;
-        while (matcher.find()) {
-            count++;
+        return Math.toIntExact(matcher.results().count());
+    }
+
+    private static String firstSsePayload(String responseBody) {
+        for (String line : responseBody.split("\\R")) {
+            if (line.startsWith("data:")) {
+                return line.substring("data:".length());
+            }
         }
-        return count;
+        throw new IllegalStateException("No SSE data payload found in response");
     }
 }

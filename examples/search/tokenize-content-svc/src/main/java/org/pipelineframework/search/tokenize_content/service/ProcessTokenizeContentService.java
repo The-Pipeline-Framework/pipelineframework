@@ -2,8 +2,6 @@ package org.pipelineframework.search.tokenize_content.service;
 
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -33,7 +31,8 @@ public class ProcessTokenizeContentService
     implements ReactiveStreamingService<ParsedDocument, TokenBatch> {
 
   // Keep batches small so downstream fan-in services receive steady chunks rather than large payload spikes.
-  private static final int TOKENS_PER_BATCH = 4;
+  public static final int TOKENS_PER_BATCH = 4;
+  private static final Set<String> STOP_WORDS = Set.of("a", "an", "and", "the", "of", "to", "in");
   private static final Logger LOGGER = Logger.getLogger(ProcessTokenizeContentService.class);
 
   @Override
@@ -72,11 +71,10 @@ public class ProcessTokenizeContentService
   }
 
   private List<String> tokenizeIntoBatches(String content, int batchSize) {
-    Set<String> stopWords = new HashSet<>(Arrays.asList("a", "an", "and", "the", "of", "to", "in"));
     String normalized = content.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9\\s]", " ");
     ArrayList<String> tokens = new ArrayList<>();
     for (String token : normalized.split("\\s+")) {
-      if (token.isBlank() || stopWords.contains(token)) {
+      if (token.isBlank() || STOP_WORDS.contains(token)) {
         continue;
       }
       tokens.add(token);

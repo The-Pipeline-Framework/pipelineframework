@@ -200,6 +200,8 @@ public class DeliverToNextIngestBridge {
 
     private void clearInFlightReservations() {
         synchronized (inFlightLock) {
+            // Intentionally retain idempotencyGuard state here:
+            // this bridge currently enforces at-most-once semantics for forwarded orderIds.
             inFlightOrderIds.clear();
         }
     }

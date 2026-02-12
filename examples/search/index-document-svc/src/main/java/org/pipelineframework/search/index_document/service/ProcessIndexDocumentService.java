@@ -30,18 +30,17 @@ import org.pipelineframework.service.ReactiveStreamingClientService;
 public class ProcessIndexDocumentService
     implements ReactiveStreamingClientService<TokenBatch, IndexAck> {
   private static final int MAX_BATCHES = 10_000;
+  private static final Logger LOGGER = Logger.getLogger(ProcessIndexDocumentService.class);
 
   @Override
   public Uni<IndexAck> process(Multi<TokenBatch> input) {
-    Logger logger = Logger.getLogger(getClass());
     return input
         .collect()
         .asList()
-        .onItem()
-        .transformToUni(batches -> processBatches(batches, logger));
+        .onItem().transformToUni(this::processBatches);
   }
 
-  private Uni<IndexAck> processBatches(List<TokenBatch> batches, Logger logger) {
+  private Uni<IndexAck> processBatches(List<TokenBatch> batches) {
     if (batches == null || batches.isEmpty()) {
       return Uni.createFrom().failure(new IllegalArgumentException("token batches are required"));
     }
@@ -79,7 +78,7 @@ public class ProcessIndexDocumentService
     output.indexedAt = Instant.now();
     output.success = true;
 
-    logger.infof("Indexed doc %s from %s token batches (version=%s)", docId, batches.size(), indexVersion);
+    LOGGER.infof("Indexed doc %s from %s token batches (version=%s)", docId, batches.size(), indexVersion);
     return Uni.createFrom().item(output);
   }
 

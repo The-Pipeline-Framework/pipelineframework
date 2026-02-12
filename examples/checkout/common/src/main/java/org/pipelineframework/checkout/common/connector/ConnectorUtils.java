@@ -39,6 +39,9 @@ public final class ConnectorUtils {
         if (field == null) {
             return "";
         }
+        if (field.isRepeated() || field.isMapField()) {
+            return "";
+        }
         Object value = message.getField(field);
         return switch (field.getJavaType()) {
             case STRING, INT, LONG, FLOAT, DOUBLE, BOOLEAN, ENUM -> String.valueOf(value);
