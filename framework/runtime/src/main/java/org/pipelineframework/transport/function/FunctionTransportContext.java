@@ -40,6 +40,10 @@ public record FunctionTransportContext(
     private static final Logger LOG = Logger.getLogger(FunctionTransportContext.class.getName());
     public static final String ATTR_IDEMPOTENCY_POLICY = "tpf.idempotency.policy";
     public static final String ATTR_IDEMPOTENCY_KEY = "tpf.idempotency.key";
+    public static final String ATTR_INVOCATION_MODE = "tpf.function.invocation.mode";
+    public static final String ATTR_TARGET_RUNTIME = "tpf.function.target.runtime";
+    public static final String ATTR_TARGET_MODULE = "tpf.function.target.module";
+    public static final String ATTR_TARGET_HANDLER = "tpf.function.target.handler";
 
     /**
      * Creates a context with immutable attributes.
@@ -63,6 +67,23 @@ public record FunctionTransportContext(
      */
     public static FunctionTransportContext of(String requestId, String functionName, String stage) {
         return new FunctionTransportContext(requestId, functionName, stage, Map.of());
+    }
+
+    /**
+     * Creates a context with attributes.
+     *
+     * @param requestId request id
+     * @param functionName function name
+     * @param stage stage name
+     * @param attributes context attributes
+     * @return context with attributes
+     */
+    public static FunctionTransportContext of(
+            String requestId,
+            String functionName,
+            String stage,
+            Map<String, String> attributes) {
+        return new FunctionTransportContext(requestId, functionName, stage, attributes);
     }
 
     /**
@@ -99,6 +120,66 @@ public record FunctionTransportContext(
         if (raw == null || raw.isBlank()) {
             return Optional.empty();
         }
-        return Optional.of(raw.trim());
+        return Optional.of(raw.strip());
+    }
+
+    /**
+     * Resolves function invocation mode from context attributes.
+     *
+     * @return invocation mode; defaults to LOCAL when unset/unknown
+     */
+    public FunctionInvocationMode invocationMode() {
+        String raw = attributes.get(ATTR_INVOCATION_MODE);
+        if (raw == null || raw.isBlank()) {
+            return FunctionInvocationMode.LOCAL;
+        }
+        String normalized = raw.strip().toUpperCase(Locale.ROOT);
+        if ("LOCAL".equals(normalized)) {
+            return FunctionInvocationMode.LOCAL;
+        }
+        if ("REMOTE".equals(normalized)) {
+            return FunctionInvocationMode.REMOTE;
+        }
+        LOG.warning(() -> "Unknown function invocation mode '" + raw
+            + "'; falling back to " + FunctionInvocationMode.LOCAL);
+        return FunctionInvocationMode.LOCAL;
+    }
+
+    /**
+     * Optional target runtime identifier for remote invocation.
+     * Only meaningful when {@link #invocationMode()} is {@link FunctionInvocationMode#REMOTE}.
+     *
+     * @return target runtime when present
+     */
+    public Optional<String> targetRuntime() {
+        return normalizedAttribute(ATTR_TARGET_RUNTIME);
+    }
+
+    /**
+     * Optional target module identifier for remote invocation.
+     * Only meaningful when {@link #invocationMode()} is {@link FunctionInvocationMode#REMOTE}.
+     *
+     * @return target module when present
+     */
+    public Optional<String> targetModule() {
+        return normalizedAttribute(ATTR_TARGET_MODULE);
+    }
+
+    /**
+     * Optional target handler identifier for remote invocation.
+     * Only meaningful when {@link #invocationMode()} is {@link FunctionInvocationMode#REMOTE}.
+     *
+     * @return target handler when present
+     */
+    public Optional<String> targetHandler() {
+        return normalizedAttribute(ATTR_TARGET_HANDLER);
+    }
+
+    private Optional<String> normalizedAttribute(String key) {
+        String raw = attributes.get(key);
+        if (raw == null || raw.isBlank()) {
+            return Optional.empty();
+        }
+        return Optional.of(raw.strip());
     }
 }

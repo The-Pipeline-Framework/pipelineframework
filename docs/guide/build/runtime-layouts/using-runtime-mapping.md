@@ -53,3 +53,43 @@ Runtime mapping applies to regular steps and synthetic side-effect steps. If plu
 ## Transport note
 
 Transport remains a pipeline decision (`GRPC`, `REST`, or `LOCAL`) and is orthogonal to runtime mapping. Runtime mapping chooses *where* steps run; transport chooses *how* they are called.
+
+## FUNCTION Invocation Contract Baseline
+
+For `pipeline.platform=FUNCTION` (serverless/function runtime target; see [Configuration Reference](/guide/build/configuration/)), runtime mapping and function transport contract metadata work together:
+
+- runtime mapping still decides placement (`orchestrator`, step modules, plugin/synthetic modules)
+- function invocation metadata in `FunctionTransportContext` expresses invocation intent. `FunctionTransportContext` is the per-invocation metadata object (invocation id, caller/stage, attributes, routing intent) passed through the function transport path:
+  - `tpf.function.invocation.mode=LOCAL|REMOTE`
+  - optional target metadata: runtime/module/handler
+
+Concrete example:
+
+```yaml
+# Runtime mapping placement (annotation-processor input)
+enabled: true
+layout: pipeline-runtime
+validation: auto
+
+modules:
+  orchestrator-svc:
+    runtime: orchestrator
+  index-document-svc:
+    runtime: pipeline
+
+# Example invocation attributes carried in FunctionTransportContext
+# (not parsed by the runtime-mapping loader; provided by handlers/adapters)
+functionTransportContext:
+  attributes:
+    # LOCAL: default generated wiring
+    tpf.function.invocation.mode: LOCAL
+
+    # REMOTE: adapter-routed invocation metadata
+    # tpf.function.invocation.mode: REMOTE
+    # tpf.function.target.runtime: pipeline
+    # tpf.function.target.module: index-document-svc
+    # tpf.function.target.handler: ProcessIndexDocumentFunctionHandler
+```
+
+The runtime reads these values via `FunctionTransportContext` accessors (`invocationMode()`, `targetRuntime()`, `targetModule()`, `targetHandler()`).
+The default behaviour is local (`LOCAL`) generated wiring, while stable contract fields are preserved for cross-runtime remote adapters.
