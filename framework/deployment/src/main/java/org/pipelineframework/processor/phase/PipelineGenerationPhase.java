@@ -599,14 +599,17 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     if (ctx.getProcessingEnv() == null) {
                         break;
                     }
-                    if (model.sideEffect()
-                        && model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER) {
+                    if (model.sideEffect()) {
                         String sideEffectBeanKey = model.servicePackage() + ".pipeline." + model.serviceName();
                         if (generatedSideEffectBeans.add(sideEffectBeanKey)) {
+                            org.pipelineframework.processor.ir.DeploymentRole sideEffectRole =
+                                model.deploymentRole() == null
+                                    ? org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT
+                                    : model.deploymentRole();
                             generateSideEffectBean(
                                 ctx,
                                 model,
-                                org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER,
+                                sideEffectRole,
                                 org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT,
                                 grpcBinding);
                         }
