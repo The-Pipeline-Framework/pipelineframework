@@ -8,7 +8,7 @@ import org.pipelineframework.search.common.dto.CrawlRequestDto;
 
 @SuppressWarnings("unused")
 @Mapper(
-    componentModel = "jakarta",
+    componentModel = "cdi",
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
 public interface CrawlRequestMapper extends org.pipelineframework.mapper.Mapper<org.pipelineframework.search.grpc.CrawlSourceSvc.CrawlRequest, CrawlRequestDto, CrawlRequest> {

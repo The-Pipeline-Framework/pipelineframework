@@ -6,7 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.net.URISyntaxException;
+import java.net.URL;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -21,6 +26,9 @@ class PipelineRuntimeTopologyTest {
         String layout = System.getProperty("csv.runtime.layout", System.getenv("CSV_RUNTIME_LAYOUT"));
         assumeTrue(layout != null && "pipeline-runtime".equalsIgnoreCase(layout.trim()),
                 "Test applies only to pipeline-runtime layout.");
+        assumeTrue(isPipelineRuntimeMappingActive(),
+                "Test requires active examples/csv-payments/config/pipeline.runtime.yaml with layout: pipeline-runtime"
+                        + " (use examples/csv-payments/build-pipeline-runtime.sh).");
 
         try (InputStream input = Thread.currentThread()
                 .getContextClassLoader()
@@ -77,5 +85,41 @@ class PipelineRuntimeTopologyTest {
             assertNotEquals(pipelinePorts, pluginPorts,
                     "Pipeline-runtime and plugin-runtime clients should not share the same endpoint");
         }
+    }
+
+    private static boolean isPipelineRuntimeMappingActive() {
+        Path mappingPath = resolveRuntimeMappingPath();
+        if (mappingPath == null || !Files.exists(mappingPath)) {
+            return false;
+        }
+        try {
+            String content = Files.readString(mappingPath);
+            return content.contains("layout: pipeline-runtime");
+        } catch (IOException ignored) {
+            return false;
+        }
+    }
+
+    private static Path resolveRuntimeMappingPath() {
+        URL resource = Thread.currentThread().getContextClassLoader().getResource("config/pipeline.runtime.yaml");
+        if (resource != null) {
+            try {
+                return Path.of(resource.toURI()).normalize();
+            } catch (URISyntaxException e) {
+                throw new IllegalStateException("Invalid runtime mapping resource URI: " + resource, e);
+            }
+        }
+
+        Path userDir = Path.of(System.getProperty("user.dir", ".")).normalize();
+        Path direct = userDir.resolve("config").resolve("pipeline.runtime.yaml").normalize();
+        if (Files.exists(direct)) {
+            return direct;
+        }
+
+        Path parent = userDir.resolve("..").resolve("config").resolve("pipeline.runtime.yaml").normalize();
+        if (Files.exists(parent)) {
+            return parent;
+        }
+        return null;
     }
 }

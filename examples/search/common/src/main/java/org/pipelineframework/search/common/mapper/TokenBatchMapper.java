@@ -8,7 +8,7 @@ import org.pipelineframework.search.common.dto.TokenBatchDto;
 
 @SuppressWarnings("unused")
 @Mapper(
-    componentModel = "jakarta",
+    componentModel = "cdi",
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
 public interface TokenBatchMapper extends org.pipelineframework.mapper.Mapper<org.pipelineframework.search.grpc.TokenizeContentSvc.TokenBatch, TokenBatchDto, TokenBatch> {

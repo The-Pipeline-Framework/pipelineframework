@@ -8,7 +8,7 @@ import org.pipelineframework.search.common.dto.RawDocumentDto;
 
 @SuppressWarnings("unused")
 @Mapper(
-    componentModel = "jakarta",
+    componentModel = "cdi",
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
 public interface RawDocumentMapper extends org.pipelineframework.mapper.Mapper<org.pipelineframework.search.grpc.CrawlSourceSvc.RawDocument, RawDocumentDto, RawDocument> {

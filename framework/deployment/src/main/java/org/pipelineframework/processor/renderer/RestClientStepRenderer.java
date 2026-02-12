@@ -247,7 +247,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
             case STREAMING_UNARY -> {
                 clientStepBuilder.addSuperinterface(ParameterizedTypeName.get(
                     ClassName.get(StepManyToOne.class), inputDto, outputDto));
-                MethodSpec applyBatchMultiMethod = MethodSpec.methodBuilder("applyBatchMulti")
+                MethodSpec applyBatchMultiMethod = MethodSpec.methodBuilder("applyReduce")
                     .addAnnotation(Override.class)
                     .addModifiers(Modifier.PUBLIC)
                     .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputDto))
