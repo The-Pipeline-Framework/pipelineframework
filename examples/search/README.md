@@ -60,18 +60,23 @@ Run only the Lambda mock event server smoke test:
 
 ### Function Streaming Lane Status
 
-The current search Function platform lane is intentionally unary-only.
+The search FUNCTION lane now includes explicit fan-out/fan-in path coverage.
 
-- `pipeline.platform=FUNCTION` currently supports `UNARY_UNARY` steps only.
-- The current `examples/search/config/pipeline.yaml` uses `ONE_TO_ONE` cardinality for all functional steps.
-- Non-unary (`ONE_TO_MANY`, `MANY_TO_ONE`, `MANY_TO_MANY`) function bridge E2E is therefore not enabled yet in this reference.
+- `pipeline.platform=FUNCTION` supports unary and streaming shapes via generated bridge adapters.
+- `examples/search/config/pipeline.yaml` now includes:
+  - `Tokenize Content`: `ONE_TO_MANY` (runtime/generation shape: `UNARY_STREAMING`)
+  - `Index Document`: `MANY_TO_ONE` (runtime/generation shape: `STREAMING_UNARY`)
 
-In this lane, treat `UNARY_UNARY` and `ONE_TO_ONE` as equivalent:
-`UNARY_UNARY` is the method/transport shape term used by runtime/generation, while `ONE_TO_ONE`
-is the pipeline-cardinality term used in `examples/search/config/pipeline.yaml` when
-`pipeline.platform=FUNCTION`.
+In this lane:
 
-When function streaming/cardinality support is expanded, add one explicit non-unary path and a dedicated end-to-end test lane.
+- `UNARY_UNARY` and `ONE_TO_ONE` are equivalent terms (method shape vs pipeline cardinality term).
+- `UNARY_STREAMING` maps to `ONE_TO_MANY`.
+- `STREAMING_UNARY` maps to `MANY_TO_ONE`.
+
+Bridge mapping exercised by targeted tests:
+
+- `ONE_TO_MANY` -> `FunctionTransportBridge.invokeOneToMany(...)`
+- `MANY_TO_ONE` -> `FunctionTransportBridge.invokeManyToOne(...)`
 
 ### Handler Selection For Modules With Multiple Generated Handlers
 
