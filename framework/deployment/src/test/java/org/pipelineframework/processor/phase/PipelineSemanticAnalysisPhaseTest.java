@@ -134,7 +134,7 @@ public class PipelineSemanticAnalysisPhaseTest {
     @EnumSource(
         value = StreamingShape.class,
         names = {"UNARY_STREAMING", "STREAMING_UNARY", "STREAMING_STREAMING"})
-    public void functionPlatformRejectsStreamingShapes(StreamingShape shape) throws Exception {
+    public void functionPlatformAllowsStreamingShapes(StreamingShape shape) throws Exception {
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
         context.setPlatformMode(PlatformMode.FUNCTION);
         context.setTransportMode(TransportMode.REST);
@@ -142,8 +142,7 @@ public class PipelineSemanticAnalysisPhaseTest {
 
         phase.execute(context);
 
-        verify(messager).printMessage(eq(Diagnostic.Kind.ERROR),
-            contains("supports only UNARY_UNARY"));
+        verify(messager, never()).printMessage(eq(Diagnostic.Kind.ERROR), any());
     }
 
     @Test

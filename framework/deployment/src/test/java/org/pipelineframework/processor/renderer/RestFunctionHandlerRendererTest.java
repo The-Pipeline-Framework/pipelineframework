@@ -16,7 +16,7 @@ import org.pipelineframework.processor.ir.RestBinding;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TypeMapping;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -44,19 +44,76 @@ class RestFunctionHandlerRendererTest {
         assertTrue(source.contains("@Named(\"ParsedDocumentFunctionHandler\")"));
         assertTrue(source.contains("ParsedDocumentResource resource"));
         assertTrue(source.contains("handleRequest(ParsedDocumentDto input, Context context)"));
-        assertTrue(source.contains("return resource.process(input).await().indefinitely()"));
+        assertTrue(source.contains("FunctionTransportContext transportContext = FunctionTransportContext.of("));
+        assertTrue(source.contains("FunctionSourceAdapter<ParsedDocumentDto, ParsedDocumentDto> source"));
+        assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invoke"));
+        assertTrue(source.contains("FunctionSinkAdapter<IndexAckDto, IndexAckDto> sink"));
+        assertTrue(source.contains("return UnaryFunctionTransportBridge.invoke(input, transportContext, source, invoke, sink)"));
+        assertFalse(source.contains("resource.process(input).await().indefinitely()"));
     }
 
     @Test
-    void rejectsStreamingShape() {
+    void rendersOneToManyStreamingShape() throws IOException {
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
         RestFunctionHandlerRenderer renderer = new RestFunctionHandlerRenderer();
+
+        renderer.render(new RestBinding(streamingModel(), null),
+            new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+                java.util.Set.of(), null, null));
+
+        Path generatedSource =
+            tempDir.resolve("org/example/search/parse/service/pipeline/ParsedDocumentFunctionHandler.java");
+        String source = Files.readString(generatedSource);
+
+        assertTrue(source.contains("implements RequestHandler<ParsedDocumentDto, List<IndexAckDto>>"));
+        assertTrue(source.contains("FunctionTransportContext transportContext = FunctionTransportContext.of("));
+        assertTrue(source.contains("FunctionSourceAdapter<ParsedDocumentDto, ParsedDocumentDto> source"));
+        assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invoke"));
+        assertTrue(source.contains("FunctionSinkAdapter<IndexAckDto, List<IndexAckDto>> sink"));
+        assertTrue(source.contains("return FunctionTransportBridge.invokeOneToMany(input, transportContext, source, invoke, sink)"));
+    }
+
+    @Test
+    void rendersStreamingUnaryShape() throws IOException {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
 
-        assertThrows(IllegalStateException.class, () ->
-            renderer.render(new RestBinding(streamingModel(), null),
-                new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
-                    java.util.Set.of(), null, null)));
+        RestFunctionHandlerRenderer renderer = new RestFunctionHandlerRenderer();
+        renderer.render(new RestBinding(streamingUnaryModel(), null),
+            new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+                java.util.Set.of(), null, null));
+
+        Path generatedSource =
+            tempDir.resolve("org/example/search/parse/service/pipeline/ParsedDocumentFunctionHandler.java");
+        String source = Files.readString(generatedSource);
+        assertTrue(source.contains("implements RequestHandler<Multi<ParsedDocumentDto>, IndexAckDto>"));
+        assertTrue(source.contains("FunctionTransportContext transportContext = FunctionTransportContext.of("));
+        assertTrue(source.contains("FunctionSourceAdapter<Multi<ParsedDocumentDto>, ParsedDocumentDto> source"));
+        assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invoke"));
+        assertTrue(source.contains("FunctionSinkAdapter<IndexAckDto, IndexAckDto> sink"));
+        assertTrue(source.contains("return FunctionTransportBridge.invokeManyToOne(input, transportContext, source, invoke, sink)"));
+    }
+
+    @Test
+    void rendersStreamingManyToManyShape() throws IOException {
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
+
+        RestFunctionHandlerRenderer renderer = new RestFunctionHandlerRenderer();
+        renderer.render(new RestBinding(streamingManyToManyModel(), null),
+            new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+                java.util.Set.of(), null, null));
+
+        Path generatedSource =
+            tempDir.resolve("org/example/search/parse/service/pipeline/ParsedDocumentFunctionHandler.java");
+        String source = Files.readString(generatedSource);
+        assertTrue(source.contains("implements RequestHandler<Multi<ParsedDocumentDto>, List<IndexAckDto>>"));
+        assertTrue(source.contains("FunctionTransportContext transportContext = FunctionTransportContext.of("));
+        assertTrue(source.contains("FunctionSourceAdapter<Multi<ParsedDocumentDto>, ParsedDocumentDto> source"));
+        assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invoke"));
+        assertTrue(source.contains("FunctionSinkAdapter<IndexAckDto, List<IndexAckDto>> sink"));
+        assertTrue(source.contains("return FunctionTransportBridge.invokeManyToMany(input, transportContext, source, invoke, sink)"));
     }
 
     private PipelineStepModel unaryModel() {
@@ -65,6 +122,14 @@ class RestFunctionHandlerRendererTest {
 
     private PipelineStepModel streamingModel() {
         return buildModel(StreamingShape.UNARY_STREAMING);
+    }
+
+    private PipelineStepModel streamingUnaryModel() {
+        return buildModel(StreamingShape.STREAMING_UNARY);
+    }
+
+    private PipelineStepModel streamingManyToManyModel() {
+        return buildModel(StreamingShape.STREAMING_STREAMING);
     }
 
     private PipelineStepModel buildModel(StreamingShape shape) {

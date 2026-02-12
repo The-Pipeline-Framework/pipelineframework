@@ -65,19 +65,6 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         if (steps == null || steps.isEmpty()) {
             return;
         }
-        for (PipelineStepModel model : steps) {
-            if (model == null) {
-                continue;
-            }
-            if (model.streamingShape() != StreamingShape.UNARY_UNARY) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "pipeline.platform=FUNCTION currently supports only UNARY_UNARY steps in REST mode. "
-                        + "This corresponds to ONE_TO_ONE-style steps in pipeline.yaml cardinality terms. "
-                        + "Unsupported streaming shape '" + model.streamingShape()
-                        + "' for step '" + model.serviceName() + "'.");
-            }
-        }
     }
 
     private void validateParallelismHints(PipelineCompilationContext ctx) {
