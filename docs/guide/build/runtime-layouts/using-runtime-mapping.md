@@ -76,20 +76,22 @@ modules:
     runtime: orchestrator
   index-document-svc:
     runtime: pipeline
-
-# Example invocation attributes carried in FunctionTransportContext
-# (not parsed by the runtime-mapping loader; provided by handlers/adapters)
-functionTransportContext:
-  attributes:
-    # LOCAL: default generated wiring
-    tpf.function.invocation.mode: LOCAL
-
-    # REMOTE: adapter-routed invocation metadata
-    # tpf.function.invocation.mode: REMOTE
-    # tpf.function.target.runtime: pipeline
-    # tpf.function.target.module: index-document-svc
-    # tpf.function.target.handler: ProcessIndexDocumentFunctionHandler
 ```
 
-The runtime reads these values via `FunctionTransportContext` accessors (`invocationMode()`, `targetRuntime()`, `targetModule()`, `targetHandler()`).
+Example invocation attributes (carried by `FunctionTransportContext`, not parsed by `pipeline.runtime.yaml` loader):
+
+```java
+// LOCAL: default generated wiring
+Map<String, String> localAttrs = Map.of(
+    "tpf.function.invocation.mode", "LOCAL");
+
+// REMOTE: adapter-routed invocation metadata
+Map<String, String> remoteAttrs = Map.of(
+    "tpf.function.invocation.mode", "REMOTE",
+    "tpf.function.target.runtime", "pipeline",
+    "tpf.function.target.module", "index-document-svc",
+    "tpf.function.target.handler", "ProcessIndexDocumentFunctionHandler");
+```
+
+The runtime reads these values via `FunctionTransportContext` accessors (`invocationMode()`, `targetRuntime()`, `targetModule()`, `targetHandler()`), while the runtime-mapping loader ignores them.
 The default behaviour is local (`LOCAL`) generated wiring, while stable contract fields are preserved for cross-runtime remote adapters.
