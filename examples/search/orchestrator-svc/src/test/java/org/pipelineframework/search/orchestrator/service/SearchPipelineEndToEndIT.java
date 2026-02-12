@@ -365,9 +365,15 @@ class SearchPipelineEndToEndIT {
         assertExitSuccess(result, "Expected pipeline run to succeed");
 
         UUID docId = stableDocId(input);
+        int rawDocumentCount = awaitRowCountAtLeastForDocId("rawdocument", docId, 1, Duration.ofSeconds(10));
+        int parsedDocumentCount = awaitRowCountAtLeastForDocId("parseddocument", docId, 1, Duration.ofSeconds(10));
         int tokenBatchCount = awaitRowCountAtLeastForDocId("tokenbatch", docId, 2, Duration.ofSeconds(10));
         int indexAckCount = awaitRowCountAtLeastForDocId("indexack", docId, 1, Duration.ofSeconds(10));
 
+        assertEquals(1, rawDocumentCount,
+            "Expected exactly one RawDocument row linked to docId " + docId);
+        assertEquals(1, parsedDocumentCount,
+            "Expected exactly one ParsedDocument row linked to docId " + docId);
         assertTrue(tokenBatchCount >= 2,
             "Expected ONE_TO_MANY fan-out to persist at least two TokenBatch rows for docId " + docId);
         assertEquals(1, indexAckCount,
