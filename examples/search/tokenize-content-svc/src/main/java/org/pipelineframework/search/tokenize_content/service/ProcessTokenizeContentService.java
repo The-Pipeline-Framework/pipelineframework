@@ -71,6 +71,9 @@ public class ProcessTokenizeContentService
   }
 
   private List<String> tokenizeIntoBatches(String content, int batchSize) {
+    if (batchSize <= 0) {
+      throw new IllegalArgumentException("batchSize must be > 0");
+    }
     String normalized = content.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9\\s]", " ");
     ArrayList<String> tokens = new ArrayList<>();
     for (String token : normalized.split("\\s+")) {

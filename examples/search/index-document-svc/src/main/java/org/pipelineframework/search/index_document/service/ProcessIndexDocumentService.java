@@ -78,7 +78,7 @@ public class ProcessIndexDocumentService
     output.indexedAt = Instant.now();
     output.success = true;
 
-    LOGGER.infof("Indexed doc %s from %s token batches (version=%s)", docId, batches.size(), indexVersion);
+    LOGGER.debugf("Indexed doc %s from %s token batches (version=%s)", docId, batches.size(), indexVersion);
     return Uni.createFrom().item(output);
   }
 

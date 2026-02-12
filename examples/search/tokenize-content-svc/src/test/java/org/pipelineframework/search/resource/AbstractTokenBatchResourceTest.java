@@ -132,7 +132,7 @@ abstract class AbstractTokenBatchResourceTest {
     private static String firstSsePayload(String responseBody) {
         for (String line : responseBody.split("\\R")) {
             if (line.startsWith("data:")) {
-                return line.substring("data:".length());
+                return line.substring("data:".length()).trim();
             }
         }
         throw new IllegalStateException("No SSE data payload found in response");
