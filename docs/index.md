@@ -3,7 +3,7 @@ layout: home
 
 hero:
   name: The Pipeline Framework
-  text: Pipeline systems, without the glue-code tax
+  text: Reactive Pipeline Processing
   tagline: Build pipeline-style applications on Quarkus, with generated adapters and a shared type-safe core
   image:
     src: /logo.png

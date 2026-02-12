@@ -1,73 +1,60 @@
-# How to use a plugin (Application Developer Guide)
+# Using plugins
 
-Application developers use plugins by applying them to pipelines via aspects. Aspects are the primary abstraction for adding cross-cutting concerns like persistence, logging, or metrics to your pipeline.
+Plugins let you add cross-cutting capabilities (like persistence, metrics, or logging) without pushing that code into every business step.
+You configure behavior through aspects; the framework wires and generates the integration pieces.
 
 ## Mental model
 
-Think of plugins as services you want to apply at specific points in your pipeline. Aspects are the configuration mechanism that tells the framework where and how to apply these plugins.
+- **Steps**: your business transformations.
+- **Aspects**: where and when a plugin should run.
+- **Plugins**: implementation modules that provide the side effect.
 
-## What aspects are
+This keeps business logic focused while infrastructure concerns stay declarative.
 
-Aspects are configuration elements that:
-- Define where plugins apply in your pipeline
-- Specify timing (before or after steps)
-- Remain separate from your core pipeline logic
+## What you configure
 
-## Why aspects exist
+You decide:
 
-Aspects separate cross-cutting concerns from your core business logic. This keeps your pipeline steps focused on business transformations while handling persistence, metrics, and other infrastructure concerns declaratively.
+- Which plugin aspects are enabled.
+- Scope: `GLOBAL` or selected `STEPS`.
+- Position: `BEFORE_STEP` or `AFTER_STEP`.
+- Any plugin-specific parameters.
 
-## How aspects differ from steps
+## What TPF handles for you
 
-- Steps transform data and are central to your business logic
-- Aspects perform side effects and are infrastructure concerns
-- Steps are always visible in your pipeline definition
-- Aspects are applied during compilation and expand into internal steps
+At build time and runtime, TPF handles:
+
+- Adapter and client/server code generation.
+- Transport-specific integration (gRPC/REST/LOCAL).
+- Type-aware side-effect wiring.
+- Runtime injection for generated plugin surfaces.
 
 ## Aspect naming and module mapping
 
-Aspect names must be lower-kebab-case and match the plugin module base name. For example, an aspect named
-`persistence` is expected to be implemented by a module named `persistence-svc`. This naming is used to wire
-plugin dependencies consistently and avoid ambiguous module resolution.
+Aspect names must be `lower-kebab-case` and map to the plugin module base name.
+For example, aspect `persistence` maps to module `persistence-svc`.
+This keeps dependency resolution deterministic.
 
 ## Side-effect transport contract
 
-Side-effect plugins observe stream elements and are exposed as unary services for the configured transport (gRPC or REST).
-The framework generates deterministic type-indexed services like `ObservePaymentRecordSideEffectService` with the
-signature `PaymentRecord -> PaymentRecord`, and injects them into the stream after each step.
+Side-effect plugins are modeled as unary services for the selected transport.
+TPF generates type-indexed service contracts such as `ObservePaymentRecordSideEffectService` with shape `PaymentRecord -> PaymentRecord`, and inserts them at the configured aspect position.
 
 ## Build-time requirements
 
-- A pipeline config YAML must be available so the processor can discover step output types for type-indexed side-effect adapters.
-  The loader searches the parent module root and a `config/` subfolder for `pipeline.yaml`, `pipeline-config.yaml`,
-  or `*-canvas-config.yaml`.
-- For gRPC transport, protobuf definitions must include the type-indexed `Observe<T>SideEffectService` services for any
-  observed type, and the descriptor set must include those definitions.
+- A pipeline YAML config must be discoverable so output types can be resolved for side-effect adapters.
+  The loader checks module root and `config/` for `pipeline.yaml`, `pipeline-config.yaml`, or `*-canvas-config.yaml`.
+- For gRPC transport, protobuf/descriptor content must include the required `Observe<T>SideEffectService` definitions.
 
 ## Plugin host modules
 
-To generate plugin-server artifacts in a dedicated module, add a marker class annotated with `@PipelinePlugin("name")`
-inside that module. This tells the annotation processor to emit plugin-server adapters and producers only there, so
-regular service modules do not depend on plugin implementations.
+If you want plugin-server artifacts generated in a dedicated module, add a marker class annotated with `@PipelinePlugin("name")` in that module.
+That scopes plugin-server generation there and avoids leaking plugin implementation dependencies into regular service modules.
 
-## Global vs step-scoped aspects
-
-Aspects support two scopes:
-
-- **GLOBAL**: Applies to all steps in the pipeline
-- **STEPS**: Applies to the configured `targetSteps` list in the aspect config
-
-## Positioning with BEFORE and AFTER
-
-Aspects can be positioned:
-- **BEFORE_STEP**: Executes before the main step
-- **AFTER_STEP**: Executes after the main step
-
-BEFORE_STEP and AFTER_STEP are applied as configured during compilation.
-
-## Example: Pipeline with persistence aspect
+## Example
 
 Without aspect:
+
 ```json
 {
   "steps": [
@@ -82,6 +69,7 @@ Without aspect:
 ```
 
 With persistence aspect:
+
 ```json
 {
   "steps": [
@@ -101,27 +89,3 @@ With persistence aspect:
   }
 }
 ```
-
-## Deployment options
-
-Plugins can be deployed in different ways:
-- **Embedded**: Run in the same process as the pipeline
-- **Shared runtime**: Multiple pipelines share plugin instances
-- **Separate service**: Plugin runs as an independent service
-
-The choice affects performance, scaling, and operational complexity but doesn't change how you configure aspects.
-
-## What application developers control
-
-You decide:
-- Which plugins to apply
-- Where in the pipeline to apply them (BEFORE/AFTER)
-- The configuration parameters for each plugin
-
-## What is decided automatically
-
-The framework handles:
-- Transport protocols between pipeline and plugins
-- Type conversion between domain and transport types
-- Code generation for adapters
-- Runtime injection of plugin implementations

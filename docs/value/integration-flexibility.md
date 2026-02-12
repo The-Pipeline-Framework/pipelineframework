@@ -20,8 +20,7 @@
 
 <div class="value-links">
 
-- [Extension: REST Resources](/guide/development/extension/rest-resources)
-- [Extension: Client Steps](/guide/development/extension/client-steps)
+- [Customization points](/guide/development/customization-points)
 - [AWS Lambda Platform](/guide/development/aws-lambda)
 - [Runtime Layouts](/guide/build/runtime-layouts/)
 
