@@ -41,6 +41,25 @@ jobs:
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
 
+      - name: Ensure Docker is ready for Testcontainers
+        run: |
+          set -euo pipefail
+          echo "DOCKER_HOST=unix:///var/run/docker.sock" >> "$GITHUB_ENV"
+          if ! docker info >/dev/null 2>&1; then
+            echo "Docker daemon not ready; attempting startup"
+            sudo systemctl start docker || true
+          fi
+          for i in {1..10}; do
+            if docker info >/dev/null 2>&1; then
+              echo "Docker is ready"
+              break
+            fi
+            echo "Waiting for Docker (${i}/10)..."
+            sleep 3
+          done
+          docker version
+          docker info
+
       - name: Full clean install (framework + examples)
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
