@@ -59,8 +59,12 @@ public class PipelineSemanticAnalysisPhaseTest {
         // Test different cardinalities
         assertEquals(org.pipelineframework.processor.ir.StreamingShape.UNARY_STREAMING, 
                      phase.streamingShape("EXPANSION"));
+        assertEquals(org.pipelineframework.processor.ir.StreamingShape.UNARY_STREAMING,
+                     phase.streamingShape("ONE_TO_MANY"));
         assertEquals(org.pipelineframework.processor.ir.StreamingShape.STREAMING_UNARY, 
                      phase.streamingShape("REDUCTION"));
+        assertEquals(org.pipelineframework.processor.ir.StreamingShape.STREAMING_UNARY,
+                     phase.streamingShape("MANY_TO_ONE"));
         assertEquals(org.pipelineframework.processor.ir.StreamingShape.STREAMING_STREAMING, 
                      phase.streamingShape("MANY_TO_MANY"));
         assertEquals(org.pipelineframework.processor.ir.StreamingShape.UNARY_UNARY, 
@@ -70,6 +74,7 @@ public class PipelineSemanticAnalysisPhaseTest {
     @Test
     public void testIsStreamingInputCardinality() {
         assertTrue(phase.isStreamingInputCardinality("REDUCTION"));
+        assertTrue(phase.isStreamingInputCardinality("MANY_TO_ONE"));
         assertTrue(phase.isStreamingInputCardinality("MANY_TO_MANY"));
         assertFalse(phase.isStreamingInputCardinality("EXPANSION"));
         assertFalse(phase.isStreamingInputCardinality("OTHER"));
@@ -80,6 +85,8 @@ public class PipelineSemanticAnalysisPhaseTest {
         // Test EXPANSION turns streaming on
         assertTrue(phase.applyCardinalityToStreaming("EXPANSION", false));
         assertTrue(phase.applyCardinalityToStreaming("EXPANSION", true));
+        assertTrue(phase.applyCardinalityToStreaming("ONE_TO_MANY", false));
+        assertTrue(phase.applyCardinalityToStreaming("ONE_TO_MANY", true));
         
         // Test MANY_TO_MANY turns streaming on
         assertTrue(phase.applyCardinalityToStreaming("MANY_TO_MANY", false));
@@ -88,6 +95,8 @@ public class PipelineSemanticAnalysisPhaseTest {
         // Test REDUCTION turns streaming off
         assertFalse(phase.applyCardinalityToStreaming("REDUCTION", false));
         assertFalse(phase.applyCardinalityToStreaming("REDUCTION", true));
+        assertFalse(phase.applyCardinalityToStreaming("MANY_TO_ONE", false));
+        assertFalse(phase.applyCardinalityToStreaming("MANY_TO_ONE", true));
         
         // Test other cardinalities preserve current state
         assertFalse(phase.applyCardinalityToStreaming("OTHER", false));

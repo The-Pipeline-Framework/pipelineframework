@@ -8,10 +8,14 @@ import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import java.time.Duration;
+import java.util.HashSet;
 import java.util.Objects;
+import java.util.Set;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.pipelineframework.PipelineOutputBus;
+import org.pipelineframework.checkout.common.connector.ConnectorUtils;
+import org.pipelineframework.checkout.common.connector.IdempotencyGuard;
 import org.pipelineframework.checkout.deliverorder.grpc.OrderDeliveredSvc;
 
 @ApplicationScoped
@@ -22,6 +26,12 @@ public class DeliverToNextIngestBridge {
     private final PipelineOutputBus outputBus;
     private final DeliveredOrderForwardClient forwardClient;
     private final boolean enabled;
+    private final boolean idempotencyEnabled;
+    private final IdempotencyGuard idempotencyGuard;
+    private final String backpressureStrategy;
+    private final int backpressureBufferCapacity;
+    private final Set<String> inFlightOrderIds = new HashSet<>();
+    private final Object inFlightLock = new Object();
 
     private Cancellable forwardingSubscription;
 
@@ -31,15 +41,32 @@ public class DeliverToNextIngestBridge {
      * @param outputBus the pipeline output bus to consume delivered-order events from
      * @param forwardClient the client used to forward delivered orders onward
      * @param enabled configuration flag; `true` enables forwarding, `false` disables it
+     * @param idempotencyEnabled whether duplicate order ids should be filtered before forwarding
+     * @param idempotencyMaxKeys max in-memory keys retained for duplicate filtering
+     * @param backpressureStrategy overflow strategy for connector handoff (`BUFFER` or `DROP`)
+     * @param backpressureBufferCapacity overflow buffer capacity when strategy is `BUFFER`
      */
     public DeliverToNextIngestBridge(
         PipelineOutputBus outputBus,
         DeliveredOrderForwardClient forwardClient,
-        @ConfigProperty(name = "checkout.deliver.forward.enabled", defaultValue = "false") boolean enabled
+        @ConfigProperty(name = "checkout.deliver.forward.enabled", defaultValue = "false") boolean enabled,
+        @ConfigProperty(name = "checkout.deliver.forward.idempotency.enabled", defaultValue = "true")
+        boolean idempotencyEnabled,
+        @ConfigProperty(name = "checkout.deliver.forward.idempotency.max-keys", defaultValue = "10000")
+        int idempotencyMaxKeys,
+        @ConfigProperty(name = "checkout.deliver.forward.backpressure.strategy", defaultValue = "BUFFER")
+        String backpressureStrategy,
+        @ConfigProperty(name = "checkout.deliver.forward.backpressure.buffer-capacity", defaultValue = "256")
+        int backpressureBufferCapacity
     ) {
-        this.outputBus = outputBus;
-        this.forwardClient = forwardClient;
+        this.outputBus = Objects.requireNonNull(outputBus, "outputBus must not be null");
+        this.forwardClient = Objects.requireNonNull(forwardClient, "forwardClient must not be null");
         this.enabled = enabled;
+        this.idempotencyEnabled = idempotencyEnabled;
+        int normalizedIdempotencyMaxKeys = idempotencyMaxKeys > 0 ? idempotencyMaxKeys : 10000;
+        this.idempotencyGuard = idempotencyEnabled ? new IdempotencyGuard(normalizedIdempotencyMaxKeys) : null;
+        this.backpressureStrategy = ConnectorUtils.normalizeBackpressureStrategy(backpressureStrategy);
+        this.backpressureBufferCapacity = backpressureBufferCapacity > 0 ? backpressureBufferCapacity : 256;
     }
 
     /**
@@ -57,11 +84,20 @@ public class DeliverToNextIngestBridge {
             return;
         }
 
-        Multi<OrderDeliveredSvc.DeliveredOrder> deliveredStream = outputBus.stream(Object.class)
-            .onItem().transform(this::toDeliveredOrder)
-            .select().where(Objects::nonNull)
-            .onFailure().invoke(error -> LOG.error("Deliver->next stream failed before forwarding", error))
-            .onFailure().retry().withBackOff(Duration.ofMillis(100), Duration.ofSeconds(1)).atMost(5);
+        Multi<Object> sourceStream =
+            ConnectorUtils.applyBackpressure(outputBus.stream(Object.class), backpressureStrategy, backpressureBufferCapacity);
+        Multi<OrderDeliveredSvc.DeliveredOrder> deliveredStream = sourceStream
+            // Use concatenate intentionally so mapping/idempotency reservation is serialized in this bridge.
+            .onItem().transformToMulti(item -> {
+                OrderDeliveredSvc.DeliveredOrder mapped = toDeliveredOrder(item);
+                return mapped == null ? Multi.createFrom().empty() : Multi.createFrom().item(mapped);
+            }).concatenate()
+            .onItem().invoke(order -> markForwarded(order.getOrderId()))
+            .onFailure().invoke(error -> {
+                clearInFlightReservations();
+                LOG.error("Deliver->next stream failed before forwarding", error);
+            })
+            .onFailure().retry().withBackOff(Duration.ofMillis(100), Duration.ofSeconds(1)).indefinitely();
 
         forwardingSubscription = forwardClient.forward(deliveredStream);
         LOG.infof("Deliver->next forwarding bridge started using client %s", forwardClient.getClass().getName());
@@ -95,17 +131,23 @@ public class DeliverToNextIngestBridge {
      */
     private OrderDeliveredSvc.DeliveredOrder toDeliveredOrder(Object item) {
         if (item instanceof OrderDeliveredSvc.DeliveredOrder delivered) {
+            if (isDuplicateOrInFlight(delivered.getOrderId())) {
+                return null;
+            }
             return delivered;
         }
         if (item instanceof Message message) {
-            String orderId = readField(message, "order_id");
-            String customerId = readField(message, "customer_id");
-            String readyAt = readField(message, "ready_at");
-            String dispatchId = readField(message, "dispatch_id");
-            String dispatchedAt = readField(message, "dispatched_at");
-            String deliveredAt = readField(message, "delivered_at");
+            String orderId = ConnectorUtils.readField(message, "order_id");
+            String customerId = ConnectorUtils.readField(message, "customer_id");
+            String readyAt = ConnectorUtils.readField(message, "ready_at");
+            String dispatchId = ConnectorUtils.readField(message, "dispatch_id");
+            String dispatchedAt = ConnectorUtils.readField(message, "dispatched_at");
+            String deliveredAt = ConnectorUtils.readField(message, "delivered_at");
             if (!orderId.isBlank() && !customerId.isBlank() && !readyAt.isBlank()
                 && !dispatchId.isBlank() && !dispatchedAt.isBlank() && !deliveredAt.isBlank()) {
+                if (isDuplicateOrInFlight(orderId)) {
+                    return null;
+                }
                 return OrderDeliveredSvc.DeliveredOrder.newBuilder()
                     .setOrderId(orderId)
                     .setCustomerId(customerId)
@@ -126,26 +168,42 @@ public class DeliverToNextIngestBridge {
         return null;
     }
 
-    /**
-     * Retrieves a field's textual representation from a protobuf Message.
-     *
-     * If the named field is present and its Java type is STRING, INT, LONG, FLOAT, DOUBLE, BOOLEAN,
-     * or ENUM this returns the field's string form; if the field is missing or its type is
-     * BYTE_STRING or MESSAGE this returns an empty string.
-     *
-     * @param message the protobuf Message to read from
-     * @param fieldName the name of the field to read
-     * @return the field value as a string, or an empty string when the field is not found or not representable as text
-     */
-    private static String readField(Message message, String fieldName) {
-        var field = message.getDescriptorForType().findFieldByName(fieldName);
-        if (field == null) {
-            return "";
+    private boolean isDuplicateOrInFlight(String orderId) {
+        if (!isIdempotencyActive() || orderId == null || orderId.isBlank()) {
+            return false;
         }
-        Object value = message.getField(field);
-        return switch (field.getJavaType()) {
-            case STRING, INT, LONG, FLOAT, DOUBLE, BOOLEAN, ENUM -> String.valueOf(value);
-            case BYTE_STRING, MESSAGE -> "";
-        };
+        // Lock ordering invariant:
+        // Always acquire inFlightLock before touching inFlightOrderIds and idempotencyGuard.
+        // markForwarded follows the same order. Preserve this ordering in future changes.
+        synchronized (inFlightLock) {
+            if (idempotencyGuard.contains(orderId) || inFlightOrderIds.contains(orderId)) {
+                LOG.debugf("Dropped duplicate deliver->next handoff orderId=%s", orderId);
+                return true;
+            }
+            inFlightOrderIds.add(orderId);
+        }
+        return false;
+    }
+
+    private void markForwarded(String orderId) {
+        if (!isIdempotencyActive() || orderId == null || orderId.isBlank()) {
+            return;
+        }
+        synchronized (inFlightLock) {
+            inFlightOrderIds.remove(orderId);
+            idempotencyGuard.markIfNew(orderId);
+        }
+    }
+
+    private boolean isIdempotencyActive() {
+        return idempotencyEnabled && idempotencyGuard != null;
+    }
+
+    private void clearInFlightReservations() {
+        synchronized (inFlightLock) {
+            // Intentionally retain idempotencyGuard state here:
+            // this bridge currently enforces at-most-once semantics for forwarded orderIds.
+            inFlightOrderIds.clear();
+        }
     }
 }

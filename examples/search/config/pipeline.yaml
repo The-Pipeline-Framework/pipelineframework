@@ -91,7 +91,7 @@ steps:
         type: "Instant"
         protoType: "string"
   - name: "Tokenize Content"
-    cardinality: "ONE_TO_ONE"
+    cardinality: "ONE_TO_MANY"
     inputTypeName: "ParsedDocument"
     inputFields:
       - name: "docId"
@@ -130,7 +130,7 @@ steps:
         type: "Instant"
         protoType: "string"
   - name: "Index Document"
-    cardinality: "ONE_TO_ONE"
+    cardinality: "MANY_TO_ONE"
     inputTypeName: "TokenBatch"
     inputFields:
       - name: "docId"

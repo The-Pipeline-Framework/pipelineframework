@@ -294,16 +294,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
      * @return the corresponding streaming shape
      */
     protected StreamingShape streamingShape(String cardinality) {
-        if ("EXPANSION".equalsIgnoreCase(cardinality)) {
-            return StreamingShape.UNARY_STREAMING;
-        }
-        if ("REDUCTION".equalsIgnoreCase(cardinality)) {
-            return StreamingShape.STREAMING_UNARY;
-        }
-        if ("MANY_TO_MANY".equalsIgnoreCase(cardinality)) {
-            return StreamingShape.STREAMING_STREAMING;
-        }
-        return StreamingShape.UNARY_UNARY;
+        return StreamingShapeResolver.streamingShape(cardinality);
     }
 
     /**
@@ -313,7 +304,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
      * @return true if the input is streaming, false otherwise
      */
     protected boolean isStreamingInputCardinality(String cardinality) {
-        return "REDUCTION".equalsIgnoreCase(cardinality) || "MANY_TO_MANY".equalsIgnoreCase(cardinality);
+        return StreamingShapeResolver.isStreamingInputCardinality(cardinality);
     }
 
     /**
@@ -324,13 +315,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
      * @return the updated streaming state
      */
     protected boolean applyCardinalityToStreaming(String cardinality, boolean currentStreaming) {
-        if ("EXPANSION".equalsIgnoreCase(cardinality) || "MANY_TO_MANY".equalsIgnoreCase(cardinality)) {
-            return true;
-        }
-        if ("REDUCTION".equalsIgnoreCase(cardinality)) {
-            return false;
-        }
-        return currentStreaming;
+        return StreamingShapeResolver.applyCardinalityToStreaming(cardinality, currentStreaming);
     }
 
     /**

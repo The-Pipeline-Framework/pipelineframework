@@ -3,6 +3,7 @@ package org.pipelineframework.checkout.create_order.connector;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import com.google.protobuf.Message;
 import io.quarkus.runtime.StartupEvent;
@@ -10,7 +11,9 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.subscription.Cancellable;
 import java.util.Objects;
 import org.jboss.logging.Logger;
+import org.pipelineframework.checkout.common.connector.ConnectorUtils;
 import org.pipelineframework.PipelineOutputBus;
+import org.pipelineframework.checkout.common.connector.IdempotencyGuard;
 import org.pipelineframework.checkout.createorder.grpc.OrderReadySvc;
 import org.pipelineframework.checkout.deliverorder.grpc.OrderDispatchSvc;
 
@@ -24,6 +27,10 @@ public class CreateToDeliverIngestBridge {
 
     private final PipelineOutputBus outputBus;
     private final DeliverOrderIngestClient deliverOrderIngestClient;
+    private final boolean idempotencyEnabled;
+    private final IdempotencyGuard idempotencyGuard;
+    private final String backpressureStrategy;
+    private final int backpressureBufferCapacity;
 
     private Cancellable forwardingSubscription;
 
@@ -32,12 +39,32 @@ public class CreateToDeliverIngestBridge {
      *
      * @param outputBus the source of pipeline checkpoint outputs; must not be null
      * @param deliverOrderIngestClient the gRPC client used to forward ready orders; must not be null
+     * @param idempotencyEnabled whether duplicate order ids should be filtered before forwarding
+     * @param idempotencyMaxKeys max in-memory keys retained for duplicate filtering
+     * @param backpressureStrategy overflow strategy for connector handoff (`BUFFER` or `DROP`)
+     * @param backpressureBufferCapacity overflow buffer capacity when strategy is `BUFFER`
      * @throws NullPointerException if {@code outputBus} or {@code deliverOrderIngestClient} is null
      */
-    public CreateToDeliverIngestBridge(PipelineOutputBus outputBus, DeliverOrderIngestClient deliverOrderIngestClient) {
+    public CreateToDeliverIngestBridge(
+        PipelineOutputBus outputBus,
+        DeliverOrderIngestClient deliverOrderIngestClient,
+        @ConfigProperty(name = "checkout.create-to-deliver.idempotency.enabled", defaultValue = "true")
+        boolean idempotencyEnabled,
+        @ConfigProperty(name = "checkout.create-to-deliver.idempotency.max-keys", defaultValue = "10000")
+        int idempotencyMaxKeys,
+        @ConfigProperty(name = "checkout.create-to-deliver.backpressure.strategy", defaultValue = "BUFFER")
+        String backpressureStrategy,
+        @ConfigProperty(name = "checkout.create-to-deliver.backpressure.buffer-capacity", defaultValue = "256")
+        int backpressureBufferCapacity
+    ) {
         this.outputBus = Objects.requireNonNull(outputBus, "outputBus must not be null");
         this.deliverOrderIngestClient =
             Objects.requireNonNull(deliverOrderIngestClient, "deliverOrderIngestClient must not be null");
+        this.idempotencyEnabled = idempotencyEnabled;
+        int normalizedIdempotencyMaxKeys = idempotencyMaxKeys > 0 ? idempotencyMaxKeys : 10000;
+        this.idempotencyGuard = idempotencyEnabled ? new IdempotencyGuard(normalizedIdempotencyMaxKeys) : null;
+        this.backpressureStrategy = ConnectorUtils.normalizeBackpressureStrategy(backpressureStrategy);
+        this.backpressureBufferCapacity = backpressureBufferCapacity > 0 ? backpressureBufferCapacity : 256;
     }
 
     /**
@@ -51,7 +78,9 @@ public class CreateToDeliverIngestBridge {
      * @param ignored the startup event (unused)
      */
     void onStartup(@Observes StartupEvent ignored) {
-        Multi<OrderDispatchSvc.ReadyOrder> readyOrderStream = outputBus.stream(Object.class)
+        Multi<Object> sourceStream =
+            ConnectorUtils.applyBackpressure(outputBus.stream(Object.class), backpressureStrategy, backpressureBufferCapacity);
+        Multi<OrderDispatchSvc.ReadyOrder> readyOrderStream = sourceStream
             .onItem().transformToMulti(item -> {
                 OrderDispatchSvc.ReadyOrder mapped = toDeliverReadyOrder(item);
                 return mapped == null ? Multi.createFrom().empty() : Multi.createFrom().item(mapped);
@@ -89,6 +118,9 @@ public class CreateToDeliverIngestBridge {
      */
     private OrderDispatchSvc.ReadyOrder toDeliverReadyOrder(Object item) {
         if (item instanceof OrderReadySvc.ReadyOrder readyOrder) {
+            if (isDuplicateOrderId(readyOrder.getOrderId())) {
+                return null;
+            }
             return OrderDispatchSvc.ReadyOrder.newBuilder()
                 .setOrderId(readyOrder.getOrderId())
                 .setCustomerId(readyOrder.getCustomerId())
@@ -96,10 +128,13 @@ public class CreateToDeliverIngestBridge {
                 .build();
         }
         if (item instanceof Message message) {
-            String orderId = readField(message, "order_id");
-            String customerId = readField(message, "customer_id");
-            String readyAt = readField(message, "ready_at");
+            String orderId = ConnectorUtils.readField(message, "order_id");
+            String customerId = ConnectorUtils.readField(message, "customer_id");
+            String readyAt = ConnectorUtils.readField(message, "ready_at");
             if (!orderId.isBlank() && !customerId.isBlank() && !readyAt.isBlank()) {
+                if (isDuplicateOrderId(orderId)) {
+                    return null;
+                }
                 LOG.debugf(
                     "Mapped Message -> ReadyOrder messageType=%s orderId=%s customerId=%s readyAt=%s",
                     message.getClass().getName(), orderId, customerId, readyAt);
@@ -121,31 +156,15 @@ public class CreateToDeliverIngestBridge {
         return null;
     }
 
-    /**
-     * Extracts the named field's value from a protobuf Message and returns it as a String.
-     *
-     * If the field does not exist, is unset, or is a bytes or nested message type, an empty
-     * string is returned. Numeric, boolean, string, and enum field values are converted to
-     * their String representation.
-     *
-     * @param message the protobuf Message to read from
-     * @param fieldName the name of the field to read
-     * @return the field's string representation if present and of type string, numeric, boolean,
-     *         or enum; otherwise an empty string
-     */
-    private static String readField(Message message, String fieldName) {
-        var field = message.getDescriptorForType().findFieldByName(fieldName);
-        if (field == null) {
-            return "";
+    private boolean isDuplicateOrderId(String orderId) {
+        if (!idempotencyEnabled || orderId == null || orderId.isBlank()) {
+            return false;
         }
-        Object value = message.getField(field);
-        if (value == null) {
-            return "";
+        boolean firstOccurrence = idempotencyGuard.markIfNew(orderId);
+        if (!firstOccurrence) {
+            LOG.debugf("Dropped duplicate create->deliver handoff orderId=%s", orderId);
         }
-        return switch (field.getJavaType()) {
-            case STRING, INT, LONG, FLOAT, DOUBLE, BOOLEAN, ENUM -> String.valueOf(value);
-            case BYTE_STRING, MESSAGE -> "";
-        };
+        return !firstOccurrence;
     }
 
 }
