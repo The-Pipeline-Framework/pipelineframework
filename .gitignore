@@ -79,6 +79,7 @@ pom.xml.releaseBackup
 
 # Terraform CLI
 /examples/csv-payments/terraform/.terraform/
+/examples/csv-payments/config/pipeline.runtime.yaml
 
 # flatten plugin
 **/.flattened-pom.xml
