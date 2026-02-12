@@ -87,6 +87,7 @@ public class DeliverToNextIngestBridge {
         Multi<Object> sourceStream =
             ConnectorUtils.applyBackpressure(outputBus.stream(Object.class), backpressureStrategy, backpressureBufferCapacity);
         Multi<OrderDeliveredSvc.DeliveredOrder> deliveredStream = sourceStream
+            // Use concatenate intentionally so mapping/idempotency reservation is serialized in this bridge.
             .onItem().transformToMulti(item -> {
                 OrderDeliveredSvc.DeliveredOrder mapped = toDeliveredOrder(item);
                 return mapped == null ? Multi.createFrom().empty() : Multi.createFrom().item(mapped);
