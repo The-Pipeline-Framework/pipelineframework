@@ -291,6 +291,25 @@ class SearchPipelineEndToEndIT {
     }
 
     @Test
+    void requireCacheColdFailureDoesNotPersistArtifactsForDocId() throws Exception {
+        String version = "cold-no-persist-" + UUID.randomUUID();
+        String input = "https://example.com/" + version;
+        UUID docId = stableDocId(input);
+
+        ProcessResult result = orchestratorTriggerRun(input, "require-cache", version, false);
+        assertExitFailure(result, "Expected require-cache to fail on a cold cache");
+
+        assertEquals(0, countRowsForDocId("rawdocument", docId),
+            "Expected no RawDocument persisted for failed cold require-cache run");
+        assertEquals(0, countRowsForDocId("parseddocument", docId),
+            "Expected no ParsedDocument persisted for failed cold require-cache run");
+        assertEquals(0, countRowsForDocId("tokenbatch", docId),
+            "Expected no TokenBatch persisted for failed cold require-cache run");
+        assertEquals(0, countRowsForDocId("indexack", docId),
+            "Expected no IndexAck persisted for failed cold require-cache run");
+    }
+
+    @Test
     void preferCacheWarmsCacheAndRequireCacheSucceeds() throws Exception {
         String version = "warm-" + UUID.randomUUID();
         ProcessResult warm = orchestratorTriggerRun("https://example.com", "prefer-cache", version, false);
