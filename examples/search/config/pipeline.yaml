@@ -169,25 +169,17 @@ steps:
 aspects:
   persistence:
     enabled: true
-    scope: "STEPS"
+    scope: "GLOBAL"
     position: "AFTER_STEP"
     order: 0
     config:
-      targetSteps:
-        - "ProcessCrawlSourceService"
-        - "ProcessParseDocumentService"
       pluginImplementationClass: "org.pipelineframework.plugin.persistence.PersistenceService"
   cache:
     enabled: true
-    scope: "STEPS"
+    scope: "GLOBAL"
     position: "AFTER_STEP"
     order: 5
     config:
-      # Tokenize/Index are intentionally excluded: these compute-heavy steps should run on fresh input,
-      # while Crawl/Parse benefit from cache reuse across repeated source fetches.
-      targetSteps:
-        - "ProcessCrawlSourceService"
-        - "ProcessParseDocumentService"
       pluginImplementationClass: "org.pipelineframework.plugin.cache.CacheService"
   cache-invalidate:
     enabled: true
@@ -196,7 +188,7 @@ aspects:
     order: -4
     config:
       targetSteps:
-        - "ProcessParseDocumentService"
+        - "ProcessTokenizeContentService"
       pluginImplementationClass: "org.pipelineframework.plugin.cache.CacheInvalidationService"
   cache-invalidate-all:
     enabled: true
