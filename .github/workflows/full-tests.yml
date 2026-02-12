@@ -104,7 +104,7 @@ jobs:
             -Dtest=LambdaMockEventServerSmokeTest \
             test
 
-      - name: Run function non-unary bridge lane (runtime + generation)
+      - name: Run function non-unary bridge lane (runtime + deployment)
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" -f framework/pom.xml \
