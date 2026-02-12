@@ -57,6 +57,9 @@ jobs:
             echo "Waiting for Docker (${i}/10)..."
             sleep 3
           done
+          SERVER_API="$(docker version --format '{{.Server.APIVersion}}')"
+          echo "DOCKER_API_VERSION=$SERVER_API" >> "$GITHUB_ENV"
+          echo "TESTCONTAINERS_DOCKER_CLIENT_STRATEGY=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" >> "$GITHUB_ENV"
           docker version
           docker info
 
