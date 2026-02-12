@@ -104,6 +104,18 @@ jobs:
             -Dtest=LambdaMockEventServerSmokeTest \
             test
 
+      - name: Run function non-unary bridge lane (runtime + generation)
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f framework/pom.xml \
+            -pl runtime \
+            -Dtest=FunctionTransportBridgeTest,FunctionTransportAdaptersTest \
+            test
+          ./mvnw "${maven_args[@]}" -f framework/pom.xml \
+            -pl deployment \
+            -Dtest=RestFunctionHandlerRendererTest,OrchestratorFunctionHandlerRendererTest \
+            test
+
       - name: Dump integration test reports on failure
         if: failure()
         run: |

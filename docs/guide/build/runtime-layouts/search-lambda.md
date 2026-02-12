@@ -11,8 +11,9 @@ Canonical Lambda development and operations guidance lives here:
 
 - Verifies TPF Function platform wiring on a concrete example
 - Verifies Quarkus Lambda mock event-server behavior locally
+- Verifies non-unary FUNCTION bridge paths through targeted runtime/deployment tests
 - Does not require provisioning a live AWS stack
-- Uses current unary-only FUNCTION shape support (`UNARY_UNARY` only)
+- Uses Search pipeline fan-out/fan-in cardinalities (`ONE_TO_MANY`, `MANY_TO_ONE`)
 - For shape/bridge mapping and failure semantics, see [AWS Lambda Platform (Development)](/guide/development/aws-lambda)
 - Keep Lambda timeout and retry budget bounded for this verification lane; do not assume unbounded waits at function boundaries.
 
@@ -59,6 +60,28 @@ Expected result:
 - `BUILD SUCCESS`
 - `LambdaMockEventServerSmokeTest` passes
 - pass/fail details are available in Maven Surefire summary and `orchestrator-svc/target/surefire-reports`
+
+## Non-Unary Function Bridge Lane
+
+Run targeted tests that execute generated non-unary function bridge paths for Search shape mappings:
+
+```bash
+./mvnw -f framework/pom.xml \
+  -pl runtime \
+  -Dtest=FunctionTransportBridgeTest,FunctionTransportAdaptersTest \
+  test
+
+./mvnw -f framework/pom.xml \
+  -pl deployment \
+  -Dtest=RestFunctionHandlerRendererTest,OrchestratorFunctionHandlerRendererTest \
+  test
+```
+
+These tests validate:
+
+- `ONE_TO_MANY` (`UNARY_STREAMING`) -> `FunctionTransportBridge.invokeOneToMany(...)`
+- `MANY_TO_ONE` (`STREAMING_UNARY`) -> `FunctionTransportBridge.invokeManyToOne(...)`
+- generated handler wiring for non-unary FUNCTION shapes
 
 ## Native Smoke Build
 
