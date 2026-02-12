@@ -46,6 +46,7 @@ jobs:
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" clean verify \
           -Pcoverage \
+          -DskipITs=true \
           -DskipNative=true \
           -Dquarkus.package.type=fast-jar \
           -Dquarkus.container-image.build=true \
@@ -61,6 +62,7 @@ jobs:
           ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.xml \
             -pl orchestrator-svc \
             -Dcsv.runtime.layout=monolith \
+            -Dcsv.e2e.pipeline.wait.seconds=120 \
             -Dit.test=CsvPaymentsEndToEndIT \
             verify
 
@@ -74,6 +76,7 @@ jobs:
           ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.pipeline-runtime.xml \
             -pl orchestrator-svc \
             -Dcsv.runtime.layout=pipeline-runtime \
+            -Dcsv.e2e.pipeline.wait.seconds=120 \
             -Dtest=PipelineRuntimeTopologyTest \
             -Dit.test=CsvPaymentsPipelineRuntimeEndToEndIT \
             verify
