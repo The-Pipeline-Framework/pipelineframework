@@ -7,6 +7,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Properties;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -21,6 +23,9 @@ class PipelineRuntimeTopologyTest {
         String layout = System.getProperty("csv.runtime.layout", System.getenv("CSV_RUNTIME_LAYOUT"));
         assumeTrue(layout != null && "pipeline-runtime".equalsIgnoreCase(layout.trim()),
                 "Test applies only to pipeline-runtime layout.");
+        assumeTrue(isPipelineRuntimeMappingActive(),
+                "Test requires active examples/csv-payments/config/pipeline.runtime.yaml with layout: pipeline-runtime"
+                        + " (use examples/csv-payments/build-pipeline-runtime.sh).");
 
         try (InputStream input = Thread.currentThread()
                 .getContextClassLoader()
@@ -76,6 +81,19 @@ class PipelineRuntimeTopologyTest {
             assertEquals(1, pluginPorts.size(), "Plugin-runtime clients should share one port");
             assertNotEquals(pipelinePorts, pluginPorts,
                     "Pipeline-runtime and plugin-runtime clients should not share the same endpoint");
+        }
+    }
+
+    private static boolean isPipelineRuntimeMappingActive() {
+        Path mappingPath = Path.of("..", "config", "pipeline.runtime.yaml").normalize();
+        if (!Files.exists(mappingPath)) {
+            return false;
+        }
+        try {
+            String content = Files.readString(mappingPath);
+            return content.contains("layout: pipeline-runtime");
+        } catch (Exception ignored) {
+            return false;
         }
     }
 }
