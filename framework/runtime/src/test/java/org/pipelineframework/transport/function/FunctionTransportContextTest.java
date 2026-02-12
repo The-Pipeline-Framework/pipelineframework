@@ -23,6 +23,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FunctionTransportContextTest {
 
@@ -61,5 +62,69 @@ class FunctionTransportContextTest {
             "ingress",
             Map.of(FunctionTransportContext.ATTR_IDEMPOTENCY_POLICY, rawPolicy));
         assertEquals(IdempotencyPolicy.EXPLICIT, context.idempotencyPolicy());
+    }
+
+    @Test
+    void defaultsInvocationModeToLocalWhenUnset() {
+        FunctionTransportContext context = FunctionTransportContext.of("req-6", "fn", "invoke");
+        assertEquals(FunctionInvocationMode.LOCAL, context.invocationMode());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"remote", "REMOTE", "Remote"})
+    void resolvesInvocationModeCaseInsensitively(String rawMode) {
+        FunctionTransportContext context = new FunctionTransportContext(
+            "req-7",
+            "fn",
+            "invoke",
+            Map.of(FunctionTransportContext.ATTR_INVOCATION_MODE, rawMode));
+        assertEquals(FunctionInvocationMode.REMOTE, context.invocationMode());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"local", "LOCAL", "Local"})
+    void resolvesLocalInvocationModeCaseInsensitively(String rawMode) {
+        FunctionTransportContext context = new FunctionTransportContext(
+            "req-7b",
+            "fn",
+            "invoke",
+            Map.of(FunctionTransportContext.ATTR_INVOCATION_MODE, rawMode));
+        assertEquals(FunctionInvocationMode.LOCAL, context.invocationMode());
+    }
+
+    @Test
+    void fallsBackUnknownInvocationModeToLocal() {
+        FunctionTransportContext context = new FunctionTransportContext(
+            "req-8",
+            "fn",
+            "invoke",
+            Map.of(FunctionTransportContext.ATTR_INVOCATION_MODE, "somewhere"));
+        assertEquals(FunctionInvocationMode.LOCAL, context.invocationMode());
+    }
+
+    @Test
+    void resolvesTargetAttributes() {
+        FunctionTransportContext context = FunctionTransportContext.of(
+            "req-9",
+            "fn",
+            "invoke",
+            Map.of(
+                FunctionTransportContext.ATTR_TARGET_RUNTIME, " pipeline-runtime ",
+                FunctionTransportContext.ATTR_TARGET_MODULE, " index-document-svc ",
+                FunctionTransportContext.ATTR_TARGET_HANDLER, " ProcessIndexDocumentFunctionHandler "));
+        assertTrue(context.targetRuntime().isPresent(), "expected targetRuntime to be present");
+        assertTrue(context.targetModule().isPresent(), "expected targetModule to be present");
+        assertTrue(context.targetHandler().isPresent(), "expected targetHandler to be present");
+        assertEquals("pipeline-runtime", context.targetRuntime().orElseThrow());
+        assertEquals("index-document-svc", context.targetModule().orElseThrow());
+        assertEquals("ProcessIndexDocumentFunctionHandler", context.targetHandler().orElseThrow());
+    }
+
+    @Test
+    void returnsEmptyTargetAttributesWhenMissing() {
+        FunctionTransportContext context = FunctionTransportContext.of("req-10", "fn", "invoke");
+        assertTrue(context.targetRuntime().isEmpty());
+        assertTrue(context.targetModule().isEmpty());
+        assertTrue(context.targetHandler().isEmpty());
     }
 }

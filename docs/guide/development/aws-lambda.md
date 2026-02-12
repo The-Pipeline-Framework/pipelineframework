@@ -77,6 +77,21 @@ These abstractions separate:
 `TraceEnvelope` carries lineage, payload model/version, and idempotency metadata without forcing
 application DTOs to become envelope types.
 
+### Invocation Contract Baseline (Milestone C Slice 1)
+
+`FunctionTransportContext` now defines explicit invocation contract metadata for cross-runtime paths:
+
+- `tpf.function.invocation.mode=LOCAL|REMOTE` (defaults to `LOCAL`)
+- `tpf.function.target.runtime=<runtime-name>` (optional)
+- `tpf.function.target.module=<module-name>` (optional)
+- `tpf.function.target.handler=<handler-name>` (optional)
+
+Current baseline behavior:
+
+- intra-runtime generated handler paths execute with `LOCAL` invocation semantics
+- runtime mapping still controls placement/topology; invocation metadata provides a stable contract for future/optional remote adapters
+- when `REMOTE` is set but no remote adapter is configured, handler wiring should still be treated as local unless an app/runtime-specific adapter overrides it
+
 ## ID Ownership and Idempotency Boundaries
 
 TPF distinguishes between business IDs and transport IDs:
