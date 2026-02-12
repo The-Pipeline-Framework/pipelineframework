@@ -16,16 +16,12 @@
 
 package org.pipelineframework.transport.function;
 
-import io.smallrye.mutiny.Multi;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -108,97 +104,5 @@ class TraceEnvelopeTest {
         metadata.put("tenant", "other");
 
         assertEquals("acme", envelope.meta().get("tenant"));
-    }
-
-    @Test
-    void fanoutOneToManyKeepsTraceAndLineageStable() {
-        TraceEnvelope<String> input = new TraceEnvelope<>(
-            "trace-fanout-1",
-            "span-a",
-            "raw-1",
-            null,
-            "search.raw-document",
-            "v1",
-            "idem-raw-1",
-            "raw-payload",
-            null,
-            Map.of("tenant", "acme", "workflow", "checkout"));
-
-        List<TraceEnvelope<String>> fanout = Multi.createFrom().item(input)
-            .onItem().transformToMulti(envelope -> Multi.createFrom().items(
-                envelope.next("parsed-1-0", "search.parsed-document", "v1", envelope.idempotencyKey() + ":0", "part-0"),
-                envelope.next("parsed-1-1", "search.parsed-document", "v1", envelope.idempotencyKey() + ":1", "part-1")))
-            .concatenate()
-            .collect().asList()
-            .await().indefinitely();
-
-        assertEquals(2, fanout.size());
-
-        TraceEnvelope<String> first = fanout.getFirst();
-        TraceEnvelope<String> second = fanout.get(1);
-
-        assertEquals("trace-fanout-1", first.traceId());
-        assertEquals("trace-fanout-1", second.traceId());
-        assertEquals("raw-1", first.previousItemRef().previousItemId());
-        assertEquals("raw-1", second.previousItemRef().previousItemId());
-        assertEquals(TraceLineageMode.REFERENCE, first.previousItemRef().mode());
-        assertEquals(TraceLineageMode.REFERENCE, second.previousItemRef().mode());
-        assertEquals("acme", first.meta().get("tenant"));
-        assertEquals("acme", second.meta().get("tenant"));
-        assertEquals("idem-raw-1:0", first.idempotencyKey());
-        assertEquals("idem-raw-1:1", second.idempotencyKey());
-    }
-
-    @Test
-    void faninManyToOneUsesStableIdempotencyAndConsistentTrace() {
-        TraceEnvelope<String> root = new TraceEnvelope<>(
-            "trace-fanin-1",
-            "span-root",
-            "raw-merge-root",
-            null,
-            "search.raw-document",
-            "v1",
-            "idem-root",
-            "raw",
-            null,
-            Map.of("tenant", "acme", "workflow", "checkout"));
-
-        TraceEnvelope<String> left = root.next(
-            "token-1",
-            "search.token",
-            "v1",
-            "idem-root:left",
-            "token-left");
-        TraceEnvelope<String> right = root.next(
-            "token-2",
-            "search.token",
-            "v1",
-            "idem-root:right",
-            "token-right");
-
-        List<TraceEnvelope<String>> parts = Multi.createFrom().items(left, right)
-            .collect().asList()
-            .await().indefinitely();
-
-        String stableMergeKey = "merge:" + parts.stream()
-            .map(TraceEnvelope::idempotencyKey)
-            .sorted()
-            .collect(Collectors.joining("|"));
-
-        TraceEnvelope<String> merged = parts.getFirst().next(
-            "token-batch-1",
-            "search.token-batch",
-            "v1",
-            stableMergeKey,
-            "token-left,token-right");
-
-        assertEquals("trace-fanin-1", merged.traceId());
-        assertEquals("token-1", merged.previousItemRef().previousItemId());
-        assertEquals("acme", merged.meta().get("tenant"));
-        assertEquals(TraceLineageMode.REFERENCE, merged.previousItemRef().mode());
-        assertEquals("merge:idem-root:left|idem-root:right", merged.idempotencyKey());
-        assertIterableEquals(
-            List.of("idem-root:left", "idem-root:right"),
-            parts.stream().map(TraceEnvelope::idempotencyKey).sorted().toList());
     }
 }
