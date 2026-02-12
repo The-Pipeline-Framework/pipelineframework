@@ -41,10 +41,10 @@ jobs:
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
 
-      - name: Full clean verify (framework + examples)
+      - name: Full clean install (framework + examples)
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
-          ./mvnw "${maven_args[@]}" clean verify \
+          ./mvnw "${maven_args[@]}" clean install \
           -Pcoverage \
           -DskipITs=true \
           -DskipNative=true \
