@@ -45,11 +45,16 @@ public class ProcessTokenizeContentService
     List<String> tokenBatches = tokenizeIntoBatches(input.content, TOKENS_PER_BATCH);
     Instant now = Instant.now();
 
-    LOGGER.infof(
-        "Tokenized doc %s into %s batches (%s tokens)",
-        input.docId,
-        tokenBatches.size(),
-        countTokensFromBatches(tokenBatches));
+    if (LOGGER.isDebugEnabled()) {
+      LOGGER.debugf(
+          "Tokenized doc %s into %s batches (%s tokens)",
+          input.docId,
+          tokenBatches.size(),
+          countTokensFromBatches(tokenBatches));
+    }
+    if (tokenBatches.isEmpty()) {
+      return Multi.createFrom().empty();
+    }
     return Multi.createFrom()
         .iterable(tokenBatches)
         .onItem()
@@ -78,7 +83,7 @@ public class ProcessTokenizeContentService
     }
 
     if (tokens.isEmpty()) {
-      return List.of("");
+      return List.of();
     }
 
     ArrayList<String> batches = new ArrayList<>();

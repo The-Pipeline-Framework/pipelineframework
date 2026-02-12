@@ -17,6 +17,8 @@
 package org.pipelineframework.search.resource;
 
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import io.restassured.RestAssured;
 import io.restassured.config.SSLConfig;
@@ -26,10 +28,12 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 abstract class AbstractTokenBatchResourceTest {
+    private static final int LONG_CONTENT_REPEAT_COUNT = 40;
+    private static final Pattern TOKENS_HASH_PATTERN = Pattern.compile("tokensHash");
 
     @BeforeAll
     static void setUp() {
@@ -62,9 +66,9 @@ abstract class AbstractTokenBatchResourceTest {
                 .post("/api/v1/parsed-document/")
                 .then()
                 .statusCode(200)
-                .body(containsString("\"docId\""))
-                .body(containsString("\"tokens\""))
-                .body(containsString("\"tokenizedAt\""));
+                .body("docId", notNullValue())
+                .body("tokens", notNullValue())
+                .body("tokenizedAt", notNullValue());
     }
 
     @Test
@@ -87,8 +91,9 @@ abstract class AbstractTokenBatchResourceTest {
 
     @Test
     void testTokenBatchStreamsMultipleBatchesForLongContent() {
+        // Repeat enough tokens to exceed the service batch size and force multiple emitted batches.
         String longContent = String.join(" ", java.util.Collections.nCopies(
-                40, "tokenizable-content-for-batch-splitting"));
+                LONG_CONTENT_REPEAT_COUNT, "tokenizable-content-for-batch-splitting"));
         String requestBody =
                 """
                 {
@@ -107,7 +112,16 @@ abstract class AbstractTokenBatchResourceTest {
                 .extract()
                 .asString();
 
-        int tokenHashOccurrences = responseBody.split("tokensHash", -1).length - 1;
+        int tokenHashOccurrences = countOccurrences(responseBody, TOKENS_HASH_PATTERN);
         assertTrue(tokenHashOccurrences >= 2, "expected at least two streamed TokenBatch items");
+    }
+
+    private static int countOccurrences(String value, Pattern pattern) {
+        Matcher matcher = pattern.matcher(value);
+        int count = 0;
+        while (matcher.find()) {
+            count++;
+        }
+        return count;
     }
 }

@@ -14,6 +14,7 @@ import java.util.Set;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.pipelineframework.PipelineOutputBus;
+import org.pipelineframework.checkout.common.connector.ConnectorUtils;
 import org.pipelineframework.checkout.common.connector.IdempotencyGuard;
 import org.pipelineframework.checkout.deliverorder.grpc.OrderDeliveredSvc;
 
@@ -30,6 +31,7 @@ public class DeliverToNextIngestBridge {
     private final String backpressureStrategy;
     private final int backpressureBufferCapacity;
     private final Set<String> inFlightOrderIds = new HashSet<>();
+    private final Object inFlightLock = new Object();
 
     private Cancellable forwardingSubscription;
 
@@ -61,8 +63,9 @@ public class DeliverToNextIngestBridge {
         this.forwardClient = Objects.requireNonNull(forwardClient, "forwardClient must not be null");
         this.enabled = enabled;
         this.idempotencyEnabled = idempotencyEnabled;
-        this.idempotencyGuard = idempotencyEnabled ? new IdempotencyGuard(idempotencyMaxKeys) : null;
-        this.backpressureStrategy = normalizeBackpressureStrategy(backpressureStrategy);
+        int normalizedIdempotencyMaxKeys = idempotencyMaxKeys > 0 ? idempotencyMaxKeys : 10000;
+        this.idempotencyGuard = idempotencyEnabled ? new IdempotencyGuard(normalizedIdempotencyMaxKeys) : null;
+        this.backpressureStrategy = ConnectorUtils.normalizeBackpressureStrategy(backpressureStrategy);
         this.backpressureBufferCapacity = backpressureBufferCapacity > 0 ? backpressureBufferCapacity : 256;
     }
 
@@ -81,7 +84,8 @@ public class DeliverToNextIngestBridge {
             return;
         }
 
-        Multi<Object> sourceStream = applyBackpressure(outputBus.stream(Object.class));
+        Multi<Object> sourceStream =
+            ConnectorUtils.applyBackpressure(outputBus.stream(Object.class), backpressureStrategy, backpressureBufferCapacity);
         Multi<OrderDeliveredSvc.DeliveredOrder> deliveredStream = sourceStream
             .onItem().transformToMulti(item -> {
                 OrderDeliveredSvc.DeliveredOrder mapped = toDeliveredOrder(item);
@@ -132,12 +136,12 @@ public class DeliverToNextIngestBridge {
             return delivered;
         }
         if (item instanceof Message message) {
-            String orderId = readField(message, "order_id");
-            String customerId = readField(message, "customer_id");
-            String readyAt = readField(message, "ready_at");
-            String dispatchId = readField(message, "dispatch_id");
-            String dispatchedAt = readField(message, "dispatched_at");
-            String deliveredAt = readField(message, "delivered_at");
+            String orderId = ConnectorUtils.readField(message, "order_id");
+            String customerId = ConnectorUtils.readField(message, "customer_id");
+            String readyAt = ConnectorUtils.readField(message, "ready_at");
+            String dispatchId = ConnectorUtils.readField(message, "dispatch_id");
+            String dispatchedAt = ConnectorUtils.readField(message, "dispatched_at");
+            String deliveredAt = ConnectorUtils.readField(message, "delivered_at");
             if (!orderId.isBlank() && !customerId.isBlank() && !readyAt.isBlank()
                 && !dispatchId.isBlank() && !dispatchedAt.isBlank() && !deliveredAt.isBlank()) {
                 if (isDuplicateOrInFlight(orderId)) {
@@ -167,7 +171,10 @@ public class DeliverToNextIngestBridge {
         if (!isIdempotencyActive() || orderId == null || orderId.isBlank()) {
             return false;
         }
-        synchronized (inFlightOrderIds) {
+        // Lock ordering invariant:
+        // Always acquire inFlightLock before touching inFlightOrderIds and idempotencyGuard.
+        // markForwarded follows the same order. Preserve this ordering in future changes.
+        synchronized (inFlightLock) {
             if (idempotencyGuard.contains(orderId) || inFlightOrderIds.contains(orderId)) {
                 LOG.debugf("Dropped duplicate deliver->next handoff orderId=%s", orderId);
                 return true;
@@ -181,7 +188,7 @@ public class DeliverToNextIngestBridge {
         if (!isIdempotencyActive() || orderId == null || orderId.isBlank()) {
             return;
         }
-        synchronized (inFlightOrderIds) {
+        synchronized (inFlightLock) {
             inFlightOrderIds.remove(orderId);
             idempotencyGuard.markIfNew(orderId);
         }
@@ -192,50 +199,8 @@ public class DeliverToNextIngestBridge {
     }
 
     private void clearInFlightReservations() {
-        synchronized (inFlightOrderIds) {
+        synchronized (inFlightLock) {
             inFlightOrderIds.clear();
         }
-    }
-
-    private Multi<Object> applyBackpressure(Multi<Object> source) {
-        return switch (backpressureStrategy) {
-            case "DROP" -> source.onOverflow().drop();
-            case "BUFFER" -> source.onOverflow().buffer(backpressureBufferCapacity);
-            default -> source.onOverflow().buffer(backpressureBufferCapacity);
-        };
-    }
-
-    private static String normalizeBackpressureStrategy(String strategy) {
-        if (strategy == null || strategy.isBlank()) {
-            return "BUFFER";
-        }
-        String normalized = strategy.trim().toUpperCase();
-        if (!"BUFFER".equals(normalized) && !"DROP".equals(normalized)) {
-            return "BUFFER";
-        }
-        return normalized;
-    }
-
-    /**
-     * Retrieves a field's textual representation from a protobuf Message.
-     *
-     * If the named field is present and its Java type is STRING, INT, LONG, FLOAT, DOUBLE, BOOLEAN,
-     * or ENUM this returns the field's string form; if the field is missing or its type is
-     * BYTE_STRING or MESSAGE this returns an empty string.
-     *
-     * @param message the protobuf Message to read from
-     * @param fieldName the name of the field to read
-     * @return the field value as a string, or an empty string when the field is not found or not representable as text
-     */
-    private static String readField(Message message, String fieldName) {
-        var field = message.getDescriptorForType().findFieldByName(fieldName);
-        if (field == null) {
-            return "";
-        }
-        Object value = message.getField(field);
-        return switch (field.getJavaType()) {
-            case STRING, INT, LONG, FLOAT, DOUBLE, BOOLEAN, ENUM -> String.valueOf(value);
-            case BYTE_STRING, MESSAGE -> "";
-        };
     }
 }

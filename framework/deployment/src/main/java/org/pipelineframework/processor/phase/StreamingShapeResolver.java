@@ -31,6 +31,10 @@ class StreamingShapeResolver {
     /**
      * Checks if the input cardinality is streaming.
      *
+     * <p>This evaluates the input side only. ONE_TO_MANY is intentionally excluded because
+     * its input remains unary; only output becomes streaming. See
+     * {@link #applyCardinalityToStreaming(String, boolean)} for output streaming transitions.
+     *
      * @param cardinality the cardinality string
      * @return true if the input is streaming, false otherwise
      */

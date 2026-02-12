@@ -11,6 +11,7 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.subscription.Cancellable;
 import java.util.Objects;
 import org.jboss.logging.Logger;
+import org.pipelineframework.checkout.common.connector.ConnectorUtils;
 import org.pipelineframework.PipelineOutputBus;
 import org.pipelineframework.checkout.common.connector.IdempotencyGuard;
 import org.pipelineframework.checkout.createorder.grpc.OrderReadySvc;
@@ -60,8 +61,9 @@ public class CreateToDeliverIngestBridge {
         this.deliverOrderIngestClient =
             Objects.requireNonNull(deliverOrderIngestClient, "deliverOrderIngestClient must not be null");
         this.idempotencyEnabled = idempotencyEnabled;
-        this.idempotencyGuard = idempotencyEnabled ? new IdempotencyGuard(idempotencyMaxKeys) : null;
-        this.backpressureStrategy = normalizeBackpressureStrategy(backpressureStrategy);
+        int normalizedIdempotencyMaxKeys = idempotencyMaxKeys > 0 ? idempotencyMaxKeys : 10000;
+        this.idempotencyGuard = idempotencyEnabled ? new IdempotencyGuard(normalizedIdempotencyMaxKeys) : null;
+        this.backpressureStrategy = ConnectorUtils.normalizeBackpressureStrategy(backpressureStrategy);
         this.backpressureBufferCapacity = backpressureBufferCapacity > 0 ? backpressureBufferCapacity : 256;
     }
 
@@ -76,7 +78,8 @@ public class CreateToDeliverIngestBridge {
      * @param ignored the startup event (unused)
      */
     void onStartup(@Observes StartupEvent ignored) {
-        Multi<Object> sourceStream = applyBackpressure(outputBus.stream(Object.class));
+        Multi<Object> sourceStream =
+            ConnectorUtils.applyBackpressure(outputBus.stream(Object.class), backpressureStrategy, backpressureBufferCapacity);
         Multi<OrderDispatchSvc.ReadyOrder> readyOrderStream = sourceStream
             .onItem().transformToMulti(item -> {
                 OrderDispatchSvc.ReadyOrder mapped = toDeliverReadyOrder(item);
@@ -125,9 +128,9 @@ public class CreateToDeliverIngestBridge {
                 .build();
         }
         if (item instanceof Message message) {
-            String orderId = readField(message, "order_id");
-            String customerId = readField(message, "customer_id");
-            String readyAt = readField(message, "ready_at");
+            String orderId = ConnectorUtils.readField(message, "order_id");
+            String customerId = ConnectorUtils.readField(message, "customer_id");
+            String readyAt = ConnectorUtils.readField(message, "ready_at");
             if (!orderId.isBlank() && !customerId.isBlank() && !readyAt.isBlank()) {
                 if (isDuplicateOrderId(orderId)) {
                     return null;
@@ -157,57 +160,11 @@ public class CreateToDeliverIngestBridge {
         if (!idempotencyEnabled || orderId == null || orderId.isBlank()) {
             return false;
         }
-        if (idempotencyGuard == null) {
-            return false;
-        }
         boolean firstOccurrence = idempotencyGuard.markIfNew(orderId);
         if (!firstOccurrence) {
             LOG.debugf("Dropped duplicate create->deliver handoff orderId=%s", orderId);
         }
         return !firstOccurrence;
-    }
-
-    private Multi<Object> applyBackpressure(Multi<Object> source) {
-        return switch (backpressureStrategy) {
-            case "DROP" -> source.onOverflow().drop();
-            case "BUFFER" -> source.onOverflow().buffer(backpressureBufferCapacity);
-            default -> source.onOverflow().buffer(backpressureBufferCapacity);
-        };
-    }
-
-    private static String normalizeBackpressureStrategy(String strategy) {
-        if (strategy == null || strategy.isBlank()) {
-            return "BUFFER";
-        }
-        String normalized = strategy.trim().toUpperCase();
-        if (!"BUFFER".equals(normalized) && !"DROP".equals(normalized)) {
-            return "BUFFER";
-        }
-        return normalized;
-    }
-
-    /**
-     * Extracts the named field's value from a protobuf Message and returns it as a String.
-     *
-     * If the field does not exist, is unset, or is a bytes or nested message type, an empty
-     * string is returned. Numeric, boolean, string, and enum field values are converted to
-     * their String representation.
-     *
-     * @param message the protobuf Message to read from
-     * @param fieldName the name of the field to read
-     * @return the field's string representation if present and of type string, numeric, boolean,
-     *         or enum; otherwise an empty string
-     */
-    private static String readField(Message message, String fieldName) {
-        var field = message.getDescriptorForType().findFieldByName(fieldName);
-        if (field == null) {
-            return "";
-        }
-        Object value = message.getField(field);
-        return switch (field.getJavaType()) {
-            case STRING, INT, LONG, FLOAT, DOUBLE, BOOLEAN, ENUM -> String.valueOf(value);
-            case BYTE_STRING, MESSAGE -> "";
-        };
     }
 
 }

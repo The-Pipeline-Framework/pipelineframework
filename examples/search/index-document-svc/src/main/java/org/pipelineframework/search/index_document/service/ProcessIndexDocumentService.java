@@ -29,6 +29,7 @@ import org.pipelineframework.service.ReactiveStreamingClientService;
 @Getter
 public class ProcessIndexDocumentService
     implements ReactiveStreamingClientService<TokenBatch, IndexAck> {
+  private static final int MAX_BATCHES = 10_000;
 
   @Override
   public Uni<IndexAck> process(Multi<TokenBatch> input) {
@@ -43,6 +44,10 @@ public class ProcessIndexDocumentService
   private Uni<IndexAck> processBatches(List<TokenBatch> batches, Logger logger) {
     if (batches == null || batches.isEmpty()) {
       return Uni.createFrom().failure(new IllegalArgumentException("token batches are required"));
+    }
+    if (batches.size() > MAX_BATCHES) {
+      return Uni.createFrom()
+          .failure(new IllegalArgumentException("token batch count exceeds limit: " + MAX_BATCHES));
     }
     if (batches.stream().anyMatch(batch ->
         batch == null
@@ -64,11 +69,8 @@ public class ProcessIndexDocumentService
     String indexVersion = resolveIndexVersion();
     String joinedTokenHashes = batches.stream()
         .map(batch -> batch.tokensHash)
-        .filter(value -> value != null && !value.isBlank())
         .collect(Collectors.joining("|"));
-    String combinedTokensHash = joinedTokenHashes.isBlank()
-        ? null
-        : HashingUtils.sha256Base64Url(joinedTokenHashes);
+    String combinedTokensHash = HashingUtils.sha256Base64Url(joinedTokenHashes);
 
     IndexAck output = new IndexAck();
     output.docId = docId;
