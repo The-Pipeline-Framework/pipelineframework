@@ -6,7 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Properties;
@@ -85,15 +87,34 @@ class PipelineRuntimeTopologyTest {
     }
 
     private static boolean isPipelineRuntimeMappingActive() {
-        Path mappingPath = Path.of("..", "config", "pipeline.runtime.yaml").normalize();
-        if (!Files.exists(mappingPath)) {
+        Path mappingPath = resolveRuntimeMappingPath();
+        if (mappingPath == null || !Files.exists(mappingPath)) {
             return false;
         }
         try {
             String content = Files.readString(mappingPath);
             return content.contains("layout: pipeline-runtime");
-        } catch (Exception ignored) {
+        } catch (IOException ignored) {
             return false;
         }
+    }
+
+    private static Path resolveRuntimeMappingPath() {
+        URL resource = Thread.currentThread().getContextClassLoader().getResource("config/pipeline.runtime.yaml");
+        if (resource != null) {
+            return Path.of(resource.getPath()).normalize();
+        }
+
+        Path userDir = Path.of(System.getProperty("user.dir", ".")).normalize();
+        Path direct = userDir.resolve("config").resolve("pipeline.runtime.yaml").normalize();
+        if (Files.exists(direct)) {
+            return direct;
+        }
+
+        Path parent = userDir.resolve("..").resolve("config").resolve("pipeline.runtime.yaml").normalize();
+        if (Files.exists(parent)) {
+            return parent;
+        }
+        return null;
     }
 }

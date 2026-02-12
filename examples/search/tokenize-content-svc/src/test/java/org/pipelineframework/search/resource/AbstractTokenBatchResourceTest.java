@@ -16,6 +16,7 @@
 
 package org.pipelineframework.search.resource;
 
+import java.util.Collections;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -100,7 +101,7 @@ abstract class AbstractTokenBatchResourceTest {
     @Test
     void testTokenBatchStreamsMultipleBatchesForLongContent() {
         // Tie payload length to the service batch size so the test always forces multiple batches.
-        String longContent = String.join(" ", java.util.Collections.nCopies(
+        String longContent = String.join(" ", Collections.nCopies(
                 LONG_CONTENT_REPEAT_COUNT, "tokenizable-content-for-batch-splitting"));
         String requestBody =
                 """

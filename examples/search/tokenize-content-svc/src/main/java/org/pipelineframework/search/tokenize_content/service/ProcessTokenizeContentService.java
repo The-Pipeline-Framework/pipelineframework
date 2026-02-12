@@ -40,6 +40,9 @@ public class ProcessTokenizeContentService
     if (input == null || input.content == null || input.content.isBlank()) {
       return Multi.createFrom().failure(new IllegalArgumentException("content is required"));
     }
+    if (input.docId == null) {
+      return Multi.createFrom().failure(new IllegalArgumentException("docId is required"));
+    }
 
     List<String> tokenBatches = tokenizeIntoBatches(input.content, TOKENS_PER_BATCH);
     Instant now = Instant.now();
