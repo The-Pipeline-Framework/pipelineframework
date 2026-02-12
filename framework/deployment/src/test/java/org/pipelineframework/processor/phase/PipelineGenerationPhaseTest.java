@@ -110,4 +110,16 @@ class PipelineGenerationPhaseTest {
         String outer = (String) method.invoke(phase, descriptor);
         assertEquals("Baz", outer);
     }
+
+    @Test
+    void resolveClientRoleDefaultsToOrchestratorClientWhenNull() throws Exception {
+        PipelineGenerationPhase phase = new PipelineGenerationPhase();
+        java.lang.reflect.Method method = PipelineGenerationPhase.class.getDeclaredMethod(
+            "resolveClientRole",
+            org.pipelineframework.processor.ir.DeploymentRole.class);
+        method.setAccessible(true);
+
+        Object role = method.invoke(phase, new Object[]{null});
+        assertEquals(org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT, role);
+    }
 }
