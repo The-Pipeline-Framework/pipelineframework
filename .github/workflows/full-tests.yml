@@ -57,6 +57,20 @@ jobs:
             echo "Waiting for Docker (${i}/10)..."
             sleep 3
           done
+          SERVER_API="$(docker version --format '{{.Server.APIVersion}}')"
+          if [ -z "$SERVER_API" ]; then
+            echo "ERROR: Failed to resolve Docker Server API version from docker version output."
+            exit 1
+          fi
+          echo "Resolved Docker API version: $SERVER_API"
+          echo "DOCKER_API_VERSION=$SERVER_API" >> "$GITHUB_ENV"
+          echo "TESTCONTAINERS_DOCKER_CLIENT_STRATEGY=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" >> "$GITHUB_ENV"
+          # NOTE: MAVEN_OPTS is expanded from the current shell env here (not from prior $GITHUB_ENV writes);
+          # keep MAVEN_OPTS updates consolidated in one step (or set job-level env) to avoid drift.
+          echo "MAVEN_OPTS=${MAVEN_OPTS} -Ddocker.api.version=$SERVER_API -Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
+          echo "docker.client.strategy=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" > "$HOME/.testcontainers.properties"
+          echo "docker.host=unix:///var/run/docker.sock" >> "$HOME/.testcontainers.properties"
+          echo "docker.api.version=$SERVER_API" >> "$HOME/.testcontainers.properties"
           docker version
           docker info
 

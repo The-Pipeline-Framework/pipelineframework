@@ -27,6 +27,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.notNullValue;
 
 @QuarkusTest
@@ -113,5 +114,33 @@ class IndexAckResourceTest {
                 .post("/api/v1/index-ack/")
                 .then()
                 .statusCode(400);
+    }
+
+    @Test
+    void testIndexAckRejectsMixedDocIdsInSingleBatch() {
+        String requestBody =
+                """
+                [
+                  {
+                    "docId": "%s",
+                    "tokens": "search pipeline tokens one",
+                    "tokensHash": "seed-hash-1"
+                  },
+                  {
+                    "docId": "%s",
+                    "tokens": "search pipeline tokens two",
+                    "tokensHash": "seed-hash-2"
+                  }
+                ]
+                """
+                        .formatted(UUID.randomUUID(), UUID.randomUUID());
+
+        given().contentType(ContentType.JSON)
+                .body(requestBody)
+                .when()
+                .post("/api/v1/index-ack/")
+                .then()
+                .statusCode(400)
+                .body(containsString("Invalid request"));
     }
 }
