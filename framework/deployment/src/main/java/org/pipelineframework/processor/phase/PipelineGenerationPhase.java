@@ -1104,6 +1104,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
      */
     private org.pipelineframework.processor.ir.DeploymentRole resolveClientRole(
             org.pipelineframework.processor.ir.DeploymentRole serverRole) {
+        if (serverRole == null) {
+            return org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT;
+        }
         return switch (serverRole) {
             case PLUGIN_SERVER -> org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_CLIENT;
             case PIPELINE_SERVER -> org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT;
