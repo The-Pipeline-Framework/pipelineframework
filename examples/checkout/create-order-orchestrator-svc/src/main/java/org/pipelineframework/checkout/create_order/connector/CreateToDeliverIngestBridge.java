@@ -28,6 +28,8 @@ public class CreateToDeliverIngestBridge {
     private final DeliverOrderIngestClient deliverOrderIngestClient;
     private final boolean idempotencyEnabled;
     private final IdempotencyGuard idempotencyGuard;
+    private final String backpressureStrategy;
+    private final int backpressureBufferCapacity;
 
     private Cancellable forwardingSubscription;
 
@@ -38,6 +40,8 @@ public class CreateToDeliverIngestBridge {
      * @param deliverOrderIngestClient the gRPC client used to forward ready orders; must not be null
      * @param idempotencyEnabled whether duplicate order ids should be filtered before forwarding
      * @param idempotencyMaxKeys max in-memory keys retained for duplicate filtering
+     * @param backpressureStrategy overflow strategy for connector handoff (`BUFFER` or `DROP`)
+     * @param backpressureBufferCapacity overflow buffer capacity when strategy is `BUFFER`
      * @throws NullPointerException if {@code outputBus} or {@code deliverOrderIngestClient} is null
      */
     public CreateToDeliverIngestBridge(
@@ -46,13 +50,19 @@ public class CreateToDeliverIngestBridge {
         @ConfigProperty(name = "checkout.create-to-deliver.idempotency.enabled", defaultValue = "true")
         boolean idempotencyEnabled,
         @ConfigProperty(name = "checkout.create-to-deliver.idempotency.max-keys", defaultValue = "10000")
-        int idempotencyMaxKeys
+        int idempotencyMaxKeys,
+        @ConfigProperty(name = "checkout.create-to-deliver.backpressure.strategy", defaultValue = "BUFFER")
+        String backpressureStrategy,
+        @ConfigProperty(name = "checkout.create-to-deliver.backpressure.buffer-capacity", defaultValue = "256")
+        int backpressureBufferCapacity
     ) {
         this.outputBus = Objects.requireNonNull(outputBus, "outputBus must not be null");
         this.deliverOrderIngestClient =
             Objects.requireNonNull(deliverOrderIngestClient, "deliverOrderIngestClient must not be null");
         this.idempotencyEnabled = idempotencyEnabled;
         this.idempotencyGuard = idempotencyEnabled ? new IdempotencyGuard(idempotencyMaxKeys) : null;
+        this.backpressureStrategy = normalizeBackpressureStrategy(backpressureStrategy);
+        this.backpressureBufferCapacity = backpressureBufferCapacity > 0 ? backpressureBufferCapacity : 256;
     }
 
     /**
@@ -66,7 +76,8 @@ public class CreateToDeliverIngestBridge {
      * @param ignored the startup event (unused)
      */
     void onStartup(@Observes StartupEvent ignored) {
-        Multi<OrderDispatchSvc.ReadyOrder> readyOrderStream = outputBus.stream(Object.class)
+        Multi<Object> sourceStream = applyBackpressure(outputBus.stream(Object.class));
+        Multi<OrderDispatchSvc.ReadyOrder> readyOrderStream = sourceStream
             .onItem().transformToMulti(item -> {
                 OrderDispatchSvc.ReadyOrder mapped = toDeliverReadyOrder(item);
                 return mapped == null ? Multi.createFrom().empty() : Multi.createFrom().item(mapped);
@@ -154,6 +165,25 @@ public class CreateToDeliverIngestBridge {
             LOG.debugf("Dropped duplicate create->deliver handoff orderId=%s", orderId);
         }
         return !firstOccurrence;
+    }
+
+    private Multi<Object> applyBackpressure(Multi<Object> source) {
+        return switch (backpressureStrategy) {
+            case "DROP" -> source.onOverflow().drop();
+            case "BUFFER" -> source.onOverflow().buffer(backpressureBufferCapacity);
+            default -> source.onOverflow().buffer(backpressureBufferCapacity);
+        };
+    }
+
+    private static String normalizeBackpressureStrategy(String strategy) {
+        if (strategy == null || strategy.isBlank()) {
+            return "BUFFER";
+        }
+        String normalized = strategy.trim().toUpperCase();
+        if (!"BUFFER".equals(normalized) && !"DROP".equals(normalized)) {
+            return "BUFFER";
+        }
+        return normalized;
     }
 
     /**

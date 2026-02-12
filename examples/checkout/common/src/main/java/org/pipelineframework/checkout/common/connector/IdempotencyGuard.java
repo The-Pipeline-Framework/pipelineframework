@@ -20,7 +20,17 @@ public final class IdempotencyGuard {
             throw new IllegalArgumentException("maxKeys must be > 0");
         }
         this.maxKeys = maxKeys;
-        this.seen = new LinkedHashMap<>(16, 0.75f, true);
+        // Thread-safety invariant:
+        // this map is mutated/read under synchronization by markIfNew/contains/size/snapshot.
+        // removeEldestEntry therefore executes while markIfNew holds the same monitor.
+        // Any future non-synchronized caller touching seen/maxKeys must either synchronize
+        // on this instance or revisit the locking strategy.
+        this.seen = new LinkedHashMap<>(16, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
+                return size() > IdempotencyGuard.this.maxKeys;
+            }
+        };
     }
 
     /**
@@ -40,20 +50,15 @@ public final class IdempotencyGuard {
             return false;
         }
         seen.put(key, Boolean.TRUE);
-        evictIfNeeded();
         return true;
     }
 
     public synchronized boolean contains(String key) {
         Objects.requireNonNull(key, "key must not be null");
-        return seen.containsKey(key);
-    }
-
-    private void evictIfNeeded() {
-        while (seen.size() > maxKeys) {
-            String eldest = seen.entrySet().iterator().next().getKey();
-            seen.remove(eldest);
+        if (key.isBlank()) {
+            throw new IllegalArgumentException("key must not be blank");
         }
+        return seen.containsKey(key);
     }
 
     synchronized int size() {

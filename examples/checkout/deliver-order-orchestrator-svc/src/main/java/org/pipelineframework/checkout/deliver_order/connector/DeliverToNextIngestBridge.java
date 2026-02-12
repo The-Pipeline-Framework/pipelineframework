@@ -27,6 +27,8 @@ public class DeliverToNextIngestBridge {
     private final boolean enabled;
     private final boolean idempotencyEnabled;
     private final IdempotencyGuard idempotencyGuard;
+    private final String backpressureStrategy;
+    private final int backpressureBufferCapacity;
     private final Set<String> inFlightOrderIds = new HashSet<>();
 
     private Cancellable forwardingSubscription;
@@ -39,6 +41,8 @@ public class DeliverToNextIngestBridge {
      * @param enabled configuration flag; `true` enables forwarding, `false` disables it
      * @param idempotencyEnabled whether duplicate order ids should be filtered before forwarding
      * @param idempotencyMaxKeys max in-memory keys retained for duplicate filtering
+     * @param backpressureStrategy overflow strategy for connector handoff (`BUFFER` or `DROP`)
+     * @param backpressureBufferCapacity overflow buffer capacity when strategy is `BUFFER`
      */
     public DeliverToNextIngestBridge(
         PipelineOutputBus outputBus,
@@ -47,13 +51,19 @@ public class DeliverToNextIngestBridge {
         @ConfigProperty(name = "checkout.deliver.forward.idempotency.enabled", defaultValue = "true")
         boolean idempotencyEnabled,
         @ConfigProperty(name = "checkout.deliver.forward.idempotency.max-keys", defaultValue = "10000")
-        int idempotencyMaxKeys
+        int idempotencyMaxKeys,
+        @ConfigProperty(name = "checkout.deliver.forward.backpressure.strategy", defaultValue = "BUFFER")
+        String backpressureStrategy,
+        @ConfigProperty(name = "checkout.deliver.forward.backpressure.buffer-capacity", defaultValue = "256")
+        int backpressureBufferCapacity
     ) {
         this.outputBus = Objects.requireNonNull(outputBus, "outputBus must not be null");
         this.forwardClient = Objects.requireNonNull(forwardClient, "forwardClient must not be null");
         this.enabled = enabled;
         this.idempotencyEnabled = idempotencyEnabled;
         this.idempotencyGuard = idempotencyEnabled ? new IdempotencyGuard(idempotencyMaxKeys) : null;
+        this.backpressureStrategy = normalizeBackpressureStrategy(backpressureStrategy);
+        this.backpressureBufferCapacity = backpressureBufferCapacity > 0 ? backpressureBufferCapacity : 256;
     }
 
     /**
@@ -71,7 +81,8 @@ public class DeliverToNextIngestBridge {
             return;
         }
 
-        Multi<OrderDeliveredSvc.DeliveredOrder> deliveredStream = outputBus.stream(Object.class)
+        Multi<Object> sourceStream = applyBackpressure(outputBus.stream(Object.class));
+        Multi<OrderDeliveredSvc.DeliveredOrder> deliveredStream = sourceStream
             .onItem().transformToMulti(item -> {
                 OrderDeliveredSvc.DeliveredOrder mapped = toDeliveredOrder(item);
                 return mapped == null ? Multi.createFrom().empty() : Multi.createFrom().item(mapped);
@@ -153,10 +164,7 @@ public class DeliverToNextIngestBridge {
     }
 
     private boolean isDuplicateOrInFlight(String orderId) {
-        if (!idempotencyEnabled || orderId == null || orderId.isBlank()) {
-            return false;
-        }
-        if (idempotencyGuard == null) {
+        if (!isIdempotencyActive() || orderId == null || orderId.isBlank()) {
             return false;
         }
         synchronized (inFlightOrderIds) {
@@ -170,7 +178,7 @@ public class DeliverToNextIngestBridge {
     }
 
     private void markForwarded(String orderId) {
-        if (!idempotencyEnabled || orderId == null || orderId.isBlank() || idempotencyGuard == null) {
+        if (!isIdempotencyActive() || orderId == null || orderId.isBlank()) {
             return;
         }
         synchronized (inFlightOrderIds) {
@@ -179,10 +187,33 @@ public class DeliverToNextIngestBridge {
         }
     }
 
+    private boolean isIdempotencyActive() {
+        return idempotencyEnabled && idempotencyGuard != null;
+    }
+
     private void clearInFlightReservations() {
         synchronized (inFlightOrderIds) {
             inFlightOrderIds.clear();
         }
+    }
+
+    private Multi<Object> applyBackpressure(Multi<Object> source) {
+        return switch (backpressureStrategy) {
+            case "DROP" -> source.onOverflow().drop();
+            case "BUFFER" -> source.onOverflow().buffer(backpressureBufferCapacity);
+            default -> source.onOverflow().buffer(backpressureBufferCapacity);
+        };
+    }
+
+    private static String normalizeBackpressureStrategy(String strategy) {
+        if (strategy == null || strategy.isBlank()) {
+            return "BUFFER";
+        }
+        String normalized = strategy.trim().toUpperCase();
+        if (!"BUFFER".equals(normalized) && !"DROP".equals(normalized)) {
+            return "BUFFER";
+        }
+        return normalized;
     }
 
     /**
