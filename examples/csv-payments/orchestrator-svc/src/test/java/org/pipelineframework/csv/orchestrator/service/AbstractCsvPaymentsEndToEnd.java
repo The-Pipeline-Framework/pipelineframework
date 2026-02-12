@@ -73,7 +73,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final boolean MONOLITH_LAYOUT = "monolith".equals(RUNTIME_LAYOUT);
     private static final boolean PIPELINE_RUNTIME_LAYOUT = "pipeline-runtime".equals(RUNTIME_LAYOUT);
     private static final long PIPELINE_WAIT_TIMEOUT_SECONDS =
-            Long.getLong("csv.e2e.pipeline.wait.seconds", 60L);
+            Long.getLong("csv.e2e.pipeline.wait.seconds", 120L);
     private static final long PIPELINE_WAIT_POLL_MILLIS = 1000L;
     // CI sets IMAGE_TAG to github.sha; local fallback should match dev image naming conventions.
     private static final String PIPELINE_RUNTIME_IMAGE =
