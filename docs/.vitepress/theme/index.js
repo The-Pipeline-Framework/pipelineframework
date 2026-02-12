@@ -21,6 +21,7 @@ import './custom.css'
 import Callout from './components/Callout.vue'
 import HeroSection from './components/HeroSection.vue'
 import VersionBadge from './components/VersionBadge.vue'
+import LatestReleases from './components/LatestReleases.vue'
 
 export default {
   ...DefaultTheme,
@@ -33,5 +34,6 @@ export default {
     // Register custom components
     app.component('Callout', Callout)
     app.component('HeroSection', HeroSection)
+    app.component('LatestReleases', LatestReleases)
   }
 }
