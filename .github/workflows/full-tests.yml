@@ -58,8 +58,15 @@ jobs:
             sleep 3
           done
           SERVER_API="$(docker version --format '{{.Server.APIVersion}}')"
+          echo "Resolved Docker API version: $SERVER_API"
           echo "DOCKER_API_VERSION=$SERVER_API" >> "$GITHUB_ENV"
           echo "TESTCONTAINERS_DOCKER_CLIENT_STRATEGY=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" >> "$GITHUB_ENV"
+          echo "MAVEN_OPTS=${MAVEN_OPTS} -Ddocker.api.version=$SERVER_API -Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
+          cat > "$HOME/.testcontainers.properties" <<EOF
+docker.client.strategy=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy
+docker.host=unix:///var/run/docker.sock
+docker.api.version=$SERVER_API
+EOF
           docker version
           docker info
 
