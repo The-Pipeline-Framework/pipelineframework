@@ -4,21 +4,20 @@ The Pipeline Framework documentation is available for the following versions:
 
 ## Latest Version
 
-- [v0.9.2](/) - Latest stable release
+- [v26.2](/) - Current documentation
 
 ## Previous Versions
 
+- [v26.2](/versions/v26.2/) - Snapshot of the v26.2 docs
 - [v0.9.2](/versions/v0.9.2/) - Snapshot of the v0.9.2 docs
 - [v0.9.0](/versions/v0.9.0/) - Snapshot of the v0.9.0 docs
 
 ## About Versioning
 
 The Pipeline Framework follows semantic versioning:
-- **Major versions** (0.x.0) may introduce breaking changes
-- **Minor versions** (0.9.x) add new features while maintaining backward compatibility
-- **Patch versions** (0.9.1) include bug fixes and minor improvements
-
-For production use, we recommend using the latest stable version (v0.9.2).
+- **Major versions** (`x.0.0`) may introduce breaking changes.
+- **Minor versions** (`x.y.0`) add features while maintaining compatibility expectations for that major stream.
+- **Patch versions** (`x.y.z`) include fixes and incremental improvements.
 
 ## Documentation Snapshot Policy
 
@@ -27,5 +26,5 @@ When cutting a new release, create a docs snapshot and update the version list:
 
 ```bash
 cd docs
-npm run snapshot -- --version v0.9.3
+npm run snapshot -- --version v26.3
 ```
