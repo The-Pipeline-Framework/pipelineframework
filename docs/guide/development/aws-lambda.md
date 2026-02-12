@@ -68,6 +68,30 @@ These abstractions separate:
 `TraceEnvelope` carries lineage, payload model/version, and idempotency metadata without forcing
 application DTOs to become envelope types.
 
+## ID Ownership and Idempotency Boundaries
+
+TPF distinguishes between business IDs and transport IDs:
+
+- Business IDs (for example CSV row IDs, domain entity IDs) are application-owned.
+- Transport IDs (`traceId`, `itemId`, transport `idempotencyKey`) are framework-owned and opaque to business logic.
+
+TPF does not impose business semantics on transport IDs. Authoritative dedupe/rejection remains in application and data layers (for example domain rules, warehouse checks, JPA/SQL primary keys and unique constraints).
+
+## Function Transport Idempotency Policy
+
+Function transport adapters support policy-driven idempotency derivation through `FunctionTransportContext` attributes:
+
+- `tpf.idempotency.policy=RANDOM|EXPLICIT`
+- `tpf.idempotency.key=<caller-stable-key>`
+
+Behavior:
+
+- `RANDOM` (default): adapter-generated transport keys (non-authoritative dedupe behavior).
+  These keys provide transport-level correlation and can reduce duplicate processing attempts, but they do not guarantee business/data uniqueness and do not replace explicit business idempotency rules.
+- `EXPLICIT`: uses caller-provided key where supported; this is the recommended mode when the application already has stable business identifiers.
+
+`EXPLICIT` is an opt-in transport assist, not a replacement for business/data-level uniqueness enforcement.
+
 ## Backpressure Model in Function Deployments
 
 Backpressure remains active inside each runtime via Mutiny `Multi`/`Uni`, but Lambda invocation
