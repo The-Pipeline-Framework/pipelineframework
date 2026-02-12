@@ -27,6 +27,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.notNullValue;
 
 @QuarkusTest
@@ -116,7 +117,7 @@ class IndexAckResourceTest {
     }
 
     @Test
-    void testIndexAckRejectsMixedDocIdsAcrossBatches() {
+    void testIndexAckRejectsMixedDocIdsInSingleBatch() {
         String requestBody =
                 """
                 [
@@ -139,6 +140,7 @@ class IndexAckResourceTest {
                 .when()
                 .post("/api/v1/index-ack/")
                 .then()
-                .statusCode(400);
+                .statusCode(400)
+                .body(containsString("Invalid request"));
     }
 }

@@ -58,6 +58,10 @@ jobs:
             sleep 3
           done
           SERVER_API="$(docker version --format '{{.Server.APIVersion}}')"
+          if [ -z "$SERVER_API" ]; then
+            echo "ERROR: Failed to resolve Docker Server API version from docker version output."
+            exit 1
+          fi
           echo "Resolved Docker API version: $SERVER_API"
           echo "DOCKER_API_VERSION=$SERVER_API" >> "$GITHUB_ENV"
           echo "TESTCONTAINERS_DOCKER_CLIENT_STRATEGY=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" >> "$GITHUB_ENV"
