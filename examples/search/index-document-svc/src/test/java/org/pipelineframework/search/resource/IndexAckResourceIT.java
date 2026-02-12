@@ -52,10 +52,13 @@ class IndexAckResourceIT {
     void testIndexAckWithValidData() {
         String requestBody =
                 """
-                {
-                  "docId": "%s",
-                  "tokens": "search pipeline tokens"
-                }
+                [
+                  {
+                    "docId": "%s",
+                    "tokens": "search pipeline tokens",
+                    "tokensHash": "seed-hash"
+                  }
+                ]
                 """
                         .formatted(UUID.randomUUID());
 
@@ -75,10 +78,13 @@ class IndexAckResourceIT {
     void testIndexAckWithInvalidUUID() {
         String requestBody =
                 """
-                {
-                  "docId": "invalid-uuid",
-                  "tokens": "search pipeline tokens"
-                }
+                [
+                  {
+                    "docId": "invalid-uuid",
+                    "tokens": "search pipeline tokens",
+                    "tokensHash": "seed-hash"
+                  }
+                ]
                 """;
 
         given().contentType(ContentType.JSON)
@@ -93,9 +99,11 @@ class IndexAckResourceIT {
     void testIndexAckWithMissingRequiredFields() {
         String requestBody =
                 """
-                {
-                  "docId": "%s"
-                }
+                [
+                  {
+                    "docId": "%s"
+                  }
+                ]
                 """
                         .formatted(UUID.randomUUID());
 

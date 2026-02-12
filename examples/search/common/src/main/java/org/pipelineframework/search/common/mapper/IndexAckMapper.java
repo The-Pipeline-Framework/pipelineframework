@@ -8,7 +8,7 @@ import org.pipelineframework.search.common.dto.IndexAckDto;
 
 @SuppressWarnings("unused")
 @Mapper(
-    componentModel = "jakarta",
+    componentModel = "cdi",
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
 public interface IndexAckMapper extends org.pipelineframework.mapper.Mapper<org.pipelineframework.search.grpc.IndexDocumentSvc.IndexAck, IndexAckDto, IndexAck> {

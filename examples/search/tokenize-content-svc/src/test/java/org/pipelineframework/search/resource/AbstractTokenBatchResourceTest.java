@@ -26,7 +26,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static io.restassured.RestAssured.given;
-import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.containsString;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 abstract class AbstractTokenBatchResourceTest {
 
@@ -58,12 +59,12 @@ abstract class AbstractTokenBatchResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/token-batch/")
+                .post("/api/v1/parsed-document/")
                 .then()
                 .statusCode(200)
-                .body("docId", notNullValue())
-                .body("tokens", notNullValue())
-                .body("tokenizedAt", notNullValue());
+                .body(containsString("\"docId\""))
+                .body(containsString("\"tokens\""))
+                .body(containsString("\"tokenizedAt\""));
     }
 
     @Test
@@ -79,26 +80,34 @@ abstract class AbstractTokenBatchResourceTest {
         given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/token-batch/")
+                .post("/api/v1/parsed-document/")
                 .then()
                 .statusCode(400);
     }
 
     @Test
-    void testTokenBatchWithMissingRequiredFields() {
+    void testTokenBatchStreamsMultipleBatchesForLongContent() {
+        String longContent = String.join(" ", java.util.Collections.nCopies(
+                40, "tokenizable-content-for-batch-splitting"));
         String requestBody =
                 """
                 {
-                  "docId": "%s"
+                  "docId": "%s",
+                  "content": "%s"
                 }
                 """
-                        .formatted(UUID.randomUUID());
+                        .formatted(UUID.randomUUID(), longContent);
 
-        given().contentType(ContentType.JSON)
+        String responseBody = given().contentType(ContentType.JSON)
                 .body(requestBody)
                 .when()
-                .post("/api/v1/token-batch/")
+                .post("/api/v1/parsed-document/")
                 .then()
-                .statusCode(400);
+                .statusCode(200)
+                .extract()
+                .asString();
+
+        int tokenHashOccurrences = responseBody.split("tokensHash", -1).length - 1;
+        assertTrue(tokenHashOccurrences >= 2, "expected at least two streamed TokenBatch items");
     }
 }

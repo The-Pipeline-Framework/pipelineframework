@@ -8,7 +8,7 @@ import org.pipelineframework.search.common.dto.ParsedDocumentDto;
 
 @SuppressWarnings("unused")
 @Mapper(
-    componentModel = "jakarta",
+    componentModel = "cdi",
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
 public interface ParsedDocumentMapper extends org.pipelineframework.mapper.Mapper<org.pipelineframework.search.grpc.ParseDocumentSvc.ParsedDocument, ParsedDocumentDto, ParsedDocument> {

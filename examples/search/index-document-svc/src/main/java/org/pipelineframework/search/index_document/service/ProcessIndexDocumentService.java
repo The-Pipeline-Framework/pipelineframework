@@ -1,21 +1,26 @@
 package org.pipelineframework.search.index_document.service;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+import java.util.stream.Collectors;
 import jakarta.enterprise.context.ApplicationScoped;
 
+import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import lombok.Getter;
 import org.jboss.logging.Logger;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.search.common.domain.IndexAck;
 import org.pipelineframework.search.common.domain.TokenBatch;
-import org.pipelineframework.service.ReactiveService;
+import org.pipelineframework.search.common.util.HashingUtils;
+import org.pipelineframework.service.ReactiveStreamingClientService;
 
 @PipelineStep(
     inputType = org.pipelineframework.search.common.domain.TokenBatch.class,
     outputType = org.pipelineframework.search.common.domain.IndexAck.class,
-    stepType = org.pipelineframework.step.StepOneToOne.class,
-    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
+    stepType = org.pipelineframework.step.StepManyToOne.class,
+    backendType = org.pipelineframework.grpc.GrpcServiceClientStreamingAdapter.class,
     inboundMapper = org.pipelineframework.search.common.mapper.TokenBatchMapper.class,
     outboundMapper = org.pipelineframework.search.common.mapper.IndexAckMapper.class,
     cacheKeyGenerator = org.pipelineframework.search.index_document.cache.IndexDocumentCacheKeyGenerator.class
@@ -23,26 +28,56 @@ import org.pipelineframework.service.ReactiveService;
 @ApplicationScoped
 @Getter
 public class ProcessIndexDocumentService
-    implements ReactiveService<TokenBatch, IndexAck> {
+    implements ReactiveStreamingClientService<TokenBatch, IndexAck> {
 
   @Override
-  public Uni<IndexAck> process(TokenBatch input) {
+  public Uni<IndexAck> process(Multi<TokenBatch> input) {
     Logger logger = Logger.getLogger(getClass());
+    return input
+        .collect()
+        .asList()
+        .onItem()
+        .transformToUni(batches -> processBatches(batches, logger));
+  }
 
-    if (input == null || input.tokens == null || input.tokens.isBlank()) {
-      return Uni.createFrom().failure(new IllegalArgumentException("tokens are required"));
+  private Uni<IndexAck> processBatches(List<TokenBatch> batches, Logger logger) {
+    if (batches == null || batches.isEmpty()) {
+      return Uni.createFrom().failure(new IllegalArgumentException("token batches are required"));
+    }
+    if (batches.stream().anyMatch(batch ->
+        batch == null
+            || batch.tokens == null
+            || batch.tokens.isBlank()
+            || batch.tokensHash == null
+            || batch.tokensHash.isBlank())) {
+      return Uni.createFrom().failure(new IllegalArgumentException(
+          "all token batches must contain tokens and tokensHash"));
+    }
+    UUID docId = batches.get(0).docId;
+    if (docId == null) {
+      return Uni.createFrom().failure(new IllegalArgumentException("docId is required"));
+    }
+    if (batches.stream().anyMatch(batch -> batch.docId == null || !docId.equals(batch.docId))) {
+      return Uni.createFrom().failure(new IllegalArgumentException("all token batches must share the same docId"));
     }
 
     String indexVersion = resolveIndexVersion();
+    String joinedTokenHashes = batches.stream()
+        .map(batch -> batch.tokensHash)
+        .filter(value -> value != null && !value.isBlank())
+        .collect(Collectors.joining("|"));
+    String combinedTokensHash = joinedTokenHashes.isBlank()
+        ? null
+        : HashingUtils.sha256Base64Url(joinedTokenHashes);
 
     IndexAck output = new IndexAck();
-    output.docId = input.docId;
+    output.docId = docId;
     output.indexVersion = indexVersion;
-    output.tokensHash = input.tokensHash;
+    output.tokensHash = combinedTokensHash;
     output.indexedAt = Instant.now();
     output.success = true;
 
-    logger.infof("Indexed doc %s (version=%s)", input.docId, indexVersion);
+    logger.infof("Indexed doc %s from %s token batches (version=%s)", docId, batches.size(), indexVersion);
     return Uni.createFrom().item(output);
   }
 

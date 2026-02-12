@@ -343,7 +343,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             validateRestMappings(model);
         }
 
-        TypeName multiInputDto = ParameterizedTypeName.get(ClassName.get(Multi.class), inputDtoClassName);
+        TypeName listInputDto = ParameterizedTypeName.get(ClassName.get(java.util.List.class), inputDtoClassName);
         TypeName uniOutputDto = ParameterizedTypeName.get(ClassName.get(Uni.class), outputDtoClassName);
 
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("process")
@@ -354,11 +354,12 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
                 .build())
             .addModifiers(Modifier.PUBLIC)
             .returns(uniOutputDto)
-            .addParameter(ParameterSpec.builder(multiInputDto, "inputDtos")
+            .addParameter(ParameterSpec.builder(listInputDto, "inputDtos")
                 .build());
 
         methodBuilder.addStatement(
-            "return domainService.process(inputDtos.map(item -> $L.fromDto(item))).map(output -> $L.toDto(output))",
+            "return domainService.process($T.createFrom().iterable(inputDtos).map(item -> $L.fromDto(item))).map(output -> $L.toDto(output))",
+            ClassName.get(Multi.class),
             inboundMapperFieldName,
             outboundMapperFieldName);
 
@@ -621,13 +622,15 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         }
         if (!model.inputMapping().hasMapper() || model.inputMapping().domainType() == null) {
             throw new IllegalStateException(String.format(
-                "REST resource generation for '%s' requires a non-null input domain type and inbound mapper",
-                model.serviceName()));
+                "REST resource generation for '%s' requires a non-null input domain type and inbound mapper (inputMapping=%s)",
+                model.serviceName(),
+                model.inputMapping()));
         }
         if (!model.outputMapping().hasMapper() || model.outputMapping().domainType() == null) {
             throw new IllegalStateException(String.format(
-                "REST resource generation for '%s' requires a non-null output domain type and outbound mapper",
-                model.serviceName()));
+                "REST resource generation for '%s' requires a non-null output domain type and outbound mapper (outputMapping=%s)",
+                model.serviceName(),
+                model.outputMapping()));
         }
     }
 

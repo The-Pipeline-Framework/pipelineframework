@@ -14,10 +14,12 @@ class StreamingShapeResolver {
      * @return the corresponding streaming shape
      */
     static StreamingShape streamingShape(String cardinality) {
-        if ("EXPANSION".equalsIgnoreCase(cardinality)) {
+        if ("EXPANSION".equalsIgnoreCase(cardinality)
+            || "ONE_TO_MANY".equalsIgnoreCase(cardinality)) {
             return StreamingShape.UNARY_STREAMING;
         }
-        if ("REDUCTION".equalsIgnoreCase(cardinality)) {
+        if ("REDUCTION".equalsIgnoreCase(cardinality)
+            || "MANY_TO_ONE".equalsIgnoreCase(cardinality)) {
             return StreamingShape.STREAMING_UNARY;
         }
         if ("MANY_TO_MANY".equalsIgnoreCase(cardinality)) {
@@ -33,7 +35,9 @@ class StreamingShapeResolver {
      * @return true if the input is streaming, false otherwise
      */
     static boolean isStreamingInputCardinality(String cardinality) {
-        return "REDUCTION".equalsIgnoreCase(cardinality) || "MANY_TO_MANY".equalsIgnoreCase(cardinality);
+        return "REDUCTION".equalsIgnoreCase(cardinality)
+            || "MANY_TO_ONE".equalsIgnoreCase(cardinality)
+            || "MANY_TO_MANY".equalsIgnoreCase(cardinality);
     }
 
     /**
@@ -44,10 +48,13 @@ class StreamingShapeResolver {
      * @return the updated streaming state
      */
     static boolean applyCardinalityToStreaming(String cardinality, boolean currentStreaming) {
-        if ("EXPANSION".equalsIgnoreCase(cardinality) || "MANY_TO_MANY".equalsIgnoreCase(cardinality)) {
+        if ("EXPANSION".equalsIgnoreCase(cardinality)
+            || "ONE_TO_MANY".equalsIgnoreCase(cardinality)
+            || "MANY_TO_MANY".equalsIgnoreCase(cardinality)) {
             return true;
         }
-        if ("REDUCTION".equalsIgnoreCase(cardinality)) {
+        if ("REDUCTION".equalsIgnoreCase(cardinality)
+            || "MANY_TO_ONE".equalsIgnoreCase(cardinality)) {
             return false;
         }
         return currentStreaming;
