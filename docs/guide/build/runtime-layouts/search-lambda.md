@@ -12,6 +12,8 @@ Canonical Lambda development and operations guidance lives here:
 - Verifies TPF Function platform wiring on a concrete example
 - Verifies Quarkus Lambda mock event-server behavior locally
 - Does not require provisioning a live AWS stack
+- Uses current unary-only FUNCTION shape support (`UNARY_UNARY` only)
+- For shape/bridge mapping and failure semantics, see [AWS Lambda Platform (Development)](/guide/development/aws-lambda)
 
 ## Build
 
@@ -56,6 +58,10 @@ Expected result:
 - `BUILD SUCCESS`
 - `LambdaMockEventServerSmokeTest` passes
 - pass/fail details are available in Maven Surefire summary and `orchestrator-svc/target/surefire-reports`
+
+Operator note:
+
+- Keep Lambda timeout and retry budget bounded for this lane; do not assume unbounded waits at function boundaries.
 
 ## Native Smoke Build
 
