@@ -6,7 +6,16 @@ This page is the canonical TPF guide for building pipeline applications for AWS 
 
 - Platform mode: `FUNCTION` (default platform remains `COMPUTE`)
 - Transport mode: `REST` (required in Function mode)
-- Current compile-time constraint: `UNARY_UNARY` step shape only (Milestone A scope)
+- Current compile-time constraint: `UNARY_UNARY` step shape only
+
+Supported FUNCTION step shapes today:
+
+| Step shape | Status in FUNCTION mode | Notes |
+|------------|-------------------------|-------|
+| `UNARY_UNARY` | Supported | Canonical handler path in B. |
+| `UNARY_STREAMING` | Not supported | Use COMPUTE lane for streaming/cardinality examples. |
+| `STREAMING_UNARY` | Not supported | Use COMPUTE lane for reduction examples. |
+| `STREAMING_STREAMING` | Not supported | Use COMPUTE lane for full stream-to-stream paths. |
 
 Set platform mode during build:
 
@@ -92,6 +101,21 @@ Behavior:
 
 `EXPLICIT` is an opt-in transport assist, not a replacement for business/data-level uniqueness enforcement.
 
+## Shape-To-Bridge Mapping And Failure Semantics
+
+FUNCTION generation is currently constrained to unary request/response handlers.
+
+| Pipeline shape | Function bridge mapping | Failure semantics |
+|----------------|-------------------------------|-------------------|
+| `UNARY_UNARY` | Generated Lambda handler delegates to generated REST resource for step/orchestrator. | Step/resource failure becomes handler failure for that invocation. Retry/timeout behavior is controlled by Lambda invoke source and TPF retry configuration inside the runtime. |
+| Non-unary shapes | Not generated in FUNCTION mode. | Build-time validation fails fast when FUNCTION mode is selected with non-unary step shapes. |
+
+Failure semantics summary:
+
+- Validation failures (unsupported shape in FUNCTION mode) fail at build time.
+- Invocation failures in unary handlers fail the current function call.
+- Retries are not implicit in the bridge itself; they follow configured TPF retry behavior and upstream Lambda/event-source policies.
+
 ## Backpressure Model in Function Deployments
 
 Backpressure remains active inside each runtime via Mutiny `Multi`/`Uni`, but Lambda invocation
@@ -99,6 +123,16 @@ boundaries are explicit adaptation points:
 
 - inside a runtime: normal reactive demand and overflow handling
 - across runtime boundaries: flow control is managed by adapter batching policies and Lambda/event-source concurrency
+
+## Operator Notes: Bounded Waits, Timeouts, And Adapter Behavior
+
+Operators should configure bounded waits and clear timeout ownership at function boundaries.
+
+- Lambda timeout should be finite and aligned to worst-case step latency plus retry budget.
+- Startup/dependency waits should stay bounded (`pipeline.health.startup-timeout`).
+- Step retries/backoff should be bounded (`pipeline.defaults.retry-limit`, `pipeline.defaults.retry-wait-ms`, `pipeline.defaults.max-backoff`).
+- Backpressure behavior inside a runtime remains controlled by step/connector overflow strategy and capacity settings.
+- Function adapters are boundary adapters, not infinite buffers: they preserve reactive semantics inside a runtime, but cross-runtime pacing is bounded by Lambda concurrency, event source behavior, and configured batching/overflow policy.
 
 ## Quarkus Integrations You Can Leverage in TPF Apps
 
