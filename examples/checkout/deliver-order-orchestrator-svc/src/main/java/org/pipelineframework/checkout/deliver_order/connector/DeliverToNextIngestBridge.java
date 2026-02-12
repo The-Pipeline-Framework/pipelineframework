@@ -97,7 +97,7 @@ public class DeliverToNextIngestBridge {
                 clearInFlightReservations();
                 LOG.error("Deliver->next stream failed before forwarding", error);
             })
-            .onFailure().retry().withBackOff(Duration.ofMillis(100), Duration.ofSeconds(1)).atMost(5);
+            .onFailure().retry().withBackOff(Duration.ofMillis(100), Duration.ofSeconds(1)).indefinitely();
 
         forwardingSubscription = forwardClient.forward(deliveredStream);
         LOG.infof("Deliver->next forwarding bridge started using client %s", forwardClient.getClass().getName());

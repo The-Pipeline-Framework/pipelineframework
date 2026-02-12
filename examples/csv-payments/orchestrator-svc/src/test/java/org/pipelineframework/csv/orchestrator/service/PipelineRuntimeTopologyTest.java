@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -102,7 +103,11 @@ class PipelineRuntimeTopologyTest {
     private static Path resolveRuntimeMappingPath() {
         URL resource = Thread.currentThread().getContextClassLoader().getResource("config/pipeline.runtime.yaml");
         if (resource != null) {
-            return Path.of(resource.getPath()).normalize();
+            try {
+                return Path.of(resource.toURI()).normalize();
+            } catch (URISyntaxException e) {
+                throw new IllegalStateException("Invalid runtime mapping resource URI: " + resource, e);
+            }
         }
 
         Path userDir = Path.of(System.getProperty("user.dir", ".")).normalize();

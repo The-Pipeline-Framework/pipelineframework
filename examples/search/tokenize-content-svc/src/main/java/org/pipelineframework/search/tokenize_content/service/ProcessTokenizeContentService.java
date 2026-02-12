@@ -31,7 +31,7 @@ public class ProcessTokenizeContentService
     implements ReactiveStreamingService<ParsedDocument, TokenBatch> {
 
   // Keep batches small so downstream fan-in services receive steady chunks rather than large payload spikes.
-  public static final int TOKENS_PER_BATCH = 4;
+  private static final int TOKENS_PER_BATCH = 4;
   private static final Set<String> STOP_WORDS = Set.of("a", "an", "and", "the", "of", "to", "in");
   private static final Logger LOGGER = Logger.getLogger(ProcessTokenizeContentService.class);
 

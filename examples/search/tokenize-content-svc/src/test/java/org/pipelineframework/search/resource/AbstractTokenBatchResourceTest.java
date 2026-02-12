@@ -28,15 +28,15 @@ import io.restassured.http.ContentType;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.search.tokenize_content.service.ProcessTokenizeContentService;
 
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 abstract class AbstractTokenBatchResourceTest {
+    private static final int TOKENS_PER_BATCH = 4;
     private static final int LONG_CONTENT_REPEAT_COUNT =
-            (ProcessTokenizeContentService.TOKENS_PER_BATCH * 3) + 1;
+            (TOKENS_PER_BATCH * 3) + 1;
     private static final Pattern TOKENS_HASH_PATTERN = Pattern.compile("tokensHash");
 
     @BeforeAll
