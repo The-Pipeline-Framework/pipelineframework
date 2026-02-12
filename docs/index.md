@@ -9,125 +9,78 @@ hero:
     src: /logo.png
     alt: The Pipeline Framework
   actions:
-    - theme: brand
+    - theme: alt
       text: Quick Start
       link: /guide/getting-started/
-    - theme: alt
-      text: View on GitHub
-      link: https://github.com/The-Pipeline-Framework/pipelineframework
-    - theme: alt
+    - theme: brand
       text: Design with Canvas
       link: https://app.pipelineframework.org
 
 features:
-  - title: Reactive by Design
-    details: Built on Mutiny for non-blocking, high-performance applications
-  - title: Immutable Architecture
-    details: No database updates during pipeline execution - only appends/preserves
-  - title: Multiple Processing Patterns
-    details: OneToOne, OneToMany, ManyToOne, ManyToMany, and SideEffect
-  - title: gRPC & REST Flexibility
-    details: Automatic adapter generation for fast gRPC or easy REST integration
-  - title: Annotation Driven
-    details: Simple annotations generate complex infrastructure automatically
+  - title: Lower Runtime Costs
+    details: Reactive non-blocking execution increases compute density and reduces infrastructure pressure
+  - title: Quarkus-Native Developer Flow
+    details: Fast startup, Dev Services integration, and annotation-driven deployment patterns
+  - title: Faster Change Cycles
+    details: Plugin-based extensions keep business code clean and make new capabilities cheaper to add
+  - title: Transport Choice Without Rewrites
+    details: Use gRPC, REST, and local clients from one model, with function mode support evolving
+  - title: Start as Monolith, Evolve Later
+    details: Use monolith or pipeline-runtime layouts now and split into services when needed
+  - title: Container-First Delivery
+    details: Build container images with Jib and target cloud/container platforms consistently
+  - title: Native-Ready Deployments
+    details: Leverage Quarkus native compilation paths for low-latency startup and efficient footprint
   - title: Visual Design
     details: Use the Canvas designer to create and configure pipelines visually
-  - title: Health Monitoring
-    details: Built-in health check capabilities
-  - title: Observability First
-    details: Built-in metrics, tracing, and logging support
-  - title: Resilient by Default
-    details: Comprehensive error handling with dead letter queues
+  - title: Safer Operations by Default
+    details: Built-in observability, health checks, and DLQ patterns improve reliability in production
+  - title: Better Testability
+    details: Functional style boundaries and generated adapters support focused unit and integration tests
 ---
 
 <Callout type="tip" title="Visual Pipeline Designer Available">
 The Pipeline Framework includes a visual canvas designer at <a href="https://app.pipelineframework.org" target="_blank">https://app.pipelineframework.org</a> that allows you to create and configure your pipelines using an intuitive drag-and-drop interface. Simply design your pipeline visually, click "Download Application", and you'll get a complete ZIP file with all the generated source code - no command-line tools needed!
 </Callout>
 
-## Introduction
+## Key Features
 
 The Pipeline Framework is a powerful tool for building reactive pipeline processing systems. It simplifies the development of distributed systems by providing a consistent way to create, configure, and deploy pipeline steps.
 
-## Key Features
+### Runtime and Processing Model
 
-- **Reactive Programming**: Built on top of Mutiny for non-blocking operations
-- **Immutable Architecture**: No database updates during pipeline execution - only appends/preserves, ensuring data integrity
-- **Annotation-Based Configuration**: Simplifies adapter generation with `@PipelineStep`
-- **gRPC & REST Flexibility**: Automatic adapter generation for fast gRPC or easy REST integration
-- **Multiple Processing Patterns**: OneToOne, OneToMany, ManyToOne, ManyToMany, and SideEffect
-- **Health Monitoring**: Built-in health check capabilities
-- **Multiple Persistence Models**: Choose from reactive or virtual thread-based persistence
-- **Modular Design**: Clear separation between runtime and deployment components
-- **Auto-Generation**: Generates necessary infrastructure at build time
-- **Observability**: Built-in metrics, tracing, and logging support
-- **Error Handling**: Comprehensive error handling with DLQ support
-- **Backpressure Management**: Reactive processing with configurable backpressure strategies
-- **Test Integration**: [Testing with Testcontainers](/guide/development/testing)
+- **Reactive by default**: Built on Mutiny for non-blocking throughput and backpressure-aware execution.
+- **Why it matters**: Better CPU utilization and higher compute density typically mean lower runtime cost for the same workload.
+- **Quarkus runtime foundation**: Aligns with Quarkus runtime and build-time patterns for fast, production-grade services.
+- **Immutable event flow**: No in-place updates during execution; append/preserve semantics improve traceability and safety.
+- **Rich step semantics**: Supports OneToOne, OneToMany, ManyToOne, ManyToMany, and SideEffect patterns.
 
-## Getting Started
+### Extensibility with Plugins
 
-New to The Pipeline Framework? Start with our [Quick Start](/guide/getting-started/) guide to learn the basics using the visual Canvas designer.
+- **Plugin-friendly model**: Pipeline plugins add cross-cutting capabilities without coupling business logic to infrastructure code.
+- **Why it matters**: You can deliver platform concerns (cache, telemetry, orchestration behaviors) with less code churn in core services.
+- **Clear extension points**: Use [Using Plugins](/guide/development/using-plugins) and [Aspect Semantics](/guide/evolve/aspects/semantics) as primary references.
 
-## Guides
+### Integration and Deployment Flexibility
 
-To get started with The Pipeline Framework, explore these guides:
+- **Transport coverage**: Automatic generation for gRPC, REST, and local/in-process clients.
+- **Quarkus Dev Services workflow**: Smooth local development with managed service dependencies (for example, PostgreSQL) in dev/test flows.
+- **Why it matters**: Teams can adapt interfaces to consumers and platform constraints without rewriting core processing logic.
+- **Deployment layouts**: Works across modular, pipeline-runtime, and monolith build layouts.
+- **Evolution path**: Start with a monolith for speed, then break into services as scale and ownership boundaries grow.
 
-### Build Fast
-- [Quick Start](/guide/getting-started/): Create a pipeline with the Canvas
-- [Business Value](/guide/getting-started/business-value): Speed, ROI, and portability
-- [Canvas Designer Guide](/guide/getting-started/canvas-guide): Deep dive into the visual designer
+### Operations
 
-### Design
-- [Application Structure](/guide/design/application-structure): Structuring pipeline applications
-- [Common Module Structure](/guide/design/common-module-structure): Shared components and type mappings
-- [Expansion and Reduction](/guide/design/expansion-and-reduction): Cardinality explained for imperative developers
+- **Built-in observability**: Metrics, tracing, and structured logging are first-class.
+- **Resilience features**: Health checks, robust error handling, and dead-letter queue support.
+- **Container-first packaging**: Current delivery flow supports image builds with Jib for predictable CI/CD integration.
+- **Native compilation path**: Quarkus native builds support low cold-start and efficient resource usage where needed.
+- **Why it matters**: Teams get faster incident diagnosis, more predictable deployments, and lower operational overhead at scale.
 
-### Build
-- [Pipeline Compilation](/guide/build/pipeline-compilation): How build-time generation works
-- [Configuration Reference](/guide/build/configuration/): Build-time and runtime settings
-- [Dependency Management](/guide/build/dependency-management): Manage build-time and runtime deps
-- [Best Practices](/guide/operations/best-practices): Operational and design guidance
+### Developer Experience
 
-### Develop
-- [@PipelineStep Annotation](/guide/development/pipeline-step): Annotation contract and parameters
-- [Code a Step](/guide/development/code-a-step): Implement a step and its mappers
-- [Using Plugins](/guide/development/using-plugins): Apply plugins to pipelines
-- [Mappers and DTOs](/guide/development/mappers-and-dtos): Type conversions and mappings
-- [Testing with Testcontainers](/guide/development/testing): Application testing with real dependencies
-- [Orchestrator Runtime](/guide/development/orchestrator-runtime): Coordinate pipeline execution
-- [AWS Lambda Platform](/guide/development/aws-lambda): Lambda platform mode, gateway options, and Quarkus integrations
-
-### Operate
-- [Observability Overview](/guide/operations/observability/): Metrics, tracing, logs, and security notes
-- [Metrics](/guide/operations/observability/metrics): Instrumentation and dashboards
-- [Tracing](/guide/operations/observability/tracing): Distributed tracing and context propagation
-- [Logging](/guide/operations/observability/logging): Structured logging and levels
-- [Health Checks](/guide/operations/observability/health-checks): Liveness and readiness
-- [Alerting](/guide/operations/observability/alerting): Alerts and noise reduction
-- [Security Notes](/guide/operations/observability/security): Protect telemetry data
-- [Error Handling & DLQ](/guide/operations/error-handling): Managing errors and dead letter queues
-- [AWS Lambda SnapStart](/guide/operations/aws-lambda-snapstart): SnapStart runtime guidance and startup tuning
-
-### Extend
-- [Writing a Plugin](/guide/plugins/writing-a-plugin): Build your own aspects
-- [Orchestrator Extensions](/guide/development/extension/orchestrator-runtime): Customize orchestration flows
-- [Reactive Service Extensions](/guide/development/extension/reactive-services): Wrap or adapt process() behavior
-- [Client Step Extensions](/guide/development/extension/client-steps): Customize client-side calls
-- [REST Resource Extensions](/guide/development/extension/rest-resources): Extend generated REST resources
-
-### Evolve
-- [Functional Architecture](/guide/evolve/architecture): Architectural decisions and trade-offs
-- [Annotation Processor Guide](/guide/evolve/annotation-processor/): Build-time IR, phases, bindings, and renderers
-- [Plugins Architecture](/guide/evolve/plugins-architecture): Cross-cutting behavior model
-- [Aspect Semantics](/guide/evolve/aspects/semantics): Aspect expansion rules
-- [Aspect Ordering](/guide/evolve/aspects/ordering): Ordering guarantees and constraints
-- [Aspect Warnings](/guide/evolve/aspects/warnings): Known limitations and caveats
-- [Reference Implementation](/guide/evolve/reference-implementation): End-to-end example and rationale
-- [Template Generator (Reference)](/guide/evolve/template-generator): Automation/CI usage
-- [Publishing](/guide/evolve/publishing): Release and publishing workflow
-- [CI Guidelines](/guide/evolve/ci-guidelines): Build validation and automation
-- [Testing Guidelines](/guide/evolve/testing-guidelines): Coverage and test strategy
-- [Gotchas & Pitfalls](/guide/evolve/gotchas-pitfalls): Known sharp edges
-- [Proto Descriptor Integration](/guide/evolve/protobuf-integration-descriptor-res): Descriptor generation and troubleshooting
-
-This approach reduces boilerplate code and ensures consistency across your pipeline steps.
+- **Shared `common` module**: Central place for entity and DTO definitions used across pipeline components.
+- **Type safety across the pipeline**: Compile-time checks catch contract drift early as steps and transports evolve.
+- **Why it matters**: Teams get safer refactors, fewer runtime mapping errors, and faster confidence when changing domain models.
+- **Testability gains**: Functional boundaries and generated transport layers make behavior easier to isolate and test.
+- **Fast onboarding and testing**: Design visually with Canvas and validate behavior via [Testing with Testcontainers](/guide/development/testing).
