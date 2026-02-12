@@ -91,7 +91,7 @@ steps:
         type: "Instant"
         protoType: "string"
   - name: "Tokenize Content"
-    cardinality: "ONE_TO_ONE"
+    cardinality: "ONE_TO_MANY"
     inputTypeName: "ParsedDocument"
     inputFields:
       - name: "docId"
@@ -130,7 +130,7 @@ steps:
         type: "Instant"
         protoType: "string"
   - name: "Index Document"
-    cardinality: "ONE_TO_ONE"
+    cardinality: "MANY_TO_ONE"
     inputTypeName: "TokenBatch"
     inputFields:
       - name: "docId"
@@ -169,17 +169,25 @@ steps:
 aspects:
   persistence:
     enabled: true
-    scope: "GLOBAL"
+    scope: "STEPS"
     position: "AFTER_STEP"
     order: 0
     config:
+      targetSteps:
+        - "ProcessCrawlSourceService"
+        - "ProcessParseDocumentService"
       pluginImplementationClass: "org.pipelineframework.plugin.persistence.PersistenceService"
   cache:
     enabled: true
-    scope: "GLOBAL"
+    scope: "STEPS"
     position: "AFTER_STEP"
     order: 5
     config:
+      # Tokenize/Index are intentionally excluded: these compute-heavy steps should run on fresh input,
+      # while Crawl/Parse benefit from cache reuse across repeated source fetches.
+      targetSteps:
+        - "ProcessCrawlSourceService"
+        - "ProcessParseDocumentService"
       pluginImplementationClass: "org.pipelineframework.plugin.cache.CacheService"
   cache-invalidate:
     enabled: true
@@ -188,7 +196,7 @@ aspects:
     order: -4
     config:
       targetSteps:
-        - "ProcessTokenizeContentService"
+        - "ProcessParseDocumentService"
       pluginImplementationClass: "org.pipelineframework.plugin.cache.CacheInvalidationService"
   cache-invalidate-all:
     enabled: true
