@@ -70,7 +70,7 @@ When function streaming/cardinality support is expanded, add one explicit non-un
 
 ### Handler Selection For Modules With Multiple Generated Handlers
 
-Some modules can contain more than one generated function handler (for example, step handlers plus side-effect handlers).
+Some modules can contain more than one generated function handler (for example, step handlers plus side effect handlers).
 In those cases, always select the deployed entrypoint explicitly via:
 
 ```properties
@@ -81,14 +81,14 @@ Current examples:
 
 - Orchestrator entrypoint:
   - `%lambda.quarkus.lambda.handler=org.pipelineframework.search.orchestrator.service.PipelineRunFunctionHandler`
-- Persistence side-effect entrypoint:
+- Persistence side effect entrypoint:
   - `%lambda.quarkus.lambda.handler=org.pipelineframework.search.crawl_source.service.pipeline.PersistenceRawDocumentSideEffectFunctionHandler`
 - Cache invalidation entrypoint:
   - `%lambda.quarkus.lambda.handler=org.pipelineframework.search.cache_invalidation.service.pipeline.CacheInvalidationFunctionHandler`
 
 If handler generation changes, keep this value pinned to the intended runtime entrypoint per module.
 
-## Constructing crawl requests
+## Constructing Crawl Requests
 
 Use the helper to attach fetch options that affect crawl bytes:
 

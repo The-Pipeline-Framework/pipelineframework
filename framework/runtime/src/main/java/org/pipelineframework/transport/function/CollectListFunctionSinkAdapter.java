@@ -43,6 +43,9 @@ public final class CollectListFunctionSinkAdapter<O> implements FunctionSinkAdap
         if (items == null) {
             return Uni.createFrom().failure(new NullPointerException("items must not be null"));
         }
+        if (context == null) {
+            return Uni.createFrom().failure(new NullPointerException("context must not be null"));
+        }
         // Context is currently not consumed by this sink; reserved for future boundary telemetry/extensions.
         return boundedItems(items)
             .select().where(Objects::nonNull)
@@ -54,12 +57,13 @@ public final class CollectListFunctionSinkAdapter<O> implements FunctionSinkAdap
 
     private Multi<TraceEnvelope<O>> boundedItems(Multi<TraceEnvelope<O>> items) {
         int maxItems = batchingPolicy.maxItems();
+        int fetchCount = maxItems == Integer.MAX_VALUE ? maxItems : maxItems + 1;
         return switch (batchingPolicy.overflowPolicy()) {
-            case FAIL -> items.select().first(maxItems + 1).collect().asList()
+            case FAIL -> items.select().first(fetchCount).collect().asList()
                 .onItem().transformToMulti(collected -> {
                     if (collected.size() > maxItems) {
                         return Multi.createFrom().failure(new IllegalStateException(
-                            "Function sink overflow: received " + collected.size()
+                            "Function sink overflow: received at least " + collected.size()
                                 + " items with maxItems=" + maxItems + " and overflowPolicy=FAIL"));
                     }
                     return Multi.createFrom().iterable(collected);

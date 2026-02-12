@@ -229,7 +229,7 @@ They are not `application.properties` keys.
 
 | Attribute Key              | Type   | Default  | Description                                                                 |
 |---------------------------|--------|----------|-----------------------------------------------------------------------------|
-| `tpf.idempotency.policy`  | enum   | `RANDOM` | Function transport idempotency policy (`RANDOM` or `EXPLICIT`).            |
+| `tpf.idempotency.policy`  | enum   | `CONTEXT_STABLE` | Function transport idempotency policy (`CONTEXT_STABLE` or `EXPLICIT`; legacy `RANDOM` alias accepted).            |
 | `tpf.idempotency.key`     | string | none     | Explicit caller-provided idempotency key used when policy is `EXPLICIT`.   |
 
 Important:

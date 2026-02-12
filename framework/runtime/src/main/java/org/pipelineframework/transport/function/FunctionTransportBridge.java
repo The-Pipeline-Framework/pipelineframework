@@ -29,7 +29,7 @@ import io.smallrye.mutiny.Uni;
  * <p>All invoke methods in this bridge block the caller by using {@code await().atMost(timeout)}.
  * Calls may block for up to {@link #DEFAULT_WAIT_TIMEOUT} (or a supplied timeout), so callers in
  * reactive/non-blocking contexts should offload execution to worker threads or use non-blocking
- * alternatives at a higher layer.</p>
+ * alternatives at a higher layer. Reactive companion methods are provided to avoid blocking.</p>
  */
 public final class FunctionTransportBridge {
     private static final Duration DEFAULT_WAIT_TIMEOUT = Duration.ofSeconds(30);
@@ -59,8 +59,18 @@ public final class FunctionTransportBridge {
             FunctionInvokeAdapter<I, O> invokeAdapter,
             FunctionSinkAdapter<O, R> sinkAdapter,
             Duration timeout) {
-        validateParameters(event, context, sourceAdapter, invokeAdapter, sinkAdapter);
         validateTimeout(timeout);
+        return invokeOneToOneReactive(event, context, sourceAdapter, invokeAdapter, sinkAdapter)
+            .await().atMost(timeout);
+    }
+
+    public static <E, I, O, R> Uni<R> invokeOneToOneReactive(
+            E event,
+            FunctionTransportContext context,
+            FunctionSourceAdapter<E, I> sourceAdapter,
+            FunctionInvokeAdapter<I, O> invokeAdapter,
+            FunctionSinkAdapter<O, R> sinkAdapter) {
+        validateParameters(event, context, sourceAdapter, invokeAdapter, sinkAdapter);
 
         Uni<TraceEnvelope<I>> inbound = requireSingleSource(event, context, sourceAdapter);
 
@@ -68,8 +78,7 @@ public final class FunctionTransportBridge {
             .transformToUni(envelope -> invokeAdapter.invokeOneToOne(envelope, context));
 
         return outbound.onItem()
-            .transformToUni(envelope -> sinkAdapter.emitOne(envelope, context))
-            .await().atMost(timeout);
+            .transformToUni(envelope -> sinkAdapter.emitOne(envelope, context));
     }
 
     /**
@@ -94,15 +103,25 @@ public final class FunctionTransportBridge {
             FunctionInvokeAdapter<I, O> invokeAdapter,
             FunctionSinkAdapter<O, R> sinkAdapter,
             Duration timeout) {
-        validateParameters(event, context, sourceAdapter, invokeAdapter, sinkAdapter);
         validateTimeout(timeout);
+        return invokeOneToManyReactive(event, context, sourceAdapter, invokeAdapter, sinkAdapter)
+            .await().atMost(timeout);
+    }
+
+    public static <E, I, O, R> Uni<R> invokeOneToManyReactive(
+            E event,
+            FunctionTransportContext context,
+            FunctionSourceAdapter<E, I> sourceAdapter,
+            FunctionInvokeAdapter<I, O> invokeAdapter,
+            FunctionSinkAdapter<O, R> sinkAdapter) {
+        validateParameters(event, context, sourceAdapter, invokeAdapter, sinkAdapter);
 
         Uni<TraceEnvelope<I>> inbound = requireSingleSource(event, context, sourceAdapter);
 
         Multi<TraceEnvelope<O>> outbound = inbound.onItem()
             .transformToMulti(envelope -> invokeAdapter.invokeOneToMany(envelope, context));
 
-        return sinkAdapter.emitMany(outbound, context).await().atMost(timeout);
+        return sinkAdapter.emitMany(outbound, context);
     }
 
     /**
@@ -127,15 +146,24 @@ public final class FunctionTransportBridge {
             FunctionInvokeAdapter<I, O> invokeAdapter,
             FunctionSinkAdapter<O, R> sinkAdapter,
             Duration timeout) {
-        validateParameters(event, context, sourceAdapter, invokeAdapter, sinkAdapter);
         validateTimeout(timeout);
+        return invokeManyToOneReactive(event, context, sourceAdapter, invokeAdapter, sinkAdapter)
+            .await().atMost(timeout);
+    }
+
+    public static <E, I, O, R> Uni<R> invokeManyToOneReactive(
+            E event,
+            FunctionTransportContext context,
+            FunctionSourceAdapter<E, I> sourceAdapter,
+            FunctionInvokeAdapter<I, O> invokeAdapter,
+            FunctionSinkAdapter<O, R> sinkAdapter) {
+        validateParameters(event, context, sourceAdapter, invokeAdapter, sinkAdapter);
 
         Multi<TraceEnvelope<I>> inbound = sourceAdapter.adapt(event, context);
         Uni<TraceEnvelope<O>> outbound = invokeAdapter.invokeManyToOne(inbound, context);
 
         return outbound.onItem()
-            .transformToUni(envelope -> sinkAdapter.emitOne(envelope, context))
-            .await().atMost(timeout);
+            .transformToUni(envelope -> sinkAdapter.emitOne(envelope, context));
     }
 
     /**
@@ -160,12 +188,22 @@ public final class FunctionTransportBridge {
             FunctionInvokeAdapter<I, O> invokeAdapter,
             FunctionSinkAdapter<O, R> sinkAdapter,
             Duration timeout) {
-        validateParameters(event, context, sourceAdapter, invokeAdapter, sinkAdapter);
         validateTimeout(timeout);
+        return invokeManyToManyReactive(event, context, sourceAdapter, invokeAdapter, sinkAdapter)
+            .await().atMost(timeout);
+    }
+
+    public static <E, I, O, R> Uni<R> invokeManyToManyReactive(
+            E event,
+            FunctionTransportContext context,
+            FunctionSourceAdapter<E, I> sourceAdapter,
+            FunctionInvokeAdapter<I, O> invokeAdapter,
+            FunctionSinkAdapter<O, R> sinkAdapter) {
+        validateParameters(event, context, sourceAdapter, invokeAdapter, sinkAdapter);
 
         Multi<TraceEnvelope<I>> inbound = sourceAdapter.adapt(event, context);
         Multi<TraceEnvelope<O>> outbound = invokeAdapter.invokeManyToMany(inbound, context);
-        return sinkAdapter.emitMany(outbound, context).await().atMost(timeout);
+        return sinkAdapter.emitMany(outbound, context);
     }
 
     private static <T> T requireExactlyOne(List<T> items, String stage) {

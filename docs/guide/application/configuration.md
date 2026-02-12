@@ -29,7 +29,7 @@ Operational keys commonly used with Lambda:
 
 Function transport idempotency context attributes:
 
-- `tpf.idempotency.policy=RANDOM|EXPLICIT`
+- `tpf.idempotency.policy=CONTEXT_STABLE|EXPLICIT` (legacy `RANDOM` is accepted as alias)
 - `tpf.idempotency.key=<stable-caller-key>`
 
 Examples of `tpf.idempotency.key` values:
@@ -38,8 +38,13 @@ Examples of `tpf.idempotency.key` values:
 - caller-provided idempotency token from an ingress API
 
 Policy guidance:
-- `RANDOM` (default): framework-generated transport keys; best when no stable caller key exists.
+- `CONTEXT_STABLE` (default): framework-generated deterministic transport keys from stable context/envelope identifiers.
 - `EXPLICIT`: use when you can provide a stable business-side key that should remain constant across retries.
+  `tpf.idempotency.key` is expected in this mode; if missing, adapters log a warning and fall back to `CONTEXT_STABLE`.
+- `RANDOM`: legacy compatibility alias mapped to `CONTEXT_STABLE`.
+
+Notes:
+- Supplying `tpf.idempotency.key` while policy is `CONTEXT_STABLE`/`RANDOM` is ignored by key derivation.
 
 These are transport-context attributes (ephemeral per invocation metadata propagated via `FunctionTransportContext`), not global runtime properties in `application.properties`.
 They are usually set by handler/adapter code when creating `FunctionTransportContext`, for example:

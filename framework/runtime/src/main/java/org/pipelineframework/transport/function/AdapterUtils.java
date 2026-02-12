@@ -16,21 +16,24 @@
 
 package org.pipelineframework.transport.function;
 
-/**
- * Policy controlling how transport idempotency keys are derived at function boundaries.
- */
-public enum IdempotencyPolicy {
-    /**
-     * Derive deterministic transport keys from stable context/envelope identifiers.
-     */
-    CONTEXT_STABLE,
-    /**
-     * Legacy alias kept for compatibility. Semantically maps to {@link #CONTEXT_STABLE}.
-     */
-    @Deprecated(forRemoval = false)
-    RANDOM,
-    /**
-     * Use caller-supplied key from {@code tpf.idempotency.key} when available.
-     */
-    EXPLICIT
+import java.util.UUID;
+
+final class AdapterUtils {
+    private AdapterUtils() {
+    }
+
+    static String normalizeOrDefault(String value, String fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        String trimmed = value.strip();
+        return trimmed.isEmpty() ? fallback : trimmed;
+    }
+
+    static String deriveTraceId(String requestId) {
+        if (requestId == null || requestId.isBlank()) {
+            return UUID.randomUUID().toString();
+        }
+        return requestId.strip();
+    }
 }

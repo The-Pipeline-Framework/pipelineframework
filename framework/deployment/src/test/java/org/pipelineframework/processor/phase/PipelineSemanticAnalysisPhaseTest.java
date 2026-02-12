@@ -142,8 +142,7 @@ public class PipelineSemanticAnalysisPhaseTest {
 
         phase.execute(context);
 
-        verify(messager, never()).printMessage(eq(Diagnostic.Kind.ERROR),
-            contains("supports only UNARY_UNARY"));
+        verify(messager, never()).printMessage(eq(Diagnostic.Kind.ERROR), any());
     }
 
     @Test

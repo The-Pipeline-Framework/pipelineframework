@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class FunctionTransportAdaptersTest {
 
     @Test
-    void multiSourceAdapterReusesEnvelopeIdInIdempotencyKey() {
+    void multiSourceAdapterUsesContextStableIndexedIdempotencyKey() {
         MultiFunctionSourceAdapter<Integer> adapter = new MultiFunctionSourceAdapter<>("search.token", "v1");
         FunctionTransportContext context = new FunctionTransportContext(
             "req-101",
@@ -45,10 +45,11 @@ class FunctionTransportAdaptersTest {
             .collect().asList().await().atMost(Duration.ofSeconds(2));
 
         assertEquals(3, envelopes.size());
-        for (TraceEnvelope<Integer> envelope : envelopes) {
+        for (int i = 0; i < envelopes.size(); i++) {
+            TraceEnvelope<Integer> envelope = envelopes.get(i);
             assertEquals("req-101", envelope.traceId());
             assertNotNull(envelope.itemId());
-            assertEquals("req-101:search.token:" + envelope.itemId(), envelope.idempotencyKey());
+            assertEquals("req-101:search.token:" + i, envelope.idempotencyKey());
             assertEquals("search-handler", envelope.meta().get("functionName"));
             assertEquals("ingress", envelope.meta().get("stage"));
             assertEquals("req-101", envelope.meta().get("requestId"));
@@ -124,6 +125,9 @@ class FunctionTransportAdaptersTest {
         assertEquals(8, outputs.get(1).payload());
         assertEquals("trace-om", outputs.get(0).traceId());
         assertEquals("trace-om", outputs.get(1).traceId());
+        Set<String> idempotencyKeys = new HashSet<>();
+        outputs.forEach(envelope -> idempotencyKeys.add(envelope.idempotencyKey()));
+        assertEquals(outputs.size(), idempotencyKeys.size());
     }
 
     @Test
@@ -163,7 +167,9 @@ class FunctionTransportAdaptersTest {
         IllegalStateException ex = assertThrows(
             IllegalStateException.class,
             () -> adapter.invokeManyToOne(input, context).await().atMost(Duration.ofSeconds(2)));
-        assertEquals("Function invoke overflow: received 3 items with maxItems=2 and overflowPolicy=FAIL", ex.getMessage());
+        assertEquals(
+            "Function invoke overflow detected with overflowPolicy=FAIL: received more than 2 items; collected at least 3",
+            ex.getMessage());
     }
 
     @Test
@@ -215,12 +221,9 @@ class FunctionTransportAdaptersTest {
     @Test
     void batchingDefaultsReferenceBufferOverflowPolicy() {
         BatchingPolicy policy = BatchingPolicy.defaultPolicy();
-        BatchOverflowPolicy[] values = BatchOverflowPolicy.values();
 
         assertEquals(BatchOverflowPolicy.BUFFER, policy.overflowPolicy());
-        assertTrue(List.of(values).contains(BatchOverflowPolicy.BUFFER));
-        assertTrue(List.of(values).contains(BatchOverflowPolicy.DROP));
-        assertTrue(List.of(values).contains(BatchOverflowPolicy.FAIL));
+        assertEquals(3, BatchOverflowPolicy.values().length);
     }
 
     @Test
@@ -337,6 +340,6 @@ class FunctionTransportAdaptersTest {
                 TraceEnvelope.root("trace-sink", "item-2", "search.token", "v1", "idem-2", 2),
                 TraceEnvelope.root("trace-sink", "item-3", "search.token", "v1", "idem-3", 3)), context)
                 .await().atMost(Duration.ofSeconds(2)));
-        assertEquals("Function sink overflow: received 3 items with maxItems=2 and overflowPolicy=FAIL", ex.getMessage());
+        assertEquals("Function sink overflow: received at least 3 items with maxItems=2 and overflowPolicy=FAIL", ex.getMessage());
     }
 }

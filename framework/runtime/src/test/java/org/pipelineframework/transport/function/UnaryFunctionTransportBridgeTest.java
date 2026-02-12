@@ -83,4 +83,48 @@ class UnaryFunctionTransportBridgeTest {
             () -> UnaryFunctionTransportBridge.invoke(null, context, source, invokeAdapter, sinkAdapter));
         assertEquals("event must not be null", ex.getMessage());
     }
+
+    @Test
+    void rejectsNullContext() {
+        DefaultUnaryFunctionSourceAdapter<String> source = new DefaultUnaryFunctionSourceAdapter<>(
+            "search.raw-document",
+            "v1");
+        NullPointerException ex = assertThrows(
+            NullPointerException.class,
+            () -> UnaryFunctionTransportBridge.invoke("hello", null, source, invokeAdapter, sinkAdapter));
+        assertEquals("context must not be null", ex.getMessage());
+    }
+
+    @Test
+    void rejectsNullSourceAdapter() {
+        FunctionTransportContext context = FunctionTransportContext.of("req-5", "search-handler", "ingress");
+        NullPointerException ex = assertThrows(
+            NullPointerException.class,
+            () -> UnaryFunctionTransportBridge.invoke("hello", context, null, invokeAdapter, sinkAdapter));
+        assertEquals("sourceAdapter must not be null", ex.getMessage());
+    }
+
+    @Test
+    void rejectsNullInvokeAdapter() {
+        FunctionTransportContext context = FunctionTransportContext.of("req-6", "search-handler", "ingress");
+        DefaultUnaryFunctionSourceAdapter<String> source = new DefaultUnaryFunctionSourceAdapter<>(
+            "search.raw-document",
+            "v1");
+        NullPointerException ex = assertThrows(
+            NullPointerException.class,
+            () -> UnaryFunctionTransportBridge.invoke("hello", context, source, null, sinkAdapter));
+        assertEquals("invokeAdapter must not be null", ex.getMessage());
+    }
+
+    @Test
+    void rejectsNullSinkAdapter() {
+        FunctionTransportContext context = FunctionTransportContext.of("req-7", "search-handler", "ingress");
+        DefaultUnaryFunctionSourceAdapter<String> source = new DefaultUnaryFunctionSourceAdapter<>(
+            "search.raw-document",
+            "v1");
+        NullPointerException ex = assertThrows(
+            NullPointerException.class,
+            () -> UnaryFunctionTransportBridge.invoke("hello", context, source, invokeAdapter, null));
+        assertEquals("sinkAdapter must not be null", ex.getMessage());
+    }
 }

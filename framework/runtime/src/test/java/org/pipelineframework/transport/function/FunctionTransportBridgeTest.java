@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.fail;
 
 class FunctionTransportBridgeTest {
     private FunctionTransportContext context;
@@ -139,7 +140,7 @@ class FunctionTransportBridgeTest {
                 createManyToManyInvokeAdapter(),
                 sink));
 
-        assertEquals("Function sink overflow: received 3 items with maxItems=2 and overflowPolicy=FAIL", ex.getMessage());
+        assertEquals("Function sink overflow: received at least 3 items with maxItems=2 and overflowPolicy=FAIL", ex.getMessage());
     }
 
     @Test
@@ -315,8 +316,8 @@ class FunctionTransportBridgeTest {
                     TraceEnvelope<String> input,
                     FunctionTransportContext invokeContext) {
                 return Multi.createFrom().items(
-                    input.next("item-2", "search.token", "v1", "idem-1", input.payload().length()),
-                    input.next("item-3", "search.token", "v1", "idem-1", input.payload().length() + 1));
+                    input.next("item-2", "search.token", "v1", "idem-2", input.payload().length()),
+                    input.next("item-3", "search.token", "v1", "idem-3", input.payload().length() + 1));
             }
         };
     }
@@ -361,9 +362,14 @@ class FunctionTransportBridgeTest {
     }
 
     private void assertSameOrCause(RuntimeException expected, RuntimeException actual) {
-        if (actual == expected) {
-            return;
+        Throwable cursor = actual;
+        while (cursor != null) {
+            if (cursor == expected) {
+                return;
+            }
+            cursor = cursor.getCause();
         }
-        assertSame(expected, actual.getCause());
+        fail("Expected throwable instance was not found in cause chain. expected="
+            + expected + ", actual=" + actual);
     }
 }

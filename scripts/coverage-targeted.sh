@@ -46,7 +46,7 @@ FRAMEWORK_DIR="$ROOT_DIR/framework"
 MODULE_DIR="$FRAMEWORK_DIR/$MODULE"
 EXEC_FILE="$MODULE_DIR/target/jacoco.exec"
 REPORT_XML="$MODULE_DIR/target/site/jacoco/jacoco.xml"
-JACOCO_VERSION="0.8.12"
+JACOCO_VERSION="${JACOCO_VERSION:-0.8.12}"
 HOME_DIR="${HOME:-}"
 if [[ -z "$HOME_DIR" ]]; then
   echo "HOME is not set; cannot resolve local Maven repository for JaCoCo agent." >&2
@@ -87,7 +87,10 @@ extract_counter_pair() {
     my $ctype = $ENV{"COV_TYPE"};
     my $missed;
     my $covered;
-    while (/<counter type="\Q$ctype\E" missed="([0-9]+)" covered="([0-9]+)"\/>/g) {
+    # Use only root-level <report> counters (exclude per-package/class/method counters).
+    my ($root_block) = $_ =~ /<report\b[^>]*>(.*?)(?:<package\b|<\/report>)/s;
+    $root_block = $_ unless defined $root_block;
+    while ($root_block =~ /<counter type="\Q$ctype\E" missed="([0-9]+)" covered="([0-9]+)"\/>/g) {
       $missed = $1;
       $covered = $2;
     }

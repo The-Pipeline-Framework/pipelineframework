@@ -36,9 +36,8 @@ public final class UnaryFunctionTransportBridge {
      * @param <I> input payload type
      * @param <O> output payload type
      * @return final sink payload
-     * @throws NullPointerException when any required parameter is null; delegates to
-     *     {@link FunctionTransportBridge#invokeOneToOne(Object, FunctionTransportContext, FunctionSourceAdapter, FunctionInvokeAdapter, FunctionSinkAdapter)}
-     *     after local null validation
+     * @throws NullPointerException when any required parameter is null
+     * @see FunctionTransportBridge#invokeOneToOne(Object, FunctionTransportContext, FunctionSourceAdapter, FunctionInvokeAdapter, FunctionSinkAdapter)
      */
     public static <I, O> O invoke(
             I event,

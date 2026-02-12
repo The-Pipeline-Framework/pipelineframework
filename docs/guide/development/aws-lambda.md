@@ -6,16 +6,16 @@ This page is the canonical TPF guide for building pipeline applications for AWS 
 
 - Platform mode: `FUNCTION` (default platform remains `COMPUTE`)
 - Transport mode: `REST` (required in Function mode)
-- Current compile-time constraint: `UNARY_UNARY` step shape only
+- Step shapes: unary and streaming shapes are supported in FUNCTION mode through generated adapter/bridge wiring
 
 Supported FUNCTION step shapes today:
 
 | Step shape | Status in FUNCTION mode | Notes |
 |------------|-------------------------|-------|
 | `UNARY_UNARY` | Supported | Canonical handler path in B. |
-| `UNARY_STREAMING` | Not supported | Use COMPUTE lane for streaming/cardinality examples. |
-| `STREAMING_UNARY` | Not supported | Use COMPUTE lane for reduction examples. |
-| `STREAMING_STREAMING` | Not supported | Use COMPUTE lane for full stream-to-stream paths. |
+| `UNARY_STREAMING` | Supported | Adapter/bridge generated (`invokeOneToMany`). |
+| `STREAMING_UNARY` | Supported | Adapter/bridge generated (`invokeManyToOne`). |
+| `STREAMING_STREAMING` | Supported | Adapter/bridge generated (`invokeManyToMany`). |
 
 Set platform mode during build:
 
@@ -45,7 +45,7 @@ API Gateway HTTP bridge extensions are outside the canonical TPF FUNCTION path.
 
 ## Generated Lambda Handlers
 
-In FUNCTION mode, TPF generates native Lambda handlers for unary REST bindings:
+In FUNCTION mode, TPF generates native Lambda handlers for REST bindings across supported cardinalities:
 
 - Step handlers implement `RequestHandler<I, O>`
 - Orchestrator handler implements `RequestHandler<I, O>`
@@ -90,29 +90,33 @@ TPF does not impose business semantics on transport IDs. Authoritative dedupe/re
 
 Function transport adapters support policy-driven idempotency derivation through `FunctionTransportContext` attributes:
 
-- `tpf.idempotency.policy=RANDOM|EXPLICIT`
+- `tpf.idempotency.policy=CONTEXT_STABLE|EXPLICIT` (legacy `RANDOM` accepted as alias)
 - `tpf.idempotency.key=<caller-stable-key>`
 
 Behavior:
 
-- `RANDOM` (default): adapter-generated transport keys (non-authoritative dedupe behavior).
+- `CONTEXT_STABLE` (default): adapter-generated deterministic transport keys from stable context/envelope identifiers (non-authoritative dedupe behavior).
   These keys provide transport-level correlation and can reduce duplicate processing attempts, but they do not guarantee business/data uniqueness and do not replace explicit business idempotency rules.
 - `EXPLICIT`: uses caller-provided key where supported; this is the recommended mode when the application already has stable business identifiers.
+  If the key is missing, adapters log a warning and fall back to `CONTEXT_STABLE` derivation.
+- `RANDOM`: legacy compatibility alias mapped to `CONTEXT_STABLE`.
 
 `EXPLICIT` is an opt-in transport assist, not a replacement for business/data-level uniqueness enforcement.
 
 ## Shape-To-Bridge Mapping And Failure Semantics
 
-FUNCTION generation is currently constrained to unary request/response handlers.
+FUNCTION generation supports unary and streaming step cardinalities through bridge/adapters.
 
 | Pipeline shape | Function bridge mapping | Failure semantics |
 |----------------|-------------------------------|-------------------|
-| `UNARY_UNARY` | Generated Lambda handler delegates to generated REST resource for step/orchestrator. | Step/resource failure becomes handler failure for that invocation. Retry/timeout behavior is controlled by Lambda invoke source and TPF retry configuration inside the runtime. |
-| Non-unary shapes | Not generated in FUNCTION mode. | Build-time validation fails fast when FUNCTION mode is selected with non-unary step shapes. |
+| `UNARY_UNARY` | Generated Lambda handler delegates to generated REST resource for step/orchestrator. | Step/resource failure becomes handler failure for that invocation.<br>Retry/timeout behavior is controlled by Lambda invoke source and TPF retry configuration inside the runtime. |
+| `UNARY_STREAMING` | Generated handler delegates through `FunctionTransportBridge.invokeOneToMany`. | Adapter/bridge path returns list sink output and preserves transport metadata/idempotency policy. |
+| `STREAMING_UNARY` | Generated handler delegates through `FunctionTransportBridge.invokeManyToOne`. | Adapter/bridge path reduces stream input to unary output with bounded collection policy. |
+| `STREAMING_STREAMING` | Generated handler delegates through `FunctionTransportBridge.invokeManyToMany`. | Adapter/bridge path processes streaming input/output with bounded ingress/sink behavior. |
 
 Failure semantics summary:
 
-- Validation failures (unsupported shape in FUNCTION mode) fail at build time.
+- Validation failures in FUNCTION mode are now primarily transport-mode related (`pipeline.transport=REST` required), while supported streaming shapes generate adapter/bridge wiring.
 - Invocation failures in unary handlers fail the current function call.
 - Retries are not implicit in the bridge itself; they follow configured TPF retry behavior and upstream Lambda/event-source policies.
 
@@ -130,9 +134,10 @@ Operators should configure bounded waits and clear timeout ownership at function
 
 - Lambda timeout should be finite and aligned to worst-case step latency plus retry budget.
 - Startup/dependency waits should stay bounded (`pipeline.health.startup-timeout`).
-- Step retries/backoff should be bounded (`pipeline.defaults.retry-limit`, `pipeline.defaults.retry-wait-ms`, `pipeline.defaults.max-backoff`).
+- Function adapters are boundary adapters, not infinite buffers.
+  Retry/backoff should stay bounded (`pipeline.defaults.retry-limit`, `pipeline.defaults.retry-wait-ms`, `pipeline.defaults.max-backoff`).
 - Backpressure behavior inside a runtime remains controlled by step/connector overflow strategy and capacity settings.
-- Function adapters are boundary adapters, not infinite buffers: they preserve reactive semantics inside a runtime, but cross-runtime pacing is bounded by Lambda concurrency, event source behavior, and configured batching/overflow policy.
+- Adapters preserve reactive semantics inside a runtime; cross-runtime pacing is bounded by Lambda concurrency, event source behavior, and configured batching/overflow policy.
 
 ## Quarkus Integrations You Can Leverage in TPF Apps
 

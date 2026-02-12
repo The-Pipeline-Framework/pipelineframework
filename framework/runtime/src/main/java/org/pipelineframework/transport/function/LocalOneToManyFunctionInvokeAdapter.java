@@ -18,6 +18,7 @@ package org.pipelineframework.transport.function;
 
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
 import io.smallrye.mutiny.Multi;
@@ -45,8 +46,8 @@ public final class LocalOneToManyFunctionInvokeAdapter<I, O> implements Function
             String outputPayloadModel,
             String outputPayloadModelVersion) {
         this.delegate = Objects.requireNonNull(delegate, "delegate must not be null");
-        this.outputPayloadModel = normalizeOrDefault(outputPayloadModel, "unknown.output");
-        this.outputPayloadModelVersion = normalizeOrDefault(outputPayloadModelVersion, "v1");
+        this.outputPayloadModel = AdapterUtils.normalizeOrDefault(outputPayloadModel, "unknown.output");
+        this.outputPayloadModelVersion = AdapterUtils.normalizeOrDefault(outputPayloadModelVersion, "v1");
     }
 
     @Override
@@ -54,25 +55,34 @@ public final class LocalOneToManyFunctionInvokeAdapter<I, O> implements Function
         Objects.requireNonNull(input, "input envelope must not be null");
         // Context is required by the FunctionInvokeAdapter contract but not used for local 1->N invocation.
         Objects.requireNonNull(context, "context must not be null");
+        Objects.requireNonNull(input.payload(), "LocalUnaryFunctionInvokeAdapter input payload must not be null");
+        String traceId = AdapterUtils.normalizeOrDefault(input.traceId(), AdapterUtils.deriveTraceId(context.requestId()));
+        AtomicLong outputIndex = new AtomicLong(0L);
         return delegate.apply(input.payload())
             .onItem().transform(output -> {
                 if (output == null) {
                     throw new NullPointerException("LocalOneToManyFunctionInvokeAdapter delegate emitted null output");
                 }
+                String envelopeId = UUID.randomUUID().toString();
                 return input.next(
-                    UUID.randomUUID().toString(),
+                    envelopeId,
                     outputPayloadModel,
                     outputPayloadModelVersion,
-                    input.idempotencyKey(),
+                    resolveIdempotencyKey(context, traceId, input, outputIndex.getAndIncrement()),
                     output);
             });
     }
 
-    private static String normalizeOrDefault(String value, String fallback) {
-        if (value == null) {
-            return fallback;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? fallback : trimmed;
+    private String resolveIdempotencyKey(
+            FunctionTransportContext context,
+            String traceId,
+            TraceEnvelope<I> input,
+            long outputIndex) {
+        String inherited = AdapterUtils.normalizeOrDefault(input.idempotencyKey(), "");
+        String suffix = !inherited.isEmpty()
+            ? inherited + ":" + outputIndex
+            : Long.toString(outputIndex);
+        return IdempotencyKeyResolver.resolve(context, traceId, outputPayloadModel, suffix, Long.toString(outputIndex));
     }
+
 }

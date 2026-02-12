@@ -68,21 +68,25 @@ public record FunctionTransportContext(
     /**
      * Resolves idempotency policy from context attributes.
      *
-     * @return resolved policy; defaults to RANDOM when unset/unknown. Unknown values are logged and
-     *     treated as RANDOM.
+     * @return resolved policy; defaults to CONTEXT_STABLE when unset/unknown.
+     *     Unknown values are logged and treated as CONTEXT_STABLE. Legacy RANDOM is accepted
+     *     as compatibility alias and normalized to CONTEXT_STABLE.
      */
     public IdempotencyPolicy idempotencyPolicy() {
         String raw = attributes.get(ATTR_IDEMPOTENCY_POLICY);
         if (raw == null || raw.isBlank()) {
-            return IdempotencyPolicy.RANDOM;
+            return IdempotencyPolicy.CONTEXT_STABLE;
         }
-        try {
-            return IdempotencyPolicy.valueOf(raw.trim().toUpperCase(Locale.ROOT));
-        } catch (IllegalArgumentException ignored) {
-            LOG.warning(() -> "Unknown idempotency policy '" + raw
-                + "'; falling back to " + IdempotencyPolicy.RANDOM);
-            return IdempotencyPolicy.RANDOM;
+        String normalized = raw.trim().toUpperCase(Locale.ROOT);
+        if ("EXPLICIT".equals(normalized)) {
+            return IdempotencyPolicy.EXPLICIT;
         }
+        if ("CONTEXT_STABLE".equals(normalized) || "RANDOM".equals(normalized)) {
+            return IdempotencyPolicy.CONTEXT_STABLE;
+        }
+        LOG.warning(() -> "Unknown idempotency policy '" + raw
+            + "'; falling back to " + IdempotencyPolicy.CONTEXT_STABLE);
+        return IdempotencyPolicy.CONTEXT_STABLE;
     }
 
     /**

@@ -45,8 +45,8 @@ public final class LocalUnaryFunctionInvokeAdapter<I, O> implements FunctionInvo
             String outputPayloadModel,
             String outputPayloadModelVersion) {
         this.delegate = Objects.requireNonNull(delegate, "delegate must not be null");
-        this.outputPayloadModel = normalizeOrDefault(outputPayloadModel, "unknown.output");
-        this.outputPayloadModelVersion = normalizeOrDefault(outputPayloadModelVersion, "v1");
+        this.outputPayloadModel = AdapterUtils.normalizeOrDefault(outputPayloadModel, "unknown.output");
+        this.outputPayloadModelVersion = AdapterUtils.normalizeOrDefault(outputPayloadModelVersion, "v1");
     }
 
     @Override
@@ -58,8 +58,7 @@ public final class LocalUnaryFunctionInvokeAdapter<I, O> implements FunctionInvo
             return Uni.createFrom().failure(new NullPointerException(
                 "LocalUnaryFunctionInvokeAdapter input payload must not be null"));
         }
-        return Uni.createFrom().item(() -> delegate.apply(payload))
-            .onItem().transformToUni(delegateResult -> delegateResult)
+        return Uni.createFrom().deferred(() -> delegate.apply(payload))
             .onItem().ifNull().failWith(() -> new NullPointerException(
                 "LocalUnaryFunctionInvokeAdapter delegate emitted null output"))
             .onItem()
@@ -71,11 +70,4 @@ public final class LocalUnaryFunctionInvokeAdapter<I, O> implements FunctionInvo
                 output));
     }
 
-    private static String normalizeOrDefault(String value, String fallback) {
-        if (value == null) {
-            return fallback;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? fallback : trimmed;
-    }
 }

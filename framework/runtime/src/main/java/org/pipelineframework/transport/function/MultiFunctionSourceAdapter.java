@@ -49,8 +49,8 @@ public final class MultiFunctionSourceAdapter<I> implements FunctionSourceAdapte
     }
 
     public MultiFunctionSourceAdapter(String payloadModel, String payloadModelVersion, BatchingPolicy batchingPolicy) {
-        this.payloadModel = normalizeOrDefault(payloadModel, "unknown.input");
-        this.payloadModelVersion = normalizeOrDefault(payloadModelVersion, "v1");
+        this.payloadModel = AdapterUtils.normalizeOrDefault(payloadModel, "unknown.input");
+        this.payloadModelVersion = AdapterUtils.normalizeOrDefault(payloadModelVersion, "v1");
         this.batchingPolicy = Objects.requireNonNull(batchingPolicy, "batchingPolicy must not be null");
     }
 
@@ -58,7 +58,7 @@ public final class MultiFunctionSourceAdapter<I> implements FunctionSourceAdapte
     public Multi<TraceEnvelope<I>> adapt(Multi<I> event, FunctionTransportContext context) {
         Objects.requireNonNull(event, "event must not be null");
         Objects.requireNonNull(context, "context must not be null");
-        String traceId = deriveTraceId(context.requestId());
+        String traceId = AdapterUtils.deriveTraceId(context.requestId());
         Map<String, String> immutableMeta = Map.copyOf(buildMeta(context));
         AtomicLong outputIndex = new AtomicLong(0);
 
@@ -67,7 +67,6 @@ public final class MultiFunctionSourceAdapter<I> implements FunctionSourceAdapte
             String idempotencyKey = resolveIdempotencyKey(
                 context,
                 traceId,
-                envelopeId,
                 outputIndex.getAndIncrement());
             return new TraceEnvelope<>(
                 traceId,
@@ -96,52 +95,36 @@ public final class MultiFunctionSourceAdapter<I> implements FunctionSourceAdapte
                     }
                     return Multi.createFrom().iterable(collected);
                 });
-            case DROP, BUFFER -> event.select().first(maxItems);
+            case DROP -> event.select().first(maxItems);
+            // BUFFER intentionally matches DROP for ingress because source-side buffering is owned by upstream/event source.
+            case BUFFER -> event.select().first(maxItems);
         };
     }
 
     private static Map<String, String> buildMeta(FunctionTransportContext context) {
         Map<String, String> meta = new LinkedHashMap<>();
-        meta.put(KEY_FUNCTION_NAME, normalizeOrDefault(context.functionName(), ""));
-        meta.put(KEY_STAGE, normalizeOrDefault(context.stage(), ""));
-        meta.put(KEY_REQUEST_ID, normalizeOrDefault(context.requestId(), ""));
+        meta.put(KEY_FUNCTION_NAME, AdapterUtils.normalizeOrDefault(context.functionName(), ""));
+        meta.put(KEY_STAGE, AdapterUtils.normalizeOrDefault(context.stage(), ""));
+        meta.put(KEY_REQUEST_ID, AdapterUtils.normalizeOrDefault(context.requestId(), ""));
         if (context.attributes() != null && !context.attributes().isEmpty()) {
             context.attributes().forEach((key, value) -> {
                 if (!KEY_FUNCTION_NAME.equals(key)
                     && !KEY_STAGE.equals(key)
-                    && !KEY_REQUEST_ID.equals(key)) {
-                    meta.put(key, normalizeOrDefault(value, ""));
+                    && !KEY_REQUEST_ID.equals(key)
+                    && !key.startsWith("tpf.")) {
+                    meta.put(key, AdapterUtils.normalizeOrDefault(value, ""));
                 }
             });
         }
         return meta;
     }
 
-    private static String normalizeOrDefault(String value, String fallback) {
-        if (value == null) {
-            return fallback;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? fallback : trimmed;
-    }
-
-    private static String deriveTraceId(String requestId) {
-        if (requestId == null || requestId.isBlank()) {
-            return UUID.randomUUID().toString();
-        }
-        return requestId.trim();
-    }
-
     private String resolveIdempotencyKey(
             FunctionTransportContext context,
             String traceId,
-            String envelopeId,
             long index) {
-        if (context.idempotencyPolicy() == IdempotencyPolicy.EXPLICIT) {
-            return context.explicitIdempotencyKey()
-                .map(explicit -> explicit + ":" + index)
-                .orElse(traceId + ":" + payloadModel + ":" + envelopeId);
-        }
-        return traceId + ":" + payloadModel + ":" + envelopeId;
+        String suffix = Long.toString(index);
+        return IdempotencyKeyResolver.resolve(context, traceId, payloadModel, suffix, suffix);
     }
+
 }

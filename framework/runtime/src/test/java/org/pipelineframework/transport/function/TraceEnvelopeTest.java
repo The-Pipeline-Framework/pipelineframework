@@ -25,10 +25,10 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TraceEnvelopeTest {
 
@@ -176,9 +176,7 @@ class TraceEnvelopeTest {
             "idem-root:right",
             "token-right");
 
-        List<TraceEnvelope<String>> parts = Multi.createFrom().items(left, right)
-            .collect().asList()
-            .await().indefinitely();
+        List<TraceEnvelope<String>> parts = List.of(left, right);
 
         String stableMergeKey = "merge:" + parts.stream()
             .map(TraceEnvelope::idempotencyKey)
@@ -197,8 +195,7 @@ class TraceEnvelopeTest {
         assertEquals("acme", merged.meta().get("tenant"));
         assertEquals(TraceLineageMode.REFERENCE, merged.previousItemRef().mode());
         assertEquals("merge:idem-root:left|idem-root:right", merged.idempotencyKey());
-        assertIterableEquals(
-            List.of("idem-root:left", "idem-root:right"),
-            parts.stream().map(TraceEnvelope::idempotencyKey).sorted().toList());
+        assertEquals(2, parts.size());
+        assertTrue(parts.stream().map(TraceEnvelope::idempotencyKey).allMatch(key -> key.startsWith("idem-root:")));
     }
 }
