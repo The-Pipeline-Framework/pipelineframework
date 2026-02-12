@@ -82,7 +82,7 @@ Cardinality guarantees covered by tests:
 
 - `SearchPipelineEndToEndIT#tokenizeFanOutAndIndexFanInPersistPerDocumentCardinality` verifies one `docId` flows
   through `RawDocument`/`ParsedDocument`, fans out to multiple `TokenBatch` rows, then merges into exactly one `IndexAck`.
-- `IndexAckResourceTest#testIndexAckRejectsMixedDocIdsAcrossBatches` verifies fan-in rejects mixed `docId` input.
+- `IndexAckResourceTest#testIndexAckRejectsMixedDocIdsInSingleBatch` verifies fan-in rejects mixed `docId` input.
 
 ### Handler Selection For Modules With Multiple Generated Handlers
 
