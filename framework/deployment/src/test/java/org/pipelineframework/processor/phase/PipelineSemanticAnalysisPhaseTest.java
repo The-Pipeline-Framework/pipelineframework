@@ -99,6 +99,10 @@ public class PipelineSemanticAnalysisPhaseTest {
         
         assertThrows(IllegalArgumentException.class, () -> phase.applyCardinalityToStreaming("OTHER", false));
         assertThrows(IllegalArgumentException.class, () -> phase.applyCardinalityToStreaming("OTHER", true));
+        assertThrows(IllegalArgumentException.class, () -> phase.applyCardinalityToStreaming(null, false));
+        assertThrows(IllegalArgumentException.class, () -> phase.applyCardinalityToStreaming(null, true));
+        assertThrows(IllegalArgumentException.class, () -> phase.applyCardinalityToStreaming("", false));
+        assertThrows(IllegalArgumentException.class, () -> phase.applyCardinalityToStreaming("", true));
     }
 
     @Test

@@ -113,7 +113,7 @@ class PipelineProtoGeneratorTest {
     }
 
     @Test
-    void supportsOneToManyAndManyToOneAliases() throws Exception {
+    void supportsOneToManyAndManyToOneRelationships() throws Exception {
         String yaml = """
             appName: "Alias Test"
             basePackage: "com.example.alias"
@@ -162,8 +162,23 @@ class PipelineProtoGeneratorTest {
         String indexProto = Files.readString(indexProtoPath);
         String orchestratorProto = Files.readString(orchestratorProtoPath);
 
+        assertTrue(tokenizeProto.contains("package com.example.alias;"));
+        assertTrue(tokenizeProto.contains("message DocInput"));
+        assertTrue(tokenizeProto.contains("string docId = 1;"));
+        assertTrue(tokenizeProto.contains("message TokenBatch"));
+        assertTrue(tokenizeProto.contains("string tokens = 2;"));
         assertTrue(tokenizeProto.contains("rpc remoteProcess(DocInput) returns (stream TokenBatch);"));
+
+        assertTrue(indexProto.contains("package com.example.alias;"));
+        assertTrue(indexProto.contains("import \"tokenize-svc.proto\";"));
+        assertTrue(indexProto.contains("message IndexAck"));
+        assertTrue(indexProto.contains("string status = 2;"));
         assertTrue(indexProto.contains("rpc remoteProcess(stream TokenBatch) returns (IndexAck);"));
+
+        assertTrue(orchestratorProto.contains("package com.example.alias;"));
+        assertTrue(orchestratorProto.contains("import \"tokenize-svc.proto\";"));
+        assertTrue(orchestratorProto.contains("import \"index-svc.proto\";"));
+        assertTrue(orchestratorProto.contains("service OrchestratorService"));
         assertTrue(orchestratorProto.contains("rpc Run (DocInput) returns (IndexAck);"));
     }
 }

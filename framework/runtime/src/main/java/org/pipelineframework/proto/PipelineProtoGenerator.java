@@ -272,20 +272,20 @@ public class PipelineProtoGenerator {
             .append("Service {\n");
         String inputType = firstStep ? step.inputTypeName() : previous.outputTypeName();
         String outputType = step.outputTypeName();
-        String canonicalCardinality = CardinalitySemantics.canonical(step.cardinality());
-        if (CardinalitySemantics.ONE_TO_MANY.equals(canonicalCardinality)) {
+        CardinalitySemantics canonicalCardinality = CardinalitySemantics.fromString(step.cardinality());
+        if (canonicalCardinality == CardinalitySemantics.ONE_TO_MANY) {
             builder.append("  rpc remoteProcess(")
                 .append(inputType)
                 .append(") returns (stream ")
                 .append(outputType)
                 .append(");\n");
-        } else if (CardinalitySemantics.MANY_TO_MANY.equals(canonicalCardinality)) {
+        } else if (canonicalCardinality == CardinalitySemantics.MANY_TO_MANY) {
             builder.append("  rpc remoteProcess(stream ")
                 .append(inputType)
                 .append(") returns (stream ")
                 .append(outputType)
                 .append(");\n");
-        } else if (CardinalitySemantics.MANY_TO_ONE.equals(canonicalCardinality)) {
+        } else if (canonicalCardinality == CardinalitySemantics.MANY_TO_ONE) {
             builder.append("  rpc remoteProcess(stream ")
                 .append(inputType)
                 .append(") returns (")

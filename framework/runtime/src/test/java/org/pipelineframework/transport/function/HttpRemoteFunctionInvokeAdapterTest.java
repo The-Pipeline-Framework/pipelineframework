@@ -119,6 +119,75 @@ class HttpRemoteFunctionInvokeAdapterTest {
         assertTrue(ex.getMessage().contains(FunctionTransportContext.ATTR_TARGET_URL));
     }
 
+    @Test
+    void resolvesTargetUrlFromHandlerMetadataUsingRestClientConfig() throws Exception {
+        TraceEnvelope<Integer> responseEnvelope = TraceEnvelope.root(
+            "trace-remote-h", "item-remote-h", "search.out", "v1", "idem-remote-h", 123);
+        try (ServerHandle server = startServer(exchange -> respondJson(exchange, MAPPER.writeValueAsString(responseEnvelope)))) {
+            String key = "quarkus.rest-client.process-index-document.url";
+            String previous = System.getProperty(key);
+            System.setProperty(key, server.url());
+            try {
+                HttpRemoteFunctionInvokeAdapter<Integer, Integer> adapter = new HttpRemoteFunctionInvokeAdapter<>();
+                FunctionTransportContext context = FunctionTransportContext.of(
+                    "req-remote-4",
+                    "handler",
+                    "invoke",
+                    Map.of(
+                        FunctionTransportContext.ATTR_TARGET_RUNTIME, "pipeline",
+                        FunctionTransportContext.ATTR_TARGET_MODULE, "index-document-svc",
+                        FunctionTransportContext.ATTR_TARGET_HANDLER, "ProcessIndexDocumentFunctionHandler"));
+
+                TraceEnvelope<Integer> input = TraceEnvelope.root(
+                    "trace-local-4", "item-local-4", "search.in", "v1", "idem-local-4", 5);
+                TraceEnvelope<Integer> output = adapter.invokeOneToOne(input, context)
+                    .await().atMost(Duration.ofSeconds(2));
+
+                assertEquals(123, output.payload());
+            } finally {
+                if (previous == null) {
+                    System.clearProperty(key);
+                } else {
+                    System.setProperty(key, previous);
+                }
+            }
+        }
+    }
+
+    @Test
+    void resolvesTargetUrlFromModuleMetadataUsingRestClientConfig() throws Exception {
+        TraceEnvelope<Integer> responseEnvelope = TraceEnvelope.root(
+            "trace-remote-m", "item-remote-m", "search.out", "v1", "idem-remote-m", 321);
+        try (ServerHandle server = startServer(exchange -> respondJson(exchange, MAPPER.writeValueAsString(responseEnvelope)))) {
+            String key = "quarkus.rest-client.index-document-svc.url";
+            String previous = System.getProperty(key);
+            System.setProperty(key, server.url());
+            try {
+                HttpRemoteFunctionInvokeAdapter<Integer, Integer> adapter = new HttpRemoteFunctionInvokeAdapter<>();
+                FunctionTransportContext context = FunctionTransportContext.of(
+                    "req-remote-5",
+                    "handler",
+                    "invoke",
+                    Map.of(
+                        FunctionTransportContext.ATTR_TARGET_RUNTIME, "pipeline",
+                        FunctionTransportContext.ATTR_TARGET_MODULE, "index-document-svc"));
+
+                TraceEnvelope<Integer> input = TraceEnvelope.root(
+                    "trace-local-5", "item-local-5", "search.in", "v1", "idem-local-5", 6);
+                TraceEnvelope<Integer> output = adapter.invokeOneToOne(input, context)
+                    .await().atMost(Duration.ofSeconds(2));
+
+                assertEquals(321, output.payload());
+            } finally {
+                if (previous == null) {
+                    System.clearProperty(key);
+                } else {
+                    System.setProperty(key, previous);
+                }
+            }
+        }
+    }
+
     private static ServerHandle startServer(HttpHandler handler) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
         server.createContext("/", handler);
