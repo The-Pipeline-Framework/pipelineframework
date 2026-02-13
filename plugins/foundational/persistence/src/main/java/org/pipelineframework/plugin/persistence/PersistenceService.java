@@ -80,9 +80,11 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
             return Uni.createFrom().failure(new IllegalStateException("PersistenceManager is not available"));
         }
         boolean useVertx = shouldUseVertxContext();
-        Uni<T> persistUni = hasSafeVertxContext() || !useVertx
+        Uni<T> persistUni = !useVertx
             ? persistenceManager.persist(item)
-            : persistOnVertxContext(item);
+            : (hasManagedReactiveContext()
+                ? persistenceManager.persist(item)
+                : persistOnVertxContext(item));
         return persistUni
             .onFailure(this::isDuplicateKeyError)
             .recoverWithUni(failure -> handleDuplicateKey(item, failure))
@@ -99,9 +101,11 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
      *
      * @return `true` if a current Vert.x context exists and is a duplicated context, `false` otherwise.
      */
-    private boolean hasSafeVertxContext() {
+    private boolean hasManagedReactiveContext() {
         Context context = Vertx.currentContext();
-        return context != null && VertxContext.isDuplicatedContext(context);
+        return context != null
+            && VertxContext.isDuplicatedContext(context)
+            && Boolean.TRUE.equals(context.getLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY));
     }
 
     /**
