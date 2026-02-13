@@ -43,7 +43,8 @@ const loading = ref(true)
 const error = ref(false)
 
 const releasesUrl = 'https://github.com/The-Pipeline-Framework/pipelineframework/releases'
-const releasesApiUrl = 'https://api.github.com/repos/The-Pipeline-Framework/pipelineframework/releases?per_page=10'
+const releasesApiUrl = '/api/releases?per_page=10'
+const fallbackReleasesApiUrl = 'https://api.github.com/repos/The-Pipeline-Framework/pipelineframework/releases?per_page=10'
 const cacheTtlMs = 15 * 60 * 1000
 const cacheKey = `tpf:releases:${releasesApiUrl}`
 
@@ -71,15 +72,25 @@ onMounted(async () => {
       sessionStorage.removeItem(cacheKey)
     }
 
-    const response = await fetch(releasesApiUrl, {
-      headers: {
-        Accept: 'application/vnd.github+json'
+    const fetchReleases = async (url) => {
+      const response = await fetch(url, {
+        headers: {
+          Accept: 'application/vnd.github+json'
+        }
+      })
+      if (!response.ok) {
+        throw new Error(`GitHub API returned ${response.status}`)
       }
-    })
-    if (!response.ok) {
-      throw new Error(`GitHub API returned ${response.status}`)
+      return response.json()
     }
-    const data = await response.json()
+
+    let data
+    try {
+      data = await fetchReleases(releasesApiUrl)
+    } catch (_) {
+      data = await fetchReleases(fallbackReleasesApiUrl)
+    }
+
     releases.value = Array.isArray(data)
       ? data.filter((release) => !release.draft).slice(0, 3)
       : []
