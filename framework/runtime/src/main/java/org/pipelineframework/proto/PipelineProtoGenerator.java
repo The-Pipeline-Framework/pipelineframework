@@ -21,6 +21,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 
+import org.pipelineframework.config.CardinalitySemantics;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 import org.pipelineframework.config.template.*;
 
@@ -271,20 +272,20 @@ public class PipelineProtoGenerator {
             .append("Service {\n");
         String inputType = firstStep ? step.inputTypeName() : previous.outputTypeName();
         String outputType = step.outputTypeName();
-        String cardinality = step.cardinality();
-        if ("EXPANSION".equalsIgnoreCase(cardinality)) {
+        String canonicalCardinality = CardinalitySemantics.canonical(step.cardinality());
+        if (CardinalitySemantics.ONE_TO_MANY.equals(canonicalCardinality)) {
             builder.append("  rpc remoteProcess(")
                 .append(inputType)
                 .append(") returns (stream ")
                 .append(outputType)
                 .append(");\n");
-        } else if ("MANY_TO_MANY".equalsIgnoreCase(cardinality)) {
+        } else if (CardinalitySemantics.MANY_TO_MANY.equals(canonicalCardinality)) {
             builder.append("  rpc remoteProcess(stream ")
                 .append(inputType)
                 .append(") returns (stream ")
                 .append(outputType)
                 .append(");\n");
-        } else if ("REDUCTION".equalsIgnoreCase(cardinality)) {
+        } else if (CardinalitySemantics.MANY_TO_ONE.equals(canonicalCardinality)) {
             builder.append("  rpc remoteProcess(stream ")
                 .append(inputType)
                 .append(") returns (")
@@ -411,29 +412,15 @@ public class PipelineProtoGenerator {
     private StreamingShape computePipelineStreamingShape(List<ResolvedStep> steps) {
         boolean inputStreaming = false;
         if (steps != null && !steps.isEmpty()) {
-            inputStreaming = isStreamingInputCardinality(steps.get(0).cardinality());
+            inputStreaming = CardinalitySemantics.isStreamingInput(steps.get(0).cardinality());
         }
         boolean outputStreaming = inputStreaming;
         if (steps != null) {
             for (ResolvedStep step : steps) {
-                outputStreaming = applyCardinalityToStreaming(step.cardinality(), outputStreaming);
+                outputStreaming = CardinalitySemantics.applyToOutputStreaming(step.cardinality(), outputStreaming);
             }
         }
         return new StreamingShape(inputStreaming, outputStreaming);
-    }
-
-    private boolean isStreamingInputCardinality(String cardinality) {
-        return "REDUCTION".equalsIgnoreCase(cardinality) || "MANY_TO_MANY".equalsIgnoreCase(cardinality);
-    }
-
-    private boolean applyCardinalityToStreaming(String cardinality, boolean currentStreaming) {
-        if ("EXPANSION".equalsIgnoreCase(cardinality) || "MANY_TO_MANY".equalsIgnoreCase(cardinality)) {
-            return true;
-        }
-        if ("REDUCTION".equalsIgnoreCase(cardinality)) {
-            return false;
-        }
-        return currentStreaming;
     }
 
     private List<AspectDefinition> toAspectDefinitions(Map<String, PipelineTemplateAspect> aspects) {

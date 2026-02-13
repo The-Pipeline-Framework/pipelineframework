@@ -1,17 +1,12 @@
 package org.pipelineframework.processor.phase;
 
+import org.pipelineframework.config.CardinalitySemantics;
 import org.pipelineframework.processor.ir.StreamingShape;
 
 /**
  * Resolves streaming shapes based on cardinality and other factors.
  */
 class StreamingShapeResolver {
-    private static final String EXPANSION = "EXPANSION";
-    private static final String ONE_TO_MANY = "ONE_TO_MANY";
-    private static final String REDUCTION = "REDUCTION";
-    private static final String MANY_TO_ONE = "MANY_TO_ONE";
-    private static final String MANY_TO_MANY = "MANY_TO_MANY";
-
     /**
      * Determines the streaming shape based on cardinality.
      *
@@ -19,15 +14,14 @@ class StreamingShapeResolver {
      * @return the corresponding streaming shape
      */
     static StreamingShape streamingShape(String cardinality) {
-        if (EXPANSION.equalsIgnoreCase(cardinality)
-            || ONE_TO_MANY.equalsIgnoreCase(cardinality)) {
+        String canonical = CardinalitySemantics.canonical(cardinality);
+        if (CardinalitySemantics.ONE_TO_MANY.equals(canonical)) {
             return StreamingShape.UNARY_STREAMING;
         }
-        if (REDUCTION.equalsIgnoreCase(cardinality)
-            || MANY_TO_ONE.equalsIgnoreCase(cardinality)) {
+        if (CardinalitySemantics.MANY_TO_ONE.equals(canonical)) {
             return StreamingShape.STREAMING_UNARY;
         }
-        if (MANY_TO_MANY.equalsIgnoreCase(cardinality)) {
+        if (CardinalitySemantics.MANY_TO_MANY.equals(canonical)) {
             return StreamingShape.STREAMING_STREAMING;
         }
         return StreamingShape.UNARY_UNARY;
@@ -44,9 +38,7 @@ class StreamingShapeResolver {
      * @return true if the input is streaming, false otherwise
      */
     static boolean isStreamingInputCardinality(String cardinality) {
-        return REDUCTION.equalsIgnoreCase(cardinality)
-            || MANY_TO_ONE.equalsIgnoreCase(cardinality)
-            || MANY_TO_MANY.equalsIgnoreCase(cardinality);
+        return CardinalitySemantics.isStreamingInput(cardinality);
     }
 
     /**
@@ -57,16 +49,7 @@ class StreamingShapeResolver {
      * @return the updated streaming state
      */
     static boolean applyCardinalityToStreaming(String cardinality, boolean currentStreaming) {
-        if (EXPANSION.equalsIgnoreCase(cardinality)
-            || ONE_TO_MANY.equalsIgnoreCase(cardinality)
-            || MANY_TO_MANY.equalsIgnoreCase(cardinality)) {
-            return true;
-        }
-        if (REDUCTION.equalsIgnoreCase(cardinality)
-            || MANY_TO_ONE.equalsIgnoreCase(cardinality)) {
-            return false;
-        }
-        return currentStreaming;
+        return CardinalitySemantics.applyToOutputStreaming(cardinality, currentStreaming);
     }
 
     /**
