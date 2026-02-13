@@ -310,6 +310,33 @@ class SearchPipelineEndToEndIT {
     }
 
     @Test
+    void requireCacheRecoversAfterWarmForSameDocId() throws Exception {
+        String version = "recover-" + UUID.randomUUID();
+        String input = "https://example.com/" + version;
+        UUID docId = stableDocId(input);
+
+        ProcessResult cold = orchestratorTriggerRun(input, "require-cache", version, false);
+        assertExitFailure(cold, "Expected require-cache to fail on a cold cache");
+
+        ProcessResult warm = orchestratorTriggerRun(input, "prefer-cache", version, false);
+        assertExitSuccess(warm, "Expected prefer-cache warm run to succeed");
+
+        assertEquals(1, awaitRowCountAtLeastForDocId("rawdocument", docId, 1, Duration.ofSeconds(10)),
+            "Expected one RawDocument row after warm run for docId " + docId);
+        assertEquals(1, awaitRowCountAtLeastForDocId("parseddocument", docId, 1, Duration.ofSeconds(10)),
+            "Expected one ParsedDocument row after warm run for docId " + docId);
+        int tokenBatchCount = awaitRowCountAtLeastForDocId("tokenbatch", docId, 1, Duration.ofSeconds(10));
+        assertTrue(tokenBatchCount >= 1,
+            "Expected at least one TokenBatch row after warm run for docId " + docId
+                + " but found " + tokenBatchCount);
+        assertEquals(1, awaitRowCountAtLeastForDocId("indexack", docId, 1, Duration.ofSeconds(10)),
+            "Expected one IndexAck row after warm run for docId " + docId);
+
+        ProcessResult require = orchestratorTriggerRun(input, "require-cache", version, false);
+        assertExitSuccess(require, "Expected require-cache to succeed after warm cache for the same docId");
+    }
+
+    @Test
     void preferCacheWarmsCacheAndRequireCacheSucceeds() throws Exception {
         String version = "warm-" + UUID.randomUUID();
         ProcessResult warm = orchestratorTriggerRun("https://example.com", "prefer-cache", version, false);
