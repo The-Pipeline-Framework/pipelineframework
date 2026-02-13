@@ -47,7 +47,7 @@ class RestFunctionHandlerRendererTest {
         assertTrue(source.contains("FunctionTransportContext transportContext = FunctionTransportContext.of("));
         assertTrue(source.contains("FunctionSourceAdapter<ParsedDocumentDto, ParsedDocumentDto> source"));
         assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invokeLocal"));
-        assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invokeRemote = new UnsupportedRemoteFunctionInvokeAdapter<>()"));
+        assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invokeRemote = new HttpRemoteFunctionInvokeAdapter<>()"));
         assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invoke = new InvocationModeRoutingFunctionInvokeAdapter<>(invokeLocal, invokeRemote)"));
         assertTrue(source.contains("FunctionSinkAdapter<IndexAckDto, IndexAckDto> sink"));
         assertTrue(source.contains("return UnaryFunctionTransportBridge.invoke(input, transportContext, source, invoke, sink)"));
@@ -72,6 +72,7 @@ class RestFunctionHandlerRendererTest {
         assertTrue(source.contains("FunctionTransportContext transportContext = FunctionTransportContext.of("));
         assertTrue(source.contains("FunctionSourceAdapter<ParsedDocumentDto, ParsedDocumentDto> source"));
         assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invoke"));
+        assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invokeRemote = new HttpRemoteFunctionInvokeAdapter<>()"));
         assertTrue(source.contains("FunctionSinkAdapter<IndexAckDto, List<IndexAckDto>> sink"));
         assertTrue(source.contains("return FunctionTransportBridge.invokeOneToMany(input, transportContext, source, invoke, sink)"));
     }
@@ -93,6 +94,7 @@ class RestFunctionHandlerRendererTest {
         assertTrue(source.contains("FunctionTransportContext transportContext = FunctionTransportContext.of("));
         assertTrue(source.contains("FunctionSourceAdapter<Multi<ParsedDocumentDto>, ParsedDocumentDto> source"));
         assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invoke"));
+        assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invokeRemote = new HttpRemoteFunctionInvokeAdapter<>()"));
         assertTrue(source.contains("FunctionSinkAdapter<IndexAckDto, IndexAckDto> sink"));
         assertTrue(source.contains("return FunctionTransportBridge.invokeManyToOne(input, transportContext, source, invoke, sink)"));
     }
@@ -114,6 +116,7 @@ class RestFunctionHandlerRendererTest {
         assertTrue(source.contains("FunctionTransportContext transportContext = FunctionTransportContext.of("));
         assertTrue(source.contains("FunctionSourceAdapter<Multi<ParsedDocumentDto>, ParsedDocumentDto> source"));
         assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invoke"));
+        assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invokeRemote = new HttpRemoteFunctionInvokeAdapter<>()"));
         assertTrue(source.contains("FunctionSinkAdapter<IndexAckDto, List<IndexAckDto>> sink"));
         assertTrue(source.contains("return FunctionTransportBridge.invokeManyToMany(input, transportContext, source, invoke, sink)"));
     }

@@ -73,7 +73,10 @@ public final class InvocationModeRoutingFunctionInvokeAdapter<I, O> implements F
     }
 
     private FunctionInvokeAdapter<I, O> selectDelegate(FunctionTransportContext context) {
-        return context.invocationMode() == FunctionInvocationMode.REMOTE ? remoteDelegate : localDelegate;
+        FunctionInvocationMode mode = context.invocationMode();
+        if (mode == null) {
+            throw new IllegalStateException("FunctionTransportContext.invocationMode() must not be null");
+        }
+        return mode == FunctionInvocationMode.REMOTE ? remoteDelegate : localDelegate;
     }
 }
-

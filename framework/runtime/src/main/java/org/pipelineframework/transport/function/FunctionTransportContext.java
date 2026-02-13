@@ -41,6 +41,7 @@ public record FunctionTransportContext(
     public static final String ATTR_IDEMPOTENCY_POLICY = "tpf.idempotency.policy";
     public static final String ATTR_IDEMPOTENCY_KEY = "tpf.idempotency.key";
     public static final String ATTR_INVOCATION_MODE = "tpf.function.invocation.mode";
+    public static final String ATTR_TARGET_URL = "tpf.function.target.url";
     public static final String ATTR_TARGET_RUNTIME = "tpf.function.target.runtime";
     public static final String ATTR_TARGET_MODULE = "tpf.function.target.module";
     public static final String ATTR_TARGET_HANDLER = "tpf.function.target.handler";
@@ -153,6 +154,16 @@ public record FunctionTransportContext(
      */
     public Optional<String> targetRuntime() {
         return normalizedAttribute(ATTR_TARGET_RUNTIME);
+    }
+
+    /**
+     * Optional target URL for remote invocation transport.
+     * Only meaningful when {@link #invocationMode()} is {@link FunctionInvocationMode#REMOTE}.
+     *
+     * @return target URL when present
+     */
+    public Optional<String> targetUrl() {
+        return normalizedAttribute(ATTR_TARGET_URL);
     }
 
     /**
