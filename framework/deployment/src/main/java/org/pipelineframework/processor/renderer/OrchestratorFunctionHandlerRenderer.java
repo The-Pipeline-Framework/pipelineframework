@@ -69,8 +69,8 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
         ClassName.get("org.pipelineframework.transport.function", "LocalManyToManyFunctionInvokeAdapter");
     private static final ClassName INVOCATION_MODE_ROUTING_INVOKE_ADAPTER =
         ClassName.get("org.pipelineframework.transport.function", "InvocationModeRoutingFunctionInvokeAdapter");
-    private static final ClassName UNSUPPORTED_REMOTE_INVOKE_ADAPTER =
-        ClassName.get("org.pipelineframework.transport.function", "UnsupportedRemoteFunctionInvokeAdapter");
+    private static final ClassName HTTP_REMOTE_INVOKE_ADAPTER =
+        ClassName.get("org.pipelineframework.transport.function", "HttpRemoteFunctionInvokeAdapter");
     private static final ClassName DEFAULT_UNARY_SINK_ADAPTER =
         ClassName.get("org.pipelineframework.transport.function", "DefaultUnaryFunctionSinkAdapter");
     private static final ClassName COLLECT_LIST_SINK_ADAPTER =
@@ -154,7 +154,7 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
                 ORCHESTRATOR_PREFIX + binding.outputTypeName(), API_VERSION)
             .addStatement("$T<$T, $T> invokeRemote = new $T<>()",
                 FUNCTION_INVOKE_ADAPTER, inputDto, outputDto,
-                UNSUPPORTED_REMOTE_INVOKE_ADAPTER)
+                HTTP_REMOTE_INVOKE_ADAPTER)
             .addStatement("$T<$T, $T> invoke = new $T<>(invokeLocal, invokeRemote)",
                 FUNCTION_INVOKE_ADAPTER, inputDto, outputDto,
                 INVOCATION_MODE_ROUTING_INVOKE_ADAPTER)
