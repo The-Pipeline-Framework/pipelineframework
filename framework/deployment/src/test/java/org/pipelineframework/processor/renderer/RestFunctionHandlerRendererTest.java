@@ -48,6 +48,7 @@ class RestFunctionHandlerRendererTest {
         assertTrue(source.contains("FunctionSourceAdapter<ParsedDocumentDto, ParsedDocumentDto> source"));
         assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invokeLocal"));
         assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invokeRemote = new HttpRemoteFunctionInvokeAdapter<>()"));
+        assertFalse(source.contains("UnsupportedRemoteFunctionInvokeAdapter"));
         assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invoke = new InvocationModeRoutingFunctionInvokeAdapter<>(invokeLocal, invokeRemote)"));
         assertTrue(source.contains("FunctionSinkAdapter<IndexAckDto, IndexAckDto> sink"));
         assertTrue(source.contains("return UnaryFunctionTransportBridge.invoke(input, transportContext, source, invoke, sink)"));
