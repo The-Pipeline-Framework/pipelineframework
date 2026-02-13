@@ -11,11 +11,11 @@
       Fresh from GitHub releases for The Pipeline Framework.
     </p>
 
-    <div v-if="loading" class="release-loading">
+    <div v-if="loading" class="release-loading" aria-live="polite">
       Loading releases...
     </div>
 
-    <div v-else-if="error" class="release-error">
+    <div v-else-if="error" class="release-error" aria-live="polite">
       Could not load releases right now.
       <a :href="releasesUrl" target="_blank" rel="noopener noreferrer">Open releases</a>.
     </div>
@@ -63,7 +63,7 @@ onMounted(async () => {
       const cached = sessionStorage.getItem(cacheKey)
       if (cached) {
         const parsed = JSON.parse(cached)
-        if (parsed?.timestamp && Array.isArray(parsed?.data) && Date.now() - parsed.timestamp < cacheTtlMs) {
+        if (parsed?.timestamp && Array.isArray(parsed?.data) && parsed.data.length > 0 && Date.now() - parsed.timestamp < cacheTtlMs) {
           releases.value = parsed.data
           return
         }
@@ -113,7 +113,7 @@ onMounted(async () => {
   border: 1px solid var(--vp-c-border);
   border-radius: 14px;
   background:
-    radial-gradient(circle at top left, rgba(37, 99, 235, 0.08), transparent 52%),
+    radial-gradient(circle at top left, var(--vp-c-brand-subtle), transparent 52%),
     var(--vp-c-bg);
 }
 
@@ -174,7 +174,7 @@ onMounted(async () => {
   font-family: var(--vp-font-family-mono);
   font-size: 0.82rem;
   color: var(--vp-c-brand);
-  background: rgba(37, 99, 235, 0.1);
+  background: var(--vp-c-brand-subtle-strong);
   border-radius: 8px;
   padding: 0.18rem 0.4rem;
 }

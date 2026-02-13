@@ -15,7 +15,7 @@ The Pipeline Framework documentation is available for the following versions:
 
 The Pipeline Framework follows semantic versioning:
 - **Major versions** (`x.0.0`) may introduce breaking changes.
-- **Minor versions** (`x.y.0`) add features while maintaining compatibility expectations for that major stream.
+- **Minor versions** (`x.y.0`) add features and improvements while preserving compatibility guarantees for the same major version.
 - **Patch versions** (`x.y.z`) include fixes and incremental improvements.
 
 ## Documentation Snapshot Policy
@@ -25,5 +25,5 @@ When cutting a new release, create a docs snapshot and update the version list:
 
 ```bash
 cd docs
-npm run snapshot -- --version v26.3
+npm run snapshot -- --version vX.Y
 ```

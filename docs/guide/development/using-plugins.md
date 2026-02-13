@@ -37,12 +37,13 @@ This keeps dependency resolution deterministic.
 
 ## Side-effect transport contract
 
-Side-effect plugins are modeled as unary services for the selected transport.
-TPF generates type-indexed service contracts such as `ObservePaymentRecordSideEffectService` with shape `PaymentRecord -> PaymentRecord`, and inserts them at the configured aspect position.
+Side-effect plugins are modelled as unary services for the selected transport.
+TPF generates type-indexed service contracts such as `ObservePaymentRecordSideEffectService` with shape `PaymentRecord -> PaymentRecord`.
+It then inserts them at the configured aspect position.
 
 ## Build-time requirements
 
-- A pipeline YAML config must be discoverable, so output types can be resolved for side-effect adapters.
+- A pipeline YAML config must be discoverable so that output types can be resolved for side-effect adapters.
   The loader checks module root and `config/` for `pipeline.yaml`, `pipeline-config.yaml`, or `*-canvas-config.yaml`.
 - For gRPC transport, protobuf/descriptor content must include the required `Observe<T>SideEffectService` definitions.
 

@@ -35,6 +35,10 @@
   --vp-c-brand-1: #2563eb;
   --vp-c-brand-2: #3b82f6;
   --vp-c-brand-3: #1d4ed8;
+  --vp-c-brand-subtle: rgb(37 99 235 / 8%);
+  --vp-c-brand-subtle-soft: rgb(37 99 235 / 5%);
+  --vp-c-brand-subtle-strong: rgb(37 99 235 / 15%);
+  --vp-c-brand-subtle-table: rgb(37 99 235 / 10%);
   
   /* Backgrounds */
   --vp-c-bg: #ffffff;
@@ -100,7 +104,7 @@ kbd {
   border-radius: 12px;
   padding: 0.9rem 0.95rem;
   background:
-    radial-gradient(circle at top left, rgb(37 99 235 / 8%), transparent 45%),
+    radial-gradient(circle at top left, var(--vp-c-brand-subtle), transparent 45%),
     var(--vp-c-bg);
 }
 
@@ -117,6 +121,10 @@ kbd {
 }
 
 .dark:root {
+  --vp-c-brand-subtle: rgb(96 165 250 / 16%);
+  --vp-c-brand-subtle-soft: rgb(96 165 250 / 12%);
+  --vp-c-brand-subtle-strong: rgb(96 165 250 / 24%);
+  --vp-c-brand-subtle-table: rgb(96 165 250 / 20%);
   --vp-c-bg: #1a1a1a;
   --vp-c-bg-soft: #222222;
   --vp-c-bg-alt: #141414;
@@ -157,7 +165,7 @@ kbd {
 .VPNavBar .VPNavBarMenu .VPNavBarMenuLink:hover,
 .VPNavBar .VPNavBarMenu .VPFlyout .button:hover {
   border-color: transparent;
-  background: rgb(37 99 235 / 8%);
+  background: var(--vp-c-brand-subtle);
   color: var(--vp-c-brand);
 }
 
@@ -203,7 +211,7 @@ kbd {
  * hide VitePress sidebar/local-nav UI while preserving sidebar data model for prev/next links.
  * The !important overrides below are required to beat VitePress sidebar layout styles.
  */
-@media (width >= 960px) {
+@media (min-width: 960px) {
   .VPSidebar,
   .VPLocalNav {
     display: none !important;
@@ -271,7 +279,7 @@ kbd {
 /* Blockquote styling */
 .vp-doc blockquote {
   border-left: 4px solid var(--vp-c-brand);
-  background-color: rgb(37 99 235 / 5%);
+  background-color: var(--vp-c-brand-subtle-soft);
   padding: 1rem 1.5rem;
   margin: 1.5rem 0;
   border-radius: 0 8px 8px 0;
@@ -297,7 +305,7 @@ kbd {
 
 .vp-doc table th {
   font-weight: 600;
-  background-color: rgb(37 99 235 / 10%);
+  background-color: var(--vp-c-brand-subtle-table);
 }
 
 /* Button styling */
@@ -361,7 +369,7 @@ kbd {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(120deg, rgb(37 99 235 / 5%), transparent 55%);
+  background: linear-gradient(120deg, var(--vp-c-brand-subtle-soft), transparent 55%);
   pointer-events: none;
 }
 
@@ -406,7 +414,8 @@ kbd {
 
   .VPHomeFeatures .VPFeature:hover .box {
     transform: none;
-    box-shadow: none;
+    border-color: var(--vp-c-brand-light);
+    box-shadow: 0 10px 28px rgb(2 6 23 / 8%);
   }
 }
 
@@ -426,7 +435,7 @@ kbd {
   min-width: 56px;
 }
 
-@media (width <= 960px) {
+@media (max-width: 960px) {
   .VPNavBarSearch .DocSearch-Button {
     width: auto;
     max-width: none;
@@ -452,7 +461,7 @@ kbd {
 
 .callout.info {
   border-color: var(--vp-c-brand);
-  background-color: rgb(37 99 235 / 5%);
+  background-color: var(--vp-c-brand-subtle-soft);
 }
 
 .callout.tip {
@@ -478,7 +487,7 @@ kbd {
 }
 
 .callout.info .callout-header {
-  background-color: rgb(37 99 235 / 15%);
+  background-color: var(--vp-c-brand-subtle-strong);
   color: var(--vp-c-brand);
 }
 

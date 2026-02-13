@@ -1,6 +1,6 @@
 # Value Overview
 
-<p class="value-lead">TPF helps teams move from idea to production pipelines without getting buried in repetitive integration and deployment work.</p>
+<p class="value-lead">The Pipeline Framework (TPF) helps teams move from idea to production pipelines without getting buried in repetitive integration and deployment work.</p>
 
 ## At a Glance
 

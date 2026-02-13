@@ -19,6 +19,8 @@ import {withMermaid} from "vitepress-plugin-mermaid"
 
 // Use withMermaid to wrap the entire configuration - this enables GitHub-style mermaid code blocks
 // Note: This adds significant size to the bundle due to Mermaid's dependencies
+const ADDITIONAL_RESOURCES_LABEL = 'Additional Resources'
+
 const mainSidebar = [
     {
         text: 'Value',
@@ -200,7 +202,7 @@ const mainSidebar = [
         ]
     },
     {
-        text: 'Additional Resources',
+        text: ADDITIONAL_RESOURCES_LABEL,
         collapsed: true,
         items: [
             {text: 'Versions', link: '/versions/'}
@@ -221,7 +223,7 @@ const toNavItems = (items = []) =>
     })
 
 const topNavSections = mainSidebar
-    .filter((section) => section.text !== 'Additional Resources')
+    .filter((section) => section.text !== ADDITIONAL_RESOURCES_LABEL)
     .map((section) => ({
         text: section.text,
         items: toNavItems(section.items ?? []),
