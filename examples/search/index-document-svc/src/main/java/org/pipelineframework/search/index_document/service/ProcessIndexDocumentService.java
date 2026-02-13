@@ -17,7 +17,6 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
-import lombok.Getter;
 import org.jboss.logging.Logger;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.search.common.domain.IndexAck;
@@ -44,7 +43,6 @@ import org.pipelineframework.step.NonRetryableException;
  * untrusted external inputs.
  */
 @ApplicationScoped
-@Getter
 public class ProcessIndexDocumentService
     implements ReactiveStreamingClientService<TokenBatch, IndexAck> {
   private static final int MAX_BATCHES = 10_000;
@@ -77,19 +75,23 @@ public class ProcessIndexDocumentService
       Duration retryWait,
       Duration maxBackoff,
       boolean chaosEnabled) {
-    this.parkingLot = Objects.requireNonNull(parkingLot, "parkingLot must not be null");
+    IndexFailureParkingLot validatedParkingLot = Objects.requireNonNull(parkingLot, "parkingLot must not be null");
     if (maxTransientRetries < 0) {
       throw new IllegalArgumentException("maxTransientRetries must be >= 0, but was " + maxTransientRetries);
     }
+    Duration validatedRetryWait = Objects.requireNonNull(retryWait, "retryWait must not be null");
+    Duration validatedMaxBackoff = Objects.requireNonNull(maxBackoff, "maxBackoff must not be null");
+    if (validatedRetryWait.compareTo(Duration.ZERO) <= 0) {
+      throw new IllegalArgumentException("retryWait must be > 0, but was " + validatedRetryWait);
+    }
+    if (validatedMaxBackoff.compareTo(Duration.ZERO) <= 0) {
+      throw new IllegalArgumentException("maxBackoff must be > 0, but was " + validatedMaxBackoff);
+    }
+
+    this.parkingLot = validatedParkingLot;
     this.maxTransientRetries = maxTransientRetries;
-    this.retryWait = Objects.requireNonNull(retryWait, "retryWait must not be null");
-    this.maxBackoff = Objects.requireNonNull(maxBackoff, "maxBackoff must not be null");
-    if (retryWait.compareTo(Duration.ZERO) <= 0) {
-      throw new IllegalArgumentException("retryWait must be > 0, but was " + retryWait);
-    }
-    if (maxBackoff.compareTo(Duration.ZERO) <= 0) {
-      throw new IllegalArgumentException("maxBackoff must be > 0, but was " + maxBackoff);
-    }
+    this.retryWait = validatedRetryWait;
+    this.maxBackoff = validatedMaxBackoff;
     this.chaosEnabled = chaosEnabled;
   }
 
