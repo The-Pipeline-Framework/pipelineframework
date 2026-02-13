@@ -14,14 +14,14 @@ class StreamingShapeResolver {
      * @return the corresponding streaming shape
      */
     static StreamingShape streamingShape(String cardinality) {
-        String canonical = CardinalitySemantics.canonical(cardinality);
-        if (CardinalitySemantics.ONE_TO_MANY.equals(canonical)) {
+        CardinalitySemantics canonical = CardinalitySemantics.fromString(cardinality);
+        if (canonical == CardinalitySemantics.ONE_TO_MANY) {
             return StreamingShape.UNARY_STREAMING;
         }
-        if (CardinalitySemantics.MANY_TO_ONE.equals(canonical)) {
+        if (canonical == CardinalitySemantics.MANY_TO_ONE) {
             return StreamingShape.STREAMING_UNARY;
         }
-        if (CardinalitySemantics.MANY_TO_MANY.equals(canonical)) {
+        if (canonical == CardinalitySemantics.MANY_TO_MANY) {
             return StreamingShape.STREAMING_STREAMING;
         }
         return StreamingShape.UNARY_UNARY;
