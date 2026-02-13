@@ -21,6 +21,20 @@ import {withMermaid} from "vitepress-plugin-mermaid"
 // Note: This adds significant size to the bundle due to Mermaid's dependencies
 const mainSidebar = [
     {
+        text: 'Value',
+        collapsed: true,
+        items: [
+            {text: 'Overview', link: '/value/'},
+            {text: 'Business Value', link: '/value/business-value'},
+            {text: 'Developer Joy', link: '/value/developer-experience'},
+            {text: 'Performance', link: '/value/runtime-efficiency'},
+            {text: 'Transport Choice', link: '/value/integration-flexibility'},
+            {text: 'Start Monolith, Split Later', link: '/value/deployment-evolution'},
+            {text: 'Kube-Native', link: '/value/operational-confidence'},
+            {text: 'Plugins, Not Glue', link: '/value/extensibility-and-platform'}
+        ]
+    },
+    {
         text: 'Build',
         collapsed: true,
         items: [
@@ -29,8 +43,7 @@ const mainSidebar = [
                 collapsed: true,
                 items: [
                     {text: 'Quick Start', link: '/guide/getting-started/'},
-                    {text: 'Canvas Guide', link: '/guide/getting-started/canvas-guide'},
-                    {text: 'Business Value', link: '/guide/getting-started/business-value'}
+                    {text: 'Canvas Guide', link: '/guide/getting-started/canvas-guide'}
                 ]
             },
             {text: 'Pipeline Compilation', link: '/guide/build/pipeline-compilation'},
@@ -49,6 +62,7 @@ const mainSidebar = [
             },
             {text: 'Configuration Reference', link: '/guide/build/configuration/'},
             {text: 'Application Configuration', link: '/guide/application/configuration'},
+            {text: 'Using Plugins', link: '/guide/development/using-plugins'},
             {text: 'Dependency Management', link: '/guide/build/dependency-management'},
             {text: 'Pipeline Parent POM Lifecycle', link: '/guide/build/pipeline-parent-pom-lifecycle'},
             {text: 'CSV Payments POM Lifecycle', link: '/guide/build/csv-payments-pom-lifecycle'},
@@ -71,23 +85,13 @@ const mainSidebar = [
         items: [
             {text: '@PipelineStep Annotation', link: '/guide/development/pipeline-step'},
             {text: 'Code a Step', link: '/guide/development/code-a-step'},
-            {text: 'Using Plugins', link: '/guide/development/using-plugins'},
             {text: 'Mappers and DTOs', link: '/guide/development/mappers-and-dtos'},
             {text: 'Handling File Operations', link: '/guide/development/handling-file-operations'},
             {text: 'Testing with Testcontainers', link: '/guide/development/testing'},
             {text: 'Orchestrator Runtime', link: '/guide/development/orchestrator-runtime'},
             {text: 'AWS Lambda Platform', link: '/guide/development/aws-lambda'},
             {text: 'Performance', link: '/guide/development/performance'},
-            {
-                text: 'Extensions',
-                collapsed: true,
-                items: [
-                    {text: 'Orchestrator Extensions', link: '/guide/development/extension/orchestrator-runtime'},
-                    {text: 'Reactive Service Extensions', link: '/guide/development/extension/reactive-services'},
-                    {text: 'Client Step Extensions', link: '/guide/development/extension/client-steps'},
-                    {text: 'REST Resource Extensions', link: '/guide/development/extension/rest-resources'}
-                ]
-            }
+            {text: 'Customization Points', link: '/guide/development/customization-points'}
         ]
     },
     {
@@ -199,10 +203,29 @@ const mainSidebar = [
         text: 'Additional Resources',
         collapsed: true,
         items: [
-            {text: 'Versions', link: '/versions'}
+            {text: 'Versions', link: '/versions/'}
         ]
     },
 ]
+
+const toNavItems = (items = []) =>
+    items.map((item) => {
+        const navItem = {text: item.text}
+        if (item.link) {
+            navItem.link = item.link
+        }
+        if (item.items?.length) {
+            navItem.items = toNavItems(item.items)
+        }
+        return navItem
+    })
+
+const topNavSections = mainSidebar
+    .filter((section) => section.text !== 'Additional Resources')
+    .map((section) => ({
+        text: section.text,
+        items: toNavItems(section.items ?? []),
+    }))
 
 export default withMermaid(
   defineConfig({
@@ -216,12 +239,8 @@ export default withMermaid(
     // Register custom theme
     themeConfig: {
         nav: [
-            {text: 'Home', link: '/'},
-            {text: 'Build', link: '/guide/getting-started/'},
-            {text: 'Design', link: '/guide/design/application-structure'},
-            {text: 'Develop', link: '/guide/development/pipeline-step'},
-            {text: 'Operate', link: '/guide/operations/error-handling'},
-            {text: 'Versions', link: '/versions'}
+            ...topNavSections,
+            {text: 'Versions', link: '/versions/', activeMatch: '^/versions(?:/|$)'}
         ],
 
         sidebar: {
@@ -229,7 +248,7 @@ export default withMermaid(
                 {
                     text: 'Versioned Docs',
                     items: [
-                        {text: 'Versions', link: '/versions'}
+                        {text: 'Versions', link: '/versions/'}
                     ]
                 }
             ],

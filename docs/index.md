@@ -4,7 +4,7 @@ layout: home
 hero:
   name: The Pipeline Framework
   text: Reactive Pipeline Processing
-  tagline: Build scalable, resilient pipeline applications with Quarkus and Mutiny
+  tagline: Build pipeline-style applications on Quarkus, with generated adapters and a shared type-safe core
   image:
     src: /logo.png
     alt: The Pipeline Framework
@@ -17,31 +17,31 @@ hero:
       link: https://app.pipelineframework.org
 
 features:
-  - title: Lower Runtime Costs
-    details: Reactive non-blocking execution increases compute density and reduces infrastructure pressure
-  - title: Quarkus-Native Developer Flow
-    details: Fast startup, Dev Services integration, and annotation-driven deployment patterns
-  - title: Faster Change Cycles
-    details: Plugin-based extensions keep business code clean and make new capabilities cheaper to add
-  - title: Transport Choice Without Rewrites
-    details: Use gRPC, REST, and local clients from one model, with function mode support evolving
-  - title: Start as Monolith, Evolve Later
-    details: Use monolith or pipeline-runtime layouts now and split into services when needed
-  - title: Container-First Delivery
-    details: Build container images with Jib and target cloud/container platforms consistently
-  - title: Native-Ready Deployments
-    details: Leverage Quarkus native compilation paths for low-latency startup and efficient footprint
-  - title: Visual Design
-    details: Use the Canvas designer to create and configure pipelines visually
-  - title: Safer Operations by Default
-    details: Built-in observability, health checks, and DLQ patterns improve reliability in production
-  - title: Better Testability
-    details: Functional style boundaries and generated adapters support focused unit and integration tests
+  - title: Developer Joy
+    details: Start quickly, keep types in one place, and spend less time wiring things together
+    link: /value/developer-experience
+  - title: Performance
+    details: Handle more work with less runtime overhead, using generated code paths and non-blocking execution
+    link: /value/runtime-efficiency
+  - title: Transport Choice
+    details: Generate gRPC, REST, and local clients from one model, and evolve how you expose the pipeline
+    link: /value/integration-flexibility
+  - title: Start Monolith, Split Later
+    details: Start as a monolith, then split into layouts that fit your team boundaries when you are ready
+    link: /value/deployment-evolution
+  - title: Kube-Native
+    details: Container-first delivery and cloud-friendly runtime foundations, with operational patterns that scale
+    link: /value/operational-confidence
+  - title: Plugins, Not Glue
+    details: Add cross-cutting capabilities via plugins, while keeping domain code focused on behavior
+    link: /value/extensibility-and-platform
 ---
 
 <Callout type="tip" title="Visual Pipeline Designer Available">
 The Pipeline Framework includes a visual canvas designer at <a href="https://app.pipelineframework.org" target="_blank">https://app.pipelineframework.org</a> that allows you to create and configure your pipelines using an intuitive drag-and-drop interface. Simply design your pipeline visually, click "Download Application", and you'll get a complete ZIP file with all the generated source code - no command-line tools needed!
 </Callout>
+
+<LatestReleases />
 
 ## Key Features
 

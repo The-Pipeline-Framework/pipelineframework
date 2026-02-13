@@ -42,10 +42,10 @@
   --vp-c-bg-alt: #f6f6f6;
   
   /* Text */
-  --vp-c-text-1: rgba(0, 0, 0, 0.87);
-  --vp-c-text-2: rgba(0, 0, 0, 0.60);
-  --vp-c-text-3: rgba(0, 0, 0, 0.38);
-  --vp-c-text-4: rgba(0, 0, 0, 0.18);
+  --vp-c-text-1: rgb(0 0 0 / 87%);
+  --vp-c-text-2: rgb(0 0 0 / 60%);
+  --vp-c-text-3: rgb(0 0 0 / 38%);
+  --vp-c-text-4: rgb(0 0 0 / 18%);
   
   /* Borders */
   --vp-c-border: #e2e2e3;
@@ -53,8 +53,8 @@
   
   /* Code */
   --vp-code-block-bg: #f8f8f8;
-  --vp-code-copy-code-bg: rgba(255, 255, 255, 0.8);
-  --vp-code-copy-code-hover-bg: rgba(255, 255, 255, 0.4);
+  --vp-code-copy-code-bg: rgb(255 255 255 / 80%);
+  --vp-code-copy-code-hover-bg: rgb(255 255 255 / 40%);
   
   /* Layout */
   --vp-layout-max-width: 1440px;
@@ -79,25 +79,55 @@ kbd {
   font-family: var(--vp-font-family-mono);
 }
 
+.vp-doc .value-lead {
+  margin-top: 0.5rem;
+  margin-bottom: 1.35rem;
+  max-width: 72ch;
+  font-size: 1.1rem;
+  line-height: 1.65;
+  color: var(--vp-c-text-2);
+}
+
+.vp-doc .value-glance {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.85rem;
+  margin: 0.75rem 0 1.5rem;
+}
+
+.vp-doc .value-glance-item {
+  border: 1px solid var(--vp-c-border);
+  border-radius: 12px;
+  padding: 0.9rem 0.95rem;
+  background:
+    radial-gradient(circle at top left, rgb(37 99 235 / 8%), transparent 45%),
+    var(--vp-c-bg);
+}
+
+.vp-doc .value-glance-item strong {
+  display: inline;
+  margin-right: 0.25rem;
+  color: var(--vp-c-text-1);
+  font-family: var(--vp-font-family-display);
+  font-size: 0.97rem;
+}
+
+.vp-doc .value-links {
+  margin-top: 0.25rem;
+}
+
 .dark:root {
   --vp-c-bg: #1a1a1a;
   --vp-c-bg-soft: #222222;
   --vp-c-bg-alt: #141414;
   --vp-c-gray: #2a2a2a;
-  --vp-c-text-1: rgba(255, 255, 255, 0.87);
-  --vp-c-text-2: rgba(255, 255, 255, 0.60);
-  --vp-c-text-3: rgba(255, 255, 255, 0.38);
-  --vp-c-text-4: rgba(255, 255, 255, 0.18);
+  --vp-c-text-1: rgb(255 255 255 / 87%);
+  --vp-c-text-2: rgb(255 255 255 / 60%);
+  --vp-c-text-3: rgb(255 255 255 / 38%);
+  --vp-c-text-4: rgb(255 255 255 / 18%);
   --vp-c-border: #363636;
   --vp-c-divider: #363636;
   --vp-code-block-bg: #2d2d2d;
-  /* Adjust brand colors for better dark theme contrast */
-  --vp-c-brand: #3b82f6; /* Lighter blue */
-  --vp-c-brand-light: #60a5fa;
-  --vp-c-brand-dark: #2563eb;
-  --vp-c-brand-1: #3b82f6;
-  --vp-c-brand-2: #60a5fa;
-  --vp-c-brand-3: #93c5fd;
 }
 
 /* Navigation header */
@@ -110,6 +140,82 @@ kbd {
 .nav-bar-link,
 .nav-bar-dropdown {
   font-weight: 600;
+}
+
+/* Top-nav only mode: keep dropdown/button styling consistent and readable */
+.VPNavBar .VPNavBarMenu .VPNavBarMenuLink,
+.VPNavBar .VPNavBarMenu .VPFlyout .button {
+  position: relative;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--vp-c-text-1);
+  box-shadow: none;
+  overflow: visible;
+}
+
+.VPNavBar .VPNavBarMenu .VPNavBarMenuLink:hover,
+.VPNavBar .VPNavBarMenu .VPFlyout .button:hover {
+  border-color: transparent;
+  background: rgb(37 99 235 / 8%);
+  color: var(--vp-c-brand);
+}
+
+.VPNavBar .VPNavBarMenu .VPNavBarMenuLink.active,
+.VPNavBar .VPNavBarMenu .VPFlyout.active .button {
+  border-color: transparent;
+  background: transparent;
+  color: var(--vp-c-brand);
+  box-shadow: none;
+}
+
+.VPNavBarMenu .VPNavBarMenuLink.active::after,
+.VPNavBarMenu .VPFlyout.active .button::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 6px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--vp-c-brand);
+  pointer-events: none;
+}
+
+.VPNavBarMenu .VPFlyout .text,
+.VPNavBarMenu .VPFlyout .button .text {
+  color: inherit;
+}
+
+.VPNavBarMenu .VPFlyout .menu {
+  border: 1px solid var(--vp-c-border);
+  border-radius: 12px;
+  background: var(--vp-c-bg);
+  box-shadow: 0 14px 34px rgb(2 6 23 / 12%);
+}
+
+.dark .VPNavBarMenu .VPFlyout .menu {
+  box-shadow: 0 16px 38px rgb(0 0 0 / 42%);
+}
+
+/*
+ * Intentional top-nav-only desktop layout (width >= 960px):
+ * hide VitePress sidebar/local-nav UI while preserving sidebar data model for prev/next links.
+ * The !important overrides below are required to beat VitePress sidebar layout styles.
+ */
+@media (width >= 960px) {
+  .VPSidebar,
+  .VPLocalNav {
+    display: none !important;
+  }
+
+  .VPContent.has-sidebar,
+  .VPDoc.has-sidebar .content-container,
+  .VPDoc.has-sidebar .container {
+    padding-left: 0 !important;
+    margin-left: auto !important;
+    width: 100% !important;
+  }
 }
 
 /* Hero section styling */
@@ -133,11 +239,6 @@ kbd {
   color: var(--vp-c-brand-3);
 }
 
-/* Dark theme header contrast fix */
-.dark .vp-doc h2, .dark .vp-doc h3, .dark .vp-doc h4, .dark .vp-doc h5, .dark .vp-doc h6 {
-  color: var(--vp-c-brand-light);
-}
-
 /* Links */
 .vp-doc a {
   color: var(--vp-c-brand);
@@ -157,18 +258,20 @@ kbd {
 }
 
 /* Inline code */
-.vp-doc :not(pre) > code {
-  background-color: rgba(255, 229, 100, 0.2);
+.vp-doc :not(pre) > code,
+.VPFeature :not(pre) > code,
+.VPHero :not(pre) > code {
+  background-color: rgb(255 229 100 / 20%);
   border: 1px solid var(--vp-c-border);
   padding: 0.15rem 0.25rem;
   border-radius: 4px;
-  color: var(--vp-c-brand-3);
+  color: var(--vp-c-text-1);
 }
 
 /* Blockquote styling */
 .vp-doc blockquote {
   border-left: 4px solid var(--vp-c-brand);
-  background-color: rgba(37, 99, 235, 0.05);
+  background-color: rgb(37 99 235 / 5%);
   padding: 1rem 1.5rem;
   margin: 1.5rem 0;
   border-radius: 0 8px 8px 0;
@@ -194,7 +297,7 @@ kbd {
 
 .vp-doc table th {
   font-weight: 600;
-  background-color: rgba(37, 99, 235, 0.1);
+  background-color: rgb(37 99 235 / 10%);
 }
 
 /* Button styling */
@@ -216,7 +319,7 @@ kbd {
   background-color: var(--vp-c-brand-dark);
   border-color: var(--vp-c-brand-dark);
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  box-shadow: 0 4px 12px rgb(37 99 235 / 30%);
 }
 
 /* Home page hero style */
@@ -233,6 +336,101 @@ kbd {
   line-height: 1.2;
   letter-spacing: -0.5px;
   font-weight: 800;
+}
+
+/* Home feature cards: motion + gradients + depth */
+.VPHomeFeatures .VPFeature {
+  animation: feature-fade-in 0.45s ease both;
+  border: 0;
+  background: transparent;
+}
+
+.VPHomeFeatures .VPFeature .box {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--vp-c-border);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 0% 0%, rgb(59 130 246 / 12%), transparent 48%),
+    linear-gradient(165deg, var(--vp-c-bg) 0%, var(--vp-c-bg-soft) 100%);
+  box-shadow: 0 10px 28px rgb(2 6 23 / 8%);
+  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+
+.VPHomeFeatures .VPFeature .box::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(120deg, rgb(37 99 235 / 5%), transparent 55%);
+  pointer-events: none;
+}
+
+.VPHomeFeatures .VPFeature:hover .box {
+  transform: translateY(-6px);
+  border-color: var(--vp-c-brand-light);
+  box-shadow: 0 16px 34px rgb(37 99 235 / 18%);
+}
+
+.dark .VPHomeFeatures .VPFeature .box {
+  background:
+    radial-gradient(circle at 0% 0%, rgb(96 165 250 / 18%), transparent 46%),
+    linear-gradient(165deg, rgb(30 41 59 / 90%) 0%, rgb(17 24 39 / 90%) 100%);
+  box-shadow: 0 12px 30px rgb(0 0 0 / 35%);
+}
+
+.dark .VPHomeFeatures .VPFeature:hover .box {
+  box-shadow: 0 18px 40px rgb(59 130 246 / 28%);
+}
+
+@keyframes feature-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .VPHomeFeatures .VPFeature {
+    animation: none;
+  }
+
+  .VPHomeFeatures .VPFeature .box,
+  .VPHomeFeatures .VPFeature .box::before,
+  .VPHomeFeatures .VPFeature:hover .box {
+    transition: none;
+  }
+
+  .VPHomeFeatures .VPFeature:hover .box {
+    transform: none;
+    box-shadow: none;
+  }
+}
+
+/* Search: wider field and right-aligned shortcut keys */
+.VPNavBarSearch .DocSearch-Button {
+  width: 248px;
+  max-width: 248px;
+}
+
+.VPNavBarSearch .DocSearch-Button-Container {
+  flex: 1 1 auto;
+}
+
+.VPNavBarSearch .DocSearch-Button-Keys {
+  margin-left: auto;
+  justify-content: flex-end;
+  min-width: 56px;
+}
+
+@media (width <= 960px) {
+  .VPNavBarSearch .DocSearch-Button {
+    width: auto;
+    max-width: none;
+  }
 }
 
 /* Sidebar */
@@ -254,22 +452,22 @@ kbd {
 
 .callout.info {
   border-color: var(--vp-c-brand);
-  background-color: rgba(37, 99, 235, 0.05);
+  background-color: rgb(37 99 235 / 5%);
 }
 
 .callout.tip {
   border-color: #10b981;
-  background-color: rgba(16, 185, 129, 0.05);
+  background-color: rgb(16 185 129 / 5%);
 }
 
 .callout.warning {
   border-color: #f59e0b;
-  background-color: rgba(245, 158, 11, 0.05);
+  background-color: rgb(245 158 11 / 5%);
 }
 
 .callout.danger {
   border-color: #ef4444;
-  background-color: rgba(239, 68, 68, 0.05);
+  background-color: rgb(239 68 68 / 5%);
 }
 
 .callout-header {
@@ -280,60 +478,23 @@ kbd {
 }
 
 .callout.info .callout-header {
-  background-color: rgba(37, 99, 235, 0.15);
+  background-color: rgb(37 99 235 / 15%);
   color: var(--vp-c-brand);
 }
 
 .callout.tip .callout-header {
-  background-color: rgba(16, 185, 129, 0.15);
+  background-color: rgb(16 185 129 / 15%);
   color: #10b981;
 }
 
 .callout.warning .callout-header {
-  background-color: rgba(245, 158, 11, 0.15);
+  background-color: rgb(245 158 11 / 15%);
   color: #f59e0b;
 }
 
 .callout.danger .callout-header {
-  background-color: rgba(239, 68, 68, 0.15);
+  background-color: rgb(239 68 68 / 15%);
   color: #ef4444;
-}
-
-/* Dark theme callout contrast fixes */
-.dark .callout.info {
-  background-color: rgba(59, 130, 246, 0.1);
-}
-
-.dark .callout.info .callout-header {
-  background-color: rgba(59, 130, 246, 0.2);
-  color: #93c5fd;
-}
-
-.dark .callout.tip {
-  background-color: rgba(16, 185, 129, 0.1);
-}
-
-.dark .callout.tip .callout-header {
-  background-color: rgba(16, 185, 129, 0.2);
-  color: #6ee7b7;
-}
-
-.dark .callout.warning {
-  background-color: rgba(245, 158, 11, 0.1);
-}
-
-.dark .callout.warning .callout-header {
-  background-color: rgba(245, 158, 11, 0.2);
-  color: #fcd34d;
-}
-
-.dark .callout.danger {
-  background-color: rgba(239, 68, 68, 0.1);
-}
-
-.dark .callout.danger .callout-header {
-  background-color: rgba(239, 68, 68, 0.2);
-  color: #fca5a5;
 }
 
 /* Footer */
