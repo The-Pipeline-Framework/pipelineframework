@@ -5,9 +5,9 @@
 ## At a Glance
 
 <div class="value-glance">
-  <div class="value-glance-item"><strong>Start Fast</strong>Design in Canvas and generate a runnable baseline.</div>
-  <div class="value-glance-item"><strong>Type Safety</strong>Shared `common` contracts catch drift at build time.</div>
-  <div class="value-glance-item"><strong>Less Boilerplate</strong>Adapters and client layers are generated for you.</div>
+  <div class="value-glance-item"><strong>Start Fast</strong> &middot; Design in Canvas and generate a runnable baseline.</div>
+  <div class="value-glance-item"><strong>Type Safety</strong> &middot; Shared `common` contracts catch drift at build time.</div>
+  <div class="value-glance-item"><strong>Less Boilerplate</strong> &middot; Adapters and client layers are generated for you.</div>
 </div>
 
 ## Use This When

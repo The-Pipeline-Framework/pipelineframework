@@ -5,9 +5,9 @@
 ## At a Glance
 
 <div class="value-glance">
-  <div class="value-glance-item"><strong>Fast First Release</strong>Monolith layout helps teams move quickly at the start.</div>
-  <div class="value-glance-item"><strong>Clear Migration Path</strong>Shift to pipeline-runtime or modular layouts as boundaries mature.</div>
-  <div class="value-glance-item"><strong>No Core Rewrite</strong>Change topology without rebuilding pipeline behavior.</div>
+  <div class="value-glance-item"><strong>Fast First Release</strong> &middot; Monolith layout helps teams move quickly at the start.</div>
+  <div class="value-glance-item"><strong>Clear Migration Path</strong> &middot; Shift to pipeline-runtime or modular layouts as boundaries mature.</div>
+  <div class="value-glance-item"><strong>No Core Rewrite</strong> &middot; Change topology without rebuilding pipeline behavior.</div>
 </div>
 
 ## Use This When

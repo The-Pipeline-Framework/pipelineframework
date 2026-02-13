@@ -5,9 +5,9 @@
 ## At a Glance
 
 <div class="value-glance">
-  <div class="value-glance-item"><strong>Clean Extensions</strong>Implement persistence, caching, and other cross-cutting concerns as plugins.</div>
-  <div class="value-glance-item"><strong>Consistent Wiring</strong>Generated adapters keep behavior aligned across roles and transports.</div>
-  <div class="value-glance-item"><strong>Strong Platform Base</strong>Quarkus runtime and tooling stay available underneath TPF.</div>
+  <div class="value-glance-item"><strong>Clean Extensions</strong> &middot; Implement persistence, caching, and other cross-cutting concerns as plugins.</div>
+  <div class="value-glance-item"><strong>Consistent Wiring</strong> &middot; Generated adapters keep behavior aligned across roles and transports.</div>
+  <div class="value-glance-item"><strong>Strong Platform Base</strong> &middot; Quarkus runtime and tooling stay available underneath TPF.</div>
 </div>
 
 ## Use This When

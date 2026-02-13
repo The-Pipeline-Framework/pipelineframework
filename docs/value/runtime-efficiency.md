@@ -5,9 +5,9 @@
 ## At a Glance
 
 <div class="value-glance">
-  <div class="value-glance-item"><strong>High Throughput</strong>Reactive flow handles concurrency without thread-per-request bottlenecks.</div>
-  <div class="value-glance-item"><strong>Predictable Runtime</strong>Generated paths reduce hidden runtime wiring.</div>
-  <div class="value-glance-item"><strong>Quarkus Foundation</strong>Keep Quarkus startup, container, and runtime strengths.</div>
+  <div class="value-glance-item"><strong>High Throughput</strong> &middot; Reactive flow handles concurrency without thread-per-request bottlenecks.</div>
+  <div class="value-glance-item"><strong>Predictable Runtime</strong> &middot; Generated paths reduce hidden runtime wiring.</div>
+  <div class="value-glance-item"><strong>Quarkus Foundation</strong> &middot; Keep Quarkus startup, container, and runtime strengths.</div>
 </div>
 
 ## Use This When

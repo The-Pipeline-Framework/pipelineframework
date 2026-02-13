@@ -43,7 +43,9 @@ const loading = ref(true)
 const error = ref(false)
 
 const releasesUrl = 'https://github.com/The-Pipeline-Framework/pipelineframework/releases'
-const releasesApiUrl = 'https://api.github.com/repos/The-Pipeline-Framework/pipelineframework/releases?per_page=3'
+const releasesApiUrl = 'https://api.github.com/repos/The-Pipeline-Framework/pipelineframework/releases?per_page=10'
+const cacheTtlMs = 15 * 60 * 1000
+const cacheKey = `tpf:releases:${releasesApiUrl}`
 
 const formatDate = (isoDate) => {
   if (!isoDate) return ''
@@ -56,6 +58,15 @@ const formatDate = (isoDate) => {
 
 onMounted(async () => {
   try {
+    const cached = sessionStorage.getItem(cacheKey)
+    if (cached) {
+      const parsed = JSON.parse(cached)
+      if (parsed?.timestamp && Array.isArray(parsed?.data) && Date.now() - parsed.timestamp < cacheTtlMs) {
+        releases.value = parsed.data
+        return
+      }
+    }
+
     const response = await fetch(releasesApiUrl, {
       headers: {
         Accept: 'application/vnd.github+json'
@@ -68,6 +79,10 @@ onMounted(async () => {
     releases.value = Array.isArray(data)
       ? data.filter((release) => !release.draft).slice(0, 3)
       : []
+    sessionStorage.setItem(cacheKey, JSON.stringify({
+      timestamp: Date.now(),
+      data: releases.value
+    }))
   } catch (err) {
     error.value = true
   } finally {

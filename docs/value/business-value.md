@@ -5,9 +5,9 @@
 ## At a Glance
 
 <div class="value-glance">
-  <div class="value-glance-item"><strong>Faster Delivery</strong>Generate adapters and keep steps focused on one `process()` contract.</div>
-  <div class="value-glance-item"><strong>Lower Change Cost</strong>Consistency reduces integration drift and refactor fear.</div>
-  <div class="value-glance-item"><strong>Less Lock-in</strong>Plain Java + Quarkus + standard transports keep escape hatches real.</div>
+  <div class="value-glance-item"><strong>Faster Delivery</strong> &middot; Generate adapters and keep steps focused on one `process()` contract.</div>
+  <div class="value-glance-item"><strong>Lower Change Cost</strong> &middot; Consistency reduces integration drift and refactor fear.</div>
+  <div class="value-glance-item"><strong>Less Lock-in</strong> &middot; Plain Java + Quarkus + standard transports keep escape hatches real.</div>
 </div>
 
 ## Use This When

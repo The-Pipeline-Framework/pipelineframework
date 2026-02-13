@@ -5,9 +5,9 @@
 ## At a Glance
 
 <div class="value-glance">
-  <div class="value-glance-item"><strong>One Model, Many Surfaces</strong>Generate gRPC, REST, and local clients from the same definition.</div>
-  <div class="value-glance-item"><strong>Domain First</strong>Transport details stay in generated adapters.</div>
-  <div class="value-glance-item"><strong>Function Ready</strong>Function-platform support where it adds value.</div>
+  <div class="value-glance-item"><strong>One Model, Many Surfaces</strong> &middot; Generate gRPC, REST, and local clients from the same definition.</div>
+  <div class="value-glance-item"><strong>Domain First</strong> &middot; Transport details stay in generated adapters.</div>
+  <div class="value-glance-item"><strong>Function Ready</strong> &middot; Function-platform support where it adds value.</div>
 </div>
 
 ## Use This When
@@ -22,6 +22,6 @@
 
 - [Customization points](/guide/development/customization-points)
 - [AWS Lambda Platform](/guide/development/aws-lambda)
-- [Runtime Layouts](/guide/build/runtime-layouts/)
+- [Runtime Layouts](/guide/build/runtime-layouts/index)
 
 </div>

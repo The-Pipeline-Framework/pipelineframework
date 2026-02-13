@@ -42,7 +42,7 @@ TPF generates type-indexed service contracts such as `ObservePaymentRecordSideEf
 
 ## Build-time requirements
 
-- A pipeline YAML config must be discoverable so output types can be resolved for side-effect adapters.
+- A pipeline YAML config must be discoverable, so output types can be resolved for side-effect adapters.
   The loader checks module root and `config/` for `pipeline.yaml`, `pipeline-config.yaml`, or `*-canvas-config.yaml`.
 - For gRPC transport, protobuf/descriptor content must include the required `Observe<T>SideEffectService` definitions.
 

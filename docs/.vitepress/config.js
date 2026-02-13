@@ -62,7 +62,7 @@ const mainSidebar = [
             },
             {text: 'Configuration Reference', link: '/guide/build/configuration/'},
             {text: 'Application Configuration', link: '/guide/application/configuration'},
-            {text: 'Using plugins', link: '/guide/development/using-plugins'},
+            {text: 'Using Plugins', link: '/guide/development/using-plugins'},
             {text: 'Dependency Management', link: '/guide/build/dependency-management'},
             {text: 'Pipeline Parent POM Lifecycle', link: '/guide/build/pipeline-parent-pom-lifecycle'},
             {text: 'CSV Payments POM Lifecycle', link: '/guide/build/csv-payments-pom-lifecycle'},
@@ -91,7 +91,7 @@ const mainSidebar = [
             {text: 'Orchestrator Runtime', link: '/guide/development/orchestrator-runtime'},
             {text: 'AWS Lambda Platform', link: '/guide/development/aws-lambda'},
             {text: 'Performance', link: '/guide/development/performance'},
-            {text: 'Customization points', link: '/guide/development/customization-points'}
+            {text: 'Customization Points', link: '/guide/development/customization-points'}
         ]
     },
     {

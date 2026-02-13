@@ -5,9 +5,9 @@
 ## At a Glance
 
 <div class="value-glance">
-  <div class="value-glance-item"><strong>Container First</strong>Works naturally with Kubernetes-style deployment models.</div>
-  <div class="value-glance-item"><strong>Operational Metadata</strong>Generated metadata clarifies what is running and how.</div>
-  <div class="value-glance-item"><strong>Resilience Patterns</strong>Consistent DLQ, error handling, health, and observability practices.</div>
+  <div class="value-glance-item"><strong>Container First</strong> &middot; Works naturally with Kubernetes-style deployment models.</div>
+  <div class="value-glance-item"><strong>Operational Metadata</strong> &middot; Generated metadata clarifies what is running and how.</div>
+  <div class="value-glance-item"><strong>Resilience Patterns</strong> &middot; Consistent DLQ, error handling, health, and observability practices.</div>
 </div>
 
 ## Use This When
