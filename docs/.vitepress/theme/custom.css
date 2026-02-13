@@ -121,6 +121,10 @@ kbd {
 }
 
 .dark:root {
+  --vp-c-brand-subtle: rgb(96 165 250 / 16%);
+  --vp-c-brand-subtle-soft: rgb(96 165 250 / 12%);
+  --vp-c-brand-subtle-strong: rgb(96 165 250 / 24%);
+  --vp-c-brand-subtle-table: rgb(96 165 250 / 20%);
   --vp-c-bg: #1a1a1a;
   --vp-c-bg-soft: #222222;
   --vp-c-bg-alt: #141414;

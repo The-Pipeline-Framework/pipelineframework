@@ -4,9 +4,10 @@ title: Redirecting...
 
 <script setup>
 import {onMounted} from 'vue'
+import {withBase} from 'vitepress'
 
 onMounted(() => {
-  window.location.replace('/value/business-value')
+  window.location.replace(withBase('/value/business-value'))
 })
 </script>
 

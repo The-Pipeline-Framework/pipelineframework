@@ -64,7 +64,7 @@ const mainSidebar = [
             },
             {text: 'Configuration Reference', link: '/guide/build/configuration/'},
             {text: 'Application Configuration', link: '/guide/application/configuration'},
-            {text: 'Using Plugins', link: '/guide/build/using-plugins'},
+            {text: 'Using Plugins', link: '/guide/development/using-plugins'},
             {text: 'Dependency Management', link: '/guide/build/dependency-management'},
             {text: 'Pipeline Parent POM Lifecycle', link: '/guide/build/pipeline-parent-pom-lifecycle'},
             {text: 'CSV Payments POM Lifecycle', link: '/guide/build/csv-payments-pom-lifecycle'},

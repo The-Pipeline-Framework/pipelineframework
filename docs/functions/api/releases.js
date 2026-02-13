@@ -9,6 +9,8 @@ const ERROR_MAX_AGE_SECONDS = 60
 const ERROR_S_MAX_AGE_SECONDS = 120
 const RATE_LIMIT_MAX_AGE_SECONDS = 30
 const RATE_LIMIT_S_MAX_AGE_SECONDS = 180
+const PRE_FLIGHT_MAX_AGE_SECONDS = 86400
+const PRE_FLIGHT_S_MAX_AGE_SECONDS = 86400
 const GITHUB_API_VERSION = '2024-11-28'
 
 const parsePerPage = (value) => {
@@ -19,31 +21,31 @@ const parsePerPage = (value) => {
   return Math.min(Math.max(parsed, MIN_PER_PAGE), MAX_PER_PAGE)
 }
 
-const responseHeaders = (cacheControl) => ({
+const responseHeaders = (cacheControl, corsMaxAgeSeconds) => ({
   'content-type': 'application/json; charset=utf-8',
   'cache-control': cacheControl,
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET, OPTIONS',
-  'access-control-allow-headers': 'Content-Type, Authorization'
+  'access-control-allow-headers': 'Content-Type, Authorization',
+  ...(corsMaxAgeSeconds ? {'access-control-max-age': String(corsMaxAgeSeconds)} : {})
 })
 
 const safeJson = async (response) => {
+  const raw = await response.text()
   try {
-    return await response.json()
+    return JSON.parse(raw)
   } catch (_) {
-    try {
-      const raw = await response.text()
-      return JSON.parse(raw)
-    } catch (_) {
-      return []
-    }
+    return []
   }
 }
 
 export async function onRequestOptions() {
   return new Response(null, {
     status: 204,
-    headers: responseHeaders(`public, max-age=${ERROR_MAX_AGE_SECONDS}, s-maxage=${ERROR_S_MAX_AGE_SECONDS}`)
+    headers: responseHeaders(
+      `public, max-age=${PRE_FLIGHT_MAX_AGE_SECONDS}, s-maxage=${PRE_FLIGHT_S_MAX_AGE_SECONDS}`,
+      PRE_FLIGHT_MAX_AGE_SECONDS
+    )
   })
 }
 
