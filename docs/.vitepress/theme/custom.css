@@ -393,6 +393,23 @@ kbd {
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .VPHomeFeatures .VPFeature {
+    animation: none;
+  }
+
+  .VPHomeFeatures .VPFeature .box,
+  .VPHomeFeatures .VPFeature .box::before,
+  .VPHomeFeatures .VPFeature:hover .box {
+    transition: none;
+  }
+
+  .VPHomeFeatures .VPFeature:hover .box {
+    transform: none;
+    box-shadow: none;
+  }
+}
+
 /* Search: wider field and right-aligned shortcut keys */
 .VPNavBarSearch .DocSearch-Button {
   width: 248px;

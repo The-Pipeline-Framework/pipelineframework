@@ -58,13 +58,17 @@ const formatDate = (isoDate) => {
 
 onMounted(async () => {
   try {
-    const cached = sessionStorage.getItem(cacheKey)
-    if (cached) {
-      const parsed = JSON.parse(cached)
-      if (parsed?.timestamp && Array.isArray(parsed?.data) && Date.now() - parsed.timestamp < cacheTtlMs) {
-        releases.value = parsed.data
-        return
+    try {
+      const cached = sessionStorage.getItem(cacheKey)
+      if (cached) {
+        const parsed = JSON.parse(cached)
+        if (parsed?.timestamp && Array.isArray(parsed?.data) && Date.now() - parsed.timestamp < cacheTtlMs) {
+          releases.value = parsed.data
+          return
+        }
       }
+    } catch (_) {
+      sessionStorage.removeItem(cacheKey)
     }
 
     const response = await fetch(releasesApiUrl, {
