@@ -65,6 +65,10 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
         ClassName.get("org.pipelineframework.transport.function", "LocalManyToOneFunctionInvokeAdapter");
     private static final ClassName LOCAL_MANY_TO_MANY_INVOKE_ADAPTER =
         ClassName.get("org.pipelineframework.transport.function", "LocalManyToManyFunctionInvokeAdapter");
+    private static final ClassName INVOCATION_MODE_ROUTING_INVOKE_ADAPTER =
+        ClassName.get("org.pipelineframework.transport.function", "InvocationModeRoutingFunctionInvokeAdapter");
+    private static final ClassName UNSUPPORTED_REMOTE_INVOKE_ADAPTER =
+        ClassName.get("org.pipelineframework.transport.function", "UnsupportedRemoteFunctionInvokeAdapter");
     private static final ClassName DEFAULT_UNARY_SINK_ADAPTER =
         ClassName.get("org.pipelineframework.transport.function", "DefaultUnaryFunctionSinkAdapter");
     private static final ClassName COLLECT_LIST_SINK_ADAPTER =
@@ -142,7 +146,7 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
                 streamingInput ? MULTI_SOURCE_ADAPTER : DEFAULT_UNARY_SOURCE_ADAPTER,
                 baseName + ".input",
                 API_VERSION)
-            .addStatement("$T<$T, $T> invoke = new $T<>(resource::process, $S, $S)",
+            .addStatement("$T<$T, $T> invokeLocal = new $T<>(resource::process, $S, $S)",
                 FUNCTION_INVOKE_ADAPTER, inputDto, outputDto,
                 selectInvokeAdapterForShape(shape,
                     LOCAL_UNARY_INVOKE_ADAPTER,
@@ -151,6 +155,12 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
                     LOCAL_MANY_TO_MANY_INVOKE_ADAPTER),
                 baseName + ".output",
                 API_VERSION)
+            .addStatement("$T<$T, $T> invokeRemote = new $T<>()",
+                FUNCTION_INVOKE_ADAPTER, inputDto, outputDto,
+                UNSUPPORTED_REMOTE_INVOKE_ADAPTER)
+            .addStatement("$T<$T, $T> invoke = new $T<>(invokeLocal, invokeRemote)",
+                FUNCTION_INVOKE_ADAPTER, inputDto, outputDto,
+                INVOCATION_MODE_ROUTING_INVOKE_ADAPTER)
             .addStatement("$T<$T, $T> sink = new $T<>()",
                 FUNCTION_SINK_ADAPTER, outputDto, handlerOutputType,
                 streamingOutput ? COLLECT_LIST_SINK_ADAPTER : DEFAULT_UNARY_SINK_ADAPTER)

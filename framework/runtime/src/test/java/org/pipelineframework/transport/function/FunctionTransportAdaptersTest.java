@@ -358,4 +358,53 @@ class FunctionTransportAdaptersTest {
                 .await().atMost(Duration.ofSeconds(2)));
         assertEquals("Function sink overflow: received at least 3 items with maxItems=2 and overflowPolicy=FAIL", ex.getMessage());
     }
+
+    @Test
+    void invocationRoutingAdapterUsesLocalDelegateByDefault() {
+        FunctionInvokeAdapter<Integer, Integer> local = new LocalUnaryFunctionInvokeAdapter<>(
+            payload -> Uni.createFrom().item(payload + 1),
+            "search.token.out",
+            "v1");
+        FunctionInvokeAdapter<Integer, Integer> remote = new UnsupportedRemoteFunctionInvokeAdapter<>();
+        InvocationModeRoutingFunctionInvokeAdapter<Integer, Integer> routing =
+            new InvocationModeRoutingFunctionInvokeAdapter<>(local, remote);
+        FunctionTransportContext context = FunctionTransportContext.of("req-route-local", "search-handler", "invoke-step");
+        TraceEnvelope<Integer> input = TraceEnvelope.root("trace-route-local", "item-route-local",
+            "search.token", "v1", "idem-route-local", 10);
+
+        TraceEnvelope<Integer> output = routing.invokeOneToOne(input, context)
+            .await().atMost(Duration.ofSeconds(2));
+
+        assertEquals(11, output.payload());
+    }
+
+    @Test
+    void invocationRoutingAdapterUsesRemoteDelegateWhenRemoteModeConfigured() {
+        FunctionInvokeAdapter<Integer, Integer> local = new LocalUnaryFunctionInvokeAdapter<>(
+            payload -> Uni.createFrom().item(payload + 1),
+            "search.token.out",
+            "v1");
+        FunctionInvokeAdapter<Integer, Integer> remote = new UnsupportedRemoteFunctionInvokeAdapter<>();
+        InvocationModeRoutingFunctionInvokeAdapter<Integer, Integer> routing =
+            new InvocationModeRoutingFunctionInvokeAdapter<>(local, remote);
+        FunctionTransportContext context = FunctionTransportContext.of(
+            "req-route-remote",
+            "search-handler",
+            "invoke-step",
+            java.util.Map.of(
+                FunctionTransportContext.ATTR_INVOCATION_MODE, "REMOTE",
+                FunctionTransportContext.ATTR_TARGET_RUNTIME, "pipeline",
+                FunctionTransportContext.ATTR_TARGET_MODULE, "index-document-svc",
+                FunctionTransportContext.ATTR_TARGET_HANDLER, "ProcessIndexDocumentFunctionHandler"));
+        TraceEnvelope<Integer> input = TraceEnvelope.root("trace-route-remote", "item-route-remote",
+            "search.token", "v1", "idem-route-remote", 10);
+
+        UnsupportedOperationException ex = assertThrows(
+            UnsupportedOperationException.class,
+            () -> routing.invokeOneToOne(input, context).await().atMost(Duration.ofSeconds(2)));
+        assertEquals(
+            "Function invocation mode is REMOTE but no remote invoke adapter is configured "
+                + "(runtime=pipeline, module=index-document-svc, handler=ProcessIndexDocumentFunctionHandler).",
+            ex.getMessage());
+    }
 }

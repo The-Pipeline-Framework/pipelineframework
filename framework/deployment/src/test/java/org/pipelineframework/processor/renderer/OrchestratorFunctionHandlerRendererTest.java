@@ -39,8 +39,14 @@ class OrchestratorFunctionHandlerRendererTest {
             source.contains("FunctionSourceAdapter<InputTypeDto, InputTypeDto> source"),
             () -> "expected FunctionSourceAdapter fragment missing. source:\n" + source);
         assertTrue(
-            source.contains("FunctionInvokeAdapter<InputTypeDto, OutputTypeDto> invoke"),
-            () -> "expected FunctionInvokeAdapter fragment missing. source:\n" + source);
+            source.contains("FunctionInvokeAdapter<InputTypeDto, OutputTypeDto> invokeLocal"),
+            () -> "expected invokeLocal adapter fragment missing. source:\n" + source);
+        assertTrue(
+            source.contains("FunctionInvokeAdapter<InputTypeDto, OutputTypeDto> invokeRemote = new UnsupportedRemoteFunctionInvokeAdapter<>()"),
+            () -> "expected invokeRemote adapter fragment missing. source:\n" + source);
+        assertTrue(
+            source.contains("FunctionInvokeAdapter<InputTypeDto, OutputTypeDto> invoke = new InvocationModeRoutingFunctionInvokeAdapter<>(invokeLocal, invokeRemote)"),
+            () -> "expected invocation-mode routing adapter fragment missing. source:\n" + source);
         assertTrue(
             source.contains("FunctionSinkAdapter<OutputTypeDto, OutputTypeDto> sink"),
             () -> "expected FunctionSinkAdapter fragment missing. source:\n" + source);
