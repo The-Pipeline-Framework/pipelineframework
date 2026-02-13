@@ -66,15 +66,14 @@ jobs:
           echo "DOCKER_API_VERSION=$SERVER_API" >> "$GITHUB_ENV"
           echo "TESTCONTAINERS_DOCKER_CLIENT_STRATEGY=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" >> "$GITHUB_ENV"
           echo "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock" >> "$GITHUB_ENV"
-          # Use JAVA_TOOL_OPTIONS so forked test JVMs (Surefire/Failsafe) also get the log manager/system props.
+          # Use JAVA_TOOL_OPTIONS so forked test JVMs (Surefire/Failsafe) also get the log manager system prop.
           # MAVEN_OPTS only targets Maven JVM startup and can be missed by downstream forks.
-          echo "JAVA_TOOL_OPTIONS=-Djava.util.logging.manager=org.jboss.logmanager.LogManager -Ddocker.api.version=$SERVER_API" >> "$GITHUB_ENV"
+          echo "JAVA_TOOL_OPTIONS=-Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
           # NOTE: MAVEN_OPTS is expanded from the current shell env here (not from prior $GITHUB_ENV writes);
           # keep MAVEN_OPTS updates consolidated in one step (or set job-level env) to avoid drift.
-          echo "MAVEN_OPTS=${MAVEN_OPTS} -Ddocker.api.version=$SERVER_API -Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
+          echo "MAVEN_OPTS=${MAVEN_OPTS} -Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
           echo "docker.client.strategy=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" > "$HOME/.testcontainers.properties"
           echo "docker.host=unix:///var/run/docker.sock" >> "$HOME/.testcontainers.properties"
-          echo "docker.api.version=$SERVER_API" >> "$HOME/.testcontainers.properties"
           docker version
           docker info
 

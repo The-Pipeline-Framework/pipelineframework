@@ -577,7 +577,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         + postgres.getMappedPort(5432)
                         + "/quarkus";
         pb.environment().put("QUARKUS_DATASOURCE_JDBC_URL", "jdbc:" + postgresUrl);
-        pb.environment().put("PERSISTENCE_PROVIDER_CLASS", "org.pipelineframework.plugin.persistence.provider.VThreadPersistenceProvider");
+        pb.environment().put("PERSISTENCE_PROVIDER_CLASS", "org.pipelineframework.plugin.persistence.provider.ReactivePanachePersistenceProvider");
         pb.environment().put("QUARKUS_HIBERNATE_ORM_BLOCKING", "true");
         pb.environment().put("QUARKUS_HIBERNATE_ORM_SCHEMA_MANAGEMENT_STRATEGY", "drop-and-create");
         pb.environment().put("QUARKUS_HIBERNATE_ORM_PACKAGES", "org.pipelineframework.csv.common.domain");
