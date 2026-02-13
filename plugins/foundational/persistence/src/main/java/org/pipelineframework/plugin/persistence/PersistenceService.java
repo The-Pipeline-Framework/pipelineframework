@@ -16,12 +16,14 @@
 
 package org.pipelineframework.plugin.persistence;
 
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicReference;
 import jakarta.inject.Inject;
 
+import io.quarkus.vertx.core.runtime.context.VertxContextSafetyToggle;
 import io.smallrye.common.vertx.VertxContext;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.subscription.Cancellable;
-import io.quarkus.vertx.core.runtime.context.VertxContextSafetyToggle;
 import io.vertx.core.Context;
 import io.vertx.core.Vertx;
 import org.jboss.logging.Logger;
@@ -30,9 +32,6 @@ import org.pipelineframework.parallelism.ParallelismHints;
 import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.service.ReactiveSideEffectService;
 import org.pipelineframework.step.NonRetryableException;
-
-import java.time.Duration;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * A general-purpose persistence plugin that can persist any entity that has a corresponding
@@ -52,7 +51,7 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
 
     /**
      * Persists the given item using the configured PersistenceProvider and emits the original item.
-     *
+     * <p>
      * The method applies duplicate-key handling according to configuration (IGNORE emits the original
      * item, UPSERT attempts an upsert via the provider, FAIL propagates the original failure). Non-transient
      * persistence errors are wrapped as a NonRetryableException; transient errors are propagated as-is.
@@ -80,9 +79,11 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
             return Uni.createFrom().failure(new IllegalStateException("PersistenceManager is not available"));
         }
         boolean useVertx = shouldUseVertxContext();
-        Uni<T> persistUni = hasSafeVertxContext() || !useVertx
+        Uni<T> persistUni = !useVertx
             ? persistenceManager.persist(item)
-            : persistOnVertxContext(item);
+            : (hasManagedReactiveContext()
+                ? persistenceManager.persist(item)
+                : persistOnVertxContext(item));
         return persistUni
             .onFailure(this::isDuplicateKeyError)
             .recoverWithUni(failure -> handleDuplicateKey(item, failure))
@@ -95,13 +96,16 @@ public class PersistenceService<T> implements ReactiveSideEffectService<T>, Para
     }
 
     /**
-     * Determine whether a current Vert.x context exists and is a duplicated (safe) context for Vert.x-based persistence.
-     *
-     * @return `true` if a current Vert.x context exists and is a duplicated context, `false` otherwise.
+     * Determine whether the current Vert.x context is a managed reactive context suitable for direct persistence.
+     * <p>
+     * `@return` {`@code` true} if a duplicated Vert.x context exists and has the session-on-demand flag set,
+     *         {`@code` false} otherwise.
      */
-    private boolean hasSafeVertxContext() {
+    private boolean hasManagedReactiveContext() {
         Context context = Vertx.currentContext();
-        return context != null && VertxContext.isDuplicatedContext(context);
+        return context != null
+            && VertxContext.isDuplicatedContext(context)
+            && Boolean.TRUE.equals(context.getLocal(PersistenceConstants.SESSION_ON_DEMAND_KEY));
     }
 
     /**
