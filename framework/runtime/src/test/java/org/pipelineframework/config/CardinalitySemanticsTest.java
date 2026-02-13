@@ -12,6 +12,7 @@ class CardinalitySemanticsTest {
 
     @Test
     void canonicalNormalizesAliases() {
+        assertEquals(CardinalitySemantics.ONE_TO_ONE, CardinalitySemantics.canonical("ONE_TO_ONE"));
         assertEquals(CardinalitySemantics.ONE_TO_MANY, CardinalitySemantics.canonical("EXPANSION"));
         assertEquals(CardinalitySemantics.ONE_TO_MANY, CardinalitySemantics.canonical("expansion"));
         assertEquals(CardinalitySemantics.ONE_TO_MANY, CardinalitySemantics.canonical("Expansion"));
@@ -31,6 +32,8 @@ class CardinalitySemanticsTest {
 
     @Test
     void streamingInputSemanticsTest() {
+        assertThrows(IllegalArgumentException.class, () -> CardinalitySemantics.isStreamingInput(null));
+        assertFalse(CardinalitySemantics.isStreamingInput("ONE_TO_ONE"));
         assertTrue(CardinalitySemantics.isStreamingInput("REDUCTION"));
         assertTrue(CardinalitySemantics.isStreamingInput("many_to_many"));
         assertFalse(CardinalitySemantics.isStreamingInput("EXPANSION"));
@@ -38,6 +41,9 @@ class CardinalitySemanticsTest {
 
     @Test
     void applyToOutputStreamingSemanticsTest() {
+        assertThrows(IllegalArgumentException.class, () -> CardinalitySemantics.applyToOutputStreaming(null, true));
+        assertFalse(CardinalitySemantics.applyToOutputStreaming("ONE_TO_ONE", false));
+        assertTrue(CardinalitySemantics.applyToOutputStreaming("ONE_TO_ONE", true));
         assertTrue(CardinalitySemantics.applyToOutputStreaming("EXPANSION", false));
         assertTrue(CardinalitySemantics.applyToOutputStreaming("ONE_TO_MANY", false));
         assertFalse(CardinalitySemantics.applyToOutputStreaming("REDUCTION", true));

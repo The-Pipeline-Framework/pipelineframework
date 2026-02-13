@@ -40,12 +40,33 @@ public final class CardinalitySemantics {
         };
     }
 
+    /**
+     * Determines whether a cardinality implies streaming input.
+     *
+     * @param cardinality cardinality string (for example {@code MANY_TO_ONE}, {@code MANY_TO_MANY})
+     * @return {@code true} when the input side is streaming, otherwise {@code false}
+     * @throws IllegalArgumentException if cardinality is null, blank, or unsupported
+     */
     public static boolean isStreamingInput(String cardinality) {
+        if (cardinality == null) {
+            throw new IllegalArgumentException("Cardinality must not be null");
+        }
         String canonical = canonical(cardinality);
         return MANY_TO_ONE.equals(canonical) || MANY_TO_MANY.equals(canonical);
     }
 
+    /**
+     * Applies cardinality semantics to the output streaming state.
+     *
+     * @param cardinality cardinality string (for example {@code ONE_TO_MANY}, {@code MANY_TO_ONE})
+     * @param currentStreaming current output streaming flag before applying this cardinality
+     * @return updated output streaming flag after canonicalizing cardinality via {@link #canonical(String)}
+     * @throws IllegalArgumentException if cardinality is null, blank, or unsupported
+     */
     public static boolean applyToOutputStreaming(String cardinality, boolean currentStreaming) {
+        if (cardinality == null) {
+            throw new IllegalArgumentException("Cardinality must not be null");
+        }
         String canonical = canonical(cardinality);
         if (ONE_TO_MANY.equals(canonical) || MANY_TO_MANY.equals(canonical)) {
             return true;
