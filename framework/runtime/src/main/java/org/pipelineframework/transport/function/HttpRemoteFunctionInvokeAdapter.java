@@ -30,11 +30,16 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 
 /**
  * Remote invoke adapter that dispatches envelopes to an HTTP endpoint.
  *
  * <p>Target endpoint is resolved from {@link FunctionTransportContext#ATTR_TARGET_URL}.</p>
+ * <p>For N->1 and N->M shapes, this adapter collects the full input stream with
+ * {@code input.collect().asList()} before issuing a single HTTP call. This means memory usage grows with
+ * input size. Avoid unbounded/very large streams here; prefer upstream chunking or single-item invocations
+ * when you need strict streaming memory bounds.</p>
  *
  * @param <I> input payload type
  * @param <O> output payload type
@@ -47,7 +52,10 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
 
     public HttpRemoteFunctionInvokeAdapter() {
         this(
-            HttpClient.newBuilder().connectTimeout(DEFAULT_TIMEOUT).build(),
+            HttpClient.newBuilder()
+                .connectTimeout(DEFAULT_TIMEOUT)
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build(),
             new ObjectMapper().findAndRegisterModules());
     }
 
@@ -103,7 +111,7 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
             } catch (IOException e) {
                 throw new IllegalStateException("Failed to parse remote function response", e);
             }
-        });
+        }).runSubscriptionOn(Infrastructure.getDefaultExecutor());
     }
 
     private Uni<List<TraceEnvelope<O>>> postForMany(Object payload, FunctionTransportContext context) {
@@ -112,7 +120,7 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
                 String responseBody = send(payload, context);
                 JsonNode node = objectMapper.readTree(responseBody);
                 if (node == null || node.isNull()) {
-                    return List.of();
+                    throw new IllegalStateException("Remote function response body was empty");
                 }
                 if (!node.isArray()) {
                     throw new IllegalStateException("Remote function response must be a JSON array for streaming output");
@@ -128,7 +136,7 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
             } catch (IOException e) {
                 throw new IllegalStateException("Failed to parse remote function response", e);
             }
-        });
+        }).runSubscriptionOn(Infrastructure.getDefaultExecutor());
     }
 
     private String send(Object payload, FunctionTransportContext context) throws IOException, InterruptedException {
@@ -140,6 +148,7 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
         HttpRequest request = HttpRequest.newBuilder(URI.create(targetUrl))
             .timeout(DEFAULT_TIMEOUT)
             .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(requestBody))
             .build();
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());

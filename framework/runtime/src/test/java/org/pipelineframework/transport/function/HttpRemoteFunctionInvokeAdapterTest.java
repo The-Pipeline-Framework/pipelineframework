@@ -22,6 +22,9 @@ import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,6 +37,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 class HttpRemoteFunctionInvokeAdapterTest {
     private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
@@ -65,11 +69,20 @@ class HttpRemoteFunctionInvokeAdapterTest {
         List<TraceEnvelope<Integer>> responseEnvelopes = List.of(
             TraceEnvelope.root("trace-remote", "item-r1", "search.out", "v1", "idem-r1", 10),
             TraceEnvelope.root("trace-remote", "item-r2", "search.out", "v1", "idem-r2", 20));
+        AtomicReference<Throwable> serverFailure = new AtomicReference<>();
+        CountDownLatch handledRequest = new CountDownLatch(1);
 
         try (ServerHandle server = startServer(exchange -> {
-            JsonNode request = MAPPER.readTree(exchange.getRequestBody());
-            assertTrue(request.isArray());
-            respondJson(exchange, MAPPER.writeValueAsString(responseEnvelopes));
+            try {
+                JsonNode request = MAPPER.readTree(exchange.getRequestBody());
+                assertTrue(request.isArray());
+                respondJson(exchange, MAPPER.writeValueAsString(responseEnvelopes));
+            } catch (Throwable t) {
+                serverFailure.set(t);
+                throw t;
+            } finally {
+                handledRequest.countDown();
+            }
         })) {
             HttpRemoteFunctionInvokeAdapter<Integer, Integer> adapter = new HttpRemoteFunctionInvokeAdapter<>();
             FunctionTransportContext context = FunctionTransportContext.of(
@@ -87,6 +100,10 @@ class HttpRemoteFunctionInvokeAdapterTest {
 
             assertEquals(2, output.size());
             assertEquals(List.of(10, 20), output.stream().map(TraceEnvelope::payload).toList());
+            assertTrue(handledRequest.await(2, TimeUnit.SECONDS), "server did not handle request in time");
+            if (serverFailure.get() != null) {
+                fail("server-side assertion failed", serverFailure.get());
+            }
         }
     }
 
