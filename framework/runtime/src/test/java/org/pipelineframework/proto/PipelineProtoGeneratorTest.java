@@ -151,9 +151,16 @@ class PipelineProtoGeneratorTest {
         PipelineProtoGenerator generator = new PipelineProtoGenerator();
         generator.generate(tempDir, configPath, outputDir);
 
-        String tokenizeProto = Files.readString(outputDir.resolve("tokenize-svc.proto"));
-        String indexProto = Files.readString(outputDir.resolve("index-svc.proto"));
-        String orchestratorProto = Files.readString(outputDir.resolve("orchestrator.proto"));
+        Path tokenizeProtoPath = outputDir.resolve("tokenize-svc.proto");
+        Path indexProtoPath = outputDir.resolve("index-svc.proto");
+        Path orchestratorProtoPath = outputDir.resolve("orchestrator.proto");
+        assertTrue(Files.exists(tokenizeProtoPath));
+        assertTrue(Files.exists(indexProtoPath));
+        assertTrue(Files.exists(orchestratorProtoPath));
+
+        String tokenizeProto = Files.readString(tokenizeProtoPath);
+        String indexProto = Files.readString(indexProtoPath);
+        String orchestratorProto = Files.readString(orchestratorProtoPath);
 
         assertTrue(tokenizeProto.contains("rpc remoteProcess(DocInput) returns (stream TokenBatch);"));
         assertTrue(indexProto.contains("rpc remoteProcess(stream TokenBatch) returns (IndexAck);"));

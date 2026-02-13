@@ -67,8 +67,7 @@ public class PipelineSemanticAnalysisPhaseTest {
                      phase.streamingShape("MANY_TO_ONE"));
         assertEquals(org.pipelineframework.processor.ir.StreamingShape.STREAMING_STREAMING, 
                      phase.streamingShape("MANY_TO_MANY"));
-        assertEquals(org.pipelineframework.processor.ir.StreamingShape.UNARY_UNARY, 
-                     phase.streamingShape("OTHER"));
+        assertThrows(IllegalArgumentException.class, () -> phase.streamingShape("OTHER"));
     }
 
     @Test
@@ -77,7 +76,7 @@ public class PipelineSemanticAnalysisPhaseTest {
         assertTrue(phase.isStreamingInputCardinality("MANY_TO_ONE"));
         assertTrue(phase.isStreamingInputCardinality("MANY_TO_MANY"));
         assertFalse(phase.isStreamingInputCardinality("EXPANSION"));
-        assertFalse(phase.isStreamingInputCardinality("OTHER"));
+        assertThrows(IllegalArgumentException.class, () -> phase.isStreamingInputCardinality("OTHER"));
     }
 
     @Test
@@ -98,9 +97,8 @@ public class PipelineSemanticAnalysisPhaseTest {
         assertFalse(phase.applyCardinalityToStreaming("MANY_TO_ONE", false));
         assertFalse(phase.applyCardinalityToStreaming("MANY_TO_ONE", true));
         
-        // Test other cardinalities preserve current state
-        assertFalse(phase.applyCardinalityToStreaming("OTHER", false));
-        assertTrue(phase.applyCardinalityToStreaming("OTHER", true));
+        assertThrows(IllegalArgumentException.class, () -> phase.applyCardinalityToStreaming("OTHER", false));
+        assertThrows(IllegalArgumentException.class, () -> phase.applyCardinalityToStreaming("OTHER", true));
     }
 
     @Test

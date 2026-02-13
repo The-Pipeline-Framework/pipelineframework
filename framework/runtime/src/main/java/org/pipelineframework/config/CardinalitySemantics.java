@@ -19,16 +19,24 @@ public final class CardinalitySemantics {
 
     /**
      * Converts aliases (e.g. EXPANSION/REDUCTION) into canonical cardinality names.
+     *
+     * @param cardinality input cardinality value
+     * @return canonical cardinality value, or {@code null} if input is {@code null}
+     * @throws IllegalArgumentException if cardinality is blank or not recognized
      */
     public static String canonical(String cardinality) {
         if (cardinality == null) {
-            return "";
+            return null;
         }
         String normalized = cardinality.trim().toUpperCase(Locale.ROOT);
+        if (normalized.isEmpty()) {
+            throw new IllegalArgumentException("Cardinality must not be blank");
+        }
         return switch (normalized) {
             case EXPANSION -> ONE_TO_MANY;
             case REDUCTION -> MANY_TO_ONE;
-            default -> normalized;
+            case ONE_TO_ONE, ONE_TO_MANY, MANY_TO_ONE, MANY_TO_MANY -> normalized;
+            default -> throw new IllegalArgumentException("Unsupported cardinality: " + cardinality);
         };
     }
 
