@@ -1,6 +1,6 @@
 # Start Monolith, Split Later
 
-<p class="value-lead">TPF supports a practical architecture path: start with one deployable unit, then split when team and scale pressure make it worth it.</p>
+<p class="value-lead">The Pipeline Framework (TPF) supports a practical architecture path: start with one deployable unit, then split when team and scale pressure make it worth it.</p>
 
 ## At a Glance
 

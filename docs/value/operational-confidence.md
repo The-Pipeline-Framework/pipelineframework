@@ -1,6 +1,6 @@
 # Kube-Native
 
-<p class="value-lead">TPF is designed for containerized environments with operational patterns that stay workable as complexity grows.</p>
+<p class="value-lead">The Pipeline Framework (TPF) is designed for containerized environments with operational patterns that stay workable as complexity grows.</p>
 
 ## At a Glance
 
@@ -22,7 +22,7 @@
 
 - [Error Handling & DLQ](/guide/operations/error-handling)
 - [In-flight Probe](/guide/operations/in-flight-probe)
-- [Observability](/guide/operations/observability/)
+- [Observability](/guide/operations/observability/index)
 - [Best Practices](/guide/operations/best-practices)
 
 </div>

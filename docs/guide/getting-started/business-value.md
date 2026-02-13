@@ -1,5 +1,15 @@
-# Business Value
+---
+title: Redirecting...
+---
 
-This content lives under the Value section now:
+<script setup>
+import {onMounted} from 'vue'
 
-- [Business Value](/value/business-value)
+onMounted(() => {
+  window.location.replace('/value/business-value')
+})
+</script>
+
+# Redirecting...
+
+Business Value moved to [Value > Business Value](/value/business-value).

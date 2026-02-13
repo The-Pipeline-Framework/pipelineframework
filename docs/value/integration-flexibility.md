@@ -14,7 +14,7 @@
 
 - Different clients need different protocols.
 - You are migrating interfaces and need to avoid big-bang rewrites.
-- Contract consistency across transports has become a pain point.
+- You need to keep contracts consistent across transports without manual reconciliation.
 
 ## Jump to Guides
 
