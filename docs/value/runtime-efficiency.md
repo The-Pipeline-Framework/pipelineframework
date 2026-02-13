@@ -1,4 +1,4 @@
-# Performance
+# Runtime Efficiency
 
 <p class="value-lead">TPF is tuned for high-volume step processing where throughput and stability matter day to day.</p>
 

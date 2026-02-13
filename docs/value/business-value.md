@@ -1,6 +1,6 @@
 # Business Value
 
-<p class="value-lead">TPF is built to reduce delivery overhead while keeping you on portable, mainstream runtime foundations.</p>
+<p class="value-lead">The Pipeline Framework (TPF) is built to reduce delivery overhead while keeping you on portable, mainstream runtime foundations.</p>
 
 ## At a Glance
 
@@ -14,11 +14,11 @@
 
 - Teams spend significant time on glue code, wiring, and “keeping things consistent”.
 - Changes ripple across multiple services just to update a contract or endpoint shape.
-- You want an architecture path from “works as a monolith” to “split into deployables” without rewriting everything.
+- You want an architecture path from “works as a monolith” to “split into deployable units/services” without rewriting everything.
 
 ## Observed Impact (CSV Payments)
 
-In the CSV Payments example, a prior implementation took a 10-12 person team roughly 6 months.
+In the CSV Payments example, the prior implementation required substantially more manual integration work.
 Compared to the current TPF-based approach, it was materially weaker in maintainability, extensibility, and operational clarity.
 
 This is not a controlled study and results vary by team and process. The signal is that the framework structure can remove enough repeated work to shift delivery timelines meaningfully.
@@ -48,4 +48,3 @@ Teams typically aim for:
 - [Observability](/guide/operations/observability/)
 
 </div>
-
