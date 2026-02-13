@@ -111,4 +111,52 @@ class PipelineProtoGeneratorTest {
         assertTrue(orchestratorProto.contains("rpc Ingest (stream FooInput) returns (stream BarOutput);"));
         assertTrue(orchestratorProto.contains("rpc Subscribe (google.protobuf.Empty) returns (stream BarOutput);"));
     }
+
+    @Test
+    void supportsOneToManyAndManyToOneAliases() throws Exception {
+        String yaml = """
+            appName: "Alias Test"
+            basePackage: "com.example.alias"
+            transport: "GRPC"
+            steps:
+              - name: "Tokenize"
+                cardinality: "ONE_TO_MANY"
+                inputTypeName: "DocInput"
+                inputFields:
+                  - name: "docId"
+                    type: "UUID"
+                    protoType: "string"
+                outputTypeName: "TokenBatch"
+                outputFields:
+                  - name: "tokens"
+                    type: "String"
+                    protoType: "string"
+              - name: "Index"
+                cardinality: "MANY_TO_ONE"
+                inputTypeName: "TokenBatch"
+                inputFields:
+                  - name: "tokens"
+                    type: "String"
+                    protoType: "string"
+                outputTypeName: "IndexAck"
+                outputFields:
+                  - name: "status"
+                    type: "String"
+                    protoType: "string"
+            """;
+        Path configPath = tempDir.resolve("pipeline-alias-config.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("proto-alias-out");
+
+        PipelineProtoGenerator generator = new PipelineProtoGenerator();
+        generator.generate(tempDir, configPath, outputDir);
+
+        String tokenizeProto = Files.readString(outputDir.resolve("tokenize-svc.proto"));
+        String indexProto = Files.readString(outputDir.resolve("index-svc.proto"));
+        String orchestratorProto = Files.readString(outputDir.resolve("orchestrator.proto"));
+
+        assertTrue(tokenizeProto.contains("rpc remoteProcess(DocInput) returns (stream TokenBatch);"));
+        assertTrue(indexProto.contains("rpc remoteProcess(stream TokenBatch) returns (IndexAck);"));
+        assertTrue(orchestratorProto.contains("rpc Run (DocInput) returns (IndexAck);"));
+    }
 }
