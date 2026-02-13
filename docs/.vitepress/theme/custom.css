@@ -198,8 +198,12 @@ kbd {
   box-shadow: 0 16px 38px rgb(0 0 0 / 42%);
 }
 
-/* Keep sidebar model for prev/next links, but hide sidebar UI */
-@media (min-width: 960px) {
+/*
+ * Intentional top-nav-only desktop layout (width >= 960px):
+ * hide VitePress sidebar/local-nav UI while preserving sidebar data model for prev/next links.
+ * The !important overrides below are required to beat VitePress sidebar layout styles.
+ */
+@media (width >= 960px) {
   .VPSidebar,
   .VPLocalNav {
     display: none !important;

@@ -195,5 +195,12 @@ onMounted(async () => {
     grid-template-columns: 1fr;
     gap: 0.35rem;
   }
+
+  .release-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+  }
 }
 </style>

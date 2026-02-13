@@ -22,6 +22,6 @@
 
 - [Customization points](/guide/development/customization-points)
 - [AWS Lambda Platform](/guide/development/aws-lambda)
-- [Runtime Layouts](/guide/build/runtime-layouts/index)
+- [Runtime Layouts](/guide/build/runtime-layouts/)
 
 </div>
