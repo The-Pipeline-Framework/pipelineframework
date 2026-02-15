@@ -38,6 +38,7 @@ class DiscoveryConfigLoader {
      * @return an Optional containing the resolved config Path if found
      */
     Optional<Path> resolvePipelineConfigPath(Map<String, String> options, Path moduleDir, Messager messager) {
+        Objects.requireNonNull(options, "options must not be null");
         String explicitConfig = options.get("pipeline.config");
         if (explicitConfig != null && !explicitConfig.isBlank()) {
             Path explicitPath = Path.of(explicitConfig.trim());

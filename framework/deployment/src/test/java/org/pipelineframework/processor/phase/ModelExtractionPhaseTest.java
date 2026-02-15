@@ -33,12 +33,12 @@ import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.processor.PipelineCompilationContext;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /** Unit tests for ModelExtractionPhase */
 @ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT)
 class ModelExtractionPhaseTest {
 
     @Mock
@@ -52,12 +52,12 @@ class ModelExtractionPhaseTest {
 
     @BeforeEach
     void setUp() {
-        when(processingEnv.getMessager()).thenReturn(messager);
-        when(processingEnv.getElementUtils())
+        lenient().when(processingEnv.getMessager()).thenReturn(messager);
+        lenient().when(processingEnv.getElementUtils())
                 .thenReturn(mock(javax.lang.model.util.Elements.class));
-        when(processingEnv.getFiler()).thenReturn(mock(javax.annotation.processing.Filer.class));
-        when(processingEnv.getSourceVersion()).thenReturn(SourceVersion.RELEASE_21);
-        when(roundEnv.getElementsAnnotatedWith(PipelineStep.class)).thenReturn(Set.of());
+        lenient().when(processingEnv.getFiler()).thenReturn(mock(javax.annotation.processing.Filer.class));
+        lenient().when(processingEnv.getSourceVersion()).thenReturn(SourceVersion.RELEASE_21);
+        lenient().when(roundEnv.getElementsAnnotatedWith(PipelineStep.class)).thenReturn(Set.of());
     }
 
     @Test
@@ -137,8 +137,15 @@ class ModelExtractionPhaseTest {
 
         phase.execute(context);
 
-        // Verify that context.getStepModels() contains the template models (size > 0 and includes expected elements)
+        // Verify that context.getStepModels() contains the expected number of template models and has expected properties
         assertNotNull(context.getStepModels());
-        assertFalse(context.getStepModels().isEmpty());
+        assertEquals(1, context.getStepModels().size(), "Expected exactly one step model from the template");
+        
+        // Verify that the model has the expected service name based on the template step
+        // TemplateModelBuilder creates service name as "Process" + formattedName + "Service"
+        // where formattedName comes from the step name "TestStep"
+        assertTrue(context.getStepModels().stream()
+            .anyMatch(model -> model.serviceName().startsWith("Process") && model.serviceName().endsWith("Service")),
+            "Expected at least one model with service name starting with 'Process' and ending with 'Service'");
     }
 }
