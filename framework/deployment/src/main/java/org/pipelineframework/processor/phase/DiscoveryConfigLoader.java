@@ -70,7 +70,9 @@ class DiscoveryConfigLoader {
      * @return a list of loaded aspect models
      */
     List<PipelineAspectModel> loadAspects(Path configPath, Messager messager) {
-        Objects.requireNonNull(configPath, "configPath must not be null");
+        if (configPath == null) {
+            throw new IllegalArgumentException("configPath must not be null");
+        }
         PipelineAspectConfigLoader loader = new PipelineAspectConfigLoader();
         try {
             return loader.load(configPath);
@@ -94,7 +96,9 @@ class DiscoveryConfigLoader {
      * @return the loaded template config, or null if loading fails
      */
     PipelineTemplateConfig loadTemplateConfig(Path configPath, Messager messager) {
-        Objects.requireNonNull(configPath, "configPath must not be null");
+        if (configPath == null) {
+            throw new IllegalArgumentException("configPath must not be null");
+        }
         PipelineTemplateConfigLoader loader = new PipelineTemplateConfigLoader();
         try {
             return loader.load(configPath);
@@ -124,7 +128,9 @@ class DiscoveryConfigLoader {
             Function<String, String> propertyLookup,
             Function<String, String> envLookup,
             Messager messager) {
-        Objects.requireNonNull(configPath, "configPath must not be null");
+        if (configPath == null) {
+            throw new IllegalArgumentException("configPath must not be null");
+        }
         PipelineStepConfigLoader stepLoader = new PipelineStepConfigLoader(propertyLookup, envLookup, messager);
         try {
             return stepLoader.load(configPath);
