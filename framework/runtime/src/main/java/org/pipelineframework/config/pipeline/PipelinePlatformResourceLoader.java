@@ -59,12 +59,17 @@ public final class PipelinePlatformResourceLoader {
             }
             return Optional.of(new PlatformMetadata(platform, transport, module, pluginHost));
         } catch (Exception e) {
-            throw new IllegalStateException("Failed to read pipeline platform resource.", e);
+            LOG.warn("Failed to read pipeline platform resource.", e);
+            return Optional.empty();
         }
     }
 
     /**
      * Platform metadata record containing build-time pipeline configuration.
+     *
+     * NOTE: This record is duplicated from the private static class in
+     * org.pipelineframework.processor.util.PipelinePlatformMetadataGenerator.
+     * Keep both definitions in sync when making changes.
      *
      * @param platform the target deployment platform (e.g. COMPUTE, FUNCTION)
      * @param transport the transport mode (e.g. GRPC, REST, LOCAL)

@@ -142,7 +142,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         ProcessingEnvironment procEnv = ctx.getProcessingEnv();
         PipelineTemplateConfigLoader loader = procEnv != null
             ? new PipelineTemplateConfigLoader(procEnv.getOptions()::get, System::getenv)
-            : new PipelineTemplateConfigLoader(System::getenv, System::getenv);
+            : new PipelineTemplateConfigLoader(key -> null, System::getenv);
         try {
             return loader.load(configPath.get());
         } catch (Exception e) {
@@ -172,7 +172,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
 
         ProcessingEnvironment stepProcEnv = ctx.getProcessingEnv();
         PipelineStepConfigLoader stepLoader = new PipelineStepConfigLoader(
-            stepProcEnv != null ? stepProcEnv.getOptions()::get : System::getenv,
+            stepProcEnv != null ? stepProcEnv.getOptions()::get : key -> null,
             System::getenv,
             stepProcEnv == null ? null : stepProcEnv.getMessager());
         try {

@@ -68,7 +68,7 @@
         <mockito.version>5.21.0</mockito.version>
         <maven.deploy.skip>true</maven.deploy.skip>
         <surefireArgLine />
-        <pipeline.parallelism>AUTO</pipeline.parallelism>
+        <tpf.build.parallelism>AUTO</tpf.build.parallelism>
         <tpf.build.transport>GRPC</tpf.build.transport>
         <tpf.build.platform>COMPUTE</tpf.build.platform>
     </properties>
@@ -111,7 +111,7 @@
                         <release>21</release>
                         <enablePreview>true</enablePreview>
                         <compilerArgs>
-                            <arg>-Apipeline.parallelism=${pipeline.parallelism}</arg>
+                            <arg>-Apipeline.parallelism=${tpf.build.parallelism}</arg>
                             <arg>-Apipeline.transport=${tpf.build.transport}</arg>
                             <arg>-Apipeline.platform=${tpf.build.platform}</arg>
                         </compilerArgs>

@@ -33,7 +33,7 @@ import org.pipelineframework.annotation.PipelineStep;
     "pipeline.platform", // Optional: target deployment platform (COMPUTE|FUNCTION; legacy: STANDARD|LAMBDA)
     "pipeline.transport", // Optional: transport mode (GRPC|REST|LOCAL)
     "pipeline.rest.naming.strategy", // Optional: REST naming strategy (LEGACY|RESOURCEFUL)
-    "pipeline.parallelism" // Optional: parallelism mode (PARALLEL|SEQUENTIAL|AUTO)
+    "tpf.build.parallelism" // Optional: parallelism mode (PARALLEL|SEQUENTIAL|AUTO)
 })
 @SupportedSourceVersion(SourceVersion.RELEASE_21)
 public class PipelineCompiler extends AbstractProcessingTool {
