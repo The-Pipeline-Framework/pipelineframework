@@ -2,6 +2,7 @@ package org.pipelineframework.processor.phase;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Collections;
 import java.util.Map;
 
 /**
@@ -9,6 +10,8 @@ import java.util.Map;
  * Stateless collaborator extracted from PipelineDiscoveryPhase.
  */
 class DiscoveryPathResolver {
+
+    private static final int GENERATED_SOURCES_DEPTH = 3; // Maps to "target/generated-sources/pipeline" depth
 
     /**
      * Resolve the root directory where generated pipeline sources should be written.
@@ -21,6 +24,10 @@ class DiscoveryPathResolver {
      * @return the resolved Path for generated pipeline sources
      */
     Path resolveGeneratedSourcesRoot(Map<String, String> options) {
+        if (options == null) {
+            return Paths.get(System.getProperty("user.dir"), "target", "generated-sources", "pipeline");
+        }
+        
         String configured = options.get("pipeline.generatedSourcesDir");
         if (configured != null && !configured.isBlank()) {
             return Paths.get(configured);
@@ -44,7 +51,7 @@ class DiscoveryPathResolver {
     Path resolveModuleDir(Path generatedSourcesRoot) {
         if (generatedSourcesRoot != null) {
             Path candidate = generatedSourcesRoot;
-            for (int i = 0; i < 3 && candidate != null; i++) {
+            for (int i = 0; i < GENERATED_SOURCES_DEPTH && candidate != null; i++) {
                 candidate = candidate.getParent();
             }
             if (candidate != null) {

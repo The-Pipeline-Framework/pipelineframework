@@ -106,4 +106,53 @@ class ModelExtractionPhaseTest {
         assertThrows(NullPointerException.class,
             () -> new ModelExtractionPhase(new TemplateModelBuilder(), null));
     }
+
+    @Test
+    void testExecute_withTemplateModels_mergesIntoStepModels() throws Exception {
+        ModelExtractionPhase phase = new ModelExtractionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        
+        // Create a mock template config with steps
+        var templateConfig = new org.pipelineframework.config.template.PipelineTemplateConfig() {
+            @Override
+            public String basePackage() {
+                return "com.example";
+            }
+
+            @Override
+            public java.util.List<org.pipelineframework.config.template.PipelineTemplateStep> steps() {
+                return java.util.List.of(
+                    new org.pipelineframework.config.template.PipelineTemplateStep() {
+                        @Override
+                        public String name() {
+                            return "TestStep";
+                        }
+
+                        @Override
+                        public String inputTypeName() {
+                            return "InputType";
+                        }
+
+                        @Override
+                        public String outputTypeName() {
+                            return "OutputType";
+                        }
+
+                        @Override
+                        public org.pipelineframework.config.template.Cardinality cardinality() {
+                            return org.pipelineframework.config.template.Cardinality.UNARY_UNARY;
+                        }
+                    }
+                );
+            }
+        };
+        
+        context.setPipelineTemplateConfig(templateConfig);
+
+        phase.execute(context);
+
+        // Verify that context.getStepModels() contains the template models (size > 0 and includes expected elements)
+        assertNotNull(context.getStepModels());
+        assertFalse(context.getStepModels().isEmpty());
+    }
 }

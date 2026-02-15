@@ -1,9 +1,12 @@
 package org.pipelineframework.processor.phase;
 
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import javax.annotation.processing.Messager;
@@ -67,13 +70,17 @@ class DiscoveryConfigLoader {
      * @return a list of loaded aspect models
      */
     List<PipelineAspectModel> loadAspects(Path configPath, Messager messager) {
+        Objects.requireNonNull(configPath, "configPath must not be null");
         PipelineAspectConfigLoader loader = new PipelineAspectConfigLoader();
         try {
             return loader.load(configPath);
         } catch (Exception e) {
             if (messager != null) {
-                messager.printMessage(Diagnostic.Kind.ERROR,
-                    "Failed to load pipeline aspects from " + configPath + ": " + e.getMessage());
+                String errorMessage = "Failed to load pipeline aspects from " + configPath + ": " + e.toString();
+                StringWriter sw = new StringWriter();
+                PrintWriter pw = new PrintWriter(sw);
+                e.printStackTrace(pw);
+                messager.printMessage(Diagnostic.Kind.ERROR, errorMessage + "\n" + sw.toString());
             }
             throw e;
         }
@@ -87,13 +94,17 @@ class DiscoveryConfigLoader {
      * @return the loaded template config, or null if loading fails
      */
     PipelineTemplateConfig loadTemplateConfig(Path configPath, Messager messager) {
+        Objects.requireNonNull(configPath, "configPath must not be null");
         PipelineTemplateConfigLoader loader = new PipelineTemplateConfigLoader();
         try {
             return loader.load(configPath);
         } catch (Exception e) {
             if (messager != null) {
-                messager.printMessage(Diagnostic.Kind.WARNING,
-                    "Failed to load pipeline template config from " + configPath + ": " + e.getMessage());
+                String errorMessage = "Failed to load pipeline template config from " + configPath + ": " + e.toString();
+                StringWriter sw = new StringWriter();
+                PrintWriter pw = new PrintWriter(sw);
+                e.printStackTrace(pw);
+                messager.printMessage(Diagnostic.Kind.WARNING, errorMessage + "\n" + sw.toString());
             }
             return null;
         }
@@ -113,13 +124,17 @@ class DiscoveryConfigLoader {
             Function<String, String> propertyLookup,
             Function<String, String> envLookup,
             Messager messager) {
+        Objects.requireNonNull(configPath, "configPath must not be null");
         PipelineStepConfigLoader stepLoader = new PipelineStepConfigLoader(propertyLookup, envLookup, messager);
         try {
             return stepLoader.load(configPath);
         } catch (Exception e) {
             if (messager != null) {
-                messager.printMessage(Diagnostic.Kind.WARNING,
-                    "Failed to load pipeline transport/platform from " + configPath + ": " + e.getMessage());
+                String errorMessage = "Failed to load pipeline transport/platform from " + configPath + ": " + e.toString();
+                StringWriter sw = new StringWriter();
+                PrintWriter pw = new PrintWriter(sw);
+                e.printStackTrace(pw);
+                messager.printMessage(Diagnostic.Kind.WARNING, errorMessage + "\n" + sw.toString());
             }
             return null;
         }
@@ -147,8 +162,11 @@ class DiscoveryConfigLoader {
             return loader.load(configPath.get());
         } catch (Exception e) {
             if (messager != null) {
-                messager.printMessage(Diagnostic.Kind.ERROR,
-                    "Failed to load runtime mapping from " + configPath.get() + ": " + e.getMessage());
+                String errorMessage = "Failed to load runtime mapping from " + configPath.get() + ": " + e.toString();
+                StringWriter sw = new StringWriter();
+                PrintWriter pw = new PrintWriter(sw);
+                e.printStackTrace(pw);
+                messager.printMessage(Diagnostic.Kind.ERROR, errorMessage + "\n" + sw.toString());
             }
             throw e;
         }

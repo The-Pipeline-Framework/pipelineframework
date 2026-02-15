@@ -51,9 +51,12 @@ flowchart TD
     C -->|no gRPC| E["Skip descriptor load"]
     D --> F["StepBindingBuilder.constructBindings"]
     E --> F
-    F --> G["GrpcBindingResolver"]
-    F --> H["RestBindingResolver"]
-    F --> I["LocalBinding creation"]
+    subgraph F2["StepBindingBuilder.constructBindings Internal Operations"]
+        G["GrpcBindingResolver"]
+        H["RestBindingResolver"]
+        I["LocalBinding creation"]
+    end
+    F --> F2
     B --> J["OrchestratorBindingBuilder"]
     G --> K["rendererBindings map"]
     H --> K

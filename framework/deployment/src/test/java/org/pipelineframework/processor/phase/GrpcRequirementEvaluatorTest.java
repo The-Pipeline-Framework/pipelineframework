@@ -28,6 +28,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.processor.ir.*;
+import org.pipelineframework.processor.phase.TestModelFactory;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.contains;
@@ -45,20 +47,41 @@ class GrpcRequirementEvaluatorTest {
 
     @Test
     void needsGrpc_stepWithGrpcService_true() {
-        PipelineStepModel model = createModel("Svc", Set.of(GenerationTarget.GRPC_SERVICE));
-        assertTrue(evaluator.needsGrpcBindings(List.of(model), List.of(), null, messager));
+        PipelineStepModel model = TestModelFactory.createTestModel("Svc");
+        // Create a new model with the specific targets
+        PipelineStepModel modelWithTargets = new PipelineStepModel(
+            model.serviceName(), model.generatedName(), model.servicePackage(), model.serviceClassName(),
+            model.inputMapping(), model.outputMapping(), model.streamingShape(), 
+            Set.of(GenerationTarget.GRPC_SERVICE), model.executionMode(),
+            model.deploymentRole(), model.sideEffect(), model.cacheKeyGenerator(),
+            model.orderingRequirement(), model.threadSafety());
+        assertTrue(evaluator.needsGrpcBindings(List.of(modelWithTargets), List.of(), null, messager));
     }
 
     @Test
     void needsGrpc_stepWithClientStep_true() {
-        PipelineStepModel model = createModel("Svc", Set.of(GenerationTarget.CLIENT_STEP));
-        assertTrue(evaluator.needsGrpcBindings(List.of(model), List.of(), null, messager));
+        PipelineStepModel model = TestModelFactory.createTestModel("Svc");
+        // Create a new model with the specific targets
+        PipelineStepModel modelWithTargets = new PipelineStepModel(
+            model.serviceName(), model.generatedName(), model.servicePackage(), model.serviceClassName(),
+            model.inputMapping(), model.outputMapping(), model.streamingShape(), 
+            Set.of(GenerationTarget.CLIENT_STEP), model.executionMode(),
+            model.deploymentRole(), model.sideEffect(), model.cacheKeyGenerator(),
+            model.orderingRequirement(), model.threadSafety());
+        assertTrue(evaluator.needsGrpcBindings(List.of(modelWithTargets), List.of(), null, messager));
     }
 
     @Test
     void needsGrpc_stepWithRestOnly_false() {
-        PipelineStepModel model = createModel("Svc", Set.of(GenerationTarget.REST_RESOURCE));
-        assertFalse(evaluator.needsGrpcBindings(List.of(model), List.of(), null, messager));
+        PipelineStepModel model = TestModelFactory.createTestModel("Svc");
+        // Create a new model with the specific targets
+        PipelineStepModel modelWithTargets = new PipelineStepModel(
+            model.serviceName(), model.generatedName(), model.servicePackage(), model.serviceClassName(),
+            model.inputMapping(), model.outputMapping(), model.streamingShape(), 
+            Set.of(GenerationTarget.REST_RESOURCE), model.executionMode(),
+            model.deploymentRole(), model.sideEffect(), model.cacheKeyGenerator(),
+            model.orderingRequirement(), model.threadSafety());
+        assertFalse(evaluator.needsGrpcBindings(List.of(modelWithTargets), List.of(), null, messager));
     }
 
     @Test
@@ -101,8 +124,15 @@ class GrpcRequirementEvaluatorTest {
 
     @Test
     void needsGrpc_stepWithMixedTargets_true() {
-        PipelineStepModel model = createModel("Svc", Set.of(GenerationTarget.GRPC_SERVICE, GenerationTarget.REST_RESOURCE));
-        assertTrue(evaluator.needsGrpcBindings(List.of(model), List.of(), null, messager));
+        PipelineStepModel model = TestModelFactory.createTestModel("Svc");
+        // Create a new model with the specific targets
+        PipelineStepModel modelWithTargets = new PipelineStepModel(
+            model.serviceName(), model.generatedName(), model.servicePackage(), model.serviceClassName(),
+            model.inputMapping(), model.outputMapping(), model.streamingShape(), 
+            Set.of(GenerationTarget.GRPC_SERVICE, GenerationTarget.REST_RESOURCE), model.executionMode(),
+            model.deploymentRole(), model.sideEffect(), model.cacheKeyGenerator(),
+            model.orderingRequirement(), model.threadSafety());
+        assertTrue(evaluator.needsGrpcBindings(List.of(modelWithTargets), List.of(), null, messager));
     }
 
     @Test
@@ -111,11 +141,4 @@ class GrpcRequirementEvaluatorTest {
         assertFalse(evaluator.needsGrpcBindings(List.of(), List.of(orch), null, messager));
     }
 
-    private PipelineStepModel createModel(String name, Set<GenerationTarget> targets) {
-        return new PipelineStepModel(
-            name, name, "com.example.service", ClassName.get("com.example.service", name),
-            new TypeMapping(null, null, false), new TypeMapping(null, null, false),
-            StreamingShape.UNARY_UNARY, targets, ExecutionMode.DEFAULT,
-            DeploymentRole.PIPELINE_SERVER, false, null);
-    }
 }

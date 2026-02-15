@@ -107,4 +107,27 @@ class DiscoveryConfigLoaderTest {
     void loadRuntimeMapping_noMappingFile_returnsNull() {
         assertNull(loader.loadRuntimeMapping(tempDir, messager));
     }
+
+    // --- Null safety tests ---
+
+    @Test
+    void loadAspects_withNullConfigPath_throwsIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class, () -> {
+            loader.loadAspects(null, messager);
+        });
+    }
+
+    @Test
+    void loadTemplateConfig_withNullConfigPath_throwsIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class, () -> {
+            loader.loadTemplateConfig(null, messager);
+        });
+    }
+
+    @Test
+    void loadStepConfig_withNullConfigPath_throwsIllegalArgumentException() {
+        assertThrows(IllegalArgumentException.class, () -> {
+            loader.loadStepConfig(null, System::getProperty, System::getenv, messager);
+        });
+    }
 }

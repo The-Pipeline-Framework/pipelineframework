@@ -71,7 +71,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
         Map<String, String> options = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getOptions() : Map.of();
-        Messager messager = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getMessager() : null;
+        Messager messager = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getMessager() : new NoOpMessager();
 
         // Discover annotated elements - handle null round environment gracefully
         Set<? extends Element> orchestratorElements =

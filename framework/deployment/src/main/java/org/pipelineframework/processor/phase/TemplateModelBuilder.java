@@ -96,6 +96,12 @@ class TemplateModelBuilder {
         if (sanitized.endsWith("_")) {
             sanitized = sanitized.substring(0, sanitized.length() - 1);
         }
+        
+        // Check if the sanitized result starts with a digit and prepend a fixed prefix
+        if (!sanitized.isBlank() && Character.isDigit(sanitized.charAt(0))) {
+            sanitized = "step_" + sanitized;
+        }
+        
         return sanitized.isBlank() ? "service" : sanitized;
     }
 }

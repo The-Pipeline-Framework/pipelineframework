@@ -108,20 +108,7 @@ class TemplateExpansionOrchestrator {
     }
 
     private PipelineStepModel withDeploymentRole(PipelineStepModel model, DeploymentRole role) {
-        return new PipelineStepModel(
-            model.serviceName(),
-            model.generatedName(),
-            model.servicePackage(),
-            model.serviceClassName(),
-            model.inputMapping(),
-            model.outputMapping(),
-            model.streamingShape(),
-            model.enabledTargets(),
-            model.executionMode(),
-            role,
-            model.sideEffect(),
-            model.cacheKeyGenerator()
-        );
+        return model.withDeploymentRole(role);
     }
 
     private boolean isMonolithLayout(PipelineCompilationContext ctx) {

@@ -32,6 +32,7 @@ class StepBindingBuilder {
      * @param descriptorSet the protobuf descriptor set (may be null)
      * @param processingEnv the processing environment (may be null)
      * @return a map of bindings keyed by model name + suffix
+     * @throws IllegalStateException if duplicate service names are detected that would cause silent overwrites
      */
     static Map<String, Object> constructBindings(
             List<PipelineStepModel> stepModels,
@@ -55,14 +56,31 @@ class StepBindingBuilder {
             }
 
             String modelKey = model.serviceName();
+            
+            // Check for duplicate keys before inserting to prevent silent overwrites
             if (grpcBinding != null) {
-                bindingsMap.put(modelKey + GRPC_SUFFIX, grpcBinding);
+                String grpcKey = modelKey + GRPC_SUFFIX;
+                if (bindingsMap.containsKey(grpcKey)) {
+                    throw new IllegalStateException("Duplicate service name detected: " + modelKey + 
+                        " for GRPC binding. Service names must be unique to prevent overwrites. Model: " + model.getClass().getSimpleName());
+                }
+                bindingsMap.put(grpcKey, grpcBinding);
             }
             if (restBinding != null) {
-                bindingsMap.put(modelKey + REST_SUFFIX, restBinding);
+                String restKey = modelKey + REST_SUFFIX;
+                if (bindingsMap.containsKey(restKey)) {
+                    throw new IllegalStateException("Duplicate service name detected: " + modelKey + 
+                        " for REST binding. Service names must be unique to prevent overwrites. Model: " + model.getClass().getSimpleName());
+                }
+                bindingsMap.put(restKey, restBinding);
             }
             if (model.enabledTargets().contains(GenerationTarget.LOCAL_CLIENT_STEP)) {
-                bindingsMap.put(modelKey + LOCAL_SUFFIX, new LocalBinding(model));
+                String localKey = modelKey + LOCAL_SUFFIX;
+                if (bindingsMap.containsKey(localKey)) {
+                    throw new IllegalStateException("Duplicate service name detected: " + modelKey + 
+                        " for LOCAL binding. Service names must be unique to prevent overwrites. Model: " + model.getClass().getSimpleName());
+                }
+                bindingsMap.put(localKey, new LocalBinding(model));
             }
         }
 

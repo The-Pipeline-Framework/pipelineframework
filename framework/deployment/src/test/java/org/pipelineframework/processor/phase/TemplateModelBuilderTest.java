@@ -88,6 +88,10 @@ class TemplateModelBuilderTest {
 
         List<PipelineStepModel> models = builder.buildModels(config);
         assertEquals(2, models.size());
+        
+        // Check that the returned List preserves step order and maps to correct services
+        assertEquals("ProcessFirstService", models.get(0).serviceName(), "First step should map to ProcessFirstService");
+        assertEquals("ProcessSecondService", models.get(1).serviceName(), "Second step should map to ProcessSecondService");
     }
 
     // --- Package segment derivation (tested indirectly through buildModels) ---
