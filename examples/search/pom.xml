@@ -43,13 +43,10 @@
         <surefireArgLine />
         <pipeline.generatedSourcesArg />
         <protobuf.descriptor.fileArg />
-        <pipeline.transport>REST</pipeline.transport>
-        <pipeline.transportArg>-Apipeline.transport=${pipeline.transport}</pipeline.transportArg>
-        <pipeline.platform>COMPUTE</pipeline.platform>
-        <pipeline.platformArg>-Apipeline.platform=${pipeline.platform}</pipeline.platformArg>
-        <pipeline.lambda.dependency.scope>provided</pipeline.lambda.dependency.scope>
-        <pipeline.rest.naming.strategy>RESOURCEFUL</pipeline.rest.naming.strategy>
-        <pipeline.rest.naming.strategyArg>-Apipeline.rest.naming.strategy=${pipeline.rest.naming.strategy}</pipeline.rest.naming.strategyArg>
+        <tpf.build.transport>REST</tpf.build.transport>
+        <tpf.build.platform>COMPUTE</tpf.build.platform>
+        <tpf.build.lambda.scope>provided</tpf.build.lambda.scope>
+        <tpf.build.rest.naming.strategy>RESOURCEFUL</tpf.build.rest.naming.strategy>
         <pipeline.parallelism>PARALLEL</pipeline.parallelism>
         <quarkus.container-image.build>true</quarkus.container-image.build>
         <quarkus.container-image.registry>localhost</quarkus.container-image.registry>
@@ -311,9 +308,9 @@
                                 <compilerArgs>
                                     <arg>${pipeline.generatedSourcesArg}</arg>
                                     <arg>${protobuf.descriptor.fileArg}</arg>
-                                    <arg>${pipeline.transportArg}</arg>
-                                    <arg>${pipeline.platformArg}</arg>
-                                    <arg>${pipeline.rest.naming.strategyArg}</arg>
+                                    <arg>-Apipeline.transport=${tpf.build.transport}</arg>
+                                    <arg>-Apipeline.platform=${tpf.build.platform}</arg>
+                                    <arg>-Apipeline.rest.naming.strategy=${tpf.build.rest.naming.strategy}</arg>
                                 </compilerArgs>
                             </configuration>
                         </execution>

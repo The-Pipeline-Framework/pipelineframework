@@ -80,10 +80,12 @@ public class PipelineOrderMetadataGenerator {
         }
 
         PipelineOrderMetadata metadata = new PipelineOrderMetadata(expanded);
-        javax.tools.FileObject resourceFile = processingEnv.getFiler()
-            .createResource(StandardLocation.CLASS_OUTPUT, "", ORDER_RESOURCE, (javax.lang.model.element.Element[]) null);
-        try (var writer = resourceFile.openWriter()) {
-            writer.write(gson.toJson(metadata));
+        if (processingEnv != null) {
+            javax.tools.FileObject resourceFile = processingEnv.getFiler()
+                .createResource(StandardLocation.CLASS_OUTPUT, "", ORDER_RESOURCE, (javax.lang.model.element.Element[]) null);
+            try (var writer = resourceFile.openWriter()) {
+                writer.write(gson.toJson(metadata));
+            }
         }
     }
 
@@ -98,7 +100,9 @@ public class PipelineOrderMetadataGenerator {
         if (configPath.isEmpty()) {
             return null;
         }
-        PipelineYamlConfigLoader loader = new PipelineYamlConfigLoader();
+        PipelineYamlConfigLoader loader = processingEnv != null
+            ? new PipelineYamlConfigLoader(processingEnv.getOptions()::get, System::getenv)
+            : new PipelineYamlConfigLoader(key -> null, System::getenv);
         return loader.load(configPath.get());
     }
 
@@ -195,15 +199,15 @@ public class PipelineOrderMetadataGenerator {
 
     private String selectBestMatch(List<String> candidates, String token) {
         String best = null;
-        int bestLength = -1;
+        int bestLength = Integer.MAX_VALUE;
         for (String candidate : candidates) {
             if (candidate == null || candidate.isBlank()) {
                 continue;
             }
             String normalized = normalizeStepToken(candidate);
-            if (normalized.contains(token) && token.length() > bestLength) {
+            if (normalized.contains(token) && normalized.length() < bestLength) {
                 best = candidate;
-                bestLength = token.length();
+                bestLength = normalized.length();
             }
         }
         return best;

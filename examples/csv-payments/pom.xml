@@ -322,6 +322,8 @@
                                     <arg>${pipeline.generatedSourcesArg}</arg>
                                     <arg>${pipeline.moduleArg}</arg>
                                     <arg>${protobuf.descriptor.fileArg}</arg>
+                                    <arg>-Apipeline.transport=${tpf.build.transport}</arg>
+                                    <arg>-Apipeline.platform=${tpf.build.platform}</arg>
                                 </compilerArgs>
                             </configuration>
                         </execution>
