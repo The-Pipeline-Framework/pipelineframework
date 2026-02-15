@@ -16,11 +16,15 @@
 
 package org.pipelineframework.processor.phase;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
 
+import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,6 +32,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.pipelineframework.processor.PipelineCompilationContext;
+import org.pipelineframework.processor.ir.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
@@ -64,11 +70,62 @@ class PipelineBindingConstructionPhaseTest {
     }
 
     @Test
-    void testBindingConstructionPhaseExecution() throws Exception {
+    void testBindingConstructionPhaseExecution_noModels() throws Exception {
         PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
-        org.pipelineframework.processor.PipelineCompilationContext context = 
-            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
-        
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
         assertDoesNotThrow(() -> phase.execute(context));
+        assertNotNull(context.getRendererBindings());
+        assertTrue(context.getRendererBindings().isEmpty());
+    }
+
+    @Test
+    void testBindingConstructionPhaseExecution_stepWithRestTargets() throws Exception {
+        PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
+        PipelineStepModel model = createModel("TestService", Set.of(GenerationTarget.REST_RESOURCE));
+        context.setStepModels(List.of(model));
+
+        phase.execute(context);
+
+        Map<String, Object> bindings = context.getRendererBindings();
+        assertTrue(bindings.containsKey("TestService_rest"));
+        assertTrue(bindings.containsKey("TestService_grpc"));
+    }
+
+    @Test
+    void testBindingConstructionPhaseExecution_stepWithLocalTarget() throws Exception {
+        PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
+        PipelineStepModel model = createModel("TestService", Set.of(GenerationTarget.LOCAL_CLIENT_STEP));
+        context.setStepModels(List.of(model));
+
+        phase.execute(context);
+
+        Map<String, Object> bindings = context.getRendererBindings();
+        assertTrue(bindings.containsKey("TestService_local"));
+    }
+
+    @Test
+    void testConstructorInjection() {
+        GrpcRequirementEvaluator evaluator = new GrpcRequirementEvaluator();
+        PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase(evaluator);
+        assertNotNull(phase);
+    }
+
+    @Test
+    void testConstructorInjection_rejectsNull() {
+        assertThrows(NullPointerException.class,
+            () -> new PipelineBindingConstructionPhase(null));
+    }
+
+    private PipelineStepModel createModel(String name, Set<GenerationTarget> targets) {
+        return new PipelineStepModel(
+            name, name, "com.example.service", ClassName.get("com.example.service", name),
+            new TypeMapping(null, null, false), new TypeMapping(null, null, false),
+            StreamingShape.UNARY_UNARY, targets, ExecutionMode.DEFAULT,
+            DeploymentRole.PIPELINE_SERVER, false, null);
     }
 }

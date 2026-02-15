@@ -17,7 +17,7 @@ The canonical processor path is:
 
 This chain is wired in `PipelineStepProcessor.init(...)` and executed by `PipelineCompiler`.
 
-## Active vs Retained Components
+## Active Components
 
 Active in canonical path:
 
@@ -26,13 +26,16 @@ Active in canonical path:
 - `PipelineCompilationContext`
 - the eight phases listed above
 
-Retained in codebase but not in the default phase chain:
+## Extracted Collaborators
 
-- `ConfigurationLoadingPhase`
-- `TargetResolutionPhase`
-- `BindingResolutionPhase`
+Each phase with complex orchestration delegates to focused, stateless collaborators injected via constructor:
 
-These retained classes are not the canonical execution path unless explicitly wired.
+| Phase | Collaborators |
+| --- | --- |
+| PipelineDiscoveryPhase | `DiscoveryPathResolver`, `DiscoveryConfigLoader`, `TransportPlatformResolver` |
+| ModelExtractionPhase | `TemplateModelBuilder`, `TemplateExpansionOrchestrator` |
+| PipelineTargetResolutionPhase | `ClientRoleTargetResolutionStrategy`, `ServerRoleTargetResolutionStrategy` |
+| PipelineBindingConstructionPhase | `GrpcRequirementEvaluator`, `StepBindingBuilder` |
 
 ## Generation Dispatch Model
 

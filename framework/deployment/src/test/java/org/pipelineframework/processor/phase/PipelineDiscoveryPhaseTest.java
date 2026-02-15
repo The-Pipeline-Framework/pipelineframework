@@ -29,6 +29,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.pipelineframework.config.PlatformMode;
+import org.pipelineframework.processor.PipelineCompilationContext;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
@@ -58,15 +59,6 @@ class PipelineDiscoveryPhaseTest {
     }
 
     @Test
-    void testSupportedAnnotationTypes() {
-        // We need to initialize processor for this test
-        PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
-        // Note: Discovery phase doesn't need initialization like the processor
-        // This test would be more appropriate for the main processor
-        assertNotNull(phase);
-    }
-
-    @Test
     void testDiscoveryPhaseInitialization() {
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
         assertNotNull(phase);
@@ -74,24 +66,64 @@ class PipelineDiscoveryPhaseTest {
     }
 
     @Test
-    void testDiscoveryPhaseExecution() throws Exception {
+    void testDiscoveryPhaseExecution_defaultValues() throws Exception {
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
-        org.pipelineframework.processor.PipelineCompilationContext context =
-            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
 
-        // Execute the phase
         phase.execute(context);
 
-        // Verify that the context has been populated with expected values
-        // Since there are no annotated elements in the mock, we expect empty lists
-        assertNotNull(context.getStepModels()); // Should be initialized to empty list
-        assertNotNull(context.getAspectModels()); // Should be initialized to empty list
-        assertNotNull(context.getOrchestratorModels()); // Should be initialized to empty list
-        assertNotNull(context.getResolvedTargets()); // Should be initialized to empty set
-        assertNotNull(context.getGeneratedSourcesRoot()); // Should be set to default path
-        assertNotNull(context.getModuleDir()); // Should be set to default path
-        assertFalse(context.isPluginHost()); // Should be false since no plugin elements
-        assertTrue(context.isTransportModeGrpc()); // Should be true by default
-        assertEquals(PlatformMode.COMPUTE, context.getPlatformMode()); // Should default to COMPUTE
+        assertNotNull(context.getGeneratedSourcesRoot());
+        assertNotNull(context.getModuleDir());
+        assertFalse(context.isPluginHost());
+        assertTrue(context.isTransportModeGrpc());
+        assertEquals(PlatformMode.COMPUTE, context.getPlatformMode());
+        assertNotNull(context.getAspectModels());
+        assertNotNull(context.getOrchestratorModels());
+        assertTrue(context.getOrchestratorModels().isEmpty());
+    }
+
+    @Test
+    void testDiscoveryPhaseExecution_nullRoundEnv() throws Exception {
+        PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, null);
+
+        phase.execute(context);
+
+        assertNotNull(context.getGeneratedSourcesRoot());
+        assertFalse(context.isPluginHost());
+        assertTrue(context.getOrchestratorModels().isEmpty());
+    }
+
+    @Test
+    void testDiscoveryPhaseExecution_nullProcessingEnv() throws Exception {
+        PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+
+        phase.execute(context);
+
+        assertNotNull(context.getGeneratedSourcesRoot());
+        assertNotNull(context.getModuleDir());
+        assertFalse(context.isPluginHost());
+    }
+
+    @Test
+    void testConstructorInjection() {
+        DiscoveryPathResolver pathResolver = new DiscoveryPathResolver();
+        DiscoveryConfigLoader configLoader = new DiscoveryConfigLoader();
+        TransportPlatformResolver tpResolver = new TransportPlatformResolver();
+
+        PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase(pathResolver, configLoader, tpResolver);
+        assertNotNull(phase);
+        assertEquals("Pipeline Discovery Phase", phase.name());
+    }
+
+    @Test
+    void testConstructorInjection_rejectsNull() {
+        assertThrows(NullPointerException.class,
+            () -> new PipelineDiscoveryPhase(null, new DiscoveryConfigLoader(), new TransportPlatformResolver()));
+        assertThrows(NullPointerException.class,
+            () -> new PipelineDiscoveryPhase(new DiscoveryPathResolver(), null, new TransportPlatformResolver()));
+        assertThrows(NullPointerException.class,
+            () -> new PipelineDiscoveryPhase(new DiscoveryPathResolver(), new DiscoveryConfigLoader(), null));
     }
 }
