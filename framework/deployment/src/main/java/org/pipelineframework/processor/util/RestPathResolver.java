@@ -17,7 +17,6 @@ import org.pipelineframework.processor.ir.StreamingShape;
 public final class RestPathResolver {
 
     public static final String REST_NAMING_STRATEGY_OPTION = "pipeline.rest.naming.strategy";
-    public static final String REST_NAMING_STRATEGY_ENV = "PIPELINE_REST_NAMING_STRATEGY";
     private static final String API_BASE_PATH = "/api/v1";
     private static final Logger LOG = Logger.getLogger(RestPathResolver.class.getName());
 
@@ -57,15 +56,12 @@ public final class RestPathResolver {
                 raw = options.get(REST_NAMING_STRATEGY_OPTION);
             }
         }
+        
+        // If not found in processing environment options, check system property
         if (raw == null || raw.isBlank()) {
             raw = System.getProperty(REST_NAMING_STRATEGY_OPTION);
         }
-        if (raw == null || raw.isBlank()) {
-            raw = System.getenv(REST_NAMING_STRATEGY_ENV);
-        }
-        if (raw == null || raw.isBlank()) {
-            raw = System.getenv(REST_NAMING_STRATEGY_OPTION);
-        }
+        
         if (raw == null || raw.isBlank()) {
             return NamingStrategy.RESOURCEFUL;
         }

@@ -40,19 +40,19 @@ Run only the Lambda mock event server smoke test:
 
 ```bash
 ./mvnw -pl orchestrator-svc -am \
-  -Dpipeline.platform=FUNCTION \
-  -Dpipeline.transport=REST \
-  -Dpipeline.rest.naming.strategy=RESOURCEFUL \
-  -Dpipeline.lambda.dependency.scope=compile \
+  -Dtpf.build.platform=FUNCTION \
+  -Dtpf.build.transport=REST \
+  -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
+  -Dtpf.build.lambda.scope=compile \
   -Dquarkus.profile=lambda \
   -DskipTests \
   compile
 
 ./mvnw -pl orchestrator-svc \
-  -Dpipeline.platform=FUNCTION \
-  -Dpipeline.transport=REST \
-  -Dpipeline.rest.naming.strategy=RESOURCEFUL \
-  -Dpipeline.lambda.dependency.scope=compile \
+  -Dtpf.build.platform=FUNCTION \
+  -Dtpf.build.transport=REST \
+  -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
+  -Dtpf.build.lambda.scope=compile \
   -Dquarkus.profile=lambda \
   -Dtest=LambdaMockEventServerSmokeTest \
   test

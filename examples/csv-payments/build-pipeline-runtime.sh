@@ -36,4 +36,4 @@ trap cleanup EXIT
 
 cp "$PIPELINE_RUNTIME_MAPPING" "$ACTIVE_MAPPING"
 PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT:-GRPC}"
-"$MVN_BIN" -f "$CSV_DIR/pom.pipeline-runtime.xml" -Dpipeline.transport="$PIPELINE_TRANSPORT" clean install "$@"
+"$MVN_BIN" -f "$CSV_DIR/pom.pipeline-runtime.xml" -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean install "$@"
