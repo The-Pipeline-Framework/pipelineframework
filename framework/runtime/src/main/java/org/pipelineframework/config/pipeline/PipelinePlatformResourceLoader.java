@@ -29,7 +29,6 @@ import org.jboss.logging.Logger;
 public final class PipelinePlatformResourceLoader {
 
     private static final String RESOURCE = "META-INF/pipeline/platform.json";
-    private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final Logger LOG = Logger.getLogger(PipelinePlatformResourceLoader.class);
 
     private PipelinePlatformResourceLoader() {
@@ -48,7 +47,7 @@ public final class PipelinePlatformResourceLoader {
                 LOG.debugf("Pipeline platform resource not found: %s", RESOURCE);
                 return Optional.empty();
             }
-            Map<?, ?> data = MAPPER.readValue(streamToRead, Map.class);
+            Map<?, ?> data = PipelineJson.mapper().readValue(streamToRead, Map.class);
             String platform = readString(data, "platform");
             String transport = readString(data, "transport");
             String module = readString(data, "module");

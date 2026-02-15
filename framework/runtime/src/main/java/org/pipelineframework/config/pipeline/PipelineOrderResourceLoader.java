@@ -32,7 +32,6 @@ public final class PipelineOrderResourceLoader {
 
     private static final String RESOURCE = "META-INF/pipeline/order.json";
     private static final String ROLES_RESOURCE = "META-INF/pipeline/roles.json";
-    private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final Logger LOG = Logger.getLogger(PipelineOrderResourceLoader.class);
 
     private PipelineOrderResourceLoader() {
@@ -51,7 +50,7 @@ public final class PipelineOrderResourceLoader {
                 logMissingResource(classLoader);
                 return Optional.empty();
             }
-            Map<?, ?> data = MAPPER.readValue(streamToRead, Map.class);
+            Map<?, ?> data = PipelineJson.mapper().readValue(streamToRead, Map.class);
             Object value = data.get("order");
             if (!(value instanceof List<?> list)) {
                 throw new IllegalStateException("Pipeline order resource is missing an order array.");
@@ -78,7 +77,7 @@ public final class PipelineOrderResourceLoader {
             if (stream == null) {
                 return false;
             }
-            Map<?, ?> data = MAPPER.readValue(streamToRead, Map.class);
+            Map<?, ?> data = PipelineJson.mapper().readValue(streamToRead, Map.class);
             Object roles = data.get("roles");
             if (!(roles instanceof Map<?, ?> rolesMap)) {
                 return false;

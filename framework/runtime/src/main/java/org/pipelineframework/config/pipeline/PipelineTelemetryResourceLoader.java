@@ -28,7 +28,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public final class PipelineTelemetryResourceLoader {
 
     private static final String RESOURCE = "META-INF/pipeline/telemetry.json";
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private PipelineTelemetryResourceLoader() {
     }
@@ -54,7 +53,7 @@ public final class PipelineTelemetryResourceLoader {
             if (streamToRead == null) {
                 return Optional.empty();
             }
-            Map<?, ?> data = MAPPER.readValue(streamToRead, Map.class);
+            Map<?, ?> data = PipelineJson.mapper().readValue(streamToRead, Map.class);
             String itemInputType = valueAsString(data.get("itemInputType"));
             String itemOutputType = valueAsString(data.get("itemOutputType"));
             String producerStep = valueAsString(data.get("producerStep"));
