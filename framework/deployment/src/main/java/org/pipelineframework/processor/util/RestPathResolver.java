@@ -56,6 +56,12 @@ public final class RestPathResolver {
                 raw = options.get(REST_NAMING_STRATEGY_OPTION);
             }
         }
+        
+        // If not found in processing environment options, check system property
+        if (raw == null || raw.isBlank()) {
+            raw = System.getProperty(REST_NAMING_STRATEGY_OPTION);
+        }
+        
         if (raw == null || raw.isBlank()) {
             return NamingStrategy.RESOURCEFUL;
         }
