@@ -2,7 +2,6 @@ package org.pipelineframework.processor.phase;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Collections;
 import java.util.Map;
 
 /**
@@ -12,8 +11,15 @@ import java.util.Map;
 class DiscoveryPathResolver {
 
     private static final int GENERATED_SOURCES_DEPTH = 3; // Maps to "target/generated-sources/pipeline" depth
-    private static final Path DEFAULT_GENERATED_SOURCES_ROOT = 
-        Paths.get(System.getProperty("user.dir"), "target", "generated-sources", "pipeline");
+
+    /**
+     * Gets the default generated sources root path based on current working directory.
+     *
+     * @return the default path for generated pipeline sources
+     */
+    private Path getDefaultGeneratedSourcesRoot() {
+        return Paths.get(System.getProperty("user.dir"), "target", "generated-sources", "pipeline");
+    }
 
     /**
      * Resolve the root directory where generated pipeline sources should be written.
@@ -27,7 +33,7 @@ class DiscoveryPathResolver {
      */
     Path resolveGeneratedSourcesRoot(Map<String, String> options) {
         if (options == null) {
-            return DEFAULT_GENERATED_SOURCES_ROOT;
+            return getDefaultGeneratedSourcesRoot();
         }
 
         String configured = options.get("pipeline.generatedSourcesDir");
@@ -40,7 +46,7 @@ class DiscoveryPathResolver {
             return Paths.get(fallback);
         }
 
-        return DEFAULT_GENERATED_SOURCES_ROOT;
+        return getDefaultGeneratedSourcesRoot();
     }
 
     /**

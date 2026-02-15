@@ -24,6 +24,9 @@ class StepBindingBuilder {
     static final String REST_SUFFIX = "_rest";
     static final String LOCAL_SUFFIX = "_local";
     static final String ORCHESTRATOR_KEY = "orchestrator";
+    
+    private static final GrpcBindingResolver GRPC_RESOLVER = new GrpcBindingResolver();
+    private static final RestBindingResolver REST_RESOLVER = new RestBindingResolver();
 
     /**
      * Construct renderer-specific bindings for all step models.
@@ -39,20 +42,18 @@ class StepBindingBuilder {
             DescriptorProtos.FileDescriptorSet descriptorSet,
             ProcessingEnvironment processingEnv) {
         Map<String, Object> bindingsMap = new HashMap<>();
-        GrpcBindingResolver grpcBindingResolver = new GrpcBindingResolver();
-        RestBindingResolver restBindingResolver = new RestBindingResolver();
 
         for (PipelineStepModel model : stepModels) {
             GrpcBinding grpcBinding = null;
             if (model.enabledTargets().contains(GenerationTarget.GRPC_SERVICE)
                 || model.enabledTargets().contains(GenerationTarget.CLIENT_STEP)) {
-                grpcBinding = grpcBindingResolver.resolve(model, descriptorSet);
+                grpcBinding = GRPC_RESOLVER.resolve(model, descriptorSet);
             }
 
             RestBinding restBinding = null;
             if (model.enabledTargets().contains(GenerationTarget.REST_RESOURCE)
                 || model.enabledTargets().contains(GenerationTarget.REST_CLIENT_STEP)) {
-                restBinding = restBindingResolver.resolve(model, processingEnv);
+                restBinding = REST_RESOLVER.resolve(model, processingEnv);
             }
 
             String modelKey = model.serviceName();

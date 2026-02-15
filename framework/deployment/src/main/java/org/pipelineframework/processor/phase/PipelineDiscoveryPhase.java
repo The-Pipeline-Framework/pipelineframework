@@ -136,7 +136,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
 
             String serviceName = element.getSimpleName().toString() + "Orchestrator";
             String servicePackage = element instanceof TypeElement typeElement
-                ? typeElement.getQualifiedName().toString().replace("." + element.getSimpleName().toString(), ".orchestrator.service")
+                ? computeServicePackage(typeElement.getQualifiedName().toString(), element.getSimpleName().toString())
                 : "org.pipelineframework.orchestrator.service";
 
             Set<GenerationTarget> enabledTargets;
@@ -152,5 +152,23 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         }
 
         return models;
+    }
+
+    /**
+     * Computes the service package by finding the last occurrence of the simple class name
+     * in the qualified name and replacing it with ".orchestrator.service".
+     *
+     * @param qualifiedName the fully qualified name of the type
+     * @param simpleName the simple name of the type
+     * @return the computed service package
+     */
+    private String computeServicePackage(String qualifiedName, String simpleName) {
+        String classNameWithDot = "." + simpleName;
+        int lastDotIndex = qualifiedName.lastIndexOf(classNameWithDot);
+        if (lastDotIndex != -1) {
+            return qualifiedName.substring(0, lastDotIndex) + ".orchestrator.service";
+        }
+        // Fallback to the original qualified name if the simple name isn't found at the end
+        return "org.pipelineframework.orchestrator.service";
     }
 }
