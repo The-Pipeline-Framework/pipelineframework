@@ -80,9 +80,12 @@ class DiscoveryPathResolver {
             return null;
         }
         String moduleName = options.get("pipeline.module");
-        if (moduleName == null || moduleName.isBlank()) {
+        if (moduleName != null) {
+            moduleName = moduleName.trim();
+        }
+        if (moduleName == null || moduleName.isEmpty()) {
             return null;
         }
-        return moduleName.trim();
+        return moduleName;
     }
 }

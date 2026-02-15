@@ -30,11 +30,15 @@ class StepBindingBuilder {
 
     /**
      * Construct renderer-specific bindings for all step models.
-     *
+     * 
+     * This method returns a Map<String, Object> that accommodates heterogeneous binding types
+     * (GrpcBinding, RestBinding, LocalBinding) for Mustache/template engines and other templating
+     * libraries. Callers will need to cast entries to the concrete types when accessing them.
+     * 
      * @param stepModels the pipeline step models
      * @param descriptorSet the protobuf descriptor set (may be null)
      * @param processingEnv the processing environment (may be null)
-     * @return a map of bindings keyed by model name + suffix
+     * @return a map of bindings keyed by model name + suffix; values are of type Object and must be cast to concrete binding types
      * @throws IllegalStateException if duplicate service names are detected that would cause silent overwrites
      */
     static Map<String, Object> constructBindings(

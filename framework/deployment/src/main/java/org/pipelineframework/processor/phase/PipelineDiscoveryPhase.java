@@ -2,6 +2,7 @@ package org.pipelineframework.processor.phase;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -127,6 +128,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         }
 
         List<PipelineOrchestratorModel> models = new ArrayList<>();
+        Set<String> serviceNames = new HashSet<>();
 
         for (Element element : orchestratorElements) {
             PipelineOrchestrator annotation = element.getAnnotation(PipelineOrchestrator.class);
@@ -135,6 +137,15 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
             }
 
             String serviceName = element.getSimpleName().toString() + "Orchestrator";
+            
+            // Check for duplicate service names to avoid downstream errors
+            if (serviceNames.contains(serviceName)) {
+                String qualifiedName = element instanceof TypeElement ? ((TypeElement) element).getQualifiedName().toString() : element.toString();
+                throw new IllegalStateException("Duplicate service name detected: " + serviceName + 
+                    " from element: " + qualifiedName + 
+                    ". Different types with the same simple name must have unique service names.");
+            }
+            
             String servicePackage = element instanceof TypeElement typeElement
                 ? computeServicePackage(typeElement.getQualifiedName().toString(), element.getSimpleName().toString())
                 : "org.pipelineframework.orchestrator.service";
@@ -149,6 +160,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
             }
 
             models.add(new PipelineOrchestratorModel(serviceName, servicePackage, enabledTargets, annotation.generateCli()));
+            serviceNames.add(serviceName);
         }
 
         return models;
