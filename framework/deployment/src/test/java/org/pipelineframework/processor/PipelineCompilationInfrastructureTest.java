@@ -4,10 +4,8 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.processor.phase.BindingResolutionPhase;
-import org.pipelineframework.processor.phase.ConfigurationLoadingPhase;
 import org.pipelineframework.processor.phase.ModelExtractionPhase;
-import org.pipelineframework.processor.phase.TargetResolutionPhase;
+import org.pipelineframework.processor.phase.PipelineDiscoveryPhase;
 
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -21,7 +19,7 @@ public class PipelineCompilationInfrastructureTest {
     public void testPipelineCompilationContextCreation() {
         // This test verifies that the core infrastructure classes can be instantiated
         PipelineCompilationContext context = new PipelineCompilationContext(null, null);
-        
+
         assertNotNull(context);
         assertNotNull(context.getStepModels());
         assertNotNull(context.getAspectModels());
@@ -34,12 +32,10 @@ public class PipelineCompilationInfrastructureTest {
     public void testPipelineCompilationPhaseImplementation() {
         // Test that our phase implementations follow the interface contract
         List<PipelineCompilationPhase> phases = Arrays.asList(
-            new ConfigurationLoadingPhase(),
-            new ModelExtractionPhase(),
-            new TargetResolutionPhase(),
-            new BindingResolutionPhase()
+            new PipelineDiscoveryPhase(),
+            new ModelExtractionPhase()
         );
-        
+
         for (PipelineCompilationPhase phase : phases) {
             assertNotNull(phase.name());
             assertNotEquals("", phase.name().trim(), "Phase name should not be empty");
@@ -50,10 +46,10 @@ public class PipelineCompilationInfrastructureTest {
     public void testPipelineCompilerInstantiation() {
         // Test that we can instantiate the compiler with phases
         List<PipelineCompilationPhase> phases = Arrays.asList(
-            new ConfigurationLoadingPhase(),
+            new PipelineDiscoveryPhase(),
             new ModelExtractionPhase()
         );
-        
+
         PipelineCompiler compiler = new PipelineCompiler(phases);
         assertNotNull(compiler);
     }

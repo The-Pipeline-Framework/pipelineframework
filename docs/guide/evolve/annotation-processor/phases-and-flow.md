@@ -15,16 +15,17 @@ Configured in `PipelineStepProcessor.init`:
 
 ## Responsibility Matrix
 
-| Phase | Primary Responsibility | Key Outputs in Context |
-| --- | --- | --- |
-| Discovery | Load config, resolve module paths, detect plugin/orchestrator markers | module paths, platform/transport mode, aspect/template/orchestrator models |
-| Model Extraction | Build `PipelineStepModel` IR from annotations and template-derived steps | `stepModels` |
-| Runtime Mapping | Apply runtime placement/module filtering | filtered `stepModels`, mapping resolution |
-| Semantic Analysis | Policy checks and semantic constraints | orchestrator flag, diagnostics |
-| Target Resolution | Map role+transport to target sets | updated `enabledTargets`, `resolvedTargets` |
-| Binding Construction | Build renderer-facing bindings | `rendererBindings`, descriptor set |
-| Generation | Emit sources/metadata | generated artifacts + metadata resources |
-| Infrastructure | Ensure output directories and filesystem context | role directories under generated-sources root |
+| Phase | Primary Responsibility | Key Outputs in Context | Collaborators |
+| --- | --- | --- | --- |
+| Discovery | Load config, resolve module paths, detect plugin/orchestrator markers | module paths, platform/transport mode, aspect/template/orchestrator models | `DiscoveryPathResolver`, `DiscoveryConfigLoader`, `TransportPlatformResolver` |
+| Model Extraction | Build `PipelineStepModel` IR from annotations and template-derived steps | `stepModels` | `TemplateModelBuilder`, `TemplateExpansionOrchestrator` |
+| Runtime Mapping | Apply runtime placement/module filtering | filtered `stepModels`, mapping resolution | — |
+| Semantic Analysis | Policy checks and semantic constraints | orchestrator flag, diagnostics | — |
+| Target Resolution | Map role+transport to target sets | updated `enabledTargets`, `resolvedTargets` | `ClientRoleTargetResolutionStrategy`, `ServerRoleTargetResolutionStrategy` |
+| Binding Construction | Build renderer-facing bindings | `rendererBindings`, descriptor set | `GrpcRequirementEvaluator`, `StepBindingBuilder` |
+| Generation | Emit sources/metadata | generated artifacts + metadata resources | — |
+| Infrastructure | Ensure output directories and filesystem context | role directories under generated-sources root | — |
+
 
 ## Data Flow
 
@@ -67,3 +68,4 @@ sequenceDiagram
 - The phase chain is explicit and deterministic.
 - Failures are reported with phase names via `PipelineCompiler`.
 - Each phase is intended to keep concern boundaries strict.
+- Phases with collaborators use constructor injection: a no-arg constructor wires production defaults, and a package-private constructor accepts explicit collaborators for testing.

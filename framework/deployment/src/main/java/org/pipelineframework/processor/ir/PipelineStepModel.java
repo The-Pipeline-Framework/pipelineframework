@@ -404,4 +404,29 @@ public record PipelineStepModel(
                     threadSafety);
         }
     }
+    
+    /**
+     * Creates a new PipelineStepModel with the same properties as this instance but with the specified deployment role.
+     *
+     * @param role the deployment role to use in the new instance
+     * @return a new PipelineStepModel with the same properties but the specified deployment role
+     */
+    public PipelineStepModel withDeploymentRole(DeploymentRole role) {
+        return new PipelineStepModel(
+            serviceName,
+            generatedName,
+            servicePackage,
+            serviceClassName,
+            inputMapping,
+            outputMapping,
+            streamingShape,
+            enabledTargets,
+            executionMode,
+            role,
+            sideEffect,
+            cacheKeyGenerator,
+            orderingRequirement,
+            threadSafety
+        );
+    }
 }
