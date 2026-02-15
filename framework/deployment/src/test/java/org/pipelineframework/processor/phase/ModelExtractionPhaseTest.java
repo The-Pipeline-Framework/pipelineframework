@@ -114,24 +114,26 @@ class ModelExtractionPhaseTest {
 
         // Create a real PipelineTemplateStep record instance
         var templateStep = new org.pipelineframework.config.template.PipelineTemplateStep(
-            "TestStep", 
-            "UNARY_UNARY", 
-            "InputType", 
-            java.util.List.of(), 
-            "OutputType", 
+            "TestStep",
+            "ONE_TO_ONE",  // Valid cardinality string, not a StreamingShape value
+            "InputType",
+            java.util.List.of(),
+            "OutputType",
             java.util.List.of()
         );
 
         // Create a real PipelineTemplateConfig record instance
         var templateConfig = new org.pipelineframework.config.template.PipelineTemplateConfig(
-            "testApp", 
-            "com.example", 
-            "GRPC", 
-            java.util.List.of(templateStep), 
+            "testApp",
+            "com.example",
+            "GRPC",
+            java.util.List.of(templateStep),
             java.util.Map.of()
         );
 
         context.setPipelineTemplateConfig(templateConfig);
+        context.setPluginHost(true);  // Need to be a plugin host or have orchestrator to process templates
+        context.setTransportMode(org.pipelineframework.processor.ir.TransportMode.LOCAL);  // Make plugins colocated to avoid needing plugin aspects
 
         phase.execute(context);
 
