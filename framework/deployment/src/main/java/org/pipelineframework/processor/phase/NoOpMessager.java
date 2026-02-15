@@ -1,6 +1,9 @@
 package org.pipelineframework.processor.phase;
 
 import javax.annotation.processing.Messager;
+import javax.lang.model.element.AnnotationMirror;
+import javax.lang.model.element.AnnotationValue;
+import javax.lang.model.element.Element;
 import javax.tools.Diagnostic;
 
 /**
@@ -15,17 +18,17 @@ class NoOpMessager implements Messager {
     }
 
     @Override
-    public void printMessage(Diagnostic.Kind kind, CharSequence msg, javax.lang.model.element.Element e) {
+    public void printMessage(Diagnostic.Kind kind, CharSequence msg, Element e) {
         // Do nothing
     }
 
     @Override
-    public void printMessage(Diagnostic.Kind kind, CharSequence msg, javax.lang.model.element.Element e, javax.lang.model.element.AnnotationMirror a) {
+    public void printMessage(Diagnostic.Kind kind, CharSequence msg, Element e, AnnotationMirror a) {
         // Do nothing
     }
 
     @Override
-    public void printMessage(Diagnostic.Kind kind, CharSequence msg, javax.lang.model.element.Element e, javax.lang.model.element.AnnotationMirror a, javax.lang.model.element.AnnotationValue v) {
+    public void printMessage(Diagnostic.Kind kind, CharSequence msg, Element e, AnnotationMirror a, AnnotationValue v) {
         // Do nothing
     }
 }

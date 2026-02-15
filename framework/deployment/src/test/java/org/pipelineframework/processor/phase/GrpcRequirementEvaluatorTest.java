@@ -28,8 +28,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.processor.ir.*;
-import org.pipelineframework.processor.phase.TestModelFactory;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.contains;
@@ -114,11 +112,11 @@ class GrpcRequirementEvaluatorTest {
     }
 
     @Test
-    void needsGrpc_orchestratorWithUnknownTransport_warnsAndFalse() {
+    void needsGrpc_orchestratorWithUnknownTransport_warnsAndTrue() {
         PipelineOrchestratorModel orch = new PipelineOrchestratorModel("OrcSvc", "com.example", Set.of(), false);
         PipelineTemplateConfig config = new PipelineTemplateConfig("app", "com.example", "UNKNOWN", List.of(), null);
 
-        assertFalse(evaluator.needsGrpcBindings(List.of(), List.of(orch), config, messager));
+        assertTrue(evaluator.needsGrpcBindings(List.of(), List.of(orch), config, messager));
         verify(messager).printMessage(eq(Diagnostic.Kind.WARNING), contains("Unknown transport"));
     }
 

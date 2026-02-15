@@ -134,7 +134,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
                 continue;
             }
 
-            String serviceName = "OrchestratorService";
+            String serviceName = element.getSimpleName().toString() + "Orchestrator";
             String servicePackage = element instanceof TypeElement typeElement
                 ? typeElement.getQualifiedName().toString().replace("." + element.getSimpleName().toString(), ".orchestrator.service")
                 : "org.pipelineframework.orchestrator.service";

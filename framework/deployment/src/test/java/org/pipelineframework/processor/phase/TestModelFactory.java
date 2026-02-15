@@ -23,4 +23,21 @@ public class TestModelFactory {
             StreamingShape.UNARY_UNARY, Set.of(), ExecutionMode.DEFAULT,
             DeploymentRole.PIPELINE_SERVER, false, null);
     }
+    
+    /**
+     * Creates a test PipelineStepModel with the given name and specific targets.
+     *
+     * @param name the name for the service
+     * @param targets the generation targets
+     * @return a new PipelineStepModel for testing with specified targets
+     */
+    public static PipelineStepModel createTestModelWithTargets(String name, Set<GenerationTarget> targets) {
+        PipelineStepModel original = createTestModel(name);
+        return new PipelineStepModel(
+            original.serviceName(), original.generatedName(), original.servicePackage(), original.serviceClassName(),
+            original.inputMapping(), original.outputMapping(), original.streamingShape(),
+            targets, original.executionMode(),
+            original.deploymentRole(), original.sideEffect(), original.cacheKeyGenerator(),
+            original.orderingRequirement(), original.threadSafety());
+    }
 }

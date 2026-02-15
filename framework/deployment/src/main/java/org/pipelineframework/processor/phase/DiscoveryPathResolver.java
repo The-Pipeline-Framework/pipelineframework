@@ -12,6 +12,8 @@ import java.util.Map;
 class DiscoveryPathResolver {
 
     private static final int GENERATED_SOURCES_DEPTH = 3; // Maps to "target/generated-sources/pipeline" depth
+    private static final Path DEFAULT_GENERATED_SOURCES_ROOT = 
+        Paths.get(System.getProperty("user.dir"), "target", "generated-sources", "pipeline");
 
     /**
      * Resolve the root directory where generated pipeline sources should be written.
@@ -25,9 +27,9 @@ class DiscoveryPathResolver {
      */
     Path resolveGeneratedSourcesRoot(Map<String, String> options) {
         if (options == null) {
-            return Paths.get(System.getProperty("user.dir"), "target", "generated-sources", "pipeline");
+            return DEFAULT_GENERATED_SOURCES_ROOT;
         }
-        
+
         String configured = options.get("pipeline.generatedSourcesDir");
         if (configured != null && !configured.isBlank()) {
             return Paths.get(configured);
@@ -38,7 +40,7 @@ class DiscoveryPathResolver {
             return Paths.get(fallback);
         }
 
-        return Paths.get(System.getProperty("user.dir"), "target", "generated-sources", "pipeline");
+        return DEFAULT_GENERATED_SOURCES_ROOT;
     }
 
     /**

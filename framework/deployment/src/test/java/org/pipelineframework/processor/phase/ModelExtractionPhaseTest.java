@@ -111,42 +111,26 @@ class ModelExtractionPhaseTest {
     void testExecute_withTemplateModels_mergesIntoStepModels() throws Exception {
         ModelExtractionPhase phase = new ModelExtractionPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
-        
-        // Create a mock template config with steps
-        var templateConfig = new org.pipelineframework.config.template.PipelineTemplateConfig() {
-            @Override
-            public String basePackage() {
-                return "com.example";
-            }
 
-            @Override
-            public java.util.List<org.pipelineframework.config.template.PipelineTemplateStep> steps() {
-                return java.util.List.of(
-                    new org.pipelineframework.config.template.PipelineTemplateStep() {
-                        @Override
-                        public String name() {
-                            return "TestStep";
-                        }
+        // Create a real PipelineTemplateStep record instance
+        var templateStep = new org.pipelineframework.config.template.PipelineTemplateStep(
+            "TestStep", 
+            "UNARY_UNARY", 
+            "InputType", 
+            java.util.List.of(), 
+            "OutputType", 
+            java.util.List.of()
+        );
 
-                        @Override
-                        public String inputTypeName() {
-                            return "InputType";
-                        }
+        // Create a real PipelineTemplateConfig record instance
+        var templateConfig = new org.pipelineframework.config.template.PipelineTemplateConfig(
+            "testApp", 
+            "com.example", 
+            "GRPC", 
+            java.util.List.of(templateStep), 
+            java.util.Map.of()
+        );
 
-                        @Override
-                        public String outputTypeName() {
-                            return "OutputType";
-                        }
-
-                        @Override
-                        public org.pipelineframework.config.template.Cardinality cardinality() {
-                            return org.pipelineframework.config.template.Cardinality.UNARY_UNARY;
-                        }
-                    }
-                );
-            }
-        };
-        
         context.setPipelineTemplateConfig(templateConfig);
 
         phase.execute(context);

@@ -34,7 +34,6 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.*;
-import org.pipelineframework.processor.phase.TestModelFactory;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
@@ -85,14 +84,7 @@ class PipelineBindingConstructionPhaseTest {
         PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
 
-        PipelineStepModel model = TestModelFactory.createTestModel("TestService");
-        // Create a new model with the specific targets
-        PipelineStepModel modelWithTargets = new PipelineStepModel(
-            model.serviceName(), model.generatedName(), model.servicePackage(), model.serviceClassName(),
-            model.inputMapping(), model.outputMapping(), model.streamingShape(), 
-            Set.of(GenerationTarget.REST_RESOURCE), model.executionMode(),
-            model.deploymentRole(), model.sideEffect(), model.cacheKeyGenerator(),
-            model.orderingRequirement(), model.threadSafety());
+        PipelineStepModel modelWithTargets = TestModelFactory.createTestModelWithTargets("TestService", Set.of(GenerationTarget.REST_RESOURCE));
         context.setStepModels(List.of(modelWithTargets));
 
         phase.execute(context);
@@ -107,14 +99,7 @@ class PipelineBindingConstructionPhaseTest {
         PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
 
-        PipelineStepModel model = TestModelFactory.createTestModel("TestService");
-        // Create a new model with the specific targets
-        PipelineStepModel modelWithTargets = new PipelineStepModel(
-            model.serviceName(), model.generatedName(), model.servicePackage(), model.serviceClassName(),
-            model.inputMapping(), model.outputMapping(), model.streamingShape(), 
-            Set.of(GenerationTarget.LOCAL_CLIENT_STEP), model.executionMode(),
-            model.deploymentRole(), model.sideEffect(), model.cacheKeyGenerator(),
-            model.orderingRequirement(), model.threadSafety());
+        PipelineStepModel modelWithTargets = TestModelFactory.createTestModelWithTargets("TestService", Set.of(GenerationTarget.LOCAL_CLIENT_STEP));
         context.setStepModels(List.of(modelWithTargets));
 
         phase.execute(context);
