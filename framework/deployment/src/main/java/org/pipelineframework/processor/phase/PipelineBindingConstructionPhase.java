@@ -55,10 +55,11 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
         DescriptorProtos.FileDescriptorSet descriptorSet = ctx.getDescriptorSet();
 
         // Evaluate gRPC requirement and load descriptors if needed
-        if (descriptorSet == null && grpcRequirementEvaluator.needsGrpcBindings(
+        PipelineTemplateConfig templateConfig = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig cfg ? cfg : null;
+        if (descriptorSet == null && ctx.getProcessingEnv() != null && grpcRequirementEvaluator.needsGrpcBindings(
                 ctx.getStepModels(), ctx.getOrchestratorModels(),
-                ctx.getPipelineTemplateConfig(),
-                ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getMessager() : null)) {
+                templateConfig,
+                ctx.getProcessingEnv().getMessager())) {
             descriptorSet = loadDescriptorSet(ctx);
             ctx.setDescriptorSet(descriptorSet);
         }
@@ -70,7 +71,7 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
         // Add orchestrator binding if present
         if (!ctx.getOrchestratorModels().isEmpty()) {
             OrchestratorBinding orchestratorBinding = OrchestratorBindingBuilder.buildOrchestratorBinding(
-                (PipelineTemplateConfig) ctx.getPipelineTemplateConfig(),
+                templateConfig,
                 ctx.getRoundEnv() != null ? ctx.getRoundEnv().getElementsAnnotatedWith(PipelineOrchestrator.class) : Set.of()
             );
             if (orchestratorBinding != null) {

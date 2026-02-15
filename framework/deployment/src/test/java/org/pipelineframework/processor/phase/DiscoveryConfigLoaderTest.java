@@ -33,6 +33,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 
 /** Unit tests for DiscoveryConfigLoader */
@@ -67,7 +68,7 @@ class DiscoveryConfigLoaderTest {
             Map.of("pipeline.config", "/nonexistent/pipeline.yaml"), tempDir, messager);
 
         assertTrue(result.isEmpty());
-        verify(messager).printMessage(any(Diagnostic.Kind.class), contains("pipeline.config points to a missing path"));
+        verify(messager).printMessage(eq(Diagnostic.Kind.ERROR), contains("pipeline.config points to a missing path"));
     }
 
     @Test
@@ -80,6 +81,7 @@ class DiscoveryConfigLoaderTest {
             Map.of("pipeline.config", "config/pipeline.yaml"), tempDir, messager);
 
         assertTrue(result.isPresent());
+        assertEquals(configFile, result.get());
     }
 
     @Test

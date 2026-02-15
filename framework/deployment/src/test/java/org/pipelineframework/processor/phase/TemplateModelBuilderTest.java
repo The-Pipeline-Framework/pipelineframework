@@ -26,8 +26,6 @@ import org.pipelineframework.processor.ir.PipelineStepModel;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-// Helper to build test template steps: PipelineTemplateStep(name, cardinality, inputTypeName, inputFields, outputTypeName, outputFields)
-
 /** Unit tests for TemplateModelBuilder */
 class TemplateModelBuilderTest {
 
@@ -67,7 +65,7 @@ class TemplateModelBuilderTest {
         assertEquals(1, models.size());
         PipelineStepModel model = models.getFirst();
         assertEquals("ProcessDataService", model.serviceName());
-        assertTrue(model.servicePackage().startsWith("com.example."));
+        assertEquals("com.example.process_data.service", model.servicePackage());
         assertEquals(DeploymentRole.PIPELINE_SERVER, model.deploymentRole());
     }
 
@@ -92,30 +90,27 @@ class TemplateModelBuilderTest {
         assertEquals(2, models.size());
     }
 
-    // --- toPackageSegment ---
+    // --- Package segment derivation (tested indirectly through buildModels) ---
 
     @Test
-    void toPackageSegment_null_defaultsToService() {
-        assertEquals("service", builder.toPackageSegment(null));
+    void buildModels_specialCharsInName_producesValidPackage() {
+        PipelineTemplateStep step = step("Process--Data!!", "In", "Out");
+        PipelineTemplateConfig config = new PipelineTemplateConfig("app", "com.example", null, List.of(step), null);
+
+        List<PipelineStepModel> models = builder.buildModels(config);
+        assertEquals(1, models.size());
+        String pkg = models.getFirst().servicePackage();
+        // Package segment should not start/end with underscore
+        String segment = pkg.replace("com.example.", "").replace(".service", "");
+        assertFalse(segment.startsWith("_"));
+        assertFalse(segment.endsWith("_"));
+        assertEquals("process_data", segment);
     }
 
-    @Test
-    void toPackageSegment_blank_defaultsToService() {
-        assertEquals("service", builder.toPackageSegment("  "));
-    }
-
-    @Test
-    void toPackageSegment_normalName() {
-        assertEquals("process_data", builder.toPackageSegment("Process Data"));
-    }
-
-    @Test
-    void toPackageSegment_specialChars() {
-        String result = builder.toPackageSegment("Process--Data!!");
-        assertFalse(result.startsWith("_"));
-        assertFalse(result.endsWith("_"));
-    }
-
+    /**
+     * Creates a test PipelineTemplateStep with the given name, input type, and output type.
+     * Other fields (cardinality, inputFields, outputFields) are left null.
+     */
     private static PipelineTemplateStep step(String name, String inputType, String outputType) {
         return new PipelineTemplateStep(name, null, inputType, null, outputType, null);
     }

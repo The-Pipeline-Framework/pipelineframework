@@ -5,7 +5,11 @@ import java.util.List;
 import java.util.Map;
 
 import com.google.protobuf.DescriptorProtos;
-import org.pipelineframework.processor.ir.*;
+import org.pipelineframework.processor.ir.GenerationTarget;
+import org.pipelineframework.processor.ir.GrpcBinding;
+import org.pipelineframework.processor.ir.LocalBinding;
+import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.RestBinding;
 import org.pipelineframework.processor.util.GrpcBindingResolver;
 import org.pipelineframework.processor.util.RestBindingResolver;
 
@@ -51,8 +55,12 @@ class StepBindingBuilder {
             }
 
             String modelKey = model.serviceName();
-            bindingsMap.put(modelKey + GRPC_SUFFIX, grpcBinding);
-            bindingsMap.put(modelKey + REST_SUFFIX, restBinding);
+            if (grpcBinding != null) {
+                bindingsMap.put(modelKey + GRPC_SUFFIX, grpcBinding);
+            }
+            if (restBinding != null) {
+                bindingsMap.put(modelKey + REST_SUFFIX, restBinding);
+            }
             if (model.enabledTargets().contains(GenerationTarget.LOCAL_CLIENT_STEP)) {
                 bindingsMap.put(modelKey + LOCAL_SUFFIX, new LocalBinding(model));
             }

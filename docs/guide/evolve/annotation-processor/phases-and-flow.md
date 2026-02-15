@@ -26,7 +26,6 @@ Configured in `PipelineStepProcessor.init`:
 | Generation | Emit sources/metadata | generated artifacts + metadata resources | — |
 | Infrastructure | Ensure output directories and filesystem context | role directories under generated-sources root | — |
 
-All phases with collaborators use constructor injection: a no-arg constructor wires production defaults, and a package-private constructor accepts explicit collaborators for testing.
 
 ## Data Flow
 
@@ -69,3 +68,4 @@ sequenceDiagram
 - The phase chain is explicit and deterministic.
 - Failures are reported with phase names via `PipelineCompiler`.
 - Each phase is intended to keep concern boundaries strict.
+- Phases with collaborators use constructor injection: a no-arg constructor wires production defaults, and a package-private constructor accepts explicit collaborators for testing.

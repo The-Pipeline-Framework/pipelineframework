@@ -139,11 +139,14 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
                 ? typeElement.getQualifiedName().toString().replace("." + element.getSimpleName().toString(), ".orchestrator.service")
                 : "org.pipelineframework.orchestrator.service";
 
-            var enabledTargets = ctx.isTransportModeLocal()
-                ? java.util.Set.<GenerationTarget>of()
-                : (ctx.isTransportModeRest()
-                    ? java.util.Set.of(GenerationTarget.REST_RESOURCE)
-                    : java.util.Set.of(GenerationTarget.GRPC_SERVICE));
+            Set<GenerationTarget> enabledTargets;
+            if (ctx.isTransportModeLocal()) {
+                enabledTargets = Set.of();
+            } else if (ctx.isTransportModeRest()) {
+                enabledTargets = Set.of(GenerationTarget.REST_RESOURCE);
+            } else {
+                enabledTargets = Set.of(GenerationTarget.GRPC_SERVICE);
+            }
 
             models.add(new PipelineOrchestratorModel(serviceName, servicePackage, enabledTargets, annotation.generateCli()));
         }

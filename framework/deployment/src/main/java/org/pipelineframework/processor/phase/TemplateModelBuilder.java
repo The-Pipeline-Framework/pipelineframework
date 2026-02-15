@@ -41,6 +41,9 @@ class TemplateModelBuilder {
             }
 
             String stepName = step.name();
+            if (stepName == null || stepName.isBlank()) {
+                continue;
+            }
             String formattedName = NamingPolicy.formatForClassName(NamingPolicy.stripProcessPrefix(stepName));
             if (formattedName == null || formattedName.isBlank()) {
                 continue;
@@ -81,7 +84,7 @@ class TemplateModelBuilder {
         return new TypeMapping(domainType, mapperType, true);
     }
 
-    String toPackageSegment(String name) {
+    private String toPackageSegment(String name) {
         if (name == null || name.isBlank()) {
             return "service";
         }

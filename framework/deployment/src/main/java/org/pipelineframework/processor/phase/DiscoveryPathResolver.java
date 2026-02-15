@@ -61,6 +61,9 @@ class DiscoveryPathResolver {
      * @return the trimmed module name, or null if not present or blank
      */
     String resolveModuleName(Map<String, String> options) {
+        if (options == null) {
+            return null;
+        }
         String moduleName = options.get("pipeline.module");
         if (moduleName == null || moduleName.isBlank()) {
             return null;

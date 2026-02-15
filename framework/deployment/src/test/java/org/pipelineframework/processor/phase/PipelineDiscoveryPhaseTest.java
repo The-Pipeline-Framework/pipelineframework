@@ -78,6 +78,7 @@ class PipelineDiscoveryPhaseTest {
         assertTrue(context.isTransportModeGrpc());
         assertEquals(PlatformMode.COMPUTE, context.getPlatformMode());
         assertNotNull(context.getAspectModels());
+        assertTrue(context.getAspectModels().isEmpty());
         assertNotNull(context.getOrchestratorModels());
         assertTrue(context.getOrchestratorModels().isEmpty());
     }

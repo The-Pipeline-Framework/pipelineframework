@@ -30,8 +30,8 @@ import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.processor.ir.*;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 
 /** Unit tests for GrpcRequirementEvaluator */
@@ -96,7 +96,13 @@ class GrpcRequirementEvaluatorTest {
         PipelineTemplateConfig config = new PipelineTemplateConfig("app", "com.example", "UNKNOWN", List.of(), null);
 
         assertFalse(evaluator.needsGrpcBindings(List.of(), List.of(orch), config, messager));
-        verify(messager).printMessage(any(Diagnostic.Kind.class), contains("Unknown transport"));
+        verify(messager).printMessage(eq(Diagnostic.Kind.WARNING), contains("Unknown transport"));
+    }
+
+    @Test
+    void needsGrpc_stepWithMixedTargets_true() {
+        PipelineStepModel model = createModel("Svc", Set.of(GenerationTarget.GRPC_SERVICE, GenerationTarget.REST_RESOURCE));
+        assertTrue(evaluator.needsGrpcBindings(List.of(model), List.of(), null, messager));
     }
 
     @Test

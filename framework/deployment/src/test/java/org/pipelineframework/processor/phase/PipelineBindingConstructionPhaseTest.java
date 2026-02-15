@@ -91,7 +91,7 @@ class PipelineBindingConstructionPhaseTest {
 
         Map<String, Object> bindings = context.getRendererBindings();
         assertTrue(bindings.containsKey("TestService_rest"));
-        assertTrue(bindings.containsKey("TestService_grpc"));
+        assertFalse(bindings.containsKey("TestService_grpc"));
     }
 
     @Test

@@ -79,7 +79,7 @@ class ModelExtractionPhaseTest {
     }
 
     @Test
-    void testExecution_noTemplateConfig_onlyAnnotationModels() throws Exception {
+    void testExecution_noTemplateConfig_noAnnotationModels() throws Exception {
         ModelExtractionPhase phase = new ModelExtractionPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
         context.setPipelineTemplateConfig(null);

@@ -29,6 +29,7 @@ import org.pipelineframework.processor.ir.TransportMode;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -71,7 +72,7 @@ class TransportPlatformResolverTest {
     @Test
     void resolveTransport_unknown_warnsAndDefaultsToGrpc() {
         assertEquals(TransportMode.GRPC, resolver.resolveTransport("UNKNOWN", messager));
-        verify(messager).printMessage(any(Diagnostic.Kind.class), contains("Unknown pipeline transport"));
+        verify(messager).printMessage(eq(Diagnostic.Kind.WARNING), contains("Unknown pipeline transport"));
     }
 
     @Test
@@ -104,12 +105,25 @@ class TransportPlatformResolverTest {
     @Test
     void resolvePlatform_unknown_warnsAndDefaultsToCompute() {
         assertEquals(PlatformMode.COMPUTE, resolver.resolvePlatform("UNKNOWN", messager));
-        verify(messager).printMessage(any(Diagnostic.Kind.class), contains("Unknown pipeline platform"));
+        verify(messager).printMessage(eq(Diagnostic.Kind.WARNING), contains("Unknown pipeline platform"));
     }
 
     @Test
     void resolvePlatform_nullMessager_noException() {
         assertEquals(PlatformMode.COMPUTE, resolver.resolvePlatform("INVALID", null));
+    }
+
+    @Test
+    void resolveTransport_caseInsensitive() {
+        assertEquals(TransportMode.GRPC, resolver.resolveTransport("grpc", messager));
+        assertEquals(TransportMode.REST, resolver.resolveTransport("rest", messager));
+        assertEquals(TransportMode.LOCAL, resolver.resolveTransport("local", messager));
+    }
+
+    @Test
+    void resolvePlatform_caseInsensitive() {
+        assertEquals(PlatformMode.COMPUTE, resolver.resolvePlatform("compute", messager));
+        assertEquals(PlatformMode.FUNCTION, resolver.resolvePlatform("function", messager));
     }
 
     @Test

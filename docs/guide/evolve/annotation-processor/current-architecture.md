@@ -26,7 +26,7 @@ Active in canonical path:
 - `PipelineCompilationContext`
 - the eight phases listed above
 
-## Extracted Collaborators
+## Phase Collaborators
 
 Each phase with complex orchestration delegates to focused, stateless collaborators injected via constructor:
 

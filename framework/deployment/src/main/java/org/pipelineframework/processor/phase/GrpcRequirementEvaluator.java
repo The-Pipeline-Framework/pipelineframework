@@ -22,14 +22,14 @@ class GrpcRequirementEvaluator {
      *
      * @param stepModels the pipeline step models
      * @param orchestratorModels the orchestrator models
-     * @param templateConfig the pipeline template config (may be null)
-     * @param messager the messager for diagnostics (may be null)
+     * @param templateConfig the pipeline template config, may be null
+     * @param messager the messager for diagnostics, may be null
      * @return true if gRPC bindings are required
      */
     boolean needsGrpcBindings(
             List<PipelineStepModel> stepModels,
             List<PipelineOrchestratorModel> orchestratorModels,
-            Object templateConfig,
+            PipelineTemplateConfig templateConfig,
             Messager messager) {
         if (stepModels.stream().anyMatch(model ->
             model.enabledTargets().contains(GenerationTarget.GRPC_SERVICE)
@@ -37,11 +37,10 @@ class GrpcRequirementEvaluator {
             return true;
         }
         if (!orchestratorModels.isEmpty()) {
-            PipelineTemplateConfig config = templateConfig instanceof PipelineTemplateConfig cfg ? cfg : null;
-            if (config == null) {
+            if (templateConfig == null) {
                 return false;
             }
-            String transport = config.transport();
+            String transport = templateConfig.transport();
             if (transport == null || transport.isBlank()) {
                 return true;
             }
@@ -50,11 +49,11 @@ class GrpcRequirementEvaluator {
                 if (messager != null) {
                     messager.printMessage(Diagnostic.Kind.WARNING,
                         "Unknown transport '" + transport + "' in pipeline template. "
-                            + "Valid values are GRPC|gRPC|REST|LOCAL; skipping descriptor loading.");
+                            + "Valid values are GRPC|gRPC|REST|LOCAL.");
                 }
                 return false;
             }
-            return resolvedMode.orElseThrow() == TransportMode.GRPC;
+            return resolvedMode.get() == TransportMode.GRPC;
         }
         return false;
     }

@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import org.pipelineframework.annotation.PipelineOrchestrator;
 import org.pipelineframework.processor.AspectExpansionProcessor;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ResolvedStep;
@@ -17,6 +18,8 @@ import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
  * and deployment role assignment. Extracted from ModelExtractionPhase.
  */
 class TemplateExpansionOrchestrator {
+
+    private static final String PLUGIN_IMPLEMENTATION_CLASS = "pluginImplementationClass";
 
     /**
      * Expand template models based on the compilation context: colocated vs remote plugins,
@@ -32,7 +35,7 @@ class TemplateExpansionOrchestrator {
         }
 
         boolean hasOrchestrator = ctx.getRoundEnv() != null
-            && !ctx.getRoundEnv().getElementsAnnotatedWith(org.pipelineframework.annotation.PipelineOrchestrator.class).isEmpty();
+            && !ctx.getRoundEnv().getElementsAnnotatedWith(PipelineOrchestrator.class).isEmpty();
         if (!ctx.isPluginHost() && !hasOrchestrator) {
             return List.of();
         }
@@ -130,7 +133,7 @@ class TemplateExpansionOrchestrator {
         if (aspect == null || aspect.config() == null) {
             return false;
         }
-        Object value = aspect.config().get("pluginImplementationClass");
+        Object value = aspect.config().get(PLUGIN_IMPLEMENTATION_CLASS);
         return value != null && !value.toString().isBlank();
     }
 }
