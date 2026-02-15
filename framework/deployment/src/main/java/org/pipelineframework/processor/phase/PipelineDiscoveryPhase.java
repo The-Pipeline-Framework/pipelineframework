@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.Set;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
+import javax.annotation.processing.ProcessingEnvironment;
 import javax.tools.Diagnostic;
 
 import org.pipelineframework.annotation.PipelineOrchestrator;
@@ -138,7 +139,10 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
             return null;
         }
 
-        PipelineTemplateConfigLoader loader = new PipelineTemplateConfigLoader();
+        ProcessingEnvironment procEnv = ctx.getProcessingEnv();
+        PipelineTemplateConfigLoader loader = procEnv != null
+            ? new PipelineTemplateConfigLoader(procEnv.getOptions()::get, System::getenv)
+            : new PipelineTemplateConfigLoader(System::getenv, System::getenv);
         try {
             return loader.load(configPath.get());
         } catch (Exception e) {
@@ -166,10 +170,11 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
             return DEFAULT_STEP_CONFIG;
         }
 
+        ProcessingEnvironment stepProcEnv = ctx.getProcessingEnv();
         PipelineStepConfigLoader stepLoader = new PipelineStepConfigLoader(
-            System::getProperty,
+            stepProcEnv != null ? stepProcEnv.getOptions()::get : System::getenv,
             System::getenv,
-            ctx.getProcessingEnv() == null ? null : ctx.getProcessingEnv().getMessager());
+            stepProcEnv == null ? null : stepProcEnv.getMessager());
         try {
             return stepLoader.load(configPath.get());
         } catch (Exception e) {

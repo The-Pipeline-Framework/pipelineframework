@@ -278,7 +278,7 @@ public class PipelineTelemetryMetadataGenerator {
         if (configPath.isEmpty()) {
             return null;
         }
-        PipelineYamlConfigLoader loader = new PipelineYamlConfigLoader();
+        PipelineYamlConfigLoader loader = new PipelineYamlConfigLoader(processingEnv.getOptions()::get, System::getenv);
         return loader.load(configPath.get());
     }
 

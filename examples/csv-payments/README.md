@@ -276,9 +276,10 @@ sequenceDiagram
 ```
 
 `build-monolith.sh` applies the monolith runtime mapping, builds `examples/csv-payments/pom.monolith.xml`,
-sets `-Dpipeline.transport=LOCAL` for the build, and restores the previous `config/pipeline.runtime.yaml` afterwards.
-When running the monolith runtime, set `PIPELINE_TRANSPORT=LOCAL` (or pass `-Dpipeline.transport=LOCAL`) so the
-pipeline order resolves to `LocalClientStep` classes.
+sets `-Dtpf.build.transport=LOCAL` for the build, and restores the previous `config/pipeline.runtime.yaml` afterwards.
+The build-time switch `-Dtpf.build.transport=LOCAL` controls code generation only (annotation processor option);
+it does not affect runtime behavior. The generated monolith artifact already contains `LocalClientStep` classes,
+so no additional runtime flag is needed.
 
 Note: the end-to-end test lives under `orchestrator-svc`, but in monolith mode it launches the
 `monolith-svc` runnable JAR. The `orchestrator-svc` module is the test harness; the monolith runtime

@@ -21,9 +21,9 @@ PIPELINE_REST_NAMING_STRATEGY="${PIPELINE_REST_NAMING_STRATEGY:-RESOURCEFUL}"
 PIPELINE_LAMBDA_DEPENDENCY_SCOPE="${PIPELINE_LAMBDA_DEPENDENCY_SCOPE:-compile}"
 
 "$MVN_BIN" -f "$SEARCH_DIR/pom.xml" \
-  -Dpipeline.platform="$PIPELINE_PLATFORM" \
-  -Dpipeline.transport="$PIPELINE_TRANSPORT" \
-  -Dpipeline.rest.naming.strategy="$PIPELINE_REST_NAMING_STRATEGY" \
-  -Dpipeline.lambda.dependency.scope="$PIPELINE_LAMBDA_DEPENDENCY_SCOPE" \
+  -Dtpf.build.platform="$PIPELINE_PLATFORM" \
+  -Dtpf.build.transport="$PIPELINE_TRANSPORT" \
+  -Dtpf.build.rest.naming.strategy="$PIPELINE_REST_NAMING_STRATEGY" \
+  -Dtpf.build.lambda.scope="$PIPELINE_LAMBDA_DEPENDENCY_SCOPE" \
   -Dquarkus.profile=lambda \
   clean install "$@"

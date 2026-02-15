@@ -43,13 +43,13 @@
         <surefireArgLine />
         <pipeline.generatedSourcesArg />
         <protobuf.descriptor.fileArg />
-        <pipeline.transport>REST</pipeline.transport>
-        <pipeline.transportArg>-Apipeline.transport=${pipeline.transport}</pipeline.transportArg>
-        <pipeline.platform>COMPUTE</pipeline.platform>
-        <pipeline.platformArg>-Apipeline.platform=${pipeline.platform}</pipeline.platformArg>
-        <pipeline.lambda.dependency.scope>provided</pipeline.lambda.dependency.scope>
-        <pipeline.rest.naming.strategy>RESOURCEFUL</pipeline.rest.naming.strategy>
-        <pipeline.rest.naming.strategyArg>-Apipeline.rest.naming.strategy=${pipeline.rest.naming.strategy}</pipeline.rest.naming.strategyArg>
+        <tpf.build.transport>REST</tpf.build.transport>
+        <pipeline.transportArg>-Apipeline.transport=${tpf.build.transport}</pipeline.transportArg>
+        <tpf.build.platform>COMPUTE</tpf.build.platform>
+        <pipeline.platformArg>-Apipeline.platform=${tpf.build.platform}</pipeline.platformArg>
+        <tpf.build.lambda.scope>provided</tpf.build.lambda.scope>
+        <tpf.build.rest.naming.strategy>RESOURCEFUL</tpf.build.rest.naming.strategy>
+        <pipeline.rest.naming.strategyArg>-Apipeline.rest.naming.strategy=${tpf.build.rest.naming.strategy}</pipeline.rest.naming.strategyArg>
         <pipeline.parallelism>PARALLEL</pipeline.parallelism>
         <quarkus.container-image.build>true</quarkus.container-image.build>
         <quarkus.container-image.registry>localhost</quarkus.container-image.registry>

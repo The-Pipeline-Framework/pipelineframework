@@ -134,19 +134,19 @@ jobs:
           ./mvnw "${maven_args[@]}" -f examples/search/pom.xml \
             -pl orchestrator-svc \
             -am \
-            -Dpipeline.platform=FUNCTION \
-            -Dpipeline.transport=REST \
-            -Dpipeline.rest.naming.strategy=RESOURCEFUL \
-            -Dpipeline.lambda.dependency.scope=compile \
+            -Dtpf.build.platform=FUNCTION \
+            -Dtpf.build.transport=REST \
+            -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
+            -Dtpf.build.lambda.scope=compile \
             -Dquarkus.profile=lambda \
             -DskipTests \
             compile
           ./mvnw "${maven_args[@]}" -f examples/search/pom.xml \
             -pl orchestrator-svc \
-            -Dpipeline.platform=FUNCTION \
-            -Dpipeline.transport=REST \
-            -Dpipeline.rest.naming.strategy=RESOURCEFUL \
-            -Dpipeline.lambda.dependency.scope=compile \
+            -Dtpf.build.platform=FUNCTION \
+            -Dtpf.build.transport=REST \
+            -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
+            -Dtpf.build.lambda.scope=compile \
             -Dquarkus.profile=lambda \
             -Dtest=LambdaMockEventServerSmokeTest \
             test
@@ -233,10 +233,10 @@ jobs:
             -pl crawl-source-svc \
             -am \
             -DskipTests \
-            -Dpipeline.platform=FUNCTION \
-            -Dpipeline.transport=REST \
-            -Dpipeline.rest.naming.strategy=RESOURCEFUL \
-            -Dpipeline.lambda.dependency.scope=compile \
+            -Dtpf.build.platform=FUNCTION \
+            -Dtpf.build.transport=REST \
+            -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
+            -Dtpf.build.lambda.scope=compile \
             -Dquarkus.profile=lambda \
             -Dquarkus.container-image.build=false \
             -Dquarkus.native.enabled=true \

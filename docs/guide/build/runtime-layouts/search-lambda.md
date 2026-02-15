@@ -25,10 +25,10 @@ Canonical Lambda development and operations guidance lives here:
 
 This sets:
 
-- `pipeline.platform=FUNCTION`
-- `pipeline.transport=REST`
-- `pipeline.rest.naming.strategy=RESOURCEFUL`
-- `pipeline.lambda.dependency.scope=compile`
+- `tpf.build.platform=FUNCTION`
+- `tpf.build.transport=REST`
+- `tpf.build.rest.naming.strategy=RESOURCEFUL`
+- `tpf.build.lambda.scope=compile`
 - `quarkus.profile=lambda`
 
 ## Mock Event-Server Smoke Test
@@ -36,20 +36,20 @@ This sets:
 ```bash
 ./mvnw -f examples/search/pom.xml \
   -pl orchestrator-svc -am \
-  -Dpipeline.platform=FUNCTION \
-  -Dpipeline.transport=REST \
-  -Dpipeline.rest.naming.strategy=RESOURCEFUL \
-  -Dpipeline.lambda.dependency.scope=compile \
+  -Dtpf.build.platform=FUNCTION \
+  -Dtpf.build.transport=REST \
+  -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
+  -Dtpf.build.lambda.scope=compile \
   -Dquarkus.profile=lambda \
   -DskipTests \
   compile
 
 ./mvnw -f examples/search/pom.xml \
   -pl orchestrator-svc \
-  -Dpipeline.platform=FUNCTION \
-  -Dpipeline.transport=REST \
-  -Dpipeline.rest.naming.strategy=RESOURCEFUL \
-  -Dpipeline.lambda.dependency.scope=compile \
+  -Dtpf.build.platform=FUNCTION \
+  -Dtpf.build.transport=REST \
+  -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
+  -Dtpf.build.lambda.scope=compile \
   -Dquarkus.profile=lambda \
   -Dtest=LambdaMockEventServerSmokeTest \
   test
@@ -88,10 +88,10 @@ These tests validate:
 ```bash
 ./mvnw -f examples/search/pom.xml \
   -pl crawl-source-svc -am \
-  -Dpipeline.platform=FUNCTION \
-  -Dpipeline.transport=REST \
-  -Dpipeline.rest.naming.strategy=RESOURCEFUL \
-  -Dpipeline.lambda.dependency.scope=compile \
+  -Dtpf.build.platform=FUNCTION \
+  -Dtpf.build.transport=REST \
+  -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
+  -Dtpf.build.lambda.scope=compile \
   -Dquarkus.profile=lambda \
   -DskipTests \
   -Dquarkus.native.enabled=true \

@@ -21,9 +21,9 @@ Set platform mode during build:
 
 ```bash
 ./mvnw -f <app-parent>/pom.xml \
-  -Dpipeline.platform=FUNCTION \
-  -Dpipeline.transport=REST \
-  -Dpipeline.lambda.dependency.scope=compile \
+  -Dtpf.build.platform=FUNCTION \
+  -Dtpf.build.transport=REST \
+  -Dtpf.build.lambda.scope=compile \
   -Dquarkus.profile=lambda \
   clean verify
 ```

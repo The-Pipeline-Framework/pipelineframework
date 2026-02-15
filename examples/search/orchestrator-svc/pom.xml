@@ -54,7 +54,7 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-amazon-lambda</artifactId>
-            <scope>${pipeline.lambda.dependency.scope}</scope>
+            <scope>${tpf.build.lambda.scope}</scope>
         </dependency>
         <!-- Tests -->
         <dependency>
