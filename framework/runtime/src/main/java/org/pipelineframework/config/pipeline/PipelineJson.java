@@ -29,11 +29,11 @@ public final class PipelineJson {
     }
 
     /**
-     * Returns the shared ObjectMapper instance.
+     * Returns a copy of the ObjectMapper instance to prevent mutation of the shared instance.
      *
-     * @return the shared ObjectMapper instance, configured for pipeline JSON operations
+     * @return a copy of the ObjectMapper instance, configured for pipeline JSON operations
      */
     public static ObjectMapper mapper() {
-        return MAPPER;
+        return MAPPER.copy();
     }
 }

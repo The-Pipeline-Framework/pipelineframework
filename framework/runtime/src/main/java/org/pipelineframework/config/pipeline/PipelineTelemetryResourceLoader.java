@@ -20,7 +20,6 @@ import java.io.InputStream;
 import java.util.Map;
 import java.util.Optional;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Loads item-boundary telemetry metadata from the generated resource.
@@ -38,17 +37,8 @@ public final class PipelineTelemetryResourceLoader {
      * @return telemetry metadata, if present
      */
     public static Optional<ItemBoundary> loadItemBoundary() {
-        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        if (classLoader == null) {
-            classLoader = PipelineTelemetryResourceLoader.class.getClassLoader();
-        }
-        InputStream stream = classLoader != null ? classLoader.getResourceAsStream(RESOURCE) : null;
-        if (stream == null) {
-            stream = PipelineTelemetryResourceLoader.class.getResourceAsStream("/" + RESOURCE);
-        }
-        if (stream == null) {
-            stream = ClassLoader.getSystemResourceAsStream(RESOURCE);
-        }
+        ClassLoader classLoader = PipelineResources.resolveClassLoader();
+        InputStream stream = PipelineResources.openResource(classLoader, RESOURCE);
         try (InputStream streamToRead = stream) {
             if (streamToRead == null) {
                 return Optional.empty();

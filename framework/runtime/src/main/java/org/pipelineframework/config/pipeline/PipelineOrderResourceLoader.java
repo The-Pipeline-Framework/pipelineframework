@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jboss.logging.Logger;
 
 /**
@@ -43,8 +42,8 @@ public final class PipelineOrderResourceLoader {
      * @return the ordered list of step class names, if available
      */
     public static Optional<List<String>> loadOrder() {
-        ClassLoader classLoader = resolveClassLoader();
-        InputStream stream = openResource(classLoader, RESOURCE);
+        ClassLoader classLoader = PipelineResources.resolveClassLoader();
+        InputStream stream = PipelineResources.openResource(classLoader, RESOURCE);
         try (InputStream streamToRead = stream) {
             if (stream == null) {
                 logMissingResource(classLoader);
@@ -71,8 +70,8 @@ public final class PipelineOrderResourceLoader {
      * @return true if order metadata is required, false otherwise
      */
     public static boolean requiresOrder() {
-        ClassLoader classLoader = resolveClassLoader();
-        InputStream stream = openResource(classLoader, ROLES_RESOURCE);
+        ClassLoader classLoader = PipelineResources.resolveClassLoader();
+        InputStream stream = PipelineResources.openResource(classLoader, ROLES_RESOURCE);
         try (InputStream streamToRead = stream) {
             if (stream == null) {
                 return false;
@@ -89,24 +88,6 @@ public final class PipelineOrderResourceLoader {
         }
     }
 
-    private static ClassLoader resolveClassLoader() {
-        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        if (classLoader == null) {
-            classLoader = PipelineOrderResourceLoader.class.getClassLoader();
-        }
-        return classLoader;
-    }
-
-    private static InputStream openResource(ClassLoader classLoader, String resource) {
-        InputStream stream = classLoader != null ? classLoader.getResourceAsStream(resource) : null;
-        if (stream == null) {
-            stream = PipelineOrderResourceLoader.class.getResourceAsStream("/" + resource);
-        }
-        if (stream == null) {
-            stream = ClassLoader.getSystemResourceAsStream(resource);
-        }
-        return stream;
-    }
 
     private static void logMissingResource(ClassLoader classLoader) {
         if (!LOG.isDebugEnabled()) {

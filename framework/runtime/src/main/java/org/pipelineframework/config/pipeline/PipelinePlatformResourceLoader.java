@@ -20,7 +20,6 @@ import java.io.InputStream;
 import java.util.Map;
 import java.util.Optional;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jboss.logging.Logger;
 
 /**
@@ -40,8 +39,8 @@ public final class PipelinePlatformResourceLoader {
      * @return the platform metadata, if available
      */
     public static Optional<PlatformMetadata> loadPlatform() {
-        ClassLoader classLoader = resolveClassLoader();
-        InputStream stream = openResource(classLoader, RESOURCE);
+        ClassLoader classLoader = PipelineResources.resolveClassLoader();
+        InputStream stream = PipelineResources.openResource(classLoader, RESOURCE);
         try (InputStream streamToRead = stream) {
             if (stream == null) {
                 LOG.debugf("Pipeline platform resource not found: %s", RESOURCE);
@@ -91,22 +90,4 @@ public final class PipelinePlatformResourceLoader {
         return value != null && Boolean.parseBoolean(value.toString());
     }
 
-    private static ClassLoader resolveClassLoader() {
-        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-        if (classLoader == null) {
-            classLoader = PipelinePlatformResourceLoader.class.getClassLoader();
-        }
-        return classLoader;
-    }
-
-    private static InputStream openResource(ClassLoader classLoader, String resource) {
-        InputStream stream = classLoader != null ? classLoader.getResourceAsStream(resource) : null;
-        if (stream == null) {
-            stream = PipelinePlatformResourceLoader.class.getResourceAsStream("/" + resource);
-        }
-        if (stream == null) {
-            stream = ClassLoader.getSystemResourceAsStream(resource);
-        }
-        return stream;
-    }
 }
