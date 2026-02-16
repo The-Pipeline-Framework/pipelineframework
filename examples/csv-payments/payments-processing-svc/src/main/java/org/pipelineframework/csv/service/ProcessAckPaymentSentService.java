@@ -25,8 +25,6 @@ import org.jboss.logging.Logger;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
-import org.pipelineframework.csv.common.mapper.AckPaymentSentMapper;
-import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
 import org.pipelineframework.grpc.GrpcReactiveServiceAdapter;
 import org.pipelineframework.service.ReactiveService;
 
@@ -34,9 +32,7 @@ import org.pipelineframework.service.ReactiveService;
     inputType = AckPaymentSent.class,
     outputType = PaymentStatus.class,
     stepType = org.pipelineframework.step.StepOneToOne.class,
-    backendType = GrpcReactiveServiceAdapter.class,
-    inboundMapper = AckPaymentSentMapper.class,
-    outboundMapper = PaymentStatusMapper.class
+    backendType = GrpcReactiveServiceAdapter.class
 )
 @ApplicationScoped
 @Getter

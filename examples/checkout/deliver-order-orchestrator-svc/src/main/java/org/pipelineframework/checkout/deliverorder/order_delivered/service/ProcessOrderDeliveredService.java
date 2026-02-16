@@ -15,9 +15,7 @@ import java.util.Objects;
     inputType = DispatchedOrder.class,
     outputType = DeliveredOrder.class,
     stepType = org.pipelineframework.step.StepOneToOne.class,
-    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-    inboundMapper = org.pipelineframework.checkout.deliverorder.common.mapper.DispatchedOrderMapper.class,
-    outboundMapper = org.pipelineframework.checkout.deliverorder.common.mapper.DeliveredOrderMapper.class
+    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class
 )
 @ApplicationScoped
 public class ProcessOrderDeliveredService

@@ -17,8 +17,6 @@ import org.pipelineframework.service.ReactiveService;
     outputType = org.pipelineframework.search.common.domain.ParsedDocument.class,
     stepType = org.pipelineframework.step.StepOneToOne.class,
     backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-    inboundMapper = org.pipelineframework.search.common.mapper.RawDocumentMapper.class,
-    outboundMapper = org.pipelineframework.search.common.mapper.ParsedDocumentMapper.class,
     cacheKeyGenerator = org.pipelineframework.search.parse_document.cache.ParseDocumentCacheKeyGenerator.class
 )
 @ApplicationScoped

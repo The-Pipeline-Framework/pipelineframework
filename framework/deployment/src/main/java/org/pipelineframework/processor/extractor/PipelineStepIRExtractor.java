@@ -18,6 +18,8 @@ import org.pipelineframework.processor.util.AnnotationProcessingUtils;
 
 /**
  * Extractor that converts PipelineStep annotations to semantic information in PipelineStepModel.
+ * This extractor no longer reads explicit mapper parameters - mappers are inferred at build time
+ * based on generic type signatures.
  */
 public class PipelineStepIRExtractor {
 
@@ -41,6 +43,9 @@ public class PipelineStepIRExtractor {
 
     /**
      * Produces a PipelineStepModel by extracting semantic information from a class annotated with `@PipelineStep`.
+     * <p>
+     * Mapper inference is NOT performed here - it happens later during binding construction
+     * using the MapperInferenceEngine.
      *
      * @param serviceClass the element representing the annotated service class
      * @return the extraction result wrapping the constructed PipelineStepModel, or `null` if the annotation mirror could not be obtained
@@ -70,14 +75,12 @@ public class PipelineStepIRExtractor {
         ThreadSafety threadSafety = AnnotationProcessingUtils.getAnnotationValueAsEnum(
             annotationMirror, "threadSafety", ThreadSafety.class, ThreadSafety.SAFE);
 
-        // Create directional type mappings
+        // Create directional type mappings - mappers will be inferred later
         TypeMapping inputMapping = extractTypeMapping(
-            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "inputType"),
-            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "inboundMapper"));
+            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "inputType"));
 
         TypeMapping outputMapping = extractTypeMapping(
-            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "outputType"),
-            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "outboundMapper"));
+            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "outputType"));
 
         ClassName cacheKeyGenerator = resolveCacheKeyGenerator(annotationMirror);
 
@@ -101,7 +104,7 @@ public class PipelineStepIRExtractor {
             serviceClassName = ClassName.bestGuess(fallbackName);
         }
 
-        // Build the model
+        // Build the model - mappers are not yet inferred
         PipelineStepModel model = new PipelineStepModel.Builder()
             .serviceName(serviceClass.getSimpleName().toString())
             .servicePackage(processingEnv.getElementUtils().getPackageOf(serviceClass).getQualifiedName().toString())
@@ -121,31 +124,29 @@ public class PipelineStepIRExtractor {
     }
 
     /**
-     * Create a TypeMapping describing the relationship between a domain type and an optional mapper type.
+     * Create a TypeMapping describing the relationship between a domain type.
+     * Mapper inference happens later during binding construction.
      *
      * If `domainType` is null or represents `void`/`java.lang.Void`, the result is disabled with no domain or mapper.
-     * If `mapperType` is null or represents `void`/`java.lang.Void`, the result contains the domain type, no mapper, and is disabled.
      *
      * @param domainType the domain type to map from; may be null or a `void` type to indicate absence
-     * @param mapperType the mapper type to convert the domain type; may be null or a `void` type to indicate no mapper
-     * @return a TypeMapping containing resolved `TypeName` values and an `enabled` flag set to `true` only when both domain and mapper are present
+     * @return a TypeMapping containing resolved `TypeName` values with hasMapper=false (mapper to be inferred later)
      */
-    private TypeMapping extractTypeMapping(TypeMirror domainType, TypeMirror mapperType) {
+    private TypeMapping extractTypeMapping(TypeMirror domainType) {
         if (domainType == null
                 || domainType.getKind() == javax.lang.model.type.TypeKind.VOID
                 || domainType.toString().equals("java.lang.Void")) {
-            return new TypeMapping(null, null, false);
-        }
-        if (mapperType == null
-                || mapperType.getKind() == javax.lang.model.type.TypeKind.VOID
-                || mapperType.toString().equals("java.lang.Void")) {
-            return new TypeMapping(TypeName.get(domainType), null, false);
+            return new TypeMapping(null, null, false, null);
         }
 
+        // Mapper will be inferred later by MapperInferenceEngine.
+        // entityType is intentionally initialized to domainType because transport mapping
+        // uses domain type as the entity type for mapper inference.
         return new TypeMapping(
             TypeName.get(domainType),
-            TypeName.get(mapperType),
-            true
+            null,
+            false,
+            TypeName.get(domainType)
         );
     }
 

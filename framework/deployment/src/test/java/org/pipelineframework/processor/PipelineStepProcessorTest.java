@@ -184,11 +184,7 @@ class PipelineStepProcessorTest {
 
         // Create mock executable elements for the annotation attributes
         ExecutableElement inputTypeElement = createMockExecutableElement("inputType");
-        ExecutableElement inputGrpcTypeElement = createMockExecutableElement("inputGrpcType");
-        ExecutableElement inboundMapperElement = createMockExecutableElement("inboundMapper");
         ExecutableElement outputTypeElement = createMockExecutableElement("outputType");
-        ExecutableElement outputGrpcTypeElement = createMockExecutableElement("outputGrpcType");
-        ExecutableElement outboundMapperElement = createMockExecutableElement("outboundMapper");
         ExecutableElement stepTypeElement = createMockExecutableElement("stepType");
         ExecutableElement grpcImplElement = createMockExecutableElement("grpcImpl");
         ExecutableElement grpcStubElement = createMockExecutableElement("grpcStub");
@@ -208,25 +204,9 @@ class PipelineStepProcessorTest {
         when(inputTypeValue.getValue()).thenReturn(stringTypeMirror);
         elementValuesMap.put(inputTypeElement, inputTypeValue);
 
-        AnnotationValue inputGrpcTypeValue = mock(AnnotationValue.class);
-        when(inputGrpcTypeValue.getValue()).thenReturn(grpcStringTypeMirror);
-        elementValuesMap.put(inputGrpcTypeElement, inputGrpcTypeValue);
-
-        AnnotationValue inboundMapperValue = mock(AnnotationValue.class);
-        when(inboundMapperValue.getValue()).thenReturn(voidTypeMirror);
-        elementValuesMap.put(inboundMapperElement, inboundMapperValue);
-
         AnnotationValue outputTypeValue = mock(AnnotationValue.class);
         when(outputTypeValue.getValue()).thenReturn(integerTypeMirror);
         elementValuesMap.put(outputTypeElement, outputTypeValue);
-
-        AnnotationValue outputGrpcTypeValue = mock(AnnotationValue.class);
-        when(outputGrpcTypeValue.getValue()).thenReturn(grpcIntegerTypeMirror);
-        elementValuesMap.put(outputGrpcTypeElement, outputGrpcTypeValue);
-
-        AnnotationValue outboundMapperValue = mock(AnnotationValue.class);
-        when(outboundMapperValue.getValue()).thenReturn(voidTypeMirror);
-        elementValuesMap.put(outboundMapperElement, outboundMapperValue);
 
         AnnotationValue stepTypeValue = mock(AnnotationValue.class);
         when(stepTypeValue.getValue()).thenReturn("org.pipelineframework.step.StepOneToOne");
@@ -333,11 +313,7 @@ class PipelineStepProcessorTest {
 
         // Create mock executable elements for the annotation attributes
         ExecutableElement inputTypeElement = createMockExecutableElement("inputType");
-        ExecutableElement inputGrpcTypeElement = createMockExecutableElement("inputGrpcType");
-        ExecutableElement inboundMapperElement = createMockExecutableElement("inboundMapper");
         ExecutableElement outputTypeElement = createMockExecutableElement("outputType");
-        ExecutableElement outputGrpcTypeElement = createMockExecutableElement("outputGrpcType");
-        ExecutableElement outboundMapperElement = createMockExecutableElement("outboundMapper");
         ExecutableElement stepTypeElement = createMockExecutableElement("stepType");
         ExecutableElement grpcImplElement = createMockExecutableElement("grpcImpl");
         ExecutableElement grpcStubElement = createMockExecutableElement("grpcStub");
@@ -357,25 +333,9 @@ class PipelineStepProcessorTest {
         when(inputTypeValue.getValue()).thenReturn(stringTypeMirror);
         elementValuesMap.put(inputTypeElement, inputTypeValue);
 
-        AnnotationValue inputGrpcTypeValue = mock(AnnotationValue.class);
-        when(inputGrpcTypeValue.getValue()).thenReturn(grpcStringTypeMirror);
-        elementValuesMap.put(inputGrpcTypeElement, inputGrpcTypeValue);
-
-        AnnotationValue inboundMapperValue = mock(AnnotationValue.class);
-        when(inboundMapperValue.getValue()).thenReturn(voidTypeMirror);
-        elementValuesMap.put(inboundMapperElement, inboundMapperValue);
-
         AnnotationValue outputTypeValue = mock(AnnotationValue.class);
         when(outputTypeValue.getValue()).thenReturn(integerTypeMirror);
         elementValuesMap.put(outputTypeElement, outputTypeValue);
-
-        AnnotationValue outputGrpcTypeValue = mock(AnnotationValue.class);
-        when(outputGrpcTypeValue.getValue()).thenReturn(grpcIntegerTypeMirror);
-        elementValuesMap.put(outputGrpcTypeElement, outputGrpcTypeValue);
-
-        AnnotationValue outboundMapperValue = mock(AnnotationValue.class);
-        when(outboundMapperValue.getValue()).thenReturn(voidTypeMirror);
-        elementValuesMap.put(outboundMapperElement, outboundMapperValue);
 
         AnnotationValue stepTypeValue = mock(AnnotationValue.class);
         when(stepTypeValue.getValue()).thenReturn("org.pipelineframework.step.StepOneToOne");
@@ -542,9 +502,7 @@ class PipelineStepProcessorTest {
 
             @PipelineStep(
                 inputType = CrawlRequest.class,
-                outputType = RawDocument.class,
-                inboundMapper = CrawlRequestMapper.class,
-                outboundMapper = RawDocumentMapper.class
+                outputType = RawDocument.class
             )
             public class ProcessCrawlSourceService {
             }
@@ -627,24 +585,32 @@ class PipelineStepProcessorTest {
         String crawlRequestMapper = """
             package test.common.mapper;
 
+            import org.pipelineframework.mapper.Mapper;
             import test.common.domain.CrawlRequest;
+            import test.common.domain.CrawlRequestGrpcMessage;
+            import test.common.dto.CrawlRequestDto;
 
-            public class CrawlRequestMapper {
-                public static CrawlRequest toDomain(Object input) {
-                    return new CrawlRequest();
-                }
+            public class CrawlRequestMapper implements Mapper<CrawlRequestGrpcMessage, CrawlRequestDto, CrawlRequest> {
+                public CrawlRequestDto fromGrpc(CrawlRequestGrpcMessage grpc) { return new CrawlRequestDto(); }
+                public CrawlRequestGrpcMessage toGrpc(CrawlRequestDto dto) { return new CrawlRequestGrpcMessage(); }
+                public CrawlRequest fromDto(CrawlRequestDto dto) { return new CrawlRequest(); }
+                public CrawlRequestDto toDto(CrawlRequest domain) { return new CrawlRequestDto(); }
             }
             """;
 
         String rawDocumentMapper = """
             package test.common.mapper;
 
+            import org.pipelineframework.mapper.Mapper;
             import test.common.domain.RawDocument;
+            import test.common.domain.RawDocumentGrpcMessage;
+            import test.common.dto.RawDocumentDto;
 
-            public class RawDocumentMapper {
-                public static RawDocument toDomain(Object input) {
-                    return new RawDocument();
-                }
+            public class RawDocumentMapper implements Mapper<RawDocumentGrpcMessage, RawDocumentDto, RawDocument> {
+                public RawDocumentDto fromGrpc(RawDocumentGrpcMessage grpc) { return new RawDocumentDto(); }
+                public RawDocumentGrpcMessage toGrpc(RawDocumentDto dto) { return new RawDocumentGrpcMessage(); }
+                public RawDocument fromDto(RawDocumentDto dto) { return new RawDocument(); }
+                public RawDocumentDto toDto(RawDocument domain) { return new RawDocumentDto(); }
             }
             """;
 
@@ -691,8 +657,16 @@ class PipelineStepProcessorTest {
                         "-Aprotobuf.descriptor.path=" + tempDir.toString())
                 .compile(
                         JavaFileObjects.forSourceString("test.step.ProcessCrawlSourceService", stepCode),
+                        // Domain types first
                         JavaFileObjects.forSourceString("test.common.domain.CrawlRequest", crawlRequestDomain),
                         JavaFileObjects.forSourceString("test.common.domain.RawDocument", rawDocumentDomain),
+                        // DTO types
+                        JavaFileObjects.forSourceString("test.common.dto.CrawlRequestDto", "package test.common.dto; public class CrawlRequestDto {}"),
+                        JavaFileObjects.forSourceString("test.common.dto.RawDocumentDto", "package test.common.dto; public class RawDocumentDto {}"),
+                        // gRPC message types
+                        JavaFileObjects.forSourceString("test.common.domain.CrawlRequestGrpcMessage", "package test.common.domain; public class CrawlRequestGrpcMessage {}"),
+                        JavaFileObjects.forSourceString("test.common.domain.RawDocumentGrpcMessage", "package test.common.domain; public class RawDocumentGrpcMessage {}"),
+                        // Mapper interfaces last
                         JavaFileObjects.forSourceString("test.common.mapper.CrawlRequestMapper", crawlRequestMapper),
                         JavaFileObjects.forSourceString("test.common.mapper.RawDocumentMapper", rawDocumentMapper)
                 );
@@ -729,9 +703,7 @@ class PipelineStepProcessorTest {
 
             @PipelineStep(
                 inputType = RawDocument.class,
-                outputType = ParsedDocument.class,
-                inboundMapper = RawDocumentMapper.class,
-                outboundMapper = ParsedDocumentMapper.class
+                outputType = ParsedDocument.class
             )
             public class ProcessParseDocumentService {
             }
@@ -833,24 +805,32 @@ class PipelineStepProcessorTest {
         String rawDocumentMapper = """
             package test.common.mapper;
 
+            import org.pipelineframework.mapper.Mapper;
             import test.common.domain.RawDocument;
+            import test.common.domain.RawDocumentGrpcMessage;
+            import test.common.dto.RawDocumentDto;
 
-            public class RawDocumentMapper {
-                public static RawDocument toDomain(Object input) {
-                    return new RawDocument();
-                }
+            public class RawDocumentMapper implements Mapper<RawDocumentGrpcMessage, RawDocumentDto, RawDocument> {
+                public RawDocumentDto fromGrpc(RawDocumentGrpcMessage grpc) { return new RawDocumentDto(); }
+                public RawDocumentGrpcMessage toGrpc(RawDocumentDto dto) { return new RawDocumentGrpcMessage(); }
+                public RawDocument fromDto(RawDocumentDto dto) { return new RawDocument(); }
+                public RawDocumentDto toDto(RawDocument domain) { return new RawDocumentDto(); }
             }
             """;
 
         String parsedDocumentMapper = """
             package test.common.mapper;
 
+            import org.pipelineframework.mapper.Mapper;
             import test.common.domain.ParsedDocument;
+            import test.common.domain.ParsedDocumentGrpcMessage;
+            import test.common.dto.ParsedDocumentDto;
 
-            public class ParsedDocumentMapper {
-                public static ParsedDocument toDomain(Object input) {
-                    return new ParsedDocument();
-                }
+            public class ParsedDocumentMapper implements Mapper<ParsedDocumentGrpcMessage, ParsedDocumentDto, ParsedDocument> {
+                public ParsedDocumentDto fromGrpc(ParsedDocumentGrpcMessage grpc) { return new ParsedDocumentDto(); }
+                public ParsedDocumentGrpcMessage toGrpc(ParsedDocumentDto dto) { return new ParsedDocumentGrpcMessage(); }
+                public ParsedDocument fromDto(ParsedDocumentDto dto) { return new ParsedDocument(); }
+                public ParsedDocumentDto toDto(ParsedDocument domain) { return new ParsedDocumentDto(); }
             }
             """;
 
@@ -903,8 +883,16 @@ class PipelineStepProcessorTest {
                         "-Aprotobuf.descriptor.path=" + tempDir.toString())
                 .compile(
                         JavaFileObjects.forSourceString("test.step.ProcessParseDocumentService", stepCode),
+                        // Domain types first
                         JavaFileObjects.forSourceString("test.common.domain.RawDocument", rawDocumentDomain),
                         JavaFileObjects.forSourceString("test.common.domain.ParsedDocument", parsedDocumentDomain),
+                        // DTO types
+                        JavaFileObjects.forSourceString("test.common.dto.RawDocumentDto", "package test.common.dto; public class RawDocumentDto {}"),
+                        JavaFileObjects.forSourceString("test.common.dto.ParsedDocumentDto", "package test.common.dto; public class ParsedDocumentDto {}"),
+                        // gRPC message types
+                        JavaFileObjects.forSourceString("test.common.domain.RawDocumentGrpcMessage", "package test.common.domain; public class RawDocumentGrpcMessage {}"),
+                        JavaFileObjects.forSourceString("test.common.domain.ParsedDocumentGrpcMessage", "package test.common.domain; public class ParsedDocumentGrpcMessage {}"),
+                        // Mapper interfaces last
                         JavaFileObjects.forSourceString("test.common.mapper.RawDocumentMapper", rawDocumentMapper),
                         JavaFileObjects.forSourceString("test.common.mapper.ParsedDocumentMapper", parsedDocumentMapper)
                 );

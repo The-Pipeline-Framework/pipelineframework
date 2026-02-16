@@ -12,6 +12,7 @@ import com.squareup.javapoet.TypeSpec;
 import org.jboss.logging.Logger;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
+import org.pipelineframework.processor.StepDefinitionWriter;
 import org.pipelineframework.processor.ir.*;
 import org.pipelineframework.processor.renderer.*;
 import org.pipelineframework.processor.util.OrchestratorClientPropertiesGenerator;
@@ -201,6 +202,22 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 ctx.getProcessingEnv().getMessager().printMessage(
                     javax.tools.Diagnostic.Kind.WARNING,
                     "Failed to write orchestrator metadata: " + e.getMessage());
+            }
+        }
+
+        // Write step definitions for Quarkus build step consumption
+        if (ctx.getProcessingEnv() == null) {
+            LOG.warn("Skipping step definition writing because ProcessingEnvironment is null");
+            return;
+        }
+        try {
+            StepDefinitionWriter stepDefinitionWriter = new StepDefinitionWriter(ctx.getProcessingEnv().getFiler());
+            stepDefinitionWriter.write(ctx.getStepModels());
+        } catch (IOException e) {
+            if (ctx.getProcessingEnv() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.WARNING,
+                    "Failed to write step definitions: " + e.getMessage());
             }
         }
     }

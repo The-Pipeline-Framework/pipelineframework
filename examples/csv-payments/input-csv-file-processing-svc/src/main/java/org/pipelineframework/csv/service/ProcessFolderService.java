@@ -31,8 +31,6 @@ import org.jboss.logging.MDC;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.csv.common.domain.CsvFolder;
 import org.pipelineframework.csv.common.domain.CsvPaymentsInputFile;
-import org.pipelineframework.csv.common.mapper.CsvFolderMapper;
-import org.pipelineframework.csv.common.mapper.CsvPaymentsInputFileMapper;
 import org.pipelineframework.csv.util.HybridResourceLoader;
 
 @ApplicationScoped
@@ -40,9 +38,7 @@ import org.pipelineframework.csv.util.HybridResourceLoader;
     inputType = CsvFolder.class,
     outputType = CsvPaymentsInputFile.class,
     stepType = org.pipelineframework.step.StepOneToMany.class,
-    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-    inboundMapper = CsvFolderMapper.class,
-    outboundMapper = CsvPaymentsInputFileMapper.class
+    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class
 )
 public class ProcessFolderService implements org.pipelineframework.service.ReactiveStreamingService<CsvFolder, CsvPaymentsInputFile> {
 

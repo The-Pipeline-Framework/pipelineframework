@@ -46,20 +46,6 @@ public @interface PipelineStep {
     Class<?> outputType() default Void.class;
 
     /**
-     * The inbound mapper class for this pipeline service/step.
-     * Required when inputType is specified.
-     * @return the inbound mapper class
-     */
-    Class<?> inboundMapper() default Void.class;
-
-    /**
-     * The outbound mapper class for this pipeline service/step.
-     * Required when outputType is specified.
-     * @return the outbound mapper class
-     */
-    Class<?> outboundMapper() default Void.class;
-
-    /**
      * The step type class for this pipeline step. This can be any of the following
      * <p>
      * StepOneToOne

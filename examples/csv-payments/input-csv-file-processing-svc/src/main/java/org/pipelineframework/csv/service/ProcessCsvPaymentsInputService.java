@@ -33,8 +33,6 @@ import org.jboss.logging.MDC;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.csv.common.domain.CsvPaymentsInputFile;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
-import org.pipelineframework.csv.common.mapper.CsvPaymentsInputFileMapper;
-import org.pipelineframework.csv.common.mapper.PaymentRecordMapper;
 import org.pipelineframework.csv.util.DemandPacerConfig;
 import org.pipelineframework.service.ReactiveStreamingService;
 
@@ -42,9 +40,7 @@ import org.pipelineframework.service.ReactiveStreamingService;
     inputType = CsvPaymentsInputFile.class,
     outputType = PaymentRecord.class,
     stepType = org.pipelineframework.step.StepOneToMany.class,
-    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-    inboundMapper = CsvPaymentsInputFileMapper.class,
-    outboundMapper = PaymentRecordMapper.class
+    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class
 )
 @ApplicationScoped
 @Getter
