@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package ai.sdk;
+
+option java_package = "com.example.ai.sdk.grpc";
+
+message Prompt {
+  string id = 1;
+  string content = 2;
+  double temperature = 3;
+}
+
+message Completion {
+  string id = 1;
+  string content = 2;
+  string model = 3;
+  int64 timestamp = 4;
+}
+
+service ProcessLLMCompletionService {
+  rpc RemoteProcess(Prompt) returns (Completion);
+}
+
+service ObservePersistenceCompletionSideEffectService {
+  rpc RemoteProcess(Completion) returns (Completion);
+}
