@@ -17,6 +17,14 @@ import java.util.List;
  */
 public class SimilaritySearchService implements ReactiveStreamingService<Vector, ScoredChunk> {
 
+    /**
+     * Performs a similarity search for the given query vector and streams scored chunks.
+     *
+     * @param input the query vector whose values are used to compute deterministic, dummy similarity scores;
+     *              if `input` is null, `input.values()` is null, or `input.values()` is empty, no results are emitted
+     * @return a Multi that emits up to five dummy ScoredChunk instances (constructed with dummy Chunk data)
+     *         whose scores are computed deterministically from the provided vector; emits no items for invalid input
+     */
     @Override
     public Multi<ScoredChunk> process(Vector input) {
         if (input == null || input.values() == null || input.values().isEmpty()) {
@@ -45,6 +53,13 @@ public class SimilaritySearchService implements ReactiveStreamingService<Vector,
         return Multi.createFrom().iterable(results);
     }
 
+    /**
+     * Compute a deterministic similarity score for a query vector using a per-index weighting.
+     *
+     * @param queryVector the vector whose components are used to compute the score
+     * @param index       an integer used to scale components (varies the weighting)
+     * @return            a float similarity score in the range (0, 1], where higher values indicate greater similarity
+     */
     private float calculateSimilarity(Vector queryVector, int index) {
         // Simple deterministic similarity calculation
         float sum = 0;
@@ -55,7 +70,10 @@ public class SimilaritySearchService implements ReactiveStreamingService<Vector,
     }
 
     /**
-     * Alternative method that accepts DTOs directly for TPF delegation
+     * Produce a stream of ScoredChunkDto objects representing similarity search results for the given query vector.
+     *
+     * @param input the query vector used to perform the similarity search; if null or its values are null or empty, the resulting stream is empty
+     * @return a Multi that emits ScoredChunkDto items corresponding to scored chunks produced from the query
      */
     public Multi<ScoredChunkDto> processDto(Vector input) {
         return process(input).map(sc -> new ScoredChunkDto(
