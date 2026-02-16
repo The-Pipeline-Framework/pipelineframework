@@ -674,8 +674,22 @@ class PipelineStepProcessorTest {
         // Verify compilation succeeded
         assertThat(compilation).succeeded();
 
-        // The processor should generate server adapter only for the annotated step
-        // and not for other steps that might be defined in the pipeline config
+        // Verify that the processor generated the server adapter for the annotated step
+        assertTrue(
+            compilation.generatedSourceFile("test.step.ProcessCrawlSourceServiceServerAdapter").isPresent(),
+            "Expected generated server adapter: test.step.ProcessCrawlSourceServiceServerAdapter"
+        );
+
+        // Optionally verify the generated adapter references the inferred mapper
+        var adapterSource = compilation.generatedSourceFile("test.step.ProcessCrawlSourceServiceServerAdapter");
+        if (adapterSource.isPresent()) {
+            String adapterContent = java.nio.file.Files.readString(
+                java.nio.file.Paths.get(adapterSource.get().toUri()));
+            assertTrue(
+                adapterContent.contains("CrawlRequestMapper") || adapterContent.contains("RawDocumentMapper"),
+                "Generated adapter should reference inferred mapper classes"
+            );
+        }
     }
 
     @Test

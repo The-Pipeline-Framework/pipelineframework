@@ -150,31 +150,36 @@ class PipelinePluginTest {
         Path restServerDir = generatedSourcesDir.resolve("rest-server");
 
         // Check if REST server files were generated for the regular steps
-        boolean hasRestFiles = Files.exists(restServerDir) &&
-            Files.walk(restServerDir)
-                .filter(Files::isRegularFile)
-                .anyMatch(path -> path.toString().endsWith(".java"));
+        boolean hasRestFiles = Files.exists(restServerDir);
+        if (hasRestFiles) {
+            try (var stream = Files.walk(restServerDir)) {
+                hasRestFiles = stream.filter(Files::isRegularFile)
+                    .anyMatch(path -> path.toString().endsWith(".java"));
+            }
+        }
 
         // If REST server files exist, verify they contain the expected content for the ProcessTestService REST resource
         if (hasRestFiles) {
-            boolean hasCorrectContent = Files.walk(restServerDir)
-                .filter(Files::isRegularFile)
-                .filter(path -> path.toString().endsWith(".java"))
-                .anyMatch(path -> {
-                    try {
-                        String content = Files.readString(path);
-                        // Check for expected content indicating it's a REST resource for the persistence aspect
-                        return content.contains("class PersistenceTestDataSideEffectResource") &&
-                               (content.contains("@Path") || content.contains("@GET") || content.contains("@POST"));
-                    } catch (IOException e) {
-                        return false;
-                    }
-                });
+            boolean hasCorrectContent = false;
+            try (var stream = Files.walk(restServerDir)) {
+                hasCorrectContent = stream.filter(Files::isRegularFile)
+                    .filter(path -> path.toString().endsWith(".java"))
+                    .anyMatch(path -> {
+                        try {
+                            String content = Files.readString(path);
+                            // Check for expected content indicating it's a REST resource for the persistence aspect
+                            return content.contains("class PersistenceTestDataSideEffectResource") &&
+                                   (content.contains("@Path") || content.contains("@GET") || content.contains("@POST"));
+                        } catch (IOException e) {
+                            return false;
+                        }
+                    });
+            }
 
             if (!hasCorrectContent) {
                 // List what files were actually generated for debugging
-                try {
-                    java.util.List<Path> files = Files.walk(restServerDir)
+                try (var stream = Files.walk(restServerDir)) {
+                    java.util.List<Path> files = stream
                         .filter(Files::isRegularFile)
                         .filter(path -> path.toString().endsWith(".java"))
                         .toList();
@@ -319,31 +324,36 @@ class PipelinePluginTest {
         Path restServerDir = generatedSourcesDir.resolve("rest-server");
 
         // Check if REST server files were generated for the regular steps
-        boolean hasRestFiles = Files.exists(restServerDir) &&
-            Files.walk(restServerDir)
-                .filter(Files::isRegularFile)
-                .anyMatch(path -> path.toString().endsWith(".java"));
+        boolean hasRestFiles = Files.exists(restServerDir);
+        if (hasRestFiles) {
+            try (var stream = Files.walk(restServerDir)) {
+                hasRestFiles = stream.filter(Files::isRegularFile)
+                    .anyMatch(path -> path.toString().endsWith(".java"));
+            }
+        }
 
         // If REST server files exist, verify they contain the expected content for the ProcessTestService REST resource
         if (hasRestFiles) {
-            boolean hasCorrectContent = Files.walk(restServerDir)
-                .filter(Files::isRegularFile)
-                .filter(path -> path.toString().endsWith(".java"))
-                .anyMatch(path -> {
-                    try {
-                        String content = Files.readString(path);
-                        // Check for expected content indicating it's a REST resource for the cache aspect
-                        return content.contains("class CacheTestDataSideEffectResource") &&
-                               (content.contains("@Path") || content.contains("@GET") || content.contains("@POST"));
-                    } catch (IOException e) {
-                        return false;
-                    }
-                });
+            boolean hasCorrectContent = false;
+            try (var stream = Files.walk(restServerDir)) {
+                hasCorrectContent = stream.filter(Files::isRegularFile)
+                    .filter(path -> path.toString().endsWith(".java"))
+                    .anyMatch(path -> {
+                        try {
+                            String content = Files.readString(path);
+                            // Check for expected content indicating it's a REST resource for the cache aspect
+                            return content.contains("class CacheTestDataSideEffectResource") &&
+                                   (content.contains("@Path") || content.contains("@GET") || content.contains("@POST"));
+                        } catch (IOException e) {
+                            return false;
+                        }
+                    });
+            }
 
             if (!hasCorrectContent) {
                 // List what files were actually generated for debugging
-                try {
-                    java.util.List<Path> files = Files.walk(restServerDir)
+                try (var stream = Files.walk(restServerDir)) {
+                    java.util.List<Path> files = stream
                         .filter(Files::isRegularFile)
                         .filter(path -> path.toString().endsWith(".java"))
                         .toList();
