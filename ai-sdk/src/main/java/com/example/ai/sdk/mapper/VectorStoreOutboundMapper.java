@@ -22,9 +22,6 @@ public interface VectorStoreOutboundMapper extends Mapper<VectorStoreSvc.StoreRe
      * @return the DTO containing the same `id`, `success`, and `message` values as the gRPC object
      */
     @Override
-    @org.mapstruct.Mapping(target = "id", source = "id")
-    @org.mapstruct.Mapping(target = "success", source = "success")
-    @org.mapstruct.Mapping(target = "message", source = "message")
     StoreResultDto fromGrpc(VectorStoreSvc.StoreResult grpc);
 
     /**
@@ -34,9 +31,6 @@ public interface VectorStoreOutboundMapper extends Mapper<VectorStoreSvc.StoreRe
      * @return a gRPC {@link VectorStoreSvc.StoreResult} with id, success, and message copied from the DTO
      */
     @Override
-    @org.mapstruct.Mapping(target = "id", source = "id")
-    @org.mapstruct.Mapping(target = "success", source = "success")
-    @org.mapstruct.Mapping(target = "message", source = "message")
     VectorStoreSvc.StoreResult toGrpc(StoreResultDto dto);
 
     /**
@@ -46,9 +40,6 @@ public interface VectorStoreOutboundMapper extends Mapper<VectorStoreSvc.StoreRe
      * @return the domain StoreResult with `id`, `success`, and `message` copied from the DTO
      */
     @Override
-    @org.mapstruct.Mapping(target = "id", source = "id")
-    @org.mapstruct.Mapping(target = "success", source = "success")
-    @org.mapstruct.Mapping(target = "message", source = "message")
     StoreResult fromDto(StoreResultDto dto);
 
     /**
@@ -58,8 +49,5 @@ public interface VectorStoreOutboundMapper extends Mapper<VectorStoreSvc.StoreRe
      * @return the StoreResultDto with `id`, `success`, and `message` copied from the domain entity
      */
     @Override
-    @org.mapstruct.Mapping(target = "id", source = "id")
-    @org.mapstruct.Mapping(target = "success", source = "success")
-    @org.mapstruct.Mapping(target = "message", source = "message")
     StoreResultDto toDto(StoreResult domain);
 }

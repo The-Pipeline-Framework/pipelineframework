@@ -2,8 +2,8 @@ package com.example.ai.sdk.mapper;
 
 import com.example.ai.sdk.dto.ScoredChunkDto;
 import com.example.ai.sdk.entity.ScoredChunk;
+import com.example.ai.sdk.grpc.DocumentChunkingSvc;
 import com.example.ai.sdk.grpc.SimilaritySearchSvc;
-import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.mapper.Mapper;
 
@@ -33,9 +33,16 @@ public interface ScoredChunkMapper extends Mapper<SimilaritySearchSvc.ScoredChun
      * @return a gRPC ScoredChunk with `chunk` and `score` populated from the DTO
      */
     @Override
-    @org.mapstruct.Mapping(target = "chunk", source = "chunk")
-    @org.mapstruct.Mapping(target = "score", source = "score")
-    SimilaritySearchSvc.ScoredChunk toGrpc(ScoredChunkDto dto);
+    default SimilaritySearchSvc.ScoredChunk toGrpc(ScoredChunkDto dto) {
+        if (dto == null) {
+            return null;
+        }
+        DocumentChunkingSvc.Chunk grpcChunk = ChunkMapper.INSTANCE.toGrpc(dto.chunk());
+        return SimilaritySearchSvc.ScoredChunk.newBuilder()
+                .setChunk(grpcChunk)
+                .setScore(dto.score())
+                .build();
+    }
 
     /**
      * Converts a ScoredChunkDto to a ScoredChunk entity.

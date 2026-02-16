@@ -51,8 +51,6 @@ public interface VectorMapper extends Mapper<EmbeddingSvc.Vector, VectorDto, Vec
      * @return the domain Vector with id and values copied from the DTO
      */
     @Override
-    @org.mapstruct.Mapping(target = "id", source = "id")
-    @org.mapstruct.Mapping(target = "values", source = "values")
     Vector fromDto(VectorDto dto);
 
     /**
@@ -62,7 +60,5 @@ public interface VectorMapper extends Mapper<EmbeddingSvc.Vector, VectorDto, Vec
      * @return a VectorDto whose id and values are copied from the domain entity
      */
     @Override
-    @org.mapstruct.Mapping(target = "id", source = "id")
-    @org.mapstruct.Mapping(target = "values", source = "values")
     VectorDto toDto(Vector domain);
 }

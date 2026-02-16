@@ -3,6 +3,7 @@ package com.example.ai.sdk.mapper;
 import com.example.ai.sdk.dto.VectorDto;
 import com.example.ai.sdk.entity.Vector;
 import com.example.ai.sdk.grpc.EmbeddingSvc;
+import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.mapper.Mapper;
 
@@ -21,8 +22,8 @@ public interface EmbeddingOutboundMapper extends Mapper<EmbeddingSvc.Vector, Vec
      * @return a VectorDto with `id` taken from `grpc.id` and `values` taken from `grpc.valuesList`
      */
     @Override
-    @org.mapstruct.Mapping(target = "id", source = "id")
-    @org.mapstruct.Mapping(target = "values", source = "valuesList")
+    @Mapping(target = "id", source = "id")
+    @Mapping(target = "values", source = "valuesList")
     VectorDto fromGrpc(EmbeddingSvc.Vector grpc);
 
     /**
@@ -53,8 +54,6 @@ public interface EmbeddingOutboundMapper extends Mapper<EmbeddingSvc.Vector, Vec
      * @return the domain Vector populated from the given DTO
      */
     @Override
-    @org.mapstruct.Mapping(target = "id", source = "id")
-    @org.mapstruct.Mapping(target = "values", source = "values")
     Vector fromDto(VectorDto dto);
 
     /**
@@ -64,7 +63,5 @@ public interface EmbeddingOutboundMapper extends Mapper<EmbeddingSvc.Vector, Vec
      * @return the VectorDto with id and values taken from the domain entity
      */
     @Override
-    @org.mapstruct.Mapping(target = "id", source = "id")
-    @org.mapstruct.Mapping(target = "values", source = "values")
     VectorDto toDto(Vector domain);
 }

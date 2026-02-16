@@ -57,6 +57,7 @@ public interface ChunkMapper extends Mapper<DocumentChunkingSvc.Chunk, ChunkDto,
     /**
      * Converts a domain Chunk entity into a ChunkDto.
      *
+     * @param domain the domain Chunk entity to convert
      * @return a ChunkDto representing the provided domain Chunk
      */
     @Override
