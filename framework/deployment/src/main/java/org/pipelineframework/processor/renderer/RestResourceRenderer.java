@@ -611,6 +611,12 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         return DtoTypeUtils.toDtoType(domainType);
     }
 
+    /**
+     * Validate that the pipeline step model contains required input/output mapping configuration for REST generation.
+     *
+     * @param model the pipeline step model to validate
+     * @throws IllegalStateException if {@code model} is null, if input or output mappings are missing, or if either mapping lacks a resolved mapper or a non-null domain type
+     */
     private void validateRestMappings(PipelineStepModel model) {
         if (model == null) {
             throw new IllegalStateException("REST resource generation requires a non-null PipelineStepModel");

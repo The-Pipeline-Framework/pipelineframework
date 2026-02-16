@@ -47,15 +47,14 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Orchestrates generation of pipeline source artifacts and metadata for all step models and the orchestrator.
-     *
-     * <p>Initializes renderers and generators, produces per-step artifacts (gRPC, REST, clients, side-effect beans),
-     * optionally generates protobuf parsers when gRPC transport and a descriptor set are available, and writes role
-     * and orchestrator-related metadata files.</p>
-     *
-     * @param ctx the compilation context containing step models, renderer bindings, descriptor set, environment and settings
-     * @throws Exception if an unrecoverable generation error occurs that cannot be handled locally
-     */
+         * Generates pipeline source artifacts and metadata for all configured step models and the orchestrator.
+         *
+         * <p>Produces per-step artifacts (gRPC services, REST resources, client classes, side-effect beans), optionally
+         * generates protobuf parsers when applicable, and writes role, platform, and orchestrator-related metadata.</p>
+         *
+         * @param ctx the compilation context containing step models, renderer bindings, descriptor set, environment, and settings
+         * @throws Exception if an unrecoverable generation error occurs that cannot be handled locally
+         */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
         // Only proceed if there are models to process or orchestrator to generate
