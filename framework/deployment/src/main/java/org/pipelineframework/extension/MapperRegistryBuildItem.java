@@ -45,10 +45,14 @@ public final class MapperRegistryBuildItem extends SimpleBuildItem {
     private final Map<ClassInfo, DotName> mapperToDomain;
 
     /**
-     * Creates a new mapper registry build item.
+     * Constructs a build item that holds a bidirectional, immutable mapping between domain types and mapper classes.
      *
-     * @param domainToMapper map of domain type DotName to mapper ClassInfo
-     * @param mapperToDomain map of mapper ClassInfo to domain type DotName
+     * <p>Validates that each entry in one map is the inverse of the corresponding entry in the other map and stores
+     * unmodifiable copies of both maps.</p>
+     *
+     * @param domainToMapper map from domain type {@link DotName} to mapper {@link ClassInfo}
+     * @param mapperToDomain map from mapper {@link ClassInfo} to domain type {@link DotName}
+     * @throws IllegalArgumentException if the two maps are not consistent inverses of each other
      */
     public MapperRegistryBuildItem(Map<DotName, ClassInfo> domainToMapper, Map<ClassInfo, DotName> mapperToDomain) {
         Map<DotName, ClassInfo> domainToMapperCopy = new HashMap<>(Objects.requireNonNull(domainToMapper));
@@ -110,9 +114,9 @@ public final class MapperRegistryBuildItem extends SimpleBuildItem {
     }
 
     /**
-     * Gets the number of registered mappers.
+     * Report how many mappers are registered.
      *
-     * @return the number of mappers in the registry
+     * @return the number of registered mappers
      */
     public int size() {
         return domainToMapper.size();
@@ -128,9 +132,9 @@ public final class MapperRegistryBuildItem extends SimpleBuildItem {
     }
 
     /**
-     * Gets all registered mappers.
+     * All registered mapper ClassInfo instances.
      *
-     * @return an unmodifiable collection of mapper ClassInfos
+     * @return an unmodifiable collection of mapper ClassInfo instances present in the registry
      */
     public Collection<ClassInfo> getAllMappers() {
         return domainToMapper.values();
@@ -147,6 +151,11 @@ public final class MapperRegistryBuildItem extends SimpleBuildItem {
         return domainToMapper;
     }
 
+    /**
+     * String representation of this build item that includes the number of registered mappers.
+     *
+     * @return the string in the form "MapperRegistryBuildItem{size=<n>}" where <n> is the number of mappings
+     */
     @Override
     public String toString() {
         return "MapperRegistryBuildItem{size=" + domainToMapper.size() + '}';
