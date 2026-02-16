@@ -39,14 +39,16 @@ public final class StepDefinitionBuildItem extends MultiBuildItem {
     private final String stepCardinality;
 
     /**
-     * Creates a new step definition build item.
+     * Create a build item that describes a step definition for the Quarkus build process.
      *
-     * @param stepName the fully qualified name of the step service class
-     * @param domainIn DotName of the input domain type (E_in), or null if not specified
-     * @param domainOut DotName of the output domain type (E_out), or null if not specified
-     * @param stepCardinality the cardinality of the step; an empty string is accepted as a sentinel
-     *                       value produced by MapperInferenceBuildSteps.readStepDefinitions() when
-     *                       cardinality is not explicitly specified
+     * @param stepName the fully qualified name of the step service class; must not be null or blank
+     * @param domainIn the Jandex DotName of the step input type (E_in), or {@code null} if unspecified
+     * @param domainOut the Jandex DotName of the step output type (E_out), or {@code null} if unspecified
+     * @param stepCardinality a string describing the step cardinality; must not be null, but may be blank
+     *                       as a sentinel value produced by MapperInferenceBuildSteps.readStepDefinitions()
+     *                       when cardinality is not explicitly specified
+     * @throws NullPointerException if {@code stepName} or {@code stepCardinality} is null
+     * @throws IllegalArgumentException if {@code stepName} is blank
      */
     public StepDefinitionBuildItem(String stepName, DotName domainIn, DotName domainOut, String stepCardinality) {
         this.stepName = Objects.requireNonNull(stepName, "stepName must not be null");
@@ -60,33 +62,27 @@ public final class StepDefinitionBuildItem extends MultiBuildItem {
     }
 
     /**
-     * Gets the fully qualified name of the step service class.
+     * The fully qualified name of the step service class.
      *
-     * @return the step class name
+     * @return the fully qualified name of the step service class
      */
     public String getStepName() {
         return stepName;
     }
 
     /**
-     * Gets the DotName of the input domain type (E_in).
-     * <p>
-     * This is the entity type that flows into the step, used to resolve
-     * the outbound mapper: {@code Mapper<?, ?, E_in>}.
+     * Provides the {@code DotName} of the input domain type (E_in) that represents the entity type flowing into the step.
      *
-     * @return the input domain type DotName, or null if not specified
+     * @return the {@code DotName} of the input domain type (E_in), or {@code null} if not specified
      */
     public DotName getDomainIn() {
         return domainIn;
     }
 
     /**
-     * Gets the DotName of the output domain type (E_out).
-     * <p>
-     * This is the entity type that flows out of the step, used to resolve
-     * the inbound mapper: {@code Mapper<?, ?, E_out>}.
+     * The DotName of the step's output domain type (E_out).
      *
-     * @return the output domain type DotName, or null if not specified
+     * @return the output domain type DotName, or {@code null} if not specified
      */
     public DotName getDomainOut() {
         return domainOut;
@@ -101,6 +97,11 @@ public final class StepDefinitionBuildItem extends MultiBuildItem {
         return stepCardinality;
     }
 
+    /**
+     * String representation of the build item including the step name, domain types, and step cardinality.
+     *
+     * @return the string containing `stepName`, `domainIn`, `domainOut`, and `stepCardinality`
+     */
     @Override
     public String toString() {
         return "StepDefinitionBuildItem{" +

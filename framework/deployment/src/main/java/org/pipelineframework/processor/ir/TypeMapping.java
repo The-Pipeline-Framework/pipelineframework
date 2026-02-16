@@ -29,21 +29,21 @@ public record TypeMapping(
     }
 
     /**
-     * Creates a new TypeMapping instance (backward-compatible constructor).
+     * Backward-compatible constructor that creates a TypeMapping and defaults the entityType to the provided domainType.
      *
-     * @param domainType the domain type
-     * @param mapperType the mapper type (may be null)
-     * @param hasMapper whether a mapper is present
+     * @param domainType the domain type for this mapping; used as the entityType when none is provided
+     * @param mapperType the mapper type, or null if not specified
+     * @param hasMapper  true if a mapper has been inferred, false otherwise
      */
     public TypeMapping(TypeName domainType, TypeName mapperType, boolean hasMapper) {
         this(domainType, mapperType, hasMapper, domainType);
     }
 
     /**
-     * Creates a new TypeMapping with the inferred mapper type.
+     * Create a new TypeMapping that records the provided inferred mapper type.
      *
-     * @param inferredMapperType the inferred mapper ClassName
-     * @return a new TypeMapping instance with the mapper type set
+     * @param inferredMapperType the mapper ClassName to set on the returned mapping
+     * @return a TypeMapping with `mapperType` set to the provided `inferredMapperType` and `hasMapper` set to true
      */
     public TypeMapping withInferredMapper(ClassName inferredMapperType) {
         return new TypeMapping(domainType, inferredMapperType, true, entityType);

@@ -64,9 +64,10 @@ public class MapperInferenceEngine {
     private final IndexView index;
 
     /**
-     * Creates a new mapper inference engine.
+     * Create a new MapperInferenceEngine using the provided Jandex index.
      *
-     * @param index the Jandex index containing the full application classpath
+     * @param index the Jandex IndexView for the application classpath; must not be null
+     * @throws NullPointerException if {@code index} is null
      */
     public MapperInferenceEngine(IndexView index) {
         this.index = Objects.requireNonNull(index, "Jandex index must not be null");
@@ -117,14 +118,14 @@ public class MapperInferenceEngine {
     }
 
     /**
-     * Builds a complete mapper registry from the Jandex index.
-     * <p>
-     * This method scans all known implementors of the Mapper interface,
-     * extracts their generic type parameters, validates them, and builds
-     * a registry mapping domain types to mapper implementations.
+     * Builds an immutable registry that maps domain types to their unique Mapper implementations discovered in the Jandex index.
      *
-     * @return the built mapper registry
-     * @throws IllegalStateException if duplicate mappers are found for the same domain type
+     * Scans all implementors of the Mapper interface, extracts and validates each Mapper's generic signature, and records
+     * a one-to-one mapping from domain type to mapper and back. Validation enforces that generic parameters are present
+     * and not wildcards or erased, and that exactly one mapper exists per domain type.
+     *
+     * @return a MapperRegistry mapping domain type names (DotName) to their Mapper ClassInfo and the inverse mapping
+     * @throws IllegalStateException if any validation errors are encountered (for example: missing/erased/wildcard generic parameters or duplicate mappers); the exception message aggregates all validation errors
      */
     public MapperRegistry buildRegistry() {
         // Get all classes implementing Mapper interface
@@ -178,13 +179,12 @@ public class MapperInferenceEngine {
     }
 
     /**
-     * Extracts the generic type signature from a Mapper implementation.
-     * <p>
-     * Looks for the Mapper interface in the class's type parameters and
-     * extracts the three generic arguments: {@code Mapper<Grpc, Dto, Domain>}.
+     * Finds and returns the Mapper generic signature (Mapper<Grpc, Dto, Domain>) declared by the given mapper implementation.
      *
-     * @param mapperClass the mapper ClassInfo
-     * @return the extracted generic signature, or null if extraction failed
+     * Searches implemented interfaces (including extended interfaces) first and then the superclass chain to locate and extract the three type arguments.
+     *
+     * @param mapperClass the mapper implementation to inspect
+     * @return the extracted MapperGenericSignature if found, or {@code null} if the Mapper signature cannot be resolved
      */
     private MapperGenericSignature extractMapperGenericSignature(ClassInfo mapperClass) {
         // Create a single visited set to avoid redundant traversals across interface and superclass chains
@@ -207,6 +207,13 @@ public class MapperInferenceEngine {
         return null;
     }
 
+    /**
+     * Locate and return the generic signature Mapper<Grpc, Dto, Domain> for the given type by searching its interfaces and superclass.
+     *
+     * @param type the type to inspect for a Mapper signature; may be null
+     * @param visited a set of type names already visited to prevent infinite recursion
+     * @return the MapperGenericSignature when the type represents a parameterized Mapper with three type arguments, or `null` if no valid signature is found
+     */
     private MapperGenericSignature resolveMapperSignature(Type type, Set<DotName> visited) {
         if (type == null) {
             return null;
@@ -281,10 +288,10 @@ public class MapperInferenceEngine {
         }
 
         /**
-         * Checks if a type is a wildcard or has erased generic parameters.
+         * Determine whether a Jandex Type is a wildcard or represents an erased generic.
          *
-         * @param type the type to check
-         * @return true if the type is a wildcard or erased
+         * @param type the type to inspect; `null` is treated as erased
+         * @return `true` if the type is `null`, a wildcard, or a type variable (erased); `false` otherwise
          */
         private boolean isWildcardOrErased(Type type) {
             if (type == null) {
@@ -304,6 +311,11 @@ public class MapperInferenceEngine {
             return false;
         }
 
+        /**
+         * Provide a human-readable representation of the mapper generic signature.
+         *
+         * @return a string formatted as `Mapper<grpcType, dtoType, domainType>` where each placeholder is the string form of the corresponding type
+         */
         @Override
         public String toString() {
             return "Mapper<" + grpcType + ", " + dtoType + ", " + domainType + ">";

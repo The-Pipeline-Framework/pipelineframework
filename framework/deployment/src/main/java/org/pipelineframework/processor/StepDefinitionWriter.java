@@ -99,10 +99,13 @@ public class StepDefinitionWriter {
     }
 
     /**
-     * Creates a writer for the step definitions resource.
+     * Obtain a Writer for the step definitions resource.
      *
-     * @return the writer for the resource
-     * @throws IOException if resource creation fails
+     * Attempts to create the resource in CLASS_OUTPUT and, if that fails, in SOURCE_OUTPUT;
+     * if both attempts fail the exception from the CLASS_OUTPUT attempt is added as suppressed to the thrown exception.
+     *
+     * @return a Writer for META-INF/pipeline/step-definitions.txt
+     * @throws IOException if creating the resource fails in both CLASS_OUTPUT and SOURCE_OUTPUT
      */
     private Writer createResourceWriter() throws IOException {
         // Try to create the resource in CLASS_OUTPUT (target/classes)

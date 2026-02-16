@@ -57,10 +57,13 @@ public class MapperInferenceBuildSteps {
     private static final String STEP_DEFINITIONS_FILE = "META-INF/pipeline/step-definitions.txt";
 
     /**
-     * Reads step definitions from the metadata file produced by the annotation processor.
+     * Load pipeline step definitions from classpath resources at META-INF/pipeline/step-definitions.txt.
      *
-     * @return list of step definition build items
-     * @throws IOException if reading fails
+     * <p>Parses each non-empty, non-comment line using the format:
+     * stepName|domainIn|domainOut|cardinality (cardinality is optional). Empty domain fields are treated as absent.</p>
+     *
+     * @return a list of StepDefinitionBuildItem representing the parsed step definitions
+     * @throws IOException if an I/O error occurs while reading resources or if a step definition line is malformed
      */
     private List<StepDefinitionBuildItem> readStepDefinitions() throws IOException {
         List<StepDefinitionBuildItem> stepDefinitions = new ArrayList<>();
@@ -105,20 +108,14 @@ public class MapperInferenceBuildSteps {
     }
 
     /**
-     * Builds the mapper registry from the Jandex index.
-     * <p>
-     * This build step:
-     * <ol>
-     *   <li>Reads step definitions from the metadata file produced by the annotation processor</li>
-     *   <li>Consumes the CombinedIndexBuildItem containing the full application classpath</li>
-     *   <li>Scans all known implementors of the Mapper interface</li>
-     *   <li>Extracts and validates generic type signatures</li>
-     *   <li>Builds a registry mapping domain types to mapper implementations</li>
-     *   <li>Produces a MapperRegistryBuildItem for consumption by code generation</li>
-     * </ol>
+     * Builds a MapperRegistry from the application's Jandex index and emits it as a MapperRegistryBuildItem.
      *
-     * @param combinedIndex the combined Jandex index of all application and dependency classes
-     * @param mapperRegistry producer for the mapper registry build item
+     * <p>Reads step definitions, discovers Mapper implementations from the index, validates that each pipeline
+     * step has matching mappers for its input/output domain types, and produces a MapperRegistryBuildItem for
+     * use by downstream build steps.</p>
+     *
+     * @param combinedIndex the combined Jandex index of application and dependency classes
+     * @param mapperRegistry producer used to emit the resulting MapperRegistryBuildItem
      */
     @BuildStep
     void buildMapperRegistry(
@@ -162,14 +159,15 @@ public class MapperInferenceBuildSteps {
     }
 
     /**
-     * Validates that all steps have mappers for their input/output domain types.
-     * <p>
-     * PER REQUIREMENTS: Fail fast on missing mappers. No silent transport bypass.
+     * Ensure every pipeline step has mappers for its input and output domain types.
+     *
+     * <p>Per requirements, fails fast on any missing mapper and reports whether the domain type
+     * itself is absent from the Jandex index or present but missing a mapper implementation.</p>
      *
      * @param stepDefinitions the step definitions to validate
-     * @param registry the mapper registry
-     * @param index the Jandex index for type existence checks
-     * @throws IllegalStateException if any step is missing a required mapper
+     * @param registry the mapper registry mapping domain types to discovered mappers
+     * @param index the Jandex index used to determine whether a domain type is present in the application index
+     * @throws IllegalStateException if one or more steps are missing required mappers or referenced domain types are not indexed
      */
     private void validateStepMappers(
             List<StepDefinitionBuildItem> stepDefinitions,
