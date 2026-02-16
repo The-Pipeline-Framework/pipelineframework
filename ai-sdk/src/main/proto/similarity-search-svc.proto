@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package ai.sdk;
+
+option java_package = "com.example.ai.sdk.grpc";
+
+import "document-chunking-svc.proto";
+import "embedding-svc.proto";
+
+message ScoredChunk {
+  Chunk chunk = 1;
+  float score = 2;
+}
+
+service ProcessSimilaritySearchService {
+  rpc remoteProcess(Vector) returns (stream ScoredChunk);
+}
+
+service ObservePersistenceScoredChunkSideEffectService {
+  rpc remoteProcess(ScoredChunk) returns (ScoredChunk);
+}

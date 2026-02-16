@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package ai.sdk;
+
+option java_package = "com.example.ai.sdk.grpc";
+
+message StringValue {
+  string value = 1;
+}
+
+message Vector {
+  string id = 1;
+  repeated float values = 2;
+}
+
+service ProcessEmbeddingService {
+  rpc remoteProcess(StringValue) returns (Vector);
+}
+
+service ObservePersistenceVectorSideEffectService {
+  rpc remoteProcess(Vector) returns (Vector);
+}
