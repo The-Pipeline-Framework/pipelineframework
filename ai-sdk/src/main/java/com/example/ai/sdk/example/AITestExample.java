@@ -19,6 +19,12 @@ import java.util.Objects;
  */
 public class AITestExample {
     
+    /**
+     * Example entry point that demonstrates a complete SDK workflow: document chunking, embedding generation,
+     * storing embeddings in a vector store, similarity search, and LLM completion.
+     *
+     * <p>The method runs a sequential demo using the SDK services and prints progress and results to standard output.
+     */
     public static void main(String[] args) {
         // Initialize services
         DocumentChunkingService chunkingService = new DocumentChunkingService();

@@ -13,6 +13,16 @@ import org.pipelineframework.service.ReactiveService;
  */
 public class LLMCompletionService implements ReactiveService<Prompt, Completion> {
 
+    /**
+     * Generate a deterministic Completion for the given Prompt.
+     *
+     * <p>Validates that {@code input}, {@code input.id()}, and {@code input.content()} are non-null;
+     * if any are null the returned {@code Uni} will fail with an {@link IllegalArgumentException}.</p>
+     *
+     * @param input the prompt to process; must have a non-null id and non-null content
+     * @return a Completion populated with deterministic content derived from the prompt and prompt id,
+     *         a deterministic completion id, the model label "fake-llm-model-v1", and a generation timestamp
+     */
     @Override
     public Uni<Completion> process(Prompt input) {
         if (input == null || input.id() == null || input.content() == null) {
@@ -34,6 +44,13 @@ public class LLMCompletionService implements ReactiveService<Prompt, Completion>
         return Uni.createFrom().item(completion);
     }
 
+    /**
+     * Constructs a deterministic, human-readable completion string derived from a prompt and its identifier.
+     *
+     * @param prompt   the user's prompt text used as the basis of the completion
+     * @param promptId the prompt's identifier used to seed deterministic content
+     * @return         a deterministic completion message that references the prompt and includes a numeric seed
+     */
     private String generateDeterministicCompletion(String prompt, String promptId) {
         // Generate a deterministic completion based on the prompt and ID
         int seed = prompt.hashCode() + promptId.hashCode();
@@ -49,7 +66,10 @@ public class LLMCompletionService implements ReactiveService<Prompt, Completion>
     }
 
     /**
-     * Alternative method that accepts DTOs directly for TPF delegation
+     * Processes a prompt represented as a DTO and returns the resulting completion as a DTO.
+     *
+     * @param input the prompt data transfer object containing id, content, and temperature
+     * @return a CompletionDto containing the generated completion's id, content, model, and timestamp
      */
     public Uni<CompletionDto> processDto(PromptDto input) {
         Prompt entity = new Prompt(input.id(), input.content(), input.temperature());

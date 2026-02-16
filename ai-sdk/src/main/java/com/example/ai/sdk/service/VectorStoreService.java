@@ -17,6 +17,12 @@ public class VectorStoreService implements ReactiveService<Vector, StoreResult> 
 
     private final Map<String, Vector> store = new ConcurrentHashMap<>();
 
+    /**
+     * Persist the given vector in the in-memory store and produce a StoreResult describing the outcome.
+     *
+     * @param input the vector to store; must be non-null and must have a non-null id()
+     * @return a StoreResult containing the stored vector's id, `success` set to `true`, and a success message
+     */
     @Override
     public Uni<StoreResult> process(Vector input) {
         if (input == null || input.id() == null) {
@@ -38,14 +44,20 @@ public class VectorStoreService implements ReactiveService<Vector, StoreResult> 
     }
 
     /**
-     * Alternative method that accepts DTOs directly for TPF delegation
+     * Process a Vector and convert the operation result into a transfer object suitable for TPF delegation.
+     *
+     * @param input the Vector to persist; must not be null and must have a non-null id()
+     * @return a StoreResultDto containing the vector id, a success flag, and a message describing the outcome
      */
     public Uni<StoreResultDto> processDto(Vector input) {
         return process(input).map(r -> new StoreResultDto(r.id(), r.success(), r.message()));
     }
 
     /**
-     * Retrieve a vector by ID
+     * Retrieve the vector stored under the given identifier.
+     *
+     * @param id the vector's identifier
+     * @return the stored {@code Vector} for the given id, or {@code null} if no vector is found
      */
     public Vector getVector(String id) {
         return store.get(id);

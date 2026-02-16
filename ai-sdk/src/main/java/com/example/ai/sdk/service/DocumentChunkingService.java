@@ -15,6 +15,20 @@ import java.util.Arrays;
  */
 public class DocumentChunkingService implements ReactiveStreamingService<Document, Chunk> {
     
+    /**
+     * Splits a document's text into fixed-size word chunks and emits them as a stream.
+     *
+     * If the input is null, or its content is null or empty after trimming, an empty stream is returned.
+     *
+     * Each resulting Chunk contains up to 10 words. Chunk fields are set as follows:
+     * - id: "{documentId}_chunk_{position}"
+     * - documentId: the input document's id
+     * - content: the chunk's text
+     * - position: zero-based chunk index
+     *
+     * @param input the document to chunk; may be null
+     * @return a Multi emitting the generated Chunk instances, or an empty Multi if the input has no content
+     */
     @Override
     public Multi<Chunk> process(Document input) {
         if (input == null || input.content() == null) {
@@ -50,7 +64,12 @@ public class DocumentChunkingService implements ReactiveStreamingService<Documen
     }
     
     /**
-     * Alternative method that accepts DTOs directly for TPF delegation
+     * Produce chunk DTOs from a DocumentDto by splitting its content into chunks.
+     *
+     * If the input or its content is null or empty, no chunks are produced.
+     *
+     * @param input the document DTO to convert and chunk
+     * @return ChunkDto objects representing the sequential chunks of the document
      */
     public Multi<ChunkDto> processDto(DocumentDto input) {
         Document entity = new Document(input.id(), input.content());

@@ -15,6 +15,12 @@ public interface CompletionMapper extends Mapper<LlmCompletionSvc.Completion, Co
 
     CompletionMapper INSTANCE = Mappers.getMapper(CompletionMapper.class);
 
+    /**
+     * Convert a gRPC Completion message into its DTO representation.
+     *
+     * @param grpc the gRPC Completion message to convert
+     * @return the DTO with `id`, `content`, `model`, and `timestamp` copied from the gRPC message
+     */
     @Override
     @org.mapstruct.Mapping(target = "id", source = "id")
     @org.mapstruct.Mapping(target = "content", source = "content")
@@ -22,6 +28,12 @@ public interface CompletionMapper extends Mapper<LlmCompletionSvc.Completion, Co
     @org.mapstruct.Mapping(target = "timestamp", source = "timestamp")
     CompletionDto fromGrpc(LlmCompletionSvc.Completion grpc);
 
+    /**
+     * Convert a CompletionDto to its gRPC Completion representation.
+     *
+     * @param dto the source CompletionDto
+     * @return the corresponding LlmCompletionSvc.Completion with id, content, model, and timestamp copied from the DTO
+     */
     @Override
     @org.mapstruct.Mapping(target = "id", source = "id")
     @org.mapstruct.Mapping(target = "content", source = "content")
@@ -29,6 +41,12 @@ public interface CompletionMapper extends Mapper<LlmCompletionSvc.Completion, Co
     @org.mapstruct.Mapping(target = "timestamp", source = "timestamp")
     LlmCompletionSvc.Completion toGrpc(CompletionDto dto);
 
+    /**
+     * Converts a CompletionDto into a domain/entity Completion.
+     *
+     * @param dto the data-transfer object containing completion fields
+     * @return the domain/entity Completion with fields mapped from the DTO
+     */
     @Override
     @org.mapstruct.Mapping(target = "id", source = "id")
     @org.mapstruct.Mapping(target = "content", source = "content")
@@ -36,6 +54,12 @@ public interface CompletionMapper extends Mapper<LlmCompletionSvc.Completion, Co
     @org.mapstruct.Mapping(target = "timestamp", source = "timestamp")
     Completion fromDto(CompletionDto dto);
 
+    /**
+     * Convert a domain Completion entity to a CompletionDto.
+     *
+     * @param domain the domain/entity Completion to convert
+     * @return a CompletionDto populated with `id`, `content`, `model`, and `timestamp` from the domain entity
+     */
     @Override
     @org.mapstruct.Mapping(target = "id", source = "id")
     @org.mapstruct.Mapping(target = "content", source = "content")

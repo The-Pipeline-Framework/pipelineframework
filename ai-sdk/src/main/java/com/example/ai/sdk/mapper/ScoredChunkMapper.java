@@ -15,21 +15,45 @@ public interface ScoredChunkMapper extends Mapper<SimilaritySearchSvc.ScoredChun
 
     ScoredChunkMapper INSTANCE = Mappers.getMapper(ScoredChunkMapper.class);
 
+    /**
+     * Converts a gRPC ScoredChunk message to a ScoredChunkDto.
+     *
+     * @param grpc the gRPC ScoredChunk to convert
+     * @return a ScoredChunkDto with the corresponding chunk and score from the gRPC message
+     */
     @Override
     @org.mapstruct.Mapping(target = "chunk", source = "chunk")
     @org.mapstruct.Mapping(target = "score", source = "score")
     ScoredChunkDto fromGrpc(SimilaritySearchSvc.ScoredChunk grpc);
 
+    /**
+     * Converts a scored-chunk DTO into the corresponding gRPC ScoredChunk message.
+     *
+     * @param dto the DTO containing the chunk content and its similarity score
+     * @return a gRPC ScoredChunk with `chunk` and `score` populated from the DTO
+     */
     @Override
     @org.mapstruct.Mapping(target = "chunk", source = "chunk")
     @org.mapstruct.Mapping(target = "score", source = "score")
     SimilaritySearchSvc.ScoredChunk toGrpc(ScoredChunkDto dto);
 
+    /**
+     * Converts a ScoredChunkDto to a ScoredChunk entity.
+     *
+     * @param dto the data transfer object containing chunk and score values
+     * @return the entity populated with values from {@code dto}
+     */
     @Override
     @org.mapstruct.Mapping(target = "chunk", source = "chunk")
     @org.mapstruct.Mapping(target = "score", source = "score")
     ScoredChunk fromDto(ScoredChunkDto dto);
 
+    /**
+     * Converts a domain ScoredChunk entity to a ScoredChunkDto.
+     *
+     * @param domain the domain entity whose fields are mapped into the DTO
+     * @return a ScoredChunkDto with `chunk` and `score` copied from the domain entity
+     */
     @Override
     @org.mapstruct.Mapping(target = "chunk", source = "chunk")
     @org.mapstruct.Mapping(target = "score", source = "score")
