@@ -3,7 +3,6 @@ package com.example.ai.sdk.mapper;
 import com.example.ai.sdk.dto.StoreResultDto;
 import com.example.ai.sdk.entity.StoreResult;
 import com.example.ai.sdk.grpc.VectorStoreSvc;
-import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.mapper.Mapper;
 
@@ -22,9 +21,6 @@ public interface StoreResultMapper extends Mapper<VectorStoreSvc.StoreResult, St
      * @return the corresponding StoreResultDto with id, success, and message populated
      */
     @Override
-    @org.mapstruct.Mapping(target = "id", source = "id")
-    @org.mapstruct.Mapping(target = "success", source = "success")
-    @org.mapstruct.Mapping(target = "message", source = "message")
     StoreResultDto fromGrpc(VectorStoreSvc.StoreResult grpc);
 
     /**
@@ -34,10 +30,16 @@ public interface StoreResultMapper extends Mapper<VectorStoreSvc.StoreResult, St
      * @return the corresponding gRPC StoreResult with id, success, and message populated
      */
     @Override
-    @org.mapstruct.Mapping(target = "id", source = "id")
-    @org.mapstruct.Mapping(target = "success", source = "success")
-    @org.mapstruct.Mapping(target = "message", source = "message")
-    VectorStoreSvc.StoreResult toGrpc(StoreResultDto dto);
+    default VectorStoreSvc.StoreResult toGrpc(StoreResultDto dto) {
+        if (dto == null) {
+            return null;
+        }
+        return VectorStoreSvc.StoreResult.newBuilder()
+                .setId(dto.id())
+                .setSuccess(dto.success())
+                .setMessage(dto.message())
+                .build();
+    }
 
     /**
      * Convert a StoreResultDto into a domain StoreResult entity.
@@ -46,9 +48,6 @@ public interface StoreResultMapper extends Mapper<VectorStoreSvc.StoreResult, St
      * @return the StoreResult entity with `id`, `success`, and `message` populated from the DTO
      */
     @Override
-    @org.mapstruct.Mapping(target = "id", source = "id")
-    @org.mapstruct.Mapping(target = "success", source = "success")
-    @org.mapstruct.Mapping(target = "message", source = "message")
     StoreResult fromDto(StoreResultDto dto);
 
     /**
@@ -58,8 +57,5 @@ public interface StoreResultMapper extends Mapper<VectorStoreSvc.StoreResult, St
      * @return the corresponding StoreResultDto with `id`, `success`, and `message` mapped
      */
     @Override
-    @org.mapstruct.Mapping(target = "id", source = "id")
-    @org.mapstruct.Mapping(target = "success", source = "success")
-    @org.mapstruct.Mapping(target = "message", source = "message")
     StoreResultDto toDto(StoreResult domain);
 }

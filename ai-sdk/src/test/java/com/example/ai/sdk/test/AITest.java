@@ -42,6 +42,7 @@ class AITest {
             var embedding = embeddingService.process(chunk.content()).await().atMost(Duration.ofSeconds(30));
             assertNotNull(embedding, "Embedding result must not be null");
             assertNotNull(embedding.values(), "Embedding values must not be null");
+            assertFalse(embedding.values().isEmpty(), "Embedding values must not be empty");
 
             var storeResult = vectorStoreService.process(embedding).await().atMost(Duration.ofSeconds(30));
             assertTrue(storeResult.success(), "Vector store should return success");

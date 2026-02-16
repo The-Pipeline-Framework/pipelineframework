@@ -10,7 +10,7 @@ import org.pipelineframework.mapper.Mapper;
 /**
  * MapStruct mapper for ScoredChunk conversion between gRPC, DTO, and Entity layers.
  */
-@org.mapstruct.Mapper
+@org.mapstruct.Mapper(uses = {ChunkMapper.class})
 public interface ScoredChunkMapper extends Mapper<SimilaritySearchSvc.ScoredChunk, ScoredChunkDto, ScoredChunk> {
 
     ScoredChunkMapper INSTANCE = Mappers.getMapper(ScoredChunkMapper.class);
@@ -22,8 +22,6 @@ public interface ScoredChunkMapper extends Mapper<SimilaritySearchSvc.ScoredChun
      * @return a ScoredChunkDto with the corresponding chunk and score from the gRPC message
      */
     @Override
-    @org.mapstruct.Mapping(target = "chunk", source = "chunk")
-    @org.mapstruct.Mapping(target = "score", source = "score")
     ScoredChunkDto fromGrpc(SimilaritySearchSvc.ScoredChunk grpc);
 
     /**
@@ -51,8 +49,6 @@ public interface ScoredChunkMapper extends Mapper<SimilaritySearchSvc.ScoredChun
      * @return the entity populated with values from {@code dto}
      */
     @Override
-    @org.mapstruct.Mapping(target = "chunk", source = "chunk")
-    @org.mapstruct.Mapping(target = "score", source = "score")
     ScoredChunk fromDto(ScoredChunkDto dto);
 
     /**
@@ -62,7 +58,5 @@ public interface ScoredChunkMapper extends Mapper<SimilaritySearchSvc.ScoredChun
      * @return a ScoredChunkDto with `chunk` and `score` copied from the domain entity
      */
     @Override
-    @org.mapstruct.Mapping(target = "chunk", source = "chunk")
-    @org.mapstruct.Mapping(target = "score", source = "score")
     ScoredChunkDto toDto(ScoredChunk domain);
 }

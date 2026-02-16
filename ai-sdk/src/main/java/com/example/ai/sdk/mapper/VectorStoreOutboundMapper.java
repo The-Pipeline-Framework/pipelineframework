@@ -3,7 +3,6 @@ package com.example.ai.sdk.mapper;
 import com.example.ai.sdk.dto.StoreResultDto;
 import com.example.ai.sdk.entity.StoreResult;
 import com.example.ai.sdk.grpc.VectorStoreSvc;
-import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.mapper.Mapper;
 
@@ -31,7 +30,16 @@ public interface VectorStoreOutboundMapper extends Mapper<VectorStoreSvc.StoreRe
      * @return a gRPC {@link VectorStoreSvc.StoreResult} with id, success, and message copied from the DTO
      */
     @Override
-    VectorStoreSvc.StoreResult toGrpc(StoreResultDto dto);
+    default VectorStoreSvc.StoreResult toGrpc(StoreResultDto dto) {
+        if (dto == null) {
+            return null;
+        }
+        return VectorStoreSvc.StoreResult.newBuilder()
+                .setId(dto.id())
+                .setSuccess(dto.success())
+                .setMessage(dto.message())
+                .build();
+    }
 
     /**
      * Converts a StoreResultDto into a domain StoreResult entity.

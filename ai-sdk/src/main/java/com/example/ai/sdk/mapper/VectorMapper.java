@@ -36,8 +36,10 @@ public interface VectorMapper extends Mapper<EmbeddingSvc.Vector, VectorDto, Vec
         if (dto == null) {
             return null;
         }
-        EmbeddingSvc.Vector.Builder builder = EmbeddingSvc.Vector.newBuilder()
-                .setId(dto.id());
+        EmbeddingSvc.Vector.Builder builder = EmbeddingSvc.Vector.newBuilder();
+        if (dto.id() != null) {
+            builder.setId(dto.id());
+        }
         if (dto.values() != null) {
             builder.addAllValues(dto.values());
         }

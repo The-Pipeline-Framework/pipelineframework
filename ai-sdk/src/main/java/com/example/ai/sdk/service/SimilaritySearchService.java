@@ -21,6 +21,10 @@ public class SimilaritySearchService implements ReactiveStreamingService<Vector,
     /**
      * Performs a similarity search for the given query vector and streams scored chunks.
      *
+     * <p><strong>Note:</strong> This is a stub implementation for demo/testing purposes.
+     * It returns deterministic dummy results rather than querying the VectorStoreService.
+     * In a production implementation, this would query the vector store for actual similarity matches.</p>
+     *
      * @param input the query vector whose values are used to compute deterministic, dummy similarity scores;
      *              if `input` is null, `input.values()` is null, or `input.values()` is empty, no results are emitted
      * @return a Multi that emits up to five dummy ScoredChunk instances (constructed with dummy Chunk data)
@@ -32,8 +36,8 @@ public class SimilaritySearchService implements ReactiveStreamingService<Vector,
             return Multi.createFrom().empty();
         }
 
-        // In a real implementation, this would query the vector store
-        // For simulation, we'll return some dummy results with calculated similarity scores
+        // Stub implementation: returns deterministic dummy results for demo/testing purposes
+        // A production implementation would query VectorStoreService for actual similarity matches
 
         List<ScoredChunk> results = new ArrayList<>();
 
