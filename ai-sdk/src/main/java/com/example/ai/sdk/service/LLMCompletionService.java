@@ -37,7 +37,7 @@ public class LLMCompletionService implements ReactiveService<Prompt, Completion>
         int nonNegativeHash = input.id().hashCode() & 0x7fffffff;
         String completionId = "completion_" + nonNegativeHash;
         String model = "fake-llm-model-v1";
-        long timestamp = System.currentTimeMillis();
+        long timestamp = Math.abs((long) input.id().hashCode() * 31 + input.content().hashCode());
 
         Completion completion = new Completion(completionId, completionContent, model, timestamp);
 
@@ -72,6 +72,9 @@ public class LLMCompletionService implements ReactiveService<Prompt, Completion>
      * @return a CompletionDto containing the generated completion's id, content, model, and timestamp
      */
     public Uni<CompletionDto> processDto(PromptDto input) {
+        if (input == null) {
+            return Uni.createFrom().failure(new IllegalArgumentException("PromptDto cannot be null"));
+        }
         Prompt entity = new Prompt(input.id(), input.content(), input.temperature());
         return process(entity).map(c -> new CompletionDto(c.id(), c.content(), c.model(), c.timestamp()));
     }

@@ -5,6 +5,7 @@ import com.example.ai.sdk.dto.ScoredChunkDto;
 import com.example.ai.sdk.entity.ScoredChunk;
 import com.example.ai.sdk.entity.Vector;
 import com.example.ai.sdk.entity.Chunk;
+import com.example.ai.sdk.mapper.ScoredChunkMapper;
 import io.smallrye.mutiny.Multi;
 import org.pipelineframework.service.ReactiveStreamingService;
 
@@ -76,9 +77,6 @@ public class SimilaritySearchService implements ReactiveStreamingService<Vector,
      * @return a Multi that emits ScoredChunkDto items corresponding to scored chunks produced from the query
      */
     public Multi<ScoredChunkDto> processDto(Vector input) {
-        return process(input).map(sc -> new ScoredChunkDto(
-            new ChunkDto(sc.chunk().id(), sc.chunk().documentId(), sc.chunk().content(), sc.chunk().position()),
-            sc.score()
-        ));
+        return process(input).map(ScoredChunkMapper.INSTANCE::toDto);
     }
 }

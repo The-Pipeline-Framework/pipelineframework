@@ -13,9 +13,9 @@ message StoreResult {
 }
 
 service ProcessVectorStoreService {
-  rpc remoteProcess(Vector) returns (StoreResult);
+  rpc RemoteProcess(Vector) returns (StoreResult);
 }
 
 service ObservePersistenceStoreResultChunkSideEffectService {
-  rpc remoteProcess(StoreResult) returns (StoreResult);
+  rpc RemoteProcess(StoreResult) returns (StoreResult);
 }

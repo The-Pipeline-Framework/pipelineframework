@@ -31,7 +31,7 @@ public class DocumentChunkingService implements ReactiveStreamingService<Documen
      */
     @Override
     public Multi<Chunk> process(Document input) {
-        if (input == null || input.content() == null) {
+        if (input == null || input.content() == null || input.id() == null) {
             return Multi.createFrom().empty();
         }
 
@@ -44,12 +44,12 @@ public class DocumentChunkingService implements ReactiveStreamingService<Documen
         String[] words = trimmedContent.split("\\s+");
         int chunkSize = 10;
         int numChunks = (int) Math.ceil((double) words.length / chunkSize);
-        
+
         Chunk[] chunks = new Chunk[numChunks];
         for (int i = 0; i < numChunks; i++) {
             int start = i * chunkSize;
             int end = Math.min(start + chunkSize, words.length);
-            
+
             String chunkContent = String.join(" ", Arrays.copyOfRange(words, start, end));
 
             chunks[i] = new Chunk(
@@ -59,7 +59,7 @@ public class DocumentChunkingService implements ReactiveStreamingService<Documen
                 i
             );
         }
-        
+
         return Multi.createFrom().iterable(Arrays.asList(chunks));
     }
     
@@ -72,6 +72,9 @@ public class DocumentChunkingService implements ReactiveStreamingService<Documen
      * @return ChunkDto objects representing the sequential chunks of the document
      */
     public Multi<ChunkDto> processDto(DocumentDto input) {
+        if (input == null) {
+            return Multi.createFrom().empty();
+        }
         Document entity = new Document(input.id(), input.content());
         return process(entity).map(chunk -> new ChunkDto(chunk.id(), chunk.documentId(), chunk.content(), chunk.position()));
     }

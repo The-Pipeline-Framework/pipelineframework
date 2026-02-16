@@ -30,16 +30,21 @@ com.example.ai.sdk
 
 With Quarkus gRPC, the `.proto` files are compiled during the build process to generate:
 - Client and server stubs
-- Message classes (e.g., `DocumentProto`, `ChunkProto`, etc.) - these will be generated in `com.example.ai.sdk.grpc` package
+- Message classes (e.g., `Document`, `Chunk`, `Vector`, `Prompt`, `Completion`, etc.) - these will be generated in `com.example.ai.sdk.grpc` package
 - Service interfaces
 
 During the build, Quarkus gRPC plugin will:
-1. Process `src/main/proto/ai_sdk.proto` 
+1. Process `.proto` files in `src/main/proto/` directory:
+   - `document-chunking-svc.proto`
+   - `embedding-svc.proto`
+   - `vector-store-svc.proto`
+   - `similarity-search-svc.proto`
+   - `llm-completion-svc.proto`
 2. Generate gRPC classes in the target directory
 3. These generated classes will be available for compilation of the mappers
 4. The mappers will convert between the generated gRPC classes, DTOs, and Entity objects
 
-The generated classes will be located in the package specified in the `.proto` file (`com.example.ai.sdk.grpc`).
+The generated classes will be located in the package specified in the `.proto` files (`com.example.ai.sdk.grpc`).
 
 ## Services
 

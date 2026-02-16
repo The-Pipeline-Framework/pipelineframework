@@ -17,9 +17,9 @@ message Chunk {
 }
 
 service ProcessDocumentChunkingService {
-  rpc remoteProcess(Document) returns (stream Chunk);
+  rpc RemoteProcess(Document) returns (stream Chunk);
 }
 
 service ObservePersistenceChunkSideEffectService {
-  rpc remoteProcess(Chunk) returns (Chunk);
+  rpc RemoteProcess(Chunk) returns (Chunk);
 }

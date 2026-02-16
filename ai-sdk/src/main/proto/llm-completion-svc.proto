@@ -18,9 +18,9 @@ message Completion {
 }
 
 service ProcessLLMCompletionService {
-  rpc remoteProcess(Prompt) returns (Completion);
+  rpc RemoteProcess(Prompt) returns (Completion);
 }
 
 service ObservePersistenceCompletionSideEffectService {
-  rpc remoteProcess(Completion) returns (Completion);
+  rpc RemoteProcess(Completion) returns (Completion);
 }

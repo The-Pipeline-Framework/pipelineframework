@@ -13,9 +13,9 @@ message ScoredChunk {
 }
 
 service ProcessSimilaritySearchService {
-  rpc remoteProcess(Vector) returns (stream ScoredChunk);
+  rpc RemoteProcess(Vector) returns (stream ScoredChunk);
 }
 
 service ObservePersistenceScoredChunkSideEffectService {
-  rpc remoteProcess(ScoredChunk) returns (ScoredChunk);
+  rpc RemoteProcess(ScoredChunk) returns (ScoredChunk);
 }

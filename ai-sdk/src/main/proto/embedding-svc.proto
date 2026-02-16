@@ -4,7 +4,7 @@ package ai.sdk;
 
 option java_package = "com.example.ai.sdk.grpc";
 
-message StringValue {
+message TextInput {
   string value = 1;
 }
 
@@ -14,9 +14,9 @@ message Vector {
 }
 
 service ProcessEmbeddingService {
-  rpc remoteProcess(StringValue) returns (Vector);
+  rpc RemoteProcess(TextInput) returns (Vector);
 }
 
 service ObservePersistenceVectorSideEffectService {
-  rpc remoteProcess(Vector) returns (Vector);
+  rpc RemoteProcess(Vector) returns (Vector);
 }

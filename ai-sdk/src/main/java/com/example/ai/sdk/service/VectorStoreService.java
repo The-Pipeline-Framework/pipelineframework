@@ -3,6 +3,7 @@ package com.example.ai.sdk.service;
 import com.example.ai.sdk.dto.StoreResultDto;
 import com.example.ai.sdk.entity.StoreResult;
 import com.example.ai.sdk.entity.Vector;
+import com.example.ai.sdk.mapper.StoreResultMapper;
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.service.ReactiveService;
 
@@ -50,7 +51,7 @@ public class VectorStoreService implements ReactiveService<Vector, StoreResult> 
      * @return a StoreResultDto containing the vector id, a success flag, and a message describing the outcome
      */
     public Uni<StoreResultDto> processDto(Vector input) {
-        return process(input).map(r -> new StoreResultDto(r.id(), r.success(), r.message()));
+        return process(input).map(StoreResultMapper.INSTANCE::toDto);
     }
 
     /**
