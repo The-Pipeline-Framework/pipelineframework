@@ -3,7 +3,6 @@ package com.example.ai.sdk.mapper;
 import com.example.ai.sdk.dto.DocumentDto;
 import com.example.ai.sdk.entity.Document;
 import com.example.ai.sdk.grpc.DocumentChunkingSvc;
-import org.mapstruct.Mapping;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.mapper.Mapper;
 
@@ -22,8 +21,6 @@ public interface DocumentChunkingMapper extends Mapper<DocumentChunkingSvc.Docum
      * @return the resulting DocumentDto with its id and content set from the source
      */
     @Override
-    @org.mapstruct.Mapping(target = "id", source = "id")
-    @org.mapstruct.Mapping(target = "content", source = "content")
     DocumentDto fromGrpc(DocumentChunkingSvc.Document grpc);
 
     /**
@@ -33,9 +30,15 @@ public interface DocumentChunkingMapper extends Mapper<DocumentChunkingSvc.Docum
      * @return the gRPC Document populated from the given DTO
      */
     @Override
-    @org.mapstruct.Mapping(target = "id", source = "id")
-    @org.mapstruct.Mapping(target = "content", source = "content")
-    DocumentChunkingSvc.Document toGrpc(DocumentDto dto);
+    default DocumentChunkingSvc.Document toGrpc(DocumentDto dto) {
+        if (dto == null) {
+            return null;
+        }
+        return DocumentChunkingSvc.Document.newBuilder()
+                .setId(dto.id())
+                .setContent(dto.content())
+                .build();
+    }
 
     /**
      * Converts a DocumentDto into a domain Document.
@@ -44,8 +47,6 @@ public interface DocumentChunkingMapper extends Mapper<DocumentChunkingSvc.Docum
      * @return the domain Document populated with the DTO's `id` and `content`
      */
     @Override
-    @org.mapstruct.Mapping(target = "id", source = "id")
-    @org.mapstruct.Mapping(target = "content", source = "content")
     Document fromDto(DocumentDto dto);
 
     /**
@@ -55,7 +56,5 @@ public interface DocumentChunkingMapper extends Mapper<DocumentChunkingSvc.Docum
      * @return the corresponding DocumentDto with matching id and content
      */
     @Override
-    @org.mapstruct.Mapping(target = "id", source = "id")
-    @org.mapstruct.Mapping(target = "content", source = "content")
     DocumentDto toDto(Document domain);
 }
