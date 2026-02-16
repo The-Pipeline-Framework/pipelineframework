@@ -83,7 +83,7 @@ public class MapperInferenceBuildSteps {
                     String[] parts = line.split("\\|");
                     if (parts.length < 3) {
                         throw new IOException(String.format(
-                                "Malformed step definition at %s:%d. Expected format: stepName|domainIn|domainOut|cardinality. Line: '%s'",
+                                "Malformed step definition at %s:%d. Expected format: stepName|domainIn|domainOut[|cardinality]. Line: '%s'",
                                 url, lineNumber, line));
                     }
 

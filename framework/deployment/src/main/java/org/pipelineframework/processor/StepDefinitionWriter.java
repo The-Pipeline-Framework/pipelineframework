@@ -76,13 +76,18 @@ public class StepDefinitionWriter {
                 // Get cardinality from streaming shape
                 String cardinality = step.streamingShape() != null ? step.streamingShape().name() : "ONE_TO_ONE";
                 String serviceName = step.serviceName();
+                // Service name must not be null or blank
+                if (serviceName == null || serviceName.trim().isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "Step serviceName must not be null or blank: " + serviceName);
+                }
                 // The metadata format is pipe-delimited; service names must not include '|'.
-                if (serviceName != null && serviceName.contains("|")) {
+                if (serviceName.contains("|")) {
                     throw new IllegalArgumentException(
                             "Step serviceName contains unsupported delimiter '|': " + serviceName);
                 }
 
-                String line = String.format("%s|%s|%s|%s%n",
+                String line = String.format("%s|%s|%s|%s\n",
                         serviceName,
                         domainIn,
                         domainOut,

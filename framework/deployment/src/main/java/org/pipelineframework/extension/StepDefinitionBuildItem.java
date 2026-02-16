@@ -44,7 +44,9 @@ public final class StepDefinitionBuildItem extends MultiBuildItem {
      * @param stepName the fully qualified name of the step service class
      * @param domainIn DotName of the input domain type (E_in), or null if not specified
      * @param domainOut DotName of the output domain type (E_out), or null if not specified
-     * @param stepCardinality the cardinality of the step
+     * @param stepCardinality the cardinality of the step; an empty string is accepted as a sentinel
+     *                       value produced by MapperInferenceBuildSteps.readStepDefinitions() when
+     *                       cardinality is not explicitly specified
      */
     public StepDefinitionBuildItem(String stepName, DotName domainIn, DotName domainOut, String stepCardinality) {
         this.stepName = Objects.requireNonNull(stepName, "stepName must not be null");
@@ -52,9 +54,7 @@ public final class StepDefinitionBuildItem extends MultiBuildItem {
         if (this.stepName.isBlank()) {
             throw new IllegalArgumentException("stepName must not be blank");
         }
-        if (this.stepCardinality.isBlank()) {
-            throw new IllegalArgumentException("stepCardinality must not be blank");
-        }
+        // stepCardinality is allowed to be empty as a sentinel value from readStepDefinitions()
         this.domainIn = domainIn;
         this.domainOut = domainOut;
     }

@@ -80,6 +80,9 @@ public class MapperInferenceEngine {
      *   <li>When success=true: mapperClass must be non-null, errorMessage must be null</li>
      *   <li>When success=false: mapperClass must be null, errorMessage must be non-null</li>
      * </ul>
+     * <p>
+     * TODO: This record is reserved for future use to provide richer inference result information.
+     * Currently kept to prevent accidental pruning and to document the intended result structure.
      *
      * @param mapperClass the resolved mapper ClassInfo, or null if resolution failed
      * @param success whether resolution was successful
@@ -184,9 +187,12 @@ public class MapperInferenceEngine {
      * @return the extracted generic signature, or null if extraction failed
      */
     private MapperGenericSignature extractMapperGenericSignature(ClassInfo mapperClass) {
+        // Create a single visited set to avoid redundant traversals across interface and superclass chains
+        Set<Type> visited = new HashSet<>();
+        
         // Check interfaces first, including extended interfaces.
         for (Type interfaceType : mapperClass.interfaceTypes()) {
-            MapperGenericSignature signature = resolveMapperSignature(interfaceType, new HashSet<>());
+            MapperGenericSignature signature = resolveMapperSignature(interfaceType, visited);
             if (signature != null) {
                 return signature;
             }
@@ -195,7 +201,7 @@ public class MapperInferenceEngine {
         // Check superclass chain, including inherited interfaces on abstract bases.
         Type superClassType = mapperClass.superClassType();
         if (superClassType != null) {
-            return resolveMapperSignature(superClassType, new HashSet<>());
+            return resolveMapperSignature(superClassType, visited);
         }
 
         return null;

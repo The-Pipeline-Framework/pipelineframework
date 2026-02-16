@@ -54,6 +54,17 @@ public final class MapperRegistryBuildItem extends SimpleBuildItem {
         Map<DotName, ClassInfo> domainToMapperCopy = new HashMap<>(Objects.requireNonNull(domainToMapper));
         Map<ClassInfo, DotName> mapperToDomainCopy = new HashMap<>(Objects.requireNonNull(mapperToDomain));
 
+        // Verify equal sizes upfront for a clear error message on mismatched entries
+        if (domainToMapperCopy.size() != mapperToDomainCopy.size()) {
+            throw new IllegalArgumentException(String.format(
+                    "Inconsistent mapper registry: domainToMapper has %d entries but mapperToDomain has %d entries. " +
+                    "Ensure both maps have the same entries. domainToMapper sample key: %s, mapperToDomain sample key: %s",
+                    domainToMapperCopy.size(),
+                    mapperToDomainCopy.size(),
+                    domainToMapperCopy.keySet().isEmpty() ? "N/A" : domainToMapperCopy.keySet().iterator().next(),
+                    mapperToDomainCopy.keySet().isEmpty() ? "N/A" : mapperToDomainCopy.keySet().iterator().next()));
+        }
+
         for (Map.Entry<DotName, ClassInfo> entry : domainToMapperCopy.entrySet()) {
             DotName domain = entry.getKey();
             ClassInfo mapper = entry.getValue();

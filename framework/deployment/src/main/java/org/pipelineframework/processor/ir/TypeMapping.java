@@ -40,16 +40,6 @@ public record TypeMapping(
     }
 
     /**
-     * Checks if this mapping has an associated mapper.
-     *
-     * @return true if a mapper is present, false otherwise
-     */
-    @Override
-    public boolean hasMapper() {
-        return hasMapper;
-    }
-
-    /**
      * Creates a new TypeMapping with the inferred mapper type.
      *
      * @param inferredMapperType the inferred mapper ClassName

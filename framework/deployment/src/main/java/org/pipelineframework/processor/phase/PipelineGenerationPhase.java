@@ -214,11 +214,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             StepDefinitionWriter stepDefinitionWriter = new StepDefinitionWriter(ctx.getProcessingEnv().getFiler());
             stepDefinitionWriter.write(ctx.getStepModels());
         } catch (IOException e) {
-            if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.WARNING,
-                    "Failed to write step definitions: " + e.getMessage());
-            }
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.WARNING,
+                "Failed to write step definitions: " + e.getMessage());
         }
     }
 

@@ -29,6 +29,8 @@ import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
 import org.pipelineframework.service.ReactiveService;
 
+import java.util.Objects;
+
 @PipelineStep(
     inputType = PaymentStatus.class,
     outputType = PaymentOutput.class,
@@ -44,10 +46,10 @@ public class ProcessPaymentStatusService
 
   @Override
   public Uni<PaymentOutput> process(PaymentStatus paymentStatus) {
-      AckPaymentSent ackPaymentSent = paymentStatus.getAckPaymentSent();
-      assert ackPaymentSent != null;
-      PaymentRecord paymentRecord = ackPaymentSent.getPaymentRecord();
-      assert paymentRecord != null;
+      AckPaymentSent ackPaymentSent = Objects.requireNonNull(paymentStatus.getAckPaymentSent(),
+              "AckPaymentSent must not be null for PaymentStatus: " + paymentStatus);
+      PaymentRecord paymentRecord = Objects.requireNonNull(ackPaymentSent.getPaymentRecord(),
+              "PaymentRecord must not be null in AckPaymentSent: " + ackPaymentSent);
 
       PaymentOutput output = new PaymentOutput();
       output.setPaymentStatus(paymentStatus);
