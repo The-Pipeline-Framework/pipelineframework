@@ -188,8 +188,8 @@ public class MapperInferenceEngine {
      */
     private MapperGenericSignature extractMapperGenericSignature(ClassInfo mapperClass) {
         // Create a single visited set to avoid redundant traversals across interface and superclass chains
-        Set<Type> visited = new HashSet<>();
-        
+        Set<DotName> visited = new HashSet<>();
+
         // Check interfaces first, including extended interfaces.
         for (Type interfaceType : mapperClass.interfaceTypes()) {
             MapperGenericSignature signature = resolveMapperSignature(interfaceType, visited);
