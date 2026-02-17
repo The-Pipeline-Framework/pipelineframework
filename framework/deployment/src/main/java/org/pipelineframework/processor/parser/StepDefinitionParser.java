@@ -58,7 +58,9 @@ public class StepDefinitionParser {
     private final BiConsumer<Diagnostic.Kind, String> diagnosticReporter;
 
     /**
-     * Creates a new StepDefinitionParser.
+     * Creates a StepDefinitionParser that uses a no-op diagnostic reporter.
+     *
+     * Initializes the parser with a default diagnostic reporter which ignores all diagnostics.
      */
     public StepDefinitionParser() {
         this((kind, message) -> {
@@ -117,10 +119,16 @@ public class StepDefinitionParser {
     }
     
     /**
-     * Parses a single step definition from a map of step data.
+     * Parse a single step definition from a YAML-derived configuration map.
      *
-     * @param stepData the map containing step configuration data
-     * @return a StepDefinition object, or null if the step data is invalid
+     * The map is expected to come from a parsed "step" entry and may contain keys such as
+     * "name", "operator", "delegate", "service", "input", "output", "inputTypeName",
+     * "outputTypeName", "operatorMapper", and "externalMapper". The method validates
+     * mutual exclusivity, resolves step kind (INTERNAL or DELEGATED), parses class names,
+     * and enforces rules about input/output and mapper usage.
+     *
+     * @param stepData the map containing step configuration data (YAML-derived keys described above)
+     * @return a StepDefinition for the parsed step, or null if the step is invalid, unsupported, or should be skipped
      */
     private StepDefinition parseStepDefinition(Map<String, Object> stepData) {
         String name = getStringValue(stepData, "name");
@@ -258,6 +266,16 @@ public class StepDefinitionParser {
         return new StepDefinition(name, kind, executionClass, externalMapper, inputType, outputType);
     }
 
+    /**
+     * Reports any unsupported keys present in a step definition and emits a warning.
+     *
+     * <p>If the step contains keys that are not in the supported set, a warning message
+     * listing those keys is logged and forwarded to the diagnostic reporter as
+     * Diagnostic.Kind.WARNING. Unsupported keys are ignored by the parser.
+     *
+     * @param stepName human-readable name of the step (used in the warning message)
+     * @param stepData map of key/value pairs from the step definition to inspect
+     */
     private void reportUnknownStepKeys(String stepName, Map<String, Object> stepData) {
         Set<String> unknownKeys = new HashSet<>();
         for (String key : stepData.keySet()) {
@@ -274,10 +292,24 @@ public class StepDefinitionParser {
         report(Diagnostic.Kind.WARNING, message);
     }
 
+    /**
+     * Forwards a diagnostic message to the configured diagnostic reporter.
+     *
+     * @param kind    the diagnostic severity kind
+     * @param message the diagnostic message text
+     */
     private void report(Diagnostic.Kind kind, String message) {
         diagnosticReporter.accept(kind, message);
     }
 
+    /**
+     * Parses a candidate class-name string for a step field.
+     *
+     * @param typeName   the candidate class-name string (may be fully-qualified or nested)
+     * @param stepName   the step's name used for diagnostic messages
+     * @param fieldName  the field name (e.g., "input", "output", "operatorMapper") used for diagnostics
+     * @return           the parsed ClassName, or `null` if `typeName` is blank or not a valid class name
+     */
     private ClassName parseOptionalClassName(String typeName, String stepName, String fieldName) {
         if (isBlank(typeName)) {
             return null;
@@ -290,11 +322,16 @@ public class StepDefinitionParser {
     }
 
     /**
-     * Safely extracts a string value from a map, handling null and non-string values.
+     * Retrieve a string representation for the given map entry.
+     *
+     * If the entry is a `String` it is returned; if the entry is non-null and not a `String` its
+     * string representation is returned via `String.valueOf(value)`; if the key is absent or maps
+     * to `null` this method returns `null`.
      *
      * @param map the map to extract from
      * @param key the key to look up
-     * @return the string value, or null if not present or not a string
+     * @return the string value for the key, or `null` if the key is absent or maps to `null`; when the
+     *         value is non-String, returns `String.valueOf(value)`
      */
     private String getStringValue(Map<String, Object> map, String key) {
         Object value = map.get(key);
@@ -321,10 +358,13 @@ public class StepDefinitionParser {
     }
 
     /**
-     * Parses a fully qualified class name string into a ClassName object.
+     * Parse a fully qualified Java class name string into a ClassName representation.
      *
-     * @param className the fully qualified class name string
-     * @return a ClassName object, or null if the className is invalid
+     * Accepts top-level and nested class names (nested segments separated by '$'), validates package and identifier segments,
+     * and rejects null, blank, or malformed inputs.
+     *
+     * @param className the fully qualified class name (e.g. "com.example.Outer$Inner"); may include '$' for nested classes
+     * @return the corresponding ClassName, or `null` if the input is null, blank, or not a valid Java class name
      */
     private ClassName parseClassName(String className) {
         if (className == null || className.isBlank()) {
@@ -382,6 +422,12 @@ public class StepDefinitionParser {
         }
     }
 
+    /**
+     * Determines whether the given string is a valid Java identifier segment.
+     *
+     * @param segment the string to validate
+     * @return `true` if the string is non-empty and satisfies Java identifier start and part character rules, `false` otherwise
+     */
     private boolean isValidIdentifier(String segment) {
         if (segment == null || segment.isEmpty()) {
             return false;

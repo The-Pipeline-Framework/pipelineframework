@@ -42,11 +42,26 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     public ModelExtractionPhase() {
     }
 
+    /**
+     * Human-readable name of this compilation phase.
+     *
+     * @return the phase name "Model Extraction Phase"
+     */
     @Override
     public String name() {
         return "Model Extraction Phase";
     }
 
+    /**
+     * Orchestrates extraction and contextual enrichment of pipeline step models from the compilation context.
+     *
+     * Extracts step models from YAML step definitions, applies context roles and aspects when YAML definitions are present,
+     * logs informational notes when enrichment produces no changes or when no YAML definitions are found, and stores the
+     * final list of PipelineStepModel instances into the provided context.
+     *
+     * @param ctx the pipeline compilation context containing step definitions, processing environment, and storage for results
+     * @throws Exception if an error occurs during model extraction or contextual enrichment
+     */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
         // Extract pipeline step models based on YAML configuration
@@ -101,12 +116,17 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Create a PipelineStepModel from a StepDefinition.
+     * Builds a PipelineStepModel that represents the provided StepDefinition.
+     *
+     * For INTERNAL steps, verifies the referenced service class exists and is annotated with
+     * @PipelineStep, extracts semantic information from the class, and applies the YAML-derived
+     * identity. For DELEGATED steps, constructs a delegated model via createDelegatedStepModel.
      *
      * @param ctx the compilation context
      * @param stepDef the step definition to convert
-     * @param irExtractor the extractor for annotation processing
-     * @return a PipelineStepModel based on the StepDefinition
+     * @param irExtractor the extractor used to obtain semantic information from annotated classes
+     * @return a PipelineStepModel populated from the step definition, or `null` if validation or extraction fails
+     * @throws IllegalStateException if the step kind is unknown
      */
     private PipelineStepModel createStepModelFromDefinition(
             PipelineCompilationContext ctx,
@@ -161,11 +181,17 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Create a PipelineStepModel for a delegated step.
+     * Build a PipelineStepModel representing a delegated step described by the given StepDefinition.
      *
-     * @param ctx the compilation context
-     * @param stepDef the step definition for the delegated step
-     * @return a PipelineStepModel for the delegated step
+     * Creates a model configured to invoke an existing delegate service (setting delegateService,
+     * externalMapper when applicable, type mappings, generation targets, and defaults for execution
+     * and deployment). Returns null when validation fails (delegate class not found, delegate does not
+     * implement a supported reactive service interface, input/output types cannot be resolved, or an
+     * explicit or inferred external mapper cannot be resolved or is incompatible).
+     *
+     * @param ctx compilation context providing processing utilities and configuration
+     * @param stepDef YAML-derived step definition describing the delegated step
+     * @return a configured PipelineStepModel for the delegated step, or `null` if the step could not be validated or resolved
      */
     private PipelineStepModel createDelegatedStepModel(
             PipelineCompilationContext ctx,
@@ -278,6 +304,19 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .build();
     }
 
+    /**
+     * Locate or infer an ExternalMapper implementation suitable for the delegated step's
+     * application and operator input/output types.
+     *
+     * @param ctx the compilation context used to resolve type elements and report diagnostics
+     * @param stepDef the YAML step definition that may specify an explicit external mapper
+     * @param applicationInputType the application's expected input type for the step
+     * @param applicationOutputType the application's expected output type for the step
+     * @param operatorInputType the delegate/operator's input type
+     * @param operatorOutputType the delegate/operator's output type
+     * @return the ClassName of a compatible ExternalMapper, or `null` if no mapper is required,
+     *         none could be resolved, or validation failed
+     */
     private ClassName resolveDelegatedExternalMapper(
             PipelineCompilationContext ctx,
             org.pipelineframework.processor.ir.StepDefinition stepDef,
@@ -321,6 +360,17 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             operatorOutputType);
     }
 
+    /**
+     * Infers a single ExternalMapper implementation matching the specified application/operator input and output types for a step.
+     *
+     * @param ctx the compilation context used to access the round environment and emit diagnostics
+     * @param stepName the YAML step name (used for diagnostics)
+     * @param applicationInputType the application's input type to match
+     * @param operatorInputType the operator's input type to match
+     * @param applicationOutputType the application's output type to match
+     * @param operatorOutputType the operator's output type to match
+     * @return the ClassName of the matching ExternalMapper, or `null` if no unique compatible implementation can be inferred
+     */
     private ClassName inferExternalMapper(
             PipelineCompilationContext ctx,
             String stepName,
@@ -380,6 +430,20 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         return matchingCandidates.getFirst();
     }
 
+    /**
+     * Validates that the given mapper element's generic type parameters match the specified
+     * application and operator input/output types, reporting diagnostics on mismatch.
+     *
+     * @param ctx the pipeline compilation context used to report diagnostics
+     * @param stepName the YAML step name used for diagnostic messages
+     * @param mapperElement the candidate mapper class element to validate
+     * @param applicationInputType the expected application input type
+     * @param operatorInputType the expected operator input type
+     * @param applicationOutputType the expected application output type
+     * @param operatorOutputType the expected operator output type
+     * @return `true` if `mapperElement` declares type parameters that exactly match the four
+     *         provided types, `false` otherwise
+     */
     private boolean isCompatibleExternalMapper(
             PipelineCompilationContext ctx,
             String stepName,
@@ -399,6 +463,20 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             true);
     }
 
+    /**
+     * Checks whether a candidate ExternalMapper's generic type parameters match the expected application and operator input/output types for the given step.
+     *
+     * @param ctx the pipeline compilation context used for type utilities and reporting
+     * @param stepName the name of the step (used in diagnostic messages)
+     * @param mapperElement the TypeElement of the candidate mapper class
+     * @param applicationInputType the expected application-level input type
+     * @param operatorInputType the expected operator-level input type
+     * @param applicationOutputType the expected application-level output type
+     * @param operatorOutputType the expected operator-level output type
+     * @param reportErrors if true, emit compilation errors when the mapper is not a valid ExternalMapper or its type parameters do not match
+     * @return `true` if the mapper implements org.pipelineframework.mapper.ExternalMapper with type arguments equal to
+     *         applicationInputType, operatorInputType, applicationOutputType, operatorOutputType; `false` otherwise.
+     */
     private boolean isCompatibleExternalMapper(
             PipelineCompilationContext ctx,
             String stepName,
@@ -447,6 +525,14 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         return matches;
     }
 
+    /**
+     * Create a new PipelineStepModel that preserves all attributes of the extracted model
+     * but replaces its service identity with the name derived from the provided YAML StepDefinition.
+     *
+     * @param stepDef the YAML step definition whose name is used to derive the service identity
+     * @param extractedModel the model extracted from the annotated/internal class whose fields are copied
+     * @return a PipelineStepModel with `serviceName` and `generatedName` set from the YAML definition and all other properties copied from `extractedModel`
+     */
     private PipelineStepModel applyYamlIdentityToInternalModel(
             org.pipelineframework.processor.ir.StepDefinition stepDef,
             PipelineStepModel extractedModel) {
@@ -471,6 +557,12 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .build();
     }
 
+    /**
+     * Convert a YAML step name into a Java service class name for the pipeline.
+     *
+     * @param stepName the original step name from YAML (may include a process prefix)
+     * @return the generated service class name (for example, "ProcessXyzService"); returns "ProcessStepService" when the formatted name is blank
+     */
     private String toYamlServiceName(String stepName) {
         String formatted = NamingPolicy.formatForClassName(NamingPolicy.stripProcessPrefix(stepName));
         if (formatted == null || formatted.isBlank()) {
@@ -479,6 +571,17 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         return "Process" + formatted + "Service";
     }
 
+    /**
+     * Locates which reactive service interface the delegate implements and derives its reactive signature.
+     *
+     * If the delegate implements exactly one reactive service interface, returns a ReactiveSignature
+     * describing the streaming shape and input/output types. If the delegate implements none, returns
+     * `null`. If the delegate implements more than one reactive interface, reports an ERROR via the
+     * provided messager and returns `null`.
+     *
+     * @param delegateElement the delegate class to inspect for implemented reactive service interfaces
+     * @return the resolved ReactiveSignature when exactly one reactive interface is implemented, `null` otherwise
+     */
     private ReactiveSignature resolveReactiveSignature(
             TypeElement delegateElement,
             Types typeUtils,
@@ -506,6 +609,18 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         return matches.isEmpty() ? null : matches.get(0);
     }
 
+    /**
+     * If the given delegateElement implements the specified reactive interface, adds a corresponding
+     * ReactiveSignature (constructed with the provided shape) to `matches` and appends the
+     * interface name to `matchNames`.
+     *
+     * @param matches       list to which a found ReactiveSignature will be appended
+     * @param matchNames    list to which the matched interface's qualified name will be appended
+     * @param typeUtils     utility for type operations
+     * @param delegateElement element to inspect for the reactive interface
+     * @param reactiveInterface fully qualified name of the reactive interface to search for
+     * @param shape         streaming shape to use when constructing the ReactiveSignature
+     */
     private void collectReactiveMatch(
             List<ReactiveSignature> matches,
             List<String> matchNames,
@@ -524,6 +639,13 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
     }
 
+    /**
+     * Construct a ReactiveSignature from a declared reactive type by extracting its first two type arguments.
+     *
+     * @param shape the streaming shape to assign to the signature
+     * @param reactiveType a declared reactive interface type whose first two type arguments represent input and output; may be null
+     * @return a ReactiveSignature with the given shape and the first two type arguments as input and output types, or `null` if {@code reactiveType} is null or has fewer than two type arguments
+     */
     private ReactiveSignature reactiveSignature(StreamingShape shape, DeclaredType reactiveType) {
         if (reactiveType == null || reactiveType.getTypeArguments().size() < 2) {
             return null;
@@ -535,6 +657,13 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         );
     }
 
+    /**
+     * Locate a declared supertype with the given qualified name by recursively scanning the provided type's supertypes.
+     *
+     * @param type the starting type to inspect
+     * @param targetQualifiedName the fully qualified name of the target supertype to find
+     * @return the matching {@link DeclaredType} whose element's qualified name equals {@code targetQualifiedName}, or {@code null} if no match is found
+     */
     private DeclaredType findReactiveSupertype(Types types, TypeMirror type, String targetQualifiedName) {
         if (type == null || type.getKind() == TypeKind.NONE) {
             return null;
@@ -559,6 +688,13 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     private record ReactiveSignature(StreamingShape shape, TypeName inputType, TypeName outputType) {
     }
 
+    /**
+     * Apply role and aspect-based expansions to the provided base pipeline step models according to the compilation context.
+     *
+     * @param ctx the compilation context that supplies transport mode, plugin/orchestrator presence, and available aspect models
+     * @param baseModels the base list of PipelineStepModel instances to expand; may be empty or null
+     * @return a list of PipelineStepModel instances produced by applying relevant aspects and assigning deployment roles; may be empty
+     */
     private List<PipelineStepModel> applyContextRolesAndAspects(
             PipelineCompilationContext ctx,
             List<PipelineStepModel> baseModels) {
@@ -616,6 +752,15 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         return combined;
     }
 
+    /**
+     * Expands the given pipeline step models by applying the provided aspect models.
+     *
+     * If no aspects are supplied, the original list of base models is returned unchanged.
+     *
+     * @param baseModels the pipeline step models to expand
+     * @param aspects the aspect definitions to apply to the base models
+     * @return the list of pipeline step models produced after aspect expansion (or {@code baseModels} if no aspects) 
+     */
     private List<PipelineStepModel> expandAspects(
         List<PipelineStepModel> baseModels,
         List<org.pipelineframework.processor.ir.PipelineAspectModel> aspects
@@ -675,10 +820,10 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Checks whether an aspect model specifies a plugin implementation class in its configuration.
+     * Determines whether an aspect model declares a plugin implementation class in its configuration.
      *
      * @param aspect the aspect model to inspect; may be null
-     * @return `true` if the aspect's config contains a non-blank `"pluginImplementationClass"` entry, `false` otherwise
+     * @return `true` if the aspect's config contains a non-blank "pluginImplementationClass" entry, `false` otherwise
      */
     private boolean hasPluginImplementation(org.pipelineframework.processor.ir.PipelineAspectModel aspect) {
         if (aspect == null || aspect.config() == null) {

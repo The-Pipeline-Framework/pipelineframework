@@ -46,18 +46,21 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     private final TransportPlatformResolver transportPlatformResolver;
 
     /**
-     * Creates a new PipelineDiscoveryPhase.
+     * Create a PipelineDiscoveryPhase initialized with default collaborators.
+     *
+     * <p>Uses a new DiscoveryPathResolver, DiscoveryConfigLoader, and TransportPlatformResolver.
      */
     public PipelineDiscoveryPhase() {
         this(new DiscoveryPathResolver(), new DiscoveryConfigLoader(), new TransportPlatformResolver());
     }
 
     /**
-     * Creates a new PipelineDiscoveryPhase with injected collaborators.
+     * Constructs a PipelineDiscoveryPhase with the provided collaborators.
      *
-     * @param discoveryPathResolver path resolver collaborator
-     * @param discoveryConfigLoader config loader collaborator
-     * @param transportPlatformResolver transport/platform resolver collaborator
+     * @param discoveryPathResolver resolver for locating pipeline-related paths
+     * @param discoveryConfigLoader loader for discovery configuration
+     * @param transportPlatformResolver resolver for transport and platform modes
+     * @throws NullPointerException if any argument is null
      */
     public PipelineDiscoveryPhase(
             DiscoveryPathResolver discoveryPathResolver,
@@ -68,6 +71,11 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         this.transportPlatformResolver = Objects.requireNonNull(transportPlatformResolver, "transportPlatformResolver");
     }
 
+    /**
+     * Provides the phase's human-readable name.
+     *
+     * @return the phase name "Pipeline Discovery Phase"
+     */
     @Override
     public String name() {
         return "Pipeline Discovery Phase";
@@ -214,6 +222,13 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         }
     }
 
+    /**
+     * Resolve the pipeline transport mode from the provided step configuration.
+     *
+     * @param ctx         the compilation context used to emit diagnostics if needed
+     * @param stepConfig  the step configuration that may contain a transport name
+     * @return            the resolved TransportMode; `GRPC` when the transport is missing or unrecognized
+     */
     private TransportMode loadPipelineTransport(
         PipelineCompilationContext ctx,
         PipelineStepConfigLoader.StepConfig stepConfig) {
@@ -232,6 +247,13 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         return mode.get();
     }
 
+    /**
+     * Resolve the pipeline platform mode from the step configuration, defaulting to COMPUTE when missing or unrecognized.
+     *
+     * @param ctx the compilation context used to emit diagnostics (may be null)
+     * @param stepConfig the loaded step configuration containing the platform value
+     * @return the resolved {@link PlatformMode}; {@code COMPUTE} if the configuration is missing or unrecognized
+     */
     private PlatformMode loadPipelinePlatform(
         PipelineCompilationContext ctx,
         PipelineStepConfigLoader.StepConfig stepConfig) {
@@ -300,10 +322,10 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Returns the {@code PipelineOrchestrator} annotation from the given element, if present.
+     * Retrieve the {@code PipelineOrchestrator} annotation from the given element.
      *
-     * @param orchestratorElement element to inspect; may be null
-     * @return the {@code PipelineOrchestrator} annotation, or {@code null} if the element is null or not annotated
+     * @param orchestratorElement element to inspect; may be {@code null}
+     * @return the {@code PipelineOrchestrator} annotation, or {@code null} if the element is {@code null} or not annotated
      */
     private PipelineOrchestrator resolveOrchestratorAnnotation(Element orchestratorElement) {
         if (orchestratorElement == null) {
@@ -313,15 +335,12 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Loads the pipeline runtime mapping for the current module, if present.
+     * Loads the pipeline runtime mapping for the current module if one exists.
      *
-     * Locates a runtime mapping file in the context's module directory and parses it into a
-     * PipelineRuntimeMapping. If the context has no module directory or no mapping file is found,
-     * this method returns `null`. If loading fails, an error is reported to the processing
-     * environment (when available) and the underlying exception is rethrown.
+     * Locates a runtime mapping file in the compilation context's module directory and parses it into a PipelineRuntimeMapping. If the context has no module directory or no mapping file is found, returns null. If loading fails, reports an error to the processing environment (if available) and rethrows the underlying exception.
      *
      * @param ctx the compilation context providing the module directory and processing environment
-     * @return the loaded PipelineRuntimeMapping, or `null` if none was found or the module directory is unset
+     * @return the loaded PipelineRuntimeMapping, or null if none was found or the module directory is unset
      */
     private PipelineRuntimeMapping loadRuntimeMapping(PipelineCompilationContext ctx) {
         PipelineRuntimeMappingLocator locator = new PipelineRuntimeMappingLocator();
@@ -390,14 +409,10 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Resolve the module name from the processing environment options.
+     * Resolves the module name from the processing environment's options.
      *
-     * Reads the "pipeline.module" option from the compilation context's processing environment,
-     * trims surrounding whitespace, and returns the result. If the processing environment is
-     * unavailable or the option is missing or blank, returns `null`.
-     *
-     * @param ctx the compilation context providing access to the processing environment and its options
-     * @return the trimmed module name, or `null` if not present or blank
+     * @param ctx the compilation context used to access processing environment options
+     * @return the trimmed module name, or {@code null} if the processing environment is unavailable or the option is missing or blank
      */
     private String resolveModuleName(PipelineCompilationContext ctx) {
         if (ctx.getProcessingEnv() == null) {
@@ -411,14 +426,14 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Resolve the filesystem root directory where generated pipeline sources should be written.
+     * Determine the filesystem root where generated pipeline sources should be written.
      *
-     * Checks processing environment options (when available) for "pipeline.generatedSourcesDir" first,
-     * then "pipeline.generatedSourcesRoot" and returns the first non-blank value as a Path.
-     * If neither option is present, returns {user.dir}/target/generated-sources/pipeline.
+     * Checks the processing environment options (if available) for the first non-blank value of
+     * "pipeline.generatedSourcesDir" then "pipeline.generatedSourcesRoot". If neither option is set,
+     * returns {user.dir}/target/generated-sources/pipeline.
      *
-     * @param ctx the compilation context whose processing environment options are consulted (may be null)
-     * @return the resolved Path for generated pipeline sources
+     * @param ctx the compilation context whose processing environment options are consulted; may be null
+     * @return the resolved filesystem Path for generated pipeline sources
      */
     private Path resolveGeneratedSourcesRoot(PipelineCompilationContext ctx) {
         Map<String, String> options = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getOptions() : Map.of();
@@ -438,9 +453,12 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     /**
      * Parse step definitions from the pipeline template configuration.
      *
-     * @param ctx the pipeline compilation context
-     * @return a list of StepDefinition objects parsed from the template
-     * @throws IOException if config resolution fails or parsing step definitions fails
+     * Returns the parsed StepDefinition objects found in the resolved pipeline config.
+     * If no config is found or parsing fails, returns an empty list and emits diagnostics
+     * via the processing environment's messager when available.
+     *
+     * @param ctx the pipeline compilation context used to resolve config path and emit diagnostics
+     * @return a list of StepDefinition parsed from the template; empty if none or on error
      */
     private List<StepDefinition> parseStepDefinitions(PipelineCompilationContext ctx) {
         Optional<Path> configPath = resolvePipelineConfigPath(ctx);
@@ -473,12 +491,12 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Resolve the module root directory by ascending from a generated-sources path or falling back to the current working directory.
+     * Resolves the module root directory by ascending from a generated-sources path or falling back to the current working directory.
      *
-     * <p>If {@code generatedSourcesRoot} is non-null, the method climbs up to three parent directory levels and returns the resulting path if found. If no candidate is available or {@code generatedSourcesRoot} is null, the method returns the JVM current working directory.
+     * <p>If {@code generatedSourcesRoot} is non-null, the method climbs up to three parent directory levels and returns the resulting path as the module root. If {@code generatedSourcesRoot} is null or no ancestor is available, the JVM current working directory is returned.
      *
      * @param generatedSourcesRoot the path inside the module's generated-sources tree, or {@code null} if unknown
-     * @return the resolved module directory path, or the current working directory if resolution fails
+     * @return the resolved module directory path, or the JVM current working directory if resolution fails
      */
     private Path resolveModuleDir(PipelineCompilationContext ctx, Path generatedSourcesRoot) {
         if (generatedSourcesRoot != null) {

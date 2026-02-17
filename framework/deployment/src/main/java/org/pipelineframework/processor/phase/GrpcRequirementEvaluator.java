@@ -19,13 +19,17 @@ import org.pipelineframework.processor.ir.TransportMode;
 class GrpcRequirementEvaluator {
 
     /**
-     * Determine whether gRPC bindings are required.
+     * Determine whether gRPC bindings are required for the current compilation.
      *
-     * @param stepModels the pipeline step models
-     * @param orchestratorModels the orchestrator models
-     * @param templateConfig the pipeline template config, may be null
-     * @param messager the messager for diagnostics, may be null
-     * @return true if gRPC bindings are required
+     * If the pipeline template specifies an unknown transport, a warning is printed through
+     * the provided messager (if non-null) and gRPC is assumed.
+     *
+     * @param stepModels the pipeline step models (must not be null)
+     * @param orchestratorModels the orchestrator models (must not be null)
+     * @param templateConfig the pipeline template config; may be null when no template is present
+     * @param messager a diagnostics messager; may be null
+     * @throws NullPointerException if {@code stepModels} or {@code orchestratorModels} is null
+     * @return {@code true} if gRPC bindings are required, {@code false} otherwise
      */
     boolean needsGrpcBindings(
             List<PipelineStepModel> stepModels,
