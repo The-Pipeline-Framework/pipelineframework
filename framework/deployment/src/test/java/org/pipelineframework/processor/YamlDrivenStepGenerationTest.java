@@ -45,6 +45,55 @@ class YamlDrivenStepGenerationTest {
     Path tempDir;
 
     @Test
+    void generatesDelegatedArtifactsFromYamlWithoutAnnotatedGlue() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-delegate-only.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "embed"
+                delegate: "com.example.lib.EmbeddingService"
+            """);
+
+        Path delegateSource = writeSource("EmbeddingService.java", """
+            package com.example.lib;
+
+            import io.smallrye.mutiny.Uni;
+            import org.pipelineframework.service.ReactiveService;
+
+            public class EmbeddingService implements ReactiveService<LibraryChunk, LibraryVector> {
+                @Override
+                public Uni<LibraryVector> process(LibraryChunk input) {
+                    return Uni.createFrom().item(new LibraryVector());
+                }
+            }
+            """);
+        Path libInput = writeSource("LibraryChunk.java", """
+            package com.example.lib;
+
+            public class LibraryChunk {
+            }
+            """);
+        Path libOutput = writeSource("LibraryVector.java", """
+            package com.example.lib;
+
+            public class LibraryVector {
+            }
+            """);
+        Path markerSource = writeSource("Marker.java", """
+            package com.example.app;
+
+            public class Marker {
+            }
+            """);
+
+        CompilationResult result = compile(yamlFile, List.of(delegateSource, libInput, libOutput, markerSource));
+        assertTrue(result.success, "Expected delegated YAML step compilation to succeed: " + result.errorSummary());
+
+    }
+
+    @Test
     void validatesDelegatedYamlStepContractsDeterministically() throws IOException {
         Path yamlFile = tempDir.resolve("pipeline.yaml");
         Files.writeString(yamlFile, """
