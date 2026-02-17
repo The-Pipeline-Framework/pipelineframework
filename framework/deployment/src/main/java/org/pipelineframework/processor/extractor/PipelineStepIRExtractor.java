@@ -18,7 +18,7 @@ import org.pipelineframework.processor.util.AnnotationProcessingUtils;
 
 /**
  * Extractor that converts PipelineStep annotations to semantic information in PipelineStepModel.
- * This extractor reads declared step metadata and optional explicit mapper hints.
+ * This extractor reads declared step metadata.
  */
 public class PipelineStepIRExtractor {
 
@@ -43,8 +43,7 @@ public class PipelineStepIRExtractor {
     /**
      * Produces a PipelineStepModel by extracting semantic information from a class annotated with `@PipelineStep`.
      * <p>
-     * Mapper inference is NOT performed here. If mapper types are declared explicitly on
-     * the annotation they are propagated, otherwise mapping remains unresolved for later phases.
+     * Mapper inference is NOT performed here. Mapping remains unresolved for later phases.
      *
      * @param serviceClass the element representing the annotated service class
      * @return the extraction result wrapping the constructed PipelineStepModel, or `null` if the annotation mirror could not be obtained
@@ -74,17 +73,12 @@ public class PipelineStepIRExtractor {
         ThreadSafety threadSafety = AnnotationProcessingUtils.getAnnotationValueAsEnum(
             annotationMirror, "threadSafety", ThreadSafety.class, ThreadSafety.SAFE);
 
-        TypeMirror inboundMapper = AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "inboundMapper");
-        TypeMirror outboundMapper = AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "outboundMapper");
-
-        // Create directional type mappings with optional explicit mappers.
+        // Create directional type mappings without assigning mappers in the AP phase.
         TypeMapping inputMapping = extractTypeMapping(
-            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "inputType"),
-            inboundMapper);
+            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "inputType"));
 
         TypeMapping outputMapping = extractTypeMapping(
-            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "outputType"),
-            outboundMapper);
+            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "outputType"));
 
         ClassName cacheKeyGenerator = resolveCacheKeyGenerator(annotationMirror);
 
@@ -133,29 +127,19 @@ public class PipelineStepIRExtractor {
      * If `domainType` is null or represents `void`/`java.lang.Void`, the result is disabled with no domain or mapper.
      *
      * @param domainType the domain type to map from; may be null or a `void` type to indicate absence
-     * @param mapperType optional mapper type mirror from annotation (may be null or Void)
      * @return a TypeMapping containing resolved TypeName values and mapper presence
      */
-    private TypeMapping extractTypeMapping(TypeMirror domainType, TypeMirror mapperType) {
+    private TypeMapping extractTypeMapping(TypeMirror domainType) {
         if (domainType == null
                 || domainType.getKind() == javax.lang.model.type.TypeKind.VOID
                 || domainType.toString().equals("java.lang.Void")) {
             return new TypeMapping(null, null, false, null);
         }
 
-        TypeName mapperTypeName = null;
-        boolean hasMapper = false;
-        if (mapperType != null
-                && mapperType.getKind() != javax.lang.model.type.TypeKind.VOID
-                && !"java.lang.Void".equals(mapperType.toString())) {
-            mapperTypeName = TypeName.get(mapperType);
-            hasMapper = true;
-        }
-
         return new TypeMapping(
             TypeName.get(domainType),
-            mapperTypeName,
-            hasMapper,
+            null,
+            false,
             TypeName.get(domainType)
         );
     }
