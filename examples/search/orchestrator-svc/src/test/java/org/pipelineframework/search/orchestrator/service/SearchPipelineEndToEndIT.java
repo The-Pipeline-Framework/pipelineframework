@@ -325,7 +325,7 @@ class SearchPipelineEndToEndIT {
             "Expected one RawDocument row after warm run for docId " + docId);
         assertEquals(1, awaitRowCountAtLeastForDocId("parseddocument", docId, 1, Duration.ofSeconds(10)),
             "Expected one ParsedDocument row after warm run for docId " + docId);
-        int tokenBatchCount = awaitRowCountAtLeastForDocId("tokenbatch", docId, 1, Duration.ofSeconds(10));
+        int tokenBatchCount = awaitRowCountAtLeastForDocId("tokenbatch", docId, 2, Duration.ofSeconds(10));
         assertTrue(tokenBatchCount >= 1,
             "Expected at least one TokenBatch row after warm run for docId " + docId
                 + " but found " + tokenBatchCount);

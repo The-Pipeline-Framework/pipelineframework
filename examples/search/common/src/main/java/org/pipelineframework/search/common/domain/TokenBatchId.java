@@ -6,6 +6,8 @@ import java.util.UUID;
 
 public class TokenBatchId implements Serializable {
 
+  private static final long serialVersionUID = 1L;
+
   public UUID docId;
   public Integer batchIndex;
 
