@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.Objects;
 import java.util.Set;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
@@ -20,10 +21,8 @@ import com.squareup.javapoet.TypeName;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
-import org.pipelineframework.processor.AspectExpansionProcessor;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
-import org.pipelineframework.processor.ResolvedStep;
 import org.pipelineframework.processor.extractor.PipelineStepIRExtractor;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ExecutionMode;
@@ -38,10 +37,17 @@ import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
  * This phase discovers and extracts PipelineStepModel instances from @PipelineStep annotated classes.
  */
 public class ModelExtractionPhase implements PipelineCompilationPhase {
+    private final ModelContextRoleEnricher contextRoleEnricher;
+
     /**
      * Creates a new ModelExtractionPhase.
      */
     public ModelExtractionPhase() {
+        this(new ModelContextRoleEnricher());
+    }
+
+    ModelExtractionPhase(ModelContextRoleEnricher contextRoleEnricher) {
+        this.contextRoleEnricher = Objects.requireNonNull(contextRoleEnricher, "contextRoleEnricher");
     }
 
     @Override
@@ -58,7 +64,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         List<org.pipelineframework.processor.ir.StepDefinition> stepDefinitions = ctx.getStepDefinitions();
         boolean hasYamlStepDefinitions = stepDefinitions != null && !stepDefinitions.isEmpty();
         if (hasYamlStepDefinitions) {
-            List<PipelineStepModel> contextualModels = applyContextRolesAndAspects(ctx, stepModels);
+            List<PipelineStepModel> contextualModels = contextRoleEnricher.enrich(ctx, stepModels);
             if (contextualModels != null && !contextualModels.isEmpty()) {
                 stepModels = contextualModels;
             } else if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
@@ -559,135 +565,6 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     }
 
     private record ReactiveSignature(StreamingShape shape, TypeName inputType, TypeName outputType) {
-    }
-
-    private List<PipelineStepModel> applyContextRolesAndAspects(
-            PipelineCompilationContext ctx,
-            List<PipelineStepModel> baseModels) {
-        if (baseModels == null || baseModels.isEmpty()) {
-            return List.of();
-        }
-        boolean hasOrchestrator = ctx.getRoundEnv() != null
-            && !ctx.getRoundEnv().getElementsAnnotatedWith(org.pipelineframework.annotation.PipelineOrchestrator.class).isEmpty();
-        if (!ctx.isPluginHost() && !hasOrchestrator) {
-            return List.of();
-        }
-
-        boolean colocatedPlugins = ctx.isTransportModeLocal() || isMonolithLayout(ctx);
-        if (ctx.isPluginHost() && !colocatedPlugins) {
-            Set<String> pluginAspectNames = PluginBindingBuilder.extractPluginAspectNames(ctx);
-            if (pluginAspectNames == null || pluginAspectNames.isEmpty()) {
-                return List.of();
-            }
-            List<org.pipelineframework.processor.ir.PipelineAspectModel> filteredAspects = ctx.getAspectModels().stream()
-                .filter(aspect -> aspect != null && pluginAspectNames.contains(aspect.name()))
-                .filter(this::hasPluginImplementation)
-                .toList();
-            if (filteredAspects.isEmpty()) {
-                return List.of();
-            }
-
-            List<PipelineStepModel> expanded = expandAspects(baseModels, filteredAspects);
-            return expanded.stream()
-                .filter(PipelineStepModel::sideEffect)
-                .map(model -> withDeploymentRole(model, DeploymentRole.PLUGIN_SERVER))
-                .toList();
-        }
-
-        List<org.pipelineframework.processor.ir.PipelineAspectModel> expandableAspects = ctx.getAspectModels().stream()
-            .filter(aspect -> aspect != null)
-            .filter(this::hasPluginImplementation)
-            .toList();
-        List<PipelineStepModel> expanded = expandAspects(baseModels, expandableAspects);
-        List<PipelineStepModel> clientModels = expanded.stream()
-            .map(model -> withDeploymentRole(model, DeploymentRole.ORCHESTRATOR_CLIENT))
-            .toList();
-        if (!colocatedPlugins) {
-            return clientModels;
-        }
-        List<PipelineStepModel> pluginModels = expanded.stream()
-            .filter(PipelineStepModel::sideEffect)
-            .map(model -> withDeploymentRole(model, DeploymentRole.PLUGIN_SERVER))
-            .toList();
-        if (pluginModels.isEmpty()) {
-            return clientModels;
-        }
-        List<PipelineStepModel> combined = new ArrayList<>(pluginModels.size() + clientModels.size());
-        combined.addAll(pluginModels);
-        combined.addAll(clientModels);
-        return combined;
-    }
-
-    private List<PipelineStepModel> expandAspects(
-        List<PipelineStepModel> baseModels,
-        List<org.pipelineframework.processor.ir.PipelineAspectModel> aspects
-    ) {
-        if (aspects == null || aspects.isEmpty()) {
-            return baseModels;
-        }
-
-        List<ResolvedStep> resolvedSteps = baseModels.stream()
-            .map(model -> new ResolvedStep(model, null, null))
-            .toList();
-
-        AspectExpansionProcessor processor = new AspectExpansionProcessor();
-        List<ResolvedStep> expanded = processor.expandAspects(resolvedSteps, aspects);
-        return expanded.stream()
-            .map(ResolvedStep::model)
-            .toList();
-    }
-
-    /**
-     * Create a copy of a PipelineStepModel with the specified deployment role.
-     *
-     * @param model the original step model to copy
-     * @param role the deployment role to assign on the returned model
-     * @return a new PipelineStepModel identical to {@code model} except with its deployment role set to {@code role}
-     */
-    private PipelineStepModel withDeploymentRole(PipelineStepModel model, DeploymentRole role) {
-        return new PipelineStepModel.Builder()
-            .serviceName(model.serviceName())
-            .generatedName(model.generatedName())
-            .servicePackage(model.servicePackage())
-            .serviceClassName(model.serviceClassName())
-            .inputMapping(model.inputMapping())
-            .outputMapping(model.outputMapping())
-            .streamingShape(model.streamingShape())
-            .enabledTargets(model.enabledTargets())
-            .executionMode(model.executionMode())
-            .deploymentRole(role)
-            .sideEffect(model.sideEffect())
-            .cacheKeyGenerator(model.cacheKeyGenerator())
-            .orderingRequirement(model.orderingRequirement())
-            .threadSafety(model.threadSafety())
-            .delegateService(model.delegateService())
-            .externalMapper(model.externalMapper())
-            .build();
-    }
-
-    /**
-     * Determine whether the configured runtime layout is MONOLITH.
-     *
-     * @param ctx the compilation context from which the runtime mapping is obtained
-     * @return `true` if a runtime mapping exists and its layout is `MONOLITH`, `false` otherwise
-     */
-    private boolean isMonolithLayout(PipelineCompilationContext ctx) {
-        PipelineRuntimeMapping mapping = ctx.getRuntimeMapping();
-        return mapping != null && mapping.layout() == PipelineRuntimeMapping.Layout.MONOLITH;
-    }
-
-    /**
-     * Checks whether an aspect model specifies a plugin implementation class in its configuration.
-     *
-     * @param aspect the aspect model to inspect; may be null
-     * @return `true` if the aspect's config contains a non-blank `"pluginImplementationClass"` entry, `false` otherwise
-     */
-    private boolean hasPluginImplementation(org.pipelineframework.processor.ir.PipelineAspectModel aspect) {
-        if (aspect == null || aspect.config() == null) {
-            return false;
-        }
-        Object value = aspect.config().get("pluginImplementationClass");
-        return value != null && !value.toString().isBlank();
     }
 
     private List<PipelineStepModel> deduplicateByServiceName(List<PipelineStepModel> stepModels) {

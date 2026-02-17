@@ -122,6 +122,8 @@ class PipelineBindingConstructionPhaseTest {
     void testConstructorInjection_rejectsNull() {
         assertThrows(NullPointerException.class,
             () -> new PipelineBindingConstructionPhase(null));
+        assertThrows(NullPointerException.class,
+            () -> new PipelineBindingConstructionPhase(new GrpcRequirementEvaluator(), null));
     }
 
     @Test
