@@ -31,24 +31,23 @@ import javax.annotation.Nonnull;
 public interface ExternalMapper<TApplicationInput, TOperatorInput, TApplicationOutput, TOperatorOutput> {
 
     /**
-     * Maps from the application's input domain type to the operator's input entity type.
-     * Preferred alias for {@link #toLibraryInput(Object)}.
-     *
-     * @param applicationInput The input in the application's domain type (must not be null)
-     * @return The mapped input in the operator's entity type (must not be null)
-     * @throws IllegalArgumentException if applicationInput is null
-     */
+         * Map an application-domain input to the operator's input entity type.
+         *
+         * @param applicationInput the application input; must not be null
+         * @return the corresponding operator input; never null
+         * @throws IllegalArgumentException if {@code applicationInput} is null
+         */
     @Nonnull
     default TOperatorInput toOperatorInput(@Nonnull TApplicationInput applicationInput) {
         return toLibraryInput(applicationInput);
     }
 
     /**
-     * Legacy method name kept for backward compatibility.
+     * Converts application input to the operator's input type; retained for backward compatibility.
      *
-     * @param applicationInput The input in the application's domain type (must not be null)
-     * @return The mapped input in the operator's entity type (must not be null)
-     * @throws IllegalArgumentException if applicationInput is null
+     * @param applicationInput the input in the application's domain type; must not be null
+     * @return the mapped input in the operator's entity type; never null
+     * @throws IllegalArgumentException if {@code applicationInput} is null
      * @deprecated Use {@link #toOperatorInput(Object)}.
      */
     @Deprecated
