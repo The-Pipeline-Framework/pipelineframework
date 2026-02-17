@@ -629,6 +629,12 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     if (model.deploymentRole() == org.pipelineframework.processor.ir.DeploymentRole.PLUGIN_SERVER && ctx.isPluginHost()) {
                         break;
                     }
+                    if (grpcBinding == null) {
+                        ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                            "Skipping gRPC client step generation for '" + model.generatedName() +
+                                "' because no gRPC binding is available.");
+                        break;
+                    }
                     String clientClassName = model.servicePackage() + ".pipeline."
                         + trimServiceSuffix(model.generatedName()) + "GrpcClientStep";
                     org.pipelineframework.processor.ir.DeploymentRole clientRole = resolveClientRole(model.deploymentRole());

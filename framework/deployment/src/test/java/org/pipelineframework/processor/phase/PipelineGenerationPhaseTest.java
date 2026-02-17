@@ -122,4 +122,36 @@ class PipelineGenerationPhaseTest {
         Object role = method.invoke(phase, new Object[]{null});
         assertEquals(org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT, role);
     }
+
+    @Test
+    void skipsClientStepGenerationWhenGrpcBindingMissing() {
+        PipelineGenerationPhase phase = new PipelineGenerationPhase();
+        org.pipelineframework.processor.PipelineCompilationContext context =
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+
+        org.pipelineframework.processor.ir.PipelineStepModel model =
+            new org.pipelineframework.processor.ir.PipelineStepModel.Builder()
+                .serviceName("ProcessMissingBindingService")
+                .generatedName("ProcessMissingBindingService")
+                .servicePackage("com.example")
+                .serviceClassName(com.squareup.javapoet.ClassName.get("com.example", "MissingBindingService"))
+                .inputMapping(new org.pipelineframework.processor.ir.TypeMapping(
+                    com.squareup.javapoet.ClassName.get("com.example", "In"), null, false))
+                .outputMapping(new org.pipelineframework.processor.ir.TypeMapping(
+                    com.squareup.javapoet.ClassName.get("com.example", "Out"), null, false))
+                .streamingShape(org.pipelineframework.processor.ir.StreamingShape.UNARY_UNARY)
+                .enabledTargets(java.util.Set.of(org.pipelineframework.processor.ir.GenerationTarget.CLIENT_STEP))
+                .executionMode(org.pipelineframework.processor.ir.ExecutionMode.DEFAULT)
+                .deploymentRole(org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT)
+                .sideEffect(false)
+                .cacheKeyGenerator(null)
+                .orderingRequirement(org.pipelineframework.parallelism.OrderingRequirement.RELAXED)
+                .threadSafety(org.pipelineframework.parallelism.ThreadSafety.SAFE)
+                .build();
+
+        context.setStepModels(java.util.List.of(model));
+        context.setRendererBindings(java.util.Map.of());
+
+        assertDoesNotThrow(() -> phase.execute(context));
+    }
 }
