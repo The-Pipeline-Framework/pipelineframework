@@ -77,15 +77,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final long PIPELINE_WAIT_TIMEOUT_SECONDS =
             Long.getLong("csv.e2e.pipeline.wait.seconds", 120L);
     private static final long PIPELINE_WAIT_POLL_MILLIS = 1000L;
-    // CI sets IMAGE_TAG to github.sha; local fallback should match dev image naming conventions.
-    private static final String PIPELINE_RUNTIME_IMAGE =
-            System.getenv().getOrDefault("IMAGE_REGISTRY", "registry.example.com")
-                    + "/"
-                    + System.getenv().getOrDefault("IMAGE_GROUP", "csv-payments")
-                    + "/"
-                    + System.getenv().getOrDefault("IMAGE_NAME", "pipeline-runtime-svc")
-                    + ":"
-                    + System.getenv().getOrDefault("IMAGE_TAG", "latest");
+    private static final String PIPELINE_RUNTIME_IMAGE = resolvePipelineRuntimeImage();
 
     // Containers are lazily created so monolith mode does not require service cert binds.
     static PostgreSQLContainer<?> postgresContainer;
@@ -95,6 +87,19 @@ abstract class AbstractCsvPaymentsEndToEnd {
     static GenericContainer<?> paymentStatusService;
     static GenericContainer<?> outputCsvService;
     static GenericContainer<?> pipelineRuntimeService;
+
+    private static String resolvePipelineRuntimeImage() {
+        String explicitImage = System.getenv("PIPELINE_RUNTIME_IMAGE");
+        if (explicitImage != null && !explicitImage.isBlank()) {
+            return explicitImage;
+        }
+
+        String registry = System.getenv().getOrDefault("IMAGE_REGISTRY", "registry.example.com");
+        String group = System.getenv().getOrDefault("IMAGE_GROUP", "csv-payments");
+        String name = System.getenv().getOrDefault("IMAGE_NAME", "pipeline-runtime-svc");
+        String tag = System.getenv().getOrDefault("IMAGE_TAG", "1.0.0");
+        return registry + "/" + group + "/" + name + ":" + tag;
+    }
 
     /**
          * Prepare test artifacts and start the containers required for the end-to-end CSV payments tests.
