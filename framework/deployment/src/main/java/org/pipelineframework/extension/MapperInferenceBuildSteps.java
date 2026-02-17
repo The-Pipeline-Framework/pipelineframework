@@ -57,16 +57,30 @@ public class MapperInferenceBuildSteps {
     private static final String STEP_DEFINITIONS_FILE = "META-INF/pipeline/step-definitions.txt";
 
     /**
+     * Local data carrier for step definition metadata parsed from classpath resources.
+     * <p>
+     * This is a plain record used only for local data transfer within this build step class.
+     * It is NOT a Quarkus build item and should not be confused with StepDefinitionBuildItem.
+     *
+     * @param stepName the fully qualified name of the step service class
+     * @param domainIn DotName of the input domain type (E_in), or null if not specified
+     * @param domainOut DotName of the output domain type (E_out), or null if not specified
+     * @param cardinality the cardinality of the step; empty string if not specified
+     */
+    private record StepDefinition(String stepName, DotName domainIn, DotName domainOut, String cardinality) {
+    }
+
+    /**
      * Load pipeline step definitions from classpath resources at META-INF/pipeline/step-definitions.txt.
      *
      * <p>Parses each non-empty, non-comment line using the format:
      * stepName|domainIn|domainOut|cardinality (cardinality is optional). Empty domain fields are treated as absent.</p>
      *
-     * @return a list of StepDefinitionBuildItem representing the parsed step definitions
+     * @return a list of StepDefinition records representing the parsed step definitions
      * @throws IOException if an I/O error occurs while reading resources or if a step definition line is malformed
      */
-    private List<StepDefinitionBuildItem> readStepDefinitions() throws IOException {
-        List<StepDefinitionBuildItem> stepDefinitions = new ArrayList<>();
+    private List<StepDefinition> readStepDefinitions() throws IOException {
+        List<StepDefinition> stepDefinitions = new ArrayList<>();
 
         Enumeration<URL> resources = Thread.currentThread().getContextClassLoader()
                 .getResources(STEP_DEFINITIONS_FILE);
@@ -98,7 +112,7 @@ public class MapperInferenceBuildSteps {
                     DotName domainInDotName = domainIn.isEmpty() ? null : DotName.createSimple(domainIn);
                     DotName domainOutDotName = domainOut.isEmpty() ? null : DotName.createSimple(domainOut);
 
-                    stepDefinitions.add(new StepDefinitionBuildItem(
+                    stepDefinitions.add(new StepDefinition(
                             stepName, domainInDotName, domainOutDotName, cardinality));
                 }
             }
@@ -124,7 +138,7 @@ public class MapperInferenceBuildSteps {
 
         LOG.debugf("Building mapper registry from Jandex index");
 
-        List<StepDefinitionBuildItem> stepDefinitions;
+        List<StepDefinition> stepDefinitions;
         try {
             stepDefinitions = readStepDefinitions();
         } catch (IOException e) {
@@ -170,48 +184,48 @@ public class MapperInferenceBuildSteps {
      * @throws IllegalStateException if one or more steps are missing required mappers or referenced domain types are not indexed
      */
     private void validateStepMappers(
-            List<StepDefinitionBuildItem> stepDefinitions,
+            List<StepDefinition> stepDefinitions,
             MapperRegistry registry,
             IndexView index) {
 
         List<String> validationErrors = new ArrayList<>();
 
-        for (StepDefinitionBuildItem step : stepDefinitions) {
+        for (StepDefinition step : stepDefinitions) {
             // Validate input domain mapper (outbound mapper: entity -> DTO -> proto)
-            if (step.getDomainIn() != null) {
-                if (!registry.domainToMapper().containsKey(step.getDomainIn())) {
+            if (step.domainIn() != null) {
+                if (!registry.domainToMapper().containsKey(step.domainIn())) {
                     // Check if the domain type exists in the index
-                    ClassInfo domainClass = index.getClassByName(step.getDomainIn());
+                    ClassInfo domainClass = index.getClassByName(step.domainIn());
                     if (domainClass == null) {
                         validationErrors.add(String.format(
                                 "Step '%s' references input domain type '%s' that is not in the Jandex index. " +
                                 "Ensure the class is indexed by Quarkus.",
-                                step.getStepName(), step.getDomainIn()));
+                                step.stepName(), step.domainIn()));
                     } else {
                         validationErrors.add(String.format(
                                 "Step '%s' has no outbound mapper for input domain type '%s'. " +
                                 "PER REQUIREMENTS: All mappers MUST be resolved at build time. " +
                                 "Add a Mapper implementation: Mapper<?, ?, %s>",
-                                step.getStepName(), step.getDomainIn(), step.getDomainIn()));
+                                step.stepName(), step.domainIn(), step.domainIn()));
                     }
                 }
             }
 
             // Validate output domain mapper (inbound mapper: proto -> DTO -> entity)
-            if (step.getDomainOut() != null) {
-                if (!registry.domainToMapper().containsKey(step.getDomainOut())) {
-                    ClassInfo domainClass = index.getClassByName(step.getDomainOut());
+            if (step.domainOut() != null) {
+                if (!registry.domainToMapper().containsKey(step.domainOut())) {
+                    ClassInfo domainClass = index.getClassByName(step.domainOut());
                     if (domainClass == null) {
                         validationErrors.add(String.format(
                                 "Step '%s' references output domain type '%s' that is not in the Jandex index. " +
                                 "Ensure the class is indexed by Quarkus.",
-                                step.getStepName(), step.getDomainOut()));
+                                step.stepName(), step.domainOut()));
                     } else {
                         validationErrors.add(String.format(
                                 "Step '%s' has no inbound mapper for output domain type '%s'. " +
                                 "PER REQUIREMENTS: All mappers MUST be resolved at build time. " +
                                 "Add a Mapper implementation: Mapper<?, ?, %s>",
-                                step.getStepName(), step.getDomainOut(), step.getDomainOut()));
+                                step.stepName(), step.domainOut(), step.domainOut()));
                     }
                 }
             }
