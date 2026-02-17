@@ -2,7 +2,9 @@ package org.pipelineframework.processor.phase;
 
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 import java.util.Set;
 import javax.lang.model.element.Element;
@@ -71,7 +73,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                     "No YAML step definitions were found. Skipping step generation (YAML-driven mode).");
             }
         }
-        ctx.setStepModels(stepModels);
+        ctx.setStepModels(deduplicateByServiceName(stepModels));
     }
 
     /**
@@ -688,4 +690,12 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         return value != null && !value.toString().isBlank();
     }
 
+    private List<PipelineStepModel> deduplicateByServiceName(List<PipelineStepModel> stepModels) {
+        Map<String, PipelineStepModel> uniqueByServiceName = new LinkedHashMap<>();
+        for (PipelineStepModel model : stepModels) {
+            // Keep first occurrence so concrete @PipelineStep models take precedence over template fallbacks.
+            uniqueByServiceName.putIfAbsent(model.serviceName(), model);
+        }
+        return new ArrayList<>(uniqueByServiceName.values());
+    }
 }

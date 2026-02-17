@@ -36,6 +36,7 @@ Legend:
 | Per-module role source roots (`target/generated-sources/pipeline/*`) | required | required | required |
 | Role-specific compile outputs (`classes-pipeline/*`) | required | required | required |
 | Merge role outputs into `target/classes` before packaging | required | required | required |
+| Merge orchestrator pipeline metadata into packaged runtime (`META-INF/pipeline/order.json`, `telemetry.json`, `orchestrator-clients.properties`) | n/a | required for grouped runtime module | required (`monolith-svc`) |
 | Source aggregation from multiple service modules | n/a | required for grouped runtime module | required (`monolith-svc`) |
 | Standalone orchestrator runtime module | required | required | n/a |
 | Standalone grouped pipeline runtime module | n/a | required (`pipeline-runtime-svc`) | n/a |
