@@ -35,6 +35,7 @@ import org.pipelineframework.processor.PipelineCompilationContext;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** Unit tests for ModelExtractionPhase */
@@ -87,6 +88,19 @@ class ModelExtractionPhaseTest {
         phase.execute(context);
 
         assertTrue(context.getStepModels().isEmpty());
+    }
+
+    @Test
+    void testExecution_emitsNoteWhenFallingBackToLegacyExtraction() throws Exception {
+        ModelExtractionPhase phase = new ModelExtractionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        context.setStepDefinitions(java.util.List.of());
+
+        phase.execute(context);
+
+        verify(messager).printMessage(
+            javax.tools.Diagnostic.Kind.NOTE,
+            "No YAML step definitions were found. Falling back to legacy annotation/template step extraction.");
     }
 
     @Test

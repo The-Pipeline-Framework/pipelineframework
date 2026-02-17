@@ -84,6 +84,11 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 stepModels = contextualModels;
             }
         } else {
+            if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.NOTE,
+                    "No YAML step definitions were found. Falling back to legacy annotation/template step extraction.");
+            }
             List<PipelineStepModel> templateModels = extractTemplateModels(ctx);
             if (templateModels != null && !templateModels.isEmpty()) {
                 stepModels.addAll(templateModels);
