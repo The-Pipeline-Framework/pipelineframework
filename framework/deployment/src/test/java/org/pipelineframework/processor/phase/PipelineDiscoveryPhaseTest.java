@@ -16,13 +16,18 @@
 
 package org.pipelineframework.processor.phase;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Map;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
+import javax.tools.Diagnostic;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -33,12 +38,16 @@ import org.pipelineframework.processor.PipelineCompilationContext;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** Unit tests for PipelineDiscoveryPhase */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class PipelineDiscoveryPhaseTest {
+
+    @TempDir
+    Path tempDir;
 
     @Mock
     private ProcessingEnvironment processingEnv;
@@ -126,5 +135,27 @@ class PipelineDiscoveryPhaseTest {
             () -> new PipelineDiscoveryPhase(new DiscoveryPathResolver(), null, new TransportPlatformResolver()));
         assertThrows(NullPointerException.class,
             () -> new PipelineDiscoveryPhase(new DiscoveryPathResolver(), new DiscoveryConfigLoader(), null));
+    }
+
+    @Test
+    void discoveryReportsYamlStepDefinitionErrorsToMessager() throws Exception {
+        Path yaml = tempDir.resolve("pipeline.yaml");
+        Files.writeString(yaml, """
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "bad-step"
+                service: "com.example.InternalService"
+                delegate: "com.example.ExternalService"
+            """);
+        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.config", yaml.toString()));
+
+        PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        phase.execute(context);
+
+        verify(messager).printMessage(
+            Diagnostic.Kind.ERROR,
+            "Skipping step 'bad-step': 'service' and 'delegate' are mutually exclusive");
     }
 }

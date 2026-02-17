@@ -22,6 +22,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
+import javax.tools.Diagnostic;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -37,11 +39,24 @@ public class StepDefinitionParser {
 
     private static final Logger LOG = Logger.getLogger(StepDefinitionParser.class);
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
+    private final BiConsumer<Diagnostic.Kind, String> diagnosticReporter;
 
     /**
      * Creates a new StepDefinitionParser.
      */
     public StepDefinitionParser() {
+        this((kind, message) -> {
+        });
+    }
+
+    /**
+     * Creates a StepDefinitionParser with a diagnostic reporter.
+     *
+     * @param diagnosticReporter reporter used to surface parse diagnostics (e.g. via annotation processing Messager)
+     */
+    public StepDefinitionParser(BiConsumer<Diagnostic.Kind, String> diagnosticReporter) {
+        this.diagnosticReporter = diagnosticReporter == null ? (kind, message) -> {
+        } : diagnosticReporter;
     }
     
     /**
@@ -102,7 +117,9 @@ public class StepDefinitionParser {
         String serviceClassName = getStringValue(stepData, "service");
 
         if (!isBlank(delegateClassName) && !isBlank(serviceClassName)) {
-            LOG.warnf("Skipping step '%s': 'service' and 'delegate' are mutually exclusive", name);
+            String message = "Skipping step '" + name + "': 'service' and 'delegate' are mutually exclusive";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
             return null;
         }
 
@@ -151,7 +168,10 @@ public class StepDefinitionParser {
 
         if (kind == StepKind.INTERNAL) {
             if (externalMapper != null) {
-                LOG.warnf("Ignoring 'externalMapper' on internal step '%s'; this field is only used for delegated steps", name);
+                String message = "Ignoring 'externalMapper' on internal step '" + name
+                    + "'; this field is only used for delegated steps";
+                LOG.warn(message);
+                report(Diagnostic.Kind.WARNING, message);
                 externalMapper = null;
             }
         }
@@ -160,7 +180,10 @@ public class StepDefinitionParser {
             boolean hasInput = !isBlank(inputTypeName);
             boolean hasOutput = !isBlank(outputTypeName);
             if (hasInput != hasOutput) {
-                LOG.warnf("Skipping step '%s': delegated steps must provide both 'input' and 'output' together", name);
+                String message = "Skipping step '" + name
+                    + "': delegated steps must provide both 'input' and 'output' together";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
                 return null;
             }
         }
@@ -173,6 +196,10 @@ public class StepDefinitionParser {
         }
 
         return new StepDefinition(name, kind, executionClass, externalMapper, inputType, outputType);
+    }
+
+    private void report(Diagnostic.Kind kind, String message) {
+        diagnosticReporter.accept(kind, message);
     }
 
     private ClassName parseOptionalClassName(String typeName, String stepName, String fieldName) {

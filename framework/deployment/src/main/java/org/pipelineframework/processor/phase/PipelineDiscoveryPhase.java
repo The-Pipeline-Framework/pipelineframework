@@ -448,7 +448,11 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
             return List.of();
         }
 
-        StepDefinitionParser parser = new StepDefinitionParser();
+        StepDefinitionParser parser = new StepDefinitionParser((kind, message) -> {
+            if (ctx.getProcessingEnv() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(kind, message);
+            }
+        });
         return parser.parseStepDefinitions(configPath.get());
     }
 
