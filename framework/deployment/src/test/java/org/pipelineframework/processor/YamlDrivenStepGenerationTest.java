@@ -279,6 +279,97 @@ class YamlDrivenStepGenerationTest {
             "Expected unreferenced-service policy note in diagnostics: " + notes);
     }
 
+    @Test
+    void infersDelegatedExternalMapperWhenExactlyOneCandidateMatches() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-delegate-infer-mapper.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "embed"
+                delegate: "com.example.lib.EmbeddingService3"
+                input: "com.example.app.TextChunk3"
+                output: "com.example.app.Vector3"
+            """);
+
+        Path delegateSource = writeSource("EmbeddingService3.java", """
+            package com.example.lib;
+
+            import io.smallrye.mutiny.Uni;
+            import org.pipelineframework.service.ReactiveService;
+
+            public class EmbeddingService3 implements ReactiveService<LibraryChunk3, LibraryVector3> {
+                @Override
+                public Uni<LibraryVector3> process(LibraryChunk3 input) {
+                    return Uni.createFrom().item(new LibraryVector3());
+                }
+            }
+            """);
+        Path libInput = writeSource("LibraryChunk3.java", """
+            package com.example.lib;
+
+            public class LibraryChunk3 {
+            }
+            """);
+        Path libOutput = writeSource("LibraryVector3.java", """
+            package com.example.lib;
+
+            public class LibraryVector3 {
+            }
+            """);
+        Path appInput = writeSource("TextChunk3.java", """
+            package com.example.app;
+
+            public class TextChunk3 {
+            }
+            """);
+        Path appOutput = writeSource("Vector3.java", """
+            package com.example.app;
+
+            public class Vector3 {
+            }
+            """);
+        Path inferredMapper = writeSource("EmbeddingMapper3.java", """
+            package com.example.app;
+
+            import com.example.lib.LibraryChunk3;
+            import com.example.lib.LibraryVector3;
+            import org.pipelineframework.mapper.ExternalMapper;
+
+            public class EmbeddingMapper3 implements ExternalMapper<TextChunk3, LibraryChunk3, Vector3, LibraryVector3> {
+                @Override
+                public LibraryChunk3 toLibraryInput(TextChunk3 input) {
+                    return new LibraryChunk3();
+                }
+
+                @Override
+                public Vector3 toApplicationOutput(LibraryVector3 output) {
+                    return new Vector3();
+                }
+            }
+            """);
+        Path externalMapperContract = writeSource("ExternalMapper.java", """
+            package org.pipelineframework.mapper;
+
+            public interface ExternalMapper<TApplicationInput, TLibraryInput, TApplicationOutput, TLibraryOutput> {
+                TLibraryInput toLibraryInput(TApplicationInput input);
+
+                TApplicationOutput toApplicationOutput(TLibraryOutput output);
+            }
+            """);
+        Path markerSource = writeSource("Marker4.java", """
+            package com.example.app;
+
+            public class Marker4 {
+            }
+            """);
+
+        CompilationResult result = compile(yamlFile, List.of(
+            delegateSource, libInput, libOutput, appInput, appOutput, inferredMapper, externalMapperContract, markerSource));
+        assertTrue(result.success, "Expected delegated external mapper inference to succeed: " + result.errorSummary());
+    }
+
     private Path writeSource(String fileName, String content) throws IOException {
         Path file = tempDir.resolve(fileName);
         Files.writeString(file, content);
