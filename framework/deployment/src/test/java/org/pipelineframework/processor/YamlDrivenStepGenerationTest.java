@@ -218,7 +218,7 @@ class YamlDrivenStepGenerationTest {
             """);
 
         CompilationResult result = compile(yamlFile, List.of(triggerSource, nonAnnotatedService));
-        assertFalse(result.success, "Expected failure when YAML internal service lacks @PipelineStep");
+        assertFalse(result.success(), "Expected failure when YAML internal service lacks @PipelineStep");
         String errors = result.errorSummary().toLowerCase(Locale.ROOT);
         assertTrue(errors.contains("must be annotated with @pipelinestep"), result.errorSummary());
     }
@@ -423,6 +423,7 @@ class YamlDrivenStepGenerationTest {
                     "-proc:only",
                     "-s", generatedDir.toString(),
                     "-d", classesDir.toString(),
+                    "-classpath", System.getProperty("java.class.path"),
                     "-processor", "org.pipelineframework.processor.PipelineStepProcessor",
                     "-Apipeline.config=" + yamlFile
                 ),

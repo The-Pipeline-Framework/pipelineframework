@@ -90,8 +90,9 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
         
         // Process orchestrator models if present
         if (!ctx.getOrchestratorModels().isEmpty()) {
+            PipelineTemplateConfig config = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig cfg ? cfg : null;
             OrchestratorBinding orchestratorBinding = OrchestratorBindingBuilder.buildOrchestratorBinding(
-                (PipelineTemplateConfig) ctx.getPipelineTemplateConfig(),
+                config,
                 ctx.getRoundEnv() != null ? ctx.getRoundEnv().getElementsAnnotatedWith(PipelineOrchestrator.class) : Set.of()
             );
             if (orchestratorBinding != null) {

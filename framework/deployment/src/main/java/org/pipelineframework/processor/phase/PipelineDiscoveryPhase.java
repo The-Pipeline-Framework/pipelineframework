@@ -141,9 +141,9 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     /**
      * Loads pipeline aspect models from the resolved pipeline configuration file.
      *
-     * @param ctx the pipeline compilation context used to resolve the config path and report diagnostics
+     * @param configPath the optional resolved pipeline configuration path
+     * @param messager the messager used to report diagnostics, may be null
      * @return a list of loaded {@code PipelineAspectModel} instances; an empty list if no pipeline config is found
-     * @throws Exception if loading fails; an error diagnostic is reported to the processing environment's messager when available
      */
     private List<PipelineAspectModel> loadPipelineAspects(Optional<Path> configPath, Messager messager) {
         if (configPath.isEmpty()) {
@@ -155,7 +155,8 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     /**
      * Locates and loads the pipeline template configuration from the module directory.
      *
-     * @param ctx compilation context used to determine the module directory and to report warnings
+     * @param configPath the optional resolved pipeline configuration path
+     * @param messager the messager used to report warnings, may be null
      * @return the loaded PipelineTemplateConfig, or `null` if no configuration is present or if loading fails (a warning is emitted via the processing environment when available)
      */
     private PipelineTemplateConfig loadPipelineTemplateConfig(Optional<Path> configPath, Messager messager) {
@@ -172,7 +173,8 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * configuration (base package, transport, platform, input/output types). When the file is
      * missing or cannot be loaded, returns a default non-null configuration.
      *
-     * @param ctx the pipeline compilation context used to locate the module directory and to report warnings
+     * @param configPath the optional resolved pipeline configuration path
+     * @param messager the messager used to report warnings, may be null
      * @return a non-null {@link org.pipelineframework.processor.config.PipelineStepConfigLoader.StepConfig}
      */
     private PipelineStepConfigLoader.StepConfig loadPipelineStepConfig(Optional<Path> configPath, Messager messager) {
@@ -263,7 +265,8 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * If no config is found or parsing fails, returns an empty list and emits diagnostics
      * via the processing environment's messager when available.
      *
-     * @param ctx the pipeline compilation context used to resolve config path and emit diagnostics
+     * @param configPath the optional resolved pipeline configuration path
+     * @param messager the messager used to emit diagnostics, may be null
      * @return a list of StepDefinition parsed from the template; empty if none or on error
      */
     private List<StepDefinition> parseStepDefinitions(Optional<Path> configPath, Messager messager) {

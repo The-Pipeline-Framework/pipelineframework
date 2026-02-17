@@ -31,12 +31,12 @@ import jakarta.annotation.Nonnull;
 public interface ExternalMapper<TApplicationInput, TOperatorInput, TApplicationOutput, TOperatorOutput> {
 
     /**
-         * Map an application-domain input to the operator's input entity type.
-         *
-         * @param applicationInput the application input; must not be null
-         * @return the corresponding operator input; never null
-         * @throws IllegalArgumentException if {@code applicationInput} is null
-         */
+     * Map an application-domain input to the operator's input entity type.
+     *
+     * @param applicationInput the application input; must not be null
+     * @return the corresponding operator input; never null
+     * @throws IllegalArgumentException if {@code applicationInput} is null
+     */
     @Nonnull
     TOperatorInput toOperatorInput(@Nonnull TApplicationInput applicationInput);
 

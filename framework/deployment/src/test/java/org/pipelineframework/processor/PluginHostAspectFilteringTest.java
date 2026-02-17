@@ -95,7 +95,7 @@ class PluginHostAspectFilteringTest {
                             inboundMapper = com.example.StringInputMapper.class,
                             outboundMapper = com.example.StringOutputMapper.class
                         )
-                        @ApplicationScoped
+	                        @ApplicationScoped
 	                        public class ProcessTestService implements ReactiveService<String, String> {
 	                            @Override
 	                            public Uni<String> process(String input) {

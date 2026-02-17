@@ -344,14 +344,13 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-         * Declares the REST client's streaming-to-unary process operation.
-         *
-         * @param versionTag the pipeline version tag passed via header
-         * @param replayMode the replay mode flag passed via header
-         * @param cachePolicy the cache policy passed via header
-         * @param inputDtos a stream of input DTOs to be processed
-         * @return a `Uni` that emits the single output DTO produced from the streamed inputs
-         */
+     * Declares the REST client's streaming-to-unary process operation.
+     *
+     * @param inputDto the DTO type used for each element in the input batch
+     * @param outputDto the DTO type used as the unary response entity
+     * @param operationPath the REST sub-path for the operation endpoint
+     * @return a `Uni` that emits the single output DTO produced from the input batch
+     */
     private MethodSpec buildStreamingUnaryMethod(TypeName inputDto, TypeName outputDto, String operationPath) {
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("process")
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST")).build())

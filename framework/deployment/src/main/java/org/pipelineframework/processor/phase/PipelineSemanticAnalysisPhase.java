@@ -402,7 +402,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
 
         // Validate that annotated services not referenced in YAML don't generate steps
         // This is done by checking if each annotated service is in the YAML step definitions
-        List<String> yamlReferencedServices = new ArrayList<>();
+        Set<String> yamlReferencedServices = new HashSet<>();
         if (ctx.getStepDefinitions() != null) {
             for (var stepDef : ctx.getStepDefinitions()) {
                 if (stepDef.kind() == org.pipelineframework.processor.ir.StepKind.INTERNAL
@@ -483,13 +483,18 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                         continue;
                     }
 
-                    // Check if the operator mapper implements ExternalMapper interface
-                    boolean implementsExternalMapper = false;
                     var externalMapperInterfaceElement = elementUtils.getTypeElement("org.pipelineframework.mapper.ExternalMapper");
-                    if (externalMapperInterfaceElement != null && typeUtils.isAssignable(externalMapperElement.asType(), externalMapperInterfaceElement.asType())) {
-                        implementsExternalMapper = true;
+                    if (externalMapperInterfaceElement == null) {
+                        messager.printMessage(
+                            Diagnostic.Kind.ERROR,
+                            "Framework interface 'org.pipelineframework.mapper.ExternalMapper' could not be resolved on the processor classpath "
+                                + "while validating operator mapper '" + model.externalMapper().canonicalName()
+                                + "' for step '" + model.serviceName() + "'.");
+                        continue;
                     }
 
+                    boolean implementsExternalMapper =
+                        typeUtils.isAssignable(externalMapperElement.asType(), externalMapperInterfaceElement.asType());
                     if (!implementsExternalMapper) {
                         messager.printMessage(
                             Diagnostic.Kind.ERROR,

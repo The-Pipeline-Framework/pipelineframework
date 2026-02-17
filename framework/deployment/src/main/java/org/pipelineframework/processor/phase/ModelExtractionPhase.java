@@ -37,6 +37,9 @@ import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
  * This phase discovers and extracts PipelineStepModel instances from @PipelineStep annotated classes.
  */
 public class ModelExtractionPhase implements PipelineCompilationPhase {
+    public static final String NO_YAML_DEFINITIONS_MESSAGE =
+        "No YAML step definitions were found. Skipping step generation (YAML-driven mode).";
+
     private final ModelContextRoleEnricher contextRoleEnricher;
 
     /**
@@ -72,12 +75,13 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
      */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
-        // Extract pipeline step models based on YAML configuration
-        List<PipelineStepModel> stepModels = new ArrayList<>(extractStepModelsFromYaml(ctx));
-
-        // Only use legacy template-derived model synthesis when no YAML step definitions were parsed.
         List<org.pipelineframework.processor.ir.StepDefinition> stepDefinitions = ctx.getStepDefinitions();
         boolean hasYamlStepDefinitions = stepDefinitions != null && !stepDefinitions.isEmpty();
+
+        // Extract pipeline step models based on YAML configuration
+        List<PipelineStepModel> stepModels = new ArrayList<>(extractStepModelsFromYaml(ctx, stepDefinitions));
+
+        // Only use legacy template-derived model synthesis when no YAML step definitions were parsed.
         if (hasYamlStepDefinitions) {
             List<PipelineStepModel> contextualModels = contextRoleEnricher.enrich(ctx, stepModels);
             if (contextualModels != null && !contextualModels.isEmpty()) {
@@ -91,7 +95,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
                 ctx.getProcessingEnv().getMessager().printMessage(
                     javax.tools.Diagnostic.Kind.NOTE,
-                    "No YAML step definitions were found. Skipping step generation (YAML-driven mode).");
+                    NO_YAML_DEFINITIONS_MESSAGE);
             }
         }
         ctx.setStepModels(deduplicateByServiceName(stepModels));
@@ -104,8 +108,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
      * @param ctx the compilation context containing the parsed StepDefinition objects
      * @return list of PipelineStepModel objects based on YAML configuration
      */
-    private List<PipelineStepModel> extractStepModelsFromYaml(PipelineCompilationContext ctx) {
-        List<org.pipelineframework.processor.ir.StepDefinition> stepDefinitions = ctx.getStepDefinitions();
+    private List<PipelineStepModel> extractStepModelsFromYaml(
+            PipelineCompilationContext ctx,
+            List<org.pipelineframework.processor.ir.StepDefinition> stepDefinitions) {
         if (stepDefinitions == null || stepDefinitions.isEmpty()) {
             return List.of();
         }
@@ -177,14 +182,6 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 // For delegated steps, create a model based on the delegate service
                 yield createDelegatedStepModel(ctx, stepDef);
             }
-            default -> {
-                // Fail-fast guard for unknown/future StepKind values so missing handling is surfaced immediately.
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.ERROR,
-                    "Unknown step kind '" + stepDef.kind() + "' for step '" + stepDef.name() +
-                    "'. Valid kinds are: INTERNAL, DELEGATED.");
-                throw new IllegalStateException("Unknown step kind: " + stepDef.kind());
-            }
         };
     }
 
@@ -252,7 +249,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             reactiveSignature.outputType());
         if (stepDef.externalMapper() != null && externalMapper == null) {
             ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.NOTE,
+                javax.tools.Diagnostic.Kind.WARNING,
                 "Skipping delegated step '" + stepDef.name()
                     + "': operator mapper '" + stepDef.externalMapper().canonicalName()
                     + "' was specified but could not be resolved.");
@@ -263,7 +260,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             && (!inputType.equals(reactiveSignature.inputType())
                 || !outputType.equals(reactiveSignature.outputType()))) {
             ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.NOTE,
+                javax.tools.Diagnostic.Kind.WARNING,
                 "Skipping delegated step '" + stepDef.name()
                     + "': no operator mapper provided and YAML types ["
                     + inputType + " -> " + outputType
@@ -420,7 +417,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 "Step '" + stepName + "' requires an operator mapper for types ["
                     + applicationInputType + " -> " + operatorInputType + ", "
                     + operatorOutputType + " -> " + applicationOutputType
-                    + "], but no matching ExternalMapper implementation was found.");
+                    + "], but no matching ExternalMapper implementation was found. "
+                    + "The mapper may be in a dependency JAR or produced in a different processing round. "
+                    + "Ensure it is compiled in this round or specify it explicitly in YAML.");
             return null;
         }
 
@@ -545,23 +544,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             org.pipelineframework.processor.ir.StepDefinition stepDef,
             PipelineStepModel extractedModel) {
         String serviceName = toYamlServiceName(stepDef.name());
-        return new PipelineStepModel.Builder()
+        return extractedModel.toBuilder()
             .serviceName(serviceName)
             .generatedName(serviceName)
-            .servicePackage(extractedModel.servicePackage())
-            .serviceClassName(extractedModel.serviceClassName())
-            .inputMapping(extractedModel.inputMapping())
-            .outputMapping(extractedModel.outputMapping())
-            .streamingShape(extractedModel.streamingShape())
-            .enabledTargets(extractedModel.enabledTargets())
-            .executionMode(extractedModel.executionMode())
-            .deploymentRole(extractedModel.deploymentRole())
-            .sideEffect(extractedModel.sideEffect())
-            .cacheKeyGenerator(extractedModel.cacheKeyGenerator())
-            .orderingRequirement(extractedModel.orderingRequirement())
-            .threadSafety(extractedModel.threadSafety())
-            .delegateService(extractedModel.delegateService())
-            .externalMapper(extractedModel.externalMapper())
             .build();
     }
 
@@ -572,6 +557,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
      * @return the generated service class name (for example, "ProcessXyzService"); returns "ProcessStepService" when the formatted name is blank
      */
     private String toYamlServiceName(String stepName) {
+        if (stepName == null || stepName.isBlank()) {
+            return "ProcessStepService";
+        }
         String formatted = NamingPolicy.formatForClassName(NamingPolicy.stripProcessPrefix(stepName));
         if (formatted == null || formatted.isBlank()) {
             return "ProcessStepService";

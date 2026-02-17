@@ -116,20 +116,22 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
         externalAdapterBuilder.addSuperinterface(
             ParameterizedTypeName.get(reactiveServiceInterface, applicationInputType, applicationOutputType));
 
-        // Add field for the delegate service (package-private, not public)
+        // Add field for the delegate service.
         FieldSpec delegateServiceField = FieldSpec.builder(
                         delegateServiceType,
                         "delegateService")
                 .addAnnotation(Inject.class)
+                .addModifiers(Modifier.PRIVATE)
                 .build();
         externalAdapterBuilder.addField(delegateServiceField);
 
-        // Add field for the operator mapper if specified (package-private, not public)
+        // Add field for the operator mapper if specified.
         if (externalMapperType != null) {
             FieldSpec externalMapperField = FieldSpec.builder(
                             externalMapperType,
                             "externalMapper")
                     .addAnnotation(Inject.class)
+                    .addModifiers(Modifier.PRIVATE)
                     .build();
             externalAdapterBuilder.addField(externalMapperField);
         }
@@ -216,9 +218,6 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
             } else if (streamingShape == StreamingShape.STREAMING_STREAMING) {
                 // For bidirectional streaming operations: Multi<I> -> Multi<O>
                 addStreamingMapperLogic(methodBuilder);
-            } else {
-                // Default case - no operator mapping
-                methodBuilder.addStatement("return delegateService.process(input)");
             }
         } else {
             // If no operator mapper, just delegate directly

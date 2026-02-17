@@ -16,6 +16,7 @@
 
 package org.pipelineframework.processor.phase;
 
+import java.util.List;
 import java.util.Set;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -33,6 +34,7 @@ import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.processor.PipelineCompilationContext;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static javax.tools.Diagnostic.Kind.NOTE;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -99,13 +101,13 @@ class ModelExtractionPhaseTest {
     void testExecution_emitsNoteWhenFallingBackToLegacyExtraction() throws Exception {
         ModelExtractionPhase phase = new ModelExtractionPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
-        context.setStepDefinitions(java.util.List.of());
+        context.setStepDefinitions(List.of());
 
         phase.execute(context);
 
         verify(messager).printMessage(
-            javax.tools.Diagnostic.Kind.NOTE,
-            "No YAML step definitions were found. Skipping step generation (YAML-driven mode).");
+            NOTE,
+            ModelExtractionPhase.NO_YAML_DEFINITIONS_MESSAGE);
     }
 
     @Test

@@ -2,6 +2,7 @@ package org.pipelineframework.processor.phase;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
@@ -172,9 +173,37 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             }
 
             // Get the bindings for this model (for non-delegation steps)
-            GrpcBinding grpcBinding = (GrpcBinding) bindingsMap.get(model.serviceName() + "_grpc");
-            RestBinding restBinding = (RestBinding) bindingsMap.get(model.serviceName() + "_rest");
-            LocalBinding localBinding = (LocalBinding) bindingsMap.get(model.serviceName() + "_local");
+            String grpcBindingKey = model.serviceName() + "_grpc";
+            String restBindingKey = model.serviceName() + "_rest";
+            String localBindingKey = model.serviceName() + "_local";
+
+            Object grpcBindingObj = bindingsMap.get(grpcBindingKey);
+            Object restBindingObj = bindingsMap.get(restBindingKey);
+            Object localBindingObj = bindingsMap.get(localBindingKey);
+
+            GrpcBinding grpcBinding = null;
+            if (grpcBindingObj instanceof GrpcBinding value) {
+                grpcBinding = value;
+            } else if (grpcBindingObj != null) {
+                LOG.warnf("Invalid binding type for '%s': expected GrpcBinding but got %s",
+                    grpcBindingKey, grpcBindingObj.getClass().getName());
+            }
+
+            RestBinding restBinding = null;
+            if (restBindingObj instanceof RestBinding value) {
+                restBinding = value;
+            } else if (restBindingObj != null) {
+                LOG.warnf("Invalid binding type for '%s': expected RestBinding but got %s",
+                    restBindingKey, restBindingObj.getClass().getName());
+            }
+
+            LocalBinding localBinding = null;
+            if (localBindingObj instanceof LocalBinding value) {
+                localBinding = value;
+            } else if (localBindingObj != null) {
+                LOG.warnf("Invalid binding type for '%s': expected LocalBinding but got %s",
+                    localBindingKey, localBindingObj.getClass().getName());
+            }
 
             // Generate artifacts based on enabled targets
             generateArtifacts(
@@ -383,7 +412,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             .map(PipelineAspectModel::name)
             .filter(Objects::nonNull)
             .map(aspectName -> aspectName.toLowerCase(Locale.ROOT))
-            .collect(java.util.stream.Collectors.toUnmodifiableSet());
+            .collect(Collectors.toUnmodifiableSet());
     }
 
     /**

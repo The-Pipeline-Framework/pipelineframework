@@ -107,23 +107,8 @@ class ModelContextRoleEnricher {
     }
 
     private PipelineStepModel withDeploymentRole(PipelineStepModel model, DeploymentRole role) {
-        return new PipelineStepModel.Builder()
-            .serviceName(model.serviceName())
-            .generatedName(model.generatedName())
-            .servicePackage(model.servicePackage())
-            .serviceClassName(model.serviceClassName())
-            .inputMapping(model.inputMapping())
-            .outputMapping(model.outputMapping())
-            .streamingShape(model.streamingShape())
-            .enabledTargets(model.enabledTargets())
-            .executionMode(model.executionMode())
+        return model.toBuilder()
             .deploymentRole(role)
-            .sideEffect(model.sideEffect())
-            .cacheKeyGenerator(model.cacheKeyGenerator())
-            .orderingRequirement(model.orderingRequirement())
-            .threadSafety(model.threadSafety())
-            .delegateService(model.delegateService())
-            .externalMapper(model.externalMapper())
             .build();
     }
 

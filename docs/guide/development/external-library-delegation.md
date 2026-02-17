@@ -239,6 +239,7 @@ The following annotation processor options control YAML-driven generation:
 | `pipeline.warnUnreferencedSteps` | `true` | Whether to warn about @PipelineStep classes not referenced in YAML |
 
 Example Maven configuration:
+
 ```xml
 <plugin>
     <groupId>org.apache.maven.plugins</groupId>

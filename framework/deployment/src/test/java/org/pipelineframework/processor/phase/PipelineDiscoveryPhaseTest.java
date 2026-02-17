@@ -18,6 +18,7 @@ package org.pipelineframework.processor.phase;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.function.Function;
 import java.util.Map;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -161,6 +162,8 @@ class PipelineDiscoveryPhaseTest {
         verify(messager).printMessage(
             eq(Diagnostic.Kind.ERROR),
             contains("Skipping step 'bad-step':"));
+        assertNotNull(context.getStepDefinitions());
+        assertTrue(context.getStepDefinitions().isEmpty());
     }
 
     @Test
@@ -182,7 +185,11 @@ class PipelineDiscoveryPhaseTest {
             .thenReturn(java.util.Optional.of(pipelineConfig));
         when(configLoader.loadAspects(pipelineConfig, messager)).thenReturn(java.util.List.of());
         when(configLoader.loadTemplateConfig(pipelineConfig, messager)).thenReturn(null);
-        when(configLoader.loadStepConfig(eq(pipelineConfig), any(), any(), eq(messager)))
+        when(configLoader.loadStepConfig(
+            eq(pipelineConfig),
+            any(Function.class),
+            any(Function.class),
+            eq(messager)))
             .thenReturn(new org.pipelineframework.processor.config.PipelineStepConfigLoader.StepConfig(
                 "com.example", "GRPC", "COMPUTE", java.util.List.of(), java.util.List.of()));
         when(configLoader.loadRuntimeMapping(moduleDir, messager)).thenReturn(null);
@@ -205,7 +212,19 @@ class PipelineDiscoveryPhaseTest {
             .resolvePipelineConfigPath(Map.of(), moduleDir, messager);
         verify(configLoader, times(1)).loadAspects(pipelineConfig, messager);
         verify(configLoader, times(1)).loadTemplateConfig(pipelineConfig, messager);
-        verify(configLoader, times(1)).loadStepConfig(eq(pipelineConfig), any(), any(), eq(messager));
+        verify(configLoader, times(1)).loadStepConfig(
+            eq(pipelineConfig),
+            any(Function.class),
+            any(Function.class),
+            eq(messager));
         verify(configLoader, times(1)).loadRuntimeMapping(moduleDir, messager);
+        assertEquals(generatedSourcesRoot, context.getGeneratedSourcesRoot());
+        assertEquals(moduleDir, context.getModuleDir());
+        assertEquals("test-module", context.getModuleName());
+        assertNotNull(context.getAspectModels());
+        assertNotNull(context.getStepDefinitions());
+        assertTrue(context.getStepDefinitions().isEmpty());
+        assertTrue(context.isTransportModeGrpc());
+        assertEquals(PlatformMode.COMPUTE, context.getPlatformMode());
     }
 }

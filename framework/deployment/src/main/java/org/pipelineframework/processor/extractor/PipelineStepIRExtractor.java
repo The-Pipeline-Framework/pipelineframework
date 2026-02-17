@@ -138,9 +138,7 @@ public class PipelineStepIRExtractor {
          * @return a `TypeMapping` containing the resolved domain type, the mapper `ClassName` if provided, a boolean indicating mapper presence, and the inferred target type; returns a disabled mapping (no domain, no mapper, mapper-present=false) if `domainType` is null or void
          */
     private TypeMapping extractTypeMapping(TypeMirror domainType, TypeMirror mapperTypeMirror) {
-        if (domainType == null
-                || domainType.getKind() == javax.lang.model.type.TypeKind.VOID
-                || domainType.toString().equals("java.lang.Void")) {
+        if (isNullOrVoid(domainType)) {
             return new TypeMapping(null, null, false, null);
         }
 
@@ -219,7 +217,7 @@ public class PipelineStepIRExtractor {
             return null;
         }
 
-        return resolveTypeClass(annotationMirror, "cacheKeyGenerator");
+        return resolveClassNameFromMirror(typeMirror);
     }
 
     /**

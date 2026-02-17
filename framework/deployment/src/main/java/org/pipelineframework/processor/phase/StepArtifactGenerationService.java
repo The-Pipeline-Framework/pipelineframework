@@ -7,6 +7,7 @@ import java.util.Set;
 import com.google.protobuf.DescriptorProtos;
 import com.squareup.javapoet.ClassName;
 import org.pipelineframework.processor.PipelineCompilationContext;
+import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.GrpcBinding;
@@ -27,6 +28,7 @@ import org.pipelineframework.processor.util.RoleMetadataGenerator;
  * Generates per-step artifacts for enabled generation targets.
  */
 class StepArtifactGenerationService {
+    private static final String PIPELINE_DOT = PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX + ".";
 
     private final GenerationPathResolver pathResolver;
     private final GenerationPolicy generationPolicy;
@@ -70,7 +72,7 @@ class StepArtifactGenerationService {
                             ? DeploymentRole.ORCHESTRATOR_CLIENT
                             : DeploymentRole.PLUGIN_SERVER;
                         if (ctx.isTransportModeLocal()) {
-                            String sideEffectBeanKey = model.servicePackage() + ".pipeline." + model.serviceName();
+                            String sideEffectBeanKey = model.servicePackage() + PIPELINE_DOT + model.serviceName();
                             if (generatedSideEffectBeans.add(sideEffectBeanKey)) {
                                 sideEffectBeanService.generateSideEffectBean(
                                     ctx,
@@ -97,7 +99,7 @@ class StepArtifactGenerationService {
                                 + "' because no gRPC binding is available.");
                         break;
                     }
-                    String grpcClassName = model.servicePackage() + ".pipeline." + model.generatedName() + "GrpcService";
+                    String grpcClassName = model.servicePackage() + PIPELINE_DOT + model.generatedName() + "GrpcService";
                     DeploymentRole grpcRole = model.deploymentRole();
                     grpcRenderer.render(grpcBinding, new GenerationContext(
                         ctx.getProcessingEnv(),
@@ -118,7 +120,7 @@ class StepArtifactGenerationService {
                                 + "' because no gRPC binding is available.");
                         break;
                     }
-                    String clientClassName = model.servicePackage() + ".pipeline."
+                    String clientClassName = model.servicePackage() + PIPELINE_DOT
                         + ResourceNameUtils.normalizeBaseName(model.generatedName()) + "GrpcClientStep";
                     DeploymentRole clientRole = resolveClientRole(model.deploymentRole());
                     clientRenderer.render(grpcBinding, new GenerationContext(
@@ -138,7 +140,7 @@ class StepArtifactGenerationService {
                         break;
                     }
                     if (model.sideEffect()) {
-                        String sideEffectBeanKey = model.servicePackage() + ".pipeline." + model.serviceName();
+                        String sideEffectBeanKey = model.servicePackage() + PIPELINE_DOT + model.serviceName();
                         if (generatedSideEffectBeans.add(sideEffectBeanKey)) {
                             DeploymentRole sideEffectRole =
                                 model.deploymentRole() == null
@@ -158,7 +160,7 @@ class StepArtifactGenerationService {
                                 + "' because no local binding is available.");
                         break;
                     }
-                    String localClientClassName = model.servicePackage() + ".pipeline."
+                    String localClientClassName = model.servicePackage() + PIPELINE_DOT
                         + ResourceNameUtils.normalizeBaseName(model.generatedName()) + "LocalClientStep";
                     DeploymentRole localClientRole = resolveClientRole(model.deploymentRole());
                     localClientRenderer.render(localBinding, new GenerationContext(
@@ -189,7 +191,7 @@ class StepArtifactGenerationService {
                                 + "' because no REST binding is available.");
                         break;
                     }
-                    String restClassName = model.servicePackage() + ".pipeline."
+                    String restClassName = model.servicePackage() + PIPELINE_DOT
                         + ResourceNameUtils.normalizeBaseName(model.generatedName()) + "Resource";
                     DeploymentRole restRole = DeploymentRole.REST_SERVER;
                     restRenderer.render(restBinding, new GenerationContext(
@@ -224,7 +226,7 @@ class StepArtifactGenerationService {
                                 + "' because no REST binding is available.");
                         break;
                     }
-                    String restClientClassName = model.servicePackage() + ".pipeline."
+                    String restClientClassName = model.servicePackage() + PIPELINE_DOT
                         + ResourceNameUtils.normalizeBaseName(model.generatedName()) + "RestClientStep";
                     DeploymentRole restClientRole = resolveClientRole(model.deploymentRole());
                     restClientRenderer.render(restBinding, new GenerationContext(
@@ -235,6 +237,14 @@ class StepArtifactGenerationService {
                         cacheKeyGenerator,
                         descriptorSet));
                     roleMetadataGenerator.recordClassWithRole(restClientClassName, restClientRole.name());
+                }
+                default -> {
+                    if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
+                        ctx.getProcessingEnv().getMessager().printMessage(
+                            javax.tools.Diagnostic.Kind.WARNING,
+                            "Skipping unsupported generation target '" + target
+                                + "' for step '" + model.generatedName() + "'.");
+                    }
                 }
             }
         }

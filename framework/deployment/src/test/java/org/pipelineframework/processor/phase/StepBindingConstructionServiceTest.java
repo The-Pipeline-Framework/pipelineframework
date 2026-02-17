@@ -6,6 +6,7 @@ import java.util.Set;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 
+import com.google.protobuf.DescriptorProtos;
 import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -69,16 +70,32 @@ class StepBindingConstructionServiceTest {
         when(processingEnv.getMessager()).thenReturn(messager);
         PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, null);
         PipelineStepModel delegated = TestModelFactory
-            .createTestModelWithTargets("DelegatedWarnService", Set.of(GenerationTarget.GRPC_SERVICE))
+            .createTestModelWithTargets("ProcessDelegatedWarnService", Set.of(GenerationTarget.GRPC_SERVICE))
             .toBuilder()
             .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
             .build();
         ctx.setStepModels(List.of(delegated));
 
-        service.buildBindings(ctx, null);
+        service.buildBindings(ctx, descriptorSetForService("ProcessDelegatedWarnService"));
 
         verify(messager).printMessage(
             eq(javax.tools.Diagnostic.Kind.WARNING),
-            contains("Delegated step 'DelegatedWarnService' ignores server targets"));
+            contains("Delegated step 'ProcessDelegatedWarnService' ignores server targets"));
+    }
+
+    private static DescriptorProtos.FileDescriptorSet descriptorSetForService(String serviceName) {
+        DescriptorProtos.FileDescriptorProto fileProto = DescriptorProtos.FileDescriptorProto.newBuilder()
+            .setName(serviceName.toLowerCase() + ".proto")
+            .setPackage("com.example")
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("Input"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("Output"))
+            .addService(DescriptorProtos.ServiceDescriptorProto.newBuilder()
+                .setName(serviceName)
+                .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
+                    .setName("remoteProcess")
+                    .setInputType(".com.example.Input")
+                    .setOutputType(".com.example.Output")))
+            .build();
+        return DescriptorProtos.FileDescriptorSet.newBuilder().addFile(fileProto).build();
     }
 }

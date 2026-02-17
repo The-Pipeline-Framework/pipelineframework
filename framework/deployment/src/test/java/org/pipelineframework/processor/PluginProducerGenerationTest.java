@@ -89,13 +89,13 @@ class PluginProducerGenerationTest {
                             outboundMapper = com.example.StringOutputMapper.class
                         )
                         @ApplicationScoped
-	                        public class ProcessTestService implements ReactiveService<String, String> {
-	                            @Override
-	                            public Uni<String> process(String input) {
-	                                return Uni.createFrom().item(input);
-	                            }
-	                        }
-	                        """),
+                        public class ProcessTestService implements ReactiveService<String, String> {
+                            @Override
+                            public Uni<String> process(String input) {
+                                return Uni.createFrom().item(input);
+                            }
+                        }
+                        """),
                 JavaFileObjects.forSourceString(
                     "com.example.StringInputMapper",
                     """
@@ -148,9 +148,6 @@ class PluginProducerGenerationTest {
     }
 
     private boolean containsText(Path rootDir, String text) throws IOException {
-        if (!Files.exists(rootDir)) {
-            return false;
-        }
         try (var stream = Files.walk(rootDir)) {
             return stream.filter(path -> path.toString().endsWith(".java"))
                 .anyMatch(path -> {

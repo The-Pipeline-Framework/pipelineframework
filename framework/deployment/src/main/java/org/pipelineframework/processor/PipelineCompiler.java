@@ -32,6 +32,8 @@ import org.pipelineframework.annotation.PipelineStep;
     "pipeline.cache.keyGenerator", // Optional: fully-qualified CacheKeyGenerator class for @CacheResult
     "pipeline.orchestrator.generate", // Optional: enable orchestrator endpoint generation
     "pipeline.module", // Optional: logical module name for runtime mapping
+    "pipeline.moduleDir", // Optional: module directory used for config discovery fallback
+    "project.basedir", // Optional: project base directory used for config discovery fallback
     "pipeline.platform", // Optional: target deployment platform (COMPUTE|FUNCTION; legacy: STANDARD|LAMBDA)
     "pipeline.transport", // Optional: transport mode (GRPC|REST|LOCAL)
     "pipeline.rest.naming.strategy", // Optional: REST naming strategy (LEGACY|RESOURCEFUL)
@@ -155,7 +157,14 @@ public class PipelineCompiler extends AbstractProcessingTool {
         // Primary source is the explicit annotation processor option; filesystem probing is best-effort fallback.
         String configuredPath = processingEnv.getOptions().get("pipeline.config");
         if (configuredPath != null && !configuredPath.isBlank()) {
-            return true;
+            Path configured = Path.of(configuredPath.trim());
+            if (Files.exists(configured) && Files.isRegularFile(configured) && Files.isReadable(configured)) {
+                return true;
+            }
+            processingEnv.getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.WARNING,
+                "Ignoring pipeline.config because it is not a readable file: " + configuredPath);
+            return false;
         }
 
         String baseDir = processingEnv.getOptions().get("pipeline.moduleDir");

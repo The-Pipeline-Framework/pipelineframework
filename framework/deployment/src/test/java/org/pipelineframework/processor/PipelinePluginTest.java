@@ -114,7 +114,7 @@ class PipelinePluginTest {
                             inboundMapper = test.plugin.StringInputMapper.class,
                             outboundMapper = test.plugin.StringOutputMapper.class
                         )
-                        @ApplicationScoped
+	                        @ApplicationScoped
 	                        public class ProcessTestService implements ReactiveService<String, String> {
 	                            @Override
 	                            public Uni<String> process(String input) {
@@ -302,7 +302,7 @@ class PipelinePluginTest {
                             inboundMapper = test.plugin.StringInputMapper.class,
                             outboundMapper = test.plugin.StringOutputMapper.class
                         )
-                        @ApplicationScoped
+	                        @ApplicationScoped
 	                        public class ProcessTestService implements ReactiveService<String, String> {
 	                            @Override
 	                            public Uni<String> process(String input) {
