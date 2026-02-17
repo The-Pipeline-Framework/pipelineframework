@@ -20,8 +20,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.BiConsumer;
 import javax.tools.Diagnostic;
 
@@ -39,6 +41,18 @@ public class StepDefinitionParser {
 
     private static final Logger LOG = Logger.getLogger(StepDefinitionParser.class);
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
+    private static final Set<String> SUPPORTED_STEP_KEYS = Set.of(
+        "name",
+        "service",
+        "delegate",
+        "input",
+        "output",
+        "externalMapper",
+        "cardinality",
+        "inputTypeName",
+        "inputFields",
+        "outputTypeName",
+        "outputFields");
     private final BiConsumer<Diagnostic.Kind, String> diagnosticReporter;
 
     /**
@@ -111,6 +125,7 @@ public class StepDefinitionParser {
             LOG.warnf("Skipping step with null or blank name: %s", stepData);
             return null;
         }
+        reportUnknownStepKeys(name, stepData);
 
         // Check if it's a delegated step (has 'delegate' field) or internal step (has 'service' field)
         String delegateClassName = getStringValue(stepData, "delegate");
@@ -196,6 +211,22 @@ public class StepDefinitionParser {
         }
 
         return new StepDefinition(name, kind, executionClass, externalMapper, inputType, outputType);
+    }
+
+    private void reportUnknownStepKeys(String stepName, Map<String, Object> stepData) {
+        Set<String> unknownKeys = new HashSet<>();
+        for (String key : stepData.keySet()) {
+            if (!SUPPORTED_STEP_KEYS.contains(key)) {
+                unknownKeys.add(key);
+            }
+        }
+        if (unknownKeys.isEmpty()) {
+            return;
+        }
+        String message = "Step '" + stepName + "' contains unsupported keys that will be ignored: "
+            + String.join(", ", unknownKeys);
+        LOG.warn(message);
+        report(Diagnostic.Kind.WARNING, message);
     }
 
     private void report(Diagnostic.Kind kind, String message) {

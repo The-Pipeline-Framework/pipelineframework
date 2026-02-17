@@ -21,7 +21,11 @@ import static org.junit.jupiter.api.Assertions.*;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
+
+import javax.tools.Diagnostic;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -95,6 +99,30 @@ class StepDefinitionParserTest {
         assertEquals(StepKind.DELEGATED, step.kind());
         assertEquals("com.example.lib.ExternalService", step.executionClass().canonicalName());
         assertEquals("com.example.app.ExternalMapperImpl", step.externalMapper().canonicalName());
+    }
+
+    @Test
+    void reportsWarningForUnsupportedStepKeys() throws IOException {
+        Path file = tempDir.resolve("pipeline.yaml");
+        Files.writeString(file, """
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "step-with-extra"
+                service: "com.example.app.InternalService"
+                unexpectedField: "value"
+            """);
+
+        List<String> diagnostics = new ArrayList<>();
+        StepDefinitionParser parser = new StepDefinitionParser((kind, message) ->
+            diagnostics.add(kind + ":" + message));
+        List<StepDefinition> steps = parser.parseStepDefinitions(file);
+
+        assertEquals(1, steps.size());
+        String warningSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(warningSummary.contains(Diagnostic.Kind.WARNING.name()));
+        assertTrue(warningSummary.contains("unsupported keys"));
+        assertTrue(warningSummary.contains("unexpectedField"));
     }
 
     private List<StepDefinition> parse(String yaml) throws IOException {
