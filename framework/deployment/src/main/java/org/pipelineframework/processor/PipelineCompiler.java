@@ -105,7 +105,12 @@ public class PipelineCompiler extends AbstractProcessingTool {
                     "Pipeline compilation failed in phase '" +
                     phase.name() +
                     "': " + e.getMessage());
-                e.printStackTrace();
+                Throwable cause = e.getCause();
+                if (cause != null && cause.getMessage() != null && !cause.getMessage().isBlank()) {
+                    processingEnv.getMessager().printMessage(
+                        javax.tools.Diagnostic.Kind.NOTE,
+                        "Cause: " + cause.getClass().getSimpleName() + ": " + cause.getMessage());
+                }
                 return true; // Return true to indicate processing happened (even if it failed)
             }
         }
