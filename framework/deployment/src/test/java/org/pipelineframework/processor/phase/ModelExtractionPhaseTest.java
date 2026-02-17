@@ -100,7 +100,7 @@ class ModelExtractionPhaseTest {
 
         verify(messager).printMessage(
             javax.tools.Diagnostic.Kind.NOTE,
-            "No YAML step definitions were found. Falling back to legacy annotation/template step extraction.");
+            "No YAML step definitions were found. Skipping step generation (YAML-driven mode).");
     }
 
     @Test
@@ -122,7 +122,7 @@ class ModelExtractionPhaseTest {
     }
 
     @Test
-    void testExecute_withTemplateModels_mergesIntoStepModels() throws Exception {
+    void testExecute_withTemplateModels_doesNotGenerateWithoutYamlStepDefinitions() throws Exception {
         ModelExtractionPhase phase = new ModelExtractionPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
 
@@ -151,15 +151,8 @@ class ModelExtractionPhaseTest {
 
         phase.execute(context);
 
-        // Verify that context.getStepModels() contains the expected number of template models and has expected properties
+        // Template-only synthesis is disabled in YAML-driven mode.
         assertNotNull(context.getStepModels());
-        assertEquals(1, context.getStepModels().size(), "Expected exactly one step model from the template");
-        
-        // Verify that the model has the expected service name based on the template step
-        // TemplateModelBuilder creates service name as "Process" + formattedName + "Service"
-        // where formattedName comes from the step name "TestStep"
-        assertTrue(context.getStepModels().stream()
-            .anyMatch(model -> model.serviceName().startsWith("Process") && model.serviceName().endsWith("Service")),
-            "Expected at least one model with service name starting with 'Process' and ending with 'Service'");
+        assertTrue(context.getStepModels().isEmpty(), "Expected no generated step models without YAML step definitions");
     }
 }
