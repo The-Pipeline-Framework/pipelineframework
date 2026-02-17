@@ -41,6 +41,7 @@ import org.pipelineframework.annotation.PipelineStep;
 public class PipelineCompiler extends AbstractProcessingTool {
 
     private final List<PipelineCompilationPhase> phases;
+    private boolean compilationExecuted;
 
     /**
      * Creates a new PipelineCompiler with the ordered compilation phases.
@@ -54,10 +55,15 @@ public class PipelineCompiler extends AbstractProcessingTool {
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
         super.init(processingEnv);
+        this.compilationExecuted = false;
     }
 
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+        if (compilationExecuted) {
+            return false;
+        }
+
         // Check if there are any relevant annotations to process
         Set<? extends Element> pipelineStepElements = roundEnv.getElementsAnnotatedWith(PipelineStep.class);
         Set<? extends Element> orchestratorElements = roundEnv.getElementsAnnotatedWith(PipelineOrchestrator.class);
@@ -104,6 +110,7 @@ public class PipelineCompiler extends AbstractProcessingTool {
             }
         }
 
+        compilationExecuted = true;
         return true;
     }
 
