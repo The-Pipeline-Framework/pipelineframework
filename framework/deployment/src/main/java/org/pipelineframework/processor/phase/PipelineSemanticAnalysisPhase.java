@@ -5,6 +5,9 @@ import java.util.List;
 import java.util.Set;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 
 import org.pipelineframework.annotation.ParallelismHint;
@@ -501,11 +504,72 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                             model.serviceName() + "'");
                     }
                 } else {
-                    // TODO: validate step/delegate generic types — tracked in future enhancement
-                    // When no external mapper is specified, validate that the step's input/output types match the delegate's types
+                    DelegateTypeSignature delegateSignature = resolveDelegateTypeSignature(delegateElement, typeUtils);
+                    if (delegateSignature == null || model.inputMapping() == null || model.outputMapping() == null) {
+                        continue;
+                    }
+
+                    String stepInputType = String.valueOf(model.inputMapping().domainType());
+                    String stepOutputType = String.valueOf(model.outputMapping().domainType());
+                    String delegateInputType = delegateSignature.inputType().toString();
+                    String delegateOutputType = delegateSignature.outputType().toString();
+
+                    boolean inputDiffers = !stepInputType.equals(delegateInputType);
+                    boolean outputDiffers = !stepOutputType.equals(delegateOutputType);
+                    if (inputDiffers || outputDiffers) {
+                        messager.printMessage(
+                            Diagnostic.Kind.ERROR,
+                            "Delegated step '" + model.serviceName()
+                                + "' requires an external mapper because YAML types ["
+                                + stepInputType + " -> " + stepOutputType
+                                + "] differ from delegate service types ["
+                                + delegateInputType + " -> " + delegateOutputType + "].");
+                    }
                 }
             }
         }
+    }
+
+    private DelegateTypeSignature resolveDelegateTypeSignature(TypeElement delegateElement, Types typeUtils) {
+        List<String> reactiveInterfaces = List.of(
+            "org.pipelineframework.service.ReactiveService",
+            "org.pipelineframework.service.ReactiveStreamingService",
+            "org.pipelineframework.service.ReactiveStreamingClientService",
+            "org.pipelineframework.service.ReactiveClientStreamingService",
+            "org.pipelineframework.service.ReactiveBidirectionalStreamingService");
+
+        for (String reactiveInterface : reactiveInterfaces) {
+            DeclaredType declared = findReactiveSupertype(typeUtils, delegateElement.asType(), reactiveInterface);
+            if (declared == null || declared.getTypeArguments().size() < 2) {
+                continue;
+            }
+            return new DelegateTypeSignature(
+                declared.getTypeArguments().get(0),
+                declared.getTypeArguments().get(1));
+        }
+        return null;
+    }
+
+    private DeclaredType findReactiveSupertype(Types types, TypeMirror type, String targetQualifiedName) {
+        if (type == null) {
+            return null;
+        }
+        if (type instanceof DeclaredType declaredType
+            && declaredType.asElement() instanceof TypeElement typeElement
+            && targetQualifiedName.contentEquals(typeElement.getQualifiedName())) {
+            return declaredType;
+        }
+
+        for (TypeMirror supertype : types.directSupertypes(type)) {
+            DeclaredType match = findReactiveSupertype(types, supertype, targetQualifiedName);
+            if (match != null) {
+                return match;
+            }
+        }
+        return null;
+    }
+
+    private record DelegateTypeSignature(TypeMirror inputType, TypeMirror outputType) {
     }
 
     /**
