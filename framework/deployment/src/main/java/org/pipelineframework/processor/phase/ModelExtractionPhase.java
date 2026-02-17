@@ -38,7 +38,7 @@ import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
  */
 public class ModelExtractionPhase implements PipelineCompilationPhase {
     public static final String NO_YAML_DEFINITIONS_MESSAGE =
-        "No YAML step definitions were found. Skipping step generation (YAML-driven mode).";
+        "No YAML step definitions were found. Falling back to annotation-driven extraction.";
 
     private final ModelContextRoleEnricher contextRoleEnricher;
 
@@ -78,11 +78,10 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         List<org.pipelineframework.processor.ir.StepDefinition> stepDefinitions = ctx.getStepDefinitions();
         boolean hasYamlStepDefinitions = stepDefinitions != null && !stepDefinitions.isEmpty();
 
-        // Extract pipeline step models based on YAML configuration
-        List<PipelineStepModel> stepModels = new ArrayList<>(extractStepModelsFromYaml(ctx, stepDefinitions));
-
-        // Only use legacy template-derived model synthesis when no YAML step definitions were parsed.
+        List<PipelineStepModel> stepModels;
         if (hasYamlStepDefinitions) {
+            // Extract pipeline step models based on explicit YAML step definitions.
+            stepModels = new ArrayList<>(extractStepModelsFromYaml(ctx, stepDefinitions));
             List<PipelineStepModel> contextualModels = contextRoleEnricher.enrich(ctx, stepModels);
             if (contextualModels != null && !contextualModels.isEmpty()) {
                 stepModels = contextualModels;
@@ -96,6 +95,13 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 ctx.getProcessingEnv().getMessager().printMessage(
                     javax.tools.Diagnostic.Kind.NOTE,
                     NO_YAML_DEFINITIONS_MESSAGE);
+            }
+            // Preserve backward compatibility for legacy template pipelines that do not declare
+            // explicit service/operator step definitions.
+            stepModels = new ArrayList<>(extractStepModelsFromAnnotations(ctx));
+            List<PipelineStepModel> contextualModels = contextRoleEnricher.enrich(ctx, stepModels);
+            if (contextualModels != null && !contextualModels.isEmpty()) {
+                stepModels = contextualModels;
             }
         }
         ctx.setStepModels(deduplicateByServiceName(stepModels));
@@ -125,6 +131,31 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             }
         }
 
+        return stepModels;
+    }
+
+    /**
+     * Fallback extraction path for annotation-driven internal steps.
+     *
+     * @param ctx the compilation context containing the current round environment
+     * @return list of extracted step models from @PipelineStep-annotated classes
+     */
+    private List<PipelineStepModel> extractStepModelsFromAnnotations(PipelineCompilationContext ctx) {
+        if (ctx.getRoundEnv() == null || ctx.getProcessingEnv() == null) {
+            return List.of();
+        }
+
+        List<PipelineStepModel> stepModels = new ArrayList<>();
+        PipelineStepIRExtractor irExtractor = new PipelineStepIRExtractor(ctx.getProcessingEnv());
+        Set<? extends Element> annotatedElements = ctx.getRoundEnv().getElementsAnnotatedWith(PipelineStep.class);
+        for (Element element : annotatedElements) {
+            if (element instanceof TypeElement serviceClass) {
+                var result = irExtractor.extract(serviceClass);
+                if (result != null) {
+                    stepModels.add(result.model());
+                }
+            }
+        }
         return stepModels;
     }
 
