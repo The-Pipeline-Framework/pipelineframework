@@ -189,6 +189,14 @@ public class StepDefinitionParser {
                 report(Diagnostic.Kind.WARNING, message);
                 externalMapper = null;
             }
+            if (!isBlank(inputTypeName) || !isBlank(outputTypeName)) {
+                String message = "Ignoring 'input'/'output' on internal step '" + name
+                    + "'; internal types are derived from the @PipelineStep service signature";
+                LOG.warn(message);
+                report(Diagnostic.Kind.WARNING, message);
+                inputType = null;
+                outputType = null;
+            }
         }
 
         if (kind == StepKind.DELEGATED) {

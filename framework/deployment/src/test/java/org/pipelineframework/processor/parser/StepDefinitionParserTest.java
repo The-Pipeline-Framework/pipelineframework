@@ -67,6 +67,34 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void warnsAndIgnoresInputOutputForInternalStep() throws IOException {
+        Path file = tempDir.resolve("pipeline.yaml");
+        Files.writeString(file, """
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "internal-with-types"
+                service: "com.example.app.InternalService"
+                input: "com.example.app.InputType"
+                output: "com.example.app.OutputType"
+            """);
+
+        List<String> diagnostics = new ArrayList<>();
+        StepDefinitionParser parser = new StepDefinitionParser((kind, message) ->
+            diagnostics.add(kind + ":" + message));
+        List<StepDefinition> steps = parser.parseStepDefinitions(file);
+
+        assertEquals(1, steps.size());
+        StepDefinition step = steps.getFirst();
+        assertEquals(StepKind.INTERNAL, step.kind());
+        assertNull(step.inputType());
+        assertNull(step.outputType());
+        String warningSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(warningSummary.contains(Diagnostic.Kind.WARNING.name()));
+        assertTrue(warningSummary.contains("Ignoring 'input'/'output' on internal step"));
+    }
+
+    @Test
     void rejectsDelegatedStepWhenOnlyOneTypeIsProvided() throws IOException {
         List<StepDefinition> steps = parse("""
             appName: "Test"
