@@ -8,6 +8,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doReturn;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -34,8 +36,11 @@ class PipelineCompilerTest {
         PipelineCompilationPhase phase = mock(PipelineCompilationPhase.class);
         PipelineCompiler compiler = new PipelineCompiler(List.of(phase));
 
+        Path pipelineConfig = Files.createTempFile("pipeline-compiler-test", ".yaml");
+        Files.writeString(pipelineConfig, "appName: test\nbasePackage: com.example\nsteps: []\n");
+
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.config", "/tmp/pipeline.yaml"));
+        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.config", pipelineConfig.toString()));
         when(processingEnv.getMessager()).thenReturn(mock(Messager.class));
         compiler.init(processingEnv);
 
