@@ -19,32 +19,48 @@ package org.pipelineframework.mapper;
 import javax.annotation.Nonnull;
 
 /**
- * Interface for mapping between application domain types and external library entity types.
- * This mapper is used when a pipeline step delegates to an external library service
- * and needs to transform between the application's domain types and the library's entity types.
+ * Interface for mapping between application domain types and operator entity types.
+ * This mapper is used when a pipeline step delegates to an operator service
+ * and needs to transform between the application's domain types and the operator's entity types.
  *
  * @param <TApplicationInput> The application's input domain type
- * @param <TLibraryInput> The library's input entity type
+ * @param <TOperatorInput> The operator's input entity type
  * @param <TApplicationOutput> The application's output domain type
- * @param <TLibraryOutput> The library's output entity type
+ * @param <TOperatorOutput> The operator's output entity type
  */
-public interface ExternalMapper<TApplicationInput, TLibraryInput, TApplicationOutput, TLibraryOutput> {
+public interface ExternalMapper<TApplicationInput, TOperatorInput, TApplicationOutput, TOperatorOutput> {
 
     /**
-     * Maps from the application's input domain type to the library's input entity type.
+     * Maps from the application's input domain type to the operator's input entity type.
+     * Preferred alias for {@link #toLibraryInput(Object)}.
      *
      * @param applicationInput The input in the application's domain type (must not be null)
-     * @return The mapped input in the library's entity type (must not be null)
+     * @return The mapped input in the operator's entity type (must not be null)
      * @throws IllegalArgumentException if applicationInput is null
      */
-    @Nonnull TLibraryInput toLibraryInput(@Nonnull TApplicationInput applicationInput);
+    @Nonnull
+    default TOperatorInput toOperatorInput(@Nonnull TApplicationInput applicationInput) {
+        return toLibraryInput(applicationInput);
+    }
 
     /**
-     * Maps from the library's output entity type to the application's output domain type.
+     * Legacy method name kept for backward compatibility.
      *
-     * @param libraryOutput The output in the library's entity type (must not be null)
-     * @return The mapped output in the application's domain type (must not be null)
-     * @throws IllegalArgumentException if libraryOutput is null
+     * @param applicationInput The input in the application's domain type (must not be null)
+     * @return The mapped input in the operator's entity type (must not be null)
+     * @throws IllegalArgumentException if applicationInput is null
+     * @deprecated Use {@link #toOperatorInput(Object)}.
      */
-    @Nonnull TApplicationOutput toApplicationOutput(@Nonnull TLibraryOutput libraryOutput);
+    @Deprecated
+    @Nonnull
+    TOperatorInput toLibraryInput(@Nonnull TApplicationInput applicationInput);
+
+    /**
+     * Maps from the operator's output entity type to the application's output domain type.
+     *
+     * @param operatorOutput The output in the operator's entity type (must not be null)
+     * @return The mapped output in the application's domain type (must not be null)
+     * @throws IllegalArgumentException if operatorOutput is null
+     */
+    @Nonnull TApplicationOutput toApplicationOutput(@Nonnull TOperatorOutput operatorOutput);
 }

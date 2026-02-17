@@ -38,7 +38,7 @@ import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
 
 /**
  * Renderer for external adapter implementations based on PipelineStepModel.
- * The external adapter handles delegation to external library services and manages external mapping.
+ * The external adapter handles delegation to operator services and manages external mapping.
  *
  * @param target The generation target for this renderer
  */
@@ -191,10 +191,10 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
 
         // Build the method body based on whether external mapping is needed
         if (hasExternalMapper) {
-            // If we have an external mapper, we need to map between application and library types
+            // If we have an external mapper, we need to map between application and operator types
             if (reactiveServiceInterface.equals(REACTIVE_SERVICE)) {
                 // For unary operations: Uni<I> -> Uni<O>
-                methodBuilder.addStatement("return delegateService.process(externalMapper.toLibraryInput(input)).map(libOutput -> externalMapper.toApplicationOutput(libOutput))");
+                methodBuilder.addStatement("return delegateService.process(externalMapper.toOperatorInput(input)).map(libOutput -> externalMapper.toApplicationOutput(libOutput))");
             } else if (reactiveServiceInterface.equals(REACTIVE_CLIENT_STREAMING_SERVICE)) {
                 // For client-streaming operations: Multi<I> -> Uni<O>
                 addClientStreamingMapperLogic(methodBuilder);
@@ -219,15 +219,15 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
      */
     private void addStreamingMapperLogic(MethodSpec.Builder methodBuilder) {
         methodBuilder
-            .addStatement("var libraryInputs = input.map(appInput -> externalMapper.toLibraryInput(appInput))")
-            .addStatement("var libraryOutputs = delegateService.process(libraryInputs)")
-            .addStatement("return libraryOutputs.map(libOutput -> externalMapper.toApplicationOutput(libOutput))");
+            .addStatement("var operatorInputs = input.map(appInput -> externalMapper.toOperatorInput(appInput))")
+            .addStatement("var operatorOutputs = delegateService.process(operatorInputs)")
+            .addStatement("return operatorOutputs.map(libOutput -> externalMapper.toApplicationOutput(libOutput))");
     }
 
     private void addClientStreamingMapperLogic(MethodSpec.Builder methodBuilder) {
         methodBuilder
-            .addStatement("var libraryInputs = input.map(appInput -> externalMapper.toLibraryInput(appInput))")
-            .addStatement("return delegateService.process(libraryInputs).map(libOutput -> externalMapper.toApplicationOutput(libOutput))");
+            .addStatement("var operatorInputs = input.map(appInput -> externalMapper.toOperatorInput(appInput))")
+            .addStatement("return delegateService.process(operatorInputs).map(libOutput -> externalMapper.toApplicationOutput(libOutput))");
     }
 
     /**

@@ -11,7 +11,7 @@ The Pipeline Framework (TPF) uses YAML-driven pipeline configuration, where step
 In the new architecture:
 - YAML configuration drives step generation
 - @PipelineStep annotations only mark internal execution services
-- External delegated services require **zero user-written Java glue classes when using library types directly (Option 1)**
+- External delegated services ("operator") require **zero user-written Java glue classes when using operator types directly (Option 1)**
 - When using domain types (Option 2), you need to provide an `ExternalMapper` implementation
 
 ### Two Kinds of Steps
@@ -19,7 +19,7 @@ In the new architecture:
 There are two kinds of steps that can be defined in YAML:
 
 1. **Internal Steps**: Refer to services within the application annotated with @PipelineStep
-2. **Delegated Steps**: Refer to external library services that are not annotated with @PipelineStep
+2. **Delegated Steps**: Refer to operators that are NOT annotated with @PipelineStep
 
 ### Type Layers for Delegated Steps
 
@@ -30,9 +30,9 @@ Application Domain Types
         ↓
 External Mapper (App-provided)
         ↓
-Library Entity/DTO Types
+Operator Entity/DTO Types
         ↓
-Library Transport Mapper (DTO ↔ Proto)
+Operator Transport Mapper (DTO ↔ Proto)
         ↓
 Transport Layer (grpc/http/etc.)
 ```
@@ -51,7 +51,7 @@ steps:
 
 ### Delegated Steps
 
-To define a delegated step that references an external library service:
+To define a delegated step that references an external operator service:
 
 ```yaml
 steps:
@@ -76,14 +76,14 @@ steps:
   - name: process-payment
     service: com.app.payment.ProcessPaymentService
     
-  # Delegated step referencing an external library service
+  # Delegated step referencing an external operator service
   - name: embed-text
     delegate: com.example.ai.sdk.service.EmbeddingService
     input: com.app.domain.TextChunk
     output: com.app.domain.Embedding
     externalMapper: com.app.mapper.TextEmbeddingMapper
     
-  # Delegated step without external mapper (uses library types directly)
+  # Delegated step without external mapper (uses operator types directly)
   - name: send-email
     delegate: com.example.email.service.EmailService
     input: com.example.email.dto.EmailRequest
@@ -111,11 +111,11 @@ public class ProcessPaymentService implements ReactiveService<PaymentRecord, Pay
 }
 ```
 
-## Using External Library Delegation
+## Using operator Delegation
 
-### Option 1 — Use Library Types Directly
+### Option 1 — Use Operator Types Directly
 
-When you want to use the library's types directly without transformation:
+When you want to use the operator's types directly without transformation:
 
 ```yaml
 steps:
@@ -126,12 +126,12 @@ steps:
 ```
 
 Requirements:
-- Library must provide inbound/outbound transport mappers
+- Operator must provide inbound/outbound transport mappers
 - Cardinality derived from ReactiveService subtype
 
 ### Option 2 — Use Domain Types
 
-When you want to abstract away library types using an external mapper:
+When you want to abstract away operator types using an external mapper:
 
 ```yaml
 steps:
@@ -147,69 +147,69 @@ Where the external mapper is defined as:
 ```java
 public class TextEmbeddingMapper implements ExternalMapper<
     TextChunk,           // Application input type
-    EmbeddingRequest,    // Library input type
+    EmbeddingRequest,    // Operator input type
     Embedding,           // Application output type
-    EmbeddingResult      // Library output type
+    EmbeddingResult      // Operator output type
 > {
     @Override
-    public EmbeddingRequest toLibraryInput(TextChunk applicationInput) {
-        // Convert from application domain type to library entity type
+    public EmbeddingRequest toOperatorInput(TextChunk applicationInput) {
+        // Convert from application domain type to operator entity type
         return new EmbeddingRequest(applicationInput.text);
     }
 
     @Override
-    public Embedding toApplicationOutput(EmbeddingResult libraryOutput) {
-        // Convert from library entity type to application domain type
+    public Embedding toApplicationOutput(EmbeddingResult operatorOutput) {
+        // Convert from operator entity type to application domain type
         Embedding result = new Embedding();
-        result.vector = libraryOutput.getEmbeddingVector();
+        result.vector = operatorOutput.getEmbeddingVector();
         return result;
     }
 }
 ```
 
-## Creating Library Services
+## Creating Operator Services
 
 ### 1. Execution Service
 
 A plain service implementing one of the reactive service interfaces:
 
 ```java
-public class EmbeddingService implements ReactiveService<LibraryTextInput, LibraryEmbeddingOutput> {
+public class EmbeddingService implements ReactiveService<OperatorTextInput, OperatorEmbeddingOutput> {
     @Override
-    public Uni<LibraryEmbeddingOutput> process(LibraryTextInput input) {
+    public Uni<OperatorEmbeddingOutput> process(OperatorTextInput input) {
         // Implementation here
         return Uni.createFrom().item(calculateEmbedding(input));
     }
     
-    private LibraryEmbeddingOutput calculateEmbedding(LibraryTextInput input) {
+    private OperatorEmbeddingOutput calculateEmbedding(OperatorTextInput input) {
         // Actual embedding calculation
-        return new LibraryEmbeddingOutput(new float[]{0.1f, 0.2f, 0.3f});
+        return new OperatorEmbeddingOutput(new float[]{0.1f, 0.2f, 0.3f});
     }
 }
 ```
 
-**Important**: Library services must NOT be annotated with @PipelineStep.
+**Important**: Operator services must NOT be annotated with @PipelineStep.
 
 ### 2. Entity / DTO / Proto Model
 
-Library must define:
+Operator must define:
 - Entity (business-level contract)
 - DTO
 - Proto (or transport model)
 
 ### 3. Transport Mappers
 
-Library must ship:
+Operator must ship:
 - InboundMapper (Proto → DTO → Entity)
 - OutboundMapper (Entity → DTO → Proto)
 
 Exactly like current TPF-generated mappers.
 
-These mappers are owned by the library.
+These mappers are owned by the operator.
 
-### 4. Library Self-Containment
+### 4. Operator Self-Containment
 
-The library must be fully transport-ready. It must not depend on:
+The operator must be fully transport-ready. It must not depend on:
 - Application types
 - Application mappers
 - TPF annotation processing
@@ -268,7 +268,7 @@ org.pipelineframework.mapper.ExternalMapper
 
 When implementing an ExternalMapper:
 - All four type parameters must be specified
-- The `toLibraryInput` method must not return null
+- The `toOperatorInput` method must not return null
 - The `toApplicationOutput` method must not return null
 - The mapper class should be public and have a public no-arg constructor
 
@@ -318,7 +318,7 @@ steps:
     output: com.app.domain.FraudCheckResult
     externalMapper: com.app.mapper.PaymentFraudMapper
     
-  # Delegated step to external notification service (using library types directly)
+  # Delegated step to external notification service (using operator types directly)
   - name: send-notification
     delegate: com.notification.service.NotificationService
     input: com.notification.dto.NotificationRequest
@@ -342,4 +342,4 @@ public class ValidatePaymentService implements ReactiveService<PaymentRequest, P
 
 ## Summary
 
-The YAML-driven architecture provides a more flexible and controlled approach to defining pipeline steps. It separates the concern of step definition from implementation, allows for easy integration of external library services, and maintains all the benefits of the previous annotation-driven approach while adding new capabilities for delegation.
+The YAML-driven architecture provides a more flexible and controlled approach to defining pipeline steps. It separates the concern of step definition from implementation, allows for easy integration of operator services, and maintains all the benefits of the previous annotation-driven approach while adding new capabilities for delegation.

@@ -130,7 +130,7 @@
               },
               "delegate": {
                 "type": "string",
-                "description": "Fully qualified class name of the delegate service from an external library",
+                "description": "Fully qualified class name of the delegate service from an operator",
                 "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
               },
               "input": {
@@ -145,7 +145,7 @@
               },
               "externalMapper": {
                 "type": "string",
-                "description": "Fully qualified class name of the external mapper for converting between domain and library types",
+                "description": "Fully qualified class name of the external mapper for converting between domain and operator types",
                 "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
               }
             },

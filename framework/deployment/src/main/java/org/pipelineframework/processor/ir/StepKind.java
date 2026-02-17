@@ -27,7 +27,7 @@ public enum StepKind {
     INTERNAL,
     
     /**
-     * A delegated step where the execution is provided by an external library service
+     * A delegated step where the execution is provided by an operator service
      * that is not annotated with @PipelineStep.
      */
     DELEGATED

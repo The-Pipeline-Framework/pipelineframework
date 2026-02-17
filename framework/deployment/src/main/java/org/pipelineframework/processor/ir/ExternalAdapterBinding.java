@@ -19,13 +19,13 @@ package org.pipelineframework.processor.ir;
 /**
  * Binding that connects a pipeline step model to external adapter generation requirements.
  * This binding holds the information needed to generate an external adapter that delegates
- * to an external library service.
+ * to an operator service.
  *
  * @param model The pipeline step model containing semantic information from the @PipelineStep annotation
  * @param serviceName The name of the service
  * @param servicePackage The package of the service
  * @param delegateService The delegate service class that provides the actual implementation
- * @param externalMapper The external mapper class for mapping between application and library types
+ * @param externalMapper The external mapper class for mapping between application and operator types
  */
 public record ExternalAdapterBinding(
         PipelineStepModel model,

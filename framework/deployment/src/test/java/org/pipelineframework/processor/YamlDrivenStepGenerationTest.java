@@ -152,10 +152,10 @@ class YamlDrivenStepGenerationTest {
         Path externalMapperContract = writeSource("ExternalMapper.java", """
             package org.pipelineframework.mapper;
 
-            public interface ExternalMapper<TApplicationInput, TLibraryInput, TApplicationOutput, TLibraryOutput> {
-                TLibraryInput toLibraryInput(TApplicationInput input);
+            public interface ExternalMapper<TApplicationInput, TOperatorInput, TApplicationOutput, TOperatorOutput> {
+                TOperatorInput toOperatorInput(TApplicationInput input);
 
-                TApplicationOutput toApplicationOutput(TLibraryOutput output);
+                TApplicationOutput toApplicationOutput(TOperatorOutput output);
             }
             """);
         Path reactiveServiceContract = writeSource("ReactiveService.java", """
@@ -339,7 +339,7 @@ class YamlDrivenStepGenerationTest {
 
             public class EmbeddingMapper3 implements ExternalMapper<TextChunk3, LibraryChunk3, Vector3, LibraryVector3> {
                 @Override
-                public LibraryChunk3 toLibraryInput(TextChunk3 input) {
+                public LibraryChunk3 toOperatorInput(TextChunk3 input) {
                     return new LibraryChunk3();
                 }
 
@@ -352,10 +352,10 @@ class YamlDrivenStepGenerationTest {
         Path externalMapperContract = writeSource("ExternalMapper.java", """
             package org.pipelineframework.mapper;
 
-            public interface ExternalMapper<TApplicationInput, TLibraryInput, TApplicationOutput, TLibraryOutput> {
-                TLibraryInput toLibraryInput(TApplicationInput input);
+            public interface ExternalMapper<TApplicationInput, TOperatorInput, TApplicationOutput, TOperatorOutput> {
+                TOperatorInput toOperatorInput(TApplicationInput input);
 
-                TApplicationOutput toApplicationOutput(TLibraryOutput output);
+                TApplicationOutput toApplicationOutput(TOperatorOutput output);
             }
             """);
         Path markerSource = writeSource("Marker4.java", """

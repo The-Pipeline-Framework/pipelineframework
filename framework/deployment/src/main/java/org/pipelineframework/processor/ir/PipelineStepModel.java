@@ -388,7 +388,7 @@ public record PipelineStepModel(
         }
 
         /**
-         * Sets the external mapper class for mapping between domain and library types.
+         * Sets the external mapper class for mapping between domain and operator types.
          *
          * @param externalMapper the external mapper class, or null if no external mapping is needed
          * @return this builder instance

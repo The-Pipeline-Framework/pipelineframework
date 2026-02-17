@@ -17,7 +17,7 @@ The `@PipelineStep` annotation marks an internal execution service and provides 
 - `ordering`: Ordering requirement for the generated client step
 - `threadSafety`: Thread safety declaration for the generated client step
 - `delegate`: Specifies the delegate service class used for delegated execution when `delegate() != Void.class`. The delegate service must implement one of the supported reactive service interfaces (`ReactiveService`, `ReactiveStreamingService`, `ReactiveStreamingClientService`/`ReactiveClientStreamingService`, `ReactiveBidirectionalStreamingService`).
-- `externalMapper`: Specifies the external mapper class that maps between application and delegate/library types. `externalMapper()` is only considered when `delegate() != Void.class`; it is ignored when `delegate() == Void.class`. When delegated input/output types differ, `externalMapper()` is required; when types match, it is optional.
+- `externalMapper`: Specifies the external mapper class that maps between application and delegate/operator types. `externalMapper()` is only considered when `delegate() != Void.class`; it is ignored when `delegate() == Void.class`. When delegated input/output types differ, `externalMapper()` is required; when types match, it is optional.
 
 `backendType` is a legacy annotation field and is ignored by the current processor.
 
@@ -41,14 +41,14 @@ public class ProcessPaymentService implements ReactiveService<PaymentRecord, Pay
     }
 }
 
-// Example with delegation to an external library service
+// Example with delegation to an operator service
 // Use delegation when integrating with external libraries or services that already provide the required functionality
 @PipelineStep(
    inputType = PaymentRecord.class,
    outputType = PaymentStatus.class,
    stepType = StepOneToOne.class,
-   delegate = ExternalPaymentService.class,  // Delegates to external library service (must implement a supported Reactive*Service interface)
-   externalMapper = PaymentExternalMapper.class  // Maps between domain and library types
+   delegate = ExternalPaymentService.class,  // Delegates to operator service (must implement a supported Reactive*Service interface)
+   externalMapper = PaymentExternalMapper.class  // Maps between domain and operator types
 )
 @ApplicationScoped
 public class DelegatedPaymentService {
@@ -61,7 +61,7 @@ public class DelegatedPaymentService {
    inputType = PaymentRecord.class,
    outputType = PaymentStatus.class,
    stepType = StepOneToOne.class,
-   delegate = ExternalPaymentService.class  // Delegates to external library service with matching types
+   delegate = ExternalPaymentService.class  // Delegates to operator service with matching types
    // No externalMapper needed when input/output types match the delegate's types
 )
 @ApplicationScoped

@@ -33,10 +33,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Basic tests for the external library step delegation functionality.
+ * Basic tests for the operator step delegation functionality.
  * These tests verify that the annotation processor handles delegation annotations correctly.
  */
-class ExternalLibraryDelegationTest {
+class OperatorDelegationTest {
 
     @TempDir
     Path tempDir;

@@ -124,7 +124,7 @@ public @interface PipelineStep {
      * Specifies the external mapper class that maps between the step's domain types and the delegate service's entity types.
      * This is used when the step's input/output types differ from the delegate service's entity types, and it is ignored when
      * {@code delegate() == Void.class}. For delegated steps ({@code delegate() != Void.class}), this mapper is required whenever
-     * application step types differ from delegate library types; otherwise it may remain {@code Void.class}.
+     * application step types differ from delegate operator types; otherwise it may remain {@code Void.class}.
      *
      * @return the external mapper class, or Void.class if no external mapping is needed
      */

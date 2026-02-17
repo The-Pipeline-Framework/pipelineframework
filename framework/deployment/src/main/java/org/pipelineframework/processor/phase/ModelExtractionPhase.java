@@ -267,8 +267,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             org.pipelineframework.processor.ir.StepDefinition stepDef,
             TypeName applicationInputType,
             TypeName applicationOutputType,
-            TypeName libraryInputType,
-            TypeName libraryOutputType) {
+            TypeName operatorInputType,
+            TypeName operatorOutputType) {
         if (stepDef.externalMapper() != null) {
             TypeElement mapperElement = ctx.getProcessingEnv().getElementUtils()
                 .getTypeElement(stepDef.externalMapper().canonicalName());
@@ -284,15 +284,15 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 stepDef.name(),
                 mapperElement,
                 applicationInputType,
-                libraryInputType,
+                operatorInputType,
                 applicationOutputType,
-                libraryOutputType)) {
+                operatorOutputType)) {
                 return null;
             }
             return ClassName.get(mapperElement);
         }
 
-        if (applicationInputType.equals(libraryInputType) && applicationOutputType.equals(libraryOutputType)) {
+        if (applicationInputType.equals(operatorInputType) && applicationOutputType.equals(operatorOutputType)) {
             return null;
         }
 
@@ -300,18 +300,18 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ctx,
             stepDef.name(),
             applicationInputType,
-            libraryInputType,
+            operatorInputType,
             applicationOutputType,
-            libraryOutputType);
+            operatorOutputType);
     }
 
     private ClassName inferExternalMapper(
             PipelineCompilationContext ctx,
             String stepName,
             TypeName applicationInputType,
-            TypeName libraryInputType,
+            TypeName operatorInputType,
             TypeName applicationOutputType,
-            TypeName libraryOutputType) {
+            TypeName operatorOutputType) {
         if (ctx.getRoundEnv() == null) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
@@ -332,9 +332,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 stepName,
                 candidateElement,
                 applicationInputType,
-                libraryInputType,
+                operatorInputType,
                 applicationOutputType,
-                libraryOutputType,
+                operatorOutputType,
                 false)) {
                 matchingCandidates.add(ClassName.get(candidateElement));
             }
@@ -344,8 +344,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Step '" + stepName + "' requires an external mapper for types ["
-                    + applicationInputType + " -> " + libraryInputType + ", "
-                    + libraryOutputType + " -> " + applicationOutputType
+                    + applicationInputType + " -> " + operatorInputType + ", "
+                    + operatorOutputType + " -> " + applicationOutputType
                     + "], but no matching ExternalMapper implementation was found.");
             return null;
         }
@@ -369,17 +369,17 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             String stepName,
             TypeElement mapperElement,
             TypeName applicationInputType,
-            TypeName libraryInputType,
+            TypeName operatorInputType,
             TypeName applicationOutputType,
-            TypeName libraryOutputType) {
+            TypeName operatorOutputType) {
         return isCompatibleExternalMapper(
             ctx,
             stepName,
             mapperElement,
             applicationInputType,
-            libraryInputType,
+            operatorInputType,
             applicationOutputType,
-            libraryOutputType,
+            operatorOutputType,
             true);
     }
 
@@ -388,9 +388,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             String stepName,
             TypeElement mapperElement,
             TypeName applicationInputType,
-            TypeName libraryInputType,
+            TypeName operatorInputType,
             TypeName applicationOutputType,
-            TypeName libraryOutputType,
+            TypeName operatorOutputType,
             boolean reportErrors) {
         Types typeUtils = ctx.getProcessingEnv().getTypeUtils();
         DeclaredType externalMapperType = findReactiveSupertype(
@@ -410,22 +410,22 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         TypeName candidateApplicationInput = TypeName.get(externalMapperType.getTypeArguments().get(0));
-        TypeName candidateLibraryInput = TypeName.get(externalMapperType.getTypeArguments().get(1));
+        TypeName candidateOperatorInput = TypeName.get(externalMapperType.getTypeArguments().get(1));
         TypeName candidateApplicationOutput = TypeName.get(externalMapperType.getTypeArguments().get(2));
-        TypeName candidateLibraryOutput = TypeName.get(externalMapperType.getTypeArguments().get(3));
+        TypeName candidateOperatorOutput = TypeName.get(externalMapperType.getTypeArguments().get(3));
 
         boolean matches = candidateApplicationInput.equals(applicationInputType)
-            && candidateLibraryInput.equals(libraryInputType)
+            && candidateOperatorInput.equals(operatorInputType)
             && candidateApplicationOutput.equals(applicationOutputType)
-            && candidateLibraryOutput.equals(libraryOutputType);
+            && candidateOperatorOutput.equals(operatorOutputType);
 
         if (!matches && reportErrors) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
                 "External mapper '" + mapperElement.getQualifiedName() + "' has incompatible type parameters for step '"
                     + stepName + "'. Expected ExternalMapper<"
-                    + applicationInputType + ", " + libraryInputType + ", "
-                    + applicationOutputType + ", " + libraryOutputType + ">.");
+                    + applicationInputType + ", " + operatorInputType + ", "
+                    + applicationOutputType + ", " + operatorOutputType + ">.");
         }
 
         return matches;
