@@ -26,6 +26,12 @@ import org.pipelineframework.processor.ir.StreamingShape;
  * and emits errors or warnings via Messager if needed.
  */
 public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
+    private static final List<String> REACTIVE_SERVICE_INTERFACE_NAMES = List.of(
+        "org.pipelineframework.service.ReactiveService",
+        "org.pipelineframework.service.ReactiveStreamingService",
+        "org.pipelineframework.service.ReactiveStreamingClientService",
+        "org.pipelineframework.service.ReactiveClientStreamingService",
+        "org.pipelineframework.service.ReactiveBidirectionalStreamingService");
 
     /**
      * Creates a new PipelineSemanticAnalysisPhase.
@@ -430,46 +436,11 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                     continue;
                 }
 
-                // Validate that the delegate service implements a valid reactive service interface
                 var typeUtils = ctx.getProcessingEnv().getTypeUtils();
-                boolean isValidReactiveService = false;
-
-                // Check for ReactiveService interface
-                var reactiveServiceElement = elementUtils.getTypeElement("org.pipelineframework.service.ReactiveService");
-                if (reactiveServiceElement != null && typeUtils.isAssignable(delegateElement.asType(), reactiveServiceElement.asType())) {
-                    isValidReactiveService = true;
-                }
-
-                // Check for ReactiveStreamingService interface
-                if (!isValidReactiveService) {
-                    var reactiveStreamingServiceElement = elementUtils.getTypeElement("org.pipelineframework.service.ReactiveStreamingService");
-                    if (reactiveStreamingServiceElement != null && typeUtils.isAssignable(delegateElement.asType(), reactiveStreamingServiceElement.asType())) {
-                        isValidReactiveService = true;
-                    }
-                }
-
-                // Check for ReactiveClientStreamingService interface
-                if (!isValidReactiveService) {
-                    var reactiveStreamingClientServiceElement = elementUtils.getTypeElement("org.pipelineframework.service.ReactiveStreamingClientService");
-                    if (reactiveStreamingClientServiceElement != null && typeUtils.isAssignable(delegateElement.asType(), reactiveStreamingClientServiceElement.asType())) {
-                        isValidReactiveService = true;
-                    }
-                }
-
-                if (!isValidReactiveService) {
-                    var reactiveClientStreamingServiceElement = elementUtils.getTypeElement("org.pipelineframework.service.ReactiveClientStreamingService");
-                    if (reactiveClientStreamingServiceElement != null && typeUtils.isAssignable(delegateElement.asType(), reactiveClientStreamingServiceElement.asType())) {
-                        isValidReactiveService = true;
-                    }
-                }
-
-                // Check for ReactiveBidirectionalStreamingService interface
-                if (!isValidReactiveService) {
-                    var reactiveBidirectionalStreamingServiceElement = elementUtils.getTypeElement("org.pipelineframework.service.ReactiveBidirectionalStreamingService");
-                    if (reactiveBidirectionalStreamingServiceElement != null && typeUtils.isAssignable(delegateElement.asType(), reactiveBidirectionalStreamingServiceElement.asType())) {
-                        isValidReactiveService = true;
-                    }
-                }
+                boolean isValidReactiveService = implementsAnyReactiveService(
+                    delegateElement,
+                    elementUtils,
+                    typeUtils);
 
                 if (!isValidReactiveService) {
                     messager.printMessage(
@@ -531,14 +502,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
     }
 
     private DelegateTypeSignature resolveDelegateTypeSignature(TypeElement delegateElement, Types typeUtils) {
-        List<String> reactiveInterfaces = List.of(
-            "org.pipelineframework.service.ReactiveService",
-            "org.pipelineframework.service.ReactiveStreamingService",
-            "org.pipelineframework.service.ReactiveStreamingClientService",
-            "org.pipelineframework.service.ReactiveClientStreamingService",
-            "org.pipelineframework.service.ReactiveBidirectionalStreamingService");
-
-        for (String reactiveInterface : reactiveInterfaces) {
+        for (String reactiveInterface : REACTIVE_SERVICE_INTERFACE_NAMES) {
             DeclaredType declared = findReactiveSupertype(typeUtils, delegateElement.asType(), reactiveInterface);
             if (declared == null || declared.getTypeArguments().size() < 2) {
                 continue;
@@ -548,6 +512,19 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                 declared.getTypeArguments().get(1));
         }
         return null;
+    }
+
+    private boolean implementsAnyReactiveService(
+            TypeElement delegateElement,
+            javax.lang.model.util.Elements elementUtils,
+            Types typeUtils) {
+        for (String interfaceName : REACTIVE_SERVICE_INTERFACE_NAMES) {
+            TypeElement interfaceElement = elementUtils.getTypeElement(interfaceName);
+            if (interfaceElement != null && typeUtils.isAssignable(delegateElement.asType(), interfaceElement.asType())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private DeclaredType findReactiveSupertype(Types types, TypeMirror type, String targetQualifiedName) {
