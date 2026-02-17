@@ -5,6 +5,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import com.google.protobuf.DescriptorProtos;
 import org.pipelineframework.annotation.PipelineOrchestrator;
@@ -80,6 +81,7 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
 
             // Delegated steps also need external adapters in addition to regular client bindings.
             if (model.delegateService() != null) {
+                warnIfDelegatedStepHasServerTargets(ctx, model);
                 ExternalAdapterBinding externalAdapterBinding = new ExternalAdapterBinding(
                     model,
                     model.serviceName(),
@@ -161,5 +163,24 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
             ctx.getProcessingEnv().getOptions(),
             expectedServices,
             ctx.getProcessingEnv().getMessager());
+    }
+
+    private void warnIfDelegatedStepHasServerTargets(PipelineCompilationContext ctx, PipelineStepModel model) {
+        if (ctx.getProcessingEnv() == null || ctx.getProcessingEnv().getMessager() == null) {
+            return;
+        }
+        Set<GenerationTarget> ignoredTargets = model.enabledTargets().stream()
+            .filter(target -> target == GenerationTarget.GRPC_SERVICE || target == GenerationTarget.REST_RESOURCE)
+            .collect(Collectors.toSet());
+        if (ignoredTargets.isEmpty()) {
+            return;
+        }
+
+        String ignoredTargetsMessage = ignoredTargets.stream().map(Enum::name).sorted().collect(Collectors.joining(", "));
+        ctx.getProcessingEnv().getMessager().printMessage(
+            javax.tools.Diagnostic.Kind.WARNING,
+            "Delegated step '" + model.serviceName() + "' ignores server targets ["
+                + ignoredTargetsMessage
+                + "]. Delegated steps generate external adapters plus client bindings.");
     }
 }

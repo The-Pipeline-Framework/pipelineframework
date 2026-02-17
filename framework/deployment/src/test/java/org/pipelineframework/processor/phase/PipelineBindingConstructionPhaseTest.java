@@ -36,7 +36,10 @@ import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.*;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** Unit tests for PipelineBindingConstructionPhase */
@@ -156,5 +159,27 @@ class PipelineBindingConstructionPhaseTest {
         assertTrue(bindings.containsKey("DelegatedLocalService_external_adapter"));
         assertTrue(bindings.containsKey("DelegatedLocalService_local"));
         assertFalse(bindings.containsKey("DelegatedLocalService_grpc"));
+    }
+
+    @Test
+    void delegatedStepWithServerTargetsEmitsWarning() throws Exception {
+        PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
+        PipelineStepModel delegatedModel = TestModelFactory
+            .createTestModelWithTargets("DelegatedServerTargetService", Set.of(
+                GenerationTarget.GRPC_SERVICE,
+                GenerationTarget.REST_RESOURCE,
+                GenerationTarget.LOCAL_CLIENT_STEP))
+            .toBuilder()
+            .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
+            .build();
+        context.setStepModels(List.of(delegatedModel));
+
+        phase.execute(context);
+
+        verify(messager).printMessage(
+            eq(javax.tools.Diagnostic.Kind.WARNING),
+            contains("Delegated step 'DelegatedServerTargetService' ignores server targets"));
     }
 }
