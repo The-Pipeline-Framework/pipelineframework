@@ -410,7 +410,7 @@ class SearchPipelineEndToEndIT {
     }
 
     @Test
-    void tokenizeAndIndexPersistSingleRowPerDocId() throws Exception {
+    void tokenizeAndIndexPersistFanoutBatchesPerDocId() throws Exception {
         String input = "https://example.com/fanout-" + UUID.randomUUID();
         String version = "fanout-fanin-" + UUID.randomUUID();
         ProcessResult result = orchestratorTriggerRun(input, "prefer-cache", version, false);
@@ -426,9 +426,9 @@ class SearchPipelineEndToEndIT {
             "Expected exactly one RawDocument row linked to docId " + docId);
         assertEquals(1, parsedDocumentCount,
             "Expected exactly one ParsedDocument row linked to docId " + docId);
-        assertEquals(1, tokenBatchCount,
-            "Expected exactly one TokenBatch row linked to docId " + docId
-                + " because TokenBatch uses docId as primary key");
+        assertTrue(tokenBatchCount > 1,
+            "Expected fan-out to persist multiple TokenBatch rows linked to docId " + docId
+                + " but found " + tokenBatchCount);
         assertEquals(1, indexAckCount,
             "Expected MANY_TO_ONE fan-in to persist exactly one IndexAck row for docId " + docId
                 + " but found " + indexAckCount);
