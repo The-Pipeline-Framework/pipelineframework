@@ -74,7 +74,7 @@ public class MapperInferenceBuildSteps {
      * Load pipeline step definitions from classpath resources at META-INF/pipeline/step-definitions.txt.
      *
      * <p>Parses each non-empty, non-comment line using the format:
-     * stepName|domainIn|domainOut|cardinality (cardinality is optional). Empty domain fields are treated as absent.</p>
+     * stepName|domainIn|domainOut|cardinality (all four fields required). Empty domain fields are treated as absent.</p>
      *
      * @return a list of StepDefinition records representing the parsed step definitions
      * @throws IOException if an I/O error occurs while reading resources or if a step definition line is malformed
@@ -98,16 +98,16 @@ public class MapperInferenceBuildSteps {
                     }
 
                     String[] parts = line.split("\\|");
-                    if (parts.length < 3) {
+                    if (parts.length < 4) {
                         throw new IOException(String.format(
-                                "Malformed step definition at %s:%d. Expected format: stepName|domainIn|domainOut[|cardinality]. Line: '%s'",
+                                "Malformed step definition at %s:%d. Expected format: stepName|domainIn|domainOut|cardinality. Line: '%s'",
                                 url, lineNumber, line));
                     }
 
                     String stepName = parts[0].trim();
                     String domainIn = parts[1].trim();
                     String domainOut = parts[2].trim();
-                    String cardinality = parts.length > 3 ? parts[3].trim() : "";
+                    String cardinality = parts[3].trim();
 
                     DotName domainInDotName = domainIn.isEmpty() ? null : DotName.createSimple(domainIn);
                     DotName domainOutDotName = domainOut.isEmpty() ? null : DotName.createSimple(domainOut);
