@@ -75,7 +75,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final long ORCHESTRATOR_WAIT_TIMEOUT_SECONDS =
             Long.getLong("csv.e2e.orchestrator.wait.seconds", 300L);
     private static final long PIPELINE_WAIT_TIMEOUT_SECONDS =
-            Long.getLong("csv.e2e.pipeline.wait.seconds", 120L);
+            resolvePipelineWaitTimeoutSeconds();
     private static final long PIPELINE_WAIT_POLL_MILLIS = 1000L;
     private static final String PIPELINE_RUNTIME_IMAGE = resolvePipelineRuntimeImage();
 
@@ -87,6 +87,14 @@ abstract class AbstractCsvPaymentsEndToEnd {
     static GenericContainer<?> paymentStatusService;
     static GenericContainer<?> outputCsvService;
     static GenericContainer<?> pipelineRuntimeService;
+
+    private static long resolvePipelineWaitTimeoutSeconds() {
+        long configured = Long.getLong("csv.e2e.pipeline.wait.seconds", 120L);
+        if (PIPELINE_RUNTIME_LAYOUT) {
+            return Math.max(configured, 240L);
+        }
+        return configured;
+    }
 
     private static String resolvePipelineRuntimeImage() {
         String explicitImage = System.getenv("PIPELINE_RUNTIME_IMAGE");
