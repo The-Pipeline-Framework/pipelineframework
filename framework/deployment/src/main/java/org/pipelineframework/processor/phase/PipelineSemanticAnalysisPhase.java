@@ -475,7 +475,11 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                             model.serviceName() + "'");
                     }
                 } else {
-                    DelegateTypeSignature delegateSignature = resolveDelegateTypeSignature(delegateElement, typeUtils);
+                    DelegateTypeSignature delegateSignature = resolveDelegateTypeSignature(
+                        delegateElement,
+                        typeUtils,
+                        messager,
+                        model.serviceName());
                     if (delegateSignature == null || model.inputMapping() == null || model.outputMapping() == null) {
                         continue;
                     }
@@ -501,17 +505,43 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         }
     }
 
-    private DelegateTypeSignature resolveDelegateTypeSignature(TypeElement delegateElement, Types typeUtils) {
+    private DelegateTypeSignature resolveDelegateTypeSignature(
+            TypeElement delegateElement,
+            Types typeUtils,
+            javax.annotation.processing.Messager messager,
+            String stepName) {
+        List<DeclaredType> matches = new ArrayList<>();
+        List<String> matchedInterfaceNames = new ArrayList<>();
         for (String reactiveInterface : REACTIVE_SERVICE_INTERFACE_NAMES) {
             DeclaredType declared = findReactiveSupertype(typeUtils, delegateElement.asType(), reactiveInterface);
             if (declared == null || declared.getTypeArguments().size() < 2) {
                 continue;
             }
-            return new DelegateTypeSignature(
-                declared.getTypeArguments().get(0),
-                declared.getTypeArguments().get(1));
+            matches.add(declared);
+            matchedInterfaceNames.add(reactiveInterface);
         }
-        return null;
+
+        if (matches.size() > 1) {
+            if (messager != null) {
+                messager.printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "Delegated step '" + stepName + "' uses delegate service '"
+                        + delegateElement.getQualifiedName()
+                        + "' that implements multiple reactive service interfaces: "
+                        + String.join(", ", matchedInterfaceNames)
+                        + ". Use exactly one reactive service interface.");
+            }
+            return null;
+        }
+
+        if (matches.isEmpty()) {
+            return null;
+        }
+
+        DeclaredType match = matches.getFirst();
+        return new DelegateTypeSignature(
+            match.getTypeArguments().get(0),
+            match.getTypeArguments().get(1));
     }
 
     private boolean implementsAnyReactiveService(
