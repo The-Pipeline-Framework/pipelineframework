@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Pipeline Framework (TPF) now supports YAML-driven pipeline configuration, where step generation is driven entirely by YAML configuration rather than by the presence of @PipelineStep annotations. This new architecture provides better control and flexibility for defining pipeline steps.
+The Pipeline Framework (TPF) uses YAML-driven pipeline configuration, where step generation is driven by YAML configuration rather than by the presence of `@PipelineStep` annotations alone.
 
 ## Key Concepts
 
@@ -276,7 +276,7 @@ When implementing an ExternalMapper:
 
 ### From Annotation-Driven to YAML-Driven
 
-**Old approach** (still supported for backward compatibility):
+**Old approach** (legacy, not used by strict YAML-driven generation):
 ```java
 @PipelineStep(
    inputType = PaymentRecord.class,

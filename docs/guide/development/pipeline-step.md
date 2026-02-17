@@ -1,10 +1,10 @@
 # Annotations
 
-The Pipeline Framework uses annotations to simplify configuration and automatic generation of pipeline components.
+The Pipeline Framework uses annotations to describe internal step service metadata used by YAML-driven generation.
 
 ## @PipelineStep
 
-The `@PipelineStep` annotation marks a class as a pipeline step and enables automatic generation of adapters for the configured transport (gRPC or REST). The framework encourages append-only persistence via plugins, but step implementations can perform any storage behavior required by your application.
+The `@PipelineStep` annotation marks an internal execution service and provides compile-time metadata. Step generation is driven by `pipeline.yaml`; `@PipelineStep` alone does not create a generated step.
 
 ### Parameters
 
@@ -16,8 +16,8 @@ The `@PipelineStep` annotation marks a class as a pipeline step and enables auto
 - `sideEffect`: Optional plugin service type used to generate side-effect client/server adapters
 - `ordering`: Ordering requirement for the generated client step
 - `threadSafety`: Thread safety declaration for the generated client step
-- `delegate`: Specifies the delegate service class that provides the actual execution implementation. When present, the annotated class becomes a client-only step that delegates to the specified service. When absent (defaults to Void.class), the annotated class is treated as a traditional internal step. The delegate service must implement one of the reactive service interfaces: `ReactiveService`, `ReactiveStreamingService`, or `ReactiveBidirectionalStreamingService`.
-- `externalMapper`: Specifies the external mapper class that maps between the step's domain types and the delegate service's entity types. This is used when the step's input/output types differ from the delegate service's types. When absent (defaults to Void.class), no external mapping is performed and the step's types must match the delegate's types. **When `externalMapper` is provided, it performs both inbound and outbound mapping, so `inboundMapper` and `outboundMapper` are not required.** The `ExternalMapper` interface is defined in `org.pipelineframework.mapper.ExternalMapper` and requires four type parameters: `<TAppIn, TLibIn, TAppOut, TLibOut>`.
+- `delegate`: Specifies the delegate service class used for delegated execution when `delegate() != Void.class`. The delegate service must implement one of the supported reactive service interfaces (`ReactiveService`, `ReactiveStreamingService`, `ReactiveStreamingClientService`/`ReactiveClientStreamingService`, `ReactiveBidirectionalStreamingService`).
+- `externalMapper`: Specifies the external mapper class that maps between application and delegate/library types. `externalMapper()` is only considered when `delegate() != Void.class`; it is ignored when `delegate() == Void.class`. When delegated input/output types differ, `externalMapper()` is required; when types match, it is optional.
 
 `backendType` is a legacy annotation field and is ignored by the current processor.
 
@@ -75,7 +75,8 @@ public class SimpleDelegatedPaymentService {
 
 Developers only need to:
 
-1. Annotate their service class with `@PipelineStep`
+1. Define steps in `pipeline.yaml` (`service` for internal, `delegate` for delegated)
+2. For internal services, annotate the execution class with `@PipelineStep`
 2. Create MapStruct-based mapper interfaces that extend the `Mapper<Grpc, Dto, Domain>` interface
 3. Implement the service interface (`ReactiveService`, `ReactiveStreamingService`, `ReactiveStreamingClientService`, or `ReactiveBidirectionalStreamingService`)
 

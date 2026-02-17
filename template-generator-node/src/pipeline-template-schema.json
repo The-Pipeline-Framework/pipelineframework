@@ -75,7 +75,7 @@
     },
     "steps": {
       "type": "array",
-      "description": "List of pipeline steps to generate",
+      "description": "List of pipeline steps. YAML-defined service/delegate steps drive strict compiler step generation; scaffold-style cardinality blocks are for template generation workflows.",
       "items": {
         "oneOf": [
           {
