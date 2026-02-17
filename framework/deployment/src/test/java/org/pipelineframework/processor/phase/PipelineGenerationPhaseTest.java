@@ -22,6 +22,8 @@ import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
 import javax.tools.FileObject;
 import javax.tools.StandardLocation;
+import java.nio.file.Path;
+import java.util.Set;
 
 import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
@@ -153,5 +155,35 @@ class PipelineGenerationPhaseTest {
         context.setRendererBindings(java.util.Map.of());
 
         assertDoesNotThrow(() -> phase.execute(context));
+    }
+
+    @Test
+    void externalAdapterGenerationContextPropagatesEnabledAspects() throws Exception {
+        PipelineGenerationPhase phase = new PipelineGenerationPhase();
+        org.pipelineframework.processor.PipelineCompilationContext context =
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+        context.setGeneratedSourcesRoot(Path.of("target/generated-sources-test"));
+
+        java.lang.reflect.Method method = PipelineGenerationPhase.class.getDeclaredMethod(
+            "createExternalAdapterGenerationContext",
+            org.pipelineframework.processor.PipelineCompilationContext.class,
+            org.pipelineframework.processor.ir.DeploymentRole.class,
+            Set.class,
+            com.squareup.javapoet.ClassName.class,
+            com.google.protobuf.DescriptorProtos.FileDescriptorSet.class);
+        method.setAccessible(true);
+
+        @SuppressWarnings("unchecked")
+        org.pipelineframework.processor.renderer.GenerationContext generationContext =
+            (org.pipelineframework.processor.renderer.GenerationContext) method.invoke(
+                phase,
+                context,
+                org.pipelineframework.processor.ir.DeploymentRole.PIPELINE_SERVER,
+                Set.of("cache", "audit"),
+                null,
+                null);
+
+        assertEquals(Set.of("cache", "audit"), generationContext.enabledAspects());
+        assertEquals(org.pipelineframework.processor.ir.DeploymentRole.PIPELINE_SERVER, generationContext.role());
     }
 }

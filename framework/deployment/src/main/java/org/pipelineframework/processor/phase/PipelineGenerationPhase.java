@@ -136,13 +136,14 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     ? model.deploymentRole()
                     : org.pipelineframework.processor.ir.DeploymentRole.PIPELINE_SERVER;
                 try {
-                    externalAdapterRenderer.render(externalAdapterBinding, new GenerationContext(
-                        ctx.getProcessingEnv(),
-                        resolveRoleOutputDir(ctx, adapterRole),
-                        adapterRole,
-                        enabledAspects,
-                        cacheKeyGenerator,
-                        descriptorSet));
+                    externalAdapterRenderer.render(
+                        externalAdapterBinding,
+                        createExternalAdapterGenerationContext(
+                            ctx,
+                            adapterRole,
+                            enabledAspects,
+                            cacheKeyGenerator,
+                            descriptorSet));
                     String generatedName = model.generatedName() != null ? model.generatedName() : model.serviceName();
                     String baseName = generatedName.endsWith("Service")
                         ? generatedName.substring(0, generatedName.length() - "Service".length())
@@ -763,6 +764,21 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             .stream()
             .map(aspect -> aspect.name().toLowerCase(Locale.ROOT))
             .collect(java.util.stream.Collectors.toUnmodifiableSet());
+    }
+
+    private GenerationContext createExternalAdapterGenerationContext(
+            PipelineCompilationContext ctx,
+            org.pipelineframework.processor.ir.DeploymentRole adapterRole,
+            Set<String> enabledAspects,
+            ClassName cacheKeyGenerator,
+            DescriptorProtos.FileDescriptorSet descriptorSet) {
+        return new GenerationContext(
+            ctx.getProcessingEnv(),
+            resolveRoleOutputDir(ctx, adapterRole),
+            adapterRole,
+            enabledAspects,
+            cacheKeyGenerator,
+            descriptorSet);
     }
 
     /**
