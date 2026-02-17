@@ -103,4 +103,46 @@ public class PipelineCompiler extends AbstractProcessingTool {
 
         return true;
     }
+    /**
+     * Detects whether a pipeline configuration signal is present for the compiler.
+     *
+     * Checks the explicit processor option "pipeline.config" first. If that option is not set,
+     * determines a base directory from "pipeline.moduleDir", then "pipeline.generatedSourcesDir",
+     * then the system property "user.dir", and looks for a pipeline.yaml file at either
+     * {baseDir}/pipeline.yaml or {baseDir}/src/main/resources/pipeline.yaml.
+     *
+     * @return `true` if the "pipeline.config" option is set or a pipeline.yaml file is found,
+     *         `false` otherwise.
+     */
+    private boolean hasPipelineConfigSignal() {
+        // Primary source is the explicit annotation processor option; filesystem probing is best-effort fallback.
+        String configuredPath = processingEnv.getOptions().get("pipeline.config");
+        if (configuredPath != null && !configuredPath.isBlank()) {
+            return true;
+        }
+
+        String baseDir = processingEnv.getOptions().get("pipeline.moduleDir");
+        if (baseDir == null || baseDir.isBlank()) {
+            baseDir = processingEnv.getOptions().get("pipeline.generatedSourcesDir");
+        }
+        if (baseDir == null || baseDir.isBlank()) {
+            baseDir = processingEnv.getOptions().get("project.basedir");
+        }
+        if (baseDir == null || baseDir.isBlank()) {
+            baseDir = System.getProperty("maven.multiModuleProjectDirectory");
+        }
+        // Avoid user.dir fallback: it is unreliable under IDE/daemon/multi-module builds.
+        if (baseDir == null || baseDir.isBlank()) {
+            return false;
+        }
+        Path basePath = Path.of(baseDir);
+
+        Path cwdPipelineConfig = basePath.resolve("pipeline.yaml");
+        if (Files.exists(cwdPipelineConfig)) {
+            return true;
+        }
+
+        Path resourcesPipelineConfig = basePath.resolve(Path.of("src", "main", "resources", "pipeline.yaml"));
+        return Files.exists(resourcesPipelineConfig);
+    }
 }

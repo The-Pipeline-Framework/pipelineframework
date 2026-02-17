@@ -176,6 +176,14 @@
                                 <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
                                     <fileset dir="${project.basedir}/../orchestrator-svc/src/main/java"/>
                                 </copy>
+                                <available file="${project.basedir}/../orchestrator-svc/target/generated-sources/pipeline/orchestrator-client"
+                                           type="dir"
+                                           property="orchestrator.client.sources.present"/>
+                                <fail unless="orchestrator.client.sources.present"
+                                      message="Missing generated orchestrator-client sources at ${project.basedir}/../orchestrator-svc/target/generated-sources/pipeline/orchestrator-client. Build orchestrator-svc first."/>
+                                <copy todir="${project.build.directory}/monolith-sources" overwrite="false" failonerror="true">
+                                    <fileset dir="${project.basedir}/../orchestrator-svc/target/generated-sources/pipeline/orchestrator-client"/>
+                                </copy>
                             </target>
                         </configuration>
                     </execution>
