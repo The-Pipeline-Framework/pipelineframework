@@ -24,6 +24,7 @@ import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
 
+import com.google.protobuf.DescriptorProtos;
 import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -36,7 +37,10 @@ import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.*;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** Unit tests for PipelineBindingConstructionPhase */
@@ -119,5 +123,84 @@ class PipelineBindingConstructionPhaseTest {
     void testConstructorInjection_rejectsNull() {
         assertThrows(NullPointerException.class,
             () -> new PipelineBindingConstructionPhase(null));
+        assertThrows(NullPointerException.class,
+            () -> new PipelineBindingConstructionPhase(new GrpcRequirementEvaluator(), null));
+    }
+
+    @Test
+    void delegatedClientStepBuildsGrpcAndExternalAdapterBindings() throws Exception {
+        PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
+        PipelineStepModel delegatedModel = TestModelFactory
+            .createTestModelWithTargets("ProcessDelegatedService", Set.of(GenerationTarget.CLIENT_STEP))
+            .toBuilder()
+            .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
+            .build();
+        context.setStepModels(List.of(delegatedModel));
+        context.setDescriptorSet(descriptorSetForService("ProcessDelegatedService"));
+
+        assertDoesNotThrow(() -> phase.execute(context));
+        Map<String, Object> bindings = context.getRendererBindings();
+        assertTrue(bindings.containsKey("ProcessDelegatedService_external_adapter"));
+        assertTrue(bindings.containsKey("ProcessDelegatedService_grpc"));
+    }
+
+    @Test
+    void delegatedLocalClientStepBuildsLocalAndExternalAdapterBindings() throws Exception {
+        PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
+        PipelineStepModel delegatedModel = TestModelFactory
+            .createTestModelWithTargets("DelegatedLocalService", Set.of(GenerationTarget.LOCAL_CLIENT_STEP))
+            .toBuilder()
+            .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
+            .build();
+        context.setStepModels(List.of(delegatedModel));
+
+        assertDoesNotThrow(() -> phase.execute(context));
+        Map<String, Object> bindings = context.getRendererBindings();
+        assertTrue(bindings.containsKey("DelegatedLocalService_external_adapter"));
+        assertTrue(bindings.containsKey("DelegatedLocalService_local"));
+        assertFalse(bindings.containsKey("DelegatedLocalService_grpc"));
+    }
+
+    @Test
+    void delegatedStepWithServerTargetsEmitsWarning() throws Exception {
+        PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
+        PipelineStepModel delegatedModel = TestModelFactory
+            .createTestModelWithTargets("ProcessDelegatedServerTargetService", Set.of(
+                GenerationTarget.GRPC_SERVICE,
+                GenerationTarget.REST_RESOURCE,
+                GenerationTarget.LOCAL_CLIENT_STEP))
+            .toBuilder()
+            .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
+            .build();
+        context.setStepModels(List.of(delegatedModel));
+        context.setDescriptorSet(descriptorSetForService("ProcessDelegatedServerTargetService"));
+
+        phase.execute(context);
+
+        verify(messager).printMessage(
+            eq(javax.tools.Diagnostic.Kind.WARNING),
+            contains("Delegated step 'ProcessDelegatedServerTargetService' ignores server targets"));
+    }
+
+    private static DescriptorProtos.FileDescriptorSet descriptorSetForService(String serviceName) {
+        DescriptorProtos.FileDescriptorProto fileProto = DescriptorProtos.FileDescriptorProto.newBuilder()
+            .setName(serviceName.toLowerCase() + ".proto")
+            .setPackage("com.example")
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("Input"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("Output"))
+            .addService(DescriptorProtos.ServiceDescriptorProto.newBuilder()
+                .setName(serviceName)
+                .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
+                    .setName("remoteProcess")
+                    .setInputType(".com.example.Input")
+                    .setOutputType(".com.example.Output")))
+            .build();
+        return DescriptorProtos.FileDescriptorSet.newBuilder().addFile(fileProto).build();
     }
 }

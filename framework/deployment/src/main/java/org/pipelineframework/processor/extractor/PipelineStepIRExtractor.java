@@ -73,14 +73,21 @@ public class PipelineStepIRExtractor {
         ThreadSafety threadSafety = AnnotationProcessingUtils.getAnnotationValueAsEnum(
             annotationMirror, "threadSafety", ThreadSafety.class, ThreadSafety.SAFE);
 
-        // Create directional type mappings without assigning mappers in the AP phase.
+        // Create directional type mappings. Explicit mapper references are retained as backward-compatible
+        // fallback while build-time inference can still populate missing mappings in later phases.
         TypeMapping inputMapping = extractTypeMapping(
-            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "inputType"));
+            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "inputType"),
+            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "inboundMapper"));
 
         TypeMapping outputMapping = extractTypeMapping(
-            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "outputType"));
+            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "outputType"),
+            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "outboundMapper"));
 
         ClassName cacheKeyGenerator = resolveCacheKeyGenerator(annotationMirror);
+        
+        // Extract delegated operator and mapper class names
+        ClassName delegateService = resolveDelegateService(annotationMirror, serviceClass);
+        ClassName externalMapper = resolveExternalMapper(annotationMirror, serviceClass);
 
         String qualifiedServiceName = serviceClass.getQualifiedName().toString();
         ClassName serviceClassName = null;
@@ -116,32 +123,43 @@ public class PipelineStepIRExtractor {
             .threadSafety(threadSafety)
             .deploymentRole(DeploymentRole.PIPELINE_SERVER)
             .cacheKeyGenerator(cacheKeyGenerator)
+            .delegateService(delegateService)
+            .externalMapper(externalMapper)
             .build();
 
         return new ExtractResult(model);
     }
 
     /**
-     * Create a TypeMapping describing the relationship between a domain type and an optional mapper type.
-     *
-     * If `domainType` is null or represents `void`/`java.lang.Void`, the result is disabled with no domain or mapper.
-     *
-     * @param domainType the domain type to map from; may be null or a `void` type to indicate absence
-     * @return a TypeMapping containing resolved TypeName values and mapper presence
-     */
-    private TypeMapping extractTypeMapping(TypeMirror domainType) {
-        if (domainType == null
-                || domainType.getKind() == javax.lang.model.type.TypeKind.VOID
-                || domainType.toString().equals("java.lang.Void")) {
+         * Create a TypeMapping that represents a domain type and an optional mapper type.
+         *
+         * @param domainType the domain type to map from; may be null or the `void`/`java.lang.Void` type to indicate absence
+         * @param mapperTypeMirror an optional mapper type mirror from the annotation; may be null or the `void`/`java.lang.Void` type
+         * @return a `TypeMapping` containing the resolved domain type, the mapper `ClassName` if provided, a boolean indicating mapper presence, and the inferred target type; returns a disabled mapping (no domain, no mapper, mapper-present=false) if `domainType` is null or void
+         */
+    private TypeMapping extractTypeMapping(TypeMirror domainType, TypeMirror mapperTypeMirror) {
+        if (isNullOrVoid(domainType)) {
             return new TypeMapping(null, null, false, null);
         }
 
+        ClassName mapperType = resolveOptionalMapperType(mapperTypeMirror);
+
         return new TypeMapping(
             TypeName.get(domainType),
-            null,
-            false,
+            mapperType,
+            mapperType != null,
             TypeName.get(domainType)
         );
+    }
+
+    /**
+     * Resolve an optional mapper TypeMirror to a ClassName.
+     *
+     * @param mapperTypeMirror the annotation TypeMirror for a mapper (may be null or represent void)
+     * @return the resolved ClassName for the mapper, or `null` if the mirror is null, represents `void`/`java.lang.Void`, or cannot be resolved
+     */
+    private ClassName resolveOptionalMapperType(TypeMirror mapperTypeMirror) {
+        return resolveClassNameFromMirror(mapperTypeMirror);
     }
 
     /**
@@ -177,23 +195,115 @@ public class PipelineStepIRExtractor {
         return StreamingShape.UNARY_UNARY;
     }
 
+    /**
+     * Determine the configured cache key generator class from the given annotation mirror.
+     *
+     * Reads the `cacheKeyGenerator` value and returns its ClassName unless the value is absent
+     * or equals the default `io.quarkus.cache.CacheKeyGenerator`, in which case `null` is returned.
+     *
+     * @param annotationMirror the annotation mirror to read the `cacheKeyGenerator` value from
+     * @return the ClassName of the configured cache key generator, or `null` if none or the default is used
+     */
     private ClassName resolveCacheKeyGenerator(AnnotationMirror annotationMirror) {
         TypeMirror typeMirror = AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "cacheKeyGenerator");
         if (typeMirror == null) {
             return null;
         }
 
+        // Check if it's the default value (io.quarkus.cache.CacheKeyGenerator)
         TypeElement defaultElement = processingEnv.getElementUtils()
             .getTypeElement("io.quarkus.cache.CacheKeyGenerator");
         if (defaultElement != null && processingEnv.getTypeUtils().isSameType(typeMirror, defaultElement.asType())) {
             return null;
         }
 
+        return resolveClassNameFromMirror(typeMirror);
+    }
+
+    /**
+     * Resolves a ClassName from an annotation value that specifies a type.
+     * Handles void types, null values, and converts TypeMirror to ClassName.
+     *
+     * @param annotationMirror the annotation mirror to extract the value from
+     * @param fieldName the name of the annotation value to extract
+     * @return the ClassName for the specified type, or null if not specified or void
+     */
+    private ClassName resolveTypeClass(AnnotationMirror annotationMirror, String fieldName) {
+        TypeMirror typeMirror = AnnotationProcessingUtils.getAnnotationValue(annotationMirror, fieldName);
+        return resolveClassNameFromMirror(typeMirror);
+    }
+
+    /**
+     * Resolve a TypeMirror into a ClassName representing the referenced type.
+     *
+     * @param typeMirror the type mirror to resolve; may be null or represent `void`/`java.lang.Void`
+     * @return the ClassName for the referenced type, or `null` if the provided mirror is null or represents void/Void
+     */
+    private ClassName resolveClassNameFromMirror(TypeMirror typeMirror) {
+        if (isNullOrVoid(typeMirror)) {
+            return null;
+        }
         Element element = processingEnv.getTypeUtils().asElement(typeMirror);
         if (element instanceof TypeElement typeElement) {
             return ClassName.get(typeElement);
         }
-
         return ClassName.bestGuess(typeMirror.toString());
+    }
+
+    /**
+     * Determines whether a TypeMirror is null or represents the void type.
+     *
+     * @param typeMirror the type to check; may be null
+     * @return `true` if the provided type is null, `void`, or `java.lang.Void`, `false` otherwise
+     */
+    private boolean isNullOrVoid(TypeMirror typeMirror) {
+        return typeMirror == null
+            || typeMirror.getKind() == javax.lang.model.type.TypeKind.VOID
+            || typeMirror.toString().equals("java.lang.Void");
+    }
+
+    /**
+     * Resolve the delegate service class referenced in the PipelineStep annotation.
+     *
+     * If both `operator` and `delegate` are present with different values, an error is reported
+     * and the `operator` value is returned.
+     *
+     * @param annotationMirror the PipelineStep annotation mirror to read `operator` and `delegate` from
+     * @return the ClassName for the resolved delegate (the `operator` if present, otherwise the `delegate`),
+     *         or `null` if neither is specified
+     */
+    private ClassName resolveDelegateService(AnnotationMirror annotationMirror, TypeElement serviceClass) {
+        ClassName operator = resolveTypeClass(annotationMirror, "operator");
+        ClassName delegate = resolveTypeClass(annotationMirror, "delegate");
+        if (operator != null && delegate != null && !operator.equals(delegate)) {
+            processingEnv.getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "@PipelineStep declares both operator() and delegate() with different values; use only one alias.",
+                serviceClass);
+            return operator;
+        }
+        return operator != null ? operator : delegate;
+    }
+
+    /**
+     * Determine which mapper type is declared on the PipelineStep annotation.
+     *
+     * Prefers `operatorMapper` when present. If both `operatorMapper` and `externalMapper`
+     * are specified with different values an error is reported and `operatorMapper` is returned.
+     *
+     * @param annotationMirror the PipelineStep annotation mirror to read mapper fields from
+     * @return the resolved mapper `ClassName`, or `null` if neither mapper is specified
+     */
+    private ClassName resolveExternalMapper(AnnotationMirror annotationMirror, TypeElement serviceClass) {
+        ClassName operatorMapper = resolveTypeClass(annotationMirror, "operatorMapper");
+        ClassName externalMapper = resolveTypeClass(annotationMirror, "externalMapper");
+        if (operatorMapper != null && externalMapper != null && !operatorMapper.equals(externalMapper)) {
+            processingEnv.getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "@PipelineStep declares both operatorMapper() and externalMapper() with different values; use only one alias.",
+                serviceClass);
+            return operatorMapper;
+        }
+        return operatorMapper != null ? operatorMapper : externalMapper;
     }
 }

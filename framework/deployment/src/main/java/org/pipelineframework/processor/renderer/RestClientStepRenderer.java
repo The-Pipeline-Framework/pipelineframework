@@ -259,7 +259,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                     .addStatement("String replayMode = context != null ? context.replayMode() : null")
                     .addStatement("String cachePolicy = context != null ? context.cachePolicy() : null")
                     .addStatement(
-                        "return $T.instrumentClient($S, $S, inputs.collect().asList().onItem().transformToUni(items -> this.restClient.process(versionTag, replayMode, cachePolicy, items)))",
+                        "return inputs.collect().asList().onItem().transformToUni(inputDtos -> $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, inputDtos)))",
                         ClassName.get("org.pipelineframework.telemetry", "HttpMetrics"),
                         model.serviceName(),
                         "process")
@@ -346,14 +346,12 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
     /**
      * Declares the REST client's streaming-to-unary process operation.
      *
-     * @param versionTag the pipeline version tag passed via header
-     * @param replayMode the replay mode flag passed via header
-     * @param cachePolicy the cache policy passed via header
-     * @param inputDtos a batch of input DTOs to be processed
-     * @return a Uni that emits the single output DTO produced from the streamed inputs
+     * @param inputDto the DTO type used for each element in the input batch
+     * @param outputDto the DTO type used as the unary response entity
+     * @param operationPath the REST sub-path for the operation endpoint
+     * @return a `Uni` that emits the single output DTO produced from the input batch
      */
     private MethodSpec buildStreamingUnaryMethod(TypeName inputDto, TypeName outputDto, String operationPath) {
-        TypeName listInputDto = ParameterizedTypeName.get(ClassName.get(java.util.List.class), inputDto);
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("process")
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST")).build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Path"))
@@ -364,7 +362,8 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
             .addParameter(headerParam("versionTag"))
             .addParameter(headerParam("replayMode"))
             .addParameter(headerParam("cachePolicy"))
-            .addParameter(ParameterSpec.builder(listInputDto, "inputDtos").build());
+            .addParameter(ParameterSpec.builder(
+                ParameterizedTypeName.get(ClassName.get(java.util.List.class), inputDto), "inputDtos").build());
         return methodBuilder.build();
     }
 
@@ -433,6 +432,13 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
         return DtoTypeUtils.toDtoType(domainType);
     }
 
+    /**
+     * Ensure the pipeline step model contains the required REST input and output mappings, domain types, and mappers.
+     *
+     * @param model the pipeline step model to validate
+     * @throws IllegalStateException if the model is null; if input or output mappings are missing; or if either mapping
+     *                               lacks a mapper or a non-null domain type
+     */
     private void validateRestMappings(PipelineStepModel model) {
         if (model == null) {
             throw new IllegalStateException("REST client generation requires a non-null PipelineStepModel");
@@ -442,14 +448,14 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                 "REST client generation for '%s' requires input/output mappings to be present",
                 model.serviceName()));
         }
-        if (model.inputMapping().domainType() == null) {
+        if (!model.inputMapping().hasMapper() || model.inputMapping().domainType() == null) {
             throw new IllegalStateException(String.format(
-                "REST client generation for '%s' requires a non-null input domain type",
+                "REST client generation for '%s' requires a non-null input domain type and inbound mapper",
                 model.serviceName()));
         }
-        if (model.outputMapping().domainType() == null) {
+        if (!model.outputMapping().hasMapper() || model.outputMapping().domainType() == null) {
             throw new IllegalStateException(String.format(
-                "REST client generation for '%s' requires a non-null output domain type",
+                "REST client generation for '%s' requires a non-null output domain type and outbound mapper",
                 model.serviceName()));
         }
     }

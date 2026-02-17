@@ -32,12 +32,8 @@ public class TestModelFactory {
      * @return a new PipelineStepModel for testing with specified targets
      */
     public static PipelineStepModel createTestModelWithTargets(String name, Set<GenerationTarget> targets) {
-        PipelineStepModel original = createTestModel(name);
-        return new PipelineStepModel(
-            original.serviceName(), original.generatedName(), original.servicePackage(), original.serviceClassName(),
-            original.inputMapping(), original.outputMapping(), original.streamingShape(),
-            targets, original.executionMode(),
-            original.deploymentRole(), original.sideEffect(), original.cacheKeyGenerator(),
-            original.orderingRequirement(), original.threadSafety());
+        return createTestModel(name).toBuilder()
+            .enabledTargets(targets)
+            .build();
     }
 }

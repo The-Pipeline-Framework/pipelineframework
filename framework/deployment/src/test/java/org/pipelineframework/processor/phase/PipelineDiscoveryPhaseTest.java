@@ -16,13 +16,19 @@
 
 package org.pipelineframework.processor.phase;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.function.Function;
+import java.util.Map;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
+import javax.tools.Diagnostic;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -32,13 +38,21 @@ import org.pipelineframework.config.PlatformMode;
 import org.pipelineframework.processor.PipelineCompilationContext;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** Unit tests for PipelineDiscoveryPhase */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class PipelineDiscoveryPhaseTest {
+
+    @TempDir
+    Path tempDir;
 
     @Mock
     private ProcessingEnvironment processingEnv;
@@ -126,5 +140,91 @@ class PipelineDiscoveryPhaseTest {
             () -> new PipelineDiscoveryPhase(new DiscoveryPathResolver(), null, new TransportPlatformResolver()));
         assertThrows(NullPointerException.class,
             () -> new PipelineDiscoveryPhase(new DiscoveryPathResolver(), new DiscoveryConfigLoader(), null));
+    }
+
+    @Test
+    void discoveryReportsYamlStepDefinitionErrorsToMessager() throws Exception {
+        Path yaml = tempDir.resolve("pipeline.yaml");
+        Files.writeString(yaml, """
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "bad-step"
+                service: "com.example.InternalService"
+                delegate: "com.example.ExternalService"
+            """);
+        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.config", yaml.toString()));
+
+        PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        phase.execute(context);
+
+        verify(messager).printMessage(
+            eq(Diagnostic.Kind.ERROR),
+            contains("Skipping step 'bad-step':"));
+        assertNotNull(context.getStepDefinitions());
+        assertTrue(context.getStepDefinitions().isEmpty());
+    }
+
+    @Test
+    void executeResolvesPipelineConfigOnceAndReusesItAcrossLoaders() throws Exception {
+        DiscoveryPathResolver pathResolver = mock(DiscoveryPathResolver.class);
+        DiscoveryConfigLoader configLoader = mock(DiscoveryConfigLoader.class);
+        TransportPlatformResolver tpResolver = mock(TransportPlatformResolver.class);
+
+        Path generatedSourcesRoot = tempDir.resolve("target/generated-sources/pipeline");
+        Path moduleDir = tempDir;
+        Path pipelineConfig = tempDir.resolve("pipeline.yaml");
+        Files.writeString(pipelineConfig, "appName: test");
+
+        when(pathResolver.resolveGeneratedSourcesRoot(Map.of())).thenReturn(generatedSourcesRoot);
+        when(pathResolver.resolveModuleDir(generatedSourcesRoot)).thenReturn(moduleDir);
+        when(pathResolver.resolveModuleName(Map.of())).thenReturn("test-module");
+
+        when(configLoader.resolvePipelineConfigPath(Map.of(), moduleDir, messager))
+            .thenReturn(java.util.Optional.of(pipelineConfig));
+        when(configLoader.loadAspects(pipelineConfig, messager)).thenReturn(java.util.List.of());
+        when(configLoader.loadTemplateConfig(pipelineConfig, messager)).thenReturn(null);
+        when(configLoader.loadStepConfig(
+            eq(pipelineConfig),
+            any(Function.class),
+            any(Function.class),
+            eq(messager)))
+            .thenReturn(new org.pipelineframework.processor.config.PipelineStepConfigLoader.StepConfig(
+                "com.example", "GRPC", "COMPUTE", java.util.List.of(), java.util.List.of()));
+        when(configLoader.loadRuntimeMapping(moduleDir, messager)).thenReturn(null);
+        when(tpResolver.resolveTransport("GRPC", messager))
+            .thenReturn(org.pipelineframework.processor.ir.TransportMode.GRPC);
+        when(tpResolver.resolvePlatform("COMPUTE", messager))
+            .thenReturn(org.pipelineframework.config.PlatformMode.COMPUTE);
+        when(processingEnv.getOptions()).thenReturn(Map.of());
+
+        PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase(pathResolver, configLoader, tpResolver);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        when(roundEnv.getElementsAnnotatedWith(org.pipelineframework.annotation.PipelineOrchestrator.class))
+            .thenReturn(java.util.Set.of());
+        when(roundEnv.getElementsAnnotatedWith(org.pipelineframework.annotation.PipelinePlugin.class))
+            .thenReturn(java.util.Set.of());
+
+        phase.execute(context);
+
+        verify(configLoader, times(1))
+            .resolvePipelineConfigPath(Map.of(), moduleDir, messager);
+        verify(configLoader, times(1)).loadAspects(pipelineConfig, messager);
+        verify(configLoader, times(1)).loadTemplateConfig(pipelineConfig, messager);
+        verify(configLoader, times(1)).loadStepConfig(
+            eq(pipelineConfig),
+            any(Function.class),
+            any(Function.class),
+            eq(messager));
+        verify(configLoader, times(1)).loadRuntimeMapping(moduleDir, messager);
+        assertEquals(generatedSourcesRoot, context.getGeneratedSourcesRoot());
+        assertEquals(moduleDir, context.getModuleDir());
+        assertEquals("test-module", context.getModuleName());
+        assertNotNull(context.getAspectModels());
+        assertNotNull(context.getStepDefinitions());
+        assertTrue(context.getStepDefinitions().isEmpty());
+        assertTrue(context.isTransportModeGrpc());
+        assertEquals(PlatformMode.COMPUTE, context.getPlatformMode());
     }
 }

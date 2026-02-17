@@ -42,9 +42,9 @@ class RestBindingSkipTest {
             transport: "REST"
             steps:
               - name: "Process Foo"
-                cardinality: "ONE_TO_ONE"
-                inputTypeName: "FooInput"
-                outputTypeName: "FooOutput"
+                service: "com.example.ProcessFooService"
+                input: "com.example.domain.FooInput"
+                output: "com.example.domain.FooOutput"
             """);
 
         Compilation compilation = Compiler.javac()

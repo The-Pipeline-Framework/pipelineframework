@@ -46,13 +46,13 @@ class PipelineGenerationPhaseIntegrationTest {
             transport: "LOCAL"
             steps:
               - name: "Process Crawl Source"
-                cardinality: "ONE_TO_ONE"
-                inputTypeName: "CrawlRequest"
-                outputTypeName: "RawDocument"
+                service: "org.pipelineframework.search.service.ProcessCrawlSourceService"
+                input: "org.pipelineframework.search.domain.CrawlRequest"
+                output: "org.pipelineframework.search.domain.RawDocument"
             """);
 
         Compilation compilation = Compiler.javac()
-            .withProcessors(new PipelineStepProcessor(), new org.mapstruct.ap.MappingProcessor())
+            .withProcessors(new PipelineStepProcessor())
             .withOptions(
                 "-Apipeline.generatedSourcesDir=" + generatedSourcesDir.toString().replace('\\', '/'),
                 "-Aprotobuf.descriptor.file="
@@ -69,113 +69,87 @@ class PipelineGenerationPhaseIntegrationTest {
                         import org.pipelineframework.step.StepOneToOne;
 
                         @PipelineStep(
-                            inputType = org.pipelineframework.search.common.domain.CrawlRequest.class,
-                            outputType = org.pipelineframework.search.common.domain.RawDocument.class,
-                            stepType = StepOneToOne.class
+                            inputType = org.pipelineframework.search.domain.CrawlRequest.class,
+                            outputType = org.pipelineframework.search.domain.RawDocument.class,
+                            stepType = StepOneToOne.class,
+                            inboundMapper = org.pipelineframework.search.mapper.CrawlRequestMapper.class,
+                            outboundMapper = org.pipelineframework.search.mapper.RawDocumentMapper.class
                         )
-                        public class ProcessCrawlSourceService implements ReactiveService<org.pipelineframework.search.common.domain.CrawlRequest, org.pipelineframework.search.common.domain.RawDocument> {
+                        public class ProcessCrawlSourceService implements ReactiveService<org.pipelineframework.search.domain.CrawlRequest, org.pipelineframework.search.domain.RawDocument> {
                             @Override
-                            public Uni<org.pipelineframework.search.common.domain.RawDocument> process(org.pipelineframework.search.common.domain.CrawlRequest input) {
-                                return Uni.createFrom().item(new org.pipelineframework.search.common.domain.RawDocument());
+                            public Uni<org.pipelineframework.search.domain.RawDocument> process(org.pipelineframework.search.domain.CrawlRequest input) {
+                                return Uni.createFrom().item(new org.pipelineframework.search.domain.RawDocument());
                             }
                         }
                         """),
                 JavaFileObjects.forSourceString(
-                    "org.pipelineframework.search.common.domain.CrawlRequest",
+                    "org.pipelineframework.search.domain.CrawlRequest",
                     """
-                        package org.pipelineframework.search.common.domain;
+                        package org.pipelineframework.search.domain;
 
                         public class CrawlRequest {
                         }
                         """),
                 JavaFileObjects.forSourceString(
-                    "org.pipelineframework.search.common.domain.RawDocument",
+                    "org.pipelineframework.search.domain.RawDocument",
                     """
-                        package org.pipelineframework.search.common.domain;
+                        package org.pipelineframework.search.domain;
 
                         public class RawDocument {
                         }
                         """),
-                // Mapper stubs for domain types
                 JavaFileObjects.forSourceString(
-                    "org.pipelineframework.search.common.mapper.CrawlRequestMapper",
+                    "org.pipelineframework.search.dto.CrawlRequestDto",
                     """
-                        package org.pipelineframework.search.common.mapper;
-
-                        import org.pipelineframework.mapper.Mapper;
-                        import org.pipelineframework.search.common.domain.CrawlRequest;
-                        import org.pipelineframework.search.common.dto.CrawlRequestDto;
-                        import org.pipelineframework.search.common.domain.CrawlRequestGrpcMessage;
-
-                        @org.mapstruct.Mapper
-                        public interface CrawlRequestMapper extends Mapper<CrawlRequestGrpcMessage, CrawlRequestDto, CrawlRequest> {
-                            @Override
-                            CrawlRequestDto fromGrpc(CrawlRequestGrpcMessage grpc);
-                            @Override
-                            CrawlRequestGrpcMessage toGrpc(CrawlRequestDto dto);
-                            @Override
-                            CrawlRequest fromDto(CrawlRequestDto dto);
-                            @Override
-                            CrawlRequestDto toDto(CrawlRequest domain);
-                        }
-                        """),
-                JavaFileObjects.forSourceString(
-                    "org.pipelineframework.search.common.mapper.RawDocumentMapper",
-                    """
-                        package org.pipelineframework.search.common.mapper;
-
-                        import org.pipelineframework.mapper.Mapper;
-                        import org.pipelineframework.search.common.domain.RawDocument;
-                        import org.pipelineframework.search.common.dto.RawDocumentDto;
-                        import org.pipelineframework.search.common.domain.RawDocumentGrpcMessage;
-
-                        @org.mapstruct.Mapper
-                        public interface RawDocumentMapper extends Mapper<RawDocumentGrpcMessage, RawDocumentDto, RawDocument> {
-                            @Override
-                            RawDocumentDto fromGrpc(RawDocumentGrpcMessage grpc);
-                            @Override
-                            RawDocumentGrpcMessage toGrpc(RawDocumentDto dto);
-                            @Override
-                            RawDocument fromDto(RawDocumentDto dto);
-                            @Override
-                            RawDocumentDto toDto(RawDocument domain);
-                        }
-                        """),
-                // DTO stubs
-                JavaFileObjects.forSourceString(
-                    "org.pipelineframework.search.common.dto.CrawlRequestDto",
-                    """
-                        package org.pipelineframework.search.common.dto;
+                        package org.pipelineframework.search.dto;
 
                         public class CrawlRequestDto {
                         }
                         """),
                 JavaFileObjects.forSourceString(
-                    "org.pipelineframework.search.common.dto.RawDocumentDto",
+                    "org.pipelineframework.search.dto.RawDocumentDto",
                     """
-                        package org.pipelineframework.search.common.dto;
+                        package org.pipelineframework.search.dto;
 
                         public class RawDocumentDto {
                         }
                         """),
-                // gRPC message stubs
                 JavaFileObjects.forSourceString(
-                    "org.pipelineframework.search.common.domain.CrawlRequestGrpcMessage",
+                    "org.pipelineframework.search.mapper.CrawlRequestMapper",
                     """
-                        package org.pipelineframework.search.common.domain;
+                        package org.pipelineframework.search.mapper;
 
-                        public class CrawlRequestGrpcMessage {
+                        import org.pipelineframework.search.domain.CrawlRequest;
+                        import org.pipelineframework.search.dto.CrawlRequestDto;
+
+                        public class CrawlRequestMapper {
+                            public CrawlRequest fromDto(CrawlRequestDto dto) {
+                                return new CrawlRequest();
+                            }
+
+                            public CrawlRequestDto toDto(CrawlRequest domain) {
+                                return new CrawlRequestDto();
+                            }
                         }
                         """),
                 JavaFileObjects.forSourceString(
-                    "org.pipelineframework.search.common.domain.RawDocumentGrpcMessage",
+                    "org.pipelineframework.search.mapper.RawDocumentMapper",
                     """
-                        package org.pipelineframework.search.common.domain;
+                        package org.pipelineframework.search.mapper;
 
-                        public class RawDocumentGrpcMessage {
+                        import org.pipelineframework.search.domain.RawDocument;
+                        import org.pipelineframework.search.dto.RawDocumentDto;
+
+                        public class RawDocumentMapper {
+                            public RawDocument fromDto(RawDocumentDto dto) {
+                                return new RawDocument();
+                            }
+
+                            public RawDocumentDto toDto(RawDocument domain) {
+                                return new RawDocumentDto();
+                            }
                         }
-                        """)
-            );
+                        """));
 
         assertThat(compilation).succeeded();
 

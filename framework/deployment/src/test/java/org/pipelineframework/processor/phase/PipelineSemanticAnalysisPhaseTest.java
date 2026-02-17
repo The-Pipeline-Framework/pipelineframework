@@ -6,6 +6,12 @@ import java.util.Set;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
+import javax.lang.model.element.Name;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.Elements;
+import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 
 import com.squareup.javapoet.ClassName;
@@ -168,6 +174,135 @@ public class PipelineSemanticAnalysisPhaseTest {
         verify(messager, never()).printMessage(eq(Diagnostic.Kind.ERROR), any());
     }
 
+    @Test
+    public void delegatedStepWithoutMapperFailsWhenYamlTypesDifferFromDelegate() throws Exception {
+        Elements elementUtils = mock(Elements.class);
+        Types typeUtils = mock(Types.class);
+        when(processingEnv.getElementUtils()).thenReturn(elementUtils);
+        when(processingEnv.getTypeUtils()).thenReturn(typeUtils);
+        when(roundEnv.getElementsAnnotatedWith(org.pipelineframework.annotation.PipelineStep.class)).thenReturn(Set.of());
+
+        TypeElement delegateElement = mock(TypeElement.class);
+        TypeElement reactiveServiceElement = mock(TypeElement.class);
+        DeclaredType delegateDeclaredType = mock(DeclaredType.class);
+        DeclaredType reactiveDeclaredType = mock(DeclaredType.class);
+        TypeMirror delegateInputType = mock(TypeMirror.class);
+        TypeMirror delegateOutputType = mock(TypeMirror.class);
+
+        when(delegateElement.asType()).thenReturn(delegateDeclaredType);
+        when(delegateElement.getQualifiedName()).thenReturn(name("com.example.lib.EmbeddingService"));
+        when(reactiveServiceElement.asType()).thenReturn(reactiveDeclaredType);
+        when(reactiveServiceElement.getQualifiedName()).thenReturn(name("org.pipelineframework.service.ReactiveService"));
+
+        when(elementUtils.getTypeElement("com.example.lib.EmbeddingService")).thenReturn(delegateElement);
+        when(elementUtils.getTypeElement("org.pipelineframework.service.ReactiveService")).thenReturn(reactiveServiceElement);
+
+        when(typeUtils.isAssignable(delegateDeclaredType, reactiveDeclaredType)).thenReturn(true);
+        doReturn(List.of(reactiveDeclaredType)).when(typeUtils).directSupertypes(delegateDeclaredType);
+        doReturn(List.of()).when(typeUtils).directSupertypes(reactiveDeclaredType);
+
+        when(delegateDeclaredType.asElement()).thenReturn(delegateElement);
+        when(reactiveDeclaredType.asElement()).thenReturn(reactiveServiceElement);
+        doReturn(List.of(delegateInputType, delegateOutputType)).when(reactiveDeclaredType).getTypeArguments();
+        when(delegateInputType.toString()).thenReturn("com.example.lib.LibraryChunk");
+        when(delegateOutputType.toString()).thenReturn("com.example.lib.LibraryVector");
+
+        PipelineStepModel delegatedModel = new PipelineStepModel.Builder()
+            .serviceName("ProcessEmbedService")
+            .generatedName("ProcessEmbedService")
+            .servicePackage("com.example.app")
+            .serviceClassName(ClassName.get("com.example.app", "ProcessEmbedService"))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+            .enabledTargets(Set.of(GenerationTarget.LOCAL_CLIENT_STEP))
+            .inputMapping(new TypeMapping(ClassName.get("com.example.app", "TextChunk"), null, false))
+            .outputMapping(new TypeMapping(ClassName.get("com.example.app", "Vector"), null, false))
+            .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
+            .externalMapper(null)
+            .build();
+
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        context.setStepModels(List.of(delegatedModel));
+
+        phase.execute(context);
+
+        verify(messager).printMessage(
+            eq(Diagnostic.Kind.ERROR),
+            contains("requires an operator mapper"));
+    }
+
+    @Test
+    public void delegatedStepFailsWhenDelegateImplementsMultipleReactiveInterfaces() throws Exception {
+        Elements elementUtils = mock(Elements.class);
+        Types typeUtils = mock(Types.class);
+        when(processingEnv.getElementUtils()).thenReturn(elementUtils);
+        when(processingEnv.getTypeUtils()).thenReturn(typeUtils);
+        when(roundEnv.getElementsAnnotatedWith(org.pipelineframework.annotation.PipelineStep.class)).thenReturn(Set.of());
+
+        TypeElement delegateElement = mock(TypeElement.class);
+        TypeElement reactiveServiceElement = mock(TypeElement.class);
+        TypeElement reactiveStreamingElement = mock(TypeElement.class);
+        DeclaredType delegateDeclaredType = mock(DeclaredType.class);
+        DeclaredType reactiveDeclaredType = mock(DeclaredType.class);
+        DeclaredType reactiveStreamingDeclaredType = mock(DeclaredType.class);
+        TypeMirror delegateInputType = mock(TypeMirror.class);
+        TypeMirror delegateOutputType = mock(TypeMirror.class);
+        TypeMirror streamingInputType = mock(TypeMirror.class);
+        TypeMirror streamingOutputType = mock(TypeMirror.class);
+
+        when(delegateElement.asType()).thenReturn(delegateDeclaredType);
+        when(delegateElement.getQualifiedName()).thenReturn(name("com.example.lib.EmbeddingService"));
+        when(reactiveServiceElement.asType()).thenReturn(reactiveDeclaredType);
+        when(reactiveServiceElement.getQualifiedName()).thenReturn(name("org.pipelineframework.service.ReactiveService"));
+        when(reactiveStreamingElement.asType()).thenReturn(reactiveStreamingDeclaredType);
+        when(reactiveStreamingElement.getQualifiedName()).thenReturn(name("org.pipelineframework.service.ReactiveStreamingService"));
+
+        when(elementUtils.getTypeElement("com.example.lib.EmbeddingService")).thenReturn(delegateElement);
+        when(elementUtils.getTypeElement("org.pipelineframework.service.ReactiveService")).thenReturn(reactiveServiceElement);
+        when(elementUtils.getTypeElement("org.pipelineframework.service.ReactiveStreamingService")).thenReturn(reactiveStreamingElement);
+
+        when(typeUtils.isAssignable(delegateDeclaredType, reactiveDeclaredType)).thenReturn(true);
+        when(typeUtils.isAssignable(delegateDeclaredType, reactiveStreamingDeclaredType)).thenReturn(true);
+        doReturn(List.of(reactiveDeclaredType, reactiveStreamingDeclaredType))
+            .when(typeUtils).directSupertypes(delegateDeclaredType);
+        doReturn(List.of()).when(typeUtils).directSupertypes(reactiveDeclaredType);
+        doReturn(List.of()).when(typeUtils).directSupertypes(reactiveStreamingDeclaredType);
+
+        when(reactiveDeclaredType.asElement()).thenReturn(reactiveServiceElement);
+        when(reactiveStreamingDeclaredType.asElement()).thenReturn(reactiveStreamingElement);
+        doReturn(List.of(delegateInputType, delegateOutputType)).when(reactiveDeclaredType).getTypeArguments();
+        doReturn(List.of(streamingInputType, streamingOutputType)).when(reactiveStreamingDeclaredType).getTypeArguments();
+        when(delegateInputType.toString()).thenReturn("com.example.lib.LibraryChunk");
+        when(delegateOutputType.toString()).thenReturn("com.example.lib.LibraryVector");
+        when(streamingInputType.toString()).thenReturn("com.example.lib.LibraryChunk");
+        when(streamingOutputType.toString()).thenReturn("com.example.lib.LibraryVector");
+
+        PipelineStepModel delegatedModel = new PipelineStepModel.Builder()
+            .serviceName("ProcessEmbedService")
+            .generatedName("ProcessEmbedService")
+            .servicePackage("com.example.app")
+            .serviceClassName(ClassName.get("com.example.app", "ProcessEmbedService"))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+            .enabledTargets(Set.of(GenerationTarget.LOCAL_CLIENT_STEP))
+            .inputMapping(new TypeMapping(ClassName.get("com.example.lib", "LibraryChunk"), null, false))
+            .outputMapping(new TypeMapping(ClassName.get("com.example.lib", "LibraryVector"), null, false))
+            .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
+            .externalMapper(null)
+            .build();
+
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        context.setStepModels(List.of(delegatedModel));
+
+        phase.execute(context);
+
+        verify(messager).printMessage(
+            eq(Diagnostic.Kind.ERROR),
+            contains("implements multiple reactive service interfaces"));
+    }
+
     private PipelineStepModel step(StreamingShape streamingShape) {
         return new PipelineStepModel.Builder()
             .serviceName("ProcessPaymentStatusService")
@@ -187,5 +322,34 @@ public class PipelineSemanticAnalysisPhaseTest {
                 ClassName.get("org.pipelineframework.csv.common.mapper", "PaymentOutputMapper"),
                 true))
             .build();
+    }
+
+    private static Name name(String value) {
+        return new Name() {
+            @Override
+            public boolean contentEquals(CharSequence cs) {
+                return value.contentEquals(cs);
+            }
+
+            @Override
+            public int length() {
+                return value.length();
+            }
+
+            @Override
+            public char charAt(int index) {
+                return value.charAt(index);
+            }
+
+            @Override
+            public CharSequence subSequence(int start, int end) {
+                return value.subSequence(start, end);
+            }
+
+            @Override
+            public String toString() {
+                return value;
+            }
+        };
     }
 }

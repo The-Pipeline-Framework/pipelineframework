@@ -16,6 +16,7 @@
 
 package org.pipelineframework.processor.phase;
 
+import java.util.List;
 import java.util.Set;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -33,8 +34,10 @@ import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.processor.PipelineCompilationContext;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static javax.tools.Diagnostic.Kind.NOTE;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /** Unit tests for ModelExtractionPhase */
@@ -68,6 +71,11 @@ class ModelExtractionPhaseTest {
     }
 
     @Test
+    void testConstructorInjectionRejectsNullRoleEnricher() {
+        assertThrows(NullPointerException.class, () -> new ModelExtractionPhase(null));
+    }
+
+    @Test
     void testExecution_noAnnotatedElements_emptyModels() throws Exception {
         ModelExtractionPhase phase = new ModelExtractionPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
@@ -90,25 +98,20 @@ class ModelExtractionPhaseTest {
     }
 
     @Test
-    void testConstructorInjection() {
-        TemplateModelBuilder builder = new TemplateModelBuilder();
-        TemplateExpansionOrchestrator orchestrator = new TemplateExpansionOrchestrator();
+    void testExecution_emitsNoteWhenFallingBackToLegacyExtraction() throws Exception {
+        ModelExtractionPhase phase = new ModelExtractionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        context.setStepDefinitions(List.of());
 
-        ModelExtractionPhase phase = new ModelExtractionPhase(builder, orchestrator);
-        assertNotNull(phase);
-        assertEquals("Model Extraction Phase", phase.name());
+        phase.execute(context);
+
+        verify(messager).printMessage(
+            NOTE,
+            ModelExtractionPhase.NO_YAML_DEFINITIONS_MESSAGE);
     }
 
     @Test
-    void testConstructorInjection_rejectsNull() {
-        assertThrows(NullPointerException.class,
-            () -> new ModelExtractionPhase(null, new TemplateExpansionOrchestrator()));
-        assertThrows(NullPointerException.class,
-            () -> new ModelExtractionPhase(new TemplateModelBuilder(), null));
-    }
-
-    @Test
-    void testExecute_withTemplateModels_mergesIntoStepModels() throws Exception {
+    void testExecute_withTemplateModels_doesNotGenerateWithoutYamlStepDefinitions() throws Exception {
         ModelExtractionPhase phase = new ModelExtractionPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
 
@@ -137,15 +140,8 @@ class ModelExtractionPhaseTest {
 
         phase.execute(context);
 
-        // Verify that context.getStepModels() contains the expected number of template models and has expected properties
+        // Template-only synthesis is disabled in YAML-driven mode.
         assertNotNull(context.getStepModels());
-        assertEquals(1, context.getStepModels().size(), "Expected exactly one step model from the template");
-        
-        // Verify that the model has the expected service name based on the template step
-        // TemplateModelBuilder creates service name as "Process" + formattedName + "Service"
-        // where formattedName comes from the step name "TestStep"
-        assertTrue(context.getStepModels().stream()
-            .anyMatch(model -> model.serviceName().startsWith("Process") && model.serviceName().endsWith("Service")),
-            "Expected at least one model with service name starting with 'Process' and ending with 'Service'");
+        assertTrue(context.getStepModels().isEmpty(), "Expected no generated step models without YAML step definitions");
     }
 }

@@ -15,6 +15,7 @@ import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
 import org.pipelineframework.processor.ir.PipelineOrchestratorModel;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.TransportMode;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolution;
@@ -42,6 +43,8 @@ public class PipelineCompilationContext {
     private List<PipelineOrchestratorModel> orchestratorModels;
     @Setter
     private Object pipelineTemplateConfig; // Store as Object to avoid circular dependencies
+    @Setter
+    private List<StepDefinition> stepDefinitions;
     
     // Resolved generation targets
     @Setter
@@ -73,7 +76,7 @@ public class PipelineCompilationContext {
     private DescriptorProtos.FileDescriptorSet descriptorSet;
     
     /**
-     * Initialize a compilation context for the given annotation processing round.
+     * Create a compilation context for the given annotation processing round.
      *
      * @param processingEnv the processing environment providing compiler utilities and messaging
      * @param roundEnv the round environment containing the annotated elements visible in this round
@@ -86,6 +89,7 @@ public class PipelineCompilationContext {
         this.aspectsForExpansion = List.of();
         this.orchestratorModels = List.of();
         this.pipelineTemplateConfig = null;
+        this.stepDefinitions = List.of();
         this.resolvedTargets = Set.of();
         this.rendererBindings = Map.of();
         this.pluginHost = false;

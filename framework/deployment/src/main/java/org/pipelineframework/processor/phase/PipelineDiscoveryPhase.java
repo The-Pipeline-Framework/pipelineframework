@@ -1,8 +1,8 @@
 package org.pipelineframework.processor.phase;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -11,6 +11,8 @@ import java.util.Set;
 import javax.annotation.processing.Messager;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.util.Elements;
+import javax.tools.Diagnostic;
 
 import org.pipelineframework.annotation.PipelineOrchestrator;
 import org.pipelineframework.annotation.PipelinePlugin;
@@ -20,9 +22,12 @@ import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.config.PipelineStepConfigLoader;
 import org.pipelineframework.processor.ir.GenerationTarget;
+import org.pipelineframework.processor.ir.PipelineAspectModel;
 import org.pipelineframework.processor.ir.PipelineOrchestratorModel;
+import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.TransportMode;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
+import org.pipelineframework.processor.parser.StepDefinitionParser;
 
 /**
  * Discovers and loads pipeline configuration, aspects, and semantic models.
@@ -31,30 +36,41 @@ import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     private static final PipelineStepConfigLoader.StepConfig DEFAULT_STEP_CONFIG =
         new PipelineStepConfigLoader.StepConfig("", "GRPC", "COMPUTE", List.of(), List.of());
-
-    private final DiscoveryPathResolver pathResolver;
-    private final DiscoveryConfigLoader configLoader;
+    private final DiscoveryPathResolver discoveryPathResolver;
+    private final DiscoveryConfigLoader discoveryConfigLoader;
     private final TransportPlatformResolver transportPlatformResolver;
 
     /**
-     * Creates a new PipelineDiscoveryPhase with default collaborators.
+     * Create a PipelineDiscoveryPhase initialized with default collaborators.
+     *
+     * <p>Uses a new DiscoveryPathResolver, DiscoveryConfigLoader, and TransportPlatformResolver.
      */
     public PipelineDiscoveryPhase() {
         this(new DiscoveryPathResolver(), new DiscoveryConfigLoader(), new TransportPlatformResolver());
     }
 
     /**
-     * Creates a new PipelineDiscoveryPhase with explicit collaborators.
+     * Constructs a PipelineDiscoveryPhase with the provided collaborators.
+     *
+     * @param discoveryPathResolver resolver for locating pipeline-related paths
+     * @param discoveryConfigLoader loader for discovery configuration
+     * @param transportPlatformResolver resolver for transport and platform modes
+     * @throws NullPointerException if any argument is null
      */
-    PipelineDiscoveryPhase(
-            DiscoveryPathResolver pathResolver,
-            DiscoveryConfigLoader configLoader,
+    public PipelineDiscoveryPhase(
+            DiscoveryPathResolver discoveryPathResolver,
+            DiscoveryConfigLoader discoveryConfigLoader,
             TransportPlatformResolver transportPlatformResolver) {
-        this.pathResolver = Objects.requireNonNull(pathResolver, "pathResolver must not be null");
-        this.configLoader = Objects.requireNonNull(configLoader, "configLoader must not be null");
-        this.transportPlatformResolver = Objects.requireNonNull(transportPlatformResolver, "transportPlatformResolver must not be null");
+        this.discoveryPathResolver = Objects.requireNonNull(discoveryPathResolver, "discoveryPathResolver");
+        this.discoveryConfigLoader = Objects.requireNonNull(discoveryConfigLoader, "discoveryConfigLoader");
+        this.transportPlatformResolver = Objects.requireNonNull(transportPlatformResolver, "transportPlatformResolver");
     }
 
+    /**
+     * Provides the phase's human-readable name.
+     *
+     * @return the phase name "Pipeline Discovery Phase"
+     */
     @Override
     public String name() {
         return "Pipeline Discovery Phase";
@@ -71,116 +87,215 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
-        Map<String, String> options = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getOptions() : Map.of();
-        Messager messager = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getMessager() : new NoOpMessager();
-
         // Discover annotated elements - handle null round environment gracefully
         Set<? extends Element> orchestratorElements =
             ctx.getRoundEnv() != null ? ctx.getRoundEnv().getElementsAnnotatedWith(PipelineOrchestrator.class) : Set.of();
         Set<? extends Element> pluginElements =
             ctx.getRoundEnv() != null ? ctx.getRoundEnv().getElementsAnnotatedWith(PipelinePlugin.class) : Set.of();
 
-        // Resolve generated sources root and module directory
-        Path generatedSourcesRoot = pathResolver.resolveGeneratedSourcesRoot(options);
+        Map<String, String> options = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getOptions() : Map.of();
+        Messager messager = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getMessager() : null;
+
+        // Resolve generated sources root and module directory early (needed for config discovery)
+        Path generatedSourcesRoot = discoveryPathResolver.resolveGeneratedSourcesRoot(options);
         ctx.setGeneratedSourcesRoot(generatedSourcesRoot);
 
-        Path moduleDir = pathResolver.resolveModuleDir(generatedSourcesRoot);
+        Path moduleDir = discoveryPathResolver.resolveModuleDir(generatedSourcesRoot);
         ctx.setModuleDir(moduleDir);
-        ctx.setModuleName(pathResolver.resolveModuleName(options));
+        ctx.setModuleName(discoveryPathResolver.resolveModuleName(options));
+
+        Optional<Path> configPath = discoveryConfigLoader.resolvePipelineConfigPath(options, moduleDir, messager);
 
         // Check if this is a plugin host
-        ctx.setPluginHost(!pluginElements.isEmpty());
-
-        // Resolve pipeline config path (used by multiple loaders)
-        Optional<Path> configPath = configLoader.resolvePipelineConfigPath(options, moduleDir, messager);
+        boolean isPluginHost = !pluginElements.isEmpty();
+        ctx.setPluginHost(isPluginHost);
 
         // Load pipeline aspects
-        ctx.setAspectModels(configPath.isPresent() ? configLoader.loadAspects(configPath.get(), messager) : List.of());
+        List<PipelineAspectModel> aspects = loadPipelineAspects(configPath, messager);
+        ctx.setAspectModels(aspects);
 
         // Load pipeline template config
-        ctx.setPipelineTemplateConfig(configPath.isPresent() ? configLoader.loadTemplateConfig(configPath.get(), messager) : null);
+        PipelineTemplateConfig templateConfig = loadPipelineTemplateConfig(configPath, messager);
+        ctx.setPipelineTemplateConfig(templateConfig);
+
+        // Parse step definitions from YAML
+        List<StepDefinition> stepDefinitions = parseStepDefinitions(configPath, messager);
+        ctx.setStepDefinitions(stepDefinitions);
 
         // Load runtime mapping config (optional)
-        ctx.setRuntimeMapping(configLoader.loadRuntimeMapping(moduleDir, messager));
+        PipelineRuntimeMapping runtimeMapping = loadRuntimeMapping(moduleDir, messager);
+        ctx.setRuntimeMapping(runtimeMapping);
 
         // Determine transport and platform modes
-        PipelineStepConfigLoader.StepConfig stepConfig = configPath.isPresent()
-            ? configLoader.loadStepConfig(configPath.get(), System::getProperty, System::getenv, messager)
-            : null;
-        if (stepConfig == null) {
-            stepConfig = DEFAULT_STEP_CONFIG;
-        }
-        ctx.setTransportMode(transportPlatformResolver.resolveTransport(stepConfig.transport(), messager));
-        ctx.setPlatformMode(transportPlatformResolver.resolvePlatform(stepConfig.platform(), messager));
+        PipelineStepConfigLoader.StepConfig stepConfig = loadPipelineStepConfig(configPath, messager);
+        TransportMode transportMode = transportPlatformResolver.resolveTransport(stepConfig.transport(), messager);
+        ctx.setTransportMode(transportMode);
+        PlatformMode platformMode = transportPlatformResolver.resolvePlatform(stepConfig.platform(), messager);
+        ctx.setPlatformMode(platformMode);
 
         // Discover orchestrator models if present
-        ctx.setOrchestratorModels(discoverOrchestratorModels(ctx, orchestratorElements));
+        List<PipelineOrchestratorModel> orchestratorModels = discoverOrchestratorModels(ctx, orchestratorElements);
+        ctx.setOrchestratorModels(orchestratorModels);
+    }
+
+    /**
+     * Loads pipeline aspect models from the resolved pipeline configuration file.
+     *
+     * @param configPath the optional resolved pipeline configuration path
+     * @param messager the messager used to report diagnostics, may be null
+     * @return a list of loaded {@code PipelineAspectModel} instances; an empty list if no pipeline config is found
+     */
+    private List<PipelineAspectModel> loadPipelineAspects(Optional<Path> configPath, Messager messager) {
+        if (configPath.isEmpty()) {
+            return List.of();
+        }
+        return discoveryConfigLoader.loadAspects(configPath.get(), messager);
+    }
+
+    /**
+     * Locates and loads the pipeline template configuration from the module directory.
+     *
+     * @param configPath the optional resolved pipeline configuration path
+     * @param messager the messager used to report warnings, may be null
+     * @return the loaded PipelineTemplateConfig, or `null` if no configuration is present or if loading fails (a warning is emitted via the processing environment when available)
+     */
+    private PipelineTemplateConfig loadPipelineTemplateConfig(Optional<Path> configPath, Messager messager) {
+        if (configPath.isEmpty()) {
+            return null;
+        }
+        return discoveryConfigLoader.loadTemplateConfig(configPath.get(), messager);
+    }
+
+    /**
+     * Resolve pipeline step configuration from the module's pipeline YAML.
+     *
+     * Locates a pipeline YAML under the context's module directory and loads its step-level
+     * configuration (base package, transport, platform, input/output types). When the file is
+     * missing or cannot be loaded, returns a default non-null configuration.
+     *
+     * @param configPath the optional resolved pipeline configuration path
+     * @param messager the messager used to report warnings, may be null
+     * @return a non-null {@link org.pipelineframework.processor.config.PipelineStepConfigLoader.StepConfig}
+     */
+    private PipelineStepConfigLoader.StepConfig loadPipelineStepConfig(Optional<Path> configPath, Messager messager) {
+        if (configPath.isEmpty()) {
+            return DEFAULT_STEP_CONFIG;
+        }
+        PipelineStepConfigLoader.StepConfig loaded = discoveryConfigLoader.loadStepConfig(
+            configPath.get(),
+            key -> null,
+            System::getenv,
+            messager);
+        return loaded != null ? loaded : DEFAULT_STEP_CONFIG;
     }
 
     /**
      * Discover and build simple PipelineOrchestratorModel instances from elements annotated with @PipelineOrchestrator.
+     *
+     * @param ctx the compilation context used to determine transport mode and other contextual settings
+     * @param orchestratorElements the set of elements to inspect for a PipelineOrchestrator annotation; may be null or empty
+     * @return a list of PipelineOrchestratorModel objects created from the annotated elements; an empty list if no orchestrator elements are provided or none contain the annotation
      */
     private List<PipelineOrchestratorModel> discoverOrchestratorModels(
-            PipelineCompilationContext ctx,
+            PipelineCompilationContext ctx, 
             Set<? extends Element> orchestratorElements) {
         if (orchestratorElements == null || orchestratorElements.isEmpty()) {
             return List.of();
         }
 
         List<PipelineOrchestratorModel> models = new ArrayList<>();
-        Set<String> serviceNames = new HashSet<>();
-
+        
         for (Element element : orchestratorElements) {
-            PipelineOrchestrator annotation = element.getAnnotation(PipelineOrchestrator.class);
-            if (annotation == null) {
-                continue;
+            PipelineOrchestrator annotation = resolveOrchestratorAnnotation(element);
+            if (annotation != null) {
+                String serviceName = "OrchestratorService";
+                String servicePackage = "org.pipelineframework.orchestrator.service";
+                if (element instanceof TypeElement typeElement && ctx.getProcessingEnv() != null) {
+                    Elements elementUtils = ctx.getProcessingEnv().getElementUtils();
+                    if (elementUtils != null) {
+                        String packageName = elementUtils.getPackageOf(typeElement).getQualifiedName().toString();
+                        servicePackage = packageName + ".orchestrator.service";
+                        serviceName = typeElement.getSimpleName() + "OrchestratorService";
+                    }
+                }
+                
+                // Determine enabled targets based on transport mode
+                // This is simplified - in reality, it would depend on configuration
+                var enabledTargets = ctx.isTransportModeLocal()
+                    ? java.util.Set.<GenerationTarget>of()
+                    : (ctx.isTransportModeRest()
+                        ? java.util.Set.of(GenerationTarget.REST_RESOURCE)
+                        : java.util.Set.of(GenerationTarget.GRPC_SERVICE));
+                
+                PipelineOrchestratorModel model = new PipelineOrchestratorModel(
+                    serviceName,
+                    servicePackage,
+                    enabledTargets,
+                    annotation.generateCli()
+                );
+                
+                models.add(model);
             }
-
-            String serviceName = element.getSimpleName().toString() + "Orchestrator";
-            
-            // Check for duplicate service names to avoid downstream errors
-            if (serviceNames.contains(serviceName)) {
-                String qualifiedName = element instanceof TypeElement ? ((TypeElement) element).getQualifiedName().toString() : element.toString();
-                throw new IllegalStateException("Duplicate service name detected: " + serviceName + 
-                    " from element: " + qualifiedName + 
-                    ". Different types with the same simple name must have unique service names.");
-            }
-            
-            String servicePackage = element instanceof TypeElement typeElement
-                ? computeServicePackage(typeElement.getQualifiedName().toString(), element.getSimpleName().toString())
-                : "org.pipelineframework.orchestrator.service";
-
-            Set<GenerationTarget> enabledTargets;
-            if (ctx.isTransportModeLocal()) {
-                enabledTargets = Set.of();
-            } else if (ctx.isTransportModeRest()) {
-                enabledTargets = Set.of(GenerationTarget.REST_RESOURCE);
-            } else {
-                enabledTargets = Set.of(GenerationTarget.GRPC_SERVICE);
-            }
-
-            models.add(new PipelineOrchestratorModel(serviceName, servicePackage, enabledTargets, annotation.generateCli()));
-            serviceNames.add(serviceName);
         }
-
+        
         return models;
     }
 
     /**
-     * Computes the service package by finding the last occurrence of the simple class name
-     * in the qualified name and replacing it with ".orchestrator.service".
+     * Retrieve the {@code PipelineOrchestrator} annotation from the given element.
      *
-     * @param qualifiedName the fully qualified name of the type
-     * @param simpleName the simple name of the type
-     * @return the computed service package
+     * @param orchestratorElement element to inspect; may be {@code null}
+     * @return the {@code PipelineOrchestrator} annotation, or {@code null} if the element is {@code null} or not annotated
      */
-    private String computeServicePackage(String qualifiedName, String simpleName) {
-        String classNameWithDot = "." + simpleName;
-        int lastDotIndex = qualifiedName.lastIndexOf(classNameWithDot);
-        if (lastDotIndex != -1) {
-            return qualifiedName.substring(0, lastDotIndex) + ".orchestrator.service";
+    private PipelineOrchestrator resolveOrchestratorAnnotation(Element orchestratorElement) {
+        if (orchestratorElement == null) {
+            return null;
         }
-        // Fallback to the original qualified name if the simple name isn't found at the end
-        return "org.pipelineframework.orchestrator.service";
+        return orchestratorElement.getAnnotation(PipelineOrchestrator.class);
+    }
+
+    private PipelineRuntimeMapping loadRuntimeMapping(Path moduleDir, Messager messager) {
+        return discoveryConfigLoader.loadRuntimeMapping(moduleDir, messager);
+    }
+
+    /**
+     * Parse step definitions from the pipeline template configuration.
+     *
+     * Returns the parsed StepDefinition objects found in the resolved pipeline config.
+     * If no config is found or parsing fails, returns an empty list and emits diagnostics
+     * via the processing environment's messager when available.
+     *
+     * @param configPath the optional resolved pipeline configuration path
+     * @param messager the messager used to emit diagnostics, may be null
+     * @return a list of StepDefinition parsed from the template; empty if none or on error
+     */
+    private List<StepDefinition> parseStepDefinitions(Optional<Path> configPath, Messager messager) {
+        if (configPath.isEmpty()) {
+            return List.of();
+        }
+
+        StepDefinitionParser parser = new StepDefinitionParser((kind, message) ->
+            reportDiagnostic(messager, kind, message));
+        try {
+            return parser.parseStepDefinitions(configPath.get());
+        } catch (IOException e) {
+            reportDiagnostic(
+                messager,
+                Diagnostic.Kind.ERROR,
+                "Failed to parse YAML step definitions from " + configPath.get() + ": " + e.getMessage());
+            return List.of();
+        } catch (Exception e) {
+            reportDiagnostic(
+                messager,
+                Diagnostic.Kind.ERROR,
+                "Unexpected error while parsing YAML step definitions from " + configPath.get() + ": " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    private void reportDiagnostic(Messager messager, Diagnostic.Kind kind, String message) {
+        if (messager != null) {
+            messager.printMessage(kind, message);
+        }
     }
 }

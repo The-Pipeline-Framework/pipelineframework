@@ -1,8 +1,15 @@
 package org.pipelineframework.processor.phase;
 
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import javax.lang.model.element.Element;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
 
 import org.pipelineframework.annotation.ParallelismHint;
@@ -21,6 +28,11 @@ import org.pipelineframework.processor.ir.StreamingShape;
  * and emits errors or warnings via Messager if needed.
  */
 public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
+    private static final List<String> REACTIVE_SERVICE_INTERFACE_NAMES = List.of(
+        "org.pipelineframework.service.ReactiveService",
+        "org.pipelineframework.service.ReactiveStreamingService",
+        "org.pipelineframework.service.ReactiveStreamingClientService",
+        "org.pipelineframework.service.ReactiveBidirectionalStreamingService");
 
     /**
      * Creates a new PipelineSemanticAnalysisPhase.
@@ -33,6 +45,16 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         return "Pipeline Semantic Analysis Phase";
     }
 
+    /**
+     * Performs semantic analysis and policy validation for the given pipeline compilation context.
+     *
+     * This method prepares aspect models for expansion, decides whether an orchestrator should be
+     * generated, and runs validations for parallelism hints, provider hints, function-platform constraints,
+     * and YAML-driven step definitions. It updates the provided context with derived state used by later phases.
+     *
+     * @param ctx the pipeline compilation context to analyze and update
+     * @throws Exception if an unexpected processing error occurs during analysis
+     */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
         // Analyze aspects to identify those that should be expanded
@@ -46,6 +68,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         validateParallelismHints(ctx);
         validateProviderHints(ctx);
         validateFunctionPlatformConstraints(ctx);
+        validateYamlDrivenSteps(ctx);
 
         // Analyze streaming shapes and other semantic properties
         // This phase focuses on semantic analysis without building bindings or calling renderers
@@ -351,6 +374,288 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         }
         String normalized = option.trim();
         return "true".equalsIgnoreCase(normalized) || "1".equals(normalized);
+    }
+
+    /**
+     * Validates pipeline steps defined via YAML and checks @PipelineStep-annotated classes and delegate compatibility.
+     *
+     * <p>Performs the following validations and emits diagnostics via the processing {@code Messager}:
+     * <ul>
+     *   <li>Warns (as a NOTE) when a class annotated with {@code @PipelineStep} is not referenced by any YAML step (controlled by the
+     *       {@code pipeline.warnUnreferencedSteps} option, defaults to true).</li>
+     *   <li>For YAML-declared steps with a delegate service: verifies the delegate type exists and implements a recognized reactive service
+     *       interface.</li>
+     *   <li>If an {@code externalMapper} is specified: verifies the mapper class exists and implements {@code org.pipelineframework.mapper.ExternalMapper}.</li>
+     *   <li>If no external mapper is specified: resolves the delegate's reactive service type arguments and compares them to the YAML step's
+     *       input/output domain types; emits an error requiring an operator mapper when the types differ.</li>
+     * </ul>
+     *
+     * @param ctx the pipeline compilation context; method returns immediately if {@code ctx} or required processing utilities or step models are absent
+     */
+    private void validateYamlDrivenSteps(PipelineCompilationContext ctx) {
+        if (ctx == null || ctx.getProcessingEnv() == null || ctx.getStepModels() == null) {
+            return;
+        }
+
+        var elementUtils = ctx.getProcessingEnv().getElementUtils();
+        var messager = ctx.getProcessingEnv().getMessager();
+
+        // Validate that annotated services not referenced in YAML don't generate steps
+        // This is done by checking if each annotated service is in the YAML step definitions
+        Set<String> yamlReferencedServices = new HashSet<>();
+        if (ctx.getStepDefinitions() != null) {
+            for (var stepDef : ctx.getStepDefinitions()) {
+                if (stepDef.kind() == org.pipelineframework.processor.ir.StepKind.INTERNAL
+                        && stepDef.executionClass() != null) {
+                    yamlReferencedServices.add(stepDef.executionClass().canonicalName());
+                }
+            }
+        }
+
+        // Get all @PipelineStep annotated classes
+        Set<? extends Element> pipelineStepElements =
+            ctx.getRoundEnv() != null ? ctx.getRoundEnv().getElementsAnnotatedWith(org.pipelineframework.annotation.PipelineStep.class) : Set.of();
+
+        // Check if we should warn about unreferenced steps (default: true)
+        boolean warnUnreferenced = true;
+        String warnOption = ctx.getProcessingEnv().getOptions().get("pipeline.warnUnreferencedSteps");
+        if (warnOption != null) {
+            warnUnreferenced = Boolean.parseBoolean(warnOption);
+        }
+
+        for (Element annotatedElement : pipelineStepElements) {
+            // Validate that @PipelineStep is only applied to classes
+            if (annotatedElement.getKind() != javax.lang.model.element.ElementKind.CLASS) {
+                messager.printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PipelineStep can only be applied to classes",
+                    annotatedElement);
+                continue;
+            }
+
+            TypeElement serviceClass = (TypeElement) annotatedElement;
+            String serviceClassName = serviceClass.getQualifiedName().toString();
+
+            // If this annotated service is not referenced in YAML, emit a warning when enabled
+            if (!yamlReferencedServices.contains(serviceClassName)) {
+                if (warnUnreferenced) {
+                    messager.printMessage(
+                        Diagnostic.Kind.WARNING,
+                        "Service '" + serviceClassName + "' is annotated with @PipelineStep but not referenced in pipeline YAML. No step will be generated for it.");
+                }
+            }
+        }
+
+        // Validate the step models created from YAML
+        for (PipelineStepModel model : ctx.getStepModels()) {
+            if (model.delegateService() != null) {
+                // Validate that the delegate service exists
+                var delegateElement = elementUtils.getTypeElement(model.delegateService().canonicalName());
+                if (delegateElement == null) {
+                    messager.printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "Delegate service '" + model.delegateService().canonicalName() + "' not found for step '" + model.serviceName() + "'");
+                    continue;
+                }
+
+                var typeUtils = ctx.getProcessingEnv().getTypeUtils();
+                boolean isValidReactiveService = implementsAnyReactiveService(
+                    delegateElement,
+                    elementUtils,
+                    typeUtils);
+
+                if (!isValidReactiveService) {
+                    messager.printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "Delegate service '" + model.delegateService().canonicalName() +
+                        "' must implement one of the reactive service interfaces (ReactiveService, ReactiveStreamingService, etc.) for step '" +
+                        model.serviceName() + "'");
+                    continue;
+                }
+
+                // If operator mapper is specified, validate it implements ExternalMapper
+                if (model.externalMapper() != null) {
+                    var externalMapperElement = elementUtils.getTypeElement(model.externalMapper().canonicalName());
+                    if (externalMapperElement == null) {
+                        messager.printMessage(
+                            Diagnostic.Kind.ERROR,
+                            "Operator mapper '" + model.externalMapper().canonicalName() + "' not found for step '" + model.serviceName() + "'");
+                        continue;
+                    }
+
+                    var externalMapperInterfaceElement = elementUtils.getTypeElement("org.pipelineframework.mapper.ExternalMapper");
+                    if (externalMapperInterfaceElement == null) {
+                        messager.printMessage(
+                            Diagnostic.Kind.ERROR,
+                            "Framework interface 'org.pipelineframework.mapper.ExternalMapper' could not be resolved on the processor classpath "
+                                + "while validating operator mapper '" + model.externalMapper().canonicalName()
+                                + "' for step '" + model.serviceName() + "'.");
+                        continue;
+                    }
+
+                    boolean implementsExternalMapper =
+                        typeUtils.isAssignable(externalMapperElement.asType(), externalMapperInterfaceElement.asType());
+                    if (!implementsExternalMapper) {
+                        messager.printMessage(
+                            Diagnostic.Kind.ERROR,
+                            "Operator mapper '" + model.externalMapper().canonicalName() + 
+                            "' must implement org.pipelineframework.mapper.ExternalMapper for step '" + 
+                            model.serviceName() + "'");
+                    }
+                } else {
+                    DelegateTypeSignature delegateSignature = resolveDelegateTypeSignature(
+                        delegateElement,
+                        typeUtils,
+                        messager,
+                        model.serviceName());
+                    if (delegateSignature == null || model.inputMapping() == null || model.outputMapping() == null) {
+                        continue;
+                    }
+
+                    var stepInputDomainType = model.inputMapping().domainType();
+                    var stepOutputDomainType = model.outputMapping().domainType();
+                    var delegateInputDomainType = delegateSignature.inputType();
+                    var delegateOutputDomainType = delegateSignature.outputType();
+
+                    String stepInputType = stepInputDomainType == null ? "absent" : stepInputDomainType.toString();
+                    String stepOutputType = stepOutputDomainType == null ? "absent" : stepOutputDomainType.toString();
+                    String delegateInputType = delegateInputDomainType == null ? "absent" : delegateInputDomainType.toString();
+                    String delegateOutputType = delegateOutputDomainType == null ? "absent" : delegateOutputDomainType.toString();
+                    boolean inputDiffers = !Objects.equals(stepInputType, delegateInputType);
+                    boolean outputDiffers = !Objects.equals(stepOutputType, delegateOutputType);
+                    if (inputDiffers || outputDiffers) {
+                        messager.printMessage(
+                            Diagnostic.Kind.ERROR,
+                            "Delegated step '" + model.serviceName()
+                                + "' requires an operator mapper because YAML types ["
+                                + stepInputType + " -> " + stepOutputType
+                                + "] differ from delegate service types ["
+                                + delegateInputType + " -> " + delegateOutputType + "].");
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Resolves the delegate service's reactive input and output type arguments.
+     *
+     * @param delegateElement the delegate service element to inspect
+     * @param typeUtils utility for operating on types and resolving supertypes
+     * @param messager used to emit an error if the delegate implements multiple reactive interfaces; may be null
+     * @param stepName name of the step (included in any emitted diagnostic)
+     * @return a DelegateTypeSignature containing the delegate's input and output type mirrors, or `null` if no known reactive service interface is found or if multiple matching reactive interfaces are present
+     */
+    private DelegateTypeSignature resolveDelegateTypeSignature(
+            TypeElement delegateElement,
+            Types typeUtils,
+            javax.annotation.processing.Messager messager,
+            String stepName) {
+        List<DeclaredType> matches = new ArrayList<>();
+        List<String> matchedInterfaceNames = new ArrayList<>();
+        for (String reactiveInterface : REACTIVE_SERVICE_INTERFACE_NAMES) {
+            DeclaredType declared = findReactiveSupertype(typeUtils, delegateElement.asType(), reactiveInterface);
+            if (declared == null || declared.getTypeArguments().size() < 2) {
+                continue;
+            }
+            matches.add(declared);
+            matchedInterfaceNames.add(reactiveInterface);
+        }
+
+        if (matches.size() > 1) {
+            if (messager != null) {
+                messager.printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "Delegated step '" + stepName + "' uses delegate service '"
+                        + delegateElement.getQualifiedName()
+                        + "' that implements multiple reactive service interfaces: "
+                        + String.join(", ", matchedInterfaceNames)
+                        + ". Use exactly one reactive service interface.");
+            }
+            return null;
+        }
+
+        if (matches.isEmpty()) {
+            return null;
+        }
+
+        DeclaredType match = matches.getFirst();
+        return new DelegateTypeSignature(
+            match.getTypeArguments().get(0),
+            match.getTypeArguments().get(1));
+    }
+
+    /**
+     * Determines whether the given delegate element implements any recognized reactive service interface.
+     *
+     * @param delegateElement the type element representing the delegate service implementation to check
+     * @return `true` if the element implements at least one interface listed in REACTIVE_SERVICE_INTERFACE_NAMES, `false` otherwise
+     */
+    private boolean implementsAnyReactiveService(
+            TypeElement delegateElement,
+            javax.lang.model.util.Elements elementUtils,
+            Types typeUtils) {
+        for (String interfaceName : REACTIVE_SERVICE_INTERFACE_NAMES) {
+            TypeElement interfaceElement = elementUtils.getTypeElement(interfaceName);
+            if (interfaceElement != null && typeUtils.isAssignable(delegateElement.asType(), interfaceElement.asType())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Locate a declared supertype of the given type whose qualified name equals the specified target.
+     *
+     * @param types the utility for type operations
+     * @param type the type to inspect for a matching supertype
+     * @param targetQualifiedName the fully qualified name of the desired supertype
+     * @return the matching DeclaredType if found, or {@code null} if no matching supertype exists
+     */
+    private DeclaredType findReactiveSupertype(Types types, TypeMirror type, String targetQualifiedName) {
+        return findReactiveSupertype(types, type, targetQualifiedName, new HashSet<>());
+    }
+
+    /**
+     * Locates a declared supertype of the given type whose element has the specified qualified name.
+     *
+     * Performs a depth-first search through direct supertypes and uses the provided `visited` set
+     * to avoid cycles during traversal.
+     *
+     * @param types the Types utility for type operations
+     * @param type the starting type to inspect for a matching supertype
+     * @param targetQualifiedName the fully qualified name of the target supertype to find
+     * @param visited a mutable set of type string representations used to record visited types and prevent cycles
+     * @return the matching DeclaredType whose element's qualified name equals `targetQualifiedName`, or `null` if no match is found
+     */
+    private DeclaredType findReactiveSupertype(
+            Types types,
+            TypeMirror type,
+            String targetQualifiedName,
+            Set<String> visited) {
+        if (type == null) {
+            return null;
+        }
+        String typeKey = type.toString();
+        if (!visited.add(typeKey)) {
+            return null;
+        }
+        if (type instanceof DeclaredType declaredType
+            && declaredType.asElement() instanceof TypeElement typeElement
+            && targetQualifiedName.contentEquals(typeElement.getQualifiedName())) {
+            return declaredType;
+        }
+
+        for (TypeMirror supertype : types.directSupertypes(type)) {
+            DeclaredType match = findReactiveSupertype(types, supertype, targetQualifiedName, visited);
+            if (match != null) {
+                return match;
+            }
+        }
+        return null;
+    }
+
+    private record DelegateTypeSignature(TypeMirror inputType, TypeMirror outputType) {
     }
 
     /**

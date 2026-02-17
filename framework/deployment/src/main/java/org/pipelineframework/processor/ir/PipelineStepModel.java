@@ -26,6 +26,8 @@ import org.pipelineframework.parallelism.ThreadSafety;
  * @param cacheKeyGenerator Gets the cache key generator override class for this step, if any.
  * @param orderingRequirement Gets the ordering requirement for the generated client step.
  * @param threadSafety Gets the thread safety declaration for the generated client step.
+ * @param delegateService Gets the delegate service class if this is a delegation step, otherwise null.
+ * @param externalMapper Gets the operator mapper class if operator mapping is used, otherwise null.
  */
 public record PipelineStepModel(
         String serviceName,
@@ -41,7 +43,9 @@ public record PipelineStepModel(
         boolean sideEffect,
         ClassName cacheKeyGenerator,
         OrderingRequirement orderingRequirement,
-        ThreadSafety threadSafety
+        ThreadSafety threadSafety,
+        ClassName delegateService,
+        ClassName externalMapper
 ) {
     /**
          * Creates a new PipelineStepModel with the supplied service identity, type mappings and generation configuration.
@@ -58,6 +62,8 @@ public record PipelineStepModel(
      * @param cacheKeyGenerator the cache key generator override for this step; may be null
      * @param orderingRequirement the ordering requirement for the generated client step; may be null
      * @param threadSafety the thread safety declaration for the generated client step; may be null
+     * @param delegateService the delegate service class if this is a delegation step, otherwise null
+     * @param externalMapper the operator mapper class if operator mapping is used, otherwise null
      * @throws IllegalArgumentException if any parameter documented as 'must not be null' is null
      */
     @SuppressWarnings("ConstantValue")
@@ -74,7 +80,9 @@ public record PipelineStepModel(
             boolean sideEffect,
             ClassName cacheKeyGenerator,
             OrderingRequirement orderingRequirement,
-            ThreadSafety threadSafety) {
+            ThreadSafety threadSafety,
+            ClassName delegateService,
+            ClassName externalMapper) {
         // Validate non-null invariants
         if (serviceName == null)
             throw new IllegalArgumentException("serviceName cannot be null");
@@ -107,23 +115,29 @@ public record PipelineStepModel(
         this.cacheKeyGenerator = cacheKeyGenerator;
         this.orderingRequirement = orderingRequirement != null ? orderingRequirement : OrderingRequirement.RELAXED;
         this.threadSafety = threadSafety != null ? threadSafety : ThreadSafety.SAFE;
+        this.delegateService = delegateService;
+        this.externalMapper = externalMapper;
     }
 
     /**
-     * Create a pipeline step model with default ordering and thread-safety hints.
+     * Create a PipelineStepModel using provided values and default hints for ordering, thread-safety,
+     * delegate service, and external mapper.
      *
-     * @param serviceName service name from the step class
-     * @param generatedName generated service name for adapters
-     * @param servicePackage base service package
-     * @param serviceClassName service class name
-     * @param inputMapping input type mapping
-     * @param outputMapping output type mapping
-     * @param streamingShape streaming shape for the step
-     * @param enabledTargets generation targets to render
-     * @param executionMode execution mode
-     * @param deploymentRole deployment role
-     * @param sideEffect whether this step is a side-effect plugin
-     * @param cacheKeyGenerator optional cache key generator class
+     * Defaults: ordering is set to OrderingRequirement.RELAXED, threadSafety is set to ThreadSafety.SAFE,
+     * and both delegateService and externalMapper are set to null.
+     *
+     * @param serviceName service identifier derived from the step class
+     * @param generatedName base name to use for generated adapter/service classes
+     * @param servicePackage package to place generated service classes in
+     * @param serviceClassName ClassName of the service implementation
+     * @param inputMapping mapping information for inbound (domain→gRPC) types
+     * @param outputMapping mapping information for outbound (gRPC→domain) types
+     * @param streamingShape streaming configuration for the service
+     * @param enabledTargets set of GenerationTarget values enabled for generation
+     * @param executionMode execution mode for the service
+     * @param deploymentRole deployment role for the generated service implementation
+     * @param sideEffect true if the step is a synthetic side-effect observer
+     * @param cacheKeyGenerator optional ClassName override for cache key generation
      */
     public PipelineStepModel(String serviceName,
             String generatedName,
@@ -150,7 +164,9 @@ public record PipelineStepModel(
             sideEffect,
             cacheKeyGenerator,
             OrderingRequirement.RELAXED,
-            ThreadSafety.SAFE);
+            ThreadSafety.SAFE,
+            null,
+            null);
     }
 
     /**
@@ -196,6 +212,8 @@ public record PipelineStepModel(
         private ClassName cacheKeyGenerator;
         private OrderingRequirement orderingRequirement = OrderingRequirement.RELAXED;
         private ThreadSafety threadSafety = ThreadSafety.SAFE;
+        private ClassName delegateService;
+        private ClassName externalMapper;
 
         /**
          * Sets the service name.
@@ -363,6 +381,28 @@ public record PipelineStepModel(
         }
 
         /**
+         * Configure the delegate service class to use when this pipeline step delegates to another service.
+         *
+         * @param delegateService the delegate service ClassName, or {@code null} if this step has no delegate
+         * @return this builder instance
+         */
+        public Builder delegateService(ClassName delegateService) {
+            this.delegateService = delegateService;
+            return this;
+        }
+
+        /**
+         * Specifies a custom operator mapper class used to map between domain and operator types.
+         *
+         * @param externalMapper the operator mapper ClassName to use, or {@code null} to indicate no operator mapping
+         * @return this builder instance
+         */
+        public Builder externalMapper(ClassName externalMapper) {
+            this.externalMapper = externalMapper;
+            return this;
+        }
+
+        /**
          * Create a PipelineStepModel populated from the builder's current state.
          *
          * @return a PipelineStepModel populated with the builder's state
@@ -401,15 +441,17 @@ public record PipelineStepModel(
                     sideEffect,
                     cacheKeyGenerator,
                     orderingRequirement,
-                    threadSafety);
+                    threadSafety,
+                    delegateService,
+                    externalMapper);
         }
     }
     
     /**
-     * Creates a new PipelineStepModel with the same properties as this instance but with the specified deployment role.
+     * Produce a copy of this PipelineStepModel that uses the specified deployment role.
      *
-     * @param role the deployment role to use in the new instance
-     * @return a new PipelineStepModel with the same properties but the specified deployment role
+     * @param role the deployment role for the new instance
+     * @return a PipelineStepModel identical to this instance except with the provided deployment role
      */
     public PipelineStepModel withDeploymentRole(DeploymentRole role) {
         return new PipelineStepModel(
@@ -426,7 +468,9 @@ public record PipelineStepModel(
             sideEffect,
             cacheKeyGenerator,
             orderingRequirement,
-            threadSafety
+            threadSafety,
+            delegateService,
+            externalMapper
         );
     }
 
@@ -457,6 +501,8 @@ public record PipelineStepModel(
             .sideEffect(sideEffect)
             .cacheKeyGenerator(cacheKeyGenerator)
             .orderingRequirement(orderingRequirement)
-            .threadSafety(threadSafety);
+            .threadSafety(threadSafety)
+            .delegateService(delegateService)
+            .externalMapper(externalMapper);
     }
 }

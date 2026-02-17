@@ -1,6 +1,7 @@
 package org.pipelineframework.processor;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import static com.google.testing.compile.CompilationSubject.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PluginProducerGenerationTest {
 
@@ -18,7 +20,7 @@ class PluginProducerGenerationTest {
     Path tempDir;
 
     @Test
-    void allowsRestGenerationWithoutApTimeMapperResolution() throws IOException {
+    void generatesSideEffectResourceUsingPluginImplementationClass() throws IOException {
         Path projectRoot = tempDir;
         Files.writeString(projectRoot.resolve("pom.xml"), """
             <project>
@@ -40,9 +42,9 @@ class PluginProducerGenerationTest {
             transport: "REST"
             steps:
               - name: "Process Test"
-                cardinality: "ONE_TO_ONE"
-                inputTypeName: "TestData"
-                outputTypeName: "TestData"
+                service: "com.example.ProcessTestService"
+                input: "java.lang.String"
+                output: "java.lang.String"
             aspects:
               persistence:
                 enabled: true
@@ -54,7 +56,7 @@ class PluginProducerGenerationTest {
             """);
 
         Compilation compilation = Compiler.javac()
-            .withProcessors(new PipelineStepProcessor(), new org.mapstruct.ap.MappingProcessor())
+            .withProcessors(new PipelineStepProcessor())
             .withOptions("-Apipeline.generatedSourcesDir=" + generatedSourcesDir)
             .compile(
                 JavaFileObjects.forSourceString(
@@ -68,52 +70,93 @@ class PluginProducerGenerationTest {
                         public class PersistencePluginHost {
                         }
                         """),
-                // Service class with @PipelineStep
-                JavaFileObjects.forSourceString("com.example.ProcessTestService", """
-                    package com.example;
+                JavaFileObjects.forSourceString(
+                    "com.example.ProcessTestService",
+                    """
+                        package com.example;
 
-                    import org.pipelineframework.annotation.PipelineStep;
-                    import org.pipelineframework.step.StepOneToOne;
-                    import com.example.common.domain.TestData;
+                        import org.pipelineframework.annotation.PipelineStep;
+                        import org.pipelineframework.service.ReactiveService;
+                        import org.pipelineframework.step.StepOneToOne;
+                        import io.smallrye.mutiny.Uni;
+                        import jakarta.enterprise.context.ApplicationScoped;
 
-                    @PipelineStep(
-                        inputType = TestData.class,
-                        outputType = TestData.class,
-                        stepType = StepOneToOne.class
-                    )
-                    public class ProcessTestService {
-                    }
-                    """),
-                // Domain type stub
-                JavaFileObjects.forSourceString("com.example.common.domain.TestData", """
-                    package com.example.common.domain;
-                    public class TestData { }
-                    """),
-                // Mapper stub for TestData domain type
-                JavaFileObjects.forSourceString("com.example.common.mapper.TestDataMapper", """
-                    package com.example.common.mapper;
+                        @PipelineStep(
+                            inputType = String.class,
+                            outputType = String.class,
+                            stepType = StepOneToOne.class,
+                            inboundMapper = com.example.StringInputMapper.class,
+                            outboundMapper = com.example.StringOutputMapper.class
+                        )
+                        @ApplicationScoped
+                        public class ProcessTestService implements ReactiveService<String, String> {
+                            @Override
+                            public Uni<String> process(String input) {
+                                return Uni.createFrom().item(input);
+                            }
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "com.example.StringInputMapper",
+                    """
+                        package com.example;
 
-                    import org.pipelineframework.mapper.Mapper;
-                    import com.example.common.domain.TestData;
-                    import com.example.common.domain.TestDataGrpcMessage;
+                        public class StringInputMapper {
+                            public String fromDto(String dto) {
+                                return dto;
+                            }
 
-                    @org.mapstruct.Mapper
-                    public interface TestDataMapper extends Mapper<TestDataGrpcMessage, TestData, TestData> {
-                        TestData fromGrpc(TestDataGrpcMessage grpc);
-                        TestDataGrpcMessage toGrpc(TestData dto);
-                        TestData fromDto(TestData dto);
-                        TestData toDto(TestData domain);
-                    }
-                    """),
-                // gRPC message stub
-                JavaFileObjects.forSourceString("com.example.common.domain.TestDataGrpcMessage", """
-                    package com.example.common.domain;
+                            public String toDto(String domain) {
+                                return domain;
+                            }
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "com.example.StringOutputMapper",
+                    """
+                        package com.example;
 
-                    public class TestDataGrpcMessage {
-                    }
-                    """)
-            );
+                        public class StringOutputMapper {
+                            public String fromDto(String dto) {
+                                return dto;
+                            }
+
+                            public String toDto(String domain) {
+                                return domain;
+                            }
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "com.example.PersistenceService",
+                    """
+                        package com.example;
+
+                        public class PersistenceService {
+                        }
+                        """));
 
         assertThat(compilation).succeeded();
+
+        Path restServerDir = generatedSourcesDir.resolve("rest-server");
+        assertTrue(
+            Files.exists(restServerDir),
+            "Expected generated REST server directory to exist: " + restServerDir);
+        assertTrue(
+            containsText(restServerDir, "PersistenceService"),
+            "Expected generated REST server sources under " + restServerDir
+                + " to contain text 'PersistenceService'");
+    }
+
+    private boolean containsText(Path rootDir, String text) throws IOException {
+        try (var stream = Files.walk(rootDir)) {
+            return stream.filter(path -> path.toString().endsWith(".java"))
+                .anyMatch(path -> {
+                    try {
+                        return Files.readString(path).contains(text);
+                    } catch (IOException e) {
+                        throw new UncheckedIOException(e);
+                    }
+                });
+        }
     }
 }
