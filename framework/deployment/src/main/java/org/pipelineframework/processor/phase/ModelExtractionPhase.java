@@ -5,6 +5,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.stream.Collectors;
 import java.util.Set;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
@@ -239,34 +240,6 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return null;
         }
 
-        // Validate external mapper if specified
-        if (stepDef.externalMapper() != null) {
-            TypeElement mapperElement = ctx.getProcessingEnv().getElementUtils()
-                .getTypeElement(stepDef.externalMapper().canonicalName());
-
-            if (mapperElement == null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.ERROR,
-                    "External mapper class '" + stepDef.externalMapper().canonicalName() +
-                    "' not found for step '" + stepDef.name() + "'");
-                return null;
-            }
-
-            // Check if the mapper implements ExternalMapper interface using type utilities
-            var externalMapperInterfaceElement = ctx.getProcessingEnv().getElementUtils().getTypeElement("org.pipelineframework.mapper.ExternalMapper");
-            boolean implementsExternalMapper = externalMapperInterfaceElement != null && 
-                typeUtils.isAssignable(mapperElement.asType(), externalMapperInterfaceElement.asType());
-
-            if (!implementsExternalMapper) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.ERROR,
-                    "External mapper '" + stepDef.externalMapper().canonicalName() +
-                    "' must implement org.pipelineframework.mapper.ExternalMapper for step '" +
-                    stepDef.name() + "'");
-                return null;
-            }
-        }
-
         TypeName inputType = stepDef.inputType() != null ? stepDef.inputType() : reactiveSignature.inputType();
         TypeName outputType = stepDef.outputType() != null ? stepDef.outputType() : reactiveSignature.outputType();
         if (inputType == null || outputType == null) {
@@ -274,6 +247,23 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Could not resolve input/output types for delegated step '" + stepDef.name()
                     + "'. Provide 'input'/'output' in YAML or use a parameterized reactive delegate type.");
+            return null;
+        }
+
+        ClassName externalMapper = resolveDelegatedExternalMapper(
+            ctx,
+            stepDef,
+            inputType,
+            outputType,
+            reactiveSignature.inputType(),
+            reactiveSignature.outputType());
+        if (stepDef.externalMapper() != null && externalMapper == null) {
+            return null;
+        }
+        if (stepDef.externalMapper() == null
+            && externalMapper == null
+            && (!inputType.equals(reactiveSignature.inputType())
+                || !outputType.equals(reactiveSignature.outputType()))) {
             return null;
         }
 
@@ -313,8 +303,177 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             OrderingRequirement.RELAXED,
             ThreadSafety.SAFE,
             stepDef.executionClass(),
-            stepDef.externalMapper()
+            externalMapper
         );
+    }
+
+    private ClassName resolveDelegatedExternalMapper(
+            PipelineCompilationContext ctx,
+            org.pipelineframework.processor.ir.StepDefinition stepDef,
+            TypeName applicationInputType,
+            TypeName applicationOutputType,
+            TypeName libraryInputType,
+            TypeName libraryOutputType) {
+        if (stepDef.externalMapper() != null) {
+            TypeElement mapperElement = ctx.getProcessingEnv().getElementUtils()
+                .getTypeElement(stepDef.externalMapper().canonicalName());
+            if (mapperElement == null) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.ERROR,
+                    "External mapper class '" + stepDef.externalMapper().canonicalName()
+                        + "' not found for step '" + stepDef.name() + "'");
+                return null;
+            }
+            if (!isCompatibleExternalMapper(
+                ctx,
+                stepDef.name(),
+                mapperElement,
+                applicationInputType,
+                libraryInputType,
+                applicationOutputType,
+                libraryOutputType)) {
+                return null;
+            }
+            return ClassName.get(mapperElement);
+        }
+
+        if (applicationInputType.equals(libraryInputType) && applicationOutputType.equals(libraryOutputType)) {
+            return null;
+        }
+
+        return inferExternalMapper(
+            ctx,
+            stepDef.name(),
+            applicationInputType,
+            libraryInputType,
+            applicationOutputType,
+            libraryOutputType);
+    }
+
+    private ClassName inferExternalMapper(
+            PipelineCompilationContext ctx,
+            String stepName,
+            TypeName applicationInputType,
+            TypeName libraryInputType,
+            TypeName applicationOutputType,
+            TypeName libraryOutputType) {
+        if (ctx.getRoundEnv() == null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Step '" + stepName + "' requires an external mapper, but no source candidates were available for inference.");
+            return null;
+        }
+
+        List<ClassName> matchingCandidates = new ArrayList<>();
+        for (Element rootElement : ctx.getRoundEnv().getRootElements()) {
+            if (rootElement.getKind() != ElementKind.CLASS) {
+                continue;
+            }
+            if (!(rootElement instanceof TypeElement candidateElement)) {
+                continue;
+            }
+            if (isCompatibleExternalMapper(
+                ctx,
+                stepName,
+                candidateElement,
+                applicationInputType,
+                libraryInputType,
+                applicationOutputType,
+                libraryOutputType,
+                false)) {
+                matchingCandidates.add(ClassName.get(candidateElement));
+            }
+        }
+
+        if (matchingCandidates.isEmpty()) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Step '" + stepName + "' requires an external mapper for types ["
+                    + applicationInputType + " -> " + libraryInputType + ", "
+                    + libraryOutputType + " -> " + applicationOutputType
+                    + "], but no matching ExternalMapper implementation was found.");
+            return null;
+        }
+
+        if (matchingCandidates.size() > 1) {
+            String candidates = matchingCandidates.stream()
+                .map(ClassName::canonicalName)
+                .sorted()
+                .collect(Collectors.joining(", "));
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Step '" + stepName + "' has ambiguous external mapper inference. Matching candidates: " + candidates);
+            return null;
+        }
+
+        return matchingCandidates.getFirst();
+    }
+
+    private boolean isCompatibleExternalMapper(
+            PipelineCompilationContext ctx,
+            String stepName,
+            TypeElement mapperElement,
+            TypeName applicationInputType,
+            TypeName libraryInputType,
+            TypeName applicationOutputType,
+            TypeName libraryOutputType) {
+        return isCompatibleExternalMapper(
+            ctx,
+            stepName,
+            mapperElement,
+            applicationInputType,
+            libraryInputType,
+            applicationOutputType,
+            libraryOutputType,
+            true);
+    }
+
+    private boolean isCompatibleExternalMapper(
+            PipelineCompilationContext ctx,
+            String stepName,
+            TypeElement mapperElement,
+            TypeName applicationInputType,
+            TypeName libraryInputType,
+            TypeName applicationOutputType,
+            TypeName libraryOutputType,
+            boolean reportErrors) {
+        Types typeUtils = ctx.getProcessingEnv().getTypeUtils();
+        DeclaredType externalMapperType = findReactiveSupertype(
+            typeUtils,
+            mapperElement.asType(),
+            "org.pipelineframework.mapper.ExternalMapper");
+
+        if (externalMapperType == null || externalMapperType.getTypeArguments().size() != 4) {
+            if (reportErrors) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.ERROR,
+                    "External mapper '" + mapperElement.getQualifiedName()
+                        + "' must implement org.pipelineframework.mapper.ExternalMapper<IApp, ILib, OApp, OLib>"
+                        + " for step '" + stepName + "'");
+            }
+            return false;
+        }
+
+        TypeName candidateApplicationInput = TypeName.get(externalMapperType.getTypeArguments().get(0));
+        TypeName candidateLibraryInput = TypeName.get(externalMapperType.getTypeArguments().get(1));
+        TypeName candidateApplicationOutput = TypeName.get(externalMapperType.getTypeArguments().get(2));
+        TypeName candidateLibraryOutput = TypeName.get(externalMapperType.getTypeArguments().get(3));
+
+        boolean matches = candidateApplicationInput.equals(applicationInputType)
+            && candidateLibraryInput.equals(libraryInputType)
+            && candidateApplicationOutput.equals(applicationOutputType)
+            && candidateLibraryOutput.equals(libraryOutputType);
+
+        if (!matches && reportErrors) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "External mapper '" + mapperElement.getQualifiedName() + "' has incompatible type parameters for step '"
+                    + stepName + "'. Expected ExternalMapper<"
+                    + applicationInputType + ", " + libraryInputType + ", "
+                    + applicationOutputType + ", " + libraryOutputType + ">.");
+        }
+
+        return matches;
     }
 
     private PipelineStepModel applyYamlIdentityToInternalModel(

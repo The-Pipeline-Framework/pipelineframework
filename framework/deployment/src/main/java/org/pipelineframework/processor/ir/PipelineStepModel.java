@@ -497,6 +497,8 @@ public record PipelineStepModel(
             .sideEffect(sideEffect)
             .cacheKeyGenerator(cacheKeyGenerator)
             .orderingRequirement(orderingRequirement)
-            .threadSafety(threadSafety);
+            .threadSafety(threadSafety)
+            .delegateService(delegateService)
+            .externalMapper(externalMapper);
     }
 }

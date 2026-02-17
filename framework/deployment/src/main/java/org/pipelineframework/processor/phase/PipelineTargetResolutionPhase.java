@@ -68,19 +68,9 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
         List<PipelineStepModel> updatedModels = new ArrayList<>();
         for (PipelineStepModel model : ctx.getStepModels()) {
             Set<GenerationTarget> targets = resolveTargetsForRole(model.deploymentRole(), transportMode);
-            PipelineStepModel updatedModel = new PipelineStepModel(
-                model.serviceName(),
-                model.generatedName(),
-                model.servicePackage(),
-                model.serviceClassName(),
-                model.inputMapping(),
-                model.outputMapping(),
-                model.streamingShape(),
-                targets,
-                model.executionMode(),
-                model.deploymentRole(),
-                model.sideEffect(),
-                model.cacheKeyGenerator());
+            PipelineStepModel updatedModel = model.toBuilder()
+                .enabledTargets(targets)
+                .build();
             updatedModels.add(updatedModel);
         }
         ctx.setStepModels(updatedModels);

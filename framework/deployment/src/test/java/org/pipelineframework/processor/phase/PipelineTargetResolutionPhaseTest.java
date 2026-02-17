@@ -126,6 +126,26 @@ class PipelineTargetResolutionPhaseTest {
         assertEquals(Set.of(GenerationTarget.REST_RESOURCE), updated.enabledTargets());
     }
 
+    @Test
+    void preservesDelegationMetadataWhenResolvingTargets() throws Exception {
+        PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineStepModel original = step("DelegatedIdentityStep", DeploymentRole.ORCHESTRATOR_CLIENT)
+            .toBuilder()
+            .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
+            .externalMapper(ClassName.get("com.example.app.mapper", "EmbeddingMapper"))
+            .build();
+        context.setStepModels(List.of(original));
+        context.setTransportMode(TransportMode.GRPC);
+
+        phase.execute(context);
+
+        PipelineStepModel updated = context.getStepModels().getFirst();
+        assertEquals(original.delegateService(), updated.delegateService());
+        assertEquals(original.externalMapper(), updated.externalMapper());
+        assertEquals(Set.of(GenerationTarget.CLIENT_STEP), updated.enabledTargets());
+    }
+
     private void assertResolvedTargets(
             DeploymentRole role,
             TransportMode transportMode,

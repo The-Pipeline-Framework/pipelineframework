@@ -1,5 +1,7 @@
 package org.pipelineframework.processor;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
 import javax.annotation.processing.*;
@@ -64,8 +66,9 @@ public class PipelineCompiler extends AbstractProcessingTool {
         boolean hasRelevantAnnotations = !pipelineStepElements.isEmpty() ||
                                          !orchestratorElements.isEmpty() ||
                                          !pluginElements.isEmpty();
+        boolean hasYamlDrivenWork = hasPipelineConfigSignal();
 
-        if (!hasRelevantAnnotations) {
+        if (!hasRelevantAnnotations && !hasYamlDrivenWork) {
             // Only write metadata when no more annotations to process (end of last round)
             if (annotations.isEmpty() && roundEnv.processingOver()) {
                 // Handle metadata writing here
@@ -102,5 +105,20 @@ public class PipelineCompiler extends AbstractProcessingTool {
         }
 
         return true;
+    }
+
+    private boolean hasPipelineConfigSignal() {
+        String configuredPath = processingEnv.getOptions().get("pipeline.config");
+        if (configuredPath != null && !configuredPath.isBlank()) {
+            return true;
+        }
+
+        Path cwdPipelineConfig = Path.of(System.getProperty("user.dir"), "pipeline.yaml");
+        if (Files.exists(cwdPipelineConfig)) {
+            return true;
+        }
+
+        Path resourcesPipelineConfig = Path.of(System.getProperty("user.dir"), "src", "main", "resources", "pipeline.yaml");
+        return Files.exists(resourcesPipelineConfig);
     }
 }
