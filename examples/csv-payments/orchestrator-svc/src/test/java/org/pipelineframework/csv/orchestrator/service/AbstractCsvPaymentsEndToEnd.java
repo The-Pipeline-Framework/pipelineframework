@@ -550,15 +550,20 @@ abstract class AbstractCsvPaymentsEndToEnd {
         Process p = pb.start();
         boolean completed = p.waitFor(ORCHESTRATOR_WAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         if (!completed) {
-            p.destroy();
-            if (!p.waitFor(5, TimeUnit.SECONDS)) {
+            try {
+                p.destroy();
+                if (!p.waitFor(5, TimeUnit.SECONDS)) {
+                    p.destroyForcibly();
+                    p.waitFor(5, TimeUnit.SECONDS);
+                }
+            } catch (InterruptedException ie) {
                 p.destroyForcibly();
-                p.waitFor(5, TimeUnit.SECONDS);
+                Thread.currentThread().interrupt();
             }
             fail(
                     "Orchestrator process timed out after "
-                            + ORCHESTRATOR_WAIT_TIMEOUT_SECONDS
-                            + "s");
+                             ORCHESTRATOR_WAIT_TIMEOUT_SECONDS
+                             "s");
         }
         int exitCode = p.exitValue();
         assertEquals(0, exitCode, "Orchestrator exited with non-zero code");
