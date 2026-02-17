@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package ai.sdk;
+
+option java_package = "com.example.ai.sdk.grpc";
+
+message Document {
+  string id = 1;
+  string content = 2;
+}
+
+message Chunk {
+  string id = 1;
+  string document_id = 2;
+  string content = 3;
+  int32 position = 4;
+}
+
+service ProcessDocumentChunkingService {
+  rpc RemoteProcess(Document) returns (stream Chunk);
+}
+
+service ObservePersistenceChunkSideEffectService {
+  rpc RemoteProcess(Chunk) returns (Chunk);
+}
