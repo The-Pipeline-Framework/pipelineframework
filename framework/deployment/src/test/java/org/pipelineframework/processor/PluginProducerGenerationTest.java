@@ -1,6 +1,7 @@
 package org.pipelineframework.processor;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -137,7 +138,10 @@ class PluginProducerGenerationTest {
         assertThat(compilation).succeeded();
 
         Path restServerDir = generatedSourcesDir.resolve("rest-server");
-        assertTrue(containsText(restServerDir, "PersistenceService"));
+        assertTrue(
+            containsText(restServerDir, "PersistenceService"),
+            "Expected generated REST server sources under " + restServerDir
+                + " to contain text 'PersistenceService'");
     }
 
     private boolean containsText(Path rootDir, String text) throws IOException {
@@ -150,7 +154,7 @@ class PluginProducerGenerationTest {
                     try {
                         return Files.readString(path).contains(text);
                     } catch (IOException e) {
-                        return false;
+                        throw new UncheckedIOException(e);
                     }
                 });
         }

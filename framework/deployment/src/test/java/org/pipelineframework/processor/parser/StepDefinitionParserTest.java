@@ -150,6 +150,23 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void acceptsDelegatedStepWithoutInputOutputForTypeInference() throws IOException {
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "delegate-only"
+                operator: "com.example.lib.ExternalService"
+            """);
+
+        assertEquals(1, steps.size());
+        StepDefinition step = steps.getFirst();
+        assertEquals(StepKind.DELEGATED, step.kind());
+        assertNull(step.inputType());
+        assertNull(step.outputType());
+    }
+
+    @Test
     void rejectsStepWhenOperatorAndDelegateAliasesAreBothProvided() throws IOException {
         List<StepDefinition> steps = parse("""
             appName: "Test"
@@ -160,6 +177,44 @@ class StepDefinitionParserTest {
                 delegate: "com.example.lib.ExternalService2"
             """);
 
+        assertTrue(steps.isEmpty());
+    }
+
+    @Test
+    void rejectsInvalidClassNames() throws IOException {
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "bad-class"
+                service: "com..example.BadService"
+            """);
+        assertTrue(steps.isEmpty());
+
+        List<StepDefinition> steps2 = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "bad-class-2"
+                service: ".com.example.BadService"
+            """);
+        assertTrue(steps2.isEmpty());
+    }
+
+    @Test
+    void returnsEmptyWhenTemplatePathDoesNotExist() throws IOException {
+        Path missing = tempDir.resolve("missing-pipeline.yaml");
+        List<StepDefinition> steps = new StepDefinitionParser().parseStepDefinitions(missing);
+        assertTrue(steps.isEmpty());
+    }
+
+    @Test
+    void returnsEmptyWhenYamlHasNoStepsKey() throws IOException {
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            transport: "GRPC"
+            """);
         assertTrue(steps.isEmpty());
     }
 

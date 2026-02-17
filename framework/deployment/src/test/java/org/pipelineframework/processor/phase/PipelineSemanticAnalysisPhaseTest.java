@@ -229,7 +229,7 @@ public class PipelineSemanticAnalysisPhaseTest {
 
         verify(messager).printMessage(
             eq(Diagnostic.Kind.ERROR),
-            contains("requires an external mapper"));
+            contains("requires an operator mapper"));
     }
 
     @Test

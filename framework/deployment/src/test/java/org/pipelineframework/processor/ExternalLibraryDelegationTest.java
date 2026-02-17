@@ -64,12 +64,9 @@ class OperatorDelegationTest {
             }
             """);
 
-        boolean success = compileSource(sourceFile);
-
-        // The processor should at least run without crashing
-        // Validation errors are expected since String doesn't implement ReactiveService
-        // but the processor shouldn't crash
-        assertTrue(success || true, "Processor should run without crashing");
+        // The processor should at least run without crashing.
+        // Validation errors are expected since String doesn't implement ReactiveService.
+        assertDoesNotThrow(() -> compileSource(sourceFile), "Processor should run without crashing");
     }
 
     /**

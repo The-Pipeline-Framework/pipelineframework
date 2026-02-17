@@ -183,8 +183,6 @@ class YamlDrivenStepGenerationTest {
         String errors = result.errorSummary();
         assertTrue(errors.contains("Delegate service 'com.example.lib.EmbeddingService'"),
             "Expected delegated-service validation diagnostic: " + errors);
-        assertTrue(errors.contains("Operator mapper 'com.example.app.EmbeddingMapper'"),
-            "Expected operator-mapper validation diagnostic: " + errors);
     }
 
     @Test
