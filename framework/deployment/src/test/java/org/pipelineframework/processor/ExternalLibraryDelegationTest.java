@@ -80,13 +80,21 @@ class ExternalLibraryDelegationTest {
         assertNotNull(compiler, "JavaCompiler should be available");
         
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
+        Path generatedDir = tempDir.resolve("generated");
+        Path classesDir = tempDir.resolve("classes");
+        Files.createDirectories(generatedDir);
+        Files.createDirectories(classesDir);
         
-        try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(null, null, null)) {
+        try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(diagnostics, null, null)) {
             JavaCompiler.CompilationTask task = compiler.getTask(
                 null,
                 fileManager,
                 diagnostics,
-                Arrays.asList("-proc:only", "-processor", "org.pipelineframework.processor.PipelineStepProcessor"),
+                Arrays.asList(
+                    "-proc:only",
+                    "-s", generatedDir.toString(),
+                    "-d", classesDir.toString(),
+                    "-processor", "org.pipelineframework.processor.PipelineStepProcessor"),
                 null,
                 fileManager.getJavaFileObjects(sourceFile)
             );

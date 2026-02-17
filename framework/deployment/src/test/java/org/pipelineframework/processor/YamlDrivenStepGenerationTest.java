@@ -232,7 +232,9 @@ class YamlDrivenStepGenerationTest {
         assertNotNull(compiler, "JavaCompiler should be available");
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
         Path generatedDir = tempDir.resolve("generated");
+        Path classesDir = tempDir.resolve("classes");
         Files.createDirectories(generatedDir);
+        Files.createDirectories(classesDir);
 
         try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(diagnostics, null, null)) {
             JavaCompiler.CompilationTask task = compiler.getTask(
@@ -242,6 +244,7 @@ class YamlDrivenStepGenerationTest {
                 List.of(
                     "-proc:only",
                     "-s", generatedDir.toString(),
+                    "-d", classesDir.toString(),
                     "-processor", "org.pipelineframework.processor.PipelineStepProcessor",
                     "-Apipeline.config=" + yamlFile
                 ),
