@@ -221,6 +221,64 @@ class YamlDrivenStepGenerationTest {
         assertTrue(errors.contains("must be annotated with @pipelinestep"), result.errorSummary());
     }
 
+    @Test
+    void doesNotGenerateArtifactsForAnnotatedServicesNotReferencedInYaml() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-referenced-only.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import io.smallrye.mutiny.Uni;
+            import org.pipelineframework.annotation.PipelineStep;
+            import org.pipelineframework.service.ReactiveService;
+
+            @PipelineStep(inputType = String.class, outputType = String.class)
+            public class PaymentService implements ReactiveService<String, String> {
+                @Override
+                public Uni<String> process(String input) {
+                    return Uni.createFrom().item(input);
+                }
+            }
+            """);
+        Path unusedAnnotatedService = writeSource("UnusedService.java", """
+            package com.example.app;
+
+            import io.smallrye.mutiny.Uni;
+            import org.pipelineframework.annotation.PipelineStep;
+            import org.pipelineframework.service.ReactiveService;
+
+            @PipelineStep(inputType = String.class, outputType = String.class)
+            public class UnusedService implements ReactiveService<String, String> {
+                @Override
+                public Uni<String> process(String input) {
+                    return Uni.createFrom().item(input);
+                }
+            }
+            """);
+        Path markerSource = writeSource("Marker2.java", """
+            package com.example.app;
+
+            public class Marker2 {
+            }
+            """);
+
+        CompilationResult result = compile(yamlFile, List.of(paymentService, unusedAnnotatedService, markerSource));
+        assertTrue(result.success, "Expected YAML-referenced internal step compilation to succeed: " + result.errorSummary());
+
+        String notes = result.messagesOfKind(Diagnostic.Kind.NOTE).toLowerCase(Locale.ROOT);
+        assertTrue(notes.contains("unusedservice"), "Expected note about unreferenced @PipelineStep service: " + notes);
+        assertTrue(notes.contains("not referenced in pipeline yaml"),
+            "Expected unreferenced-service policy note in diagnostics: " + notes);
+    }
+
     private Path writeSource(String fileName, String content) throws IOException {
         Path file = tempDir.resolve(fileName);
         Files.writeString(file, content);
@@ -273,6 +331,16 @@ class YamlDrivenStepGenerationTest {
                 }
             }
             return String.join(" | ", errors);
+        }
+
+        private String messagesOfKind(Diagnostic.Kind kind) {
+            List<String> messages = new ArrayList<>();
+            for (Diagnostic<? extends JavaFileObject> diagnostic : diagnostics) {
+                if (diagnostic.getKind() == kind) {
+                    messages.add(diagnostic.getMessage(null));
+                }
+            }
+            return String.join(" | ", messages);
         }
     }
 }
