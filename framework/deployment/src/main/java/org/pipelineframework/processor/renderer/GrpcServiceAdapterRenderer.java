@@ -65,8 +65,9 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         // For gRPC services: ${ServiceName}GrpcService
         simpleClassName = model.generatedName() + PipelineStepProcessor.GRPC_SERVICE_SUFFIX;
 
-        // Determine the appropriate gRPC service base class based on configuration
-        ClassName grpcBaseClassName = determineGrpcBaseClass(binding, messager);
+        // Resolve gRPC model types from descriptors/bindings.
+        GrpcJavaTypeResolver.GrpcJavaTypes grpcTypes = GRPC_TYPE_RESOLVER.resolve(binding, messager);
+        ClassName grpcBaseClassName = grpcTypes.implBase();
 
         TypeSpec.Builder grpcServiceBuilder = TypeSpec.classBuilder(simpleClassName)
                 .addModifiers(Modifier.PUBLIC)
@@ -81,23 +82,39 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                         .build())
                 .superclass(grpcBaseClassName); // Extend the actual gRPC service base class
 
-        // Add mapper fields with @Inject if they exist
-        if (model.inputMapping().hasMapper()) {
-            FieldSpec inboundMapperField = FieldSpec.builder(
-                            model.inputMapping().mapperType(),
-                            "inboundMapper")
-                    .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
-                    .build();
-            grpcServiceBuilder.addField(inboundMapperField);
-        }
-
-        if (model.outputMapping().hasMapper()) {
-            FieldSpec outboundMapperField = FieldSpec.builder(
-                            model.outputMapping().mapperType(),
-                            "outboundMapper")
-                    .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
-                    .build();
-            grpcServiceBuilder.addField(outboundMapperField);
+        // Use generic Mapper interfaces so AP generation does not require concrete mapper resolution.
+        boolean cacheSideEffect = isCacheSideEffect(model);
+        if (!cacheSideEffect) {
+            TypeName inputGrpcType = grpcTypes.grpcParameterType() != null
+                ? grpcTypes.grpcParameterType()
+                : ClassName.OBJECT;
+            TypeName outputGrpcType = grpcTypes.grpcReturnType() != null
+                ? grpcTypes.grpcReturnType()
+                : ClassName.OBJECT;
+            TypeName inputDomainType = model.inboundDomainType() != null
+                ? model.inboundDomainType()
+                : ClassName.OBJECT;
+            TypeName outputDomainType = model.outboundDomainType() != null
+                ? model.outboundDomainType()
+                : ClassName.OBJECT;
+            TypeName inboundMapperType = ParameterizedTypeName.get(
+                ClassName.get("org.pipelineframework.mapper", "Mapper"),
+                inputGrpcType,
+                WildcardTypeName.subtypeOf(Object.class),
+                inputDomainType
+            );
+            TypeName outboundMapperType = ParameterizedTypeName.get(
+                ClassName.get("org.pipelineframework.mapper", "Mapper"),
+                outputGrpcType,
+                WildcardTypeName.subtypeOf(Object.class),
+                outputDomainType
+            );
+            grpcServiceBuilder.addField(FieldSpec.builder(inboundMapperType, "inboundMapper")
+                .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
+                .build());
+            grpcServiceBuilder.addField(FieldSpec.builder(outboundMapperType, "outboundMapper")
+                .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
+                .build());
         }
 
         TypeName serviceType = resolveServiceType(model);
@@ -124,19 +141,6 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
         }
 
         return grpcServiceBuilder.build();
-    }
-
-    /**
-     * Resolve the gRPC implementation base class for the given binding.
-     *
-     * @param binding the gRPC binding containing pipeline and service metadata
-     * @param messager a compiler messager used for type resolution diagnostics
-     * @return the ClassName representing the gRPC implementation base class for the binding
-     */
-    private ClassName determineGrpcBaseClass(GrpcBinding binding, Messager messager) {
-        // Use the new GrpcJavaTypeResolver to determine the gRPC implementation base class
-        GrpcJavaTypeResolver.GrpcJavaTypes types = GRPC_TYPE_RESOLVER.resolve(binding, messager);
-        return types.implBase();
     }
 
     /**
@@ -500,15 +504,12 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
             throw new IllegalStateException("Missing required domain parameter or return type for service: " + binding.serviceName());
         }
 
-        boolean hasInboundMapper = !cacheSideEffect && model.inputMapping().hasMapper();
-        boolean hasOutboundMapper = !cacheSideEffect && model.outputMapping().hasMapper();
-
         MethodSpec.Builder fromGrpcMethodBuilder = MethodSpec.methodBuilder("fromGrpc")
                 .addAnnotation(Override.class)
                 .addModifiers(Modifier.PROTECTED)
                 .returns(inputDomainType)
                 .addParameter(inputGrpcType, "grpcIn");
-        if (hasInboundMapper) {
+        if (!cacheSideEffect) {
             fromGrpcMethodBuilder.addStatement("return inboundMapper.fromGrpcFromDto(grpcIn)");
         } else {
             fromGrpcMethodBuilder.addStatement("return ($T) grpcIn", inputDomainType);
@@ -519,7 +520,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 .addModifiers(Modifier.PROTECTED)
                 .returns(outputGrpcType)
                 .addParameter(outputDomainType, "output");
-        if (hasOutboundMapper) {
+        if (!cacheSideEffect) {
             toGrpcMethodBuilder.addStatement("return outboundMapper.toDtoToGrpc(output)");
         } else {
             toGrpcMethodBuilder.addStatement("return ($T) output", outputGrpcType);

@@ -27,6 +27,7 @@ import org.jboss.jandex.DotName;
 import org.jboss.jandex.IndexView;
 import org.jboss.logging.Logger;
 import org.pipelineframework.annotation.PipelineOrchestrator;
+import org.pipelineframework.extension.MapperRegistryBuildItem;
 
 import static org.pipelineframework.processor.PipelineStepProcessor.GRPC_SERVICE_SUFFIX;
 
@@ -65,7 +66,8 @@ public class StepServerRegistrar {
      */
     @BuildStep
     void registerGeneratedGrpcServices(BuildProducer<AdditionalBeanBuildItem> additionalBeans,
-                                  CombinedIndexBuildItem combinedIndex) {
+                                  CombinedIndexBuildItem combinedIndex,
+                                  MapperRegistryBuildItem mapperRegistry) {
 
         if (isCliGenerationEnabled(combinedIndex)) {
             LOG.debug("Client generation enabled; skipping server registration.");

@@ -80,8 +80,7 @@ class TemplateModelBuilder {
             return new TypeMapping(null, null, false);
         }
         ClassName domainType = ClassName.get(basePackage + ".common.domain", typeName);
-        ClassName mapperType = ClassName.get(basePackage + ".common.mapper", typeName + "Mapper");
-        return new TypeMapping(domainType, mapperType, true);
+        return new TypeMapping(domainType, null, false);
     }
 
     private String toPackageSegment(String name) {

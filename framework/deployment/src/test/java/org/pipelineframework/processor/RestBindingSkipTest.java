@@ -48,7 +48,7 @@ class RestBindingSkipTest {
             """);
 
         Compilation compilation = Compiler.javac()
-            .withProcessors(new PipelineStepProcessor())
+            .withProcessors(new PipelineStepProcessor(), new org.mapstruct.ap.MappingProcessor())
             .withOptions("-Apipeline.generatedSourcesDir=" + generatedSourcesDir)
             .compile(
                 JavaFileObjects.forSourceString(
@@ -64,9 +64,7 @@ class RestBindingSkipTest {
                         @PipelineStep(
                             inputType = com.example.domain.FooInput.class,
                             outputType = com.example.domain.FooOutput.class,
-                            stepType = StepOneToOne.class,
-                            inboundMapper = com.example.mapper.FooInputMapper.class,
-                            outboundMapper = com.example.mapper.FooOutputMapper.class
+                            stepType = StepOneToOne.class
                         )
                         public class ProcessFooService implements ReactiveService<com.example.domain.FooInput, com.example.domain.FooOutput> {
                             @Override
@@ -108,21 +106,37 @@ class RestBindingSkipTest {
                         }
                         """),
                 JavaFileObjects.forSourceString(
+                    "com.example.grpc.FooInputGrpcMessage",
+                    """
+                        package com.example.grpc;
+
+                        public class FooInputGrpcMessage {
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "com.example.grpc.FooOutputGrpcMessage",
+                    """
+                        package com.example.grpc;
+
+                        public class FooOutputGrpcMessage {
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
                     "com.example.mapper.FooInputMapper",
                     """
                         package com.example.mapper;
 
                         import com.example.domain.FooInput;
                         import com.example.dto.FooInputDto;
+                        import com.example.grpc.FooInputGrpcMessage;
+                        import org.pipelineframework.mapper.Mapper;
 
-                        public class FooInputMapper {
-                            public FooInput fromDto(FooInputDto dto) {
-                                return new FooInput();
-                            }
-
-                            public FooInputDto toDto(FooInput domain) {
-                                return new FooInputDto();
-                            }
+                        @org.mapstruct.Mapper
+                        public interface FooInputMapper extends Mapper<FooInputGrpcMessage, FooInputDto, FooInput> {
+                            FooInputDto fromGrpc(FooInputGrpcMessage grpc);
+                            FooInputGrpcMessage toGrpc(FooInputDto dto);
+                            FooInput fromDto(FooInputDto dto);
+                            FooInputDto toDto(FooInput domain);
                         }
                         """),
                 JavaFileObjects.forSourceString(
@@ -132,15 +146,15 @@ class RestBindingSkipTest {
 
                         import com.example.domain.FooOutput;
                         import com.example.dto.FooOutputDto;
+                        import com.example.grpc.FooOutputGrpcMessage;
+                        import org.pipelineframework.mapper.Mapper;
 
-                        public class FooOutputMapper {
-                            public FooOutput fromDto(FooOutputDto dto) {
-                                return new FooOutput();
-                            }
-
-                            public FooOutputDto toDto(FooOutput domain) {
-                                return new FooOutputDto();
-                            }
+                        @org.mapstruct.Mapper
+                        public interface FooOutputMapper extends Mapper<FooOutputGrpcMessage, FooOutputDto, FooOutput> {
+                            FooOutputDto fromGrpc(FooOutputGrpcMessage grpc);
+                            FooOutputGrpcMessage toGrpc(FooOutputDto dto);
+                            FooOutput fromDto(FooOutputDto dto);
+                            FooOutputDto toDto(FooOutput domain);
                         }
                         """));
 

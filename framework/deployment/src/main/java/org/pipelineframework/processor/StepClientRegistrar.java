@@ -26,6 +26,7 @@ import io.quarkus.deployment.builditem.FeatureBuildItem;
 import org.jboss.jandex.*;
 import org.jboss.logging.Logger;
 import org.pipelineframework.annotation.PipelineOrchestrator;
+import org.pipelineframework.extension.MapperRegistryBuildItem;
 
 /**
  * Registers client step classes as additional unremovable beans when CLI client generation is enabled.
@@ -65,7 +66,8 @@ public class StepClientRegistrar {
      */
     @BuildStep
     void registerStepClients(BuildProducer<AdditionalBeanBuildItem> beans,
-                             CombinedIndexBuildItem combinedIndex) {
+                             CombinedIndexBuildItem combinedIndex,
+                             MapperRegistryBuildItem mapperRegistry) {
         if (!isCliGenerationEnabled(combinedIndex)) {
             LOG.debug("Client generation disabled; skipping client step registration.");
             return;

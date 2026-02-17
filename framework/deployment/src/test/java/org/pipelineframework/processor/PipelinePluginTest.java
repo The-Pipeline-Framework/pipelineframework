@@ -66,8 +66,8 @@ class PipelinePluginTest {
             steps:
               - name: "Process Test"
                 cardinality: "ONE_TO_ONE"
-                inputTypeName: "String"
-                outputTypeName: "String"
+                inputTypeName: "TestData"
+                outputTypeName: "TestData"
             aspects:
               persistence:
                 enabled: true
@@ -90,12 +90,57 @@ class PipelinePluginTest {
 
         // Compile with the PipelineStepProcessor
         Compilation compilation = Compiler.javac()
-            .withProcessors(new org.pipelineframework.processor.PipelineStepProcessor())
+            .withProcessors(new org.pipelineframework.processor.PipelineStepProcessor(), new org.mapstruct.ap.MappingProcessor())
             .withOptions(
                 "-Apipeline.generatedSourcesDir=" + generatedSourcesDir.toString(),
                 "-Aprotobuf.descriptor.file=" + moduleDir.resolve("descriptor_set.dsc").toString())
             .compile(
-                JavaFileObjects.forSourceString("test.plugin.PersistencePluginHost", pluginCode));
+                JavaFileObjects.forSourceString("test.plugin.PersistencePluginHost", pluginCode),
+                // Service class with @PipelineStep
+                JavaFileObjects.forSourceString("test.plugin.ProcessTestService", """
+                    package test.plugin;
+
+                    import org.pipelineframework.annotation.PipelineStep;
+                    import org.pipelineframework.step.StepOneToOne;
+                    import test.plugin.common.domain.TestData;
+
+                    @PipelineStep(
+                        inputType = TestData.class,
+                        outputType = TestData.class,
+                        stepType = StepOneToOne.class
+                    )
+                    public class ProcessTestService {
+                    }
+                    """),
+                // Domain type stub
+                JavaFileObjects.forSourceString("test.plugin.common.domain.TestData", """
+                    package test.plugin.common.domain;
+                    public class TestData { }
+                    """),
+                // Mapper stub for TestData domain type
+                JavaFileObjects.forSourceString("test.plugin.common.mapper.TestDataMapper", """
+                    package test.plugin.common.mapper;
+
+                    import org.pipelineframework.mapper.Mapper;
+                    import test.plugin.common.domain.TestData;
+                    import test.plugin.common.domain.TestDataGrpcMessage;
+
+                    @org.mapstruct.Mapper
+                    public interface TestDataMapper extends Mapper<TestDataGrpcMessage, TestData, TestData> {
+                        TestData fromGrpc(TestDataGrpcMessage grpc);
+                        TestDataGrpcMessage toGrpc(TestData dto);
+                        TestData fromDto(TestData dto);
+                        TestData toDto(TestData domain);
+                    }
+                    """),
+                // gRPC message stub
+                JavaFileObjects.forSourceString("test.plugin.common.domain.TestDataGrpcMessage", """
+                    package test.plugin.common.domain;
+
+                    public class TestDataGrpcMessage {
+                    }
+                    """)
+            );
 
         // Verify compilation succeeded
         assertThat(compilation).succeeded();
@@ -105,31 +150,36 @@ class PipelinePluginTest {
         Path restServerDir = generatedSourcesDir.resolve("rest-server");
 
         // Check if REST server files were generated for the regular steps
-        boolean hasRestFiles = Files.exists(restServerDir) &&
-            Files.walk(restServerDir)
-                .filter(Files::isRegularFile)
-                .anyMatch(path -> path.toString().endsWith(".java"));
+        boolean hasRestFiles = Files.exists(restServerDir);
+        if (hasRestFiles) {
+            try (var stream = Files.walk(restServerDir)) {
+                hasRestFiles = stream.filter(Files::isRegularFile)
+                    .anyMatch(path -> path.toString().endsWith(".java"));
+            }
+        }
 
         // If REST server files exist, verify they contain the expected content for the ProcessTestService REST resource
         if (hasRestFiles) {
-            boolean hasCorrectContent = Files.walk(restServerDir)
-                .filter(Files::isRegularFile)
-                .filter(path -> path.toString().endsWith(".java"))
-                .anyMatch(path -> {
-                    try {
-                        String content = Files.readString(path);
-                        // Check for expected content indicating it's a REST resource for the persistence aspect
-                        return content.contains("class PersistenceStringSideEffectResource") &&
-                               (content.contains("@Path") || content.contains("@GET") || content.contains("@POST"));
-                    } catch (IOException e) {
-                        return false;
-                    }
-                });
+            boolean hasCorrectContent = false;
+            try (var stream = Files.walk(restServerDir)) {
+                hasCorrectContent = stream.filter(Files::isRegularFile)
+                    .filter(path -> path.toString().endsWith(".java"))
+                    .anyMatch(path -> {
+                        try {
+                            String content = Files.readString(path);
+                            // Check for expected content indicating it's a REST resource for the persistence aspect
+                            return content.contains("class PersistenceTestDataSideEffectResource") &&
+                                   (content.contains("@Path") || content.contains("@GET") || content.contains("@POST"));
+                        } catch (IOException e) {
+                            return false;
+                        }
+                    });
+            }
 
             if (!hasCorrectContent) {
                 // List what files were actually generated for debugging
-                try {
-                    java.util.List<Path> files = Files.walk(restServerDir)
+                try (var stream = Files.walk(restServerDir)) {
+                    java.util.List<Path> files = stream
                         .filter(Files::isRegularFile)
                         .filter(path -> path.toString().endsWith(".java"))
                         .toList();
@@ -190,8 +240,8 @@ class PipelinePluginTest {
             steps:
               - name: "Process Test"
                 cardinality: "ONE_TO_ONE"
-                inputTypeName: "String"
-                outputTypeName: "String"
+                inputTypeName: "TestData"
+                outputTypeName: "TestData"
             aspects:
               cache:
                 enabled: true
@@ -214,12 +264,57 @@ class PipelinePluginTest {
 
         // Compile with the PipelineStepProcessor
         Compilation compilation = Compiler.javac()
-            .withProcessors(new org.pipelineframework.processor.PipelineStepProcessor())
+            .withProcessors(new org.pipelineframework.processor.PipelineStepProcessor(), new org.mapstruct.ap.MappingProcessor())
             .withOptions(
                 "-Apipeline.generatedSourcesDir=" + generatedSourcesDir.toString(),
                 "-Aprotobuf.descriptor.file=" + moduleDir.resolve("descriptor_set.dsc").toString())
             .compile(
-                JavaFileObjects.forSourceString("test.plugin.CachePluginHost", pluginCode));
+                JavaFileObjects.forSourceString("test.plugin.CachePluginHost", pluginCode),
+                // Service class with @PipelineStep
+                JavaFileObjects.forSourceString("test.plugin.ProcessTestService", """
+                    package test.plugin;
+
+                    import org.pipelineframework.annotation.PipelineStep;
+                    import org.pipelineframework.step.StepOneToOne;
+                    import test.plugin.common.domain.TestData;
+
+                    @PipelineStep(
+                        inputType = TestData.class,
+                        outputType = TestData.class,
+                        stepType = StepOneToOne.class
+                    )
+                    public class ProcessTestService {
+                    }
+                    """),
+                // Domain type stub
+                JavaFileObjects.forSourceString("test.plugin.common.domain.TestData", """
+                    package test.plugin.common.domain;
+                    public class TestData { }
+                    """),
+                // Mapper stub for TestData domain type
+                JavaFileObjects.forSourceString("test.plugin.common.mapper.TestDataMapper", """
+                    package test.plugin.common.mapper;
+
+                    import org.pipelineframework.mapper.Mapper;
+                    import test.plugin.common.domain.TestData;
+                    import test.plugin.common.domain.TestDataGrpcMessage;
+
+                    @org.mapstruct.Mapper
+                    public interface TestDataMapper extends Mapper<TestDataGrpcMessage, TestData, TestData> {
+                        TestData fromGrpc(TestDataGrpcMessage grpc);
+                        TestDataGrpcMessage toGrpc(TestData dto);
+                        TestData fromDto(TestData dto);
+                        TestData toDto(TestData domain);
+                    }
+                    """),
+                // gRPC message stub
+                JavaFileObjects.forSourceString("test.plugin.common.domain.TestDataGrpcMessage", """
+                    package test.plugin.common.domain;
+
+                    public class TestDataGrpcMessage {
+                    }
+                    """)
+            );
 
         // Verify compilation succeeded
         assertThat(compilation).succeeded();
@@ -229,31 +324,36 @@ class PipelinePluginTest {
         Path restServerDir = generatedSourcesDir.resolve("rest-server");
 
         // Check if REST server files were generated for the regular steps
-        boolean hasRestFiles = Files.exists(restServerDir) &&
-            Files.walk(restServerDir)
-                .filter(Files::isRegularFile)
-                .anyMatch(path -> path.toString().endsWith(".java"));
+        boolean hasRestFiles = Files.exists(restServerDir);
+        if (hasRestFiles) {
+            try (var stream = Files.walk(restServerDir)) {
+                hasRestFiles = stream.filter(Files::isRegularFile)
+                    .anyMatch(path -> path.toString().endsWith(".java"));
+            }
+        }
 
         // If REST server files exist, verify they contain the expected content for the ProcessTestService REST resource
         if (hasRestFiles) {
-            boolean hasCorrectContent = Files.walk(restServerDir)
-                .filter(Files::isRegularFile)
-                .filter(path -> path.toString().endsWith(".java"))
-                .anyMatch(path -> {
-                    try {
-                        String content = Files.readString(path);
-                        // Check for expected content indicating it's a REST resource for the cache aspect
-                        return content.contains("class CacheStringSideEffectResource") &&
-                               (content.contains("@Path") || content.contains("@GET") || content.contains("@POST"));
-                    } catch (IOException e) {
-                        return false;
-                    }
-                });
+            boolean hasCorrectContent = false;
+            try (var stream = Files.walk(restServerDir)) {
+                hasCorrectContent = stream.filter(Files::isRegularFile)
+                    .filter(path -> path.toString().endsWith(".java"))
+                    .anyMatch(path -> {
+                        try {
+                            String content = Files.readString(path);
+                            // Check for expected content indicating it's a REST resource for the cache aspect
+                            return content.contains("class CacheTestDataSideEffectResource") &&
+                                   (content.contains("@Path") || content.contains("@GET") || content.contains("@POST"));
+                        } catch (IOException e) {
+                            return false;
+                        }
+                    });
+            }
 
             if (!hasCorrectContent) {
                 // List what files were actually generated for debugging
-                try {
-                    java.util.List<Path> files = Files.walk(restServerDir)
+                try (var stream = Files.walk(restServerDir)) {
+                    java.util.List<Path> files = stream
                         .filter(Files::isRegularFile)
                         .filter(path -> path.toString().endsWith(".java"))
                         .toList();
