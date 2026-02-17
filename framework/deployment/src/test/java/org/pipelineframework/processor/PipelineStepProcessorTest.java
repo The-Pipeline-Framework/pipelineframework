@@ -55,6 +55,121 @@ import static org.mockito.Mockito.*;
 @MockitoSettings(strictness = Strictness.LENIENT)
 class PipelineStepProcessorTest {
 
+    // Common test data constants shared across multiple tests to avoid duplication
+    private static final String RAW_DOCUMENT_DOMAIN = """
+        package test.common.domain;
+
+        import java.time.Instant;
+        import java.util.UUID;
+
+        public class RawDocument {
+            private UUID docId;
+            private String sourceUrl;
+            private String rawContent;
+            private Instant fetchedAt;
+
+            public UUID getDocId() { return docId; }
+            public void setDocId(UUID docId) { this.docId = docId; }
+            public String getSourceUrl() { return sourceUrl; }
+            public void setSourceUrl(String sourceUrl) { this.sourceUrl = sourceUrl; }
+            public String getRawContent() { return rawContent; }
+            public void setRawContent(String rawContent) { this.rawContent = rawContent; }
+            public Instant getFetchedAt() { return fetchedAt; }
+            public void setFetchedAt(Instant fetchedAt) { this.fetchedAt = fetchedAt; }
+        }
+        """;
+
+    private static final String CRAWL_REQUEST_DOMAIN = """
+        package test.common.domain;
+
+        import java.time.Instant;
+        import java.util.UUID;
+
+        public class CrawlRequest {
+            private UUID docId;
+            private String sourceUrl;
+            private Instant requestedAt;
+
+            public UUID getDocId() { return docId; }
+            public void setDocId(UUID docId) { this.docId = docId; }
+            public String getSourceUrl() { return sourceUrl; }
+            public void setSourceUrl(String sourceUrl) { this.sourceUrl = sourceUrl; }
+            public Instant getRequestedAt() { return requestedAt; }
+            public void setRequestedAt(Instant requestedAt) { this.requestedAt = requestedAt; }
+        }
+        """;
+
+    private static final String PARSED_DOCUMENT_DOMAIN = """
+        package test.common.domain;
+
+        import java.time.Instant;
+        import java.util.UUID;
+
+        public class ParsedDocument {
+            private UUID docId;
+            private String title;
+            private String content;
+            private Instant extractedAt;
+
+            public UUID getDocId() { return docId; }
+            public void setDocId(UUID docId) { this.docId = docId; }
+            public String getTitle() { return title; }
+            public void setTitle(String title) { this.title = title; }
+            public String getContent() { return content; }
+            public void setContent(String content) { this.content = content; }
+            public Instant getExtractedAt() { return extractedAt; }
+            public void setExtractedAt(Instant extractedAt) { this.extractedAt = extractedAt; }
+        }
+        """;
+
+    private static final String CRAWL_REQUEST_MAPPER = """
+        package test.common.mapper;
+
+        import org.pipelineframework.mapper.Mapper;
+        import test.common.domain.CrawlRequest;
+        import test.common.domain.CrawlRequestGrpcMessage;
+        import test.common.dto.CrawlRequestDto;
+
+        public class CrawlRequestMapper implements Mapper<CrawlRequestGrpcMessage, CrawlRequestDto, CrawlRequest> {
+            public CrawlRequestDto fromGrpc(CrawlRequestGrpcMessage grpc) { return new CrawlRequestDto(); }
+            public CrawlRequestGrpcMessage toGrpc(CrawlRequestDto dto) { return new CrawlRequestGrpcMessage(); }
+            public CrawlRequest fromDto(CrawlRequestDto dto) { return new CrawlRequest(); }
+            public CrawlRequestDto toDto(CrawlRequest domain) { return new CrawlRequestDto(); }
+        }
+        """;
+
+    private static final String RAW_DOCUMENT_MAPPER = """
+        package test.common.mapper;
+
+        import org.pipelineframework.mapper.Mapper;
+        import test.common.domain.RawDocument;
+        import test.common.domain.RawDocumentGrpcMessage;
+        import test.common.dto.RawDocumentDto;
+
+        public class RawDocumentMapper implements Mapper<RawDocumentGrpcMessage, RawDocumentDto, RawDocument> {
+            public RawDocumentDto fromGrpc(RawDocumentGrpcMessage grpc) { return new RawDocumentDto(); }
+            public RawDocumentGrpcMessage toGrpc(RawDocumentDto dto) { return new RawDocumentGrpcMessage(); }
+            public RawDocument fromDto(RawDocumentDto dto) { return new RawDocument(); }
+            public RawDocumentDto toDto(RawDocument domain) { return new RawDocumentDto(); }
+        }
+        """;
+
+    private static final String PARSED_DOCUMENT_MAPPER = """
+        package test.common.mapper;
+
+        import org.pipelineframework.mapper.Mapper;
+        import test.common.domain.ParsedDocument;
+        import test.common.domain.ParsedDocumentGrpcMessage;
+        import test.common.dto.ParsedDocumentDto;
+
+        public class ParsedDocumentMapper implements Mapper<ParsedDocumentGrpcMessage, ParsedDocumentDto, ParsedDocument> {
+            public ParsedDocumentDto fromGrpc(ParsedDocumentGrpcMessage grpc) { return new ParsedDocumentDto(); }
+            public ParsedDocumentGrpcMessage toGrpc(ParsedDocumentDto dto) { return new ParsedDocumentGrpcMessage(); }
+            public ParsedDocument fromDto(ParsedDocumentDto dto) { return new ParsedDocument(); }
+            public ParsedDocumentDto toDto(ParsedDocument domain) { return new ParsedDocumentDto(); }
+        }
+        """;
+
     @Mock
     private ProcessingEnvironment processingEnv;
 
@@ -508,112 +623,6 @@ class PipelineStepProcessorTest {
             }
             """;
 
-        // Create supporting classes that would normally exist
-        String crawlRequestDomain = """
-            package test.common.domain;
-
-            import java.util.UUID;
-
-            public class CrawlRequest {
-                private UUID docId;
-                private String sourceUrl;
-
-                public UUID getDocId() {
-                    return docId;
-                }
-
-                public void setDocId(UUID docId) {
-                    this.docId = docId;
-                }
-
-                public String getSourceUrl() {
-                    return sourceUrl;
-                }
-
-                public void setSourceUrl(String sourceUrl) {
-                    this.sourceUrl = sourceUrl;
-                }
-            }
-            """;
-
-        String rawDocumentDomain = """
-            package test.common.domain;
-
-            import java.time.Instant;
-            import java.util.UUID;
-
-            public class RawDocument {
-                private UUID docId;
-                private String sourceUrl;
-                private String rawContent;
-                private Instant fetchedAt;
-
-                public UUID getDocId() {
-                    return docId;
-                }
-
-                public void setDocId(UUID docId) {
-                    this.docId = docId;
-                }
-
-                public String getSourceUrl() {
-                    return sourceUrl;
-                }
-
-                public void setSourceUrl(String sourceUrl) {
-                    this.sourceUrl = sourceUrl;
-                }
-
-                public String getRawContent() {
-                    return rawContent;
-                }
-
-                public void setRawContent(String rawContent) {
-                    this.rawContent = rawContent;
-                }
-
-                public Instant getFetchedAt() {
-                    return fetchedAt;
-                }
-
-                public void setFetchedAt(Instant fetchedAt) {
-                    this.fetchedAt = fetchedAt;
-                }
-            }
-            """;
-
-        String crawlRequestMapper = """
-            package test.common.mapper;
-
-            import org.pipelineframework.mapper.Mapper;
-            import test.common.domain.CrawlRequest;
-            import test.common.domain.CrawlRequestGrpcMessage;
-            import test.common.dto.CrawlRequestDto;
-
-            public class CrawlRequestMapper implements Mapper<CrawlRequestGrpcMessage, CrawlRequestDto, CrawlRequest> {
-                public CrawlRequestDto fromGrpc(CrawlRequestGrpcMessage grpc) { return new CrawlRequestDto(); }
-                public CrawlRequestGrpcMessage toGrpc(CrawlRequestDto dto) { return new CrawlRequestGrpcMessage(); }
-                public CrawlRequest fromDto(CrawlRequestDto dto) { return new CrawlRequest(); }
-                public CrawlRequestDto toDto(CrawlRequest domain) { return new CrawlRequestDto(); }
-            }
-            """;
-
-        String rawDocumentMapper = """
-            package test.common.mapper;
-
-            import org.pipelineframework.mapper.Mapper;
-            import test.common.domain.RawDocument;
-            import test.common.domain.RawDocumentGrpcMessage;
-            import test.common.dto.RawDocumentDto;
-
-            public class RawDocumentMapper implements Mapper<RawDocumentGrpcMessage, RawDocumentDto, RawDocument> {
-                public RawDocumentDto fromGrpc(RawDocumentGrpcMessage grpc) { return new RawDocumentDto(); }
-                public RawDocumentGrpcMessage toGrpc(RawDocumentDto dto) { return new RawDocumentGrpcMessage(); }
-                public RawDocument fromDto(RawDocumentDto dto) { return new RawDocument(); }
-                public RawDocumentDto toDto(RawDocument domain) { return new RawDocumentDto(); }
-            }
-            """;
-
         // Create a pipeline.yaml config file that matches the search example
         Path configDir = tempDir.resolve("config");
         Files.createDirectories(configDir);
@@ -650,6 +659,9 @@ class PipelineStepProcessorTest {
             """);
 
         // Compile with the PipelineStepProcessor
+        // Note: Domain types are provided before mappers because the annotation processor
+        // resolves type references during processing. This ordering ensures the processor
+        // can find domain types when it encounters mapper interfaces.
         Compilation compilation = Compiler.javac()
                 .withProcessors(new org.pipelineframework.processor.PipelineStepProcessor())
                 .withOptions(
@@ -657,18 +669,18 @@ class PipelineStepProcessorTest {
                         "-Aprotobuf.descriptor.path=" + tempDir.toString())
                 .compile(
                         JavaFileObjects.forSourceString("test.step.ProcessCrawlSourceService", stepCode),
-                        // Domain types first
-                        JavaFileObjects.forSourceString("test.common.domain.CrawlRequest", crawlRequestDomain),
-                        JavaFileObjects.forSourceString("test.common.domain.RawDocument", rawDocumentDomain),
+                        // Domain types first (processor resolves type references during processing)
+                        JavaFileObjects.forSourceString("test.common.domain.CrawlRequest", CRAWL_REQUEST_DOMAIN),
+                        JavaFileObjects.forSourceString("test.common.domain.RawDocument", RAW_DOCUMENT_DOMAIN),
                         // DTO types
                         JavaFileObjects.forSourceString("test.common.dto.CrawlRequestDto", "package test.common.dto; public class CrawlRequestDto {}"),
                         JavaFileObjects.forSourceString("test.common.dto.RawDocumentDto", "package test.common.dto; public class RawDocumentDto {}"),
                         // gRPC message types
                         JavaFileObjects.forSourceString("test.common.domain.CrawlRequestGrpcMessage", "package test.common.domain; public class CrawlRequestGrpcMessage {}"),
                         JavaFileObjects.forSourceString("test.common.domain.RawDocumentGrpcMessage", "package test.common.domain; public class RawDocumentGrpcMessage {}"),
-                        // Mapper interfaces last
-                        JavaFileObjects.forSourceString("test.common.mapper.CrawlRequestMapper", crawlRequestMapper),
-                        JavaFileObjects.forSourceString("test.common.mapper.RawDocumentMapper", rawDocumentMapper)
+                        // Mapper interfaces last (references domain types already provided)
+                        JavaFileObjects.forSourceString("test.common.mapper.CrawlRequestMapper", CRAWL_REQUEST_MAPPER),
+                        JavaFileObjects.forSourceString("test.common.mapper.RawDocumentMapper", RAW_DOCUMENT_MAPPER)
                 );
 
         // Verify compilation succeeded
@@ -723,131 +735,6 @@ class PipelineStepProcessorTest {
             }
             """;
 
-        // Create supporting classes that would normally exist
-        String rawDocumentDomain = """
-            package test.common.domain;
-
-            import java.time.Instant;
-            import java.util.UUID;
-
-            public class RawDocument {
-                private UUID docId;
-                private String sourceUrl;
-                private String rawContent;
-                private Instant fetchedAt;
-
-                public UUID getDocId() {
-                    return docId;
-                }
-
-                public void setDocId(UUID docId) {
-                    this.docId = docId;
-                }
-
-                public String getSourceUrl() {
-                    return sourceUrl;
-                }
-
-                public void setSourceUrl(String sourceUrl) {
-                    this.sourceUrl = sourceUrl;
-                }
-
-                public String getRawContent() {
-                    return rawContent;
-                }
-
-                public void setRawContent(String rawContent) {
-                    this.rawContent = rawContent;
-                }
-
-                public Instant getFetchedAt() {
-                    return fetchedAt;
-                }
-
-                public void setFetchedAt(Instant fetchedAt) {
-                    this.fetchedAt = fetchedAt;
-                }
-            }
-            """;
-
-        String parsedDocumentDomain = """
-            package test.common.domain;
-
-            import java.time.Instant;
-            import java.util.UUID;
-
-            public class ParsedDocument {
-                private UUID docId;
-                private String title;
-                private String content;
-                private Instant extractedAt;
-
-                public UUID getDocId() {
-                    return docId;
-                }
-
-                public void setDocId(UUID docId) {
-                    this.docId = docId;
-                }
-
-                public String getTitle() {
-                    return title;
-                }
-
-                public void setTitle(String title) {
-                    this.title = title;
-                }
-
-                public String getContent() {
-                    return content;
-                }
-
-                public void setContent(String content) {
-                    this.content = content;
-                }
-
-                public Instant getExtractedAt() {
-                    return extractedAt;
-                }
-
-                public void setExtractedAt(Instant extractedAt) {
-                    this.extractedAt = extractedAt;
-                }
-            }
-            """;
-
-        String rawDocumentMapper = """
-            package test.common.mapper;
-
-            import org.pipelineframework.mapper.Mapper;
-            import test.common.domain.RawDocument;
-            import test.common.domain.RawDocumentGrpcMessage;
-            import test.common.dto.RawDocumentDto;
-
-            public class RawDocumentMapper implements Mapper<RawDocumentGrpcMessage, RawDocumentDto, RawDocument> {
-                public RawDocumentDto fromGrpc(RawDocumentGrpcMessage grpc) { return new RawDocumentDto(); }
-                public RawDocumentGrpcMessage toGrpc(RawDocumentDto dto) { return new RawDocumentGrpcMessage(); }
-                public RawDocument fromDto(RawDocumentDto dto) { return new RawDocument(); }
-                public RawDocumentDto toDto(RawDocument domain) { return new RawDocumentDto(); }
-            }
-            """;
-
-        String parsedDocumentMapper = """
-            package test.common.mapper;
-
-            import org.pipelineframework.mapper.Mapper;
-            import test.common.domain.ParsedDocument;
-            import test.common.domain.ParsedDocumentGrpcMessage;
-            import test.common.dto.ParsedDocumentDto;
-
-            public class ParsedDocumentMapper implements Mapper<ParsedDocumentGrpcMessage, ParsedDocumentDto, ParsedDocument> {
-                public ParsedDocumentDto fromGrpc(ParsedDocumentGrpcMessage grpc) { return new ParsedDocumentDto(); }
-                public ParsedDocumentGrpcMessage toGrpc(ParsedDocumentDto dto) { return new ParsedDocumentGrpcMessage(); }
-                public ParsedDocument fromDto(ParsedDocumentDto dto) { return new ParsedDocument(); }
-                public ParsedDocumentDto toDto(ParsedDocument domain) { return new ParsedDocumentDto(); }
-            }
-            """;
-
         // Create a pipeline.yaml config file with REST transport that matches the search example
         Path configDir = tempDir.resolve("config");
         Files.createDirectories(configDir);
@@ -890,6 +777,8 @@ class PipelineStepProcessorTest {
             """);
 
         // Compile with the PipelineStepProcessor
+        // Note: Domain types are provided before mappers because the annotation processor
+        // resolves type references during processing.
         Compilation compilation = Compiler.javac()
                 .withProcessors(new org.pipelineframework.processor.PipelineStepProcessor())
                 .withOptions(
@@ -897,18 +786,18 @@ class PipelineStepProcessorTest {
                         "-Aprotobuf.descriptor.path=" + tempDir.toString())
                 .compile(
                         JavaFileObjects.forSourceString("test.step.ProcessParseDocumentService", stepCode),
-                        // Domain types first
-                        JavaFileObjects.forSourceString("test.common.domain.RawDocument", rawDocumentDomain),
-                        JavaFileObjects.forSourceString("test.common.domain.ParsedDocument", parsedDocumentDomain),
+                        // Domain types first (processor resolves type references during processing)
+                        JavaFileObjects.forSourceString("test.common.domain.RawDocument", RAW_DOCUMENT_DOMAIN),
+                        JavaFileObjects.forSourceString("test.common.domain.ParsedDocument", PARSED_DOCUMENT_DOMAIN),
                         // DTO types
                         JavaFileObjects.forSourceString("test.common.dto.RawDocumentDto", "package test.common.dto; public class RawDocumentDto {}"),
                         JavaFileObjects.forSourceString("test.common.dto.ParsedDocumentDto", "package test.common.dto; public class ParsedDocumentDto {}"),
                         // gRPC message types
                         JavaFileObjects.forSourceString("test.common.domain.RawDocumentGrpcMessage", "package test.common.domain; public class RawDocumentGrpcMessage {}"),
                         JavaFileObjects.forSourceString("test.common.domain.ParsedDocumentGrpcMessage", "package test.common.domain; public class ParsedDocumentGrpcMessage {}"),
-                        // Mapper interfaces last
-                        JavaFileObjects.forSourceString("test.common.mapper.RawDocumentMapper", rawDocumentMapper),
-                        JavaFileObjects.forSourceString("test.common.mapper.ParsedDocumentMapper", parsedDocumentMapper)
+                        // Mapper interfaces last (references domain types already provided)
+                        JavaFileObjects.forSourceString("test.common.mapper.RawDocumentMapper", RAW_DOCUMENT_MAPPER),
+                        JavaFileObjects.forSourceString("test.common.mapper.ParsedDocumentMapper", PARSED_DOCUMENT_MAPPER)
                 );
 
         // Verify compilation succeeded
