@@ -562,8 +562,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
             }
             fail(
                     "Orchestrator process timed out after "
-                             ORCHESTRATOR_WAIT_TIMEOUT_SECONDS
-                             "s");
+                            + ORCHESTRATOR_WAIT_TIMEOUT_SECONDS
+                            + "s");
         }
         int exitCode = p.exitValue();
         assertEquals(0, exitCode, "Orchestrator exited with non-zero code");
