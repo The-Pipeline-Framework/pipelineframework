@@ -1,7 +1,6 @@
 package org.pipelineframework.processor.phase;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -9,9 +8,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import javax.annotation.processing.Messager;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
 import javax.annotation.processing.ProcessingEnvironment;
+import javax.lang.model.util.Elements;
 import javax.tools.Diagnostic;
 
 import org.pipelineframework.annotation.PipelineOrchestrator;
@@ -90,39 +91,44 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         Set<? extends Element> pluginElements =
             ctx.getRoundEnv() != null ? ctx.getRoundEnv().getElementsAnnotatedWith(PipelinePlugin.class) : Set.of();
 
+        Map<String, String> options = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getOptions() : Map.of();
+        Messager messager = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getMessager() : null;
+
         // Resolve generated sources root and module directory early (needed for config discovery)
-        Path generatedSourcesRoot = resolveGeneratedSourcesRoot(ctx);
+        Path generatedSourcesRoot = discoveryPathResolver.resolveGeneratedSourcesRoot(options);
         ctx.setGeneratedSourcesRoot(generatedSourcesRoot);
 
-        Path moduleDir = resolveModuleDir(ctx, generatedSourcesRoot);
+        Path moduleDir = discoveryPathResolver.resolveModuleDir(generatedSourcesRoot);
         ctx.setModuleDir(moduleDir);
-        ctx.setModuleName(resolveModuleName(ctx));
+        ctx.setModuleName(discoveryPathResolver.resolveModuleName(options));
+
+        Optional<Path> configPath = discoveryConfigLoader.resolvePipelineConfigPath(options, moduleDir, messager);
 
         // Check if this is a plugin host
         boolean isPluginHost = !pluginElements.isEmpty();
         ctx.setPluginHost(isPluginHost);
 
         // Load pipeline aspects
-        List<PipelineAspectModel> aspects = loadPipelineAspects(ctx);
+        List<PipelineAspectModel> aspects = loadPipelineAspects(configPath, messager);
         ctx.setAspectModels(aspects);
 
         // Load pipeline template config
-        PipelineTemplateConfig templateConfig = loadPipelineTemplateConfig(ctx);
+        PipelineTemplateConfig templateConfig = loadPipelineTemplateConfig(configPath, messager);
         ctx.setPipelineTemplateConfig(templateConfig);
 
         // Parse step definitions from YAML
-        List<StepDefinition> stepDefinitions = parseStepDefinitions(ctx);
+        List<StepDefinition> stepDefinitions = parseStepDefinitions(configPath, messager);
         ctx.setStepDefinitions(stepDefinitions);
 
         // Load runtime mapping config (optional)
-        PipelineRuntimeMapping runtimeMapping = loadRuntimeMapping(ctx);
+        PipelineRuntimeMapping runtimeMapping = loadRuntimeMapping(moduleDir, messager);
         ctx.setRuntimeMapping(runtimeMapping);
 
         // Determine transport and platform modes
-        PipelineStepConfigLoader.StepConfig stepConfig = loadPipelineStepConfig(ctx);
-        TransportMode transportMode = loadPipelineTransport(ctx, stepConfig);
+        PipelineStepConfigLoader.StepConfig stepConfig = loadPipelineStepConfig(configPath, messager);
+        TransportMode transportMode = transportPlatformResolver.resolveTransport(stepConfig.transport(), messager);
         ctx.setTransportMode(transportMode);
-        PlatformMode platformMode = loadPipelinePlatform(ctx, stepConfig);
+        PlatformMode platformMode = transportPlatformResolver.resolvePlatform(stepConfig.platform(), messager);
         ctx.setPlatformMode(platformMode);
 
         // Discover orchestrator models if present
@@ -137,22 +143,11 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @return a list of loaded {@code PipelineAspectModel} instances; an empty list if no pipeline config is found
      * @throws Exception if loading fails; an error diagnostic is reported to the processing environment's messager when available
      */
-    private List<PipelineAspectModel> loadPipelineAspects(PipelineCompilationContext ctx) {
-        Optional<Path> configPath = resolvePipelineConfigPath(ctx);
+    private List<PipelineAspectModel> loadPipelineAspects(Optional<Path> configPath, Messager messager) {
         if (configPath.isEmpty()) {
             return List.of();
         }
-
-        PipelineAspectConfigLoader loader = new PipelineAspectConfigLoader();
-        try {
-            return loader.load(configPath.get());
-        } catch (Exception e) {
-            if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR,
-                    "Failed to load pipeline aspects from " + configPath.get() + ": " + e.getMessage());
-            }
-            throw e;
-        }
+        return discoveryConfigLoader.loadAspects(configPath.get(), messager);
     }
 
     /**
@@ -161,25 +156,11 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @param ctx compilation context used to determine the module directory and to report warnings
      * @return the loaded PipelineTemplateConfig, or `null` if no configuration is present or if loading fails (a warning is emitted via the processing environment when available)
      */
-    private PipelineTemplateConfig loadPipelineTemplateConfig(PipelineCompilationContext ctx) {
-        Optional<Path> configPath = resolvePipelineConfigPath(ctx);
+    private PipelineTemplateConfig loadPipelineTemplateConfig(Optional<Path> configPath, Messager messager) {
         if (configPath.isEmpty()) {
             return null;
         }
-
-        ProcessingEnvironment procEnv = ctx.getProcessingEnv();
-        PipelineTemplateConfigLoader loader = procEnv != null
-            ? new PipelineTemplateConfigLoader(procEnv.getOptions()::get, System::getenv)
-            : new PipelineTemplateConfigLoader(key -> null, System::getenv);
-        try {
-            return loader.load(configPath.get());
-        } catch (Exception e) {
-            if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
-                    "Failed to load pipeline template config from " + configPath.get() + ": " + e.getMessage());
-            }
-            return null;
-        }
+        return discoveryConfigLoader.loadTemplateConfig(configPath.get(), messager);
     }
 
     /**
@@ -192,63 +173,16 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @param ctx the pipeline compilation context used to locate the module directory and to report warnings
      * @return a non-null {@link org.pipelineframework.processor.config.PipelineStepConfigLoader.StepConfig}
      */
-    private PipelineStepConfigLoader.StepConfig loadPipelineStepConfig(PipelineCompilationContext ctx) {
-        Optional<Path> configPath = resolvePipelineConfigPath(ctx);
+    private PipelineStepConfigLoader.StepConfig loadPipelineStepConfig(Optional<Path> configPath, Messager messager) {
         if (configPath.isEmpty()) {
             return DEFAULT_STEP_CONFIG;
         }
-
-        ProcessingEnvironment stepProcEnv = ctx.getProcessingEnv();
-        PipelineStepConfigLoader stepLoader = new PipelineStepConfigLoader(
-            stepProcEnv != null ? stepProcEnv.getOptions()::get : key -> null,
+        PipelineStepConfigLoader.StepConfig loaded = discoveryConfigLoader.loadStepConfig(
+            configPath.get(),
+            key -> null,
             System::getenv,
-            stepProcEnv == null ? null : stepProcEnv.getMessager());
-        try {
-            return stepLoader.load(configPath.get());
-        } catch (Exception e) {
-            if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
-                    "Failed to load pipeline transport/platform from " + configPath.get() + ": " + e.getMessage());
-            }
-            return DEFAULT_STEP_CONFIG;
-        }
-    }
-
-    private TransportMode loadPipelineTransport(
-        PipelineCompilationContext ctx,
-        PipelineStepConfigLoader.StepConfig stepConfig) {
-        String transport = stepConfig.transport();
-        if (transport == null || transport.isBlank()) {
-            return TransportMode.GRPC;
-        }
-        Optional<TransportMode> mode = TransportMode.fromStringOptional(transport);
-        if (mode.isEmpty()) {
-            if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
-                    "Unknown pipeline transport '" + transport + "'; defaulting to GRPC.");
-            }
-            return TransportMode.GRPC;
-        }
-        return mode.get();
-    }
-
-    private PlatformMode loadPipelinePlatform(
-        PipelineCompilationContext ctx,
-        PipelineStepConfigLoader.StepConfig stepConfig) {
-        String platform = stepConfig.platform();
-        if (platform == null || platform.isBlank()) {
-            return PlatformMode.COMPUTE;
-        }
-        Optional<PlatformMode> mode = PlatformMode.fromStringOptional(platform);
-        if (mode.isEmpty()) {
-            if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.WARNING,
-                    "Unknown pipeline platform '" + platform + "'; defaulting to COMPUTE.");
-            }
-            return PlatformMode.COMPUTE;
-        }
-        return mode.get();
+            messager);
+        return loaded != null ? loaded : DEFAULT_STEP_CONFIG;
     }
 
     /**
@@ -273,9 +207,14 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
                 // For now, we'll create a simple model based on the annotation
                 // In a real implementation, this would extract more detailed information
                 String serviceName = "OrchestratorService"; // Default name
-                String servicePackage = element instanceof TypeElement typeElement 
-                    ? typeElement.getQualifiedName().toString().replace("." + element.getSimpleName().toString(), ".orchestrator.service")
-                    : "org.pipelineframework.orchestrator.service";
+                String servicePackage = "org.pipelineframework.orchestrator.service";
+                if (element instanceof TypeElement typeElement && ctx.getProcessingEnv() != null) {
+                    Elements elementUtils = ctx.getProcessingEnv().getElementUtils();
+                    if (elementUtils != null) {
+                        String packageName = elementUtils.getPackageOf(typeElement).getQualifiedName().toString();
+                        servicePackage = packageName + ".orchestrator.service";
+                    }
+                }
                 
                 // Determine enabled targets based on transport mode
                 // This is simplified - in reality, it would depend on configuration
@@ -312,127 +251,8 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         return orchestratorElement.getAnnotation(PipelineOrchestrator.class);
     }
 
-    /**
-     * Loads the pipeline runtime mapping for the current module, if present.
-     *
-     * Locates a runtime mapping file in the context's module directory and parses it into a
-     * PipelineRuntimeMapping. If the context has no module directory or no mapping file is found,
-     * this method returns `null`. If loading fails, an error is reported to the processing
-     * environment (when available) and the underlying exception is rethrown.
-     *
-     * @param ctx the compilation context providing the module directory and processing environment
-     * @return the loaded PipelineRuntimeMapping, or `null` if none was found or the module directory is unset
-     */
-    private PipelineRuntimeMapping loadRuntimeMapping(PipelineCompilationContext ctx) {
-        PipelineRuntimeMappingLocator locator = new PipelineRuntimeMappingLocator();
-        Path moduleDir = ctx.getModuleDir();
-        if (moduleDir == null) {
-            return null;
-        }
-        Optional<Path> configPath = locator.locate(moduleDir);
-        if (configPath.isEmpty()) {
-            return null;
-        }
-
-        PipelineRuntimeMappingLoader loader = new PipelineRuntimeMappingLoader();
-        try {
-            return loader.load(configPath.get());
-        } catch (Exception e) {
-            if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR,
-                    "Failed to load runtime mapping from " + configPath.get() + ": " + e.getMessage());
-            }
-            throw e;
-        }
-    }
-
-    /**
-     * Resolve the pipeline configuration file path from the processing options or by locating
-     * a pipeline YAML within the current module directory.
-     *
-     * <p>The method first checks the processing option `pipeline.config`. If present and non-blank,
-     * the value is interpreted as a filesystem path (relative paths are resolved against the
-     * context's module directory). If the explicit path exists it is returned; if it does not exist
-     * an error message is emitted via the processing environment messager (when available) and an
-     * empty Optional is returned. If no explicit option is provided, the method attempts to locate
-     * a pipeline YAML using {@code PipelineYamlConfigLocator} within the module directory. If the
-     * module directory is not available or no config is found, an empty Optional is returned.
-     *
-     * @param ctx the compilation context used to read processing options and module directory
-     * @return an Optional containing the resolved configuration Path if found, or an empty Optional
-     *         if no configuration could be located or an explicit path was missing
-     */
-    private Optional<Path> resolvePipelineConfigPath(PipelineCompilationContext ctx) {
-        Map<String, String> options = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getOptions() : Map.of();
-        String explicitConfig = options.get("pipeline.config");
-        if (explicitConfig != null && !explicitConfig.isBlank()) {
-            Path explicitPath = Path.of(explicitConfig.trim());
-            if (!explicitPath.isAbsolute() && ctx.getModuleDir() != null) {
-                explicitPath = ctx.getModuleDir().resolve(explicitPath).normalize();
-            }
-            if (Files.exists(explicitPath)) {
-                return Optional.of(explicitPath);
-            }
-            if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "pipeline.config points to a missing path: '" + explicitConfig + "' (resolved to '" +
-                        explicitPath + "')");
-            }
-            return Optional.empty();
-        }
-        Path moduleDir = ctx.getModuleDir();
-        if (moduleDir == null) {
-            return Optional.empty();
-        }
-        PipelineYamlConfigLocator locator = new PipelineYamlConfigLocator();
-        return locator.locate(moduleDir);
-    }
-
-    /**
-     * Resolve the module name from the processing environment options.
-     *
-     * Reads the "pipeline.module" option from the compilation context's processing environment,
-     * trims surrounding whitespace, and returns the result. If the processing environment is
-     * unavailable or the option is missing or blank, returns `null`.
-     *
-     * @param ctx the compilation context providing access to the processing environment and its options
-     * @return the trimmed module name, or `null` if not present or blank
-     */
-    private String resolveModuleName(PipelineCompilationContext ctx) {
-        if (ctx.getProcessingEnv() == null) {
-            return null;
-        }
-        String moduleName = ctx.getProcessingEnv().getOptions().get("pipeline.module");
-        if (moduleName == null || moduleName.isBlank()) {
-            return null;
-        }
-        return moduleName.trim();
-    }
-
-    /**
-     * Resolve the filesystem root directory where generated pipeline sources should be written.
-     *
-     * Checks processing environment options (when available) for "pipeline.generatedSourcesDir" first,
-     * then "pipeline.generatedSourcesRoot" and returns the first non-blank value as a Path.
-     * If neither option is present, returns {user.dir}/target/generated-sources/pipeline.
-     *
-     * @param ctx the compilation context whose processing environment options are consulted (may be null)
-     * @return the resolved Path for generated pipeline sources
-     */
-    private Path resolveGeneratedSourcesRoot(PipelineCompilationContext ctx) {
-        Map<String, String> options = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getOptions() : Map.of();
-        String configured = options.get("pipeline.generatedSourcesDir");
-        if (configured != null && !configured.isBlank()) {
-            return Path.of(configured);
-        }
-
-        String fallback = options.get("pipeline.generatedSourcesRoot");
-        if (fallback != null && !fallback.isBlank()) {
-            return Path.of(fallback);
-        }
-
-        return Path.of(System.getProperty("user.dir"), "target", "generated-sources", "pipeline");
+    private PipelineRuntimeMapping loadRuntimeMapping(Path moduleDir, Messager messager) {
+        return discoveryConfigLoader.loadRuntimeMapping(moduleDir, messager);
     }
 
     /**
@@ -442,55 +262,32 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @return a list of StepDefinition objects parsed from the template
      * @throws IOException if config resolution fails or parsing step definitions fails
      */
-    private List<StepDefinition> parseStepDefinitions(PipelineCompilationContext ctx) {
-        Optional<Path> configPath = resolvePipelineConfigPath(ctx);
+    private List<StepDefinition> parseStepDefinitions(Optional<Path> configPath, Messager messager) {
         if (configPath.isEmpty()) {
             return List.of();
         }
 
         StepDefinitionParser parser = new StepDefinitionParser((kind, message) -> {
-            if (ctx.getProcessingEnv() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(kind, message);
+            if (messager != null) {
+                messager.printMessage(kind, message);
             }
         });
         try {
             return parser.parseStepDefinitions(configPath.get());
         } catch (IOException e) {
-            if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
+            if (messager != null) {
+                messager.printMessage(
                     Diagnostic.Kind.ERROR,
                     "Failed to parse YAML step definitions from " + configPath.get() + ": " + e.getMessage());
             }
             return List.of();
         } catch (Exception e) {
-            if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
-                ctx.getProcessingEnv().getMessager().printMessage(
+            if (messager != null) {
+                messager.printMessage(
                     Diagnostic.Kind.ERROR,
                     "Unexpected error while parsing YAML step definitions from " + configPath.get() + ": " + e.getMessage());
             }
             return List.of();
         }
-    }
-
-    /**
-     * Resolve the module root directory by ascending from a generated-sources path or falling back to the current working directory.
-     *
-     * <p>If {@code generatedSourcesRoot} is non-null, the method climbs up to three parent directory levels and returns the resulting path if found. If no candidate is available or {@code generatedSourcesRoot} is null, the method returns the JVM current working directory.
-     *
-     * @param generatedSourcesRoot the path inside the module's generated-sources tree, or {@code null} if unknown
-     * @return the resolved module directory path, or the current working directory if resolution fails
-     */
-    private Path resolveModuleDir(PipelineCompilationContext ctx, Path generatedSourcesRoot) {
-        if (generatedSourcesRoot != null) {
-            Path candidate = generatedSourcesRoot;
-            // .../target/generated-sources/pipeline -> module root
-            for (int i = 0; i < 3 && candidate != null; i++) {
-                candidate = candidate.getParent();
-            }
-            if (candidate != null) {
-                return candidate;
-            }
-        }
-        return Path.of(System.getProperty("user.dir"));
     }
 }

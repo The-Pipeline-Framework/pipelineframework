@@ -18,12 +18,12 @@ Configured in `PipelineStepProcessor.init`:
 | Phase | Primary Responsibility | Key Outputs in Context | Collaborators |
 | --- | --- | --- | --- |
 | Discovery | Load config, resolve module paths, detect plugin/orchestrator markers | module paths, platform/transport mode, aspect/template/orchestrator models | `DiscoveryPathResolver`, `DiscoveryConfigLoader`, `TransportPlatformResolver` |
-| Model Extraction | Build `PipelineStepModel` IR from annotations and template-derived steps | `stepModels` | `TemplateModelBuilder`, `TemplateExpansionOrchestrator` |
+| Model Extraction | Build `PipelineStepModel` IR from YAML step definitions, then apply contextual role/aspect enrichment | `stepModels` | `PipelineStepIRExtractor`, `ModelContextRoleEnricher` |
 | Runtime Mapping | Apply runtime placement/module filtering | filtered `stepModels`, mapping resolution | — |
 | Semantic Analysis | Policy checks and semantic constraints | orchestrator flag, diagnostics | — |
 | Target Resolution | Map role+transport to target sets | updated `enabledTargets`, `resolvedTargets` | `ClientRoleTargetResolutionStrategy`, `ServerRoleTargetResolutionStrategy` |
-| Binding Construction | Build renderer-facing bindings | `rendererBindings`, descriptor set | `GrpcRequirementEvaluator`, `StepBindingBuilder` |
-| Generation | Emit sources/metadata | generated artifacts + metadata resources | — |
+| Binding Construction | Build renderer-facing bindings | `rendererBindings`, descriptor set | `GrpcRequirementEvaluator`, `StepBindingConstructionService` |
+| Generation | Emit sources/metadata | generated artifacts + metadata resources | `StepArtifactGenerationService`, `ProtobufParserService`, `SideEffectBeanService` |
 | Infrastructure | Ensure output directories and filesystem context | role directories under generated-sources root | — |
 
 

@@ -69,6 +69,11 @@ class ModelExtractionPhaseTest {
     }
 
     @Test
+    void testConstructorInjectionRejectsNullRoleEnricher() {
+        assertThrows(NullPointerException.class, () -> new ModelExtractionPhase(null));
+    }
+
+    @Test
     void testExecution_noAnnotatedElements_emptyModels() throws Exception {
         ModelExtractionPhase phase = new ModelExtractionPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);

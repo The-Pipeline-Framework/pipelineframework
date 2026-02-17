@@ -33,29 +33,39 @@ Each phase with complex orchestration delegates to focused, stateless collaborat
 | Phase | Collaborators |
 | --- | --- |
 | PipelineDiscoveryPhase | `DiscoveryPathResolver`, `DiscoveryConfigLoader`, `TransportPlatformResolver` |
-| ModelExtractionPhase | `TemplateModelBuilder`, `TemplateExpansionOrchestrator` |
+| ModelExtractionPhase | `PipelineStepIRExtractor`, `ModelContextRoleEnricher` |
 | PipelineTargetResolutionPhase | `ClientRoleTargetResolutionStrategy`, `ServerRoleTargetResolutionStrategy` |
-| PipelineBindingConstructionPhase | `GrpcRequirementEvaluator`, `StepBindingBuilder` |
+| PipelineBindingConstructionPhase | `GrpcRequirementEvaluator`, `StepBindingConstructionService` |
+
+## Retained Non-Canonical Phases
+
+The canonical chain is the only active execution path. Some earlier phase-style classes are retained for compatibility/reference and are not part of `PipelineStepProcessor.init(...)`:
+
+- `ConfigurationLoadingPhase`
+- `TargetResolutionPhase`
+- `BindingResolutionPhase`
 
 ## Generation Dispatch Model
 
 The generation subsystem contains:
 
 - per-target generator abstractions (`TargetGenerator`, `GenerationRequest`, concrete `*TargetGenerator` classes)
-- domain services (`SideEffectBeanService`, `ProtobufParserService`, `OrchestratorGenerationService`)
+- domain services (`StepArtifactGenerationService`, `SideEffectBeanService`, `ProtobufParserService`, `OrchestratorGenerationService`)
 - the generation phase orchestrator (`PipelineGenerationPhase`)
 
 ```mermaid
 flowchart LR
     A["PipelineGenerationPhase"] --> B["Bindings + Targets"]
     B --> C["Renderers"]
-    B --> D["SideEffectBeanService"]
-    B --> E["OrchestratorGenerationService"]
-    B --> F["ProtobufParserService"]
-    C --> G["Generated Sources"]
-    D --> G
-    E --> G
-    F --> G
+    B --> D["StepArtifactGenerationService"]
+    D --> E["SideEffectBeanService"]
+    B --> F["OrchestratorGenerationService"]
+    B --> G["ProtobufParserService"]
+    C --> H["Generated Sources"]
+    D --> H
+    E --> H
+    F --> H
+    G --> H
 ```
 
 ## Package Map

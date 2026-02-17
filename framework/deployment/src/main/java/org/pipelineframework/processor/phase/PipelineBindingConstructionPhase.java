@@ -14,8 +14,6 @@ import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.ir.*;
 import org.pipelineframework.processor.util.DescriptorFileLocator;
-import org.pipelineframework.processor.util.GrpcBindingResolver;
-import org.pipelineframework.processor.util.RestBindingResolver;
 
 /**
  * Constructs renderer-specific bindings from semantic models and resolved targets.
@@ -26,12 +24,13 @@ import org.pipelineframework.processor.util.RestBindingResolver;
  */
 public class PipelineBindingConstructionPhase implements PipelineCompilationPhase {
     private final GrpcRequirementEvaluator grpcRequirementEvaluator;
+    private final StepBindingConstructionService stepBindingConstructionService;
 
     /**
      * Creates a new PipelineBindingConstructionPhase.
      */
     public PipelineBindingConstructionPhase() {
-        this(new GrpcRequirementEvaluator());
+        this(new GrpcRequirementEvaluator(), new StepBindingConstructionService());
     }
 
     /**
@@ -40,7 +39,16 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
      * @param grpcRequirementEvaluator evaluator used to determine if descriptor loading is required
      */
     public PipelineBindingConstructionPhase(GrpcRequirementEvaluator grpcRequirementEvaluator) {
+        this(grpcRequirementEvaluator, new StepBindingConstructionService());
+    }
+
+    PipelineBindingConstructionPhase(
+            GrpcRequirementEvaluator grpcRequirementEvaluator,
+            StepBindingConstructionService stepBindingConstructionService) {
         this.grpcRequirementEvaluator = Objects.requireNonNull(grpcRequirementEvaluator, "grpcRequirementEvaluator");
+        this.stepBindingConstructionService = Objects.requireNonNull(
+            stepBindingConstructionService,
+            "stepBindingConstructionService");
     }
 
     @Override
@@ -72,52 +80,7 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
             ctx.setDescriptorSet(descriptorSet);
         }
 
-        GrpcBindingResolver grpcBindingResolver = new GrpcBindingResolver();
-        RestBindingResolver restBindingResolver = new RestBindingResolver();
-        
-        // Process each step model to construct appropriate bindings
-        for (PipelineStepModel model : ctx.getStepModels()) {
-            String modelKey = model.serviceName();
-
-            // Delegated steps also need external adapters in addition to regular client bindings.
-            if (model.delegateService() != null) {
-                warnIfDelegatedStepHasServerTargets(ctx, model);
-                ExternalAdapterBinding externalAdapterBinding = new ExternalAdapterBinding(
-                    model,
-                    model.serviceName(),
-                    model.servicePackage(),
-                    model.delegateService().toString(),
-                    model.externalMapper() != null ? model.externalMapper().toString() : null
-                );
-                bindingsMap.put(modelKey + "_external_adapter", externalAdapterBinding);
-            }
-
-            // Construct gRPC binding if needed
-            GrpcBinding grpcBinding = null;
-            if (model.delegateService() == null
-                && (model.enabledTargets().contains(GenerationTarget.GRPC_SERVICE)
-                || model.enabledTargets().contains(GenerationTarget.CLIENT_STEP))) {
-                grpcBinding = grpcBindingResolver.resolve(model, descriptorSet);
-            }
-
-            // Construct REST binding if needed
-            RestBinding restBinding = null;
-            if (model.enabledTargets().contains(GenerationTarget.REST_RESOURCE)
-                || model.enabledTargets().contains(GenerationTarget.REST_CLIENT_STEP)) {
-                restBinding = restBindingResolver.resolve(model, ctx.getProcessingEnv());
-            }
-
-            // Store bindings for this model conditionally
-            if (grpcBinding != null) {
-                bindingsMap.put(modelKey + "_grpc", grpcBinding);
-            }
-            if (restBinding != null) {
-                bindingsMap.put(modelKey + "_rest", restBinding);
-            }
-            if (model.enabledTargets().contains(GenerationTarget.LOCAL_CLIENT_STEP)) {
-                bindingsMap.put(modelKey + "_local", new LocalBinding(model));
-            }
-        }
+        bindingsMap.putAll(stepBindingConstructionService.buildBindings(ctx, descriptorSet));
         
         // Process orchestrator models if present
         if (!ctx.getOrchestratorModels().isEmpty()) {
@@ -165,22 +128,4 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
             ctx.getProcessingEnv().getMessager());
     }
 
-    private void warnIfDelegatedStepHasServerTargets(PipelineCompilationContext ctx, PipelineStepModel model) {
-        if (ctx.getProcessingEnv() == null || ctx.getProcessingEnv().getMessager() == null) {
-            return;
-        }
-        Set<GenerationTarget> ignoredTargets = model.enabledTargets().stream()
-            .filter(target -> target == GenerationTarget.GRPC_SERVICE || target == GenerationTarget.REST_RESOURCE)
-            .collect(Collectors.toSet());
-        if (ignoredTargets.isEmpty()) {
-            return;
-        }
-
-        String ignoredTargetsMessage = ignoredTargets.stream().map(Enum::name).sorted().collect(Collectors.joining(", "));
-        ctx.getProcessingEnv().getMessager().printMessage(
-            javax.tools.Diagnostic.Kind.WARNING,
-            "Delegated step '" + model.serviceName() + "' ignores server targets ["
-                + ignoredTargetsMessage
-                + "]. Delegated steps generate external adapters plus client bindings.");
-    }
 }

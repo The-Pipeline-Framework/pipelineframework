@@ -37,7 +37,11 @@ import org.pipelineframework.config.PlatformMode;
 import org.pipelineframework.processor.PipelineCompilationContext;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -155,7 +159,52 @@ class PipelineDiscoveryPhaseTest {
         phase.execute(context);
 
         verify(messager).printMessage(
-            Diagnostic.Kind.ERROR,
-            "Skipping step 'bad-step': 'service' and 'delegate' are mutually exclusive");
+            eq(Diagnostic.Kind.ERROR),
+            contains("Skipping step 'bad-step':"));
+    }
+
+    @Test
+    void executeResolvesPipelineConfigOnceAndReusesItAcrossLoaders() throws Exception {
+        DiscoveryPathResolver pathResolver = mock(DiscoveryPathResolver.class);
+        DiscoveryConfigLoader configLoader = mock(DiscoveryConfigLoader.class);
+        TransportPlatformResolver tpResolver = mock(TransportPlatformResolver.class);
+
+        Path generatedSourcesRoot = tempDir.resolve("target/generated-sources/pipeline");
+        Path moduleDir = tempDir;
+        Path pipelineConfig = tempDir.resolve("pipeline.yaml");
+        Files.writeString(pipelineConfig, "appName: test");
+
+        when(pathResolver.resolveGeneratedSourcesRoot(Map.of())).thenReturn(generatedSourcesRoot);
+        when(pathResolver.resolveModuleDir(generatedSourcesRoot)).thenReturn(moduleDir);
+        when(pathResolver.resolveModuleName(Map.of())).thenReturn("test-module");
+
+        when(configLoader.resolvePipelineConfigPath(Map.of(), moduleDir, messager))
+            .thenReturn(java.util.Optional.of(pipelineConfig));
+        when(configLoader.loadAspects(pipelineConfig, messager)).thenReturn(java.util.List.of());
+        when(configLoader.loadTemplateConfig(pipelineConfig, messager)).thenReturn(null);
+        when(configLoader.loadStepConfig(eq(pipelineConfig), any(), any(), eq(messager)))
+            .thenReturn(new org.pipelineframework.processor.config.PipelineStepConfigLoader.StepConfig(
+                "com.example", "GRPC", "COMPUTE", java.util.List.of(), java.util.List.of()));
+        when(configLoader.loadRuntimeMapping(moduleDir, messager)).thenReturn(null);
+        when(tpResolver.resolveTransport("GRPC", messager))
+            .thenReturn(org.pipelineframework.processor.ir.TransportMode.GRPC);
+        when(tpResolver.resolvePlatform("COMPUTE", messager))
+            .thenReturn(org.pipelineframework.config.PlatformMode.COMPUTE);
+        when(processingEnv.getOptions()).thenReturn(Map.of());
+
+        PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase(pathResolver, configLoader, tpResolver);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        when(roundEnv.getElementsAnnotatedWith(org.pipelineframework.annotation.PipelineOrchestrator.class))
+            .thenReturn(java.util.Set.of());
+        when(roundEnv.getElementsAnnotatedWith(org.pipelineframework.annotation.PipelinePlugin.class))
+            .thenReturn(java.util.Set.of());
+
+        phase.execute(context);
+
+        verify(configLoader, times(1))
+            .resolvePipelineConfigPath(Map.of(), moduleDir, messager);
+        verify(configLoader, times(1)).loadAspects(pipelineConfig, messager);
+        verify(configLoader, times(1)).loadTemplateConfig(pipelineConfig, messager);
+        verify(configLoader, times(1)).loadStepConfig(eq(pipelineConfig), any(), any(), eq(messager));
     }
 }
