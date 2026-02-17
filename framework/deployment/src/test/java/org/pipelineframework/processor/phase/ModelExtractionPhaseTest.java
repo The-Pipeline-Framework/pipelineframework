@@ -104,24 +104,6 @@ class ModelExtractionPhaseTest {
     }
 
     @Test
-    void testConstructorInjection() {
-        TemplateModelBuilder builder = new TemplateModelBuilder();
-        TemplateExpansionOrchestrator orchestrator = new TemplateExpansionOrchestrator();
-
-        ModelExtractionPhase phase = new ModelExtractionPhase(builder, orchestrator);
-        assertNotNull(phase);
-        assertEquals("Model Extraction Phase", phase.name());
-    }
-
-    @Test
-    void testConstructorInjection_rejectsNull() {
-        assertThrows(NullPointerException.class,
-            () -> new ModelExtractionPhase(null, new TemplateExpansionOrchestrator()));
-        assertThrows(NullPointerException.class,
-            () -> new ModelExtractionPhase(new TemplateModelBuilder(), null));
-    }
-
-    @Test
     void testExecute_withTemplateModels_doesNotGenerateWithoutYamlStepDefinitions() throws Exception {
         ModelExtractionPhase phase = new ModelExtractionPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);

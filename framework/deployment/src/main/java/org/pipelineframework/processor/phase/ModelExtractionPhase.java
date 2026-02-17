@@ -3,8 +3,6 @@ package org.pipelineframework.processor.phase;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Locale;
-import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.Set;
 import javax.lang.model.element.Element;
@@ -17,10 +15,7 @@ import javax.lang.model.util.Types;
 
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.TypeName;
-import org.jboss.logging.Logger;
 import org.pipelineframework.annotation.PipelineStep;
-import org.pipelineframework.config.template.PipelineTemplateConfig;
-import org.pipelineframework.config.template.PipelineTemplateStep;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.processor.AspectExpansionProcessor;
@@ -41,28 +36,10 @@ import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
  * This phase discovers and extracts PipelineStepModel instances from @PipelineStep annotated classes.
  */
 public class ModelExtractionPhase implements PipelineCompilationPhase {
-    private static final Logger LOG = Logger.getLogger(ModelExtractionPhase.class);
-    private final TemplateModelBuilder templateModelBuilder;
-    private final TemplateExpansionOrchestrator templateExpansionOrchestrator;
-
     /**
      * Creates a new ModelExtractionPhase.
      */
     public ModelExtractionPhase() {
-        this(new TemplateModelBuilder(), new TemplateExpansionOrchestrator());
-    }
-
-    /**
-     * Creates a new ModelExtractionPhase with injected collaborators.
-     *
-     * @param templateModelBuilder collaborator used for template step model synthesis
-     * @param templateExpansionOrchestrator collaborator used for aspect expansion orchestration
-     */
-    public ModelExtractionPhase(
-            TemplateModelBuilder templateModelBuilder,
-            TemplateExpansionOrchestrator templateExpansionOrchestrator) {
-        this.templateModelBuilder = Objects.requireNonNull(templateModelBuilder, "templateModelBuilder");
-        this.templateExpansionOrchestrator = Objects.requireNonNull(templateExpansionOrchestrator, "templateExpansionOrchestrator");
     }
 
     @Override
@@ -91,25 +68,6 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             }
         }
         ctx.setStepModels(stepModels);
-    }
-
-    private List<PipelineStepModel> extractAnnotatedStepModels(PipelineCompilationContext ctx) {
-        if (ctx.getRoundEnv() == null) {
-            return List.of();
-        }
-        PipelineStepIRExtractor irExtractor = new PipelineStepIRExtractor(ctx.getProcessingEnv());
-        List<PipelineStepModel> models = new ArrayList<>();
-        Set<? extends Element> annotated = ctx.getRoundEnv().getElementsAnnotatedWith(PipelineStep.class);
-        for (Element element : annotated) {
-            if (element.getKind() != ElementKind.CLASS) {
-                continue;
-            }
-            var result = irExtractor.extract((TypeElement) element);
-            if (result != null && result.model() != null) {
-                models.add(result.model());
-            }
-        }
-        return models;
     }
 
     /**
@@ -587,40 +545,6 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     private record ReactiveSignature(StreamingShape shape, TypeName inputType, TypeName outputType) {
     }
 
-    /**
-     * Create pipeline step models derived from the configured pipeline template, assigning deployment roles
-     * according to the compilation context and available aspect/plugin implementations.
-     *
-     * The method returns an empty list when there is no template configuration, no template steps, or when
-     * template-derived steps are not applicable given the current orchestrator/plugin-host/runtime mapping.
-     * When applicable, it builds models from the template, expands them with aspects that provide plugin
-     * implementations, and assigns DeploymentRole.ORCHESTRATOR_CLIENT to client-facing models and
-     * DeploymentRole.PLUGIN_SERVER to side-effect models where plugins are required or colocated.
-     *
-     * @param ctx the compilation context providing the pipeline template, aspect models, and runtime mapping
-     * @return the list of pipeline step models derived from the template; empty if none apply
-     */
-    private List<PipelineStepModel> extractTemplateModels(PipelineCompilationContext ctx) {
-        try {
-            PipelineTemplateConfig config = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig cfg
-                ? cfg
-                : null;
-            if (config == null || config.steps() == null || config.steps().isEmpty()) {
-                return List.of();
-            }
-            List<PipelineStepModel> baseModels = buildTemplateStepModels(config);
-            if (baseModels == null || baseModels.isEmpty()) {
-                return List.of();
-            }
-            return applyContextRolesAndAspects(ctx, baseModels);
-        } catch (Exception e) {
-            LOG.warn("Template model extraction failed; continuing without template models", e);
-            // Return empty list if template model extraction fails
-            // This can happen in test environments or when configuration is incomplete
-            return List.of();
-        }
-    }
-
     private List<PipelineStepModel> applyContextRolesAndAspects(
             PipelineCompilationContext ctx,
             List<PipelineStepModel> baseModels) {
@@ -676,30 +600,6 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         combined.addAll(pluginModels);
         combined.addAll(clientModels);
         return combined;
-    }
-
-    /**
-     * Create PipelineStepModel instances from the provided pipeline template configuration.
-     *
-     * Builds a model for each valid PipelineTemplateStep using generated service class names,
-     * package segments, input/output type mappings, resolved streaming shape, default execution
-     * mode, and a deployment role of PIPELINE_SERVER. Steps with a missing or blank base package,
-     * null entries, or invalid formatted names are skipped.
-     *
-     * @param config the pipeline template configuration containing the base package and step definitions
-     * @return a list of PipelineStepModel derived from the template steps; empty if no models could be produced
-     */
-    private List<PipelineStepModel> buildTemplateStepModels(PipelineTemplateConfig config) {
-        return templateModelBuilder.buildModels(config);
-    }
-
-    private TypeMapping buildMapping(String basePackage, String typeName) {
-        if (typeName == null || typeName.isBlank()) {
-            return new TypeMapping(null, null, false);
-        }
-        ClassName domainType = ClassName.get(basePackage + ".common.domain", typeName);
-        ClassName mapperType = ClassName.get(basePackage + ".common.mapper", typeName + "Mapper");
-        return new TypeMapping(domainType, mapperType, true);
     }
 
     private List<PipelineStepModel> expandAspects(
@@ -774,18 +674,4 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         return value != null && !value.toString().isBlank();
     }
 
-    private String toPackageSegment(String name) {
-        if (name == null || name.isBlank()) {
-            return "service";
-        }
-        String normalized = name.trim().toLowerCase(Locale.ROOT);
-        String sanitized = normalized.replaceAll("[^a-z0-9]+", "_");
-        if (sanitized.startsWith("_")) {
-            sanitized = sanitized.substring(1);
-        }
-        if (sanitized.endsWith("_")) {
-            sanitized = sanitized.substring(0, sanitized.length() - 1);
-        }
-        return sanitized.isBlank() ? "service" : sanitized;
-    }
 }
