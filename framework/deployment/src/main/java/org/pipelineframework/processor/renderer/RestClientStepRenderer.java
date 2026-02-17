@@ -259,7 +259,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                     .addStatement("String replayMode = context != null ? context.replayMode() : null")
                     .addStatement("String cachePolicy = context != null ? context.cachePolicy() : null")
                     .addStatement(
-                        "return $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, inputs))",
+                        "return inputs.collect().asList().onItem().transformToUni(inputDtos -> $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, inputDtos)))",
                         ClassName.get("org.pipelineframework.telemetry", "HttpMetrics"),
                         model.serviceName(),
                         "process")
@@ -364,7 +364,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
             .addParameter(headerParam("replayMode"))
             .addParameter(headerParam("cachePolicy"))
             .addParameter(ParameterSpec.builder(
-                ParameterizedTypeName.get(ClassName.get(Multi.class), inputDto), "inputDtos").build());
+                ParameterizedTypeName.get(ClassName.get(java.util.List.class), inputDto), "inputDtos").build());
         return methodBuilder.build();
     }
 

@@ -338,11 +338,17 @@ class SearchPipelineEndToEndIT {
 
     @Test
     void preferCacheWarmsCacheAndRequireCacheSucceeds() throws Exception {
+        String input = "https://example.com";
         String version = "warm-" + UUID.randomUUID();
-        ProcessResult warm = orchestratorTriggerRun("https://example.com", "prefer-cache", version, false);
+        ProcessResult warm = orchestratorTriggerRun(input, "prefer-cache", version, false);
         assertExitSuccess(warm, "Expected prefer-cache run to succeed");
 
-        ProcessResult require = orchestratorTriggerRun("https://example.com", "require-cache", version, false);
+        UUID docId = stableDocId(input);
+        String rawContentHash = rawContentHashFor(input, docId);
+        String key = cacheKeyForParsedDocument(version, rawContentHash);
+        assertRedisKeyState(key, true, "Expected prefer-cache to warm cache before require-cache");
+
+        ProcessResult require = orchestratorTriggerRun(input, "require-cache", version, false);
         assertExitSuccess(require, "Expected require-cache to succeed after warm cache");
     }
 
@@ -413,15 +419,16 @@ class SearchPipelineEndToEndIT {
         UUID docId = stableDocId(input);
         int rawDocumentCount = awaitRowCountAtLeastForDocId("rawdocument", docId, 1, Duration.ofSeconds(10));
         int parsedDocumentCount = awaitRowCountAtLeastForDocId("parseddocument", docId, 1, Duration.ofSeconds(10));
-        int tokenBatchCount = awaitRowCountAtLeastForDocId("tokenbatch", docId, 2, Duration.ofSeconds(10));
+        int tokenBatchCount = awaitRowCountAtLeastForDocId("tokenbatch", docId, 1, Duration.ofSeconds(10));
         int indexAckCount = awaitRowCountAtLeastForDocId("indexack", docId, 1, Duration.ofSeconds(10));
 
         assertEquals(1, rawDocumentCount,
             "Expected exactly one RawDocument row linked to docId " + docId);
         assertEquals(1, parsedDocumentCount,
             "Expected exactly one ParsedDocument row linked to docId " + docId);
-        assertTrue(tokenBatchCount >= 2,
-            "Expected ONE_TO_MANY fan-out to persist at least two TokenBatch rows for docId " + docId);
+        assertEquals(1, tokenBatchCount,
+            "Expected exactly one TokenBatch row linked to docId " + docId
+                + " because persistence stores one row per docId");
         assertEquals(1, indexAckCount,
             "Expected MANY_TO_ONE fan-in to persist exactly one IndexAck row for docId " + docId
                 + " but found " + indexAckCount);

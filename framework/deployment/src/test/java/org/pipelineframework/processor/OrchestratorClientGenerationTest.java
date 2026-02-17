@@ -38,17 +38,38 @@ class OrchestratorClientGenerationTest {
             .withOptions(
                 "-Apipeline.generatedSourcesDir=" + generatedSourcesDir,
                 "-Aprotobuf.descriptor.file=" + resourcePath("descriptor_set_search.dsc"))
-            .compile(JavaFileObjects.forSourceString(
-                "org.example.OrchestratorMarker",
-                """
-                    package org.example;
+            .compile(
+                JavaFileObjects.forSourceString(
+                    "org.example.OrchestratorMarker",
+                    """
+                        package org.example;
 
-                    import org.pipelineframework.annotation.PipelineOrchestrator;
+                        import org.pipelineframework.annotation.PipelineOrchestrator;
 
-                    @PipelineOrchestrator
-                    public class OrchestratorMarker {
-                    }
-                    """));
+                        @PipelineOrchestrator
+                        public class OrchestratorMarker {
+                        }
+                        """),
+                searchServiceStub("CrawlSourceService", "CrawlRequest", "RawDocument"),
+                searchServiceStub("ParseDocumentService", "RawDocument", "ParsedDocument"),
+                searchServiceStub("TokenizeContentService", "ParsedDocument", "TokenBatch"),
+                searchServiceStub("IndexDocumentService", "TokenBatch", "IndexAck"),
+                // Domain type stubs
+                domainStub("CrawlRequest"),
+                domainStub("RawDocument"),
+                domainStub("ParsedDocument"),
+                domainStub("TokenBatch"),
+                domainStub("IndexAck"),
+                dtoStub("CrawlRequestDto"),
+                dtoStub("RawDocumentDto"),
+                dtoStub("ParsedDocumentDto"),
+                dtoStub("TokenBatchDto"),
+                dtoStub("IndexAckDto"),
+                mapperStub("CrawlRequestMapper", "CrawlRequest", "CrawlRequestDto"),
+                mapperStub("RawDocumentMapper", "RawDocument", "RawDocumentDto"),
+                mapperStub("ParsedDocumentMapper", "ParsedDocument", "ParsedDocumentDto"),
+                mapperStub("TokenBatchMapper", "TokenBatch", "TokenBatchDto"),
+                mapperStub("IndexAckMapper", "IndexAck", "IndexAckDto"));
 
         assertThat(compilation).succeeded();
 
@@ -81,11 +102,25 @@ class OrchestratorClientGenerationTest {
                         public class OrchestratorMarker {
                         }
                         """),
+                searchServiceStub("CrawlSourceService", "CrawlRequest", "RawDocument"),
+                searchServiceStub("ParseDocumentService", "RawDocument", "ParsedDocument"),
+                searchServiceStub("TokenizeContentService", "ParsedDocument", "TokenBatch"),
+                searchServiceStub("IndexDocumentService", "TokenBatch", "IndexAck"),
+                domainStub("CrawlRequest"),
+                domainStub("RawDocument"),
+                domainStub("ParsedDocument"),
+                domainStub("TokenBatch"),
+                domainStub("IndexAck"),
                 dtoStub("CrawlRequestDto"),
                 dtoStub("RawDocumentDto"),
                 dtoStub("ParsedDocumentDto"),
                 dtoStub("TokenBatchDto"),
-                dtoStub("IndexAckDto"));
+                dtoStub("IndexAckDto"),
+                mapperStub("CrawlRequestMapper", "CrawlRequest", "CrawlRequestDto"),
+                mapperStub("RawDocumentMapper", "RawDocument", "RawDocumentDto"),
+                mapperStub("ParsedDocumentMapper", "ParsedDocument", "ParsedDocumentDto"),
+                mapperStub("TokenBatchMapper", "TokenBatch", "TokenBatchDto"),
+                mapperStub("IndexAckMapper", "IndexAck", "IndexAckDto"));
 
         assertThat(compilation).succeeded();
 
@@ -119,17 +154,37 @@ class OrchestratorClientGenerationTest {
             .withOptions(
                 "-Apipeline.generatedSourcesDir=" + generatedSourcesDir,
                 "-Aprotobuf.descriptor.file=" + resourcePath("descriptor_set_search.dsc"))
-            .compile(JavaFileObjects.forSourceString(
-                "org.example.OrchestratorMarker",
-                """
-                    package org.example;
+            .compile(
+                JavaFileObjects.forSourceString(
+                    "org.example.OrchestratorMarker",
+                    """
+                        package org.example;
 
-                    import org.pipelineframework.annotation.PipelineOrchestrator;
+                        import org.pipelineframework.annotation.PipelineOrchestrator;
 
-                    @PipelineOrchestrator
-                    public class OrchestratorMarker {
-                    }
-                    """));
+                        @PipelineOrchestrator
+                        public class OrchestratorMarker {
+                        }
+                        """),
+                searchServiceStub("CrawlSourceService", "CrawlRequest", "RawDocument"),
+                searchServiceStub("ParseDocumentService", "RawDocument", "ParsedDocument"),
+                searchServiceStub("TokenizeContentService", "ParsedDocument", "TokenBatch"),
+                searchServiceStub("IndexDocumentService", "TokenBatch", "IndexAck"),
+                domainStub("CrawlRequest"),
+                domainStub("RawDocument"),
+                domainStub("ParsedDocument"),
+                domainStub("TokenBatch"),
+                domainStub("IndexAck"),
+                dtoStub("CrawlRequestDto"),
+                dtoStub("RawDocumentDto"),
+                dtoStub("ParsedDocumentDto"),
+                dtoStub("TokenBatchDto"),
+                dtoStub("IndexAckDto"),
+                mapperStub("CrawlRequestMapper", "CrawlRequest", "CrawlRequestDto"),
+                mapperStub("RawDocumentMapper", "RawDocument", "RawDocumentDto"),
+                mapperStub("ParsedDocumentMapper", "ParsedDocument", "ParsedDocumentDto"),
+                mapperStub("TokenBatchMapper", "TokenBatch", "TokenBatchDto"),
+                mapperStub("IndexAckMapper", "IndexAck", "IndexAckDto"));
 
         assertThat(compilation).succeeded();
 
@@ -195,9 +250,70 @@ class OrchestratorClientGenerationTest {
     }
 
     private JavaFileObject dtoStub(String className) {
-        String fqcn = "org.pipelineframework.search.common.dto." + className;
+        String fqcn = "org.pipelineframework.search.dto." + className;
         String source = """
-            package org.pipelineframework.search.common.dto;
+            package org.pipelineframework.search.dto;
+
+            public class %s {
+            }
+            """.formatted(className);
+        return JavaFileObjects.forSourceString(fqcn, source);
+    }
+
+    private JavaFileObject mapperStub(String mapperName, String domainType, String dtoType) {
+        String fqcn = "org.pipelineframework.search.mapper." + mapperName;
+        String source = """
+            package org.pipelineframework.search.mapper;
+
+            import org.pipelineframework.search.domain.%s;
+            import org.pipelineframework.search.dto.%s;
+
+            public class %s {
+                public %s fromDto(%s dto) {
+                    return new %s();
+                }
+
+                public %s toDto(%s domain) {
+                    return new %s();
+                }
+            }
+            """.formatted(domainType, dtoType, mapperName, domainType, dtoType, domainType, dtoType, domainType, dtoType);
+        return JavaFileObjects.forSourceString(fqcn, source);
+    }
+
+    private JavaFileObject searchServiceStub(String serviceName, String inputType, String outputType) {
+        String fqcn = "org.pipelineframework.search." + serviceName;
+        String source = """
+            package org.pipelineframework.search;
+
+            import org.pipelineframework.annotation.PipelineStep;
+            import org.pipelineframework.service.ReactiveService;
+            import org.pipelineframework.step.StepOneToOne;
+            import io.smallrye.mutiny.Uni;
+            import jakarta.enterprise.context.ApplicationScoped;
+
+            @PipelineStep(
+                inputType = org.pipelineframework.search.domain.%s.class,
+                outputType = org.pipelineframework.search.domain.%s.class,
+                stepType = StepOneToOne.class,
+                inboundMapper = org.pipelineframework.search.mapper.%sMapper.class,
+                outboundMapper = org.pipelineframework.search.mapper.%sMapper.class
+            )
+            @ApplicationScoped
+            public class %s implements ReactiveService<org.pipelineframework.search.domain.%s, org.pipelineframework.search.domain.%s> {
+                @Override
+                public Uni<org.pipelineframework.search.domain.%s> process(org.pipelineframework.search.domain.%s input) {
+                    return null;
+                }
+            }
+            """.formatted(inputType, outputType, inputType, outputType, serviceName, inputType, outputType, outputType, inputType);
+        return JavaFileObjects.forSourceString(fqcn, source);
+    }
+
+    private JavaFileObject domainStub(String className) {
+        String fqcn = "org.pipelineframework.search.domain." + className;
+        String source = """
+            package org.pipelineframework.search.domain;
 
             public class %s {
             }

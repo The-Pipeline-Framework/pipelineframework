@@ -41,9 +41,9 @@ class PluginProducerGenerationTest {
             transport: "REST"
             steps:
               - name: "Process Test"
-                cardinality: "ONE_TO_ONE"
-                inputTypeName: "String"
-                outputTypeName: "String"
+                service: "com.example.ProcessTestService"
+                input: "java.lang.String"
+                output: "java.lang.String"
             aspects:
               persistence:
                 enabled: true
@@ -57,17 +57,82 @@ class PluginProducerGenerationTest {
         Compilation compilation = Compiler.javac()
             .withProcessors(new PipelineStepProcessor())
             .withOptions("-Apipeline.generatedSourcesDir=" + generatedSourcesDir)
-            .compile(JavaFileObjects.forSourceString(
-                "com.example.PersistencePluginHost",
-                """
-                    package com.example;
+            .compile(
+                JavaFileObjects.forSourceString(
+                    "com.example.PersistencePluginHost",
+                    """
+                        package com.example;
 
-                    import org.pipelineframework.annotation.PipelinePlugin;
+                        import org.pipelineframework.annotation.PipelinePlugin;
 
-                    @PipelinePlugin("persistence")
-                    public class PersistencePluginHost {
-                    }
-                    """));
+                        @PipelinePlugin("persistence")
+                        public class PersistencePluginHost {
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "com.example.ProcessTestService",
+                    """
+                        package com.example;
+
+                        import org.pipelineframework.annotation.PipelineStep;
+                        import org.pipelineframework.service.ReactiveService;
+                        import org.pipelineframework.step.StepOneToOne;
+                        import io.smallrye.mutiny.Uni;
+                        import jakarta.enterprise.context.ApplicationScoped;
+
+                        @PipelineStep(
+                            inputType = String.class,
+                            outputType = String.class,
+                            stepType = StepOneToOne.class,
+                            inboundMapper = com.example.StringInputMapper.class,
+                            outboundMapper = com.example.StringOutputMapper.class
+                        )
+                        @ApplicationScoped
+	                        public class ProcessTestService implements ReactiveService<String, String> {
+	                            @Override
+	                            public Uni<String> process(String input) {
+	                                return Uni.createFrom().item(input);
+	                            }
+	                        }
+	                        """),
+                JavaFileObjects.forSourceString(
+                    "com.example.StringInputMapper",
+                    """
+                        package com.example;
+
+                        public class StringInputMapper {
+                            public String fromDto(String dto) {
+                                return dto;
+                            }
+
+                            public String toDto(String domain) {
+                                return domain;
+                            }
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "com.example.StringOutputMapper",
+                    """
+                        package com.example;
+
+                        public class StringOutputMapper {
+                            public String fromDto(String dto) {
+                                return dto;
+                            }
+
+                            public String toDto(String domain) {
+                                return domain;
+                            }
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "com.example.PersistenceService",
+                    """
+                        package com.example;
+
+                        public class PersistenceService {
+                        }
+                        """));
 
         assertThat(compilation).succeeded();
 

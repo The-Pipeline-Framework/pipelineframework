@@ -65,9 +65,9 @@ class PipelinePluginTest {
             transport: "REST"
             steps:
               - name: "Process Test"
-                cardinality: "ONE_TO_ONE"
-                inputTypeName: "String"
-                outputTypeName: "String"
+                service: "test.plugin.ProcessTestService"
+                input: "java.lang.String"
+                output: "java.lang.String"
             aspects:
               persistence:
                 enabled: true
@@ -95,7 +95,71 @@ class PipelinePluginTest {
                 "-Apipeline.generatedSourcesDir=" + generatedSourcesDir.toString(),
                 "-Aprotobuf.descriptor.file=" + moduleDir.resolve("descriptor_set.dsc").toString())
             .compile(
-                JavaFileObjects.forSourceString("test.plugin.PersistencePluginHost", pluginCode));
+                JavaFileObjects.forSourceString("test.plugin.PersistencePluginHost", pluginCode),
+                JavaFileObjects.forSourceString(
+                    "test.plugin.ProcessTestService",
+                    """
+                        package test.plugin;
+
+                        import org.pipelineframework.annotation.PipelineStep;
+                        import org.pipelineframework.service.ReactiveService;
+                        import org.pipelineframework.step.StepOneToOne;
+                        import io.smallrye.mutiny.Uni;
+                        import jakarta.enterprise.context.ApplicationScoped;
+
+                        @PipelineStep(
+                            inputType = String.class,
+                            outputType = String.class,
+                            stepType = StepOneToOne.class,
+                            inboundMapper = test.plugin.StringInputMapper.class,
+                            outboundMapper = test.plugin.StringOutputMapper.class
+                        )
+                        @ApplicationScoped
+	                        public class ProcessTestService implements ReactiveService<String, String> {
+	                            @Override
+	                            public Uni<String> process(String input) {
+	                                return Uni.createFrom().item(input);
+	                            }
+	                        }
+	                        """),
+                JavaFileObjects.forSourceString(
+                    "test.plugin.StringInputMapper",
+                    """
+                        package test.plugin;
+
+                        public class StringInputMapper {
+                            public String fromDto(String dto) {
+                                return dto;
+                            }
+
+                            public String toDto(String domain) {
+                                return domain;
+                            }
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "test.plugin.StringOutputMapper",
+                    """
+                        package test.plugin;
+
+                        public class StringOutputMapper {
+                            public String fromDto(String dto) {
+                                return dto;
+                            }
+
+                            public String toDto(String domain) {
+                                return domain;
+                            }
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "test.plugin.PersistenceService",
+                    """
+                        package test.plugin;
+
+                        public class PersistenceService {
+                        }
+                        """));
 
         // Verify compilation succeeded
         assertThat(compilation).succeeded();
@@ -189,9 +253,9 @@ class PipelinePluginTest {
             transport: "REST"
             steps:
               - name: "Process Test"
-                cardinality: "ONE_TO_ONE"
-                inputTypeName: "String"
-                outputTypeName: "String"
+                service: "test.plugin.ProcessTestService"
+                input: "java.lang.String"
+                output: "java.lang.String"
             aspects:
               cache:
                 enabled: true
@@ -219,7 +283,71 @@ class PipelinePluginTest {
                 "-Apipeline.generatedSourcesDir=" + generatedSourcesDir.toString(),
                 "-Aprotobuf.descriptor.file=" + moduleDir.resolve("descriptor_set.dsc").toString())
             .compile(
-                JavaFileObjects.forSourceString("test.plugin.CachePluginHost", pluginCode));
+                JavaFileObjects.forSourceString("test.plugin.CachePluginHost", pluginCode),
+                JavaFileObjects.forSourceString(
+                    "test.plugin.ProcessTestService",
+                    """
+                        package test.plugin;
+
+                        import org.pipelineframework.annotation.PipelineStep;
+                        import org.pipelineframework.service.ReactiveService;
+                        import org.pipelineframework.step.StepOneToOne;
+                        import io.smallrye.mutiny.Uni;
+                        import jakarta.enterprise.context.ApplicationScoped;
+
+                        @PipelineStep(
+                            inputType = String.class,
+                            outputType = String.class,
+                            stepType = StepOneToOne.class,
+                            inboundMapper = test.plugin.StringInputMapper.class,
+                            outboundMapper = test.plugin.StringOutputMapper.class
+                        )
+                        @ApplicationScoped
+	                        public class ProcessTestService implements ReactiveService<String, String> {
+	                            @Override
+	                            public Uni<String> process(String input) {
+	                                return Uni.createFrom().item(input);
+	                            }
+	                        }
+	                        """),
+                JavaFileObjects.forSourceString(
+                    "test.plugin.StringInputMapper",
+                    """
+                        package test.plugin;
+
+                        public class StringInputMapper {
+                            public String fromDto(String dto) {
+                                return dto;
+                            }
+
+                            public String toDto(String domain) {
+                                return domain;
+                            }
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "test.plugin.StringOutputMapper",
+                    """
+                        package test.plugin;
+
+                        public class StringOutputMapper {
+                            public String fromDto(String dto) {
+                                return dto;
+                            }
+
+                            public String toDto(String domain) {
+                                return domain;
+                            }
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "test.plugin.CacheService",
+                    """
+                        package test.plugin;
+
+                        public class CacheService {
+                        }
+                        """));
 
         // Verify compilation succeeded
         assertThat(compilation).succeeded();

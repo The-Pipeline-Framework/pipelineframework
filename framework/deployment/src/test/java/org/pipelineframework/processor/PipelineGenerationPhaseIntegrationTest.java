@@ -46,9 +46,9 @@ class PipelineGenerationPhaseIntegrationTest {
             transport: "LOCAL"
             steps:
               - name: "Process Crawl Source"
-                cardinality: "ONE_TO_ONE"
-                inputTypeName: "CrawlRequest"
-                outputTypeName: "RawDocument"
+                service: "org.pipelineframework.search.service.ProcessCrawlSourceService"
+                input: "org.pipelineframework.search.domain.CrawlRequest"
+                output: "org.pipelineframework.search.domain.RawDocument"
             """);
 
         Compilation compilation = Compiler.javac()
@@ -71,7 +71,9 @@ class PipelineGenerationPhaseIntegrationTest {
                         @PipelineStep(
                             inputType = org.pipelineframework.search.domain.CrawlRequest.class,
                             outputType = org.pipelineframework.search.domain.RawDocument.class,
-                            stepType = StepOneToOne.class
+                            stepType = StepOneToOne.class,
+                            inboundMapper = org.pipelineframework.search.mapper.CrawlRequestMapper.class,
+                            outboundMapper = org.pipelineframework.search.mapper.RawDocumentMapper.class
                         )
                         public class ProcessCrawlSourceService implements ReactiveService<org.pipelineframework.search.domain.CrawlRequest, org.pipelineframework.search.domain.RawDocument> {
                             @Override
@@ -94,6 +96,58 @@ class PipelineGenerationPhaseIntegrationTest {
                         package org.pipelineframework.search.domain;
 
                         public class RawDocument {
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "org.pipelineframework.search.dto.CrawlRequestDto",
+                    """
+                        package org.pipelineframework.search.dto;
+
+                        public class CrawlRequestDto {
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "org.pipelineframework.search.dto.RawDocumentDto",
+                    """
+                        package org.pipelineframework.search.dto;
+
+                        public class RawDocumentDto {
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "org.pipelineframework.search.mapper.CrawlRequestMapper",
+                    """
+                        package org.pipelineframework.search.mapper;
+
+                        import org.pipelineframework.search.domain.CrawlRequest;
+                        import org.pipelineframework.search.dto.CrawlRequestDto;
+
+                        public class CrawlRequestMapper {
+                            public CrawlRequest fromDto(CrawlRequestDto dto) {
+                                return new CrawlRequest();
+                            }
+
+                            public CrawlRequestDto toDto(CrawlRequest domain) {
+                                return new CrawlRequestDto();
+                            }
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "org.pipelineframework.search.mapper.RawDocumentMapper",
+                    """
+                        package org.pipelineframework.search.mapper;
+
+                        import org.pipelineframework.search.domain.RawDocument;
+                        import org.pipelineframework.search.dto.RawDocumentDto;
+
+                        public class RawDocumentMapper {
+                            public RawDocument fromDto(RawDocumentDto dto) {
+                                return new RawDocument();
+                            }
+
+                            public RawDocumentDto toDto(RawDocument domain) {
+                                return new RawDocumentDto();
+                            }
                         }
                         """));
 
