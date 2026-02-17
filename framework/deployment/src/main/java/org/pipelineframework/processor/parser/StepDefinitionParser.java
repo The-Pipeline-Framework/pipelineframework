@@ -89,6 +89,7 @@ public class StepDefinitionParser {
         }
 
         String yamlContent = Files.readString(templatePath);
+        @SuppressWarnings("unchecked")
         Map<String, Object> templateData = YAML_MAPPER.readValue(yamlContent, Map.class);
 
         Object stepsObj = templateData.get("steps");
@@ -185,6 +186,12 @@ public class StepDefinitionParser {
         // Keep delegated input/output optional so they can be derived from delegate generics.
         ClassName inputType = parseOptionalClassName(inputTypeName, name, "input");
         ClassName outputType = parseOptionalClassName(outputTypeName, name, "output");
+        if (!isBlank(inputTypeName) && inputType == null) {
+            return null;
+        }
+        if (!isBlank(outputTypeName) && outputType == null) {
+            return null;
+        }
 
         // Parse operator mapper / legacy external mapper if present
         String operatorMapperName = getStringValue(stepData, "operatorMapper");
@@ -327,6 +334,10 @@ public class StepDefinitionParser {
         int lastDot = className.lastIndexOf('.');
         if (lastDot < 0) {
             // No package, just a simple name
+            if (!isValidIdentifier(className)) {
+                LOG.warnf("Invalid class name format: '%s' (invalid simple name)", className);
+                return null;
+            }
             return ClassName.get("", className);
         }
         if (lastDot == 0) {
@@ -337,9 +348,30 @@ public class StepDefinitionParser {
 
         String packageName = className.substring(0, lastDot);
         String simpleName = className.substring(lastDot + 1);
+        if (packageName.endsWith(".") || packageName.contains("..")) {
+            LOG.warnf("Invalid class name format: '%s' (invalid package segments)", className);
+            return null;
+        }
+        String[] pkgSegments = packageName.split("\\.");
+        for (String segment : pkgSegments) {
+            if (!isValidIdentifier(segment)) {
+                LOG.warnf("Invalid class name format: '%s' (invalid package segment '%s')", className, segment);
+                return null;
+            }
+        }
+        if (simpleName.isBlank()) {
+            LOG.warnf("Invalid class name format: '%s' (missing class name)", className);
+            return null;
+        }
 
         // Handle nested classes
         String[] parts = simpleName.split("\\$");
+        for (String part : parts) {
+            if (!isValidIdentifier(part)) {
+                LOG.warnf("Invalid class name format: '%s' (invalid class segment '%s')", className, part);
+                return null;
+            }
+        }
         if (parts.length == 1) {
             return ClassName.get(packageName, simpleName);
         } else {
@@ -348,5 +380,20 @@ public class StepDefinitionParser {
             System.arraycopy(parts, 1, nestedNames, 0, parts.length - 1);
             return ClassName.get(packageName, outerName, nestedNames);
         }
+    }
+
+    private boolean isValidIdentifier(String segment) {
+        if (segment == null || segment.isEmpty()) {
+            return false;
+        }
+        if (!Character.isJavaIdentifierStart(segment.charAt(0))) {
+            return false;
+        }
+        for (int i = 1; i < segment.length(); i++) {
+            if (!Character.isJavaIdentifierPart(segment.charAt(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 }

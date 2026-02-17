@@ -156,17 +156,7 @@ public class PipelineStepIRExtractor {
     }
 
     private ClassName resolveOptionalMapperType(TypeMirror mapperTypeMirror) {
-        if (mapperTypeMirror == null
-                || mapperTypeMirror.getKind() == javax.lang.model.type.TypeKind.VOID
-                || mapperTypeMirror.toString().equals("java.lang.Void")) {
-            return null;
-        }
-
-        Element mapperElement = processingEnv.getTypeUtils().asElement(mapperTypeMirror);
-        if (mapperElement instanceof TypeElement typeElement) {
-            return ClassName.get(typeElement);
-        }
-        return ClassName.bestGuess(mapperTypeMirror.toString());
+        return resolveClassNameFromMirror(mapperTypeMirror);
     }
 
     /**
@@ -228,18 +218,24 @@ public class PipelineStepIRExtractor {
      */
     private ClassName resolveTypeClass(AnnotationMirror annotationMirror, String fieldName) {
         TypeMirror typeMirror = AnnotationProcessingUtils.getAnnotationValue(annotationMirror, fieldName);
-        if (typeMirror == null
-                || typeMirror.getKind() == javax.lang.model.type.TypeKind.VOID
-                || typeMirror.toString().equals("java.lang.Void")) {
+        return resolveClassNameFromMirror(typeMirror);
+    }
+
+    private ClassName resolveClassNameFromMirror(TypeMirror typeMirror) {
+        if (isNullOrVoid(typeMirror)) {
             return null;
         }
-
         Element element = processingEnv.getTypeUtils().asElement(typeMirror);
         if (element instanceof TypeElement typeElement) {
             return ClassName.get(typeElement);
         }
-
         return ClassName.bestGuess(typeMirror.toString());
+    }
+
+    private boolean isNullOrVoid(TypeMirror typeMirror) {
+        return typeMirror == null
+            || typeMirror.getKind() == javax.lang.model.type.TypeKind.VOID
+            || typeMirror.toString().equals("java.lang.Void");
     }
 
     private ClassName resolveDelegateService(AnnotationMirror annotationMirror) {

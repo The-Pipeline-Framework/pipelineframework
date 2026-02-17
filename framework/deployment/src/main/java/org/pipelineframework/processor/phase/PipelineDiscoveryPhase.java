@@ -421,18 +421,18 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @return the resolved Path for generated pipeline sources
      */
     private Path resolveGeneratedSourcesRoot(PipelineCompilationContext ctx) {
-        java.util.Map<String, String> options = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getOptions() : java.util.Map.of();
+        Map<String, String> options = ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getOptions() : Map.of();
         String configured = options.get("pipeline.generatedSourcesDir");
         if (configured != null && !configured.isBlank()) {
-            return java.nio.file.Paths.get(configured);
+            return Path.of(configured);
         }
 
         String fallback = options.get("pipeline.generatedSourcesRoot");
         if (fallback != null && !fallback.isBlank()) {
-            return java.nio.file.Paths.get(fallback);
+            return Path.of(fallback);
         }
 
-        return java.nio.file.Paths.get(System.getProperty("user.dir"), "target", "generated-sources", "pipeline");
+        return Path.of(System.getProperty("user.dir"), "target", "generated-sources", "pipeline");
     }
 
     /**
@@ -442,7 +442,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @return a list of StepDefinition objects parsed from the template
      * @throws IOException if config resolution fails or parsing step definitions fails
      */
-    private List<StepDefinition> parseStepDefinitions(PipelineCompilationContext ctx) throws IOException {
+    private List<StepDefinition> parseStepDefinitions(PipelineCompilationContext ctx) {
         Optional<Path> configPath = resolvePipelineConfigPath(ctx);
         if (configPath.isEmpty()) {
             return List.of();
@@ -453,7 +453,23 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
                 ctx.getProcessingEnv().getMessager().printMessage(kind, message);
             }
         });
-        return parser.parseStepDefinitions(configPath.get());
+        try {
+            return parser.parseStepDefinitions(configPath.get());
+        } catch (IOException e) {
+            if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "Failed to parse YAML step definitions from " + configPath.get() + ": " + e.getMessage());
+            }
+            return List.of();
+        } catch (Exception e) {
+            if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "Unexpected error while parsing YAML step definitions from " + configPath.get() + ": " + e.getMessage());
+            }
+            return List.of();
+        }
     }
 
     /**
@@ -475,6 +491,6 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
                 return candidate;
             }
         }
-        return java.nio.file.Paths.get(System.getProperty("user.dir"));
+        return Path.of(System.getProperty("user.dir"));
     }
 }

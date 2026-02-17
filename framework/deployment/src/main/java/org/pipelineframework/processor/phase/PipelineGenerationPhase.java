@@ -144,17 +144,15 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                             enabledAspects,
                             cacheKeyGenerator,
                             descriptorSet));
-                    String generatedName = model.generatedName() != null ? model.generatedName() : model.serviceName();
-                    String baseName = generatedName.endsWith("Service")
-                        ? generatedName.substring(0, generatedName.length() - "Service".length())
-                        : generatedName;
-                    String externalAdapterClassName = model.servicePackage() + ".pipeline." + baseName + "ExternalAdapter";
+                    String externalAdapterClassName = model.servicePackage() + ".pipeline."
+                        + ExternalAdapterRenderer.getExternalAdapterClassName(model);
                     roleMetadataGenerator.recordClassWithRole(externalAdapterClassName, adapterRole.name());
                 } catch (IOException e) {
                     ctx.getProcessingEnv().getMessager().printMessage(
                         javax.tools.Diagnostic.Kind.ERROR,
                         "Failed to generate external adapter for '" + model.serviceName() + "': " + e.getMessage());
                 }
+                continue;
             }
 
             // Get the bindings for this model (for non-delegation steps)
@@ -762,7 +760,10 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         return Optional.ofNullable(ctx.getAspectModels())
             .orElse(List.of())
             .stream()
-            .map(aspect -> aspect.name().toLowerCase(Locale.ROOT))
+            .filter(Objects::nonNull)
+            .map(PipelineAspectModel::name)
+            .filter(Objects::nonNull)
+            .map(aspectName -> aspectName.toLowerCase(Locale.ROOT))
             .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 

@@ -111,6 +111,7 @@ public class PipelineCompiler extends AbstractProcessingTool {
                         javax.tools.Diagnostic.Kind.NOTE,
                         "Cause: " + cause.getClass().getSimpleName() + ": " + cause.getMessage());
                 }
+                compilationExecuted = true;
                 return true; // Return true to indicate processing happened (even if it failed)
             }
         }
@@ -120,17 +121,27 @@ public class PipelineCompiler extends AbstractProcessingTool {
     }
 
     private boolean hasPipelineConfigSignal() {
+        // Primary source is the explicit annotation processor option; filesystem probing is best-effort fallback.
         String configuredPath = processingEnv.getOptions().get("pipeline.config");
         if (configuredPath != null && !configuredPath.isBlank()) {
             return true;
         }
 
-        Path cwdPipelineConfig = Path.of(System.getProperty("user.dir"), "pipeline.yaml");
+        String baseDir = processingEnv.getOptions().get("pipeline.moduleDir");
+        if (baseDir == null || baseDir.isBlank()) {
+            baseDir = processingEnv.getOptions().get("pipeline.generatedSourcesDir");
+        }
+        if (baseDir == null || baseDir.isBlank()) {
+            baseDir = System.getProperty("user.dir");
+        }
+        Path basePath = Path.of(baseDir);
+
+        Path cwdPipelineConfig = basePath.resolve("pipeline.yaml");
         if (Files.exists(cwdPipelineConfig)) {
             return true;
         }
 
-        Path resourcesPipelineConfig = Path.of(System.getProperty("user.dir"), "src", "main", "resources", "pipeline.yaml");
+        Path resourcesPipelineConfig = basePath.resolve(Path.of("src", "main", "resources", "pipeline.yaml"));
         return Files.exists(resourcesPipelineConfig);
     }
 }

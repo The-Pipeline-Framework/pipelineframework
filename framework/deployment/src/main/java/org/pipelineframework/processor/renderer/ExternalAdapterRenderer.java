@@ -47,7 +47,7 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
     // Static constants for reactive service interface comparison
     private static final ClassName REACTIVE_SERVICE = ClassName.get(ReactiveService.class);
     private static final ClassName REACTIVE_STREAMING_SERVICE = ClassName.get(ReactiveStreamingService.class);
-    private static final ClassName REACTIVE_CLIENT_STREAMING_SERVICE = ClassName.get(ReactiveStreamingClientService.class);
+    private static final ClassName REACTIVE_STREAMING_CLIENT_SERVICE = ClassName.get(ReactiveStreamingClientService.class);
     private static final ClassName REACTIVE_BIDIRECTIONAL_STREAMING_SERVICE = ClassName.get(ReactiveBidirectionalStreamingService.class);
 
     /**
@@ -142,7 +142,7 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
 
         // Add the process method based on the reactive service interface
         MethodSpec processMethod = buildProcessMethod(
-            reactiveServiceInterface,
+            model.streamingShape(),
             applicationInputType,
             applicationOutputType,
             externalMapperType != null);
@@ -155,7 +155,7 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
      * Builds the process method based on the reactive service interface.
      */
     private MethodSpec buildProcessMethod(
-            ClassName reactiveServiceInterface,
+            StreamingShape streamingShape,
             TypeName applicationInputType,
             TypeName applicationOutputType,
             boolean hasExternalMapper) {
@@ -164,23 +164,20 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
         TypeName returnType;
         TypeName paramType;
 
-        // Determine method signature based on the reactive service interface using constants
-        if (reactiveServiceInterface.equals(REACTIVE_SERVICE)) {
-            returnType = ParameterizedTypeName.get(ClassName.get(Uni.class), applicationOutputType);
-            paramType = applicationInputType;
-        } else if (reactiveServiceInterface.equals(REACTIVE_STREAMING_SERVICE)) {
-            returnType = ParameterizedTypeName.get(ClassName.get(Multi.class), applicationOutputType);
-            paramType = ParameterizedTypeName.get(ClassName.get(Multi.class), applicationInputType);
-        } else if (reactiveServiceInterface.equals(REACTIVE_CLIENT_STREAMING_SERVICE)) {
-            returnType = ParameterizedTypeName.get(ClassName.get(Uni.class), applicationOutputType);
-            paramType = ParameterizedTypeName.get(ClassName.get(Multi.class), applicationInputType);
-        } else if (reactiveServiceInterface.equals(REACTIVE_BIDIRECTIONAL_STREAMING_SERVICE)) {
-            returnType = ParameterizedTypeName.get(ClassName.get(Multi.class), applicationOutputType);
-            paramType = ParameterizedTypeName.get(ClassName.get(Multi.class), applicationInputType);
-        } else {
-            // Default to ReactiveService
-            returnType = ParameterizedTypeName.get(ClassName.get(Uni.class), applicationOutputType);
-            paramType = applicationInputType;
+        switch (streamingShape) {
+            case UNARY_UNARY -> {
+                returnType = ParameterizedTypeName.get(ClassName.get(Uni.class), applicationOutputType);
+                paramType = applicationInputType;
+            }
+            case UNARY_STREAMING, STREAMING_STREAMING -> {
+                returnType = ParameterizedTypeName.get(ClassName.get(Multi.class), applicationOutputType);
+                paramType = ParameterizedTypeName.get(ClassName.get(Multi.class), applicationInputType);
+            }
+            case STREAMING_UNARY -> {
+                returnType = ParameterizedTypeName.get(ClassName.get(Uni.class), applicationOutputType);
+                paramType = ParameterizedTypeName.get(ClassName.get(Multi.class), applicationInputType);
+            }
+            default -> throw new IllegalStateException("Unsupported streaming shape: " + streamingShape);
         }
 
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder(methodName)
@@ -192,14 +189,14 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
         // Build the method body based on whether operator mapping is needed
         if (hasExternalMapper) {
             // If we have an operator mapper, we need to map between application and operator types
-            if (reactiveServiceInterface.equals(REACTIVE_SERVICE)) {
+            if (streamingShape == StreamingShape.UNARY_UNARY) {
                 // For unary operations: Uni<I> -> Uni<O>
                 methodBuilder.addStatement("return delegateService.process(externalMapper.toOperatorInput(input)).map(libOutput -> externalMapper.toApplicationOutput(libOutput))");
-            } else if (reactiveServiceInterface.equals(REACTIVE_CLIENT_STREAMING_SERVICE)) {
+            } else if (streamingShape == StreamingShape.STREAMING_UNARY) {
                 // For client-streaming operations: Multi<I> -> Uni<O>
                 addClientStreamingMapperLogic(methodBuilder);
-            } else if (reactiveServiceInterface.equals(REACTIVE_STREAMING_SERVICE) ||
-                       reactiveServiceInterface.equals(REACTIVE_BIDIRECTIONAL_STREAMING_SERVICE)) {
+            } else if (streamingShape == StreamingShape.UNARY_STREAMING
+                    || streamingShape == StreamingShape.STREAMING_STREAMING) {
                 // For streaming operations returning Multi: Multi<I> -> Multi<O>
                 addStreamingMapperLogic(methodBuilder);
             } else {
@@ -237,7 +234,7 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
         return switch (streamingShape) {
             case UNARY_UNARY -> REACTIVE_SERVICE;
             case UNARY_STREAMING -> REACTIVE_STREAMING_SERVICE;
-            case STREAMING_UNARY -> REACTIVE_CLIENT_STREAMING_SERVICE;
+            case STREAMING_UNARY -> REACTIVE_STREAMING_CLIENT_SERVICE;
             case STREAMING_STREAMING -> REACTIVE_BIDIRECTIONAL_STREAMING_SERVICE;
         };
     }
@@ -249,7 +246,7 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
      * @return the external adapter class name
      * @throws IllegalArgumentException if model.generatedName() returns null
      */
-    private String getExternalAdapterClassName(PipelineStepModel model) {
+    public static String getExternalAdapterClassName(PipelineStepModel model) {
         String serviceClassName = model.generatedName();
         if (serviceClassName == null) {
             throw new IllegalArgumentException("PipelineStepModel.generatedName() must not be null");

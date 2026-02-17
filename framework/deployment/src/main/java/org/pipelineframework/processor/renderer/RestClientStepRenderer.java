@@ -349,7 +349,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
      * @param versionTag the pipeline version tag passed via header
      * @param replayMode the replay mode flag passed via header
      * @param cachePolicy the cache policy passed via header
-     * @param inputDtos a stream of input DTOs to be processed
+     * @param inputDtos a batch of input DTOs to be processed
      * @return a Uni that emits the single output DTO produced from the streamed inputs
      */
     private MethodSpec buildStreamingUnaryMethod(TypeName inputDto, TypeName outputDto, String operationPath) {

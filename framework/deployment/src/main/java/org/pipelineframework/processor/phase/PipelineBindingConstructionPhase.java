@@ -158,7 +158,7 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
         Set<String> expectedServices = ctx.getStepModels().stream()
             .filter(model -> model.delegateService() == null)
             .map(PipelineStepModel::serviceName)
-            .collect(java.util.stream.Collectors.toSet());
+            .collect(Collectors.toSet());
         return locator.locateAndLoadDescriptors(
             ctx.getProcessingEnv().getOptions(),
             expectedServices,

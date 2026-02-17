@@ -59,6 +59,10 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             List<PipelineStepModel> contextualModels = applyContextRolesAndAspects(ctx, stepModels);
             if (contextualModels != null && !contextualModels.isEmpty()) {
                 stepModels = contextualModels;
+            } else if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.NOTE,
+                    "Contextual role/aspect enrichment produced no additional models; preserving YAML-derived models.");
             }
         } else {
             if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
@@ -213,12 +217,24 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             reactiveSignature.inputType(),
             reactiveSignature.outputType());
         if (stepDef.externalMapper() != null && externalMapper == null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.NOTE,
+                "Skipping delegated step '" + stepDef.name()
+                    + "': operator mapper '" + stepDef.externalMapper().canonicalName()
+                    + "' was specified but could not be resolved.");
             return null;
         }
         if (stepDef.externalMapper() == null
             && externalMapper == null
             && (!inputType.equals(reactiveSignature.inputType())
                 || !outputType.equals(reactiveSignature.outputType()))) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.NOTE,
+                "Skipping delegated step '" + stepDef.name()
+                    + "': no operator mapper provided and YAML types ["
+                    + inputType + " -> " + outputType
+                    + "] do not match delegate types ["
+                    + reactiveSignature.inputType() + " -> " + reactiveSignature.outputType() + "].");
             return null;
         }
 
@@ -242,24 +258,24 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
 
         String serviceName = toYamlServiceName(stepDef.name());
 
-        return new PipelineStepModel(
-            serviceName,
-            serviceName,
-            servicePackage,
-            stepDef.executionClass(),
-            inputMapping,
-            outputMapping,
-            reactiveSignature.shape(),
-            targets,
-            ExecutionMode.DEFAULT,
-            DeploymentRole.PIPELINE_SERVER,
-            false,
-            null,
-            OrderingRequirement.RELAXED,
-            ThreadSafety.SAFE,
-            stepDef.executionClass(),
-            externalMapper
-        );
+        return new PipelineStepModel.Builder()
+            .serviceName(serviceName)
+            .generatedName(serviceName)
+            .servicePackage(servicePackage)
+            .serviceClassName(stepDef.executionClass())
+            .inputMapping(inputMapping)
+            .outputMapping(outputMapping)
+            .streamingShape(reactiveSignature.shape())
+            .enabledTargets(targets)
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+            .sideEffect(false)
+            .cacheKeyGenerator(null)
+            .orderingRequirement(OrderingRequirement.RELAXED)
+            .threadSafety(ThreadSafety.SAFE)
+            .delegateService(stepDef.executionClass())
+            .externalMapper(externalMapper)
+            .build();
     }
 
     private ClassName resolveDelegatedExternalMapper(
@@ -476,8 +492,6 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             "org.pipelineframework.service.ReactiveStreamingService", StreamingShape.UNARY_STREAMING);
         collectReactiveMatch(matches, matchNames, typeUtils, delegateElement,
             "org.pipelineframework.service.ReactiveStreamingClientService", StreamingShape.STREAMING_UNARY);
-        collectReactiveMatch(matches, matchNames, typeUtils, delegateElement,
-            "org.pipelineframework.service.ReactiveClientStreamingService", StreamingShape.STREAMING_UNARY);
         collectReactiveMatch(matches, matchNames, typeUtils, delegateElement,
             "org.pipelineframework.service.ReactiveBidirectionalStreamingService", StreamingShape.STREAMING_STREAMING);
 

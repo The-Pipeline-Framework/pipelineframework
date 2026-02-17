@@ -1,7 +1,9 @@
 package org.pipelineframework.processor.phase;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
@@ -448,6 +450,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                         "Delegate service '" + model.delegateService().canonicalName() +
                         "' must implement one of the reactive service interfaces (ReactiveService, ReactiveStreamingService, etc.) for step '" +
                         model.serviceName() + "'");
+                    continue;
                 }
 
                 // If operator mapper is specified, validate it implements ExternalMapper
@@ -484,13 +487,17 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                         continue;
                     }
 
-                    String stepInputType = String.valueOf(model.inputMapping().domainType());
-                    String stepOutputType = String.valueOf(model.outputMapping().domainType());
-                    String delegateInputType = delegateSignature.inputType().toString();
-                    String delegateOutputType = delegateSignature.outputType().toString();
+                    var stepInputDomainType = model.inputMapping().domainType();
+                    var stepOutputDomainType = model.outputMapping().domainType();
+                    var delegateInputDomainType = delegateSignature.inputType();
+                    var delegateOutputDomainType = delegateSignature.outputType();
 
-                    boolean inputDiffers = !stepInputType.equals(delegateInputType);
-                    boolean outputDiffers = !stepOutputType.equals(delegateOutputType);
+                    boolean inputDiffers = !Objects.equals(stepInputDomainType, delegateInputDomainType);
+                    boolean outputDiffers = !Objects.equals(stepOutputDomainType, delegateOutputDomainType);
+                    String stepInputType = stepInputDomainType == null ? "absent" : stepInputDomainType.toString();
+                    String stepOutputType = stepOutputDomainType == null ? "absent" : stepOutputDomainType.toString();
+                    String delegateInputType = delegateInputDomainType == null ? "absent" : delegateInputDomainType.toString();
+                    String delegateOutputType = delegateOutputDomainType == null ? "absent" : delegateOutputDomainType.toString();
                     if (inputDiffers || outputDiffers) {
                         messager.printMessage(
                             Diagnostic.Kind.ERROR,
@@ -558,7 +565,19 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
     }
 
     private DeclaredType findReactiveSupertype(Types types, TypeMirror type, String targetQualifiedName) {
+        return findReactiveSupertype(types, type, targetQualifiedName, new HashSet<>());
+    }
+
+    private DeclaredType findReactiveSupertype(
+            Types types,
+            TypeMirror type,
+            String targetQualifiedName,
+            Set<String> visited) {
         if (type == null) {
+            return null;
+        }
+        String typeKey = type.toString();
+        if (!visited.add(typeKey)) {
             return null;
         }
         if (type instanceof DeclaredType declaredType
@@ -568,7 +587,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         }
 
         for (TypeMirror supertype : types.directSupertypes(type)) {
-            DeclaredType match = findReactiveSupertype(types, supertype, targetQualifiedName);
+            DeclaredType match = findReactiveSupertype(types, supertype, targetQualifiedName, visited);
             if (match != null) {
                 return match;
             }

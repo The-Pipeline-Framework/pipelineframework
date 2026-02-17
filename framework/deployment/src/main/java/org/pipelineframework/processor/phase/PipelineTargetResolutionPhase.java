@@ -106,7 +106,8 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
 
     private Set<GenerationTarget> resolveTargetsForModel(PipelineStepModel model, TransportMode transportMode) {
         if (model.delegateService() != null) {
-            // Delegated steps should always emit a local client contract plus the external adapter.
+            // Delegated steps only resolve local client target here.
+            // External adapter generation is bound later in PipelineBindingConstructionPhase.
             return Set.of(GenerationTarget.LOCAL_CLIENT_STEP);
         }
         return resolveTargetsForRole(model.deploymentRole(), transportMode);
