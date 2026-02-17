@@ -1,8 +1,10 @@
 package org.pipelineframework.processor.phase;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import javax.lang.model.element.Element;
+import javax.lang.model.element.TypeElement;
 import javax.tools.Diagnostic;
 
 import org.pipelineframework.annotation.ParallelismHint;
@@ -46,6 +48,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         validateParallelismHints(ctx);
         validateProviderHints(ctx);
         validateFunctionPlatformConstraints(ctx);
+        validateYamlDrivenSteps(ctx);
 
         // Analyze streaming shapes and other semantic properties
         // This phase focuses on semantic analysis without building bindings or calling renderers
@@ -351,6 +354,158 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         }
         String normalized = option.trim();
         return "true".equalsIgnoreCase(normalized) || "1".equals(normalized);
+    }
+
+    /**
+     * Validates YAML-driven steps to ensure they meet the requirements.
+     *
+     * @param ctx the compilation context
+     */
+    private void validateYamlDrivenSteps(PipelineCompilationContext ctx) {
+        if (ctx == null || ctx.getProcessingEnv() == null || ctx.getStepModels() == null) {
+            return;
+        }
+
+        var elementUtils = ctx.getProcessingEnv().getElementUtils();
+        var messager = ctx.getProcessingEnv().getMessager();
+
+        // Validate that annotated services not referenced in YAML don't generate steps
+        // This is done by checking if each annotated service is in the YAML step definitions
+        List<String> yamlReferencedServices = new ArrayList<>();
+        if (ctx.getStepDefinitions() != null) {
+            for (var stepDef : ctx.getStepDefinitions()) {
+                if (stepDef.kind() == org.pipelineframework.processor.ir.StepKind.INTERNAL
+                        && stepDef.executionClass() != null) {
+                    yamlReferencedServices.add(stepDef.executionClass().canonicalName());
+                }
+            }
+        }
+
+        // Get all @PipelineStep annotated classes
+        Set<? extends Element> pipelineStepElements =
+            ctx.getRoundEnv() != null ? ctx.getRoundEnv().getElementsAnnotatedWith(org.pipelineframework.annotation.PipelineStep.class) : Set.of();
+
+        // Check if we should warn about unreferenced steps (default: true)
+        boolean warnUnreferenced = true;
+        String warnOption = ctx.getProcessingEnv().getOptions().get("pipeline.warnUnreferencedSteps");
+        if (warnOption != null) {
+            warnUnreferenced = Boolean.parseBoolean(warnOption);
+        }
+
+        for (Element annotatedElement : pipelineStepElements) {
+            // Validate that @PipelineStep is only applied to classes
+            if (annotatedElement.getKind() != javax.lang.model.element.ElementKind.CLASS) {
+                messager.printMessage(
+                    Diagnostic.Kind.ERROR,
+                    "@PipelineStep can only be applied to classes",
+                    annotatedElement);
+                continue;
+            }
+
+            TypeElement serviceClass = (TypeElement) annotatedElement;
+            String serviceClassName = serviceClass.getQualifiedName().toString();
+
+            // If this annotated service is not referenced in YAML, emit a note (not a warning)
+            if (!yamlReferencedServices.contains(serviceClassName)) {
+                if (warnUnreferenced) {
+                    messager.printMessage(
+                        Diagnostic.Kind.NOTE,
+                        "Service '" + serviceClassName + "' is annotated with @PipelineStep but not referenced in pipeline YAML. No step will be generated for it.");
+                }
+            }
+        }
+
+        // Validate the step models created from YAML
+        for (PipelineStepModel model : ctx.getStepModels()) {
+            if (model.delegateService() != null) {
+                // Validate that the delegate service exists
+                var delegateElement = elementUtils.getTypeElement(model.delegateService().canonicalName());
+                if (delegateElement == null) {
+                    messager.printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "Delegate service '" + model.delegateService().canonicalName() + "' not found for step '" + model.serviceName() + "'");
+                    continue;
+                }
+
+                // Validate that the delegate service implements a valid reactive service interface
+                var typeUtils = ctx.getProcessingEnv().getTypeUtils();
+                boolean isValidReactiveService = false;
+
+                // Check for ReactiveService interface
+                var reactiveServiceElement = elementUtils.getTypeElement("org.pipelineframework.service.ReactiveService");
+                if (reactiveServiceElement != null && typeUtils.isAssignable(delegateElement.asType(), reactiveServiceElement.asType())) {
+                    isValidReactiveService = true;
+                }
+
+                // Check for ReactiveStreamingService interface
+                if (!isValidReactiveService) {
+                    var reactiveStreamingServiceElement = elementUtils.getTypeElement("org.pipelineframework.service.ReactiveStreamingService");
+                    if (reactiveStreamingServiceElement != null && typeUtils.isAssignable(delegateElement.asType(), reactiveStreamingServiceElement.asType())) {
+                        isValidReactiveService = true;
+                    }
+                }
+
+                // Check for ReactiveClientStreamingService interface
+                if (!isValidReactiveService) {
+                    var reactiveStreamingClientServiceElement = elementUtils.getTypeElement("org.pipelineframework.service.ReactiveStreamingClientService");
+                    if (reactiveStreamingClientServiceElement != null && typeUtils.isAssignable(delegateElement.asType(), reactiveStreamingClientServiceElement.asType())) {
+                        isValidReactiveService = true;
+                    }
+                }
+
+                if (!isValidReactiveService) {
+                    var reactiveClientStreamingServiceElement = elementUtils.getTypeElement("org.pipelineframework.service.ReactiveClientStreamingService");
+                    if (reactiveClientStreamingServiceElement != null && typeUtils.isAssignable(delegateElement.asType(), reactiveClientStreamingServiceElement.asType())) {
+                        isValidReactiveService = true;
+                    }
+                }
+
+                // Check for ReactiveBidirectionalStreamingService interface
+                if (!isValidReactiveService) {
+                    var reactiveBidirectionalStreamingServiceElement = elementUtils.getTypeElement("org.pipelineframework.service.ReactiveBidirectionalStreamingService");
+                    if (reactiveBidirectionalStreamingServiceElement != null && typeUtils.isAssignable(delegateElement.asType(), reactiveBidirectionalStreamingServiceElement.asType())) {
+                        isValidReactiveService = true;
+                    }
+                }
+
+                if (!isValidReactiveService) {
+                    messager.printMessage(
+                        Diagnostic.Kind.ERROR,
+                        "Delegate service '" + model.delegateService().canonicalName() +
+                        "' must implement one of the reactive service interfaces (ReactiveService, ReactiveStreamingService, etc.) for step '" +
+                        model.serviceName() + "'");
+                }
+
+                // If external mapper is specified, validate it implements ExternalMapper
+                if (model.externalMapper() != null) {
+                    var externalMapperElement = elementUtils.getTypeElement(model.externalMapper().canonicalName());
+                    if (externalMapperElement == null) {
+                        messager.printMessage(
+                            Diagnostic.Kind.ERROR,
+                            "External mapper '" + model.externalMapper().canonicalName() + "' not found for step '" + model.serviceName() + "'");
+                        continue;
+                    }
+
+                    // Check if the external mapper implements ExternalMapper interface
+                    boolean implementsExternalMapper = false;
+                    var externalMapperInterfaceElement = elementUtils.getTypeElement("org.pipelineframework.mapper.ExternalMapper");
+                    if (externalMapperInterfaceElement != null && typeUtils.isAssignable(externalMapperElement.asType(), externalMapperInterfaceElement.asType())) {
+                        implementsExternalMapper = true;
+                    }
+
+                    if (!implementsExternalMapper) {
+                        messager.printMessage(
+                            Diagnostic.Kind.ERROR,
+                            "External mapper '" + model.externalMapper().canonicalName() + 
+                            "' must implement org.pipelineframework.mapper.ExternalMapper for step '" + 
+                            model.serviceName() + "'");
+                    }
+                } else {
+                    // TODO: validate step/delegate generic types — tracked in future enhancement
+                    // When no external mapper is specified, validate that the step's input/output types match the delegate's types
+                }
+            }
+        }
     }
 
     /**

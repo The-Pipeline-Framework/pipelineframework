@@ -64,24 +64,41 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
         
         // Process each step model to construct appropriate bindings
         for (PipelineStepModel model : ctx.getStepModels()) {
+            String modelKey = model.serviceName();
+
+            // Delegated steps also need external adapters in addition to regular client bindings.
+            if (model.delegateService() != null) {
+                ExternalAdapterBinding externalAdapterBinding = new ExternalAdapterBinding(
+                    model,
+                    model.serviceName(),
+                    model.servicePackage(),
+                    model.delegateService().toString(),
+                    model.externalMapper() != null ? model.externalMapper().toString() : null
+                );
+                bindingsMap.put(modelKey + "_external_adapter", externalAdapterBinding);
+            }
+
             // Construct gRPC binding if needed
             GrpcBinding grpcBinding = null;
             if (model.enabledTargets().contains(GenerationTarget.GRPC_SERVICE)
                 || model.enabledTargets().contains(GenerationTarget.CLIENT_STEP)) {
                 grpcBinding = grpcBindingResolver.resolve(model, descriptorSet);
             }
-            
+
             // Construct REST binding if needed
             RestBinding restBinding = null;
             if (model.enabledTargets().contains(GenerationTarget.REST_RESOURCE)
                 || model.enabledTargets().contains(GenerationTarget.REST_CLIENT_STEP)) {
                 restBinding = restBindingResolver.resolve(model, ctx.getProcessingEnv());
             }
-            
-            // Store bindings for this model
-            String modelKey = model.serviceName();
-            bindingsMap.put(modelKey + "_grpc", grpcBinding);
-            bindingsMap.put(modelKey + "_rest", restBinding);
+
+            // Store bindings for this model conditionally
+            if (grpcBinding != null) {
+                bindingsMap.put(modelKey + "_grpc", grpcBinding);
+            }
+            if (restBinding != null) {
+                bindingsMap.put(modelKey + "_rest", restBinding);
+            }
             if (model.enabledTargets().contains(GenerationTarget.LOCAL_CLIENT_STEP)) {
                 bindingsMap.put(modelKey + "_local", new LocalBinding(model));
             }

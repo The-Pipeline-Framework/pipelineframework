@@ -111,4 +111,24 @@ public @interface PipelineStep {
      * @return thread safety declaration for this step
      */
     ThreadSafety threadSafety() default ThreadSafety.SAFE;
+
+    /**
+     * Specifies the delegate service class that provides the actual execution implementation.
+     * When present, the annotated class becomes a client-only step that delegates to the specified service.
+     * When absent (defaults to Void.class), the annotated class is treated as a traditional internal step.
+     * {@link #externalMapper()} is only considered when {@code delegate() != Void.class}.
+     *
+     * @return the delegate service class, or Void.class if this is an internal step
+     */
+    Class<?> delegate() default Void.class;
+
+    /**
+     * Specifies the external mapper class that maps between the step's domain types and the delegate service's entity types.
+     * This is used when the step's input/output types differ from the delegate service's entity types, and it is ignored when
+     * {@code delegate() == Void.class}. For delegated steps ({@code delegate() != Void.class}), this mapper is required whenever
+     * application step types differ from delegate library types; otherwise it may remain {@code Void.class}.
+     *
+     * @return the external mapper class, or Void.class if no external mapping is needed
+     */
+    Class<?> externalMapper() default Void.class;
 }

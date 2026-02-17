@@ -19,4 +19,6 @@ public enum GenerationTarget {
     REST_RESOURCE,
     /** Orchestrator CLI entrypoint */
     ORCHESTRATOR_CLI,
+    /** External adapter that delegates to external library services */
+    EXTERNAL_ADAPTER,
 }

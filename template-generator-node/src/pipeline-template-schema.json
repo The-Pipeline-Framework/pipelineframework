@@ -3,6 +3,54 @@
   "title": "Pipeline Template Configuration",
   "description": "Configuration schema for the Pipeline Template Generator",
   "type": "object",
+  "$defs": {
+    "fieldDefinition": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the field"
+        },
+        "type": {
+          "type": "string",
+          "description": "Java type of the field",
+          "anyOf": [
+            {
+              "enum": ["String", "Integer", "Long", "Double", "Boolean", "UUID", "BigDecimal", "Currency", "Path", "LocalDateTime", "LocalDate", "OffsetDateTime", "ZonedDateTime", "Instant", "Duration", "Period", "URI", "URL", "File", "BigInteger", "AtomicInteger", "AtomicLong", "List<String>"]
+            },
+            {
+              "type": "string",
+              "pattern": "^Map<[A-Z][A-Za-z0-9_]*, [A-Z][A-Za-z0-9_]*>$"
+            },
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)*$",
+              "description": "Custom domain type, including types defined by other steps."
+            }
+          ]
+        },
+        "protoType": {
+          "type": "string",
+          "description": "Protobuf type of the field",
+          "anyOf": [
+            {
+              "enum": ["string", "int32", "int64", "double", "bool", "bytes", "float", "uint32", "uint64", "sint32", "sint64", "fixed32", "fixed64", "sfixed32", "sfixed64"]
+            },
+            {
+              "type": "string",
+              "pattern": "^map<[a-z][a-z0-9_]*, [A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)*>$"
+            },
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)*$",
+              "description": "Custom message type, including messages defined by other steps."
+            }
+          ]
+        }
+      },
+      "required": ["name", "type", "protoType"]
+    }
+  },
   "properties": {
     "appName": {
       "type": "string",
@@ -29,127 +77,105 @@
       "type": "array",
       "description": "List of pipeline steps to generate",
       "items": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "Name of the step (e.g., Process Customer)"
-          },
-          "cardinality": {
-            "type": "string",
-            "description": "Cardinality of the step",
-            "enum": ["ONE_TO_ONE", "EXPANSION", "REDUCTION", "SIDE_EFFECT", "MANY_TO_MANY"]
-          },
-          "inputTypeName": {
-            "type": "string",
-            "description": "Name of the input type (plural if reduction)"
-          },
-          "inputFields": {
-            "type": "array",
-            "description": "List of fields in the input type",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string",
-                  "description": "Name of the field"
-                },
-                "type": {
-                  "type": "string",
-                  "description": "Java type of the field",
-                  "anyOf": [
-                    {
-                      "enum": ["String", "Integer", "Long", "Double", "Boolean", "UUID", "BigDecimal", "Currency", "Path", "LocalDateTime", "LocalDate", "OffsetDateTime", "ZonedDateTime", "Instant", "Duration", "Period", "URI", "URL", "File", "BigInteger", "AtomicInteger", "AtomicLong", "List<String>"]
-                    },
-                    {
-                      "type": "string",
-                      "pattern": "^Map<[A-Z][A-Za-z0-9]*, [A-Z][A-Za-z0-9]*>$"
-                    },
-                    {
-                      "type": "string",
-                      "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)*$",
-                      "description": "Custom domain type, including types defined by other steps."
-                    }
-                  ]
-                },
-                "protoType": {
-                  "type": "string",
-                  "description": "Protobuf type of the field",
-                  "anyOf": [
-                    {
-                      "enum": ["string", "int32", "int64", "double", "bool"]
-                    },
-                    {
-                      "type": "string",
-                      "pattern": "^map<[a-z][a-z0-9_]*, [a-z][a-z0-9_]*>$"
-                    },
-                    {
-                      "type": "string",
-                      "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)*$",
-                      "description": "Custom message type, including messages defined by other steps."
-                    }
-                  ]
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Name of the step (e.g., Process Customer)"
+              },
+              "cardinality": {
+                "type": "string",
+                "description": "Cardinality of the step",
+                "enum": ["ONE_TO_ONE", "EXPANSION", "REDUCTION", "SIDE_EFFECT", "MANY_TO_MANY"]
+              },
+              "inputTypeName": {
+                "type": "string",
+                "description": "Name of the input type (plural if reduction)"
+              },
+              "inputFields": {
+                "type": "array",
+                "description": "List of fields in the input type",
+                "items": {
+                  "$ref": "#/$defs/fieldDefinition"
                 }
               },
-              "required": ["name", "type", "protoType"]
-            }
+              "outputTypeName": {
+                "type": "string",
+                "description": "Name of the output type (plural if expansion)"
+              },
+              "outputFields": {
+                "type": "array",
+                "description": "List of fields in the output type",
+                "items": {
+                  "$ref": "#/$defs/fieldDefinition"
+                }
+              }
+            },
+            "required": ["name", "cardinality", "inputTypeName", "inputFields", "outputTypeName", "outputFields"]
           },
-          "outputTypeName": {
-            "type": "string",
-            "description": "Name of the output type (plural if expansion)"
-          },
-          "outputFields": {
-            "type": "array",
-            "description": "List of fields in the output type",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string",
-                  "description": "Name of the field"
+          {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Name of the step (e.g., Process Customer)"
+              },
+              "service": {
+                "type": "string",
+                "description": "Fully qualified class name of the internal service annotated with @PipelineStep",
+                "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+              },
+              "delegate": {
+                "type": "string",
+                "description": "Fully qualified class name of the delegate service from an external library",
+                "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+              },
+              "input": {
+                "type": "string",
+                "description": "Fully qualified class name of the input type",
+                "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+              },
+              "output": {
+                "type": "string",
+                "description": "Fully qualified class name of the output type",
+                "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+              },
+              "externalMapper": {
+                "type": "string",
+                "description": "Fully qualified class name of the external mapper for converting between domain and library types",
+                "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+              }
+            },
+            "oneOf": [
+              {
+                "required": ["name", "service"]
+              },
+              {
+                "required": ["name", "delegate"]
+              }
+            ],
+            "allOf": [
+              {
+                "if": {
+                  "required": ["input"]
                 },
-                "type": {
-                  "type": "string",
-                  "description": "Java type of the field",
-                  "anyOf": [
-                    {
-                      "enum": ["String", "Integer", "Long", "Double", "Boolean", "UUID", "BigDecimal", "Currency", "Path", "LocalDateTime", "LocalDate", "OffsetDateTime", "ZonedDateTime", "Instant", "Duration", "Period", "URI", "URL", "File", "BigInteger", "AtomicInteger", "AtomicLong", "List<String>"]
-                    },
-                    {
-                      "type": "string",
-                      "pattern": "^Map<[A-Z][A-Za-z0-9]*, [A-Z][A-Za-z0-9]*>$"
-                    },
-                    {
-                      "type": "string",
-                      "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)*$",
-                      "description": "Custom domain type, including types defined by other steps."
-                    }
-                  ]
-                },
-                "protoType": {
-                  "type": "string",
-                  "description": "Protobuf type of the field",
-                  "anyOf": [
-                    {
-                      "enum": ["string", "int32", "int64", "double", "bool"]
-                    },
-                    {
-                      "type": "string",
-                      "pattern": "^map<[a-z][a-z0-9_]*, [a-z][a-z0-9_]*>$"
-                    },
-                    {
-                      "type": "string",
-                      "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)*$",
-                      "description": "Custom message type, including messages defined by other steps."
-                    }
-                  ]
+                "then": {
+                  "required": ["output"]
                 }
               },
-              "required": ["name", "type", "protoType"]
-            }
+              {
+                "if": {
+                  "required": ["output"]
+                },
+                "then": {
+                  "required": ["input"]
+                }
+              }
+            ]
           }
-        },
-        "required": ["name", "cardinality", "inputTypeName", "inputFields", "outputTypeName", "outputFields"]
+        ]
       }
     },
     "aspects": {

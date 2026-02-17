@@ -102,6 +102,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             new OrchestratorFunctionHandlerRenderer();
         OrchestratorCliRenderer orchestratorCliRenderer = new OrchestratorCliRenderer();
         OrchestratorIngestClientRenderer orchestratorIngestClientRenderer = new OrchestratorIngestClientRenderer();
+        ExternalAdapterRenderer externalAdapterRenderer = new ExternalAdapterRenderer(GenerationTarget.EXTERNAL_ADAPTER);
 
         // Initialize role metadata generator
         RoleMetadataGenerator roleMetadataGenerator = new RoleMetadataGenerator(ctx.getProcessingEnv());
@@ -114,10 +115,48 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         DescriptorProtos.FileDescriptorSet descriptorSet = ctx.getDescriptorSet();
 
         Set<String> generatedSideEffectBeans = new HashSet<>();
+        Set<String> enabledAspects = computeEnabledAspects(ctx);
 
         // Generate artifacts for each step model
         for (PipelineStepModel model : ctx.getStepModels()) {
-            // Get the bindings for this model
+            // Check if this is a delegation step
+            Object externalAdapterBindingObj = bindingsMap.get(model.serviceName() + "_external_adapter");
+            ExternalAdapterBinding externalAdapterBinding = null;
+            if (externalAdapterBindingObj instanceof ExternalAdapterBinding) {
+                externalAdapterBinding = (ExternalAdapterBinding) externalAdapterBindingObj;
+            } else if (externalAdapterBindingObj != null) {
+                LOG.warnf("Invalid binding type for '%s_external_adapter': expected ExternalAdapterBinding but got %s",
+                    model.serviceName(), externalAdapterBindingObj.getClass().getName());
+            }
+            
+            if (externalAdapterBinding != null) {
+                // For delegation steps, generate the external adapter instead of regular artifacts
+                // Use the deployment role from the model to determine output directory
+                org.pipelineframework.processor.ir.DeploymentRole adapterRole = model.deploymentRole() != null
+                    ? model.deploymentRole()
+                    : org.pipelineframework.processor.ir.DeploymentRole.PIPELINE_SERVER;
+                try {
+                    externalAdapterRenderer.render(externalAdapterBinding, new GenerationContext(
+                        ctx.getProcessingEnv(),
+                        resolveRoleOutputDir(ctx, adapterRole),
+                        adapterRole,
+                        enabledAspects,
+                        cacheKeyGenerator,
+                        descriptorSet));
+                    String generatedName = model.generatedName() != null ? model.generatedName() : model.serviceName();
+                    String baseName = generatedName.endsWith("Service")
+                        ? generatedName.substring(0, generatedName.length() - "Service".length())
+                        : generatedName;
+                    String externalAdapterClassName = model.servicePackage() + ".pipeline." + baseName + "ExternalAdapter";
+                    roleMetadataGenerator.recordClassWithRole(externalAdapterClassName, adapterRole.name());
+                } catch (IOException e) {
+                    ctx.getProcessingEnv().getMessager().printMessage(
+                        javax.tools.Diagnostic.Kind.ERROR,
+                        "Failed to generate external adapter for '" + model.serviceName() + "': " + e.getMessage());
+                }
+            }
+
+            // Get the bindings for this model (for non-delegation steps)
             GrpcBinding grpcBinding = (GrpcBinding) bindingsMap.get(model.serviceName() + "_grpc");
             RestBinding restBinding = (RestBinding) bindingsMap.get(model.serviceName() + "_rest");
             LocalBinding localBinding = (LocalBinding) bindingsMap.get(model.serviceName() + "_local");
@@ -130,6 +169,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 restBinding,
                 localBinding,
                 generatedSideEffectBeans,
+                enabledAspects,
                 descriptorSet,
                 cacheKeyGenerator,
                 roleMetadataGenerator,
@@ -509,6 +549,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             RestBinding restBinding,
             LocalBinding localBinding,
             Set<String> generatedSideEffectBeans,
+            Set<String> enabledAspects,
             DescriptorProtos.FileDescriptorSet descriptorSet,
             ClassName cacheKeyGenerator,
             RoleMetadataGenerator roleMetadataGenerator,
@@ -519,12 +560,6 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             RestResourceRenderer restRenderer,
             RestFunctionHandlerRenderer restFunctionHandlerRenderer) throws IOException {
         
-        Set<String> enabledAspects = Optional.ofNullable(ctx.getAspectModels())
-            .orElse(List.of())
-            .stream()
-            .map(aspect -> aspect.name().toLowerCase(Locale.ROOT))
-            .collect(java.util.stream.Collectors.toUnmodifiableSet());
-
         for (GenerationTarget target : model.enabledTargets()) {
             switch (target) {
                 case GRPC_SERVICE -> {
@@ -700,6 +735,14 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 }
             }
         }
+    }
+
+    private Set<String> computeEnabledAspects(PipelineCompilationContext ctx) {
+        return Optional.ofNullable(ctx.getAspectModels())
+            .orElse(List.of())
+            .stream()
+            .map(aspect -> aspect.name().toLowerCase(Locale.ROOT))
+            .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
     /**

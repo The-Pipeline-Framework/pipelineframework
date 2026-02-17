@@ -80,6 +80,10 @@ public class PipelineStepIRExtractor {
             AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "outboundMapper"));
 
         ClassName cacheKeyGenerator = resolveCacheKeyGenerator(annotationMirror);
+        
+        // Extract delegate and externalMapper class names
+        ClassName delegateService = resolveDelegateService(annotationMirror);
+        ClassName externalMapper = resolveExternalMapper(annotationMirror);
 
         String qualifiedServiceName = serviceClass.getQualifiedName().toString();
         ClassName serviceClassName = null;
@@ -115,6 +119,8 @@ public class PipelineStepIRExtractor {
             .threadSafety(threadSafety)
             .deploymentRole(DeploymentRole.PIPELINE_SERVER)
             .cacheKeyGenerator(cacheKeyGenerator)
+            .delegateService(delegateService)
+            .externalMapper(externalMapper)
             .build();
 
         return new ExtractResult(model);
@@ -188,9 +194,29 @@ public class PipelineStepIRExtractor {
             return null;
         }
 
+        // Check if it's the default value (io.quarkus.cache.CacheKeyGenerator)
         TypeElement defaultElement = processingEnv.getElementUtils()
             .getTypeElement("io.quarkus.cache.CacheKeyGenerator");
         if (defaultElement != null && processingEnv.getTypeUtils().isSameType(typeMirror, defaultElement.asType())) {
+            return null;
+        }
+
+        return resolveTypeClass(annotationMirror, "cacheKeyGenerator");
+    }
+
+    /**
+     * Resolves a ClassName from an annotation value that specifies a type.
+     * Handles void types, null values, and converts TypeMirror to ClassName.
+     *
+     * @param annotationMirror the annotation mirror to extract the value from
+     * @param fieldName the name of the annotation value to extract
+     * @return the ClassName for the specified type, or null if not specified or void
+     */
+    private ClassName resolveTypeClass(AnnotationMirror annotationMirror, String fieldName) {
+        TypeMirror typeMirror = AnnotationProcessingUtils.getAnnotationValue(annotationMirror, fieldName);
+        if (typeMirror == null
+                || typeMirror.getKind() == javax.lang.model.type.TypeKind.VOID
+                || typeMirror.toString().equals("java.lang.Void")) {
             return null;
         }
 
@@ -200,5 +226,13 @@ public class PipelineStepIRExtractor {
         }
 
         return ClassName.bestGuess(typeMirror.toString());
+    }
+
+    private ClassName resolveDelegateService(AnnotationMirror annotationMirror) {
+        return resolveTypeClass(annotationMirror, "delegate");
+    }
+
+    private ClassName resolveExternalMapper(AnnotationMirror annotationMirror) {
+        return resolveTypeClass(annotationMirror, "externalMapper");
     }
 }

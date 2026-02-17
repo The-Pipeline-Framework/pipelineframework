@@ -1,5 +1,6 @@
 package org.pipelineframework.processor.phase;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -27,8 +28,10 @@ import org.pipelineframework.processor.config.PipelineStepConfigLoader;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
 import org.pipelineframework.processor.ir.PipelineOrchestratorModel;
+import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.TransportMode;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
+import org.pipelineframework.processor.parser.StepDefinitionParser;
 
 /**
  * Discovers and loads pipeline configuration, aspects, and semantic models.
@@ -85,6 +88,10 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         // Load pipeline template config
         PipelineTemplateConfig templateConfig = loadPipelineTemplateConfig(ctx);
         ctx.setPipelineTemplateConfig(templateConfig);
+
+        // Parse step definitions from YAML
+        List<StepDefinition> stepDefinitions = parseStepDefinitions(ctx);
+        ctx.setStepDefinitions(stepDefinitions);
 
         // Load runtime mapping config (optional)
         PipelineRuntimeMapping runtimeMapping = loadRuntimeMapping(ctx);
@@ -405,6 +412,23 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         }
 
         return java.nio.file.Paths.get(System.getProperty("user.dir"), "target", "generated-sources", "pipeline");
+    }
+
+    /**
+     * Parse step definitions from the pipeline template configuration.
+     *
+     * @param ctx the pipeline compilation context
+     * @return a list of StepDefinition objects parsed from the template
+     * @throws IOException if config resolution fails or parsing step definitions fails
+     */
+    private List<StepDefinition> parseStepDefinitions(PipelineCompilationContext ctx) throws IOException {
+        Optional<Path> configPath = resolvePipelineConfigPath(ctx);
+        if (configPath.isEmpty()) {
+            return List.of();
+        }
+
+        StepDefinitionParser parser = new StepDefinitionParser();
+        return parser.parseStepDefinitions(configPath.get());
     }
 
     /**
