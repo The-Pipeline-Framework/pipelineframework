@@ -27,7 +27,7 @@ import org.pipelineframework.parallelism.ThreadSafety;
  * @param orderingRequirement Gets the ordering requirement for the generated client step.
  * @param threadSafety Gets the thread safety declaration for the generated client step.
  * @param delegateService Gets the delegate service class if this is a delegation step, otherwise null.
- * @param externalMapper Gets the external mapper class if external mapping is used, otherwise null.
+ * @param externalMapper Gets the operator mapper class if operator mapping is used, otherwise null.
  */
 public record PipelineStepModel(
         String serviceName,
@@ -63,7 +63,7 @@ public record PipelineStepModel(
      * @param orderingRequirement the ordering requirement for the generated client step; may be null
      * @param threadSafety the thread safety declaration for the generated client step; may be null
      * @param delegateService the delegate service class if this is a delegation step, otherwise null
-     * @param externalMapper the external mapper class if external mapping is used, otherwise null
+     * @param externalMapper the operator mapper class if operator mapping is used, otherwise null
      * @throws IllegalArgumentException if any parameter documented as 'must not be null' is null
      */
     @SuppressWarnings("ConstantValue")
@@ -388,9 +388,9 @@ public record PipelineStepModel(
         }
 
         /**
-         * Sets the external mapper class for mapping between domain and operator types.
+         * Sets the operator mapper class for mapping between domain and operator types.
          *
-         * @param externalMapper the external mapper class, or null if no external mapping is needed
+         * @param externalMapper the operator mapper class, or null if no operator mapping is needed
          * @return this builder instance
          */
         public Builder externalMapper(ClassName externalMapper) {

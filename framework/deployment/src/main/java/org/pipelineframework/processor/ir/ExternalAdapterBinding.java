@@ -25,7 +25,7 @@ package org.pipelineframework.processor.ir;
  * @param serviceName The name of the service
  * @param servicePackage The package of the service
  * @param delegateService The delegate service class that provides the actual implementation
- * @param externalMapper The external mapper class for mapping between application and operator types
+ * @param externalMapper The operator mapper class for mapping between application and operator types
  */
 public record ExternalAdapterBinding(
         PipelineStepModel model,
@@ -42,7 +42,7 @@ public record ExternalAdapterBinding(
      * @param serviceName The service name
      * @param servicePackage The service package
      * @param delegateService The delegate service class name
-     * @param externalMapper The external mapper class name (may be null)
+     * @param externalMapper The operator mapper class name (may be null)
      */
     public ExternalAdapterBinding {
         if (model == null) {
@@ -58,7 +58,7 @@ public record ExternalAdapterBinding(
             throw new IllegalArgumentException("Delegate service cannot be null or blank");
         }
         if (externalMapper != null && externalMapper.isBlank()) {
-            throw new IllegalArgumentException("External mapper cannot be blank when provided");
+            throw new IllegalArgumentException("Operator mapper cannot be blank when provided");
         }
     }
 }

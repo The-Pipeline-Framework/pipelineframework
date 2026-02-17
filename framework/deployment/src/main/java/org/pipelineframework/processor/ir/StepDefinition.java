@@ -27,7 +27,7 @@ import com.squareup.javapoet.ClassName;
  * @param name The name of the step
  * @param kind The kind of step (INTERNAL or DELEGATED)
  * @param executionClass The class that provides the execution implementation
- * @param externalMapper The external mapper class for mapping between domain and operator types (nullable)
+ * @param externalMapper The operator mapper class for mapping between domain and operator types (nullable)
  * @param inputType The input type for the step
  * @param outputType The output type for the step
  */

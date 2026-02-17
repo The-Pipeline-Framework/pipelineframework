@@ -38,14 +38,14 @@ class StepDefinitionParserTest {
     Path tempDir;
 
     @Test
-    void rejectsStepWhenServiceAndDelegateAreBothProvided() throws IOException {
+    void rejectsStepWhenServiceAndOperatorAreBothProvided() throws IOException {
         List<StepDefinition> steps = parse("""
             appName: "Test"
             basePackage: "com.example"
             steps:
               - name: "bad-step"
                 service: "com.example.app.InternalService"
-                delegate: "com.example.lib.ExternalService"
+                operator: "com.example.lib.ExternalService"
             """);
 
         assertTrue(steps.isEmpty());
@@ -59,7 +59,7 @@ class StepDefinitionParserTest {
             steps:
               - name: "bad-internal"
                 service: "com.example.app.InternalService"
-                externalMapper: "com.example.app.SomeMapper"
+                operatorMapper: "com.example.app.SomeMapper"
             """);
 
         assertEquals(1, steps.size());
@@ -101,7 +101,7 @@ class StepDefinitionParserTest {
             basePackage: "com.example"
             steps:
               - name: "bad-delegated"
-                delegate: "com.example.lib.ExternalService"
+                operator: "com.example.lib.ExternalService"
                 input: "com.example.app.InputType"
             """);
 
@@ -109,16 +109,16 @@ class StepDefinitionParserTest {
     }
 
     @Test
-    void acceptsDelegatedStepWithOptionalExternalMapper() throws IOException {
+    void acceptsDelegatedStepWithOptionalOperatorMapper() throws IOException {
         List<StepDefinition> steps = parse("""
             appName: "Test"
             basePackage: "com.example"
             steps:
               - name: "good-delegated"
-                delegate: "com.example.lib.ExternalService"
+                operator: "com.example.lib.ExternalService"
                 input: "com.example.app.InputType"
                 output: "com.example.app.OutputType"
-                externalMapper: "com.example.app.ExternalMapperImpl"
+                operatorMapper: "com.example.app.ExternalMapperImpl"
             """);
 
         assertEquals(1, steps.size());
@@ -127,6 +127,40 @@ class StepDefinitionParserTest {
         assertEquals(StepKind.DELEGATED, step.kind());
         assertEquals("com.example.lib.ExternalService", step.executionClass().canonicalName());
         assertEquals("com.example.app.ExternalMapperImpl", step.externalMapper().canonicalName());
+    }
+
+    @Test
+    void acceptsLegacyDelegateAndExternalMapperAliases() throws IOException {
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "legacy-delegated"
+                delegate: "com.example.lib.ExternalService"
+                input: "com.example.app.InputType"
+                output: "com.example.app.OutputType"
+                externalMapper: "com.example.app.ExternalMapperImpl"
+            """);
+
+        assertEquals(1, steps.size());
+        StepDefinition step = steps.getFirst();
+        assertEquals(StepKind.DELEGATED, step.kind());
+        assertEquals("com.example.lib.ExternalService", step.executionClass().canonicalName());
+        assertEquals("com.example.app.ExternalMapperImpl", step.externalMapper().canonicalName());
+    }
+
+    @Test
+    void rejectsStepWhenOperatorAndDelegateAliasesAreBothProvided() throws IOException {
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "bad-alias-step"
+                operator: "com.example.lib.ExternalService"
+                delegate: "com.example.lib.ExternalService2"
+            """);
+
+        assertTrue(steps.isEmpty());
     }
 
     @Test

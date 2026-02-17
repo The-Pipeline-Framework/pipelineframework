@@ -111,22 +111,40 @@ public @interface PipelineStep {
     ThreadSafety threadSafety() default ThreadSafety.SAFE;
 
     /**
-     * Specifies the delegate service class that provides the actual execution implementation.
+     * Specifies the operator service class that provides the actual execution implementation.
      * When present, the annotated class becomes a client-only step that delegates to the specified service.
      * When absent (defaults to Void.class), the annotated class is treated as a traditional internal step.
-     * {@link #externalMapper()} is only considered when {@code delegate() != Void.class}.
+     * {@link #operatorMapper()} and {@link #externalMapper()} are only considered when
+     * {@code operator() != Void.class || delegate() != Void.class}.
+     *
+     * @return the operator service class, or Void.class if this is an internal step
+     */
+    Class<?> operator() default Void.class;
+
+    /**
+     * Legacy alias for {@link #operator()}.
      *
      * @return the delegate service class, or Void.class if this is an internal step
      */
+    @Deprecated
     Class<?> delegate() default Void.class;
 
     /**
-     * Specifies the external mapper class that maps between the step's domain types and the delegate service's entity types.
-     * This is used when the step's input/output types differ from the delegate service's entity types, and it is ignored when
-     * {@code delegate() == Void.class}. For delegated steps ({@code delegate() != Void.class}), this mapper is required whenever
-     * application step types differ from delegate operator types; otherwise it may remain {@code Void.class}.
+     * Specifies the operator mapper class that maps between step domain types and operator entity types.
+     * This is used when step input/output types differ from the delegated operator's types, and is ignored when no
+     * delegated operator is configured ({@code operator() == Void.class && delegate() == Void.class}). For delegated
+     * steps, this mapper is required whenever application step types differ from delegated operator types; otherwise
+     * it may remain {@code Void.class}.
      *
-     * @return the external mapper class, or Void.class if no external mapping is needed
+     * @return the operator mapper class, or Void.class if no operator mapping is needed
      */
+    Class<?> operatorMapper() default Void.class;
+
+    /**
+     * Legacy alias for {@link #operatorMapper()}.
+     *
+     * @return the operator mapper class, or Void.class if no operator mapping is needed
+     */
+    @Deprecated
     Class<?> externalMapper() default Void.class;
 }

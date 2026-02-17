@@ -275,7 +275,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             if (mapperElement == null) {
                 ctx.getProcessingEnv().getMessager().printMessage(
                     javax.tools.Diagnostic.Kind.ERROR,
-                    "External mapper class '" + stepDef.externalMapper().canonicalName()
+                    "Operator mapper class '" + stepDef.externalMapper().canonicalName()
                         + "' not found for step '" + stepDef.name() + "'");
                 return null;
             }
@@ -315,7 +315,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         if (ctx.getRoundEnv() == null) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
-                "Step '" + stepName + "' requires an external mapper, but no source candidates were available for inference.");
+                "Step '" + stepName + "' requires an operator mapper, but no source candidates were available for inference.");
             return null;
         }
 
@@ -343,7 +343,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         if (matchingCandidates.isEmpty()) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
-                "Step '" + stepName + "' requires an external mapper for types ["
+                "Step '" + stepName + "' requires an operator mapper for types ["
                     + applicationInputType + " -> " + operatorInputType + ", "
                     + operatorOutputType + " -> " + applicationOutputType
                     + "], but no matching ExternalMapper implementation was found.");
@@ -357,7 +357,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 .collect(Collectors.joining(", "));
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
-                "Step '" + stepName + "' has ambiguous external mapper inference. Matching candidates: " + candidates);
+                "Step '" + stepName + "' has ambiguous operator mapper inference. Matching candidates: " + candidates);
             return null;
         }
 
@@ -402,7 +402,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             if (reportErrors) {
                 ctx.getProcessingEnv().getMessager().printMessage(
                     javax.tools.Diagnostic.Kind.ERROR,
-                    "External mapper '" + mapperElement.getQualifiedName()
+                    "Operator mapper '" + mapperElement.getQualifiedName()
                         + "' must implement org.pipelineframework.mapper.ExternalMapper<IApp, ILib, OApp, OLib>"
                         + " for step '" + stepName + "'");
             }
@@ -422,7 +422,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         if (!matches && reportErrors) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
-                "External mapper '" + mapperElement.getQualifiedName() + "' has incompatible type parameters for step '"
+                "Operator mapper '" + mapperElement.getQualifiedName() + "' has incompatible type parameters for step '"
                     + stepName + "'. Expected ExternalMapper<"
                     + applicationInputType + ", " + operatorInputType + ", "
                     + applicationOutputType + ", " + operatorOutputType + ">.");

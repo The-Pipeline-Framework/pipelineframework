@@ -38,7 +38,7 @@ import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
 
 /**
  * Renderer for external adapter implementations based on PipelineStepModel.
- * The external adapter handles delegation to operator services and manages external mapping.
+ * The external adapter handles delegation to operator services and manages operator mapping.
  *
  * @param target The generation target for this renderer
  */
@@ -75,7 +75,7 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
      *
      * The produced TypeSpec is a public class annotated for CDI and Quarkus, implements the appropriate
      * reactive service interface based on the delegate service type, and provides the appropriate process method
-     * that handles external mapping and delegation.
+     * that handles operator mapping and delegation.
      *
      * @param binding the external adapter binding describing the service, model, and generated-class naming
      * @param ctx the generation context supplying the processing environment and deployment role
@@ -124,7 +124,7 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
                 .build();
         externalAdapterBuilder.addField(delegateServiceField);
 
-        // Add field for the external mapper if specified (package-private, not public)
+        // Add field for the operator mapper if specified (package-private, not public)
         if (externalMapperType != null) {
             FieldSpec externalMapperField = FieldSpec.builder(
                             externalMapperType,
@@ -189,9 +189,9 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
                 .returns(returnType)
                 .addParameter(paramType, "input");
 
-        // Build the method body based on whether external mapping is needed
+        // Build the method body based on whether operator mapping is needed
         if (hasExternalMapper) {
-            // If we have an external mapper, we need to map between application and operator types
+            // If we have an operator mapper, we need to map between application and operator types
             if (reactiveServiceInterface.equals(REACTIVE_SERVICE)) {
                 // For unary operations: Uni<I> -> Uni<O>
                 methodBuilder.addStatement("return delegateService.process(externalMapper.toOperatorInput(input)).map(libOutput -> externalMapper.toApplicationOutput(libOutput))");
@@ -203,11 +203,11 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
                 // For streaming operations returning Multi: Multi<I> -> Multi<O>
                 addStreamingMapperLogic(methodBuilder);
             } else {
-                // Default case - no external mapping
+                // Default case - no operator mapping
                 methodBuilder.addStatement("return delegateService.process(input)");
             }
         } else {
-            // If no external mapper, just delegate directly
+            // If no operator mapper, just delegate directly
             methodBuilder.addStatement("return delegateService.process(input)");
         }
 

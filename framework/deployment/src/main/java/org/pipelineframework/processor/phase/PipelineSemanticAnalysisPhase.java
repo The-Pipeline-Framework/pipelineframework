@@ -450,17 +450,17 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                         model.serviceName() + "'");
                 }
 
-                // If external mapper is specified, validate it implements ExternalMapper
+                // If operator mapper is specified, validate it implements ExternalMapper
                 if (model.externalMapper() != null) {
                     var externalMapperElement = elementUtils.getTypeElement(model.externalMapper().canonicalName());
                     if (externalMapperElement == null) {
                         messager.printMessage(
                             Diagnostic.Kind.ERROR,
-                            "External mapper '" + model.externalMapper().canonicalName() + "' not found for step '" + model.serviceName() + "'");
+                            "Operator mapper '" + model.externalMapper().canonicalName() + "' not found for step '" + model.serviceName() + "'");
                         continue;
                     }
 
-                    // Check if the external mapper implements ExternalMapper interface
+                    // Check if the operator mapper implements ExternalMapper interface
                     boolean implementsExternalMapper = false;
                     var externalMapperInterfaceElement = elementUtils.getTypeElement("org.pipelineframework.mapper.ExternalMapper");
                     if (externalMapperInterfaceElement != null && typeUtils.isAssignable(externalMapperElement.asType(), externalMapperInterfaceElement.asType())) {
@@ -470,7 +470,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                     if (!implementsExternalMapper) {
                         messager.printMessage(
                             Diagnostic.Kind.ERROR,
-                            "External mapper '" + model.externalMapper().canonicalName() + 
+                            "Operator mapper '" + model.externalMapper().canonicalName() + 
                             "' must implement org.pipelineframework.mapper.ExternalMapper for step '" + 
                             model.serviceName() + "'");
                     }
@@ -495,7 +495,7 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                         messager.printMessage(
                             Diagnostic.Kind.ERROR,
                             "Delegated step '" + model.serviceName()
-                                + "' requires an external mapper because YAML types ["
+                                + "' requires an operator mapper because YAML types ["
                                 + stepInputType + " -> " + stepOutputType
                                 + "] differ from delegate service types ["
                                 + delegateInputType + " -> " + delegateOutputType + "].");

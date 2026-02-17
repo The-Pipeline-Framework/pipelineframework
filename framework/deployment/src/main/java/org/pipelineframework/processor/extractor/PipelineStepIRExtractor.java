@@ -85,7 +85,7 @@ public class PipelineStepIRExtractor {
 
         ClassName cacheKeyGenerator = resolveCacheKeyGenerator(annotationMirror);
         
-        // Extract delegate and externalMapper class names
+        // Extract delegated operator and mapper class names
         ClassName delegateService = resolveDelegateService(annotationMirror);
         ClassName externalMapper = resolveExternalMapper(annotationMirror);
 
@@ -243,10 +243,26 @@ public class PipelineStepIRExtractor {
     }
 
     private ClassName resolveDelegateService(AnnotationMirror annotationMirror) {
-        return resolveTypeClass(annotationMirror, "delegate");
+        ClassName operator = resolveTypeClass(annotationMirror, "operator");
+        ClassName delegate = resolveTypeClass(annotationMirror, "delegate");
+        if (operator != null && delegate != null && !operator.equals(delegate)) {
+            processingEnv.getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "@PipelineStep declares both operator() and delegate() with different values; use only one alias.");
+            return operator;
+        }
+        return operator != null ? operator : delegate;
     }
 
     private ClassName resolveExternalMapper(AnnotationMirror annotationMirror) {
-        return resolveTypeClass(annotationMirror, "externalMapper");
+        ClassName operatorMapper = resolveTypeClass(annotationMirror, "operatorMapper");
+        ClassName externalMapper = resolveTypeClass(annotationMirror, "externalMapper");
+        if (operatorMapper != null && externalMapper != null && !operatorMapper.equals(externalMapper)) {
+            processingEnv.getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "@PipelineStep declares both operatorMapper() and externalMapper() with different values; use only one alias.");
+            return operatorMapper;
+        }
+        return operatorMapper != null ? operatorMapper : externalMapper;
     }
 }

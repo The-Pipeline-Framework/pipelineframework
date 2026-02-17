@@ -53,7 +53,7 @@ class YamlDrivenStepGenerationTest {
             transport: "LOCAL"
             steps:
               - name: "embed"
-                delegate: "com.example.lib.EmbeddingService"
+                operator: "com.example.lib.EmbeddingService"
             """);
 
         Path delegateSource = writeSource("EmbeddingService.java", """
@@ -102,10 +102,10 @@ class YamlDrivenStepGenerationTest {
             transport: "LOCAL"
             steps:
               - name: "embed"
-                delegate: "com.example.lib.EmbeddingService"
+                operator: "com.example.lib.EmbeddingService"
                 input: "com.example.app.TextChunk"
                 output: "com.example.app.Vector"
-                externalMapper: "com.example.app.EmbeddingMapper"
+                operatorMapper: "com.example.app.EmbeddingMapper"
             """);
 
         Path triggerSource = writeSource("TriggerStep.java", """
@@ -183,8 +183,8 @@ class YamlDrivenStepGenerationTest {
         String errors = result.errorSummary();
         assertTrue(errors.contains("Delegate service 'com.example.lib.EmbeddingService'"),
             "Expected delegated-service validation diagnostic: " + errors);
-        assertTrue(errors.contains("External mapper 'com.example.app.EmbeddingMapper'"),
-            "Expected external-mapper validation diagnostic: " + errors);
+        assertTrue(errors.contains("Operator mapper 'com.example.app.EmbeddingMapper'"),
+            "Expected operator-mapper validation diagnostic: " + errors);
     }
 
     @Test
@@ -288,7 +288,7 @@ class YamlDrivenStepGenerationTest {
             transport: "LOCAL"
             steps:
               - name: "embed"
-                delegate: "com.example.lib.EmbeddingService3"
+                operator: "com.example.lib.EmbeddingService3"
                 input: "com.example.app.TextChunk3"
                 output: "com.example.app.Vector3"
             """);

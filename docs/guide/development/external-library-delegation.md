@@ -11,7 +11,7 @@ The Pipeline Framework (TPF) uses YAML-driven pipeline configuration, where step
 In the new architecture:
 - YAML configuration drives step generation
 - @PipelineStep annotations only mark internal execution services
-- External delegated services ("operator") require **zero user-written Java glue classes when using operator types directly (Option 1)**
+- External operator services require **zero user-written Java glue classes when using operator types directly (Option 1)**
 - When using domain types (Option 2), you need to provide an `ExternalMapper` implementation
 
 ### Two Kinds of Steps
@@ -28,7 +28,7 @@ When delegation is used, there are four conceptual layers:
 ```
 Application Domain Types
         ↓
-External Mapper (App-provided)
+Operator Mapper (App-provided)
         ↓
 Operator Entity/DTO Types
         ↓
@@ -56,10 +56,10 @@ To define a delegated step that references an external operator service:
 ```yaml
 steps:
   - name: embed
-    delegate: com.example.ai.sdk.service.EmbeddingService
+    operator: com.example.ai.sdk.service.EmbeddingService
     input: com.app.domain.TextChunk
     output: com.app.domain.Vector
-    externalMapper: com.app.mapper.ChunkVectorMapper
+    operatorMapper: com.app.mapper.ChunkVectorMapper
 ```
 
 ### Full Example
@@ -78,14 +78,14 @@ steps:
     
   # Delegated step referencing an external operator service
   - name: embed-text
-    delegate: com.example.ai.sdk.service.EmbeddingService
+    operator: com.example.ai.sdk.service.EmbeddingService
     input: com.app.domain.TextChunk
     output: com.app.domain.Embedding
-    externalMapper: com.app.mapper.TextEmbeddingMapper
+    operatorMapper: com.app.mapper.TextEmbeddingMapper
     
-  # Delegated step without external mapper (uses operator types directly)
+  # Delegated step without operator mapper (uses operator types directly)
   - name: send-email
-    delegate: com.example.email.service.EmailService
+    operator: com.example.email.service.EmailService
     input: com.example.email.dto.EmailRequest
     output: com.example.email.dto.EmailResponse
 ```
@@ -120,7 +120,7 @@ When you want to use the operator's types directly without transformation:
 ```yaml
 steps:
   - name: send-email
-    delegate: com.example.email.service.EmailService
+    operator: com.example.email.service.EmailService
     input: com.example.email.dto.EmailRequest
     output: com.example.email.dto.EmailResponse
 ```
@@ -131,18 +131,18 @@ Requirements:
 
 ### Option 2 — Use Domain Types
 
-When you want to abstract away operator types using an external mapper:
+When you want to abstract away operator types using an operator mapper:
 
 ```yaml
 steps:
   - name: embed-text
-    delegate: com.example.ai.sdk.service.EmbeddingService
+    operator: com.example.ai.sdk.service.EmbeddingService
     input: com.app.domain.TextChunk
     output: com.app.domain.Embedding
-    externalMapper: com.app.mapper.TextEmbeddingMapper
+    operatorMapper: com.app.mapper.TextEmbeddingMapper
 ```
 
-Where the external mapper is defined as:
+Where the operator mapper is defined as:
 
 ```java
 public class TextEmbeddingMapper implements ExternalMapper<
@@ -224,9 +224,9 @@ At compile time, TPF validates:
 |----------|----------|
 | YAML references internal service without annotation | Fail |
 | YAML references annotated service | OK |
-| YAML references delegate not implementing ReactiveService | Fail |
-| Delegate without transport mappers | Fails in strict validation mode and may be a warning in relaxed mode, depending on processor settings and mapper discovery |
-| Missing externalMapper when types differ | Fail |
+| YAML references operator not implementing ReactiveService | Fail |
+| Operator without transport mappers | Fails in strict validation mode and may be a warning in relaxed mode, depending on processor settings and mapper discovery |
+| Missing operatorMapper when types differ | Fail |
 | Annotated service not referenced in YAML | No generation (warning if `pipeline.warnUnreferencedSteps=true`) |
 
 ## Processing Options
@@ -311,16 +311,16 @@ steps:
   - name: validate-payment
     service: com.app.payment.ValidatePaymentService
     
-  # Delegated step to external fraud detection service (using domain types with external mapper)
+  # Delegated step to external fraud detection service (using domain types with operator mapper)
   - name: detect-fraud
-    delegate: com.fraud.detection.FraudDetectionService
+    operator: com.fraud.detection.FraudDetectionService
     input: com.app.domain.PaymentRequest
     output: com.app.domain.FraudCheckResult
-    externalMapper: com.app.mapper.PaymentFraudMapper
+    operatorMapper: com.app.mapper.PaymentFraudMapper
     
   # Delegated step to external notification service (using operator types directly)
   - name: send-notification
-    delegate: com.notification.service.NotificationService
+    operator: com.notification.service.NotificationService
     input: com.notification.dto.NotificationRequest
     output: com.notification.dto.NotificationResponse
 ```

@@ -44,9 +44,11 @@ public class StepDefinitionParser {
     private static final Set<String> SUPPORTED_STEP_KEYS = Set.of(
         "name",
         "service",
+        "operator",
         "delegate",
         "input",
         "output",
+        "operatorMapper",
         "externalMapper",
         "cardinality",
         "inputTypeName",
@@ -127,12 +129,26 @@ public class StepDefinitionParser {
         }
         reportUnknownStepKeys(name, stepData);
 
-        // Check if it's a delegated step (has 'delegate' field) or internal step (has 'service' field)
+        // Check if it's an operator step (has 'operator'/'delegate' field) or internal step (has 'service' field)
+        String operatorClassName = getStringValue(stepData, "operator");
         String delegateClassName = getStringValue(stepData, "delegate");
         String serviceClassName = getStringValue(stepData, "service");
+        String delegatedClassName = null;
 
-        if (!isBlank(delegateClassName) && !isBlank(serviceClassName)) {
-            String message = "Skipping step '" + name + "': 'service' and 'delegate' are mutually exclusive";
+        if (!isBlank(operatorClassName) && !isBlank(delegateClassName)) {
+            String message = "Skipping step '" + name + "': 'operator' and 'delegate' are aliases and are mutually exclusive";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
+        if (!isBlank(operatorClassName)) {
+            delegatedClassName = operatorClassName;
+        } else if (!isBlank(delegateClassName)) {
+            delegatedClassName = delegateClassName;
+        }
+
+        if (!isBlank(delegatedClassName) && !isBlank(serviceClassName)) {
+            String message = "Skipping step '" + name + "': 'service' and delegated execution ('operator'/'delegate') are mutually exclusive";
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
             return null;
@@ -141,9 +157,9 @@ public class StepDefinitionParser {
         StepKind kind;
         String executionClassName;
 
-        if (!isBlank(delegateClassName)) {
+        if (!isBlank(delegatedClassName)) {
             kind = StepKind.DELEGATED;
-            executionClassName = delegateClassName;
+            executionClassName = delegatedClassName;
         } else if (!isBlank(serviceClassName)) {
             kind = StepKind.INTERNAL;
             executionClassName = serviceClassName;
@@ -170,21 +186,35 @@ public class StepDefinitionParser {
         ClassName inputType = parseOptionalClassName(inputTypeName, name, "input");
         ClassName outputType = parseOptionalClassName(outputTypeName, name, "output");
 
-        // Parse external mapper if present
+        // Parse operator mapper / legacy external mapper if present
+        String operatorMapperName = getStringValue(stepData, "operatorMapper");
         String externalMapperName = getStringValue(stepData, "externalMapper");
+        String effectiveMapperName = null;
+        if (!isBlank(operatorMapperName) && !isBlank(externalMapperName)) {
+            String message = "Skipping step '" + name + "': 'operatorMapper' and 'externalMapper' are aliases and are mutually exclusive";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
+        if (!isBlank(operatorMapperName)) {
+            effectiveMapperName = operatorMapperName;
+        } else if (!isBlank(externalMapperName)) {
+            effectiveMapperName = externalMapperName;
+        }
+
         ClassName externalMapper = null;
-        if (!isBlank(externalMapperName)) {
-            externalMapper = parseClassName(externalMapperName);
+        if (!isBlank(effectiveMapperName)) {
+            externalMapper = parseClassName(effectiveMapperName);
             if (externalMapper == null) {
-                LOG.warnf("Skipping step '%s': invalid external mapper class name '%s'", name, externalMapperName);
+                LOG.warnf("Skipping step '%s': invalid operator mapper class name '%s'", name, effectiveMapperName);
                 return null;
             }
         }
 
         if (kind == StepKind.INTERNAL) {
             if (externalMapper != null) {
-                String message = "Ignoring 'externalMapper' on internal step '" + name
-                    + "'; this field is only used for delegated steps";
+                String message = "Ignoring 'operatorMapper'/'externalMapper' on internal step '" + name
+                    + "'; mapper override is only used for delegated steps";
                 LOG.warn(message);
                 report(Diagnostic.Kind.WARNING, message);
                 externalMapper = null;
