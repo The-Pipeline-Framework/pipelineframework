@@ -58,14 +58,15 @@ public class ProcessTokenizeContentService
       return Multi.createFrom().empty();
     }
     return Multi.createFrom()
-        .iterable(tokenBatches)
+        .range(0, tokenBatches.size())
         .onItem()
-        .transform(tokens -> toTokenBatch(input, tokens, now));
+        .transform(batchIndex -> toTokenBatch(input, tokenBatches.get(batchIndex), now, batchIndex));
   }
 
-  private TokenBatch toTokenBatch(ParsedDocument input, String tokens, Instant tokenizedAt) {
+  private TokenBatch toTokenBatch(ParsedDocument input, String tokens, Instant tokenizedAt, int batchIndex) {
     TokenBatch output = new TokenBatch();
     output.docId = input.docId;
+    output.batchIndex = batchIndex;
     output.tokens = tokens;
     output.tokensHash = HashingUtils.sha256Base64Url(tokens);
     output.contentHash = input.contentHash;
