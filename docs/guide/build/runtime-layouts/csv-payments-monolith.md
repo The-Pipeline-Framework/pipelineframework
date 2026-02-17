@@ -13,6 +13,20 @@ This page documents the current monolith topology in `examples/csv-payments`.
 
 - Service source code remains in service modules.
 - `monolith-svc` aggregates those sources during the monolith build and packages the runnable runtime.
+- `monolith-svc` also merges generated orchestrator client-step sources and pipeline metadata needed at runtime.
+
+## Packaging details (important)
+
+`monolith-svc` uses the same merge pattern as other csv-payments modules:
+
+- `maven-resources-plugin` merges role outputs from `target/classes-pipeline/*` into `target/classes` before Quarkus packaging.
+- Monolith additionally copies orchestrator pipeline metadata into `target/classes/META-INF/pipeline`:
+  - `order.json`
+  - `telemetry.json`
+  - `orchestrator-clients.properties`
+
+Without these metadata files, monolith startup can fail with errors such as:
+`Pipeline order metadata not found. Ensure META-INF/pipeline/order.json is generated at build time.`
 
 ## Build the monolith runtime
 
@@ -51,6 +65,8 @@ Monolith support is complete only when CI runs both:
 
 - `Expected executable jar at ../monolith-svc/target/quarkus-app/quarkus-run.jar`:
   monolith build not run before test.
+- `Pipeline order metadata not found...`:
+  monolith packaging did not include orchestrator pipeline metadata in `META-INF/pipeline`.
 - Missing tables (for example `relation ... does not exist`):
   launched runtime is not creating schema in the test DB.
 - gRPC connectivity errors in monolith mode:
