@@ -288,8 +288,9 @@ public class ProcessPaymentService implements ReactiveService<PaymentRecord, Pay
 ```
 
 **New approach**:
-1. Define the service class (with or without @PipelineStep annotation)
-2. Reference it in pipeline.yaml:
+1. Internal steps referenced through `service` in `pipeline.yaml` must point to classes annotated with `@PipelineStep`.
+2. Delegated steps referenced through `operator` (legacy: `delegate`) in `pipeline.yaml` must point to operator classes that are **not** annotated with `@PipelineStep`.
+3. Reference internal services via `service` and delegated operators via `operator`:
 
 ```yaml
 steps:

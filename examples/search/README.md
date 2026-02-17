@@ -80,8 +80,9 @@ Bridge mapping exercised by targeted tests:
 
 Cardinality guarantees covered by tests:
 
-- `SearchPipelineEndToEndIT#tokenizeFanOutAndIndexFanInPersistPerDocumentCardinality` verifies one `docId` flows
-  through `RawDocument`/`ParsedDocument`, persists a `TokenBatch` row, then merges into exactly one `IndexAck`.
+- `SearchPipelineEndToEndIT#tokenizeAndIndexPersistFanoutBatchesPerDocId` verifies one `docId` flows
+  through `RawDocument`/`ParsedDocument`, fans out into multiple persisted `TokenBatch` rows (`tokenBatchCount`),
+  then merges into exactly one `IndexAck`.
 - `IndexAckResourceTest#testIndexAckRejectsMixedDocIdsInSingleBatch` verifies fan-in rejects mixed `docId` input.
 
 ### Handler Selection For Modules With Multiple Generated Handlers

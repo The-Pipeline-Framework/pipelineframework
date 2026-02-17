@@ -189,7 +189,8 @@
                   "required": ["input"]
                 }
               }
-            ]
+            ],
+            "additionalProperties": false
           }
         ]
       }

@@ -77,8 +77,8 @@ Developers only need to:
 
 1. Define steps in `pipeline.yaml` (`service` for internal, `operator` for delegated; legacy alias: `delegate`)
 2. For internal services, annotate the execution class with `@PipelineStep`
-2. Create MapStruct-based mapper interfaces that extend the `Mapper<Grpc, Dto, Domain>` interface
-3. Implement the service interface (`ReactiveService`, `ReactiveStreamingService`, `ReactiveStreamingClientService`, or `ReactiveBidirectionalStreamingService`)
+3. Create MapStruct-based mapper interfaces that extend the `Mapper<Grpc, Dto, Domain>` interface
+4. Implement the service interface (`ReactiveService`, `ReactiveStreamingService`, `ReactiveStreamingClientService`, or `ReactiveBidirectionalStreamingService`)
 
 Parallelism is configured at the pipeline level (`pipeline.parallelism` and `pipeline.max-concurrency`).
 The `ordering` and `threadSafety` values on `@PipelineStep` are propagated to the generated client step,
