@@ -1,6 +1,7 @@
 package org.pipelineframework.search.common.mapper;
 
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
 import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.search.common.domain.TokenBatch;
@@ -20,6 +21,7 @@ public interface TokenBatchMapper extends org.pipelineframework.mapper.Mapper<or
   TokenBatchDto toDto(TokenBatch entity);
 
   @Override
+  @Mapping(target = "batchIndex", ignore = true)
   TokenBatch fromDto(TokenBatchDto dto);
 
   // DTO ↔ gRPC
