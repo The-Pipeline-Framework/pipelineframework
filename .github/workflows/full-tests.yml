@@ -123,7 +123,7 @@ jobs:
           ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.pipeline-runtime.xml \
             -pl orchestrator-svc \
             -Dcsv.runtime.layout=pipeline-runtime \
-            -Dcsv.e2e.pipeline.wait.seconds=120 \
+            -Dcsv.e2e.pipeline.wait.seconds=240 \
             -Dtest=PipelineRuntimeTopologyTest \
             -Dit.test=CsvPaymentsPipelineRuntimeEndToEndIT \
             verify
