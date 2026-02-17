@@ -36,7 +36,7 @@ import org.junit.jupiter.api.io.TempDir;
  * Basic tests for the operator step delegation functionality.
  * These tests verify that the annotation processor handles delegation annotations correctly.
  */
-class OperatorDelegationTest {
+class ExternalLibraryDelegationTest {
 
     @TempDir
     Path tempDir;
@@ -91,6 +91,7 @@ class OperatorDelegationTest {
                     "-proc:only",
                     "-s", generatedDir.toString(),
                     "-d", classesDir.toString(),
+                    "-classpath", System.getProperty("java.class.path"),
                     "-processor", "org.pipelineframework.processor.PipelineStepProcessor"),
                 null,
                 fileManager.getJavaFileObjects(sourceFile)

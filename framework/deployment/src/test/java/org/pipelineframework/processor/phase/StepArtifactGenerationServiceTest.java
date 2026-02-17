@@ -77,7 +77,15 @@ class StepArtifactGenerationServiceTest {
             .sideEffect(false)
             .build();
 
-        assertDoesNotThrow(() -> service.generateArtifactsForModel(
+        assertDoesNotThrow(() -> invokeGenerateArtifacts(ctx, model));
+
+        verify(messager).printMessage(
+            eq(javax.tools.Diagnostic.Kind.WARNING),
+            contains("Skipping gRPC client step generation"));
+    }
+
+    private void invokeGenerateArtifacts(PipelineCompilationContext ctx, PipelineStepModel model) throws Exception {
+        service.generateArtifactsForModel(
             ctx,
             model,
             null,
@@ -94,10 +102,6 @@ class StepArtifactGenerationServiceTest {
             mock(org.pipelineframework.processor.renderer.RestClientStepRenderer.class),
             mock(org.pipelineframework.processor.renderer.RestResourceRenderer.class),
             mock(org.pipelineframework.processor.renderer.RestFunctionHandlerRenderer.class)
-        ));
-
-        verify(messager).printMessage(
-            eq(javax.tools.Diagnostic.Kind.WARNING),
-            contains("Skipping gRPC client step generation"));
+        );
     }
 }

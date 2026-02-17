@@ -25,7 +25,7 @@ There are two kinds of steps that can be defined in YAML:
 
 When delegation is used, there are four conceptual layers:
 
-```
+```text
 Application Domain Types
         ↓
 Operator Mapper (App-provided)
@@ -111,7 +111,7 @@ public class ProcessPaymentService implements ReactiveService<PaymentRecord, Pay
 }
 ```
 
-## Using operator Delegation
+## Using Operator Delegation
 
 ### Option 1 — Use Operator Types Directly
 
@@ -262,7 +262,8 @@ Example Maven configuration:
 ## ExternalMapper Interface
 
 The `ExternalMapper` interface is located in:
-```
+
+```text
 org.pipelineframework.mapper.ExternalMapper
 ```
 

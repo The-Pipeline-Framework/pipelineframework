@@ -180,7 +180,11 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
                 returnType = ParameterizedTypeName.get(ClassName.get(Uni.class), applicationOutputType);
                 paramType = applicationInputType;
             }
-            case UNARY_STREAMING, STREAMING_STREAMING -> {
+            case UNARY_STREAMING -> {
+                returnType = ParameterizedTypeName.get(ClassName.get(Multi.class), applicationOutputType);
+                paramType = applicationInputType;
+            }
+            case STREAMING_STREAMING -> {
                 returnType = ParameterizedTypeName.get(ClassName.get(Multi.class), applicationOutputType);
                 paramType = ParameterizedTypeName.get(ClassName.get(Multi.class), applicationInputType);
             }
@@ -203,12 +207,14 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
             if (streamingShape == StreamingShape.UNARY_UNARY) {
                 // For unary operations: Uni<I> -> Uni<O>
                 methodBuilder.addStatement("return delegateService.process(externalMapper.toOperatorInput(input)).map(libOutput -> externalMapper.toApplicationOutput(libOutput))");
+            } else if (streamingShape == StreamingShape.UNARY_STREAMING) {
+                // For server-streaming operations: I -> Multi<O>
+                methodBuilder.addStatement("return delegateService.process(externalMapper.toOperatorInput(input)).map(libOutput -> externalMapper.toApplicationOutput(libOutput))");
             } else if (streamingShape == StreamingShape.STREAMING_UNARY) {
                 // For client-streaming operations: Multi<I> -> Uni<O>
                 addClientStreamingMapperLogic(methodBuilder);
-            } else if (streamingShape == StreamingShape.UNARY_STREAMING
-                    || streamingShape == StreamingShape.STREAMING_STREAMING) {
-                // For streaming operations returning Multi: Multi<I> -> Multi<O>
+            } else if (streamingShape == StreamingShape.STREAMING_STREAMING) {
+                // For bidirectional streaming operations: Multi<I> -> Multi<O>
                 addStreamingMapperLogic(methodBuilder);
             } else {
                 // Default case - no operator mapping

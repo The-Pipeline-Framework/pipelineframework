@@ -164,7 +164,14 @@ public class PipelineCompiler extends AbstractProcessingTool {
             baseDir = processingEnv.getOptions().get("pipeline.generatedSourcesDir");
         }
         if (baseDir == null || baseDir.isBlank()) {
-            baseDir = System.getProperty("user.dir");
+            baseDir = processingEnv.getOptions().get("project.basedir");
+        }
+        if (baseDir == null || baseDir.isBlank()) {
+            baseDir = System.getProperty("maven.multiModuleProjectDirectory");
+        }
+        // Avoid user.dir fallback: it is unreliable under IDE/daemon/multi-module builds.
+        if (baseDir == null || baseDir.isBlank()) {
+            return false;
         }
         Path basePath = Path.of(baseDir);
 

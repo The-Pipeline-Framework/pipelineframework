@@ -32,7 +32,6 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         "org.pipelineframework.service.ReactiveService",
         "org.pipelineframework.service.ReactiveStreamingService",
         "org.pipelineframework.service.ReactiveStreamingClientService",
-        "org.pipelineframework.service.ReactiveClientStreamingService",
         "org.pipelineframework.service.ReactiveBidirectionalStreamingService");
 
     /**
@@ -437,11 +436,11 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
             TypeElement serviceClass = (TypeElement) annotatedElement;
             String serviceClassName = serviceClass.getQualifiedName().toString();
 
-            // If this annotated service is not referenced in YAML, emit a note (not a warning)
+            // If this annotated service is not referenced in YAML, emit a warning when enabled
             if (!yamlReferencedServices.contains(serviceClassName)) {
                 if (warnUnreferenced) {
                     messager.printMessage(
-                        Diagnostic.Kind.NOTE,
+                        Diagnostic.Kind.WARNING,
                         "Service '" + serviceClassName + "' is annotated with @PipelineStep but not referenced in pipeline YAML. No step will be generated for it.");
                 }
             }
@@ -513,12 +512,12 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                     var delegateInputDomainType = delegateSignature.inputType();
                     var delegateOutputDomainType = delegateSignature.outputType();
 
-                    boolean inputDiffers = !Objects.equals(stepInputDomainType, delegateInputDomainType);
-                    boolean outputDiffers = !Objects.equals(stepOutputDomainType, delegateOutputDomainType);
                     String stepInputType = stepInputDomainType == null ? "absent" : stepInputDomainType.toString();
                     String stepOutputType = stepOutputDomainType == null ? "absent" : stepOutputDomainType.toString();
                     String delegateInputType = delegateInputDomainType == null ? "absent" : delegateInputDomainType.toString();
                     String delegateOutputType = delegateOutputDomainType == null ? "absent" : delegateOutputDomainType.toString();
+                    boolean inputDiffers = !Objects.equals(stepInputType, delegateInputType);
+                    boolean outputDiffers = !Objects.equals(stepOutputType, delegateOutputType);
                     if (inputDiffers || outputDiffers) {
                         messager.printMessage(
                             Diagnostic.Kind.ERROR,

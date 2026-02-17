@@ -160,9 +160,13 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                         + ExternalAdapterRenderer.getExternalAdapterClassName(model);
                     roleMetadataGenerator.recordClassWithRole(externalAdapterClassName, adapterRole.name());
                 } catch (IOException e) {
-                    ctx.getProcessingEnv().getMessager().printMessage(
-                        javax.tools.Diagnostic.Kind.ERROR,
-                        "Failed to generate external adapter for '" + model.serviceName() + "': " + e.getMessage());
+                    if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
+                        ctx.getProcessingEnv().getMessager().printMessage(
+                            javax.tools.Diagnostic.Kind.ERROR,
+                            "Failed to generate external adapter for '" + model.serviceName() + "': " + e.getMessage());
+                    } else {
+                        LOG.errorf(e, "Failed to generate external adapter for '%s': %s", model.serviceName(), e.getMessage());
+                    }
                 }
                 continue;
             }

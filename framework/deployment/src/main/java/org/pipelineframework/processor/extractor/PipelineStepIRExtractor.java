@@ -86,8 +86,8 @@ public class PipelineStepIRExtractor {
         ClassName cacheKeyGenerator = resolveCacheKeyGenerator(annotationMirror);
         
         // Extract delegated operator and mapper class names
-        ClassName delegateService = resolveDelegateService(annotationMirror);
-        ClassName externalMapper = resolveExternalMapper(annotationMirror);
+        ClassName delegateService = resolveDelegateService(annotationMirror, serviceClass);
+        ClassName externalMapper = resolveExternalMapper(annotationMirror, serviceClass);
 
         String qualifiedServiceName = serviceClass.getQualifiedName().toString();
         ClassName serviceClassName = null;
@@ -274,13 +274,14 @@ public class PipelineStepIRExtractor {
      * @return the ClassName for the resolved delegate (the `operator` if present, otherwise the `delegate`),
      *         or `null` if neither is specified
      */
-    private ClassName resolveDelegateService(AnnotationMirror annotationMirror) {
+    private ClassName resolveDelegateService(AnnotationMirror annotationMirror, TypeElement serviceClass) {
         ClassName operator = resolveTypeClass(annotationMirror, "operator");
         ClassName delegate = resolveTypeClass(annotationMirror, "delegate");
         if (operator != null && delegate != null && !operator.equals(delegate)) {
             processingEnv.getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
-                "@PipelineStep declares both operator() and delegate() with different values; use only one alias.");
+                "@PipelineStep declares both operator() and delegate() with different values; use only one alias.",
+                serviceClass);
             return operator;
         }
         return operator != null ? operator : delegate;
@@ -295,13 +296,14 @@ public class PipelineStepIRExtractor {
      * @param annotationMirror the PipelineStep annotation mirror to read mapper fields from
      * @return the resolved mapper `ClassName`, or `null` if neither mapper is specified
      */
-    private ClassName resolveExternalMapper(AnnotationMirror annotationMirror) {
+    private ClassName resolveExternalMapper(AnnotationMirror annotationMirror, TypeElement serviceClass) {
         ClassName operatorMapper = resolveTypeClass(annotationMirror, "operatorMapper");
         ClassName externalMapper = resolveTypeClass(annotationMirror, "externalMapper");
         if (operatorMapper != null && externalMapper != null && !operatorMapper.equals(externalMapper)) {
             processingEnv.getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
-                "@PipelineStep declares both operatorMapper() and externalMapper() with different values; use only one alias.");
+                "@PipelineStep declares both operatorMapper() and externalMapper() with different values; use only one alias.",
+                serviceClass);
             return operatorMapper;
         }
         return operatorMapper != null ? operatorMapper : externalMapper;

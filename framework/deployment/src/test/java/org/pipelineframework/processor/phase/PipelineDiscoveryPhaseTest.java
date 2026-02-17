@@ -206,5 +206,6 @@ class PipelineDiscoveryPhaseTest {
         verify(configLoader, times(1)).loadAspects(pipelineConfig, messager);
         verify(configLoader, times(1)).loadTemplateConfig(pipelineConfig, messager);
         verify(configLoader, times(1)).loadStepConfig(eq(pipelineConfig), any(), any(), eq(messager));
+        verify(configLoader, times(1)).loadRuntimeMapping(moduleDir, messager);
     }
 }

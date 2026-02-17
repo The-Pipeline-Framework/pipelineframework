@@ -24,6 +24,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.tools.JavaCompiler;
 import javax.tools.JavaFileObject;
@@ -40,6 +42,7 @@ import org.junit.jupiter.api.io.TempDir;
  * These tests verify that the annotation processor can handle pipeline config options.
  */
 class YamlDrivenStepGenerationTest {
+    private static final Pattern PACKAGE_PATTERN = Pattern.compile("^\\s*package\\s+([\\w\\.]+)\\s*;\\s*$", Pattern.MULTILINE);
 
     @TempDir
     Path tempDir;
@@ -81,6 +84,7 @@ class YamlDrivenStepGenerationTest {
             public class LibraryVector {
             }
             """);
+        Path uniStub = writeUniStub();
         Path markerSource = writeSource("Marker.java", """
             package com.example.app;
 
@@ -88,8 +92,8 @@ class YamlDrivenStepGenerationTest {
             }
             """);
 
-        CompilationResult result = compile(yamlFile, List.of(delegateSource, libInput, libOutput, markerSource));
-        assertTrue(result.success, "Expected delegated YAML step compilation to succeed: " + result.errorSummary());
+        CompilationResult result = compile(yamlFile, List.of(delegateSource, libInput, libOutput, uniStub, markerSource));
+        assertTrue(result.success(), "Expected delegated YAML step compilation to succeed: " + result.errorSummary());
 
     }
 
@@ -179,7 +183,7 @@ class YamlDrivenStepGenerationTest {
             triggerSource, delegateSource, libInput, libOutput, appInput, appOutput,
             externalMapperContract, reactiveServiceContract, mapperSource));
 
-        assertFalse(result.success, "Expected deterministic contract validation failure in this harness");
+        assertFalse(result.success(), "Expected deterministic contract validation failure in this harness");
         String errors = result.errorSummary();
         assertTrue(errors.contains("Delegate service 'com.example.lib.EmbeddingService'"),
             "Expected delegated-service validation diagnostic: " + errors);
@@ -268,13 +272,14 @@ class YamlDrivenStepGenerationTest {
             }
             """);
 
-        CompilationResult result = compile(yamlFile, List.of(paymentService, unusedAnnotatedService, markerSource));
-        assertTrue(result.success, "Expected YAML-referenced internal step compilation to succeed: " + result.errorSummary());
+        Path uniStub = writeUniStub();
+        CompilationResult result = compile(yamlFile, List.of(paymentService, unusedAnnotatedService, uniStub, markerSource));
+        assertTrue(result.success(), "Expected YAML-referenced internal step compilation to succeed: " + result.errorSummary());
 
-        String notes = result.messagesOfKind(Diagnostic.Kind.NOTE).toLowerCase(Locale.ROOT);
-        assertTrue(notes.contains("unusedservice"), "Expected note about unreferenced @PipelineStep service: " + notes);
-        assertTrue(notes.contains("not referenced in pipeline yaml"),
-            "Expected unreferenced-service policy note in diagnostics: " + notes);
+        String warnings = result.messagesOfKind(Diagnostic.Kind.WARNING).toLowerCase(Locale.ROOT);
+        assertTrue(warnings.contains("unusedservice"), "Expected warning about unreferenced @PipelineStep service: " + warnings);
+        assertTrue(warnings.contains("not referenced in pipeline yaml"),
+            "Expected unreferenced-service policy warning in diagnostics: " + warnings);
     }
 
     @Test
@@ -356,6 +361,7 @@ class YamlDrivenStepGenerationTest {
                 TApplicationOutput toApplicationOutput(TOperatorOutput output);
             }
             """);
+        Path uniStub = writeUniStub();
         Path markerSource = writeSource("Marker4.java", """
             package com.example.app;
 
@@ -364,14 +370,39 @@ class YamlDrivenStepGenerationTest {
             """);
 
         CompilationResult result = compile(yamlFile, List.of(
-            delegateSource, libInput, libOutput, appInput, appOutput, inferredMapper, externalMapperContract, markerSource));
-        assertTrue(result.success, "Expected delegated external mapper inference to succeed: " + result.errorSummary());
+            delegateSource, libInput, libOutput, appInput, appOutput, inferredMapper, externalMapperContract, uniStub, markerSource));
+        assertTrue(result.success(), "Expected delegated external mapper inference to succeed: " + result.errorSummary());
     }
 
     private Path writeSource(String fileName, String content) throws IOException {
-        Path file = tempDir.resolve(fileName);
+        Path baseDir = tempDir;
+        Matcher matcher = PACKAGE_PATTERN.matcher(content);
+        if (matcher.find()) {
+            String packageName = matcher.group(1);
+            baseDir = tempDir.resolve(packageName.replace('.', java.io.File.separatorChar));
+        }
+        Path file = baseDir.resolve(fileName);
+        Files.createDirectories(file.getParent());
         Files.writeString(file, content);
         return file;
+    }
+
+    private Path writeUniStub() throws IOException {
+        return writeSource("Uni.java", """
+            package io.smallrye.mutiny;
+
+            public class Uni<T> {
+                public static CreateFrom createFrom() {
+                    return new CreateFrom();
+                }
+
+                public static class CreateFrom {
+                    public <U> Uni<U> item(U value) {
+                        return new Uni<>();
+                    }
+                }
+            }
+            """);
     }
 
     private CompilationResult compile(Path yamlFile, List<Path> sources) throws IOException {
@@ -403,15 +434,7 @@ class YamlDrivenStepGenerationTest {
         }
     }
 
-    private static final class CompilationResult {
-        private final boolean success;
-        private final List<Diagnostic<? extends JavaFileObject>> diagnostics;
-
-        private CompilationResult(boolean success, List<Diagnostic<? extends JavaFileObject>> diagnostics) {
-            this.success = success;
-            this.diagnostics = diagnostics;
-        }
-
+    private record CompilationResult(boolean success, List<Diagnostic<? extends JavaFileObject>> diagnostics) {
         private String errorSummary() {
             List<String> errors = new ArrayList<>();
             for (Diagnostic<? extends JavaFileObject> diagnostic : diagnostics) {

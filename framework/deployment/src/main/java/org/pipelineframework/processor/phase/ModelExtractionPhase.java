@@ -227,7 +227,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Delegate service '" + stepDef.executionClass().canonicalName() +
                 "' must implement one of: ReactiveService, ReactiveStreamingService, "
-                    + "ReactiveStreamingClientService/ReactiveClientStreamingService, "
+                    + "ReactiveStreamingClientService, "
                     + "ReactiveBidirectionalStreamingService for step '" +
                 stepDef.name() + "'");
             return null;

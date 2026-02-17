@@ -206,15 +206,14 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         for (Element element : orchestratorElements) {
             PipelineOrchestrator annotation = resolveOrchestratorAnnotation(element);
             if (annotation != null) {
-                // For now, we'll create a simple model based on the annotation
-                // In a real implementation, this would extract more detailed information
-                String serviceName = "OrchestratorService"; // Default name
+                String serviceName = "OrchestratorService";
                 String servicePackage = "org.pipelineframework.orchestrator.service";
                 if (element instanceof TypeElement typeElement && ctx.getProcessingEnv() != null) {
                     Elements elementUtils = ctx.getProcessingEnv().getElementUtils();
                     if (elementUtils != null) {
                         String packageName = elementUtils.getPackageOf(typeElement).getQualifiedName().toString();
                         servicePackage = packageName + ".orchestrator.service";
+                        serviceName = typeElement.getSimpleName() + "OrchestratorService";
                     }
                 }
                 
@@ -272,27 +271,28 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
             return List.of();
         }
 
-        StepDefinitionParser parser = new StepDefinitionParser((kind, message) -> {
-            if (messager != null) {
-                messager.printMessage(kind, message);
-            }
-        });
+        StepDefinitionParser parser = new StepDefinitionParser((kind, message) ->
+            reportDiagnostic(messager, kind, message));
         try {
             return parser.parseStepDefinitions(configPath.get());
         } catch (IOException e) {
-            if (messager != null) {
-                messager.printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "Failed to parse YAML step definitions from " + configPath.get() + ": " + e.getMessage());
-            }
+            reportDiagnostic(
+                messager,
+                Diagnostic.Kind.ERROR,
+                "Failed to parse YAML step definitions from " + configPath.get() + ": " + e.getMessage());
             return List.of();
         } catch (Exception e) {
-            if (messager != null) {
-                messager.printMessage(
-                    Diagnostic.Kind.ERROR,
-                    "Unexpected error while parsing YAML step definitions from " + configPath.get() + ": " + e.getMessage());
-            }
+            reportDiagnostic(
+                messager,
+                Diagnostic.Kind.ERROR,
+                "Unexpected error while parsing YAML step definitions from " + configPath.get() + ": " + e.getMessage());
             return List.of();
+        }
+    }
+
+    private void reportDiagnostic(Messager messager, Diagnostic.Kind kind, String message) {
+        if (messager != null) {
+            messager.printMessage(kind, message);
         }
     }
 }

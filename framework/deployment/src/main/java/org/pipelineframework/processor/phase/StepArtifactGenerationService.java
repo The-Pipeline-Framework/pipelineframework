@@ -28,8 +28,6 @@ import org.pipelineframework.processor.util.RoleMetadataGenerator;
  */
 class StepArtifactGenerationService {
 
-    private static final String SERVICE_SUFFIX = "Service";
-
     private final GenerationPathResolver pathResolver;
     private final GenerationPolicy generationPolicy;
     private final SideEffectBeanService sideEffectBeanService;
@@ -121,7 +119,7 @@ class StepArtifactGenerationService {
                         break;
                     }
                     String clientClassName = model.servicePackage() + ".pipeline."
-                        + trimServiceSuffix(model.generatedName()) + "GrpcClientStep";
+                        + ResourceNameUtils.normalizeBaseName(model.generatedName()) + "GrpcClientStep";
                     DeploymentRole clientRole = resolveClientRole(model.deploymentRole());
                     clientRenderer.render(grpcBinding, new GenerationContext(
                         ctx.getProcessingEnv(),
@@ -161,7 +159,7 @@ class StepArtifactGenerationService {
                         break;
                     }
                     String localClientClassName = model.servicePackage() + ".pipeline."
-                        + trimServiceSuffix(model.generatedName()) + "LocalClientStep";
+                        + ResourceNameUtils.normalizeBaseName(model.generatedName()) + "LocalClientStep";
                     DeploymentRole localClientRole = resolveClientRole(model.deploymentRole());
                     localClientRenderer.render(localBinding, new GenerationContext(
                         ctx.getProcessingEnv(),
@@ -227,7 +225,7 @@ class StepArtifactGenerationService {
                         break;
                     }
                     String restClientClassName = model.servicePackage() + ".pipeline."
-                        + trimServiceSuffix(model.generatedName()) + "RestClientStep";
+                        + ResourceNameUtils.normalizeBaseName(model.generatedName()) + "RestClientStep";
                     DeploymentRole restClientRole = resolveClientRole(model.deploymentRole());
                     restClientRenderer.render(restBinding, new GenerationContext(
                         ctx.getProcessingEnv(),
@@ -240,13 +238,6 @@ class StepArtifactGenerationService {
                 }
             }
         }
-    }
-
-    private String trimServiceSuffix(String generatedName) {
-        if (generatedName != null && generatedName.endsWith(SERVICE_SUFFIX)) {
-            return generatedName.substring(0, generatedName.length() - SERVICE_SUFFIX.length());
-        }
-        return generatedName;
     }
 
     private DeploymentRole resolveClientRole(DeploymentRole serverRole) {

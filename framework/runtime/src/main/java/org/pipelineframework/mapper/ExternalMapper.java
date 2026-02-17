@@ -16,7 +16,7 @@
 
 package org.pipelineframework.mapper;
 
-import javax.annotation.Nonnull;
+import jakarta.annotation.Nonnull;
 
 /**
  * Interface for mapping between application domain types and operator entity types.
@@ -38,9 +38,7 @@ public interface ExternalMapper<TApplicationInput, TOperatorInput, TApplicationO
          * @throws IllegalArgumentException if {@code applicationInput} is null
          */
     @Nonnull
-    default TOperatorInput toOperatorInput(@Nonnull TApplicationInput applicationInput) {
-        return toLibraryInput(applicationInput);
-    }
+    TOperatorInput toOperatorInput(@Nonnull TApplicationInput applicationInput);
 
     /**
      * Converts application input to the operator's input type; retained for backward compatibility.
@@ -52,7 +50,9 @@ public interface ExternalMapper<TApplicationInput, TOperatorInput, TApplicationO
      */
     @Deprecated
     @Nonnull
-    TOperatorInput toLibraryInput(@Nonnull TApplicationInput applicationInput);
+    default TOperatorInput toLibraryInput(@Nonnull TApplicationInput applicationInput) {
+        return toOperatorInput(applicationInput);
+    }
 
     /**
      * Maps from the operator's output entity type to the application's output domain type.

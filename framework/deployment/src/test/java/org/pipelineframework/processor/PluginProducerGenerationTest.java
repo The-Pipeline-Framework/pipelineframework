@@ -139,6 +139,9 @@ class PluginProducerGenerationTest {
 
         Path restServerDir = generatedSourcesDir.resolve("rest-server");
         assertTrue(
+            Files.exists(restServerDir),
+            "Expected generated REST server directory to exist: " + restServerDir);
+        assertTrue(
             containsText(restServerDir, "PersistenceService"),
             "Expected generated REST server sources under " + restServerDir
                 + " to contain text 'PersistenceService'");
