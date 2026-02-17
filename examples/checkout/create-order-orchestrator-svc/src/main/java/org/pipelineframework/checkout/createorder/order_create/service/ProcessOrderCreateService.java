@@ -13,7 +13,9 @@ import org.pipelineframework.service.ReactiveService;
     inputType = OrderLineItem.class,
     outputType = InitialOrder.class,
     stepType = org.pipelineframework.step.StepOneToOne.class,
-    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class
+    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
+    inboundMapper = org.pipelineframework.checkout.createorder.common.mapper.OrderLineItemMapper.class,
+    outboundMapper = org.pipelineframework.checkout.createorder.common.mapper.InitialOrderMapper.class
 )
 @ApplicationScoped
 public class ProcessOrderCreateService

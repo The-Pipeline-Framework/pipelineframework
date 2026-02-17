@@ -18,7 +18,9 @@ import org.jboss.logging.Logger;
     inputType = ReadyOrder.class,
     outputType = DispatchedOrder.class,
     stepType = org.pipelineframework.step.StepOneToOne.class,
-    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class
+    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
+    inboundMapper = org.pipelineframework.checkout.deliverorder.common.mapper.ReadyOrderMapper.class,
+    outboundMapper = org.pipelineframework.checkout.deliverorder.common.mapper.DispatchedOrderMapper.class
 )
 @ApplicationScoped
 public class ProcessOrderDispatchService

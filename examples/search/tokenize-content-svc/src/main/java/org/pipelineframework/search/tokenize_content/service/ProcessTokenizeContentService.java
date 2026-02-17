@@ -21,6 +21,8 @@ import org.pipelineframework.service.ReactiveStreamingService;
     outputType = org.pipelineframework.search.common.domain.TokenBatch.class,
     stepType = org.pipelineframework.step.StepOneToMany.class,
     backendType = org.pipelineframework.grpc.GrpcServiceStreamingAdapter.class,
+    inboundMapper = org.pipelineframework.search.common.mapper.ParsedDocumentMapper.class,
+    outboundMapper = org.pipelineframework.search.common.mapper.TokenBatchMapper.class,
     cacheKeyGenerator = org.pipelineframework.search.tokenize_content.cache.TokenizeContentCacheKeyGenerator.class
 )
 @ApplicationScoped

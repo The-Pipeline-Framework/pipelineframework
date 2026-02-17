@@ -15,7 +15,9 @@ import java.util.Objects;
     inputType = InitialOrder.class,
     outputType = ReadyOrder.class,
     stepType = org.pipelineframework.step.StepOneToOne.class,
-    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class
+    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
+    inboundMapper = org.pipelineframework.checkout.createorder.common.mapper.InitialOrderMapper.class,
+    outboundMapper = org.pipelineframework.checkout.createorder.common.mapper.ReadyOrderMapper.class
 )
 @ApplicationScoped
 public class ProcessOrderReadyService

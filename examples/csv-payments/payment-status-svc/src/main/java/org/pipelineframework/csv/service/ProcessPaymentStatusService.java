@@ -27,15 +27,17 @@ import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentOutput;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
+import org.pipelineframework.csv.common.mapper.PaymentOutputMapper;
+import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
 import org.pipelineframework.service.ReactiveService;
-
-import java.util.Objects;
 
 @PipelineStep(
     inputType = PaymentStatus.class,
     outputType = PaymentOutput.class,
     stepType = org.pipelineframework.step.StepOneToOne.class,
-    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class
+    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
+    inboundMapper = PaymentStatusMapper.class,
+    outboundMapper = PaymentOutputMapper.class
 )
 @ApplicationScoped
 @Getter
@@ -46,10 +48,10 @@ public class ProcessPaymentStatusService
 
   @Override
   public Uni<PaymentOutput> process(PaymentStatus paymentStatus) {
-      AckPaymentSent ackPaymentSent = Objects.requireNonNull(paymentStatus.getAckPaymentSent(),
-              "AckPaymentSent must not be null for PaymentStatus: " + paymentStatus);
-      PaymentRecord paymentRecord = Objects.requireNonNull(ackPaymentSent.getPaymentRecord(),
-              "PaymentRecord must not be null in AckPaymentSent: " + ackPaymentSent);
+      AckPaymentSent ackPaymentSent = paymentStatus.getAckPaymentSent();
+      assert ackPaymentSent != null;
+      PaymentRecord paymentRecord = ackPaymentSent.getPaymentRecord();
+      assert paymentRecord != null;
 
       PaymentOutput output = new PaymentOutput();
       output.setPaymentStatus(paymentStatus);

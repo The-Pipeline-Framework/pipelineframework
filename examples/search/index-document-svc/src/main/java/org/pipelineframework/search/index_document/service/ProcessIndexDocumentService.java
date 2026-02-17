@@ -30,6 +30,8 @@ import org.pipelineframework.step.NonRetryableException;
     outputType = org.pipelineframework.search.common.domain.IndexAck.class,
     stepType = org.pipelineframework.step.StepManyToOne.class,
     backendType = org.pipelineframework.grpc.GrpcServiceClientStreamingAdapter.class,
+    inboundMapper = org.pipelineframework.search.common.mapper.TokenBatchMapper.class,
+    outboundMapper = org.pipelineframework.search.common.mapper.IndexAckMapper.class,
     cacheKeyGenerator = org.pipelineframework.search.index_document.cache.IndexDocumentCacheKeyGenerator.class
 )
 /**
