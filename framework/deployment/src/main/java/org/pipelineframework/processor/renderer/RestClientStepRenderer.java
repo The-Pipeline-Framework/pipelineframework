@@ -442,14 +442,14 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                 "REST client generation for '%s' requires input/output mappings to be present",
                 model.serviceName()));
         }
-        if (!model.inputMapping().hasMapper() || model.inputMapping().domainType() == null) {
+        if (model.inputMapping().domainType() == null) {
             throw new IllegalStateException(String.format(
-                "REST client generation for '%s' requires a non-null input domain type and inbound mapper",
+                "REST client generation for '%s' requires a non-null input domain type",
                 model.serviceName()));
         }
-        if (!model.outputMapping().hasMapper() || model.outputMapping().domainType() == null) {
+        if (model.outputMapping().domainType() == null) {
             throw new IllegalStateException(String.format(
-                "REST client generation for '%s' requires a non-null output domain type and outbound mapper",
+                "REST client generation for '%s' requires a non-null output domain type",
                 model.serviceName()));
         }
     }

@@ -18,7 +18,7 @@ class PluginProducerGenerationTest {
     Path tempDir;
 
     @Test
-    void failsFastWhenRestMapperCannotBeResolvedDuringAnnotationProcessing() throws IOException {
+    void allowsRestGenerationWithoutApTimeMapperResolution() throws IOException {
         Path projectRoot = tempDir;
         Files.writeString(projectRoot.resolve("pom.xml"), """
             <project>
@@ -114,7 +114,6 @@ class PluginProducerGenerationTest {
                     """)
             );
 
-        assertThat(compilation).failed();
-        assertThat(compilation).hadErrorContaining("all mappers must be resolved at build time");
+        assertThat(compilation).succeeded();
     }
 }
