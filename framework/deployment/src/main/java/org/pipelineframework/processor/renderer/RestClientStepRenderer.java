@@ -259,7 +259,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                     .addStatement("String replayMode = context != null ? context.replayMode() : null")
                     .addStatement("String cachePolicy = context != null ? context.cachePolicy() : null")
                     .addStatement(
-                        "return $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, inputs))",
+                        "return $T.instrumentClient($S, $S, inputs.collect().asList().onItem().transformToUni(items -> this.restClient.process(versionTag, replayMode, cachePolicy, items)))",
                         ClassName.get("org.pipelineframework.telemetry", "HttpMetrics"),
                         model.serviceName(),
                         "process")
@@ -349,10 +349,11 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
      * @param versionTag the pipeline version tag passed via header
      * @param replayMode the replay mode flag passed via header
      * @param cachePolicy the cache policy passed via header
-     * @param inputDtos a stream of input DTOs to be processed
+     * @param inputDtos a batch of input DTOs to be processed
      * @return a Uni that emits the single output DTO produced from the streamed inputs
      */
     private MethodSpec buildStreamingUnaryMethod(TypeName inputDto, TypeName outputDto, String operationPath) {
+        TypeName listInputDto = ParameterizedTypeName.get(ClassName.get(java.util.List.class), inputDto);
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("process")
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST")).build())
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "Path"))
@@ -363,8 +364,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
             .addParameter(headerParam("versionTag"))
             .addParameter(headerParam("replayMode"))
             .addParameter(headerParam("cachePolicy"))
-            .addParameter(ParameterSpec.builder(
-                ParameterizedTypeName.get(ClassName.get(Multi.class), inputDto), "inputDtos").build());
+            .addParameter(ParameterSpec.builder(listInputDto, "inputDtos").build());
         return methodBuilder.build();
     }
 

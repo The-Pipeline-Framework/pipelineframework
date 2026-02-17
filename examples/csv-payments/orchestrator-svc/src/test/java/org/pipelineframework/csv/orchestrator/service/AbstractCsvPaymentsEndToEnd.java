@@ -72,6 +72,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
             System.getProperty("csv.runtime.layout", "modular").trim().toLowerCase();
     private static final boolean MONOLITH_LAYOUT = "monolith".equals(RUNTIME_LAYOUT);
     private static final boolean PIPELINE_RUNTIME_LAYOUT = "pipeline-runtime".equals(RUNTIME_LAYOUT);
+    private static final long ORCHESTRATOR_WAIT_TIMEOUT_SECONDS =
+            Long.getLong("csv.e2e.orchestrator.wait.seconds", 300L);
     private static final long PIPELINE_WAIT_TIMEOUT_SECONDS =
             Long.getLong("csv.e2e.pipeline.wait.seconds", 120L);
     private static final long PIPELINE_WAIT_POLL_MILLIS = 1000L;
@@ -182,6 +184,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                     "QUARKUS_DATASOURCE_REACTIVE_URL", "postgresql://postgres:5432/quarkus")
                             .withEnv("QUARKUS_DATASOURCE_USERNAME", "quarkus")
                             .withEnv("QUARKUS_DATASOURCE_PASSWORD", "quarkus")
+                            .withLogConsumer(containerLog("persistence-svc"))
                             .waitingFor(
                                     Wait.forHttps("/q/health")
                                             .forPort(8448)
@@ -214,6 +217,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                             .withExposedPorts(8444)
                             .withEnv("QUARKUS_PROFILE", "test")
                             .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
+                            .withLogConsumer(containerLog("input-csv-file-processing-svc"))
                             .waitingFor(
                                     Wait.forHttps("/q/health")
                                             .forPort(8444)
@@ -245,6 +249,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                             .withExposedPorts(8445)
                             .withEnv("QUARKUS_PROFILE", "test")
                             .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
+                            .withLogConsumer(containerLog("payments-processing-svc"))
                             .waitingFor(
                                     Wait.forHttps("/q/health")
                                             .forPort(8445)
@@ -275,6 +280,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                             .withExposedPorts(8446)
                             .withEnv("QUARKUS_PROFILE", "test")
                             .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
+                            .withLogConsumer(containerLog("payment-status-svc"))
                             .waitingFor(
                                     Wait.forHttps("/q/health")
                                             .forPort(8446)
@@ -542,8 +548,18 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         pb.inheritIO();
         Process p = pb.start();
-        boolean completed = p.waitFor(120, TimeUnit.SECONDS);
-        assertTrue(completed, "Orchestrator process timed out");
+        boolean completed = p.waitFor(ORCHESTRATOR_WAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        if (!completed) {
+            p.destroy();
+            if (!p.waitFor(5, TimeUnit.SECONDS)) {
+                p.destroyForcibly();
+                p.waitFor(5, TimeUnit.SECONDS);
+            }
+            fail(
+                    "Orchestrator process timed out after "
+                            + ORCHESTRATOR_WAIT_TIMEOUT_SECONDS
+                            + "s");
+        }
         int exitCode = p.exitValue();
         assertEquals(0, exitCode, "Orchestrator exited with non-zero code");
     }
