@@ -24,6 +24,7 @@ import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
 
+import com.google.protobuf.DescriptorProtos;
 import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -127,21 +128,22 @@ class PipelineBindingConstructionPhaseTest {
     }
 
     @Test
-    void delegatedClientStepDoesNotRequireGrpcDescriptorBindings() throws Exception {
+    void delegatedClientStepBuildsGrpcAndExternalAdapterBindings() throws Exception {
         PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
 
         PipelineStepModel delegatedModel = TestModelFactory
-            .createTestModelWithTargets("DelegatedService", Set.of(GenerationTarget.CLIENT_STEP))
+            .createTestModelWithTargets("ProcessDelegatedService", Set.of(GenerationTarget.CLIENT_STEP))
             .toBuilder()
             .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
             .build();
         context.setStepModels(List.of(delegatedModel));
+        context.setDescriptorSet(descriptorSetForService("ProcessDelegatedService"));
 
         assertDoesNotThrow(() -> phase.execute(context));
         Map<String, Object> bindings = context.getRendererBindings();
-        assertTrue(bindings.containsKey("DelegatedService_external_adapter"));
-        assertFalse(bindings.containsKey("DelegatedService_grpc"));
+        assertTrue(bindings.containsKey("ProcessDelegatedService_external_adapter"));
+        assertTrue(bindings.containsKey("ProcessDelegatedService_grpc"));
     }
 
     @Test
@@ -169,7 +171,7 @@ class PipelineBindingConstructionPhaseTest {
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
 
         PipelineStepModel delegatedModel = TestModelFactory
-            .createTestModelWithTargets("DelegatedServerTargetService", Set.of(
+            .createTestModelWithTargets("ProcessDelegatedServerTargetService", Set.of(
                 GenerationTarget.GRPC_SERVICE,
                 GenerationTarget.REST_RESOURCE,
                 GenerationTarget.LOCAL_CLIENT_STEP))
@@ -177,11 +179,28 @@ class PipelineBindingConstructionPhaseTest {
             .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
             .build();
         context.setStepModels(List.of(delegatedModel));
+        context.setDescriptorSet(descriptorSetForService("ProcessDelegatedServerTargetService"));
 
         phase.execute(context);
 
         verify(messager).printMessage(
             eq(javax.tools.Diagnostic.Kind.WARNING),
-            contains("Delegated step 'DelegatedServerTargetService' ignores server targets"));
+            contains("Delegated step 'ProcessDelegatedServerTargetService' ignores server targets"));
+    }
+
+    private static DescriptorProtos.FileDescriptorSet descriptorSetForService(String serviceName) {
+        DescriptorProtos.FileDescriptorProto fileProto = DescriptorProtos.FileDescriptorProto.newBuilder()
+            .setName(serviceName.toLowerCase() + ".proto")
+            .setPackage("com.example")
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("Input"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("Output"))
+            .addService(DescriptorProtos.ServiceDescriptorProto.newBuilder()
+                .setName(serviceName)
+                .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
+                    .setName("remoteProcess")
+                    .setInputType(".com.example.Input")
+                    .setOutputType(".com.example.Output")))
+            .build();
+        return DescriptorProtos.FileDescriptorSet.newBuilder().addFile(fileProto).build();
     }
 }
