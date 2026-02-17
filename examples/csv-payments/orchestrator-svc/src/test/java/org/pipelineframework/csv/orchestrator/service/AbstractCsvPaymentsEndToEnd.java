@@ -891,12 +891,89 @@ abstract class AbstractCsvPaymentsEndToEnd {
             Thread.sleep(PIPELINE_WAIT_POLL_MILLIS);
         }
 
+        logPipelineTimeoutDiagnostics(startTime);
         fail(
                 "Pipeline completion timeout reached with no .out files in "
                         + TEST_E2E_DIR
                         + " after "
                         + PIPELINE_WAIT_TIMEOUT_SECONDS
                         + "s");
+    }
+
+    private void logPipelineTimeoutDiagnostics(long startTimeMillis) {
+        long elapsedSeconds = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - startTimeMillis);
+        LOG.errorf(
+                "Pipeline timeout diagnostics (layout=%s, elapsed=%ds, timeout=%ds, outputDir=%s)",
+                RUNTIME_LAYOUT,
+                elapsedSeconds,
+                PIPELINE_WAIT_TIMEOUT_SECONDS,
+                TEST_E2E_DIR);
+        logTestE2EDirectorySnapshot();
+        logContainerLogTail("pipeline-runtime-svc", pipelineRuntimeService, 200);
+        logContainerLogTail("persistence-svc", persistenceService, 200);
+        logContainerLogTail("postgres", postgresContainer, 120);
+    }
+
+    private void logTestE2EDirectorySnapshot() {
+        Path dir = Paths.get(TEST_E2E_DIR);
+        if (!Files.exists(dir)) {
+            LOG.errorf("Timeout diagnostics: output directory does not exist: %s", dir);
+            return;
+        }
+        try (var files = Files.list(dir).sorted()) {
+            List<Path> paths = files.toList();
+            if (paths.isEmpty()) {
+                LOG.errorf("Timeout diagnostics: output directory is empty: %s", dir);
+                return;
+            }
+            for (Path path : paths) {
+                try {
+                    LOG.errorf(
+                            "Timeout diagnostics: file=%s size=%d modified=%s",
+                            path.getFileName(),
+                            Files.size(path),
+                            Files.getLastModifiedTime(path));
+                } catch (IOException e) {
+                    LOG.errorf(e, "Timeout diagnostics: failed to read file metadata for %s", path);
+                }
+            }
+        } catch (IOException e) {
+            LOG.errorf(e, "Timeout diagnostics: failed to list output directory %s", dir);
+        }
+    }
+
+    private static void logContainerLogTail(String containerName, GenericContainer<?> container, int maxLines) {
+        if (container == null) {
+            LOG.errorf("Timeout diagnostics: container %s was not initialized", containerName);
+            return;
+        }
+        try {
+            String logs = container.getLogs();
+            if (logs == null || logs.isBlank()) {
+                LOG.errorf("Timeout diagnostics: no logs available for %s", containerName);
+                return;
+            }
+            LOG.errorf(
+                    "Timeout diagnostics: last %d log lines for %s:%n%s",
+                    maxLines,
+                    containerName,
+                    tailLines(logs, maxLines));
+        } catch (Exception e) {
+            LOG.errorf(e, "Timeout diagnostics: failed to read logs for %s", containerName);
+        }
+    }
+
+    private static String tailLines(String text, int maxLines) {
+        String[] lines = text.split("\\R");
+        if (lines.length <= maxLines) {
+            return text;
+        }
+        int from = lines.length - maxLines;
+        StringBuilder sb = new StringBuilder();
+        for (int i = from; i < lines.length; i++) {
+            sb.append(lines[i]).append(System.lineSeparator());
+        }
+        return sb.toString();
     }
 
     /**

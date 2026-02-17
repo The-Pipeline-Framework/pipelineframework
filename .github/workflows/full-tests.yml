@@ -168,8 +168,14 @@ jobs:
         run: |
           echo "=== Failsafe reports ==="
           find . -path "*/target/failsafe-reports/*.txt" -print -exec tail -n 200 {} \;
+          echo "=== Failsafe dumpstreams ==="
+          find . -path "*/target/failsafe-reports/*.dumpstream" -print -exec tail -n 400 {} \;
+          echo "=== Failsafe dumps ==="
+          find . -path "*/target/failsafe-reports/*.dump" -print -exec tail -n 200 {} \;
           echo "=== Surefire reports ==="
           find . -path "*/target/surefire-reports/*.txt" -print -exec tail -n 200 {} \;
+          echo "=== csv-payments test-e2e directories ==="
+          find examples/csv-payments -type d -path "*/target/test-e2e" -print -exec sh -c 'ls -la "$1"' _ {} \;
 
       - name: Upload test reports on failure
         if: failure()
@@ -181,6 +187,9 @@ jobs:
             **/target/surefire-reports/*.xml
             **/target/failsafe-reports/*.txt
             **/target/failsafe-reports/*.xml
+            **/target/failsafe-reports/*.dumpstream
+            **/target/failsafe-reports/*.dump
+            examples/csv-payments/**/target/test-e2e/**
           retention-days: 7
           if-no-files-found: warn
 
