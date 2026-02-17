@@ -46,6 +46,16 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         return "Pipeline Semantic Analysis Phase";
     }
 
+    /**
+     * Performs semantic analysis and policy validation for the given pipeline compilation context.
+     *
+     * This method prepares aspect models for expansion, decides whether an orchestrator should be
+     * generated, and runs validations for parallelism hints, provider hints, function-platform constraints,
+     * and YAML-driven step definitions. It updates the provided context with derived state used by later phases.
+     *
+     * @param ctx the pipeline compilation context to analyze and update
+     * @throws Exception if an unexpected processing error occurs during analysis
+     */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
         // Analyze aspects to identify those that should be expanded
@@ -368,9 +378,20 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Validates YAML-driven steps to ensure they meet the requirements.
+     * Validates pipeline steps defined via YAML and checks @PipelineStep-annotated classes and delegate compatibility.
      *
-     * @param ctx the compilation context
+     * <p>Performs the following validations and emits diagnostics via the processing {@code Messager}:
+     * <ul>
+     *   <li>Warns (as a NOTE) when a class annotated with {@code @PipelineStep} is not referenced by any YAML step (controlled by the
+     *       {@code pipeline.warnUnreferencedSteps} option, defaults to true).</li>
+     *   <li>For YAML-declared steps with a delegate service: verifies the delegate type exists and implements a recognized reactive service
+     *       interface.</li>
+     *   <li>If an {@code externalMapper} is specified: verifies the mapper class exists and implements {@code org.pipelineframework.mapper.ExternalMapper}.</li>
+     *   <li>If no external mapper is specified: resolves the delegate's reactive service type arguments and compares them to the YAML step's
+     *       input/output domain types; emits an error requiring an operator mapper when the types differ.</li>
+     * </ul>
+     *
+     * @param ctx the pipeline compilation context; method returns immediately if {@code ctx} or required processing utilities or step models are absent
      */
     private void validateYamlDrivenSteps(PipelineCompilationContext ctx) {
         if (ctx == null || ctx.getProcessingEnv() == null || ctx.getStepModels() == null) {
@@ -512,6 +533,15 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         }
     }
 
+    /**
+     * Resolves the delegate service's reactive input and output type arguments.
+     *
+     * @param delegateElement the delegate service element to inspect
+     * @param typeUtils utility for operating on types and resolving supertypes
+     * @param messager used to emit an error if the delegate implements multiple reactive interfaces; may be null
+     * @param stepName name of the step (included in any emitted diagnostic)
+     * @return a DelegateTypeSignature containing the delegate's input and output type mirrors, or `null` if no known reactive service interface is found or if multiple matching reactive interfaces are present
+     */
     private DelegateTypeSignature resolveDelegateTypeSignature(
             TypeElement delegateElement,
             Types typeUtils,
@@ -551,6 +581,12 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
             match.getTypeArguments().get(1));
     }
 
+    /**
+     * Determines whether the given delegate element implements any recognized reactive service interface.
+     *
+     * @param delegateElement the type element representing the delegate service implementation to check
+     * @return `true` if the element implements at least one interface listed in REACTIVE_SERVICE_INTERFACE_NAMES, `false` otherwise
+     */
     private boolean implementsAnyReactiveService(
             TypeElement delegateElement,
             javax.lang.model.util.Elements elementUtils,
@@ -564,10 +600,30 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
         return false;
     }
 
+    /**
+     * Locate a declared supertype of the given type whose qualified name equals the specified target.
+     *
+     * @param types the utility for type operations
+     * @param type the type to inspect for a matching supertype
+     * @param targetQualifiedName the fully qualified name of the desired supertype
+     * @return the matching DeclaredType if found, or {@code null} if no matching supertype exists
+     */
     private DeclaredType findReactiveSupertype(Types types, TypeMirror type, String targetQualifiedName) {
         return findReactiveSupertype(types, type, targetQualifiedName, new HashSet<>());
     }
 
+    /**
+     * Locates a declared supertype of the given type whose element has the specified qualified name.
+     *
+     * Performs a depth-first search through direct supertypes and uses the provided `visited` set
+     * to avoid cycles during traversal.
+     *
+     * @param types the Types utility for type operations
+     * @param type the starting type to inspect for a matching supertype
+     * @param targetQualifiedName the fully qualified name of the target supertype to find
+     * @param visited a mutable set of type string representations used to record visited types and prevent cycles
+     * @return the matching DeclaredType whose element's qualified name equals `targetQualifiedName`, or `null` if no match is found
+     */
     private DeclaredType findReactiveSupertype(
             Types types,
             TypeMirror type,

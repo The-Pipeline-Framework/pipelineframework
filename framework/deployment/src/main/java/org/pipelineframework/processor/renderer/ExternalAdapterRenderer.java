@@ -152,7 +152,18 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
     }
 
     /**
-     * Builds the process method based on the reactive service interface.
+     * Constructs the `process` method implementation for the generated external adapter.
+     *
+     * The method signature (parameter and return types) is derived from the provided
+     * streaming shape. When `hasExternalMapper` is true, the generated body maps between
+     * application and operator types using the injected `externalMapper` before delegating
+     * to `delegateService`; otherwise it delegates directly.
+     *
+     * @param streamingShape           the streaming shape that determines the method signature
+     * @param applicationInputType     the application-facing input type used for the method parameter
+     * @param applicationOutputType    the application-facing output type used for the method return
+     * @param hasExternalMapper        whether to insert mapping logic between application and operator types
+     * @return                         a MethodSpec representing the completed `process` method
      */
     private MethodSpec buildProcessMethod(
             StreamingShape streamingShape,
@@ -212,7 +223,11 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
     }
 
     /**
-     * Adds streaming mapper logic to the method builder for streaming reactive services.
+     * Append statements that map incoming application-stream elements to operator inputs,
+     * delegate processing to the operator service, and map operator outputs back to application outputs.
+     *
+     * @param methodBuilder the MethodSpec.Builder for the generated process method; expected to contain
+     *                      an `input` parameter and to have `externalMapper` and `delegateService` in scope
      */
     private void addStreamingMapperLogic(MethodSpec.Builder methodBuilder) {
         methodBuilder
@@ -221,6 +236,15 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
             .addStatement("return operatorOutputs.map(libOutput -> externalMapper.toApplicationOutput(libOutput))");
     }
 
+    /**
+     * Appends client-streaming mapping logic to the provided process method builder.
+     *
+     * The generated statements map incoming application inputs to operator inputs using
+     * the external mapper, delegate processing to the operator service, and map operator
+     * outputs back to application outputs.
+     *
+     * @param methodBuilder the MethodSpec.Builder for the process method to append statements to
+     */
     private void addClientStreamingMapperLogic(MethodSpec.Builder methodBuilder) {
         methodBuilder
             .addStatement("var operatorInputs = input.map(appInput -> externalMapper.toOperatorInput(appInput))")
@@ -228,7 +252,10 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
     }
 
     /**
-     * Determines the reactive service interface based on the delegate service type.
+     * Selects the reactive service interface that corresponds to the given streaming shape.
+     *
+     * @param streamingShape the RPC streaming shape of the delegate service
+     * @return the ClassName of the reactive service interface for the provided streaming shape
      */
     private ClassName determineReactiveServiceInterface(StreamingShape streamingShape) {
         return switch (streamingShape) {

@@ -52,12 +52,33 @@ public class PipelineCompiler extends AbstractProcessingTool {
         this.phases = phases;
     }
 
+    /**
+     * Initializes the compiler with the provided processing environment and resets the internal
+     * execution flag so the compiler is ready for a fresh compilation run.
+     *
+     * @param processingEnv the annotation processing environment supplied by the annotation processor
+     */
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
         super.init(processingEnv);
         this.compilationExecuted = false;
     }
 
+    /**
+     * Orchestrates pipeline compilation across configured phases when pipeline-related annotations
+     * are present or when a pipeline configuration signal is detected.
+     *
+     * If no relevant annotations and no pipeline config signal are found, this method will attempt
+     * to write role metadata when the processing round is over. The method short-circuits if
+     * compilation has already been executed for this processor instance. If a phase throws an
+     * exception, an error (and an optional note with the cause) is reported and the method marks
+     * compilation as executed.
+     *
+     * @param annotations the set of annotation types requested to be processed in this round
+     * @param roundEnv the environment for information about the current and previous round
+     * @return `true` if this processor performed work during this round (including when a phase failed),
+     *         `false` otherwise
+     */
     @Override
     public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
         if (compilationExecuted) {
@@ -120,6 +141,17 @@ public class PipelineCompiler extends AbstractProcessingTool {
         return true;
     }
 
+    /**
+     * Detects whether a pipeline configuration signal is present for the compiler.
+     *
+     * Checks the explicit processor option "pipeline.config" first. If that option is not set,
+     * determines a base directory from "pipeline.moduleDir", then "pipeline.generatedSourcesDir",
+     * then the system property "user.dir", and looks for a pipeline.yaml file at either
+     * {baseDir}/pipeline.yaml or {baseDir}/src/main/resources/pipeline.yaml.
+     *
+     * @return `true` if the "pipeline.config" option is set or a pipeline.yaml file is found,
+     *         `false` otherwise.
+     */
     private boolean hasPipelineConfigSignal() {
         // Primary source is the explicit annotation processor option; filesystem probing is best-effort fallback.
         String configuredPath = processingEnv.getOptions().get("pipeline.config");
