@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package ai.sdk;
+
+option java_package = "com.example.ai.sdk.grpc";
+
+import "embedding-svc.proto";
+
+message StoreResult {
+  string id = 1;
+  bool success = 2;
+  string message = 3;
+}
+
+service ProcessVectorStoreService {
+  rpc RemoteProcess(Vector) returns (StoreResult);
+}
+
+service ObservePersistenceStoreResultChunkSideEffectService {
+  rpc RemoteProcess(StoreResult) returns (StoreResult);
+}

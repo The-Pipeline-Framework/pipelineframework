@@ -34,30 +34,34 @@ Bindings are transport/rendering realization objects:
 - `LocalBinding`
 - `OrchestratorBinding`
 
-Bindings are produced in `PipelineBindingConstructionPhase` and stored in `rendererBindings` by key:
+Bindings are produced by `StepBindingBuilder` (invoked from `PipelineBindingConstructionPhase`) and stored in `rendererBindings` using key constants:
 
-- `<service>_grpc`
-- `<service>_rest`
-- `<service>_local`
-- `orchestrator`
+- `StepBindingBuilder.GRPC_SUFFIX` → `<service>_grpc`
+- `StepBindingBuilder.REST_SUFFIX` → `<service>_rest`
+- `StepBindingBuilder.LOCAL_SUFFIX` → `<service>_local`
+- `StepBindingBuilder.ORCHESTRATOR_KEY` → `orchestrator`
 
 ## Binding Construction Flow
 
 ```mermaid
 flowchart TD
     A["PipelineStepModel + Targets"] --> B["PipelineBindingConstructionPhase"]
-    B --> C["needsGrpcBindings?"]
-    C -->|yes| D["DescriptorFileLocator"]
-    C -->|no| E["Skip descriptor load"]
-    D --> F["GrpcBindingResolver"]
+    B --> C["GrpcRequirementEvaluator"]
+    C -->|needs gRPC| D["DescriptorFileLocator"]
+    C -->|no gRPC| E["Skip descriptor load"]
+    D --> F["StepBindingBuilder.constructBindings"]
     E --> F
-    B --> G["RestBindingResolver"]
-    B --> H["LocalBinding creation"]
-    B --> I["OrchestratorBindingBuilder"]
-    F --> J["rendererBindings map"]
-    G --> J
-    H --> J
-    I --> J
+    subgraph F2["StepBindingBuilder.constructBindings Internal Operations"]
+        G["GrpcBindingResolver"]
+        H["RestBindingResolver"]
+        I["LocalBinding creation"]
+    end
+    F --> F2
+    B --> J["OrchestratorBindingBuilder"]
+    G --> K["rendererBindings map"]
+    H --> K
+    I --> K
+    J --> K
 ```
 
 ## Mapping + Role Interplay

@@ -12,6 +12,7 @@ import com.squareup.javapoet.TypeSpec;
 import org.jboss.logging.Logger;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
+import org.pipelineframework.processor.StepDefinitionWriter;
 import org.pipelineframework.processor.ir.*;
 import org.pipelineframework.processor.renderer.*;
 import org.pipelineframework.processor.util.OrchestratorClientPropertiesGenerator;
@@ -46,15 +47,14 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Orchestrates generation of pipeline source artifacts and metadata for all step models and the orchestrator.
-     *
-     * <p>Initializes renderers and generators, produces per-step artifacts (gRPC, REST, clients, side-effect beans),
-     * optionally generates protobuf parsers when gRPC transport and a descriptor set are available, and writes role
-     * and orchestrator-related metadata files.</p>
-     *
-     * @param ctx the compilation context containing step models, renderer bindings, descriptor set, environment and settings
-     * @throws Exception if an unrecoverable generation error occurs that cannot be handled locally
-     */
+         * Generates pipeline source artifacts and metadata for all configured step models and the orchestrator.
+         *
+         * <p>Produces per-step artifacts (gRPC services, REST resources, client classes, side-effect beans), optionally
+         * generates protobuf parsers when applicable, and writes role, platform, and orchestrator-related metadata.</p>
+         *
+         * @param ctx the compilation context containing step models, renderer bindings, descriptor set, environment, and settings
+         * @throws Exception if an unrecoverable generation error occurs that cannot be handled locally
+         */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
         // Only proceed if there are models to process or orchestrator to generate
@@ -242,6 +242,20 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     javax.tools.Diagnostic.Kind.WARNING,
                     "Failed to write orchestrator metadata: " + e.getMessage());
             }
+        }
+
+        // Write step definitions for Quarkus build step consumption
+        if (ctx.getProcessingEnv() == null) {
+            LOG.warn("Skipping step definition writing because ProcessingEnvironment is null");
+            return;
+        }
+        try {
+            StepDefinitionWriter stepDefinitionWriter = new StepDefinitionWriter(ctx.getProcessingEnv().getFiler());
+            stepDefinitionWriter.write(ctx.getStepModels());
+        } catch (IOException e) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.WARNING,
+                "Failed to write step definitions: " + e.getMessage());
         }
     }
 

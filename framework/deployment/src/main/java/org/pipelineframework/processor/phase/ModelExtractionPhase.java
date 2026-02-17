@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Set;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
@@ -40,11 +41,27 @@ import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
  */
 public class ModelExtractionPhase implements PipelineCompilationPhase {
     private static final Logger LOG = Logger.getLogger(ModelExtractionPhase.class);
+    private final TemplateModelBuilder templateModelBuilder;
+    private final TemplateExpansionOrchestrator templateExpansionOrchestrator;
 
     /**
      * Creates a new ModelExtractionPhase.
      */
     public ModelExtractionPhase() {
+        this(new TemplateModelBuilder(), new TemplateExpansionOrchestrator());
+    }
+
+    /**
+     * Creates a new ModelExtractionPhase with injected collaborators.
+     *
+     * @param templateModelBuilder collaborator used for template step model synthesis
+     * @param templateExpansionOrchestrator collaborator used for aspect expansion orchestration
+     */
+    public ModelExtractionPhase(
+            TemplateModelBuilder templateModelBuilder,
+            TemplateExpansionOrchestrator templateExpansionOrchestrator) {
+        this.templateModelBuilder = Objects.requireNonNull(templateModelBuilder, "templateModelBuilder");
+        this.templateExpansionOrchestrator = Objects.requireNonNull(templateExpansionOrchestrator, "templateExpansionOrchestrator");
     }
 
     @Override
@@ -517,47 +534,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
      * @return a list of PipelineStepModel derived from the template steps; empty if no models could be produced
      */
     private List<PipelineStepModel> buildTemplateStepModels(PipelineTemplateConfig config) {
-        String basePackage = config.basePackage();
-        if (basePackage == null || basePackage.isBlank()) {
-            return List.of();
-        }
-
-        List<PipelineStepModel> models = new ArrayList<>();
-        for (PipelineTemplateStep step : config.steps()) {
-            if (step == null) {
-                continue;
-            }
-
-            String stepName = step.name();
-            String formattedName = NamingPolicy.formatForClassName(NamingPolicy.stripProcessPrefix(stepName));
-            if (formattedName == null || formattedName.isBlank()) {
-                continue;
-            }
-
-            String serviceName = "Process" + formattedName + "Service";
-            String serviceNameForPackage = toPackageSegment(stepName);
-            String servicePackage = basePackage + "." + serviceNameForPackage + ".service";
-
-            String inputType = step.inputTypeName();
-            String outputType = step.outputTypeName();
-            TypeMapping inputMapping = buildMapping(basePackage, inputType);
-            TypeMapping outputMapping = buildMapping(basePackage, outputType);
-
-            PipelineStepModel model = new PipelineStepModel.Builder()
-                .serviceName(serviceName)
-                .servicePackage(servicePackage)
-                .serviceClassName(ClassName.get(servicePackage, serviceName))
-                .inputMapping(inputMapping)
-                .outputMapping(outputMapping)
-                .streamingShape(StreamingShapeResolver.streamingShape(step.cardinality()))
-                .executionMode(ExecutionMode.DEFAULT)
-                .deploymentRole(DeploymentRole.PIPELINE_SERVER)
-                .build();
-
-            models.add(model);
-        }
-
-        return models;
+        return templateModelBuilder.buildModels(config);
     }
 
     private TypeMapping buildMapping(String basePackage, String typeName) {

@@ -79,6 +79,8 @@ public class PipelineStepProcessor extends AbstractProcessingTool {
         super.init(processingEnv);
 
         // Create the phased compiler with all the phases
+        // Mapper inference is performed in the Quarkus build step with CombinedIndexBuildItem.
+        // The annotation processor only extracts pipeline metadata.
         List<PipelineCompilationPhase> phases = List.of(
             new org.pipelineframework.processor.phase.PipelineDiscoveryPhase(),
             new org.pipelineframework.processor.phase.ModelExtractionPhase(),

@@ -1,33 +1,51 @@
 package org.pipelineframework.processor.ir;
 
+import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.TypeName;
-import lombok.Getter;
 
 /**
  * Represents a semantic directional type mapping derived from annotations. Contains semantic information from the @PipelineStep
- * annotation, including domain types and mapper information.
+ * annotation, including domain types and inferred mapper information.
  *
- * @param domainType Gets the domain type for this mapping.
- * @param mapperType Gets the mapper type for this mapping.
- * @param hasMapper Whether a mapper is present for this mapping
+ * @param domainType the domain type for this mapping
+ * @param mapperType the inferred mapper type for this mapping, or null if not yet resolved
+ * @param hasMapper whether a mapper has been inferred for this mapping
+ * @param entityType the entity type used for mapper inference (the domain type that the mapper operates on)
  */
 public record TypeMapping(
-        @Getter TypeName domainType,
-        @Getter TypeName mapperType,
-        boolean hasMapper
+        TypeName domainType,
+        TypeName mapperType,
+        boolean hasMapper,
+        TypeName entityType
 ) {
     /**
-     * Creates a new TypeMapping instance.
+     * Creates a new TypeMapping instance with entity type for inference.
      */
-    public TypeMapping {}
+    public TypeMapping {
+        // entityType defaults to domainType if not specified
+        if (entityType == null) {
+            entityType = domainType;
+        }
+    }
 
     /**
-     * Checks if this mapping has an associated mapper.
+     * Backward-compatible constructor that creates a TypeMapping and defaults the entityType to the provided domainType.
      *
-     * @return true if a mapper is present, false otherwise
+     * @param domainType the domain type for this mapping; used as the entityType when none is provided
+     * @param mapperType the mapper type, or null if not specified
+     * @param hasMapper  true if a mapper has been inferred, false otherwise
      */
-    @Override
-    public boolean hasMapper() {
-        return hasMapper;
+    public TypeMapping(TypeName domainType, TypeName mapperType, boolean hasMapper) {
+        this(domainType, mapperType, hasMapper, domainType);
+    }
+
+    /**
+     * Create a new TypeMapping that records the provided inferred mapper type.
+     *
+     * @param inferredMapperType the mapper ClassName to set on the returned mapping
+     * @return a TypeMapping with `mapperType` set to the provided `inferredMapperType` and `hasMapper` set to true
+     */
+    public TypeMapping withInferredMapper(ClassName inferredMapperType) {
+        return new TypeMapping(domainType, inferredMapperType, true, entityType);
     }
 }

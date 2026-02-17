@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import javax.lang.model.element.Element;
@@ -40,11 +41,31 @@ import org.pipelineframework.processor.parser.StepDefinitionParser;
 public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     private static final PipelineStepConfigLoader.StepConfig DEFAULT_STEP_CONFIG =
         new PipelineStepConfigLoader.StepConfig("", "GRPC", "COMPUTE", List.of(), List.of());
+    private final DiscoveryPathResolver discoveryPathResolver;
+    private final DiscoveryConfigLoader discoveryConfigLoader;
+    private final TransportPlatformResolver transportPlatformResolver;
 
     /**
      * Creates a new PipelineDiscoveryPhase.
      */
     public PipelineDiscoveryPhase() {
+        this(new DiscoveryPathResolver(), new DiscoveryConfigLoader(), new TransportPlatformResolver());
+    }
+
+    /**
+     * Creates a new PipelineDiscoveryPhase with injected collaborators.
+     *
+     * @param discoveryPathResolver path resolver collaborator
+     * @param discoveryConfigLoader config loader collaborator
+     * @param transportPlatformResolver transport/platform resolver collaborator
+     */
+    public PipelineDiscoveryPhase(
+            DiscoveryPathResolver discoveryPathResolver,
+            DiscoveryConfigLoader discoveryConfigLoader,
+            TransportPlatformResolver transportPlatformResolver) {
+        this.discoveryPathResolver = Objects.requireNonNull(discoveryPathResolver, "discoveryPathResolver");
+        this.discoveryConfigLoader = Objects.requireNonNull(discoveryConfigLoader, "discoveryConfigLoader");
+        this.transportPlatformResolver = Objects.requireNonNull(transportPlatformResolver, "transportPlatformResolver");
     }
 
     @Override

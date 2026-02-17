@@ -325,7 +325,7 @@ class SearchPipelineEndToEndIT {
             "Expected one RawDocument row after warm run for docId " + docId);
         assertEquals(1, awaitRowCountAtLeastForDocId("parseddocument", docId, 1, Duration.ofSeconds(10)),
             "Expected one ParsedDocument row after warm run for docId " + docId);
-        int tokenBatchCount = awaitRowCountAtLeastForDocId("tokenbatch", docId, 1, Duration.ofSeconds(10));
+        int tokenBatchCount = awaitRowCountAtLeastForDocId("tokenbatch", docId, 2, Duration.ofSeconds(10));
         assertTrue(tokenBatchCount >= 1,
             "Expected at least one TokenBatch row after warm run for docId " + docId
                 + " but found " + tokenBatchCount);
@@ -338,8 +338,8 @@ class SearchPipelineEndToEndIT {
 
     @Test
     void preferCacheWarmsCacheAndRequireCacheSucceeds() throws Exception {
-        String input = "https://example.com";
         String version = "warm-" + UUID.randomUUID();
+        String input = "https://example.com";
         ProcessResult warm = orchestratorTriggerRun(input, "prefer-cache", version, false);
         assertExitSuccess(warm, "Expected prefer-cache run to succeed");
 
@@ -410,7 +410,7 @@ class SearchPipelineEndToEndIT {
     }
 
     @Test
-    void tokenizeFanOutAndIndexFanInPersistPerDocumentCardinality() throws Exception {
+    void tokenizeAndIndexPersistFanoutBatchesPerDocId() throws Exception {
         String input = "https://example.com/fanout-" + UUID.randomUUID();
         String version = "fanout-fanin-" + UUID.randomUUID();
         ProcessResult result = orchestratorTriggerRun(input, "prefer-cache", version, false);
@@ -426,9 +426,9 @@ class SearchPipelineEndToEndIT {
             "Expected exactly one RawDocument row linked to docId " + docId);
         assertEquals(1, parsedDocumentCount,
             "Expected exactly one ParsedDocument row linked to docId " + docId);
-        assertEquals(1, tokenBatchCount,
-            "Expected exactly one TokenBatch row linked to docId " + docId
-                + " because persistence stores one row per docId");
+        assertTrue(tokenBatchCount > 1,
+            "Expected fan-out to persist multiple TokenBatch rows linked to docId " + docId
+                + " but found " + tokenBatchCount);
         assertEquals(1, indexAckCount,
             "Expected MANY_TO_ONE fan-in to persist exactly one IndexAck row for docId " + docId
                 + " but found " + indexAckCount);

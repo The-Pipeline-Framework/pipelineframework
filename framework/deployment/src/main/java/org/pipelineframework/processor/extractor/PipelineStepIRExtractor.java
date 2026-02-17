@@ -18,6 +18,7 @@ import org.pipelineframework.processor.util.AnnotationProcessingUtils;
 
 /**
  * Extractor that converts PipelineStep annotations to semantic information in PipelineStepModel.
+ * This extractor reads declared step metadata.
  */
 public class PipelineStepIRExtractor {
 
@@ -41,6 +42,8 @@ public class PipelineStepIRExtractor {
 
     /**
      * Produces a PipelineStepModel by extracting semantic information from a class annotated with `@PipelineStep`.
+     * <p>
+     * Mapper inference is NOT performed here. Mapping remains unresolved for later phases.
      *
      * @param serviceClass the element representing the annotated service class
      * @return the extraction result wrapping the constructed PipelineStepModel, or `null` if the annotation mirror could not be obtained
@@ -70,7 +73,8 @@ public class PipelineStepIRExtractor {
         ThreadSafety threadSafety = AnnotationProcessingUtils.getAnnotationValueAsEnum(
             annotationMirror, "threadSafety", ThreadSafety.class, ThreadSafety.SAFE);
 
-        // Create directional type mappings
+        // Create directional type mappings. Explicit mapper references are retained as backward-compatible
+        // fallback while build-time inference can still populate missing mappings in later phases.
         TypeMapping inputMapping = extractTypeMapping(
             AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "inputType"),
             AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "inboundMapper"));
@@ -105,7 +109,7 @@ public class PipelineStepIRExtractor {
             serviceClassName = ClassName.bestGuess(fallbackName);
         }
 
-        // Build the model
+        // Build the model - mappers are not yet inferred
         PipelineStepModel model = new PipelineStepModel.Builder()
             .serviceName(serviceClass.getSimpleName().toString())
             .servicePackage(processingEnv.getElementUtils().getPackageOf(serviceClass).getQualifiedName().toString())
@@ -130,29 +134,39 @@ public class PipelineStepIRExtractor {
      * Create a TypeMapping describing the relationship between a domain type and an optional mapper type.
      *
      * If `domainType` is null or represents `void`/`java.lang.Void`, the result is disabled with no domain or mapper.
-     * If `mapperType` is null or represents `void`/`java.lang.Void`, the result contains the domain type, no mapper, and is disabled.
      *
      * @param domainType the domain type to map from; may be null or a `void` type to indicate absence
-     * @param mapperType the mapper type to convert the domain type; may be null or a `void` type to indicate no mapper
-     * @return a TypeMapping containing resolved `TypeName` values and an `enabled` flag set to `true` only when both domain and mapper are present
+     * @return a TypeMapping containing resolved TypeName values and mapper presence
      */
-    private TypeMapping extractTypeMapping(TypeMirror domainType, TypeMirror mapperType) {
+    private TypeMapping extractTypeMapping(TypeMirror domainType, TypeMirror mapperTypeMirror) {
         if (domainType == null
                 || domainType.getKind() == javax.lang.model.type.TypeKind.VOID
                 || domainType.toString().equals("java.lang.Void")) {
-            return new TypeMapping(null, null, false);
+            return new TypeMapping(null, null, false, null);
         }
-        if (mapperType == null
-                || mapperType.getKind() == javax.lang.model.type.TypeKind.VOID
-                || mapperType.toString().equals("java.lang.Void")) {
-            return new TypeMapping(TypeName.get(domainType), null, false);
-        }
+
+        ClassName mapperType = resolveOptionalMapperType(mapperTypeMirror);
 
         return new TypeMapping(
             TypeName.get(domainType),
-            TypeName.get(mapperType),
-            true
+            mapperType,
+            mapperType != null,
+            TypeName.get(domainType)
         );
+    }
+
+    private ClassName resolveOptionalMapperType(TypeMirror mapperTypeMirror) {
+        if (mapperTypeMirror == null
+                || mapperTypeMirror.getKind() == javax.lang.model.type.TypeKind.VOID
+                || mapperTypeMirror.toString().equals("java.lang.Void")) {
+            return null;
+        }
+
+        Element mapperElement = processingEnv.getTypeUtils().asElement(mapperTypeMirror);
+        if (mapperElement instanceof TypeElement typeElement) {
+            return ClassName.get(typeElement);
+        }
+        return ClassName.bestGuess(mapperTypeMirror.toString());
     }
 
     /**

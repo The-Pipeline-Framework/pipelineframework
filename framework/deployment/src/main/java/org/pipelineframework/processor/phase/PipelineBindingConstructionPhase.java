@@ -3,6 +3,7 @@ package org.pipelineframework.processor.phase;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 import com.google.protobuf.DescriptorProtos;
@@ -23,11 +24,22 @@ import org.pipelineframework.processor.util.RestBindingResolver;
  * Bindings are immutable and scoped to one renderer, never modifying semantic models.
  */
 public class PipelineBindingConstructionPhase implements PipelineCompilationPhase {
+    private final GrpcRequirementEvaluator grpcRequirementEvaluator;
 
     /**
      * Creates a new PipelineBindingConstructionPhase.
      */
     public PipelineBindingConstructionPhase() {
+        this(new GrpcRequirementEvaluator());
+    }
+
+    /**
+     * Creates a new PipelineBindingConstructionPhase with an injected gRPC requirement evaluator.
+     *
+     * @param grpcRequirementEvaluator evaluator used to determine if descriptor loading is required
+     */
+    public PipelineBindingConstructionPhase(GrpcRequirementEvaluator grpcRequirementEvaluator) {
+        this.grpcRequirementEvaluator = Objects.requireNonNull(grpcRequirementEvaluator, "grpcRequirementEvaluator");
     }
 
     @Override
@@ -129,32 +141,13 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
      * @return `true` if gRPC bindings are required, `false` otherwise
      */
     private boolean needsGrpcBindings(PipelineCompilationContext ctx) {
-        if (ctx.getStepModels().stream().anyMatch(model ->
-            model.enabledTargets().contains(GenerationTarget.GRPC_SERVICE)
-                || model.enabledTargets().contains(GenerationTarget.CLIENT_STEP))) {
-            return true;
-        }
-        if (!ctx.getOrchestratorModels().isEmpty()) {
-            PipelineTemplateConfig config = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig cfg ? cfg : null;
-            if (config == null) {
-                return false;
-            }
-            String transport = config.transport();
-            if (transport == null || transport.isBlank()) {
-                return true;
-            }
-            var resolvedMode = TransportMode.fromStringOptional(transport);
-            if (resolvedMode.isEmpty()) {
-                if (ctx.getProcessingEnv() != null) {
-                    ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
-                        "Unknown transport '" + transport + "' in pipeline template. "
-                            + "Valid values are GRPC|gRPC|REST|LOCAL; skipping descriptor loading.");
-                }
-                return false;
-            }
-            return resolvedMode.orElseThrow() == TransportMode.GRPC;
-        }
-        return false;
+        PipelineTemplateConfig config = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig cfg ? cfg : null;
+        return grpcRequirementEvaluator.needsGrpcBindings(
+            ctx.getStepModels(),
+            ctx.getOrchestratorModels(),
+            config,
+            ctx.getProcessingEnv() != null ? ctx.getProcessingEnv().getMessager() : null
+        );
     }
 
     private DescriptorProtos.FileDescriptorSet loadDescriptorSet(PipelineCompilationContext ctx) throws IOException {

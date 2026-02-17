@@ -106,55 +106,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
             .build();
         resourceBuilder.addField(serviceField);
-        // Add mapper fields with @Inject if they exist
-        String inboundMapperFieldName = "inboundMapper";
-        String outboundMapperFieldName = "outboundMapper";
-        TypeName inboundMapperType = null;
-        TypeName outboundMapperType = null;
-        boolean inboundMapperAdded = false;
-
-        if (!cacheSideEffect && model.inputMapping().hasMapper()) {
-            inboundMapperType = model.inputMapping().mapperType();
-            String inboundMapperSimpleName = inboundMapperType.toString().substring(
-                inboundMapperType.toString().lastIndexOf('.') + 1);
-            inboundMapperFieldName = inboundMapperSimpleName.substring(0, 1).toLowerCase() +
-                inboundMapperSimpleName.substring(1);
-
-            FieldSpec inboundMapperField = FieldSpec.builder(
-                inboundMapperType,
-                inboundMapperFieldName)
-                .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
-                .build();
-            resourceBuilder.addField(inboundMapperField);
-            inboundMapperAdded = true;
-        }
-
-        if (!cacheSideEffect && model.outputMapping().hasMapper()) {
-            outboundMapperType = model.outputMapping().mapperType();
-            String outboundMapperSimpleName = outboundMapperType.toString().substring(
-                outboundMapperType.toString().lastIndexOf('.') + 1);
-            outboundMapperFieldName = outboundMapperSimpleName.substring(0, 1).toLowerCase() +
-                outboundMapperSimpleName.substring(1);
-
-            boolean sameMapper = inboundMapperAdded && outboundMapperType.equals(inboundMapperType);
-            if (sameMapper) {
-                outboundMapperFieldName = inboundMapperFieldName;
-            } else {
-                if (inboundMapperAdded && outboundMapperFieldName.equals(inboundMapperFieldName)) {
-                    outboundMapperFieldName = "outboundMapper";
-                }
-                FieldSpec outboundMapperField = FieldSpec.builder(
-                    outboundMapperType,
-                    outboundMapperFieldName)
-                    .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
-                    .build();
-                resourceBuilder.addField(outboundMapperField);
-            }
-        }
-
-        // For REST resources, we use appropriate DTO types, not gRPC types
-        // The DTO types should be derived from domain types using the same
-        // transformation logic as the original getDtoType method would have used
+        // For REST resources, derive DTO types from domain types.
         TypeName inputDtoClassName = model.inboundDomainType() != null
             ? convertDomainToDtoType(model.inboundDomainType())
             : ClassName.OBJECT;
@@ -168,6 +120,30 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         TypeName domainOutputType = cacheSideEffect
             ? outputDtoClassName
             : (model.outboundDomainType() != null ? model.outboundDomainType() : ClassName.OBJECT);
+
+        // Use generic Mapper interfaces so AP generation does not depend on concrete mapper resolution.
+        String inboundMapperFieldName = "inboundMapper";
+        String outboundMapperFieldName = "outboundMapper";
+        if (!cacheSideEffect) {
+            TypeName inboundMapperType = ParameterizedTypeName.get(
+                ClassName.get("org.pipelineframework.mapper", "Mapper"),
+                WildcardTypeName.subtypeOf(Object.class),
+                inputDtoClassName,
+                domainInputType
+            );
+            TypeName outboundMapperType = ParameterizedTypeName.get(
+                ClassName.get("org.pipelineframework.mapper", "Mapper"),
+                WildcardTypeName.subtypeOf(Object.class),
+                outputDtoClassName,
+                domainOutputType
+            );
+            resourceBuilder.addField(FieldSpec.builder(inboundMapperType, inboundMapperFieldName)
+                .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
+                .build());
+            resourceBuilder.addField(FieldSpec.builder(outboundMapperType, outboundMapperFieldName)
+                .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
+                .build());
+        }
 
         ClassName adapterClass = resolveRestAdapterClass(model);
         TypeName adapterType = ParameterizedTypeName.get(
@@ -611,6 +587,13 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         return DtoTypeUtils.toDtoType(domainType);
     }
 
+    /**
+     * Validate that the pipeline step model contains required input/output mapping configuration for REST generation.
+     *
+     * @param model the pipeline step model to validate
+     * @throws IllegalStateException if {@code model} is null, if input or output mappings are missing,
+     *                               or if either mapping lacks a non-null domain type
+     */
     private void validateRestMappings(PipelineStepModel model) {
         if (model == null) {
             throw new IllegalStateException("REST resource generation requires a non-null PipelineStepModel");
@@ -620,15 +603,17 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
                 "REST resource generation for '%s' requires input/output mappings to be present",
                 model.serviceName()));
         }
-        if (!model.inputMapping().hasMapper() || model.inputMapping().domainType() == null) {
+        if (model.inputMapping().domainType() == null) {
             throw new IllegalStateException(String.format(
-                "REST resource generation for '%s' requires a non-null input domain type and inbound mapper (inputMapping=%s)",
+                "REST resource generation for '%s' requires a non-null input domain type " +
+                "(inputMapping=%s).",
                 model.serviceName(),
                 model.inputMapping()));
         }
-        if (!model.outputMapping().hasMapper() || model.outputMapping().domainType() == null) {
+        if (model.outputMapping().domainType() == null) {
             throw new IllegalStateException(String.format(
-                "REST resource generation for '%s' requires a non-null output domain type and outbound mapper (outputMapping=%s)",
+                "REST resource generation for '%s' requires a non-null output domain type " +
+                "(outputMapping=%s).",
                 model.serviceName(),
                 model.outputMapping()));
         }

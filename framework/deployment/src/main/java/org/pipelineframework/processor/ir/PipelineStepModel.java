@@ -442,4 +442,61 @@ public record PipelineStepModel(
                     externalMapper);
         }
     }
+    
+    /**
+     * Creates a new PipelineStepModel with the same properties as this instance but with the specified deployment role.
+     *
+     * @param role the deployment role to use in the new instance
+     * @return a new PipelineStepModel with the same properties but the specified deployment role
+     */
+    public PipelineStepModel withDeploymentRole(DeploymentRole role) {
+        return new PipelineStepModel(
+            serviceName,
+            generatedName,
+            servicePackage,
+            serviceClassName,
+            inputMapping,
+            outputMapping,
+            streamingShape,
+            enabledTargets,
+            executionMode,
+            role,
+            sideEffect,
+            cacheKeyGenerator,
+            orderingRequirement,
+            threadSafety,
+            delegateService,
+            externalMapper
+        );
+    }
+
+    /**
+     * Creates a new Builder pre-populated with this model's current values.
+     * <p>
+     * This enables the builder pattern for creating modified copies:
+     * <pre>{@code
+     * PipelineStepModel updated = model.toBuilder()
+     *     .inputMapping(newInputMapping)
+     *     .build();
+     * }</pre>
+     *
+     * @return a Builder seeded with this model's current field values
+     */
+    public Builder toBuilder() {
+        return new Builder()
+            .serviceName(serviceName)
+            .generatedName(generatedName)
+            .servicePackage(servicePackage)
+            .serviceClassName(serviceClassName)
+            .inputMapping(inputMapping)
+            .outputMapping(outputMapping)
+            .streamingShape(streamingShape)
+            .enabledTargets(enabledTargets)
+            .executionMode(executionMode)
+            .deploymentRole(deploymentRole)
+            .sideEffect(sideEffect)
+            .cacheKeyGenerator(cacheKeyGenerator)
+            .orderingRequirement(orderingRequirement)
+            .threadSafety(threadSafety);
+    }
 }
