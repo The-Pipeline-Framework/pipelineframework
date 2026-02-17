@@ -1,7 +1,9 @@
 package org.pipelineframework.processor.phase;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import javax.lang.model.element.Element;
@@ -57,7 +59,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             stepModels.addAll(templateModels);
         }
 
-        ctx.setStepModels(stepModels);
+        ctx.setStepModels(deduplicateByServiceName(stepModels));
     }
 
     private List<PipelineStepModel> extractStepModels(PipelineCompilationContext ctx) {
@@ -85,5 +87,14 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         return stepModels;
+    }
+
+    private List<PipelineStepModel> deduplicateByServiceName(List<PipelineStepModel> stepModels) {
+        Map<String, PipelineStepModel> uniqueByServiceName = new LinkedHashMap<>();
+        for (PipelineStepModel model : stepModels) {
+            // Keep first occurrence so concrete @PipelineStep models take precedence over template fallbacks.
+            uniqueByServiceName.putIfAbsent(model.serviceName(), model);
+        }
+        return new ArrayList<>(uniqueByServiceName.values());
     }
 }

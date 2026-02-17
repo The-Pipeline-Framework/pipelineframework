@@ -176,6 +176,9 @@
                                 <copy todir="${project.build.directory}/monolith-sources" overwrite="false">
                                     <fileset dir="${project.basedir}/../orchestrator-svc/src/main/java"/>
                                 </copy>
+                                <copy todir="${project.build.directory}/monolith-sources" overwrite="false" failonerror="false">
+                                    <fileset dir="${project.basedir}/../orchestrator-svc/target/generated-sources/pipeline/orchestrator-client"/>
+                                </copy>
                             </target>
                         </configuration>
                     </execution>
@@ -196,6 +199,34 @@
                             <sources>
                                 <source>${project.build.directory}/monolith-sources</source>
                             </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>merge-orchestrator-pipeline-metadata</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.outputDirectory}/META-INF/pipeline</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/../orchestrator-svc/target/classes/META-INF/pipeline</directory>
+                                    <filtering>false</filtering>
+                                    <includes>
+                                        <include>order.json</include>
+                                        <include>telemetry.json</include>
+                                        <include>orchestrator-clients.properties</include>
+                                    </includes>
+                                </resource>
+                            </resources>
                         </configuration>
                     </execution>
                 </executions>
