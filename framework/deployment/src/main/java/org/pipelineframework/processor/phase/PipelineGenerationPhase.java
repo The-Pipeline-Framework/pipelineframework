@@ -365,6 +365,12 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             restFunctionHandlerRenderer);
     }
 
+    /**
+     * Collects enabled aspect names from the compilation context and normalizes them to lowercase.
+     *
+     * @param ctx the pipeline compilation context to read aspect models from
+     * @return an unmodifiable set of enabled aspect names in lowercase; empty if no aspects are present
+     */
     private Set<String> computeEnabledAspects(PipelineCompilationContext ctx) {
         return Optional.ofNullable(ctx.getAspectModels())
             .orElse(List.of())
@@ -376,6 +382,16 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             .collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
 
+    /**
+     * Create a GenerationContext configured for producing an external adapter for the specified deployment role.
+     *
+     * @param ctx the pipeline compilation context providing the processing environment and generation root
+     * @param adapterRole the deployment role that determines the adapter's output directory and target role
+     * @param enabledAspects names of enabled aspects to include in generation (may be empty)
+     * @param cacheKeyGenerator a ClassName for a cache key generator to include, or {@code null} if none
+     * @param descriptorSet optional protobuf FileDescriptorSet to include, or {@code null}
+     * @return a GenerationContext initialized with the processing environment, resolved output directory, role, enabled aspects, cache key generator, and descriptor set
+     */
     private GenerationContext createExternalAdapterGenerationContext(
             PipelineCompilationContext ctx,
             org.pipelineframework.processor.ir.DeploymentRole adapterRole,

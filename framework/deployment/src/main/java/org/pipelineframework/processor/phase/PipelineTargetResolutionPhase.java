@@ -52,12 +52,12 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Resolves generation targets for each pipeline step according to the context's transport mode and deployment role, updates each step model with those targets, and stores the aggregated resolved targets back into the compilation context.
+     * Resolve generation targets for each pipeline step and update the compilation context.
      *
-     * The transport mode is taken from the context and defaults to GRPC when not present.
+     * Determines targets using the context's transport mode (defaults to GRPC when null), updates each step model's enabledTargets, replaces the context's step models with the updated list, and stores the union of all enabledTargets as the context's resolved targets.
      *
-     * @param ctx the pipeline compilation context whose step models and transport mode are read and whose step models and resolved targets are replaced with the computed results
-     * @throws Exception if target resolution or context update fails
+     * @param ctx the pipeline compilation context whose step models and transport mode are read and whose step models and resolved targets are updated
+     * @throws Exception if an error occurs during target resolution or while updating the context
      */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
@@ -83,17 +83,12 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Resolve the set of generation targets for a given deployment role and transport mode.
-     *
-     * <p>Client roles return the client-side generation target corresponding to the transport
-     * (REST -> REST_CLIENT_STEP, LOCAL -> LOCAL_CLIENT_STEP, GRPC -> CLIENT_STEP). Non-client
-     * roles return the resource/service target for the transport (REST -> REST_RESOURCE,
-     * GRPC -> GRPC_SERVICE). For non-client roles with transportMode == LOCAL this method returns
-     * GRPC_SERVICE_SIDE_EFFECT_ONLY to drive side-effect bean generation without full gRPC adapter emission.
+     * Determine which generation targets apply for a deployment role under a transport mode.
      *
      * @param role the deployment role to resolve targets for
-     * @param transportMode the transport mode that influences which targets are selected
-     * @return a set of GenerationTarget values applicable to the given role and transport mode
+     * @param transportMode the transport mode that influences target selection
+     * @return the set of GenerationTarget values applicable to the given role and transport mode
+     * @throws IllegalArgumentException if the deployment role is not supported
      */
     private Set<GenerationTarget> resolveTargetsForRole(
             DeploymentRole role, TransportMode transportMode) {
@@ -104,6 +99,16 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
         return strategy.resolve(transportMode);
     }
 
+    /**
+     * Determine the set of generation targets applicable to a pipeline step model.
+     *
+     * If the model delegates to an external service, the step emits only the local-client target;
+     * otherwise targets are resolved from the model's deployment role and the provided transport mode.
+     *
+     * @param model the pipeline step model to resolve targets for
+     * @param transportMode the transport mode used to influence resolution (may be null if caller applies a default)
+     * @return a set of GenerationTarget values applicable to the given step model
+     */
     private Set<GenerationTarget> resolveTargetsForModel(PipelineStepModel model, TransportMode transportMode) {
         if (model.delegateService() != null) {
             // Delegated steps only resolve local client target here.

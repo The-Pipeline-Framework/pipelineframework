@@ -27,16 +27,17 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
     private final StepBindingConstructionService stepBindingConstructionService;
 
     /**
-     * Creates a new PipelineBindingConstructionPhase.
+     * Creates a PipelineBindingConstructionPhase initialized with a default GrpcRequirementEvaluator.
      */
     public PipelineBindingConstructionPhase() {
         this(new GrpcRequirementEvaluator(), new StepBindingConstructionService());
     }
 
     /**
-     * Creates a new PipelineBindingConstructionPhase with an injected gRPC requirement evaluator.
+     * Construct a PipelineBindingConstructionPhase using the given gRPC requirement evaluator.
      *
-     * @param grpcRequirementEvaluator evaluator used to determine if descriptor loading is required
+     * @param grpcRequirementEvaluator evaluator used to decide whether gRPC descriptor loading and binding resolution are required
+     * @throws NullPointerException if {@code grpcRequirementEvaluator} is null
      */
     public PipelineBindingConstructionPhase(GrpcRequirementEvaluator grpcRequirementEvaluator) {
         this(grpcRequirementEvaluator, new StepBindingConstructionService());
@@ -51,6 +52,11 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
             "stepBindingConstructionService");
     }
 
+    /**
+     * Identifier for the pipeline binding construction phase.
+     *
+     * @return the phase name "Pipeline Binding Construction Phase"
+     */
     @Override
     public String name() {
         return "Pipeline Binding Construction Phase";
@@ -98,12 +104,12 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
     }
 
     /**
-     * Determine whether gRPC bindings are required for the given compilation context.
+     * Determine whether the compilation context requires gRPC bindings.
      *
-     * Evaluates step models and orchestrator template configuration to decide if descriptor
-     * loading and gRPC binding resolution are necessary.
+     * Considers step models, orchestrator models, and the pipeline template configuration to decide
+     * if descriptor loading and gRPC binding resolution are needed.
      *
-     * @param ctx the pipeline compilation context to inspect
+     * @param ctx the pipeline compilation context to inspect for models and configuration
      * @return `true` if gRPC bindings are required, `false` otherwise
      */
     private boolean needsGrpcBindings(PipelineCompilationContext ctx) {
@@ -116,6 +122,13 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
         );
     }
 
+    /**
+     * Load the protobuf DescriptorProtos.FileDescriptorSet for pipeline step models that require gRPC descriptors.
+     *
+     * @param ctx the compilation context providing step models and the processing environment
+     * @return the descriptor set containing descriptors for non-delegated step services
+     * @throws IOException if descriptor files cannot be located or read
+     */
     private DescriptorProtos.FileDescriptorSet loadDescriptorSet(PipelineCompilationContext ctx) throws IOException {
         DescriptorFileLocator locator = new DescriptorFileLocator();
         Set<String> expectedServices = ctx.getStepModels().stream()

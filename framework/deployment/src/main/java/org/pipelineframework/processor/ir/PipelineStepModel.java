@@ -120,20 +120,24 @@ public record PipelineStepModel(
     }
 
     /**
-     * Create a pipeline step model with default ordering and thread-safety hints.
+     * Create a PipelineStepModel using provided values and default hints for ordering, thread-safety,
+     * delegate service, and external mapper.
      *
-     * @param serviceName service name from the step class
-     * @param generatedName generated service name for adapters
-     * @param servicePackage base service package
-     * @param serviceClassName service class name
-     * @param inputMapping input type mapping
-     * @param outputMapping output type mapping
-     * @param streamingShape streaming shape for the step
-     * @param enabledTargets generation targets to render
-     * @param executionMode execution mode
-     * @param deploymentRole deployment role
-     * @param sideEffect whether this step is a side-effect plugin
-     * @param cacheKeyGenerator optional cache key generator class
+     * Defaults: ordering is set to OrderingRequirement.RELAXED, threadSafety is set to ThreadSafety.SAFE,
+     * and both delegateService and externalMapper are set to null.
+     *
+     * @param serviceName service identifier derived from the step class
+     * @param generatedName base name to use for generated adapter/service classes
+     * @param servicePackage package to place generated service classes in
+     * @param serviceClassName ClassName of the service implementation
+     * @param inputMapping mapping information for inbound (domain→gRPC) types
+     * @param outputMapping mapping information for outbound (gRPC→domain) types
+     * @param streamingShape streaming configuration for the service
+     * @param enabledTargets set of GenerationTarget values enabled for generation
+     * @param executionMode execution mode for the service
+     * @param deploymentRole deployment role for the generated service implementation
+     * @param sideEffect true if the step is a synthetic side-effect observer
+     * @param cacheKeyGenerator optional ClassName override for cache key generation
      */
     public PipelineStepModel(String serviceName,
             String generatedName,
@@ -377,9 +381,9 @@ public record PipelineStepModel(
         }
 
         /**
-         * Sets the delegate service class for delegation steps.
+         * Configure the delegate service class to use when this pipeline step delegates to another service.
          *
-         * @param delegateService the delegate service class, or null if this is an internal step
+         * @param delegateService the delegate service ClassName, or {@code null} if this step has no delegate
          * @return this builder instance
          */
         public Builder delegateService(ClassName delegateService) {
@@ -388,9 +392,9 @@ public record PipelineStepModel(
         }
 
         /**
-         * Sets the operator mapper class for mapping between domain and operator types.
+         * Specifies a custom operator mapper class used to map between domain and operator types.
          *
-         * @param externalMapper the operator mapper class, or null if no operator mapping is needed
+         * @param externalMapper the operator mapper ClassName to use, or {@code null} to indicate no operator mapping
          * @return this builder instance
          */
         public Builder externalMapper(ClassName externalMapper) {
@@ -444,10 +448,10 @@ public record PipelineStepModel(
     }
     
     /**
-     * Creates a new PipelineStepModel with the same properties as this instance but with the specified deployment role.
+     * Produce a copy of this PipelineStepModel that uses the specified deployment role.
      *
-     * @param role the deployment role to use in the new instance
-     * @return a new PipelineStepModel with the same properties but the specified deployment role
+     * @param role the deployment role for the new instance
+     * @return a PipelineStepModel identical to this instance except with the provided deployment role
      */
     public PipelineStepModel withDeploymentRole(DeploymentRole role) {
         return new PipelineStepModel(

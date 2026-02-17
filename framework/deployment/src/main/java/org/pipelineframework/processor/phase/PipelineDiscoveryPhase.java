@@ -11,21 +11,15 @@ import java.util.Set;
 import javax.annotation.processing.Messager;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
-import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.util.Elements;
 import javax.tools.Diagnostic;
 
 import org.pipelineframework.annotation.PipelineOrchestrator;
 import org.pipelineframework.annotation.PipelinePlugin;
 import org.pipelineframework.config.PlatformMode;
-import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
-import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
-import org.pipelineframework.processor.config.PipelineAspectConfigLoader;
-import org.pipelineframework.processor.config.PipelineRuntimeMappingLoader;
-import org.pipelineframework.processor.config.PipelineRuntimeMappingLocator;
 import org.pipelineframework.processor.config.PipelineStepConfigLoader;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
@@ -47,18 +41,21 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     private final TransportPlatformResolver transportPlatformResolver;
 
     /**
-     * Creates a new PipelineDiscoveryPhase.
+     * Create a PipelineDiscoveryPhase initialized with default collaborators.
+     *
+     * <p>Uses a new DiscoveryPathResolver, DiscoveryConfigLoader, and TransportPlatformResolver.
      */
     public PipelineDiscoveryPhase() {
         this(new DiscoveryPathResolver(), new DiscoveryConfigLoader(), new TransportPlatformResolver());
     }
 
     /**
-     * Creates a new PipelineDiscoveryPhase with injected collaborators.
+     * Constructs a PipelineDiscoveryPhase with the provided collaborators.
      *
-     * @param discoveryPathResolver path resolver collaborator
-     * @param discoveryConfigLoader config loader collaborator
-     * @param transportPlatformResolver transport/platform resolver collaborator
+     * @param discoveryPathResolver resolver for locating pipeline-related paths
+     * @param discoveryConfigLoader loader for discovery configuration
+     * @param transportPlatformResolver resolver for transport and platform modes
+     * @throws NullPointerException if any argument is null
      */
     public PipelineDiscoveryPhase(
             DiscoveryPathResolver discoveryPathResolver,
@@ -69,6 +66,11 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         this.transportPlatformResolver = Objects.requireNonNull(transportPlatformResolver, "transportPlatformResolver");
     }
 
+    /**
+     * Provides the phase's human-readable name.
+     *
+     * @return the phase name "Pipeline Discovery Phase"
+     */
     @Override
     public String name() {
         return "Pipeline Discovery Phase";
@@ -239,10 +241,10 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Returns the {@code PipelineOrchestrator} annotation from the given element, if present.
+     * Retrieve the {@code PipelineOrchestrator} annotation from the given element.
      *
-     * @param orchestratorElement element to inspect; may be null
-     * @return the {@code PipelineOrchestrator} annotation, or {@code null} if the element is null or not annotated
+     * @param orchestratorElement element to inspect; may be {@code null}
+     * @return the {@code PipelineOrchestrator} annotation, or {@code null} if the element is {@code null} or not annotated
      */
     private PipelineOrchestrator resolveOrchestratorAnnotation(Element orchestratorElement) {
         if (orchestratorElement == null) {
@@ -258,9 +260,12 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     /**
      * Parse step definitions from the pipeline template configuration.
      *
-     * @param ctx the pipeline compilation context
-     * @return a list of StepDefinition objects parsed from the template
-     * @throws IOException if config resolution fails or parsing step definitions fails
+     * Returns the parsed StepDefinition objects found in the resolved pipeline config.
+     * If no config is found or parsing fails, returns an empty list and emits diagnostics
+     * via the processing environment's messager when available.
+     *
+     * @param ctx the pipeline compilation context used to resolve config path and emit diagnostics
+     * @return a list of StepDefinition parsed from the template; empty if none or on error
      */
     private List<StepDefinition> parseStepDefinitions(Optional<Path> configPath, Messager messager) {
         if (configPath.isEmpty()) {

@@ -76,7 +76,7 @@ public class PipelineCompilationContext {
     private DescriptorProtos.FileDescriptorSet descriptorSet;
     
     /**
-     * Initialize a compilation context for the given annotation processing round.
+     * Create a compilation context for the given annotation processing round.
      *
      * @param processingEnv the processing environment providing compiler utilities and messaging
      * @param roundEnv the round environment containing the annotated elements visible in this round

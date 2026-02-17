@@ -344,14 +344,14 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-     * Declares the REST client's streaming-to-unary process operation.
-     *
-     * @param versionTag the pipeline version tag passed via header
-     * @param replayMode the replay mode flag passed via header
-     * @param cachePolicy the cache policy passed via header
-     * @param inputDtos a batch of input DTOs to be processed
-     * @return a Uni that emits the single output DTO produced from the streamed inputs
-     */
+         * Declares the REST client's streaming-to-unary process operation.
+         *
+         * @param versionTag the pipeline version tag passed via header
+         * @param replayMode the replay mode flag passed via header
+         * @param cachePolicy the cache policy passed via header
+         * @param inputDtos a stream of input DTOs to be processed
+         * @return a `Uni` that emits the single output DTO produced from the streamed inputs
+         */
     private MethodSpec buildStreamingUnaryMethod(TypeName inputDto, TypeName outputDto, String operationPath) {
         MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("process")
             .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.ws.rs", "POST")).build())
@@ -433,6 +433,13 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
         return DtoTypeUtils.toDtoType(domainType);
     }
 
+    /**
+     * Ensure the pipeline step model contains the required REST input and output mappings, domain types, and mappers.
+     *
+     * @param model the pipeline step model to validate
+     * @throws IllegalStateException if the model is null; if input or output mappings are missing; or if either mapping
+     *                               lacks a mapper or a non-null domain type
+     */
     private void validateRestMappings(PipelineStepModel model) {
         if (model == null) {
             throw new IllegalStateException("REST client generation requires a non-null PipelineStepModel");
