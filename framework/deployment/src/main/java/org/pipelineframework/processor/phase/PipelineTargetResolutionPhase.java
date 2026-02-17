@@ -67,7 +67,7 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
         // Apply transport targets and resolve client/server roles for each step model
         List<PipelineStepModel> updatedModels = new ArrayList<>();
         for (PipelineStepModel model : ctx.getStepModels()) {
-            Set<GenerationTarget> targets = resolveTargetsForRole(model.deploymentRole(), transportMode);
+            Set<GenerationTarget> targets = resolveTargetsForModel(model, transportMode);
             PipelineStepModel updatedModel = model.toBuilder()
                 .enabledTargets(targets)
                 .build();
@@ -102,5 +102,13 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
             throw new IllegalArgumentException("Unsupported deployment role: " + role);
         }
         return strategy.resolve(transportMode);
+    }
+
+    private Set<GenerationTarget> resolveTargetsForModel(PipelineStepModel model, TransportMode transportMode) {
+        if (model.delegateService() != null) {
+            // Delegated steps should always emit a local client contract plus the external adapter.
+            return Set.of(GenerationTarget.LOCAL_CLIENT_STEP);
+        }
+        return resolveTargetsForRole(model.deploymentRole(), transportMode);
     }
 }
