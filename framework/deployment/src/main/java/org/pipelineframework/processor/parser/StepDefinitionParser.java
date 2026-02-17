@@ -101,6 +101,11 @@ public class StepDefinitionParser {
         String delegateClassName = getStringValue(stepData, "delegate");
         String serviceClassName = getStringValue(stepData, "service");
 
+        if (!isBlank(delegateClassName) && !isBlank(serviceClassName)) {
+            LOG.warnf("Skipping step '%s': 'service' and 'delegate' are mutually exclusive", name);
+            return null;
+        }
+
         StepKind kind;
         String executionClassName;
 
@@ -140,6 +145,22 @@ public class StepDefinitionParser {
             externalMapper = parseClassName(externalMapperName);
             if (externalMapper == null) {
                 LOG.warnf("Skipping step '%s': invalid external mapper class name '%s'", name, externalMapperName);
+                return null;
+            }
+        }
+
+        if (kind == StepKind.INTERNAL) {
+            if (externalMapper != null) {
+                LOG.warnf("Ignoring 'externalMapper' on internal step '%s'; this field is only used for delegated steps", name);
+                externalMapper = null;
+            }
+        }
+
+        if (kind == StepKind.DELEGATED) {
+            boolean hasInput = !isBlank(inputTypeName);
+            boolean hasOutput = !isBlank(outputTypeName);
+            if (hasInput != hasOutput) {
+                LOG.warnf("Skipping step '%s': delegated steps must provide both 'input' and 'output' together", name);
                 return null;
             }
         }
