@@ -92,8 +92,9 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
 
             // Construct gRPC binding if needed
             GrpcBinding grpcBinding = null;
-            if (model.enabledTargets().contains(GenerationTarget.GRPC_SERVICE)
-                || model.enabledTargets().contains(GenerationTarget.CLIENT_STEP)) {
+            if (model.delegateService() == null
+                && (model.enabledTargets().contains(GenerationTarget.GRPC_SERVICE)
+                || model.enabledTargets().contains(GenerationTarget.CLIENT_STEP))) {
                 grpcBinding = grpcBindingResolver.resolve(model, descriptorSet);
             }
 
@@ -153,6 +154,7 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
     private DescriptorProtos.FileDescriptorSet loadDescriptorSet(PipelineCompilationContext ctx) throws IOException {
         DescriptorFileLocator locator = new DescriptorFileLocator();
         Set<String> expectedServices = ctx.getStepModels().stream()
+            .filter(model -> model.delegateService() == null)
             .map(PipelineStepModel::serviceName)
             .collect(java.util.stream.Collectors.toSet());
         return locator.locateAndLoadDescriptors(

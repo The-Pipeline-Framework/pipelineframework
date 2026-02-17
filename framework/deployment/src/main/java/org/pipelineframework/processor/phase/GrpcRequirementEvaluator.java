@@ -36,8 +36,9 @@ class GrpcRequirementEvaluator {
         Objects.requireNonNull(orchestratorModels, "orchestratorModels must not be null");
         
         if (stepModels.stream().anyMatch(model ->
-            model.enabledTargets().contains(GenerationTarget.GRPC_SERVICE)
-                || model.enabledTargets().contains(GenerationTarget.CLIENT_STEP))) {
+            model.delegateService() == null
+                && (model.enabledTargets().contains(GenerationTarget.GRPC_SERVICE)
+                || model.enabledTargets().contains(GenerationTarget.CLIENT_STEP)))) {
             return true;
         }
         if (!orchestratorModels.isEmpty()) {

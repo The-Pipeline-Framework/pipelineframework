@@ -56,6 +56,16 @@ class GrpcRequirementEvaluatorTest {
     }
 
     @Test
+    void needsGrpc_delegatedStepWithClientStep_false() {
+        PipelineStepModel delegatedModel = TestModelFactory
+            .createTestModelWithTargets("DelegatedSvc", Set.of(GenerationTarget.CLIENT_STEP))
+            .toBuilder()
+            .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
+            .build();
+        assertFalse(evaluator.needsGrpcBindings(List.of(delegatedModel), List.of(), null, messager));
+    }
+
+    @Test
     void needsGrpc_stepWithRestOnly_false() {
         PipelineStepModel modelWithTargets = TestModelFactory.createTestModelWithTargets("Svc", Set.of(GenerationTarget.REST_RESOURCE));
         assertFalse(evaluator.needsGrpcBindings(List.of(modelWithTargets), List.of(), null, messager));

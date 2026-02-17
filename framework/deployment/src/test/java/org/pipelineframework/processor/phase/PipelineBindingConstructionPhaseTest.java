@@ -120,4 +120,22 @@ class PipelineBindingConstructionPhaseTest {
         assertThrows(NullPointerException.class,
             () -> new PipelineBindingConstructionPhase(null));
     }
+
+    @Test
+    void delegatedClientStepDoesNotRequireGrpcDescriptorBindings() throws Exception {
+        PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
+        PipelineStepModel delegatedModel = TestModelFactory
+            .createTestModelWithTargets("DelegatedService", Set.of(GenerationTarget.CLIENT_STEP))
+            .toBuilder()
+            .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
+            .build();
+        context.setStepModels(List.of(delegatedModel));
+
+        assertDoesNotThrow(() -> phase.execute(context));
+        Map<String, Object> bindings = context.getRendererBindings();
+        assertTrue(bindings.containsKey("DelegatedService_external_adapter"));
+        assertFalse(bindings.containsKey("DelegatedService_grpc"));
+    }
 }
