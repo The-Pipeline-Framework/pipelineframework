@@ -61,13 +61,13 @@ class RestResourceRendererTest {
         assertTrue(source.contains("@Path(\"/ProcessPaymentStatusReactiveService/remoteProcess\")"));
         assertTrue(source.contains("class ProcessPaymentStatusResource"));
         assertTrue(source.contains("ProcessPaymentStatusReactiveService domainService;"));
-        assertTrue(source.contains("PaymentStatusMapper paymentStatusMapper;"));
-        assertTrue(source.contains("PaymentOutputMapper paymentOutputMapper;"));
+        assertTrue(source.contains("Mapper<?, PaymentStatusDto, PaymentStatus> inboundMapper;"));
+        assertTrue(source.contains("Mapper<?, PaymentOutputDto, PaymentOutput> outboundMapper;"));
         assertTrue(source.contains("@POST"));
         assertTrue(source.contains("@Path(\"/\")"));
         assertTrue(source.contains("public Uni<PaymentOutputDto> process(PaymentStatusDto inputDto)"));
-        assertTrue(source.contains("PaymentStatus inputDomain = paymentStatusMapper.fromDto(inputDto);"));
-        assertTrue(source.contains("return domainService.process(inputDomain).map(output -> paymentOutputMapper.toDto(output));"));
+        assertTrue(source.contains("PaymentStatus inputDomain = inboundMapper.fromDto(inputDto);"));
+        assertTrue(source.contains("return domainService.process(inputDomain).map(output -> outboundMapper.toDto(output));"));
     }
 
     @Test

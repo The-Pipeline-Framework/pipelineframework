@@ -165,7 +165,7 @@ public final class MapperRegistryBuildItem extends SimpleBuildItem {
     /**
      * String representation of this build item that includes the number of registered mappers.
      *
-     * @return the string in the form "MapperRegistryBuildItem{size=<n>}" where <n> is the number of mappings
+     * @return the string in the form {@code MapperRegistryBuildItem{size=<n>}} where {@code n} is the number of mappings
      */
     @Override
     public String toString() {
