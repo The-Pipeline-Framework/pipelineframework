@@ -140,7 +140,6 @@ public class PipelineCompiler extends AbstractProcessingTool {
         compilationExecuted = true;
         return true;
     }
-
     /**
      * Detects whether a pipeline configuration signal is present for the compiler.
      *
