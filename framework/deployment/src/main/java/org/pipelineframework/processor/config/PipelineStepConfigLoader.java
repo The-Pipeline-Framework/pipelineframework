@@ -81,15 +81,14 @@ public class PipelineStepConfigLoader {
     }
 
     /**
-     * Load pipeline step configuration from a YAML file.
+     * Load pipeline step configuration from the given YAML file.
      *
-     * Reads the file at the given path, extracts the configured base package, resolves the transport
-     * (applying known-name normalization and any external override), and collects declared step
-     * input and output type names.
+     * The returned StepConfig contains the configured base package, the resolved transport and
+     * platform values (after applying environment/property overrides and defaults), and the lists
+     * of step input and output type names declared in the file.
      *
      * @param configPath the path to the pipeline YAML configuration
-     * @return a StepConfig containing the configured base package, the resolved transport name,
-     *         the list of input type names, and the list of output type names
+     * @return a StepConfig with the base package, resolved transport, resolved platform, input type names, and output type names
      * @throws IllegalStateException if the YAML file cannot be read
      */
     public StepConfig load(Path configPath) {
