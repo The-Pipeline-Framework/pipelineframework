@@ -34,5 +34,13 @@ cleanup() {
 trap cleanup EXIT
 
 cp "$MONOLITH_MAPPING" "$ACTIVE_MAPPING"
+
+# Build orchestrator-svc first to generate LOCAL client sources and metadata
+# The monolith build copies these from orchestrator-svc/target/
+echo "Building orchestrator-svc to generate LOCAL client sources..."
 PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT:-LOCAL}"
-"$MVN_BIN" -f "$CSV_DIR/pom.monolith.xml" -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean install "$@"
+"$MVN_BIN" -f "$CSV_DIR/pom.pipeline-runtime.xml" -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean install -pl orchestrator-svc -am
+
+# Now build monolith (copies generated sources from orchestrator-svc/target/)
+echo "Building monolith..."
+"$MVN_BIN" -f "$CSV_DIR/pom.monolith.xml" clean install "$@"
