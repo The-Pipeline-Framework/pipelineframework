@@ -53,6 +53,14 @@ jobs:
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" -f framework/pom.xml clean install -DskipTests
 
+      - name: Upload framework artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: framework-m2-cache
+          path: ~/.m2/repository/org/pipelineframework/
+          retention-days: 1
+          if-no-files-found: error
+
   # All E2E workflows run in parallel after framework is installed
   e2e-csv-monolith:
     name: CSV Monolith E2E
