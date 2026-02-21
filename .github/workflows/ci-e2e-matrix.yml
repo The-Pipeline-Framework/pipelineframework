@@ -57,15 +57,14 @@ jobs:
       - name: Install root POM and framework to local repository
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
-          # Install root POM first (required by framework-parent)
-          ./mvnw "${maven_args[@]}" -N install
-          # Install framework modules
-          ./mvnw "${maven_args[@]}" -f framework/pom.xml clean install -DskipTests
+          # Install framework and all example parents to local repository
+          # -pl framework,examples installs both, -am includes all parent POMs
+          ./mvnw "${maven_args[@]}" clean install -DskipTests -pl framework,examples -am
 
       - name: Package framework artifacts
         run: |
           mkdir -p /tmp/m2-artifacts
-          tar -czf /tmp/m2-artifacts/framework-m2-cache.tar.gz -C ~/.m2/repository org/pipelineframework
+          tar -czf /tmp/m2-artifacts/framework-m2-cache.tar.gz -C ~/.m2/repository org/pipelineframework org.pipelineframework.csv
 
       - name: Upload framework artifacts
         uses: actions/upload-artifact@v4
