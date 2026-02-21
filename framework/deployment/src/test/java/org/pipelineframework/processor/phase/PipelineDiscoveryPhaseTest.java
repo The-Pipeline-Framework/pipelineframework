@@ -227,4 +227,55 @@ class PipelineDiscoveryPhaseTest {
         assertTrue(context.isTransportModeGrpc());
         assertEquals(PlatformMode.COMPUTE, context.getPlatformMode());
     }
+
+    @Test
+    void executePassesProcessorOptionsForTransportResolution() throws Exception {
+        DiscoveryPathResolver pathResolver = mock(DiscoveryPathResolver.class);
+        DiscoveryConfigLoader configLoader = mock(DiscoveryConfigLoader.class);
+        TransportPlatformResolver tpResolver = mock(TransportPlatformResolver.class);
+
+        Path generatedSourcesRoot = tempDir.resolve("target/generated-sources/pipeline");
+        Path moduleDir = tempDir;
+        Path pipelineConfig = tempDir.resolve("pipeline.yaml");
+        Files.writeString(pipelineConfig, "appName: test\ntransport: GRPC");
+
+        Map<String, String> processorOptions = Map.of("pipeline.transport", "LOCAL");
+        when(processingEnv.getOptions()).thenReturn(processorOptions);
+        when(pathResolver.resolveGeneratedSourcesRoot(processorOptions)).thenReturn(generatedSourcesRoot);
+        when(pathResolver.resolveModuleDir(generatedSourcesRoot)).thenReturn(moduleDir);
+        when(pathResolver.resolveModuleName(processorOptions)).thenReturn("test-module");
+
+        when(configLoader.resolvePipelineConfigPath(processorOptions, moduleDir, messager))
+            .thenReturn(java.util.Optional.of(pipelineConfig));
+        when(configLoader.loadAspects(pipelineConfig, messager)).thenReturn(java.util.List.of());
+        when(configLoader.loadTemplateConfig(pipelineConfig, messager)).thenReturn(null);
+        when(configLoader.loadStepConfig(
+            eq(pipelineConfig),
+            any(Function.class),
+            any(Function.class),
+            eq(messager)))
+            .thenAnswer(invocation -> {
+                Function<String, String> propertyLookup = invocation.getArgument(1);
+                String transportOverride = propertyLookup.apply("pipeline.transport");
+                assertEquals("LOCAL", transportOverride, "Processor option should be passed to config loader");
+                return new org.pipelineframework.processor.config.PipelineStepConfigLoader.StepConfig(
+                    "com.example", "LOCAL", "COMPUTE", java.util.List.of(), java.util.List.of());
+            });
+        when(configLoader.loadRuntimeMapping(moduleDir, messager)).thenReturn(null);
+        when(tpResolver.resolveTransport("LOCAL", messager))
+            .thenReturn(org.pipelineframework.processor.ir.TransportMode.LOCAL);
+        when(tpResolver.resolvePlatform("COMPUTE", messager))
+            .thenReturn(org.pipelineframework.config.PlatformMode.COMPUTE);
+
+        PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase(pathResolver, configLoader, tpResolver);
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        when(roundEnv.getElementsAnnotatedWith(org.pipelineframework.annotation.PipelineOrchestrator.class))
+            .thenReturn(java.util.Set.of());
+        when(roundEnv.getElementsAnnotatedWith(org.pipelineframework.annotation.PipelinePlugin.class))
+            .thenReturn(java.util.Set.of());
+
+        phase.execute(context);
+
+        assertTrue(context.isTransportModeLocal(), "Transport mode should be LOCAL from processor option");
+    }
 }

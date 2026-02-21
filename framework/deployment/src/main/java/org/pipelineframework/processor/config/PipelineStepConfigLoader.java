@@ -107,6 +107,9 @@ public class PipelineStepConfigLoader {
         } else if (transport != null && !transport.isBlank()) {
             warn("Unknown pipeline transport '" + transport + "' in step config; defaulting to GRPC.");
             transport = "GRPC";
+        } else {
+            // No transport specified in YAML; will be resolved from override or default to GRPC
+            transport = "";
         }
         String transportOverride = resolveTransportOverride();
         if (transportOverride != null && !transportOverride.isBlank()) {
@@ -117,6 +120,9 @@ public class PipelineStepConfigLoader {
                 warn("Unknown pipeline.transport override '" + transportOverride
                     + "'; ignoring override and retaining existing value '" + transport + "'.");
             }
+        } else if (transport == null || transport.isBlank()) {
+            // No override and no YAML transport; default to GRPC
+            transport = "GRPC";
         }
         String normalizedPlatform = PlatformOverrideResolver.normalizeKnownPlatform(platform);
         if (normalizedPlatform != null) {

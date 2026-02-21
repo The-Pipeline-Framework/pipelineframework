@@ -127,7 +127,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         ctx.setRuntimeMapping(runtimeMapping);
 
         // Determine transport and platform modes
-        PipelineStepConfigLoader.StepConfig stepConfig = loadPipelineStepConfig(configPath, messager);
+        PipelineStepConfigLoader.StepConfig stepConfig = loadPipelineStepConfig(configPath, options, messager);
         TransportMode transportMode = transportPlatformResolver.resolveTransport(stepConfig.transport(), messager);
         ctx.setTransportMode(transportMode);
         PlatformMode platformMode = transportPlatformResolver.resolvePlatform(stepConfig.platform(), messager);
@@ -174,16 +174,19 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * missing or cannot be loaded, returns a default non-null configuration.
      *
      * @param configPath the optional resolved pipeline configuration path
+     * @param options the annotation processor options map for property lookup
      * @param messager the messager used to report warnings, may be null
      * @return a non-null {@link org.pipelineframework.processor.config.PipelineStepConfigLoader.StepConfig}
      */
-    private PipelineStepConfigLoader.StepConfig loadPipelineStepConfig(Optional<Path> configPath, Messager messager) {
+    private PipelineStepConfigLoader.StepConfig loadPipelineStepConfig(Optional<Path> configPath, Map<String, String> options, Messager messager) {
         if (configPath.isEmpty()) {
             return DEFAULT_STEP_CONFIG;
         }
+        // Processor options take precedence over YAML config, then env vars.
+        // processingEnv.getOptions() returns the -A... annotation processor options.
         PipelineStepConfigLoader.StepConfig loaded = discoveryConfigLoader.loadStepConfig(
             configPath.get(),
-            key -> null,
+            options::get,
             System::getenv,
             messager);
         return loaded != null ? loaded : DEFAULT_STEP_CONFIG;
