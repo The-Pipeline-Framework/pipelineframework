@@ -2,7 +2,6 @@ name: Reusable — CSV Monolith E2E
 
 on:
   workflow_call:
-  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
