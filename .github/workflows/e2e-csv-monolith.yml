@@ -10,6 +10,7 @@ on:
       - "pom.xml"
       - ".github/workflows/e2e-csv-monolith.yml"
       - ".github/workflows/full-tests.yml"
+  workflow_dispatch:
 
 env:
   MAVEN_OPTS: -Xmx1g -Xms512m
@@ -67,6 +68,7 @@ jobs:
             -pl orchestrator-svc \
             -Dcsv.runtime.layout=monolith \
             -Dcsv.e2e.pipeline.wait.seconds=120 \
+            -Dtest=CsvPaymentsEndToEndIT \
             -Dit.test=CsvPaymentsEndToEndIT \
             verify
 
