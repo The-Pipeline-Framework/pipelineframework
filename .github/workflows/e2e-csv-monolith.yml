@@ -2,6 +2,12 @@ name: Reusable — CSV Monolith E2E
 
 on:
   workflow_call:
+    inputs:
+      artifact_name:
+        description: 'Name of the Maven artifacts tarball'
+        required: false
+        default: 'framework-m2-cache'
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-e2e-csv-monolith
@@ -33,13 +39,13 @@ jobs:
       - name: Download framework artifacts
         uses: actions/download-artifact@v4
         with:
-          name: framework-m2-cache
+          name: ${{ inputs.artifact_name }}
           path: /tmp/m2-artifacts
 
       - name: Extract framework artifacts
         run: |
           mkdir -p ~/.m2/repository
-          tar -xzf /tmp/m2-artifacts/framework-m2-cache.tar.gz -C ~/.m2/repository
+          tar -xzf /tmp/m2-artifacts/${{ inputs.artifact_name }}.tar.gz -C ~/.m2/repository
 
       - name: Setup Testcontainers Docker environment
         uses: ./.github/actions/setup-testcontainers

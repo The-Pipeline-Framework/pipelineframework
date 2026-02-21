@@ -80,16 +80,22 @@ jobs:
     name: CSV Monolith E2E
     needs: build-framework
     uses: ./.github/workflows/e2e-csv-monolith.yml
+    with:
+      artifact_name: framework-m2-cache
     secrets: inherit
 
   e2e-csv-pipeline-runtime:
     name: CSV Pipeline Runtime E2E
     needs: build-framework
     uses: ./.github/workflows/e2e-csv-pipeline-runtime.yml
+    with:
+      artifact_name: framework-m2-cache
     secrets: inherit
 
   e2e-search-lambda:
     name: Search Lambda Smoke
     needs: build-framework
     uses: ./.github/workflows/e2e-search-lambda-smoke.yml
+    with:
+      artifact_name: framework-m2-cache
     secrets: inherit
