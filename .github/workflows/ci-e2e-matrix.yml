@@ -49,7 +49,9 @@ jobs:
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
 
       - name: Install framework to local repository
-        run: ./mvnw "${MAVEN_ARGS[@]}" -f framework/pom.xml clean install -DskipTests
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f framework/pom.xml clean install -DskipTests
 
   # All E2E workflows run in parallel after framework is installed
   e2e-csv-monolith:
