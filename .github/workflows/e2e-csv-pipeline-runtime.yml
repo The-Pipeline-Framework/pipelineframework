@@ -12,6 +12,10 @@ on:
       - ".github/workflows/full-tests.yml"
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   MAVEN_OPTS: -Xmx1g -Xms512m
   MAVEN_ARGS_BUILD: -B -T 1 -V -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
