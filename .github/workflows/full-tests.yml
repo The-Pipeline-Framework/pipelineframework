@@ -10,6 +10,10 @@ on:
       - 'pom.xml'
       - '.github/workflows/full-tests.yml'
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   MAVEN_OPTS: -Xmx1g -Xms512m
   MAVEN_ARGS_BUILD: -B -T 1 -V -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
@@ -41,39 +45,11 @@ jobs:
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
 
-      - name: Ensure Docker is ready for Testcontainers
+      - name: Setup Testcontainers Docker environment
+        uses: ./.github/actions/setup-testcontainers
+
+      - name: Verify Docker ready
         run: |
-          set -euo pipefail
-          echo "DOCKER_HOST=unix:///var/run/docker.sock" >> "$GITHUB_ENV"
-          if ! docker info >/dev/null 2>&1; then
-            echo "Docker daemon not ready; attempting startup"
-            sudo systemctl start docker || true
-          fi
-          for i in {1..10}; do
-            if docker info >/dev/null 2>&1; then
-              echo "Docker is ready"
-              break
-            fi
-            echo "Waiting for Docker (${i}/10)..."
-            sleep 3
-          done
-          SERVER_API="$(docker version --format '{{.Server.APIVersion}}')"
-          if [ -z "$SERVER_API" ]; then
-            echo "ERROR: Failed to resolve Docker Server API version from docker version output."
-            exit 1
-          fi
-          echo "Resolved Docker API version: $SERVER_API"
-          echo "DOCKER_API_VERSION=$SERVER_API" >> "$GITHUB_ENV"
-          echo "TESTCONTAINERS_DOCKER_CLIENT_STRATEGY=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" >> "$GITHUB_ENV"
-          echo "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock" >> "$GITHUB_ENV"
-          # Use JAVA_TOOL_OPTIONS so forked test JVMs (Surefire/Failsafe) also get the log manager system prop.
-          # MAVEN_OPTS only targets Maven JVM startup and can be missed by downstream forks.
-          echo "JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
-          # NOTE: MAVEN_OPTS is expanded from the current shell env here (not from prior $GITHUB_ENV writes);
-          # keep MAVEN_OPTS updates consolidated in one step (or set job-level env) to avoid drift.
-          echo "MAVEN_OPTS=${MAVEN_OPTS} -Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
-          echo "docker.client.strategy=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" > "$HOME/.testcontainers.properties"
-          echo "docker.host=unix:///var/run/docker.sock" >> "$HOME/.testcontainers.properties"
           docker version
           docker info
 

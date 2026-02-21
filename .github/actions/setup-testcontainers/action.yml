@@ -1,0 +1,54 @@
+name: 'Setup Testcontainers Docker Environment'
+description: 'Configures Docker and environment variables for Testcontainers on GitHub Actions Ubuntu runners'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Configure Testcontainers Docker environment
+      shell: bash
+      run: |
+        set -euo pipefail
+        
+        # Set Docker socket path for Testcontainers
+        echo "DOCKER_HOST=unix:///var/run/docker.sock" >> "$GITHUB_ENV"
+        
+        # Ensure Docker daemon is running (GitHub Actions runners may need startup)
+        if ! docker info >/dev/null 2>&1; then
+          echo "Docker daemon not ready; attempting startup"
+          sudo systemctl start docker || true
+        fi
+        
+        # Retry loop: wait for Docker to be ready (max 10 attempts, 3s each)
+        for i in {1..10}; do
+          if docker info >/dev/null 2>&1; then
+            echo "Docker is ready"
+            break
+          fi
+          echo "Waiting for Docker (${i}/10)..."
+          sleep 3
+        done
+        
+        # Extract Docker Server API version for Testcontainers compatibility
+        SERVER_API="$(docker version --format '{{.Server.APIVersion}}')"
+        if [ -z "$SERVER_API" ]; then
+          echo "ERROR: Failed to resolve Docker Server API version from docker version output."
+          exit 1
+        fi
+        echo "Resolved Docker API version: $SERVER_API"
+        echo "DOCKER_API_VERSION=$SERVER_API" >> "$GITHUB_ENV"
+        
+        # Configure Testcontainers to use Unix socket strategy
+        # Required on GitHub Actions Ubuntu runners where Testcontainers may not
+        # auto-detect the correct Docker client provider strategy
+        echo "TESTCONTAINERS_DOCKER_CLIENT_STRATEGY=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" >> "$GITHUB_ENV"
+        echo "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock" >> "$GITHUB_ENV"
+        
+        # Configure Java logging manager for Quarkus tests
+        # Use JAVA_TOOL_OPTIONS so forked test JVMs (Surefire/Failsafe) inherit the setting
+        echo "JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
+        echo "MAVEN_OPTS=${MAVEN_OPTS} -Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
+        
+        # Write Testcontainers properties file for explicit configuration
+        # This ensures Testcontainers uses the Unix socket strategy consistently
+        echo "docker.client.strategy=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" > "$HOME/.testcontainers.properties"
+        echo "docker.host=unix:///var/run/docker.sock" >> "$HOME/.testcontainers.properties"

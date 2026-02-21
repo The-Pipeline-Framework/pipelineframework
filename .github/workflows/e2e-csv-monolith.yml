@@ -10,6 +10,11 @@ on:
       - "pom.xml"
       - ".github/workflows/e2e-csv-monolith.yml"
       - ".github/workflows/full-tests.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   MAVEN_OPTS: -Xmx1g -Xms512m
@@ -35,27 +40,8 @@ jobs:
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
 
-      - name: Ensure Docker is ready for Testcontainers
-        run: |
-          set -euo pipefail
-          echo "DOCKER_HOST=unix:///var/run/docker.sock" >> "$GITHUB_ENV"
-          if ! docker info >/dev/null 2>&1; then
-            sudo systemctl start docker || true
-          fi
-          for i in {1..10}; do
-            if docker info >/dev/null 2>&1; then
-              break
-            fi
-            sleep 3
-          done
-          SERVER_API="$(docker version --format '{{.Server.APIVersion}}')"
-          echo "DOCKER_API_VERSION=$SERVER_API" >> "$GITHUB_ENV"
-          echo "TESTCONTAINERS_DOCKER_CLIENT_STRATEGY=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" >> "$GITHUB_ENV"
-          echo "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock" >> "$GITHUB_ENV"
-          echo "JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
-          echo "MAVEN_OPTS=${MAVEN_OPTS} -Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
-          echo "docker.client.strategy=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" > "$HOME/.testcontainers.properties"
-          echo "docker.host=unix:///var/run/docker.sock" >> "$HOME/.testcontainers.properties"
+      - name: Setup Testcontainers Docker environment
+        uses: ./.github/actions/setup-testcontainers
 
       - name: Build csv-payments monolith runtime
         run: ./examples/csv-payments/build-monolith.sh -DskipTests
@@ -67,6 +53,7 @@ jobs:
             -pl orchestrator-svc \
             -Dcsv.runtime.layout=monolith \
             -Dcsv.e2e.pipeline.wait.seconds=120 \
+            -Dtest=CsvPaymentsEndToEndIT \
             -Dit.test=CsvPaymentsEndToEndIT \
             verify
 

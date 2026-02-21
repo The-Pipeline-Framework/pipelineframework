@@ -103,4 +103,50 @@ class PipelineStepConfigLoaderTest {
 
         assertEquals("FUNCTION", stepConfig.platform());
     }
+
+    @Test
+    void transportPrecedenceProcessorOptionOverridesEnvAndYaml(@TempDir Path tempDir) throws IOException {
+        // Precedence: processor option > env var > YAML config > GRPC default
+        // This test verifies processor option wins over both env and YAML
+        PipelineStepConfigLoader loader = new PipelineStepConfigLoader(
+            key -> "pipeline.transport".equals(key) ? "LOCAL" : null,
+            key -> "PIPELINE_TRANSPORT".equals(key) ? "REST" : null
+        );
+        Path config = tempDir.resolve("pipeline-config.yaml");
+        Files.writeString(config, "basePackage: test\ntransport: GRPC\nsteps: []\n");
+
+        PipelineStepConfigLoader.StepConfig stepConfig = loader.load(config);
+
+        assertEquals("LOCAL", stepConfig.transport(), "Processor option should override both env and YAML");
+    }
+
+    @Test
+    void transportPrecedenceYamlUsedWhenNoOverride(@TempDir Path tempDir) throws IOException {
+        // When no overrides, YAML config should be used
+        PipelineStepConfigLoader loader = new PipelineStepConfigLoader(
+            key -> null,
+            key -> null
+        );
+        Path config = tempDir.resolve("pipeline-config.yaml");
+        Files.writeString(config, "basePackage: test\ntransport: REST\nsteps: []\n");
+
+        PipelineStepConfigLoader.StepConfig stepConfig = loader.load(config);
+
+        assertEquals("REST", stepConfig.transport(), "YAML config should be used when no overrides");
+    }
+
+    @Test
+    void transportPrecedenceGrpcDefaultWhenNoYamlOrOverride(@TempDir Path tempDir) throws IOException {
+        // When no transport in YAML and no overrides, should default to GRPC
+        PipelineStepConfigLoader loader = new PipelineStepConfigLoader(
+            key -> null,
+            key -> null
+        );
+        Path config = tempDir.resolve("pipeline-config.yaml");
+        Files.writeString(config, "basePackage: test\nsteps: []\n");
+
+        PipelineStepConfigLoader.StepConfig stepConfig = loader.load(config);
+
+        assertEquals("GRPC", stepConfig.transport(), "Should default to GRPC when no transport specified");
+    }
 }
