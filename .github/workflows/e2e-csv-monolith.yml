@@ -51,7 +51,7 @@ jobs:
         uses: ./.github/actions/setup-testcontainers
 
       - name: Build csv-payments monolith runtime
-        run: ./examples/csv-payments/build-monolith.sh -DskipTests
+        run: ./examples/csv-payments/build-monolith.sh
 
       - name: Run csv-payments monolith E2E
         run: |
