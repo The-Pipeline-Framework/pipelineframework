@@ -9,6 +9,9 @@ on:
       - "examples/**"
       - "pom.xml"
       - ".github/workflows/ci-e2e-matrix.yml"
+      - ".github/workflows/e2e-csv-monolith.yml"
+      - ".github/workflows/e2e-csv-pipeline-runtime.yml"
+      - ".github/workflows/e2e-search-lambda-smoke.yml"
   pull_request:
     branches:
       - main
@@ -17,6 +20,9 @@ on:
       - "examples/**"
       - "pom.xml"
       - ".github/workflows/ci-e2e-matrix.yml"
+      - ".github/workflows/e2e-csv-monolith.yml"
+      - ".github/workflows/e2e-csv-pipeline-runtime.yml"
+      - ".github/workflows/e2e-search-lambda-smoke.yml"
   workflow_dispatch:
 
 concurrency:
@@ -32,7 +38,7 @@ jobs:
   build-framework:
     name: Build Framework
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.event.head_commit.message, 'maven-release-plugin') }}
+    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message, 'maven-release-plugin') }}
 
     steps:
       - name: Checkout
