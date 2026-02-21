@@ -1,0 +1,101 @@
+name: CI — CSV Pipeline Runtime E2E
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "framework/**"
+      - "examples/csv-payments/**"
+      - "pom.xml"
+      - ".github/workflows/e2e-csv-pipeline-runtime.yml"
+      - ".github/workflows/full-tests.yml"
+
+env:
+  MAVEN_OPTS: -Xmx1g -Xms512m
+  MAVEN_ARGS_BUILD: -B -T 1 -V -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
+
+jobs:
+  csv-pipeline-runtime-e2e:
+    name: CSV Pipeline Runtime E2E
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message, 'maven-release-plugin') }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Configure Maven
+        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
+
+      - name: Ensure Docker is ready for Testcontainers
+        run: |
+          set -euo pipefail
+          echo "DOCKER_HOST=unix:///var/run/docker.sock" >> "$GITHUB_ENV"
+          if ! docker info >/dev/null 2>&1; then
+            sudo systemctl start docker || true
+          fi
+          for i in {1..10}; do
+            if docker info >/dev/null 2>&1; then
+              break
+            fi
+            sleep 3
+          done
+          if ! docker info >/dev/null 2>&1; then
+            echo "::error::Docker daemon did not become ready after 30 seconds"
+            exit 1
+          fi
+          SERVER_API="$(docker version --format '{{.Server.APIVersion}}')"
+          echo "DOCKER_API_VERSION=$SERVER_API" >> "$GITHUB_ENV"
+          echo "TESTCONTAINERS_DOCKER_CLIENT_STRATEGY=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" >> "$GITHUB_ENV"
+          echo "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock" >> "$GITHUB_ENV"
+          echo "JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
+          echo "MAVEN_OPTS=${MAVEN_OPTS} -Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
+          echo "docker.client.strategy=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" > "$HOME/.testcontainers.properties"
+          echo "docker.host=unix:///var/run/docker.sock" >> "$HOME/.testcontainers.properties"
+
+      - name: Build csv-payments pipeline-runtime topology
+        run: ./examples/csv-payments/build-pipeline-runtime.sh -DskipTests
+
+      - name: Run csv-payments pipeline-runtime topology + E2E
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.pipeline-runtime.xml \
+            -pl orchestrator-svc \
+            -Dcsv.runtime.layout=pipeline-runtime \
+            -Dcsv.e2e.pipeline.wait.seconds=240 \
+            -Dtest=PipelineRuntimeTopologyTest \
+            -Dit.test=CsvPaymentsPipelineRuntimeEndToEndIT \
+            verify
+
+      - name: Dump reports on failure
+        if: failure()
+        run: |
+          find . -path "*/target/failsafe-reports/*.txt" -print -exec tail -n 200 {} \;
+          find . -path "*/target/failsafe-reports/*.dumpstream" -print -exec tail -n 400 {} \;
+          find . -path "*/target/failsafe-reports/*.dump" -print -exec tail -n 200 {} \;
+          find . -path "*/target/surefire-reports/*.txt" -print -exec tail -n 200 {} \;
+          find examples/csv-payments -type d -path "*/target/test-e2e" -print -exec sh -c 'ls -la "$1"' _ {} \;
+
+      - name: Upload reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: csv-pipeline-runtime-e2e-reports
+          path: |
+            **/target/surefire-reports/*.txt
+            **/target/surefire-reports/*.xml
+            **/target/failsafe-reports/*.txt
+            **/target/failsafe-reports/*.xml
+            **/target/failsafe-reports/*.dumpstream
+            **/target/failsafe-reports/*.dump
+            examples/csv-payments/**/target/test-e2e/**
+          retention-days: 7
+          if-no-files-found: warn
