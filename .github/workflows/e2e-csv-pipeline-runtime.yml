@@ -40,8 +40,31 @@ jobs:
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
 
-      - name: Setup Testcontainers Docker environment
-        uses: ./.github/actions/setup-testcontainers
+      - name: Ensure Docker is ready for Testcontainers
+        run: |
+          set -euo pipefail
+          echo "DOCKER_HOST=unix:///var/run/docker.sock" >> "$GITHUB_ENV"
+          if ! docker info >/dev/null 2>&1; then
+            sudo systemctl start docker || true
+          fi
+          for i in {1..10}; do
+            if docker info >/dev/null 2>&1; then
+              break
+            fi
+            sleep 3
+          done
+          if ! docker info >/dev/null 2>&1; then
+            echo "::error::Docker daemon did not become ready after 30 seconds"
+            exit 1
+          fi
+          SERVER_API="$(docker version --format '{{.Server.APIVersion}}')"
+          echo "DOCKER_API_VERSION=$SERVER_API" >> "$GITHUB_ENV"
+          echo "TESTCONTAINERS_DOCKER_CLIENT_STRATEGY=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" >> "$GITHUB_ENV"
+          echo "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock" >> "$GITHUB_ENV"
+          echo "JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
+          echo "MAVEN_OPTS=${MAVEN_OPTS} -Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
+          echo "docker.client.strategy=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" > "$HOME/.testcontainers.properties"
+          echo "docker.host=unix:///var/run/docker.sock" >> "$HOME/.testcontainers.properties"
 
       - name: Build csv-payments pipeline-runtime topology
         run: ./examples/csv-payments/build-pipeline-runtime.sh -DskipTests
