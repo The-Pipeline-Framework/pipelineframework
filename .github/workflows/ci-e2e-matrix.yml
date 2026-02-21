@@ -57,9 +57,9 @@ jobs:
       - name: Install root POM and framework to local repository
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
-          # Install framework and all example parents to local repository
-          # -pl framework,examples installs both, -am includes all parent POMs
-          ./mvnw "${maven_args[@]}" clean install -DskipTests -pl framework,examples -am
+          # Install all parent POMs from project root
+          # This installs root POM + all modules defined in root pom.xml
+          ./mvnw "${maven_args[@]}" clean install -DskipTests
 
       - name: Package framework artifacts
         run: |
