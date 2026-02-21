@@ -16,6 +16,7 @@ on:
       - "framework/**"
       - "examples/**"
       - "pom.xml"
+      - ".github/workflows/ci-e2e-matrix.yml"
   workflow_dispatch:
 
 concurrency:
