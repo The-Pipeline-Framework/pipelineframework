@@ -1,15 +1,7 @@
-name: CI — Search Lambda Smoke
+name: Reusable — Search Lambda Smoke
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "framework/**"
-      - "examples/search/**"
-      - "pom.xml"
-      - ".github/workflows/e2e-search-lambda-smoke.yml"
-      - ".github/workflows/full-tests.yml"
+  workflow_call:
   workflow_dispatch:
 
 concurrency:
@@ -24,7 +16,6 @@ jobs:
   search-lambda-smoke:
     name: Search Lambda Smoke
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.event.head_commit.message, 'maven-release-plugin') }}
 
     steps:
       - name: Checkout
@@ -38,21 +29,11 @@ jobs:
           cache: maven
 
       - name: Configure Maven
-        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> "$GITHUB_ENV"
+        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
 
       - name: Run search Lambda mock-server smoke test
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
-          ./mvnw "${maven_args[@]}" -f examples/search/pom.xml \
-            -pl orchestrator-svc \
-            -am \
-            -Dtpf.build.platform=FUNCTION \
-            -Dtpf.build.transport=REST \
-            -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
-            -Dtpf.build.lambda.scope=compile \
-            -Dquarkus.profile=lambda \
-            -DskipTests \
-            compile
           ./mvnw "${maven_args[@]}" -f examples/search/pom.xml \
             -pl orchestrator-svc \
             -Dtpf.build.platform=FUNCTION \
