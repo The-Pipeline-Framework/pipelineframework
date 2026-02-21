@@ -33,7 +33,7 @@ jobs:
           cache: maven
 
       - name: Configure Maven
-        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
+        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> "$GITHUB_ENV"
 
       - name: Run search Lambda mock-server smoke test
         run: |
