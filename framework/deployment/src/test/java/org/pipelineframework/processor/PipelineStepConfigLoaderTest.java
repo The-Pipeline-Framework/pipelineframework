@@ -105,8 +105,9 @@ class PipelineStepConfigLoaderTest {
     }
 
     @Test
-    void transportPrecedenceProcessorOptionOverridesYamlAndEnv(@TempDir Path tempDir) throws IOException {
+    void transportPrecedenceProcessorOptionOverridesEnvAndYaml(@TempDir Path tempDir) throws IOException {
         // Precedence: processor option > env var > YAML config > GRPC default
+        // This test verifies processor option wins over both env and YAML
         PipelineStepConfigLoader loader = new PipelineStepConfigLoader(
             key -> "pipeline.transport".equals(key) ? "LOCAL" : null,
             key -> "PIPELINE_TRANSPORT".equals(key) ? "REST" : null
@@ -116,22 +117,7 @@ class PipelineStepConfigLoaderTest {
 
         PipelineStepConfigLoader.StepConfig stepConfig = loader.load(config);
 
-        assertEquals("LOCAL", stepConfig.transport(), "Processor option should override YAML and env");
-    }
-
-    @Test
-    void transportPrecedenceEnvOverridesYaml(@TempDir Path tempDir) throws IOException {
-        // When processor option is absent, env var should override YAML
-        PipelineStepConfigLoader loader = new PipelineStepConfigLoader(
-            key -> null,
-            key -> "PIPELINE_TRANSPORT".equals(key) ? "LOCAL" : null
-        );
-        Path config = tempDir.resolve("pipeline-config.yaml");
-        Files.writeString(config, "basePackage: test\ntransport: GRPC\nsteps: []\n");
-
-        PipelineStepConfigLoader.StepConfig stepConfig = loader.load(config);
-
-        assertEquals("LOCAL", stepConfig.transport(), "Env var should override YAML config");
+        assertEquals("LOCAL", stepConfig.transport(), "Processor option should override both env and YAML");
     }
 
     @Test
