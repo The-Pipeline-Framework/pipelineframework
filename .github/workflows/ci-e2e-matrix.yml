@@ -64,7 +64,14 @@ jobs:
       - name: Package framework artifacts
         run: |
           mkdir -p /tmp/m2-artifacts
-          tar -czf /tmp/m2-artifacts/framework-m2-cache.tar.gz -C ~/.m2/repository org/pipelineframework org.pipelineframework.csv
+          cd ~/.m2/repository
+          # Build list of existing pipelineframework directories
+          dirs=()
+          for d in org/pipelineframework org.pipelineframework.csv org.pipelineframework.search; do
+            [ -d "$d" ] && dirs+=("$d")
+          done
+          # Tar them if any exist
+          [ ${#dirs[@]} -gt 0 ] && tar -czf /tmp/m2-artifacts/framework-m2-cache.tar.gz "${dirs[@]}"
 
       - name: Upload framework artifacts
         uses: actions/upload-artifact@v4
