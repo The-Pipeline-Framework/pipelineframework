@@ -69,7 +69,7 @@ jobs:
         with:
           name: framework-m2-cache
           path: /tmp/m2-artifacts/framework-m2-cache.tar.gz
-          retention-days: 1
+          retention-days: 7
           if-no-files-found: error
 
   # All E2E workflows run in parallel after framework is installed
