@@ -48,6 +48,10 @@ jobs:
             fi
             sleep 3
           done
+          if ! docker info >/dev/null 2>&1; then
+            echo "::error::Docker daemon did not become ready after 30 seconds"
+            exit 1
+          fi
           SERVER_API="$(docker version --format '{{.Server.APIVersion}}')"
           echo "DOCKER_API_VERSION=$SERVER_API" >> "$GITHUB_ENV"
           echo "TESTCONTAINERS_DOCKER_CLIENT_STRATEGY=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" >> "$GITHUB_ENV"
