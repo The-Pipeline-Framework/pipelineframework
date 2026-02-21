@@ -1,15 +1,7 @@
-name: CI — CSV Monolith E2E
+name: Reusable — CSV Monolith E2E
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "framework/**"
-      - "examples/csv-payments/**"
-      - "pom.xml"
-      - ".github/workflows/e2e-csv-monolith.yml"
-      - ".github/workflows/full-tests.yml"
+  workflow_call:
   workflow_dispatch:
 
 concurrency:
@@ -24,7 +16,6 @@ jobs:
   csv-monolith-e2e:
     name: CSV Monolith E2E
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.event.head_commit.message, 'maven-release-plugin') }}
 
     steps:
       - name: Checkout
