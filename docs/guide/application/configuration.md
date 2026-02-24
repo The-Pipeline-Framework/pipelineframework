@@ -35,6 +35,7 @@ Function transport idempotency context attributes:
 - `tpf.function.target.runtime=<runtime-name>` (optional target metadata)
 - `tpf.function.target.module=<module-name>` (optional target metadata)
 - `tpf.function.target.handler=<handler-name>` (optional target metadata)
+- `tpf.function.target.url=<https://target-endpoint>` (optional direct remote target metadata)
 
 Examples of `tpf.idempotency.key` values:
 - order ID (`order-12345`)
@@ -49,12 +50,13 @@ Policy guidance:
 
 Notes:
 - Supplying `tpf.idempotency.key` while policy is `CONTEXT_STABLE`/`RANDOM` is ignored by key derivation.
-- `tpf.function.invocation.mode=REMOTE` is contract metadata for cross-runtime routes. Generated FUNCTION handlers wire both local and remote invoke adapters; `LOCAL` remains the default selection, and `REMOTE` activates remote adapter routing when target metadata is provided.
-- Use `tpf.function.invocation.mode=LOCAL` for in-process execution (default generated wiring).
-- Use `tpf.function.invocation.mode=REMOTE` for remote execution boundaries (for example isolated runtime modules, sandboxed runners, edge/off-cluster targets) when a remote invoke adapter path is configured.
+- Use `tpf.function.invocation.mode=LOCAL` for in-process execution (default generated wiring). Generated FUNCTION handlers wire both local and remote invoke adapters, and `REMOTE` activates remote adapter routing only when both target metadata (`tpf.function.target.*`) and a configured remote invoke adapter path are present.
 - `tpf.function.target.runtime`, `tpf.function.target.module`, and `tpf.function.target.handler` are target routing hints for `REMOTE` mode.
   Typical values are your own runtime/module/handler identifiers, for example:
   `pipeline`, `index-document-svc`, `ProcessIndexDocumentFunctionHandler`.
+- To satisfy the "remote invoke adapter path" prerequisite, provide target resolution metadata that a remote adapter can resolve:
+  - set `tpf.function.target.url` (context attribute) directly, or
+  - set `tpf.function.target.handler` / `tpf.function.target.module` and configure matching runtime URL settings (for example `quarkus.rest-client.<client>.url` or `pipeline.module.<module>.host` + `pipeline.module.<module>.port` for `HttpRemoteFunctionInvokeAdapter`).
 
 These are transport-context attributes (ephemeral per invocation metadata propagated via `FunctionTransportContext`), not global runtime properties in `application.properties`.
 They are usually set by handler/adapter code when creating `FunctionTransportContext`, for example:
@@ -78,7 +80,7 @@ FunctionTransportContext remoteCtx = new FunctionTransportContext(requestId, fun
 ```
 
 Here, "contract metadata" means stable, transport-level routing semantics carried with each invocation.
-"Remote invoke adapter path" means the runtime adapter implementation that reads these attributes and performs remote dispatch.
+"Remote invoke adapter path" means the runtime adapter implementation that reads these attributes and performs remote dispatch (for example `InvocationModeRoutingFunctionInvokeAdapter` delegating to `HttpRemoteFunctionInvokeAdapter`).
 
 TPF transport deduplication is best-effort; authoritative deduplication remains in business/data stores.
 

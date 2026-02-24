@@ -130,13 +130,23 @@
               },
               "operator": {
                 "type": "string",
-                "description": "Fully qualified class name of the delegated operator service",
-                "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+                "description": "Delegated operator reference in fully.qualified.Class::method format",
+                "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*::[a-zA-Z_$][a-zA-Z\\d_$]*$"
               },
               "delegate": {
                 "type": "string",
-                "description": "Legacy alias for operator (deprecated; prefer 'operator'): fully qualified class name of the delegated operator service",
-                "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+                "description": "Legacy alias for operator (deprecated; prefer 'operator'): delegated operator reference in fully.qualified.Class::method format",
+                "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*::[a-zA-Z_$][a-zA-Z\\d_$]*$"
+              },
+              "exposeRest": {
+                "type": "boolean",
+                "description": "Whether REST exposure is requested for the delegated operator step",
+                "default": false
+              },
+              "exposeGrpc": {
+                "type": "boolean",
+                "description": "Whether gRPC exposure is requested for the delegated operator step",
+                "default": false
               },
               "input": {
                 "type": "string",
@@ -190,6 +200,20 @@
               {
                 "not": {
                   "required": ["operatorMapper", "externalMapper"]
+                }
+              },
+              {
+                "if": {
+                  "anyOf": [
+                    { "required": ["exposeRest"] },
+                    { "required": ["exposeGrpc"] }
+                  ]
+                },
+                "then": {
+                  "anyOf": [
+                    { "required": ["operator"] },
+                    { "required": ["delegate"] }
+                  ]
                 }
               }
             ],

@@ -49,6 +49,7 @@ const mainSidebar = [
                 ]
             },
             {text: 'Pipeline Compilation', link: '/guide/build/pipeline-compilation'},
+            {text: 'Operators (YAML Build-Time)', link: '/guide/build/operators'},
             {
                 text: 'Runtime Layouts',
                 link: '/guide/build/runtime-layouts/',

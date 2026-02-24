@@ -23,6 +23,7 @@ import io.smallrye.common.annotation.Experimental;
 import org.jboss.jandex.ClassInfo;
 import org.jboss.jandex.DotName;
 import org.jboss.jandex.IndexView;
+import org.jboss.jandex.Type;
 import org.jboss.logging.Logger;
 import org.pipelineframework.extension.MapperInferenceEngine.MapperRegistry;
 
@@ -32,6 +33,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Set;
 import java.util.Enumeration;
 import java.util.List;
 
@@ -55,6 +57,39 @@ public class MapperInferenceBuildSteps {
 
     private static final Logger LOG = Logger.getLogger(MapperInferenceBuildSteps.class);
     private static final String STEP_DEFINITIONS_FILE = "META-INF/pipeline/step-definitions.txt";
+    private static final DotName UNI = DotName.createSimple("io.smallrye.mutiny.Uni");
+    private static final DotName MULTI = DotName.createSimple("io.smallrye.mutiny.Multi");
+    private static final DotName COLLECTION = DotName.createSimple("java.util.Collection");
+    private static final DotName LIST = DotName.createSimple("java.util.List");
+    private static final DotName SET = DotName.createSimple("java.util.Set");
+    private static final DotName QUEUE = DotName.createSimple("java.util.Queue");
+    private static final DotName DEQUE = DotName.createSimple("java.util.Deque");
+    private static final DotName SORTED_SET = DotName.createSimple("java.util.SortedSet");
+    private static final DotName MAP = DotName.createSimple("java.util.Map");
+    private static final DotName STREAM = DotName.createSimple("java.util.stream.Stream");
+    private static final DotName COMPLETION_STAGE = DotName.createSimple("java.util.concurrent.CompletionStage");
+    private static final Set<String> PLATFORM_PREFIXES = Set.of(
+            "java.",
+            "javax.",
+            "jakarta.",
+            "sun.",
+            "com.sun.",
+            "kotlin.",
+            "org.springframework.",
+            "org.slf4j.",
+            "com.fasterxml.",
+            "org.jboss.");
+    private static final Set<DotName> WRAPPER_TYPES = Set.of(
+            UNI,
+            MULTI,
+            STREAM,
+            COMPLETION_STAGE,
+            COLLECTION,
+            LIST,
+            SET,
+            QUEUE,
+            DEQUE,
+            SORTED_SET);
 
     /**
      * Local data carrier for step definition metadata parsed from classpath resources.
@@ -134,20 +169,16 @@ public class MapperInferenceBuildSteps {
     @BuildStep
     void buildMapperRegistry(
             CombinedIndexBuildItem combinedIndex,
+            List<OperatorBuildItem> operators,
             BuildProducer<MapperRegistryBuildItem> mapperRegistry) {
 
         LOG.debugf("Building mapper registry from Jandex index");
 
-        List<StepDefinition> stepDefinitions;
-        try {
-            stepDefinitions = readStepDefinitions();
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to read step definitions", e);
-        }
+        IndexView index = combinedIndex.getIndex();
+        List<StepDefinition> stepDefinitions = readStepDefinitions(operators, index);
 
         LOG.debugf("Read %d step definitions", stepDefinitions.size());
 
-        IndexView index = combinedIndex.getIndex();
         MapperInferenceEngine engine = new MapperInferenceEngine(index);
 
         // Build the mapper registry from all discovered mappers
@@ -170,6 +201,127 @@ public class MapperInferenceBuildSteps {
         mapperRegistry.produce(new MapperRegistryBuildItem(
                 registry.domainToMapper(),
                 registry.mapperToDomain()));
+    }
+
+    // Convenience overload used by unit tests that call this class directly.
+    void buildMapperRegistry(
+            CombinedIndexBuildItem combinedIndex,
+            BuildProducer<MapperRegistryBuildItem> mapperRegistry) {
+        buildMapperRegistry(combinedIndex, List.of(), mapperRegistry);
+    }
+
+    private List<StepDefinition> readStepDefinitions(List<OperatorBuildItem> operators, IndexView index) {
+        if (operators != null && !operators.isEmpty()) {
+            List<StepDefinition> stepDefinitions = deriveStepDefinitionsFromOperators(operators, index);
+            LOG.debugf("Derived %d step definitions from OperatorBuildItem list", stepDefinitions.size());
+            return stepDefinitions;
+        }
+        try {
+            return readStepDefinitions();
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read step definitions", e);
+        }
+    }
+
+    private List<StepDefinition> deriveStepDefinitionsFromOperators(List<OperatorBuildItem> operators, IndexView index) {
+        List<StepDefinition> stepDefinitions = new ArrayList<>();
+        for (OperatorBuildItem operator : operators) {
+            DotName domainIn = resolveDomainCandidate(unwrapPayloadType(operator.inputType()), index);
+            DotName domainOut = resolveDomainCandidate(extractNormalizedOutputType(operator.normalizedReturnType(), index), index);
+            stepDefinitions.add(new StepDefinition(
+                    operator.step().name(),
+                    domainIn,
+                    domainOut,
+                    cardinalityFromNormalizedType(operator.normalizedReturnType())));
+        }
+        return stepDefinitions;
+    }
+
+    private DotName resolveDomainCandidate(Type type, IndexView index) {
+        if (type == null || type.kind() == Type.Kind.VOID || type.name() == null) {
+            return null;
+        }
+        DotName name = type.name();
+        String fqcn = name.toString();
+        for (String prefix : PLATFORM_PREFIXES) {
+            if (fqcn.startsWith(prefix)) {
+                return null;
+            }
+        }
+        if (index.getClassByName(name) == null) {
+            return null;
+        }
+        return name;
+    }
+
+    /**
+     * Extracts the domain output type from normalized return metadata.
+     * Supports single-argument wrappers and Map<K, V> (value type).
+     */
+    private Type extractNormalizedOutputType(Type normalizedReturnType, IndexView index) {
+        if (normalizedReturnType == null || normalizedReturnType.kind() != Type.Kind.PARAMETERIZED_TYPE) {
+            return normalizedReturnType;
+        }
+        List<Type> args = normalizedReturnType.asParameterizedType().arguments();
+        if (args.size() == 1) {
+            return args.get(0);
+        }
+        DotName raw = normalizedReturnType.asParameterizedType().name();
+        if (args.size() == 2 && isMapLike(raw, index)) {
+            return args.get(1);
+        }
+        throw new IllegalArgumentException("extractNormalizedOutputType expects a single-argument wrapper or Map<K,V>; got "
+                + normalizedReturnType);
+    }
+
+    private Type unwrapPayloadType(Type type) {
+        if (type == null || type.kind() != Type.Kind.PARAMETERIZED_TYPE) {
+            return type;
+        }
+        DotName raw = type.name();
+        if (!isWrapper(raw)) {
+            return type;
+        }
+        List<Type> args = type.asParameterizedType().arguments();
+        return args.isEmpty() ? type : unwrapPayloadType(args.get(0));
+    }
+
+    private boolean isWrapper(DotName rawType) {
+        return WRAPPER_TYPES.contains(rawType);
+    }
+
+    private boolean isMapLike(DotName rawType, IndexView index) {
+        if (rawType == null) {
+            return false;
+        }
+        if (MAP.equals(rawType)) {
+            return true;
+        }
+        ClassInfo classInfo = index.getClassByName(rawType);
+        if (classInfo == null) {
+            return false;
+        }
+        for (Type interfaceType : classInfo.interfaceTypes()) {
+            if (MAP.equals(interfaceType.name())) {
+                return true;
+            }
+        }
+        Type superType = classInfo.superClassType();
+        return superType != null && isMapLike(superType.name(), index);
+    }
+
+    private String cardinalityFromNormalizedType(Type normalizedReturnType) {
+        if (normalizedReturnType == null || normalizedReturnType.name() == null) {
+            return "";
+        }
+        DotName raw = normalizedReturnType.name();
+        if (MULTI.equals(raw)) {
+            return "MULTI";
+        }
+        if (UNI.equals(raw)) {
+            return "UNI";
+        }
+        return "";
     }
 
     /**
