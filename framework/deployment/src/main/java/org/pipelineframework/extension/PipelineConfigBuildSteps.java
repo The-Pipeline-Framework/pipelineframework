@@ -42,6 +42,11 @@ public final class PipelineConfigBuildSteps {
     private static final String PROP_PIPELINE_CONFIG = "pipeline.config";
     private static final String ENV_PIPELINE_CONFIG = "PIPELINE_CONFIG";
 
+    /**
+     * Loads delegated operator step configurations from the pipeline YAML for use at build time.
+     *
+     * @return a PipelineConfigBuildItem containing the list of delegated step configurations, or an empty build item if no pipeline config path is found
+     */
     @BuildStep
     PipelineConfigBuildItem loadPipelineConfig() {
         Optional<Path> configPath = resolveConfigPath();
@@ -51,6 +56,18 @@ public final class PipelineConfigBuildSteps {
         return new PipelineConfigBuildItem(readDelegatedSteps(configPath.get()));
     }
 
+    /**
+     * Determines the pipeline YAML configuration file path to use.
+     *
+     * Checks for an explicit path provided via the system property "pipeline.config" or the
+     * environment variable "PIPELINE_CONFIG" (first non-blank wins). If an explicit path is present,
+     * returns the path resolved to an absolute filesystem path (relative paths are resolved against
+     * the current working directory) after verifying it exists and is a regular file. If no explicit
+     * path is provided, delegates to PipelineYamlConfigLocator.locate to discover the config.
+     *
+     * @return an Optional containing the resolved config Path if found, or an empty Optional if none was located
+     * @throws DeploymentException if an explicit path is provided but does not resolve to an existing regular file
+     */
     private Optional<Path> resolveConfigPath() {
         String explicit = firstNonBlank(System.getProperty(PROP_PIPELINE_CONFIG), System.getenv(ENV_PIPELINE_CONFIG));
         Path cwd = Path.of(System.getProperty("user.dir", ".")).toAbsolutePath().normalize();
@@ -67,6 +84,16 @@ public final class PipelineConfigBuildSteps {
         return new PipelineYamlConfigLocator().locate(cwd);
     }
 
+    /**
+     * Load delegated step configurations from the given pipeline YAML file.
+     *
+     * Parses the top-level "steps" sequence and converts entries that describe delegated operators
+     * into a list of PipelineConfigBuildItem.StepConfig objects.
+     *
+     * @param configPath the path to the pipeline YAML file to read
+     * @return a list of delegated step configurations; empty if no valid delegated steps are present
+     * @throws DeploymentException if the YAML root is not a mapping, the file cannot be read, or parsing detects invalid configuration
+     */
     private List<PipelineConfigBuildItem.StepConfig> readDelegatedSteps(Path configPath) {
         Object root = readYaml(configPath);
         if (!(root instanceof Map<?, ?> rootMap)) {
@@ -98,6 +125,13 @@ public final class PipelineConfigBuildSteps {
         return delegatedSteps;
     }
 
+    /**
+     * Parse a single YAML step entry into a delegated StepConfig or skip internal steps.
+     *
+     * @param stepMap a map of step properties (expected keys: "name", "operator", "delegate", "exposeRest", "exposeGrpc")
+     * @return a configured PipelineConfigBuildItem.StepConfig when the entry defines an operator/delegate, or `null` for internal (service-based) steps
+     * @throws DeploymentException if the step declares an operator/delegate but has a blank name, if both operator and delegate are present with different values, or if creating the StepConfig fails (the original cause is wrapped)
+     */
     private PipelineConfigBuildItem.StepConfig parseDelegatedStep(Map<?, ?> stepMap) {
         String name = stringValue(stepMap, "name");
         String nameTrimmed = name == null ? null : name.trim();
@@ -130,6 +164,13 @@ public final class PipelineConfigBuildSteps {
         }
     }
 
+    /**
+     * Load and parse YAML content from the provided file path.
+     *
+     * @param configPath the path to the YAML pipeline configuration file
+     * @return the parsed YAML root object — typically a Map, List, scalar value, or `null` if the file is empty
+     * @throws DeploymentException if the configuration file cannot be read
+     */
     private Object readYaml(Path configPath) {
         LoaderOptions loaderOptions = new LoaderOptions();
         Yaml yaml = new Yaml(new SafeConstructor(loaderOptions));
@@ -140,11 +181,26 @@ public final class PipelineConfigBuildSteps {
         }
     }
 
+    /**
+     * Retrieve the value for a key from a map and return its string representation.
+     *
+     * @param map the map to read from
+     * @param key the key whose value should be retrieved
+     * @return `null` if the key is absent or maps to `null`, otherwise the value's string representation
+     */
     private String stringValue(Map<?, ?> map, String key) {
         Object value = map.get(key);
         return value == null ? null : String.valueOf(value);
     }
 
+    /**
+     * Parse a boolean-like value from the given map for the specified key or fall back to a default.
+     *
+     * @param map the map to read the value from
+     * @param key the key whose associated value should be interpreted as a boolean
+     * @param defaultValue the value to return when the map contains no mapping for the key
+     * @return `true` if the mapped value is the Boolean `true` or parses as `"true"`, `false` if it parses as `"false"` (or other non-true text), and `defaultValue` when the key is absent
+     */
     private boolean booleanValue(Map<?, ?> map, String key, boolean defaultValue) {
         Object value = map.get(key);
         if (value == null) {
@@ -156,6 +212,12 @@ public final class PipelineConfigBuildSteps {
         return Boolean.parseBoolean(String.valueOf(value));
     }
 
+    /**
+     * Finds the first candidate string that is not null or blank.
+     *
+     * @param candidates candidate strings to examine, in order
+     * @return the first non-blank candidate trimmed, or {@code null} if none found
+     */
     private String firstNonBlank(String... candidates) {
         for (String candidate : candidates) {
             if (!isBlank(candidate)) {
@@ -165,6 +227,12 @@ public final class PipelineConfigBuildSteps {
         return null;
     }
 
+    /**
+     * Checks whether the given string is null or contains only whitespace.
+     *
+     * @param value the string to test
+     * @return `true` if the string is null or blank (only whitespace), `false` otherwise
+     */
     private boolean isBlank(String value) {
         return value == null || value.isBlank();
     }

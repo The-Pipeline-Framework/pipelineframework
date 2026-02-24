@@ -29,6 +29,12 @@ public final class PipelineConfigBuildItem extends SimpleBuildItem {
 
     private final List<StepConfig> steps;
 
+    /**
+     * Creates a PipelineConfigBuildItem containing the given pipeline step configurations.
+     *
+     * @param steps the list of StepConfig entries; must not be null and must not contain null elements
+     * @throws NullPointerException if {@code steps} is null or contains a null element
+     */
     public PipelineConfigBuildItem(List<StepConfig> steps) {
         Objects.requireNonNull(steps, "steps must not be null");
         for (int i = 0; i < steps.size(); i++) {
@@ -39,6 +45,11 @@ public final class PipelineConfigBuildItem extends SimpleBuildItem {
         this.steps = List.copyOf(steps);
     }
 
+    /**
+     * Provides the configured pipeline steps.
+     *
+     * @return an immutable list of StepConfig entries in declaration order
+     */
     public List<StepConfig> steps() {
         return steps;
     }

@@ -157,13 +157,13 @@ public class MapperInferenceBuildSteps {
     }
 
     /**
-     * Builds a MapperRegistry from the application's Jandex index and emits it as a MapperRegistryBuildItem.
+     * Builds and emits a MapperRegistryBuildItem representing mappers discovered in the application's Jandex index.
      *
-     * <p>Reads step definitions, discovers Mapper implementations from the index, validates that each pipeline
-     * step has matching mappers for its input/output domain types, and produces a MapperRegistryBuildItem for
-     * use by downstream build steps.</p>
+     * Reads pipeline step definitions, discovers Mapper implementations in the index, validates that each step's
+     * input and output domain types have corresponding mappers, and produces a MapperRegistryBuildItem for downstream build steps.
      *
      * @param combinedIndex the combined Jandex index of application and dependency classes
+     * @param operators optional list of OperatorBuildItem used to derive step definitions; when empty, step definitions are read from resources
      * @param mapperRegistry producer used to emit the resulting MapperRegistryBuildItem
      */
     @BuildStep
@@ -203,13 +203,28 @@ public class MapperInferenceBuildSteps {
                 registry.mapperToDomain()));
     }
 
-    // Convenience overload used by unit tests that call this class directly.
+    /**
+     * Delegates to the main buildMapperRegistry overload using an empty operator list; provided for unit tests.
+     *
+     * @param combinedIndex the combined Jandex index build item used to locate types
+     * @param mapperRegistry producer to emit the resulting MapperRegistryBuildItem
+     */
     void buildMapperRegistry(
             CombinedIndexBuildItem combinedIndex,
             BuildProducer<MapperRegistryBuildItem> mapperRegistry) {
         buildMapperRegistry(combinedIndex, List.of(), mapperRegistry);
     }
 
+    /**
+     * Load step definitions from the supplied operator items when available; otherwise read definitions
+     * from the classpath resource file.
+     *
+     * @param operators a list of OperatorBuildItem to derive step definitions from; may be null or empty
+     *                  in which case definitions are loaded from resources
+     * @param index     the Jandex index used to resolve types when deriving definitions from operators
+     * @return          a list of resolved StepDefinition entries
+     * @throws IllegalStateException if reading step definitions from classpath resources fails
+     */
     private List<StepDefinition> readStepDefinitions(List<OperatorBuildItem> operators, IndexView index) {
         if (operators != null && !operators.isEmpty()) {
             List<StepDefinition> stepDefinitions = deriveStepDefinitionsFromOperators(operators, index);
@@ -223,6 +238,17 @@ public class MapperInferenceBuildSteps {
         }
     }
 
+    /**
+     * Derives pipeline step definitions from a list of operator build items by resolving each
+     * operator's input and normalized return types into domain names and cardinality.
+     *
+     * @param operators the operator build items to derive step definitions from
+     * @param index the Jandex index used to resolve domain types and determine visibility
+     * @return a list of StepDefinition records; each entry contains the operator's step name,
+     *         the resolved input domain (`domainIn`) or `null` if unresolved, the resolved
+     *         output domain (`domainOut`) or `null` if unresolved, and the inferred cardinality
+     *         string (e.g., "UNI", "MULTI", or empty)
+     */
     private List<StepDefinition> deriveStepDefinitionsFromOperators(List<OperatorBuildItem> operators, IndexView index) {
         List<StepDefinition> stepDefinitions = new ArrayList<>();
         for (OperatorBuildItem operator : operators) {
@@ -237,6 +263,16 @@ public class MapperInferenceBuildSteps {
         return stepDefinitions;
     }
 
+    /**
+     * Determine the domain type name for `type` if it is a candidate for mapper inference.
+     *
+     * A candidate must be non-null, not `void`, have a name, not belong to configured platform packages,
+     * and be present in the provided Jandex index.
+     *
+     * @param type  the Jandex type to evaluate
+     * @param index the Jandex index used to verify type presence
+     * @return the `DotName` of the type if it qualifies as a non-platform, indexed domain candidate, `null` otherwise
+     */
     private DotName resolveDomainCandidate(Type type, IndexView index) {
         if (type == null || type.kind() == Type.Kind.VOID || type.name() == null) {
             return null;
@@ -255,9 +291,17 @@ public class MapperInferenceBuildSteps {
     }
 
     /**
-     * Extracts the domain output type from normalized return metadata.
-     * Supports single-argument wrappers and Map<K, V> (value type).
-     */
+         * Determine the effective output domain type from a normalized return type.
+         *
+         * If the provided type is a single-argument parameterized wrapper, returns its type argument.
+         * If the provided type is a parameterized Map-like type, returns the value type (second type argument).
+         * If the provided type is null or not parameterized, returns the input `normalizedReturnType` unchanged.
+         *
+         * @param normalizedReturnType the normalized return type to inspect; may be null or parameterized
+         * @param index                the Jandex index used to detect Map-like types
+         * @return the extracted output domain type (type argument or value type), or the original type when not parameterized
+         * @throws IllegalArgumentException if the type is parameterized with an unexpected number of arguments (neither 1 nor a Map-like 2)
+         */
     private Type extractNormalizedOutputType(Type normalizedReturnType, IndexView index) {
         if (normalizedReturnType == null || normalizedReturnType.kind() != Type.Kind.PARAMETERIZED_TYPE) {
             return normalizedReturnType;
@@ -274,6 +318,16 @@ public class MapperInferenceBuildSteps {
                 + normalizedReturnType);
     }
 
+    /**
+     * Unwraps known wrapper parameterized types to obtain the underlying payload type.
+     *
+     * If the provided type is a parameterized wrapper (e.g., Uni, Multi, Collection, Optional-like),
+     * the method returns the innermost type argument that is not itself a wrapper; otherwise it
+     * returns the original type.
+     *
+     * @param type the type to unwrap; may be {@code null}
+     * @return the underlying payload {@link Type}, or {@code null} if the input was {@code null}
+     */
     private Type unwrapPayloadType(Type type) {
         if (type == null || type.kind() != Type.Kind.PARAMETERIZED_TYPE) {
             return type;
@@ -286,10 +340,23 @@ public class MapperInferenceBuildSteps {
         return args.isEmpty() ? type : unwrapPayloadType(args.get(0));
     }
 
+    /**
+     * Determine whether the given raw type is considered a wrapper that may contain a payload.
+     *
+     * @param rawType the raw type name to check
+     * @return `true` if the raw type is one of the known wrapper types, `false` otherwise
+     */
     private boolean isWrapper(DotName rawType) {
         return WRAPPER_TYPES.contains(rawType);
     }
 
+    /**
+     * Determines whether the given raw type represents a Map or a Map-like type in the index.
+     *
+     * @param rawType the raw DotName of the type to check; may be null
+     * @param index   the Jandex index used to inspect type hierarchy
+     * @return        `true` if `rawType` is `java.util.Map` or extends/implements it according to the index, `false` otherwise
+     */
     private boolean isMapLike(DotName rawType, IndexView index) {
         if (rawType == null) {
             return false;
@@ -310,6 +377,12 @@ public class MapperInferenceBuildSteps {
         return superType != null && isMapLike(superType.name(), index);
     }
 
+    /**
+     * Determines the pipeline cardinality label implied by a normalized return type.
+     *
+     * @param normalizedReturnType the normalized return `Type` to inspect; may be null or have no name
+     * @return `\"MULTI\"` if the raw type is `Multi`, `\"UNI\"` if the raw type is `Uni`, empty string otherwise
+     */
     private String cardinalityFromNormalizedType(Type normalizedReturnType) {
         if (normalizedReturnType == null || normalizedReturnType.name() == null) {
             return "";

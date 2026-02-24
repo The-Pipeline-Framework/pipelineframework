@@ -49,6 +49,20 @@ public final class OperatorResolutionBuildSteps {
     private static final DotName JAVA_LANG_OBJECT = DotName.createSimple("java.lang.Object");
     private static final Type JAVA_LANG_VOID = Type.create(DotName.createSimple("java.lang.Void"), Type.Kind.CLASS);
 
+    /**
+     * Resolve operator references declared in the pipeline configuration, validate and normalize
+     * their class/method metadata against the build-time Jandex index, and emit corresponding
+     * OperatorBuildItem instances.
+     *
+     * @param combinedIndex   the combined Jandex index used to resolve classes and types
+     * @param pipelineConfig  the pipeline configuration containing step operator references
+     * @param operatorProducer producer used to emit resulting OperatorBuildItem instances
+     * @throws DeploymentException if any validation or resolution fails, including null inputs,
+     *                             a null steps list, malformed operator reference strings,
+     *                             unresolved operator classes or methods, ambiguous method overloads,
+     *                             or invalid method signatures (more than one parameter, non-public,
+     *                             or abstract methods)
+     */
     @BuildStep
     void resolveOperators(
             CombinedIndexBuildItem combinedIndex,
@@ -88,6 +102,12 @@ public final class OperatorResolutionBuildSteps {
         }
     }
 
+    /**
+     * Parses the operator reference from the step configuration in the form "fully.qualified.Class::method".
+     *
+     * @param step the step configuration containing the operator string
+     * @return an OperatorRef containing the original reference string, the operator class name as a DotName, and the method name
+     */
     private OperatorRef parseOperator(PipelineConfigBuildItem.StepConfig step) {
         String value = step.operator();
         if (value == null || value.isBlank()) {
@@ -110,6 +130,15 @@ public final class OperatorResolutionBuildSteps {
         return new OperatorRef(value, DotName.createSimple(className), methodName);
     }
 
+    /**
+     * Resolve the operator's class from the Jandex index.
+     *
+     * @param combinedIndex the build-time combined Jandex index to search
+     * @param step the pipeline step configuration used to provide contextual information for errors
+     * @param ref the parsed operator reference containing the target class name
+     * @return the ClassInfo for the resolved operator class
+     * @throws DeploymentException if the class named in `ref` is not found in the index
+     */
     private ClassInfo resolveOperatorClass(
             CombinedIndexBuildItem combinedIndex,
             PipelineConfigBuildItem.StepConfig step,
@@ -122,6 +151,17 @@ public final class OperatorResolutionBuildSteps {
         return classInfo;
     }
 
+    /**
+     * Locate the single non-constructor, non-static-initializer, non-synthetic instance method with the specified name
+     * on the given class or its superclasses (stops at the first superclass that declares matching methods).
+     *
+     * @param combinedIndex the build-time Jandex index provider used to traverse superclasses
+     * @param step the pipeline step configuration that references the operator (used for error messages)
+     * @param ref the parsed operator reference containing the target method name
+     * @param operatorClass the class to begin the search from
+     * @return the resolved MethodInfo for the operator method
+     * @throws DeploymentException if no matching method is found or if multiple overloads are found (ambiguity)
+     */
     private MethodInfo resolveOperatorMethod(
             CombinedIndexBuildItem combinedIndex,
             PipelineConfigBuildItem.StepConfig step,
@@ -164,6 +204,14 @@ public final class OperatorResolutionBuildSteps {
         return matches.get(0);
     }
 
+    /**
+     * Ensure the resolved operator method is public, not abstract, and accepts at most one parameter.
+     *
+     * @param step   the pipeline step configuration used to produce contextual error messages
+     * @param ref    the parsed operator reference used to produce contextual error messages
+     * @param method the resolved method to validate
+     * @throws DeploymentException if the method declares more than one parameter, is not public, or is abstract
+     */
     private void validateMethodSignature(PipelineConfigBuildItem.StepConfig step, OperatorRef ref, MethodInfo method) {
         if (method.parametersCount() > 1) {
             throw new DeploymentException("Step '" + step.name() + "' operator '" + ref.raw()
@@ -194,6 +242,25 @@ public final class OperatorResolutionBuildSteps {
                 : OperatorCategory.NON_REACTIVE;
     }
 
+    /**
+     * Normalize an operator method's raw return type into the framework's canonical representation.
+     *
+     * <p>The method maps reactive and collection-like return types to a ParameterizedType using the
+     * internal Uni/Multi wrappers:
+     * - `Uni<T>` remains `Uni<T>` (element type extracted)
+     * - `Multi<T>` remains `Multi<T>` (element type extracted)
+     * - `Stream<T>` is treated as `Multi<T>`
+     * - `CompletionStage<T>` is treated as `Uni<T>`
+     * - Collection-like types with a single type argument are treated as `Multi<T>`
+     * - Any other return type is wrapped as `Uni<T>` with the original type as the element
+     * </p>
+     *
+     * @param combinedIndex the build-time Jandex index used to detect collection-like types
+     * @param step          the pipeline step configuration (used for error context)
+     * @param ref           the parsed operator reference (used for error context)
+     * @param rawReturnType the original return type reported by Jandex for the operator method
+     * @return a Jandex Type representing the normalized return type (a parameterized `Uni<T>` or `Multi<T>` with the resolved element type)
+     */
     private Type normalizeReturnType(
             CombinedIndexBuildItem combinedIndex,
             PipelineConfigBuildItem.StepConfig step,
@@ -226,6 +293,12 @@ public final class OperatorResolutionBuildSteps {
         return ParameterizedType.create(UNI, new Type[]{toReferenceType(rawReturnType)}, null);
     }
 
+    /**
+     * Obtain the DotName for a Jandex Type, treating `null` and `void` as absent.
+     *
+     * @param type the Jandex Type to inspect
+     * @return the type's DotName, or `null` if `type` is `null` or represents `void`
+     */
     private DotName rawTypeName(Type type) {
         if (type == null || type.kind() == Type.Kind.VOID) {
             return null;
@@ -233,6 +306,17 @@ public final class OperatorResolutionBuildSteps {
         return type.name();
     }
 
+    /**
+     * Extracts the single generic type argument from a parameterized type.
+     *
+     * @param type the parameterized type to inspect
+     * @param step the pipeline step whose operator is being validated (used in error messages)
+     * @param ref  the parsed operator reference (used in error messages)
+     * @param logicalTypeName a human-readable name for the expected generic type (used in error messages)
+     * @return the sole type argument declared on the provided parameterized type
+     * @throws DeploymentException if the provided type is not parameterized or declares a number of
+     *                             generic arguments other than one
+     */
     private Type extractSingleTypeArgument(
             Type type,
             PipelineConfigBuildItem.StepConfig step,
@@ -251,22 +335,53 @@ public final class OperatorResolutionBuildSteps {
         return args.get(0);
     }
 
+    /**
+     * Determines whether the given type name represents `Uni`.
+     *
+     * @param rawName the type name to check
+     * @return `true` if the name equals the `Uni` type, `false` otherwise
+     */
     private boolean isUni(DotName rawName) {
         return UNI.equals(rawName);
     }
 
+    /**
+     * Determines whether the provided raw type name corresponds to the Multi reactive type.
+     *
+     * @param rawName the raw type name to check
+     * @return `true` if `rawName` equals the configured `MULTI` type, `false` otherwise
+     */
     private boolean isMulti(DotName rawName) {
         return MULTI.equals(rawName);
     }
 
+    /**
+     * Checks whether a raw type name represents a `Stream`.
+     *
+     * @param rawName the raw type name to check
+     * @return `true` if `rawName` denotes a `Stream`, `false` otherwise
+     */
     private boolean isStream(DotName rawName) {
         return STREAM.equals(rawName);
     }
 
+    /**
+     * Determine if the given raw type name represents `CompletionStage`.
+     *
+     * @param rawName the raw type name to check
+     * @return `true` if `rawName` equals `CompletionStage`, `false` otherwise
+     */
     private boolean isCompletionStage(DotName rawName) {
         return COMPLETION_STAGE.equals(rawName);
     }
 
+    /**
+     * Determine whether the given type name represents `java.util.Collection` or is assignable to it.
+     *
+     * @param combinedIndex the build-time combined Jandex index used to resolve classes
+     * @param rawName the dot-name of the type to check; may be null
+     * @return `true` if `rawName` equals `java.util.Collection` or resolves to a class assignable to it; `false` otherwise (including when `rawName` is null or cannot be resolved)
+     */
     private boolean isCollectionLike(CombinedIndexBuildItem combinedIndex, DotName rawName) {
         if (rawName == null) {
             return false;
@@ -282,6 +397,15 @@ public final class OperatorResolutionBuildSteps {
         return isAssignableTo(classInfo, COLLECTION, combinedIndex, new HashSet<>());
     }
 
+    /**
+     * Determines whether the given class (or any of its superclasses or interfaces) is assignable to the specified target type.
+     *
+     * @param classInfo the class to check; may be null
+     * @param target the type name to test assignability against
+     * @param combinedIndex the index used to resolve superclasses and interfaces
+     * @param visited a set of already-visited type names used to avoid infinite recursion
+     * @return `true` if `classInfo` is the same as, implements, or extends `target`; `false` otherwise
+     */
     private boolean isAssignableTo(
             ClassInfo classInfo,
             DotName target,
@@ -321,6 +445,15 @@ public final class OperatorResolutionBuildSteps {
         return isAssignableTo(superClass, target, combinedIndex, visited);
     }
 
+    /**
+     * Normalize a Jandex Type to a reference-compatible form.
+     *
+     * @param type the Jandex Type to normalize
+     * @return a Type suitable for reference usage: `java.lang.Void` when input is `void`, a boxed primitive
+     *         when input is a primitive, the same parameterized type when input is parameterized, or the
+     *         original type otherwise
+     * @throws IllegalArgumentException if the type is a wildcard, type variable, or unresolved type variable
+     */
     private Type toReferenceType(Type type) {
         if (type == null || type.kind() == Type.Kind.VOID) {
             return JAVA_LANG_VOID;

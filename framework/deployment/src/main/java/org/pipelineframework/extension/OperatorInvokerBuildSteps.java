@@ -57,6 +57,16 @@ public final class OperatorInvokerBuildSteps {
     private static final MethodDescriptor UNI_CREATE_FROM = MethodDescriptor.ofMethod(Uni.class, "createFrom", UniCreate.class);
     private static final MethodDescriptor UNI_ITEM = MethodDescriptor.ofMethod(UniCreate.class, "item", Uni.class, Object.class);
 
+    /**
+     * Generate CDI invoker beans for each provided operator.
+     *
+     * For each OperatorBuildItem this step validates the operator, generates a unique invoker class that implements the runtime ReactiveService contract, and registers the generated class as an unremovable CDI bean.
+     *
+     * @param combinedIndex index of application classes and annotations used for validation and resolution
+     * @param operators list of operators to generate invokers for
+     * @param generatedBeans producer used to emit generated bean classes
+     * @param additionalBeans producer used to register additional bean metadata (e.g., mark generated beans unremovable)
+     */
     @BuildStep
     void generateOperatorInvokers(
             CombinedIndexBuildItem combinedIndex,
@@ -79,6 +89,18 @@ public final class OperatorInvokerBuildSteps {
         }
     }
 
+    /**
+     * Validate that the provided OperatorBuildItem refers to a concrete, single operator method present in the index
+     * and return a ValidatedOperator containing resolved class and method information.
+     *
+     * @param combinedIndex the combined Jandex index used to resolve classes and methods
+     * @param operator the operator build item describing the expected operator class, method and normalized return type
+     * @return a ValidatedOperator holding the resolved ClassInfo, MethodInfo, and the original OperatorBuildItem
+     * @throws DeploymentException if the operator class is missing from the index, the operator method is missing or ambiguous,
+     *         the method signature differs from the expected signature, the method has more than one parameter,
+     *         the normalized return type is not a parameterized `Uni<T>` or `Multi<T>` with a single type argument,
+     *         or the operator violates Phase 1 constraints
+     */
     private ValidatedOperator validateOperator(CombinedIndexBuildItem combinedIndex, OperatorBuildItem operator) {
         DotName className = operator.operatorClass().name();
         ClassInfo indexedClass = combinedIndex.getIndex().getClassByName(className);
@@ -136,6 +158,18 @@ public final class OperatorInvokerBuildSteps {
         return new ValidatedOperator(indexedClass, method, operator);
     }
 
+    /**
+     * Validates that an operator method meets Phase 1 restrictions and throws if any are violated.
+     *
+     * Ensures the method does not accept a streaming `Multi<T>` input, that the normalized output is not
+     * `Multi<T>`, and that reactive operators return `Uni<T>`.
+     *
+     * @param method the operator method to validate
+     * @param operator the OperatorBuildItem describing the operator (used for error messages)
+     * @param normalizedRaw the normalized raw return type name (e.g., `Uni` or `Multi`)
+     * @throws DeploymentException if the method accepts a `Multi<T>` input, normalizes to `Multi<T>`, or
+     *         if an operator with category `REACTIVE` has a return type other than `Uni<T>`
+     */
     private void enforcePhaseOneBoundaries(MethodInfo method, OperatorBuildItem operator, DotName normalizedRaw) {
         if (method.parametersCount() == 1 && MULTI.equals(method.parameterType(0).name())) {
             throw new DeploymentException("Step '" + operator.step().name()
@@ -155,6 +189,13 @@ public final class OperatorInvokerBuildSteps {
         }
     }
 
+    /**
+     * Validate that a reactive return type (`Uni` or `Multi`) has exactly one generic type argument.
+     *
+     * @param rawReturnType the resolved return type of the operator method to check
+     * @param operator the operator build item providing context (used for error messages)
+     * @throws DeploymentException if the return type is `Uni` or `Multi` but is not a parameterized type with exactly one type argument
+     */
     private void ensureGenericReactiveTypeIfNeeded(Type rawReturnType, OperatorBuildItem operator) {
         DotName raw = rawReturnType.name();
         if (!UNI.equals(raw) && !MULTI.equals(raw)) {
@@ -168,6 +209,13 @@ public final class OperatorInvokerBuildSteps {
         }
     }
 
+    /**
+     * Determine whether two methods have identical name, parameter types (in order), and return type.
+     *
+     * @param actual   the method to check
+     * @param expected the method to compare against
+     * @return `true` if both methods have the same name, the same number and types of parameters in order, and the same return type, `false` otherwise.
+     */
     private boolean sameSignature(MethodInfo actual, MethodInfo expected) {
         if (!actual.name().equals(expected.name())) {
             return false;
@@ -183,6 +231,19 @@ public final class OperatorInvokerBuildSteps {
         return actual.returnType().equals(expected.returnType());
     }
 
+    /**
+     * Generates a CDI invoker class that implements ReactiveService and delegates to the validated operator.
+     *
+     * The produced class is annotated `@Singleton`, implements `ReactiveService`, exposes a public no-arg
+     * constructor, and provides a `process(Object)` method that invokes the operator method and adapts its
+     * result to a `Uni`. If the operator method is an instance method, an injectable private `target` field
+     * of the operator type is added. For operators with category `NON_REACTIVE`, the `process` method is
+     * annotated with `@Blocking`.
+     *
+     * @param output the ClassOutput target to write the generated class to
+     * @param className the fully-qualified name to use for the generated invoker class
+     * @param operator the validated operator metadata used to shape the generated invoker
+     */
     private void generateInvokerClass(ClassOutput output, String className, ValidatedOperator operator) {
         String serviceInterface = ReactiveService.class.getName();
 
@@ -217,6 +278,14 @@ public final class OperatorInvokerBuildSteps {
         }
     }
 
+    /**
+     * Invoke the validated operator method on its target and obtain the invocation result.
+     *
+     * @param process     the Gizmo MethodCreator used to emit bytecode for the invocation
+     * @param operator    the validated operator metadata containing the method to invoke
+     * @param targetField the field descriptor for the injected target instance (ignored for static methods)
+     * @return            the ResultHandle representing the value returned by the invoked operator method
+     */
     private ResultHandle invokeTarget(
             MethodCreator process,
             ValidatedOperator operator,
@@ -234,6 +303,13 @@ public final class OperatorInvokerBuildSteps {
         return process.invokeVirtualMethod(targetMethod, target, args);
     }
 
+    /**
+     * Builds invocation argument handles for the operator method, converting the single input parameter when present.
+     *
+     * @param process the Gizmo MethodCreator used to generate bytecode for the invoker
+     * @param method the operator method metadata describing expected parameter types
+     * @return an array of `ResultHandle` values containing the converted argument; empty if the method has no parameters
+     */
     private ResultHandle[] buildInvocationArgs(MethodCreator process, MethodInfo method) {
         if (method.parametersCount() == 0) {
             return new ResultHandle[0];
@@ -243,6 +319,17 @@ public final class OperatorInvokerBuildSteps {
         return new ResultHandle[]{converted};
     }
 
+    /**
+     * Casts and converts an input ResultHandle to the specified expected type for method invocation.
+     *
+     * @param process the Gizmo MethodCreator used to emit bytecode operations
+     * @param input the handle representing the original input value
+     * @param expectedType the required parameter type; if primitive the value is unboxed from its wrapper,
+     *                     if array the value is cast using the array descriptor, otherwise cast to the raw type name
+     * @return a ResultHandle representing the input cast (and unboxed for primitives) to the expected type
+     * @throws IllegalArgumentException if an array type contains an unresolved symbol
+     * @throws DeploymentException if the expected type has no resolvable raw name
+     */
     private ResultHandle castInput(MethodCreator process, ResultHandle input, Type expectedType) {
         if (expectedType.kind() == Type.Kind.PRIMITIVE) {
             ResultHandle boxed = process.checkCast(input, boxedType(expectedType.asPrimitiveType().primitive()).getName());
@@ -263,6 +350,17 @@ public final class OperatorInvokerBuildSteps {
         return process.checkCast(input, raw.toString());
     }
 
+    /**
+     * Adapt an operator invocation result into the invoker's reactive return value.
+     *
+     * Converts the raw invocation result into a `Uni` suitable for returning from the generated invoker:
+     * - for operators declared as reactive, the method casts and returns the provided result as-is;
+     * - for non-reactive operators, the method wraps the result (or `null` for `void` returns) into a `Uni`.
+     *
+     * @param process the bytecode method creator used to emit calls and casts
+     * @param operator validated operator metadata describing category and return type
+     * @param result the raw invocation result to adapt
+     * @return a `ResultHandle` referencing a `Uni` that yields the operator's result (`null` for void returns when wrapped)
     private ResultHandle adaptReturn(MethodCreator process, ValidatedOperator operator, ResultHandle result) {
         if (operator.buildItem().category() == OperatorCategory.REACTIVE) {
             return process.checkCast(result, Uni.class);
@@ -276,6 +374,13 @@ public final class OperatorInvokerBuildSteps {
         return process.invokeVirtualMethod(UNI_ITEM, create, boxed);
     }
 
+    /**
+     * Convert a primitive result value to its corresponding wrapper object; leaves non-primitive values unchanged.
+     *
+     * @param returnType the expected return type to check for primitiveness
+     * @param value the result value to box if primitive
+     * @return the boxed wrapper object when `returnType` is a primitive type, otherwise the original `value`
+     */
     private ResultHandle boxIfPrimitive(MethodCreator process, Type returnType, ResultHandle value) {
         if (returnType.kind() != Type.Kind.PRIMITIVE) {
             return value;
@@ -300,6 +405,14 @@ public final class OperatorInvokerBuildSteps {
         };
     }
 
+    /**
+     * Unboxes a boxed wrapper value to its corresponding primitive value.
+     *
+     * @param process the MethodCreator used to emit the unboxing invocation
+     * @param value the boxed wrapper instance (e.g., Integer, Boolean)
+     * @param primitive the target primitive kind to unbox to
+     * @return a ResultHandle representing the primitive value extracted from the wrapper
+     */
     private ResultHandle unbox(MethodCreator process, ResultHandle value, org.jboss.jandex.PrimitiveType.Primitive primitive) {
         return switch (primitive) {
             case BOOLEAN -> process.invokeVirtualMethod(
@@ -321,6 +434,12 @@ public final class OperatorInvokerBuildSteps {
         };
     }
 
+    /**
+     * Map a Jandex primitive type to its corresponding boxed wrapper class.
+     *
+     * @param primitive the Jandex primitive type to convert
+     * @return the corresponding boxed `Class` (e.g., `Integer.class` for `INT`)
+     */
     private Class<?> boxedType(org.jboss.jandex.PrimitiveType.Primitive primitive) {
         return switch (primitive) {
             case BOOLEAN -> Boolean.class;
@@ -334,6 +453,17 @@ public final class OperatorInvokerBuildSteps {
         };
     }
 
+    /**
+     * Produce a unique fully-qualified class name for an operator invoker using the operator's step name and an index.
+     *
+     * The step name is sanitized to contain only ASCII letters and digits, defaults to "Step" when empty or null,
+     * and is prefixed with "Step" if its first character is not a letter.
+     *
+     * @param operator the operator used to derive the base name (operator.step().name())
+     * @param idx      an index appended to the class name to ensure uniqueness
+     * @return a fully-qualified class name in the `org.pipelineframework.generated.operator` package with the
+     *         sanitized step name and the suffix `OperatorInvoker` followed by the given index
+     */
     private String generatedClassName(OperatorBuildItem operator, int idx) {
         String step = operator.step().name() == null ? "Step" : operator.step().name();
         String normalized = step.replaceAll("[^A-Za-z0-9]", "");
