@@ -49,7 +49,7 @@ Policy guidance:
 
 Notes:
 - Supplying `tpf.idempotency.key` while policy is `CONTEXT_STABLE`/`RANDOM` is ignored by key derivation.
-- `tpf.function.invocation.mode=REMOTE` is contract metadata for cross-runtime routes; current default handler wiring remains `LOCAL` unless a remote invoke adapter path is configured.
+- `tpf.function.invocation.mode=REMOTE` is contract metadata for cross-runtime routes. Generated FUNCTION handlers wire both local and remote invoke adapters; `LOCAL` remains the default selection, and `REMOTE` activates remote adapter routing when target metadata is provided.
 - Use `tpf.function.invocation.mode=LOCAL` for in-process execution (default generated wiring).
 - Use `tpf.function.invocation.mode=REMOTE` for remote execution boundaries (for example isolated runtime modules, sandboxed runners, edge/off-cluster targets) when a remote invoke adapter path is configured.
 - `tpf.function.target.runtime`, `tpf.function.target.module`, and `tpf.function.target.handler` are target routing hints for `REMOTE` mode.
