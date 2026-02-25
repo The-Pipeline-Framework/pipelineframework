@@ -1,17 +1,6 @@
 name: CI — E2E Test Matrix
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "framework/**"
-      - "examples/**"
-      - "pom.xml"
-      - ".github/workflows/ci-e2e-matrix.yml"
-      - ".github/workflows/e2e-csv-monolith.yml"
-      - ".github/workflows/e2e-csv-pipeline-runtime.yml"
-      - ".github/workflows/e2e-search-lambda-smoke.yml"
   pull_request:
     branches:
       - main
@@ -57,9 +46,8 @@ jobs:
       - name: Install root POM and framework to local repository
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
-          # Install all parent POMs from project root
-          # This installs root POM + all modules defined in root pom.xml
-          ./mvnw "${maven_args[@]}" clean install -DskipTests
+          ./mvnw "${maven_args[@]}" -N install
+          ./mvnw "${maven_args[@]}" -f framework/pom.xml clean install -DskipTests
 
       - name: Package framework artifacts
         run: |
