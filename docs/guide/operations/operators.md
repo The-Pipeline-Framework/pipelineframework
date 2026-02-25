@@ -1,6 +1,4 @@
-# Operators for Operations
-
-This page is for SRE and platform operations teams running TPF workloads that use operators.
+# Operator Runtime Operations
 
 ## Operational Expectations
 
@@ -48,4 +46,4 @@ flowchart LR
 
 - [Best Practices](/guide/operations/best-practices)
 - [Observability](/guide/operations/observability/)
-- [Operators (YAML Build-Time)](/guide/build/operators)
+- [Operators](/guide/build/operators)

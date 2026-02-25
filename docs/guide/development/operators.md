@@ -1,6 +1,4 @@
-# Operators for Developers
-
-This page explains how application developers should write and use operators in day-to-day TPF work.
+# Developing with Operators
 
 ## Quick Start
 
@@ -27,12 +25,28 @@ public class PaymentOperators {
 - Method must have at most one parameter.
 - Use explicit generics for reactive returns (`Uni<T>`, `Multi<T>`).
 
+## AI SDK Example
+
+```yaml
+steps:
+  - name: "Chunk Document"
+    operator: "com.example.ai.sdk.service.DocumentChunkingUnaryService::process"
+  - name: "Embed Chunk"
+    operator: "com.example.ai.sdk.service.ChunkEmbeddingService::process"
+  - name: "Search Similar"
+    operator: "com.example.ai.sdk.service.SimilaritySearchUnaryService::process"
+  - name: "Build Prompt"
+    operator: "com.example.ai.sdk.service.ScoredChunkPromptService::process"
+  - name: "LLM Complete"
+    operator: "com.example.ai.sdk.service.LLMCompletionService::process"
+```
+
 ## Return Shape Behavior
 
 - Non-reactive returns are normalized to reactive metadata at build time.
-- Streaming shapes may be represented in metadata, but current Phase 1 invocation focuses on unary flow.
+- Streaming shapes may be represented in metadata, but current invocation focuses on unary flow.
 
-## Phase 1 Operator Library Requirements
+## Operator Library Requirements
 
 - The operator class must be packaged in a module/JAR available on the build/runtime classpath.
 - The class must be indexed so build-time resolution can find it via Jandex.
@@ -54,6 +68,6 @@ public class PaymentOperators {
 
 ## Related
 
-- [Operators (YAML Build-Time)](/guide/build/operators)
+- [Operators](/guide/build/operators)
 - [Mappers and DTOs](/guide/development/mappers-and-dtos)
 - [Testing with Testcontainers](/guide/development/testing)

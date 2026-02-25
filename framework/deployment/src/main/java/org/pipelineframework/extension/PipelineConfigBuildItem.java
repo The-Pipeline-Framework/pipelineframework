@@ -59,14 +59,10 @@ public final class PipelineConfigBuildItem extends SimpleBuildItem {
      *
      * @param name step name in YAML
      * @param operator operator reference in "fully.qualified.Class::method" format
-     * @param exposeRest whether REST adapter should be generated
-     * @param exposeGrpc whether gRPC adapter should be generated
      */
     public record StepConfig(
             String name,
-            String operator,
-            boolean exposeRest,
-            boolean exposeGrpc) {
+            String operator) {
         private static final Pattern QUALIFIED_CLASS_PATTERN = Pattern.compile(
                 "[A-Za-z_$][A-Za-z\\d_$]*(\\.[A-Za-z_$][A-Za-z\\d_$]*)+");
         private static final Pattern METHOD_PATTERN = Pattern.compile("[A-Za-z_$][A-Za-z\\d_$]*");

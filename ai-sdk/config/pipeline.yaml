@@ -1,0 +1,22 @@
+appName: "ai-sdk-operators-poc"
+basePackage: "com.example.ai.sdk"
+transport: "LOCAL"
+
+steps:
+  - name: "Chunk Document"
+    operator: "com.example.ai.sdk.service.DocumentChunkingUnaryService::process"
+
+  - name: "Embed Chunk"
+    operator: "com.example.ai.sdk.service.ChunkEmbeddingService::process"
+
+  - name: "Store Vector"
+    operator: "com.example.ai.sdk.service.VectorStoreService::process"
+
+  - name: "Search Similar"
+    operator: "com.example.ai.sdk.service.SimilaritySearchUnaryService::process"
+
+  - name: "Build Prompt"
+    operator: "com.example.ai.sdk.service.ScoredChunkPromptService::process"
+
+  - name: "LLM Complete"
+    operator: "com.example.ai.sdk.service.LLMCompletionService::process"

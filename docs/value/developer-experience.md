@@ -16,12 +16,18 @@
 - Refactors are becoming risky because contracts drift across modules.
 - Teams are spending too much time on integration wiring.
 
+## Operator Reuse
+
+When teams already have stable Java compute libraries, operators let them plug those methods directly into pipeline flow from `pipeline.yaml`.
+This shortens delivery time and avoids duplicate implementations.
+
 ## Jump to Guides
 
 <div class="value-links">
 
 - [Quick Start](/guide/getting-started/)
 - [Canvas Guide](/guide/getting-started/canvas-guide)
+- [Operators](/guide/build/operators)
 - [Mappers and DTOs](/guide/development/mappers-and-dtos)
 - [Testing with Testcontainers](/guide/development/testing)
 

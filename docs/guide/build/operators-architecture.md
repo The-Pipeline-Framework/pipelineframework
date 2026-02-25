@@ -1,6 +1,4 @@
-# Operators: Architecture Guide
-
-This page is for architects and senior engineers designing TPF-based systems around operators.
+# Operators Architecture
 
 ## Architecture Snapshot
 
@@ -50,6 +48,6 @@ flowchart TD
 
 ## Related
 
-- [Operators (YAML Build-Time)](/guide/build/operators)
+- [Operators](/guide/build/operators)
 - [Pipeline Compilation](/guide/build/pipeline-compilation)
 - [Runtime Layouts](/guide/build/runtime-layouts/)

@@ -28,7 +28,6 @@ const mainSidebar = [
         items: [
             {text: 'Overview', link: '/value/'},
             {text: 'Business Value', link: '/value/business-value'},
-            {text: 'Operators Value', link: '/value/operators-value'},
             {text: 'Developer Joy', link: '/value/developer-experience'},
             {text: 'Performance', link: '/value/runtime-efficiency'},
             {text: 'Transport Choice', link: '/value/integration-flexibility'},
@@ -50,8 +49,7 @@ const mainSidebar = [
                 ]
             },
             {text: 'Pipeline Compilation', link: '/guide/build/pipeline-compilation'},
-            {text: 'Operators (YAML Build-Time)', link: '/guide/build/operators'},
-            {text: 'Operators (Architecture)', link: '/guide/build/operators-architecture'},
+            {text: 'Operators', link: '/guide/build/operators'},
             {
                 text: 'Runtime Layouts',
                 link: '/guide/build/runtime-layouts/',
@@ -80,6 +78,7 @@ const mainSidebar = [
         items: [
             {text: 'Application Structure', link: '/guide/design/application-structure'},
             {text: 'Common Module Structure', link: '/guide/design/common-module-structure'},
+            {text: 'Operator Reuse Strategy', link: '/guide/design/operator-reuse-strategy'},
             {text: 'Expansion and Reduction', link: '/guide/design/expansion-and-reduction'},
             {text: 'Runtime Topology Strategy', link: '/guide/design/runtime-topology-strategy'}
         ]

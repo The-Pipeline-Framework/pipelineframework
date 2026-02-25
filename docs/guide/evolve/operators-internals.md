@@ -1,6 +1,4 @@
-# Operators: Maintainer Internals
-
-This page is for TPF maintainers evolving operator resolution and invocation internals.
+# Operator Invocation Internals
 
 ## Build-Time Processing Flow
 
@@ -29,7 +27,59 @@ flowchart TD
 
 - Invocation code is generated with Gizmo.
 - No reflection or runtime method-name lookups.
-- Phase-1 generator enforces unary constraints and clear deployment-time failures.
+- Generator enforces unary constraints and clear deployment-time failures.
+
+## Generated Bean Shape
+
+The invoker is generated as a CDI bean that calls the resolved operator method directly.
+The Java below shows the generated equivalent for each operator category.
+
+### Non-Reactive Operator Category
+
+```java
+package org.pipelineframework.generated.operator;
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import io.smallrye.mutiny.Uni;
+import org.pipelineframework.service.ReactiveService;
+
+@ApplicationScoped
+public class EnrichPaymentOperatorInvoker implements ReactiveService<PaymentIn, PaymentOut> {
+
+    @Inject
+    PaymentOperators target;
+
+    @Override
+    public Uni<PaymentOut> process(PaymentIn input) {
+        PaymentOut result = target.enrich(input);
+        return Uni.createFrom().item(result);
+    }
+}
+```
+
+### Reactive Operator Category
+
+```java
+package org.pipelineframework.generated.operator;
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import io.smallrye.mutiny.Uni;
+import org.pipelineframework.service.ReactiveService;
+
+@ApplicationScoped
+public class ScorePaymentOperatorInvoker implements ReactiveService<PaymentIn, PaymentScore> {
+
+    @Inject
+    PaymentScoringOperators target;
+
+    @Override
+    public Uni<PaymentScore> process(PaymentIn input) {
+        return target.score(input);
+    }
+}
+```
 
 ## Change-Safety Notes
 
@@ -41,5 +91,5 @@ flowchart TD
 
 ## Related
 
-- [Operators (YAML Build-Time)](/guide/build/operators)
+- [Operators](/guide/build/operators)
 - [Compiler Pipeline Architecture](/guide/evolve/compiler-pipeline-architecture)

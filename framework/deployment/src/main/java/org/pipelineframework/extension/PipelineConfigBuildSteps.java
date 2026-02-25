@@ -151,14 +151,10 @@ public final class PipelineConfigBuildSteps {
         }
 
         String effectiveOperatorTrimmed = !isBlank(operatorTrimmed) ? operatorTrimmed : delegateTrimmed;
-        boolean exposeRest = booleanValue(stepMap, "exposeRest", false);
-        boolean exposeGrpc = booleanValue(stepMap, "exposeGrpc", false);
         try {
             return new PipelineConfigBuildItem.StepConfig(
                     nameTrimmed,
-                    effectiveOperatorTrimmed,
-                    exposeRest,
-                    exposeGrpc);
+                    effectiveOperatorTrimmed);
         } catch (IllegalArgumentException | NullPointerException e) {
             throw new DeploymentException("Invalid delegated step configuration for step '" + nameTrimmed + "': " + e.getMessage(), e);
         }

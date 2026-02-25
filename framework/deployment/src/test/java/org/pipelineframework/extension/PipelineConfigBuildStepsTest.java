@@ -42,7 +42,6 @@ class PipelineConfigBuildStepsTest {
             steps:
               - name: "Delegated A"
                 operator: "com.acme.operators.Foo::run"
-                exposeRest: true
               - name: "Internal B"
                 service: "com.acme.service.InternalStep"
             """);
@@ -54,7 +53,6 @@ class PipelineConfigBuildStepsTest {
         PipelineConfigBuildItem.StepConfig step = item.steps().get(0);
         assertEquals("Delegated A", step.name());
         assertEquals("com.acme.operators.Foo::run", step.operator());
-        assertTrue(step.exposeRest());
     }
 
     @Test
