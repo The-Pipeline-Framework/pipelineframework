@@ -50,13 +50,15 @@ Policy guidance:
 
 Notes:
 - Supplying `tpf.idempotency.key` while policy is `CONTEXT_STABLE`/`RANDOM` is ignored by key derivation.
-- Use `tpf.function.invocation.mode=LOCAL` for in-process execution (default generated wiring). Generated FUNCTION handlers wire both local and remote invoke adapters, and `REMOTE` activates remote adapter routing only when both target metadata (`tpf.function.target.*`) and a configured remote invoke adapter path are present.
+- `tpf.function.invocation.mode=LOCAL` is the default for in-process execution.
+- Generated FUNCTION handlers wire both local and remote invoke adapters by default.
+- `tpf.function.invocation.mode=REMOTE` activates remote invoke adapter routing only when both target metadata (`tpf.function.target.*`) and a configured remote invoke adapter path are present.
 - `tpf.function.target.runtime`, `tpf.function.target.module`, and `tpf.function.target.handler` are target routing hints for `REMOTE` mode.
   Typical values are your own runtime/module/handler identifiers, for example:
   `pipeline`, `index-document-svc`, `ProcessIndexDocumentFunctionHandler`.
 - To satisfy the "remote invoke adapter path" prerequisite, provide target resolution metadata that a remote adapter can resolve:
   - set `tpf.function.target.url` (context attribute) directly, or
-  - set `tpf.function.target.handler` / `tpf.function.target.module` and configure matching runtime URL settings (for example `quarkus.rest-client.<client>.url` or `pipeline.module.<module>.host` + `pipeline.module.<module>.port` for `HttpRemoteFunctionInvokeAdapter`).
+  - set `tpf.function.target.handler` / `tpf.function.target.module` and configure matching runtime URL settings (for example, `quarkus.rest-client.<client>.url` or `pipeline.module.<module>.host` + `pipeline.module.<module>.port` for `HttpRemoteFunctionInvokeAdapter`).
 
 These are transport-context attributes (ephemeral per invocation metadata propagated via `FunctionTransportContext`), not global runtime properties in `application.properties`.
 They are usually set by handler/adapter code when creating `FunctionTransportContext`, for example:
@@ -77,6 +79,12 @@ Map<String, String> attrs = Map.of(
     "tpf.function.target.module", "index-document-svc",
     "tpf.function.target.handler", "ProcessIndexDocumentFunctionHandler");
 FunctionTransportContext remoteCtx = new FunctionTransportContext(requestId, functionName, "invoke-step", attrs);
+
+// REMOTE (direct URL target via tpf.function.target.url)
+Map<String, String> directUrlAttrs = Map.of(
+    "tpf.function.invocation.mode", "REMOTE",
+    "tpf.function.target.url", "https://target-endpoint");
+FunctionTransportContext remoteUrlCtx = new FunctionTransportContext(requestId, functionName, "invoke-step", directUrlAttrs);
 ```
 
 Here, "contract metadata" means stable, transport-level routing semantics carried with each invocation.

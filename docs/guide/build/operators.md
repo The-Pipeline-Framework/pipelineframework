@@ -1,6 +1,23 @@
 # Operators (YAML Build-Time)
 
-This guide describes delegated operator step syntax in `pipeline.yaml` and how the build-time resolver processes it.
+This guide describes operator syntax and build-time behavior for pipeline authors.
+
+Audience-specific companion pages:
+- [Business Value View](/value/operators-value)
+- [Architecture View](/guide/build/operators-architecture)
+- [Developer View](/guide/development/operators)
+- [Operations View](/guide/operations/operators)
+- [Maintainer Internals](/guide/evolve/operators-internals)
+
+## End-to-End Shape
+
+```mermaid
+flowchart LR
+  A["pipeline.yaml (operator: Class::method)"] --> B["Build-time resolution (Jandex)"]
+  B --> C["Operator metadata (input/normalized return/category)"]
+  C --> D["Generated invoker beans"]
+  D --> E["Runtime execution"]
+```
 
 ## Operator Step Syntax
 
@@ -18,6 +35,26 @@ Rules:
 - Exactly one `::` separator.
 - Class and method segments must be non-blank.
 - `operator` and `delegate` may both be set only when the values are identical; otherwise they must not both be set.
+
+## Minimal Working Example
+
+```java
+package com.acme.payment;
+
+import io.smallrye.mutiny.Uni;
+
+public class PaymentOperators {
+    public Uni<PaymentEnriched> enrich(PaymentIn input) {
+        return Uni.createFrom().item(new PaymentEnriched(input.id()));
+    }
+}
+```
+
+```yaml
+steps:
+  - name: "Enrich Payment"
+    operator: "com.acme.payment.PaymentOperators::enrich"
+```
 
 ## Optional Flags
 
@@ -42,7 +79,7 @@ At build time, TPF:
 2. Resolves class/method from Jandex index (no reflection).
 3. Validates method uniqueness and supported signature.
 4. Infers operator category (`NON_REACTIVE` or `REACTIVE`).
-5. Normalizes return type to reactive shape (`Uni<T>` or `Multi<T>` metadata). For Step 5, `Multi` normalisation is recorded as metadata, but the Phase 1 invoker generator still rejects `Multi` and fails the build.
+5. Normalizes return type to reactive shape (`Uni<T>` or `Multi<T>` metadata). For Step 5, `Multi` normalization is recorded as metadata, but the Phase 1 invoker generator still rejects `Multi` and fails the build.
 
 Validation fails fast when:
 - class not found,
@@ -56,10 +93,11 @@ Validation fails fast when:
 Current generated invokers support unary operators only:
 - input must be unary (not `Multi<T>`),
 - normalized output must be `Uni<T>`.
+- operator classes must be available on the build/runtime classpath (typically as project modules or JAR dependencies).
 
 Streaming input/output shapes are intentionally out of scope for this phase and fail with descriptive build errors.
 
 ## Related
 
 - [Pipeline Compilation](/guide/build/pipeline-compilation)
-- [Configuration Reference](/guide/build/configuration)
+- [Configuration Reference](/guide/build/configuration/)
