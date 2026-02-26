@@ -382,7 +382,8 @@ public final class OperatorInvokerBuildSteps {
         }
         DotName raw = expectedType.name();
         if (raw == null) {
-            throw new DeploymentException("Unsupported operator input type: " + expectedType);
+            throw new DeploymentException("Unsupported operator input type '" + expectedType
+                    + "': unresolved generic/type-variable inputs are not supported");
         }
         return process.checkCast(input, raw.toString());
     }
@@ -398,8 +399,10 @@ public final class OperatorInvokerBuildSteps {
      * @param operator validated operator metadata describing category and return type
      * @param result the raw invocation result to adapt
      * @return a `ResultHandle` referencing a `Uni` that yields the operator's result (`null` for void returns when wrapped)
+     */
     private ResultHandle adaptReturn(MethodCreator process, ValidatedOperator operator, ResultHandle result) {
         if (operator.buildItem().category() == OperatorCategory.REACTIVE) {
+            // Safe in Phase 1: enforcePhaseOneBoundaries guarantees reactive returns are Uni.
             return process.checkCast(result, Uni.class);
         }
 
