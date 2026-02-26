@@ -20,6 +20,7 @@ import io.quarkus.deployment.annotations.BuildStep;
 import jakarta.enterprise.inject.spi.DeploymentException;
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
+import org.yaml.snakeyaml.error.YAMLException;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 import org.yaml.snakeyaml.Yaml;
@@ -172,7 +173,7 @@ public final class PipelineConfigBuildSteps {
         Yaml yaml = new Yaml(new SafeConstructor(loaderOptions));
         try (Reader reader = Files.newBufferedReader(configPath)) {
             return yaml.load(reader);
-        } catch (IOException e) {
+        } catch (IOException | YAMLException e) {
             throw new DeploymentException("Failed to read pipeline config: " + configPath, e);
         }
     }

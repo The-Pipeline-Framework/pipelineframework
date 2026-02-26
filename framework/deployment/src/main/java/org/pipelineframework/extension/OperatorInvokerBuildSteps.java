@@ -44,7 +44,9 @@ import org.pipelineframework.service.ReactiveService;
 
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Generates build-time operator invoker CDI beans from {@link OperatorBuildItem}.
@@ -83,6 +85,9 @@ public final class OperatorInvokerBuildSteps {
 
         for (OperatorBuildItem operator : operators) {
             ValidatedOperator validated = validateOperator(combinedIndex, operator);
+            if (!Modifier.isStatic(validated.method().flags())) {
+                additionalBeans.produce(AdditionalBeanBuildItem.unremovableOf(validated.classInfo().name().toString()));
+            }
             String className = generatedClassName(operator, ++suffix);
             generateInvokerClass(output, className, validated);
             additionalBeans.produce(AdditionalBeanBuildItem.unremovableOf(className));
@@ -110,15 +115,12 @@ public final class OperatorInvokerBuildSteps {
         }
 
         List<MethodInfo> matches = new ArrayList<>();
-        for (MethodInfo candidate : indexedClass.methods()) {
-            if (candidate.name().equals(operator.method().name())
-                    && !candidate.isConstructor()
-                    && !candidate.isStaticInitializer()
-                    && !candidate.isBridge()
-                    && !candidate.isSynthetic()) {
-                matches.add(candidate);
-            }
-        }
+        collectMatchingMethods(
+                combinedIndex,
+                indexedClass,
+                operator.method().name(),
+                new HashSet<>(),
+                matches);
         if (matches.isEmpty()) {
             throw new DeploymentException("Operator method '" + operator.method().name() + "' for step '"
                     + operator.step().name() + "' no longer exists on class '" + className + "'");
@@ -170,6 +172,41 @@ public final class OperatorInvokerBuildSteps {
      * @throws DeploymentException if the method accepts a `Multi<T>` input, normalizes to `Multi<T>`, or
      *         if an operator with category `REACTIVE` has a return type other than `Uni<T>`
      */
+    private void collectMatchingMethods(
+            CombinedIndexBuildItem combinedIndex,
+            ClassInfo classInfo,
+            String methodName,
+            Set<DotName> visited,
+            List<MethodInfo> matches) {
+        if (classInfo == null || classInfo.name() == null || !visited.add(classInfo.name())) {
+            return;
+        }
+
+        for (MethodInfo candidate : classInfo.methods()) {
+            if (candidate.name().equals(methodName)
+                    && !candidate.isConstructor()
+                    && !candidate.isStaticInitializer()
+                    && !candidate.isBridge()
+                    && !candidate.isSynthetic()) {
+                matches.add(candidate);
+            }
+        }
+
+        for (Type interfaceType : classInfo.interfaceTypes()) {
+            if (interfaceType == null || interfaceType.name() == null) {
+                continue;
+            }
+            ClassInfo interfaceInfo = combinedIndex.getIndex().getClassByName(interfaceType.name());
+            collectMatchingMethods(combinedIndex, interfaceInfo, methodName, visited, matches);
+        }
+
+        Type superType = classInfo.superClassType();
+        if (superType == null || superType.name() == null) {
+            return;
+        }
+        ClassInfo superClass = combinedIndex.getIndex().getClassByName(superType.name());
+        collectMatchingMethods(combinedIndex, superClass, methodName, visited, matches);
+    }
     private void enforcePhaseOneBoundaries(MethodInfo method, OperatorBuildItem operator, DotName normalizedRaw) {
         if (method.parametersCount() == 1 && MULTI.equals(method.parameterType(0).name())) {
             throw new DeploymentException("Step '" + operator.step().name()

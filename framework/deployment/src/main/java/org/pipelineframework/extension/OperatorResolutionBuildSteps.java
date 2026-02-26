@@ -270,27 +270,27 @@ public final class OperatorResolutionBuildSteps {
 
         if (isUni(rawName)) {
             Type element = extractSingleTypeArgument(rawReturnType, step, ref, "Uni");
-            return ParameterizedType.create(UNI, new Type[]{toReferenceType(element)}, null);
+            return ParameterizedType.create(UNI, new Type[]{toReferenceTypeOrFail(element, step, ref)}, null);
         }
         if (isMulti(rawName)) {
             Type element = extractSingleTypeArgument(rawReturnType, step, ref, "Multi");
-            return ParameterizedType.create(MULTI, new Type[]{toReferenceType(element)}, null);
+            return ParameterizedType.create(MULTI, new Type[]{toReferenceTypeOrFail(element, step, ref)}, null);
         }
         if (isStream(rawName)) {
             Type element = extractSingleTypeArgument(rawReturnType, step, ref, "Stream");
-            return ParameterizedType.create(MULTI, new Type[]{toReferenceType(element)}, null);
+            return ParameterizedType.create(MULTI, new Type[]{toReferenceTypeOrFail(element, step, ref)}, null);
         }
         if (isCompletionStage(rawName)) {
             Type element = extractSingleTypeArgument(rawReturnType, step, ref, "CompletionStage");
-            return ParameterizedType.create(UNI, new Type[]{toReferenceType(element)}, null);
+            return ParameterizedType.create(UNI, new Type[]{toReferenceTypeOrFail(element, step, ref)}, null);
         }
         if (isCollectionLike(combinedIndex, rawName)) {
             Type element = extractSingleTypeArgument(rawReturnType, step, ref, "Collection");
-            return ParameterizedType.create(MULTI, new Type[]{toReferenceType(element)}, null);
+            return ParameterizedType.create(MULTI, new Type[]{toReferenceTypeOrFail(element, step, ref)}, null);
         }
 
         // Any non-reactive/non-collection return is normalized to Uni<T>.
-        return ParameterizedType.create(UNI, new Type[]{toReferenceType(rawReturnType)}, null);
+        return ParameterizedType.create(UNI, new Type[]{toReferenceTypeOrFail(rawReturnType, step, ref)}, null);
     }
 
     /**
@@ -471,6 +471,17 @@ public final class OperatorResolutionBuildSteps {
                     "Unsupported type kind for normalization: " + type.kind() + " for type " + type);
         }
         return type;
+    }
+
+    private Type toReferenceTypeOrFail(Type type, PipelineConfigBuildItem.StepConfig step, OperatorRef ref) {
+        try {
+            return toReferenceType(type);
+        } catch (IllegalArgumentException e) {
+            throw new DeploymentException(
+                    "Failed to normalize return type for step '" + step.name()
+                            + "' (operator '" + ref.raw() + "'): " + e.getMessage(),
+                    e);
+        }
     }
 
     private record OperatorRef(String raw, DotName className, String methodName) {
