@@ -589,6 +589,9 @@ public class PipelineExecutionService {
         throw new PipelineConfigurationException(
             "Pipeline order metadata is empty. Ensure pipeline.yaml defines steps for order generation.");
       }
+      if (LOG.isInfoEnabled()) {
+        LOG.infof("Loaded pipeline step order (%d steps): %s", orderedStepNames.size(), orderedStepNames);
+      }
       return instantiateStepsInOrder(orderedStepNames);
     } catch (Exception e) {
       LOG.errorf(e, "Failed to load configuration: %s", e.getMessage());

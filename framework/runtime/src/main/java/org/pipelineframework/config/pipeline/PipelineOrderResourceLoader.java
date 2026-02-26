@@ -18,6 +18,7 @@ package org.pipelineframework.config.pipeline;
 
 import java.io.InputStream;
 import java.util.Enumeration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -43,24 +44,97 @@ public final class PipelineOrderResourceLoader {
      */
     public static Optional<List<String>> loadOrder() {
         ClassLoader classLoader = PipelineResources.resolveClassLoader();
-        InputStream stream = PipelineResources.openResource(classLoader, RESOURCE);
-        try (InputStream streamToRead = stream) {
-            if (stream == null) {
-                logMissingResource(classLoader);
-                return Optional.empty();
+        try {
+            if (classLoader != null) {
+                Enumeration<java.net.URL> resources = classLoader.getResources(RESOURCE);
+                List<List<String>> candidates = new ArrayList<>();
+                while (resources.hasMoreElements()) {
+                    java.net.URL url = resources.nextElement();
+                    try (InputStream stream = url.openStream()) {
+                        candidates.add(parseOrder(stream));
+                    }
+                }
+                if (!candidates.isEmpty()) {
+                    return Optional.of(selectBestOrderCandidate(candidates, classLoader));
+                }
             }
-            Map<?, ?> data = PipelineJson.mapper().readValue(streamToRead, Map.class);
-            Object value = data.get("order");
-            if (!(value instanceof List<?> list)) {
-                throw new IllegalStateException("Pipeline order resource is missing an order array.");
+
+            InputStream stream = PipelineResources.openResource(classLoader, RESOURCE);
+            try (InputStream streamToRead = stream) {
+                if (stream == null) {
+                    logMissingResource(classLoader);
+                    return Optional.empty();
+                }
+                return Optional.of(parseOrder(streamToRead));
             }
-            List<String> order = list.stream()
-                .filter(item -> item != null && !item.toString().isBlank())
-                .map(Object::toString)
-                .toList();
-            return Optional.of(order);
         } catch (Exception e) {
             throw new IllegalStateException("Failed to read pipeline order resource.", e);
+        }
+    }
+
+    private static List<String> parseOrder(InputStream stream) throws Exception {
+        Map<?, ?> data = PipelineJson.mapper().readValue(stream, Map.class);
+        Object value = data.get("order");
+        if (!(value instanceof List<?> list)) {
+            throw new IllegalStateException("Pipeline order resource is missing an order array.");
+        }
+        return list.stream()
+            .filter(item -> item != null && !item.toString().isBlank())
+            .map(Object::toString)
+            .toList();
+    }
+
+    private static List<String> selectBestOrderCandidate(List<List<String>> candidates, ClassLoader classLoader) {
+        List<String> best = candidates.getFirst();
+        int bestLoadableCount = countLoadableSteps(best, classLoader);
+        boolean bestAllLoadable = bestLoadableCount == best.size();
+
+        for (int i = 1; i < candidates.size(); i++) {
+            List<String> candidate = candidates.get(i);
+            int loadableCount = countLoadableSteps(candidate, classLoader);
+            boolean allLoadable = loadableCount == candidate.size();
+            if (allLoadable && !bestAllLoadable) {
+                best = candidate;
+                bestLoadableCount = loadableCount;
+                bestAllLoadable = true;
+                continue;
+            }
+            if (allLoadable == bestAllLoadable && loadableCount > bestLoadableCount) {
+                best = candidate;
+                bestLoadableCount = loadableCount;
+                bestAllLoadable = allLoadable;
+            }
+        }
+
+        if (!bestAllLoadable) {
+            LOG.warnf(
+                "Selected pipeline order has unloadable steps (%d/%d loadable); verify duplicate order.json resources on classpath.",
+                bestLoadableCount,
+                best.size());
+            return best.stream().filter(name -> isLoadable(name, classLoader)).toList();
+        }
+        return best;
+    }
+
+    private static int countLoadableSteps(List<String> order, ClassLoader classLoader) {
+        int count = 0;
+        for (String stepClass : order) {
+            if (isLoadable(stepClass, classLoader)) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static boolean isLoadable(String stepClassName, ClassLoader classLoader) {
+        if (stepClassName == null || stepClassName.isBlank()) {
+            return false;
+        }
+        try {
+            Class.forName(stepClassName, false, classLoader);
+            return true;
+        } catch (Throwable ignored) {
+            return false;
         }
     }
 
