@@ -265,6 +265,43 @@ public class OrchestratorClientModuleMapping {
         return new ClientConfig(clientName, module.host(), module.port(), tlsConfigurationName);
     }
 
+    public ClientConfig clientConfigForName(String clientName) {
+        if (clientName == null || clientName.isBlank()) {
+            return null;
+        }
+        String normalized = normalizeClientToken(clientName);
+        String moduleName = stepToModule.get(normalized);
+        if (moduleName == null && normalized.startsWith("observe-") && normalized.endsWith("-side-effect")) {
+            String middle = normalized.substring("observe-".length(), normalized.length() - "-side-effect".length());
+            String aspect = middle;
+            int firstDash = middle.indexOf('-');
+            if (firstDash > 0) {
+                aspect = middle.substring(0, firstDash);
+            }
+            moduleName = aspectToModule.get(aspect);
+            if (moduleName == null) {
+                if (aspect.startsWith("persistence")) {
+                    moduleName = "persistence-svc";
+                } else if (aspect.startsWith("cache")) {
+                    moduleName = "cache-invalidation-svc";
+                } else {
+                    moduleName = aspect + "-svc";
+                }
+            }
+        }
+        if (moduleName == null && normalized.startsWith("process-")) {
+            moduleName = normalized.substring("process-".length()) + "-svc";
+        }
+        if (moduleName == null) {
+            return null;
+        }
+        ModuleConfig module = modules.get(moduleName);
+        if (module == null) {
+            return null;
+        }
+        return new ClientConfig(normalized, module.host(), module.port(), tlsConfigurationName);
+    }
+
     private static Integer parsePort(String value, String moduleName, ProcessingEnvironment env) {
         if (value == null || value.isBlank()) {
             return null;

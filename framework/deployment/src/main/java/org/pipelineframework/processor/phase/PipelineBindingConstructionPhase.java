@@ -93,7 +93,8 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
             PipelineTemplateConfig config = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig cfg ? cfg : null;
             OrchestratorBinding orchestratorBinding = OrchestratorBindingBuilder.buildOrchestratorBinding(
                 config,
-                ctx.getRoundEnv() != null ? ctx.getRoundEnv().getElementsAnnotatedWith(PipelineOrchestrator.class) : Set.of()
+                ctx.getRoundEnv() != null ? ctx.getRoundEnv().getElementsAnnotatedWith(PipelineOrchestrator.class) : Set.of(),
+                ctx.getTransportMode() != null ? ctx.getTransportMode().name() : null
             );
             if (orchestratorBinding != null) {
                 bindingsMap.put("orchestrator", orchestratorBinding);
