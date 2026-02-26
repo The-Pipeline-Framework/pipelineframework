@@ -551,6 +551,30 @@
 
     <profiles>
         <profile>
+            <id>runtime-layout-monolith</id>
+            <activation>
+                <property>
+                    <name>csv.runtime.layout</name>
+                    <value>monolith</value>
+                </property>
+            </activation>
+            <properties>
+                <tpf.build.transport>LOCAL</tpf.build.transport>
+            </properties>
+        </profile>
+        <profile>
+            <id>runtime-layout-pipeline-runtime</id>
+            <activation>
+                <property>
+                    <name>csv.runtime.layout</name>
+                    <value>pipeline-runtime</value>
+                </property>
+            </activation>
+            <properties>
+                <tpf.build.transport>GRPC</tpf.build.transport>
+            </properties>
+        </profile>
+        <profile>
             <id>coverage</id>
             <activation>
                 <property>
