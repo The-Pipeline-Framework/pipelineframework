@@ -18,6 +18,7 @@ import com.google.gson.GsonBuilder;
 import org.pipelineframework.config.pipeline.*;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.DeploymentRole;
+import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 
 /**
@@ -56,6 +57,14 @@ public class PipelineOrderMetadataGenerator {
         if (config == null || config.steps() == null || config.steps().isEmpty()) {
             return;
         }
+        if (ctx.getTransportMode() != null) {
+            config = new PipelineYamlConfig(
+                config.basePackage(),
+                ctx.getTransportMode().name(),
+                config.platform(),
+                config.steps(),
+                config.aspects());
+        }
 
         List<String> baseSteps = resolveBaseClientSteps(ctx);
         if (baseSteps.isEmpty()) {
@@ -76,6 +85,15 @@ public class PipelineOrderMetadataGenerator {
 
         List<String> expanded = PipelineOrderExpander.expand(ordered, config, null);
         if (expanded == null || expanded.isEmpty()) {
+            return;
+        }
+        Set<String> generatedClientSteps = resolveGeneratedClientSteps(ctx);
+        if (!generatedClientSteps.isEmpty()) {
+            expanded = expanded.stream()
+                .filter(generatedClientSteps::contains)
+                .toList();
+        }
+        if (expanded.isEmpty()) {
             return;
         }
 
@@ -174,6 +192,32 @@ public class PipelineOrderMetadataGenerator {
             ordered.add(className);
         }
         return new ArrayList<>(ordered);
+    }
+
+    private Set<String> resolveGeneratedClientSteps(PipelineCompilationContext ctx) {
+        List<PipelineStepModel> models = ctx.getStepModels();
+        if (models == null || models.isEmpty()) {
+            return Set.of();
+        }
+        GenerationTarget clientTarget = clientGenerationTarget(ctx);
+        String suffix = ctx.getTransportMode().clientStepSuffix();
+        Set<String> generated = new LinkedHashSet<>();
+        for (PipelineStepModel model : models) {
+            if (clientTarget != null && !model.enabledTargets().contains(clientTarget)) {
+                continue;
+            }
+            generated.add(model.servicePackage() + ".pipeline."
+                + model.generatedName().replace("Service", "") + suffix);
+        }
+        return generated;
+    }
+
+    private GenerationTarget clientGenerationTarget(PipelineCompilationContext ctx) {
+        return switch (ctx.getTransportMode()) {
+            case LOCAL -> GenerationTarget.LOCAL_CLIENT_STEP;
+            case REST -> GenerationTarget.REST_CLIENT_STEP;
+            case GRPC -> GenerationTarget.CLIENT_STEP;
+        };
     }
 
     private List<String> orderByYamlSteps(List<String> availableSteps, List<PipelineYamlStep> yamlSteps) {
