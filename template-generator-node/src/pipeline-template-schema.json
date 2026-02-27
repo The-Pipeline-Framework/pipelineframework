@@ -4,6 +4,10 @@
   "description": "Configuration schema for the Pipeline Template Generator",
   "type": "object",
   "$defs": {
+    "operatorReference": {
+      "type": "string",
+      "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*::[a-zA-Z_$][a-zA-Z\\d_$]*$"
+    },
     "fieldDefinition": {
       "type": "object",
       "properties": {
@@ -129,14 +133,20 @@
                 "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
               },
               "operator": {
-                "type": "string",
                 "description": "Delegated operator reference in fully.qualified.Class::method format",
-                "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*::[a-zA-Z_$][a-zA-Z\\d_$]*$"
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/operatorReference"
+                  }
+                ]
               },
               "delegate": {
-                "type": "string",
                 "description": "Legacy alias for operator (deprecated; prefer 'operator'): delegated operator reference in fully.qualified.Class::method format",
-                "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*::[a-zA-Z_$][a-zA-Z\\d_$]*$"
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/operatorReference"
+                  }
+                ]
               },
               "input": {
                 "type": "string",

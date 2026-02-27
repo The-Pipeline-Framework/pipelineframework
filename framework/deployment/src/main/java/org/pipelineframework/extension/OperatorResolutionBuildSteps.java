@@ -31,7 +31,9 @@ import org.jboss.jandex.Type;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -168,40 +170,80 @@ public final class OperatorResolutionBuildSteps {
             OperatorRef ref,
             ClassInfo operatorClass) {
         List<MethodInfo> matches = new ArrayList<>();
-        ClassInfo cursor = operatorClass;
-        while (cursor != null) {
-            List<MethodInfo> currentMatches = new ArrayList<>();
-            for (MethodInfo method : cursor.methods()) {
-                if (ref.methodName().equals(method.name())
-                        && !method.isConstructor()
-                        && !method.isStaticInitializer()
-                        && !method.isSynthetic()) {
-                    currentMatches.add(method);
-                }
-            }
-            if (!currentMatches.isEmpty()) {
-                matches.addAll(currentMatches);
-                break;
-            }
-            Type superType = cursor.superClassType();
-            if (superType == null || superType.name() == null || JAVA_LANG_OBJECT.equals(superType.name())) {
-                break;
-            }
-            cursor = combinedIndex.getIndex().getClassByName(superType.name());
-        }
+        collectMatchingMethods(
+                operatorClass,
+                ref.methodName(),
+                combinedIndex,
+                new HashSet<>(),
+                matches);
+        List<MethodInfo> distinctMatches = deduplicateBySignature(matches);
 
-        if (matches.isEmpty()) {
+        if (distinctMatches.isEmpty()) {
             throw new DeploymentException("Step '" + step.name() + "' operator '" + ref.raw()
                     + "' cannot be resolved: no method named '" + ref.methodName()
                     + "' found on class '" + operatorClass.name() + "'");
         }
-        if (matches.size() > 1) {
+        if (distinctMatches.size() > 1) {
             throw new DeploymentException("Step '" + step.name() + "' operator '" + ref.raw()
-                    + "' is ambiguous: found " + matches.size()
+                    + "' is ambiguous: found " + distinctMatches.size()
                     + " methods named '" + ref.methodName() + "' on class '" + operatorClass.name()
                     + "'. Overloads are not supported.");
         }
-        return matches.get(0);
+        return distinctMatches.get(0);
+    }
+
+    private void collectMatchingMethods(
+            ClassInfo classInfo,
+            String methodName,
+            CombinedIndexBuildItem combinedIndex,
+            Set<DotName> visited,
+            List<MethodInfo> matches) {
+        if (classInfo == null || classInfo.name() == null || !visited.add(classInfo.name())) {
+            return;
+        }
+        for (MethodInfo method : classInfo.methods()) {
+            if (methodName.equals(method.name())
+                    && !method.isConstructor()
+                    && !method.isStaticInitializer()
+                    && !method.isSynthetic()) {
+                matches.add(method);
+            }
+        }
+
+        for (Type interfaceType : classInfo.interfaceTypes()) {
+            if (interfaceType == null || interfaceType.name() == null) {
+                continue;
+            }
+            ClassInfo interfaceClass = combinedIndex.getIndex().getClassByName(interfaceType.name());
+            collectMatchingMethods(interfaceClass, methodName, combinedIndex, visited, matches);
+        }
+
+        Type superType = classInfo.superClassType();
+        if (superType == null || superType.name() == null || JAVA_LANG_OBJECT.equals(superType.name())) {
+            return;
+        }
+        ClassInfo superClass = combinedIndex.getIndex().getClassByName(superType.name());
+        collectMatchingMethods(superClass, methodName, combinedIndex, visited, matches);
+    }
+
+    private List<MethodInfo> deduplicateBySignature(List<MethodInfo> matches) {
+        Map<String, MethodInfo> unique = new LinkedHashMap<>();
+        for (MethodInfo match : matches) {
+            unique.putIfAbsent(signatureKey(match), match);
+        }
+        return new ArrayList<>(unique.values());
+    }
+
+    private String signatureKey(MethodInfo method) {
+        StringBuilder key = new StringBuilder(method.name()).append('(');
+        for (int i = 0; i < method.parametersCount(); i++) {
+            if (i > 0) {
+                key.append(',');
+            }
+            key.append(method.parameterType(i));
+        }
+        key.append(')');
+        return key.toString();
     }
 
     /**

@@ -5,6 +5,8 @@ import com.example.ai.sdk.entity.Vector;
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.service.ReactiveService;
 
+import java.util.Objects;
+
 /**
  * Phase-1 unary adapter from Chunk to embedding Vector.
  */
@@ -13,7 +15,11 @@ public class ChunkEmbeddingService implements ReactiveService<Chunk, Vector> {
     private final EmbeddingService embeddingService;
 
     public ChunkEmbeddingService() {
-        this.embeddingService = new EmbeddingService();
+        this(new EmbeddingService());
+    }
+
+    public ChunkEmbeddingService(EmbeddingService embeddingService) {
+        this.embeddingService = Objects.requireNonNull(embeddingService, "embeddingService must not be null");
     }
 
     @Override

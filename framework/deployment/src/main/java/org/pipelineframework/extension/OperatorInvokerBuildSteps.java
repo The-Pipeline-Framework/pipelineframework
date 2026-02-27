@@ -45,7 +45,9 @@ import org.pipelineframework.service.ReactiveService;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -121,17 +123,18 @@ public final class OperatorInvokerBuildSteps {
                 operator.method().name(),
                 new HashSet<>(),
                 matches);
-        if (matches.isEmpty()) {
+        List<MethodInfo> distinctMatches = deduplicateBySignature(matches);
+        if (distinctMatches.isEmpty()) {
             throw new DeploymentException("Operator method '" + operator.method().name() + "' for step '"
                     + operator.step().name() + "' no longer exists on class '" + className + "'");
         }
-        if (matches.size() > 1) {
+        if (distinctMatches.size() > 1) {
             throw new DeploymentException("Operator method '" + operator.method().name() + "' for step '"
                     + operator.step().name() + "' is ambiguous on class '" + className + "': found "
-                    + matches.size() + " methods with the same name. Overloaded operator methods are not supported.");
+                    + distinctMatches.size() + " methods with the same name. Overloaded operator methods are not supported.");
         }
 
-        MethodInfo method = matches.get(0);
+        MethodInfo method = distinctMatches.get(0);
         if (!sameSignature(method, operator.method())) {
             throw new DeploymentException("Operator method signature changed for step '" + operator.step().name()
                     + "': expected " + operator.method() + " but found " + method);
@@ -206,6 +209,26 @@ public final class OperatorInvokerBuildSteps {
         }
         ClassInfo superClass = combinedIndex.getIndex().getClassByName(superType.name());
         collectMatchingMethods(combinedIndex, superClass, methodName, visited, matches);
+    }
+
+    private List<MethodInfo> deduplicateBySignature(List<MethodInfo> matches) {
+        Map<String, MethodInfo> unique = new LinkedHashMap<>();
+        for (MethodInfo match : matches) {
+            unique.putIfAbsent(signatureKey(match), match);
+        }
+        return new ArrayList<>(unique.values());
+    }
+
+    private String signatureKey(MethodInfo method) {
+        StringBuilder key = new StringBuilder(method.name()).append('(');
+        for (int i = 0; i < method.parametersCount(); i++) {
+            if (i > 0) {
+                key.append(',');
+            }
+            key.append(method.parameterType(i));
+        }
+        key.append(')');
+        return key.toString();
     }
     private void enforcePhaseOneBoundaries(MethodInfo method, OperatorBuildItem operator, DotName normalizedRaw) {
         if (method.parametersCount() == 1 && MULTI.equals(method.parameterType(0).name())) {
@@ -496,7 +519,7 @@ public final class OperatorInvokerBuildSteps {
     /**
      * Produce a unique fully-qualified class name for an operator invoker using the operator's step name and an index.
      *
-     * The step name is sanitized to contain only ASCII letters and digits, defaults to "Step" when empty or null,
+     * The step name is sanitized to contain only ASCII letters and digits, defaults to "Step" when empty,
      * and is prefixed with "Step" if its first character is not a letter.
      *
      * @param operator the operator used to derive the base name (operator.step().name())
@@ -505,7 +528,7 @@ public final class OperatorInvokerBuildSteps {
      *         sanitized step name and the suffix `OperatorInvoker` followed by the given index
      */
     private String generatedClassName(OperatorBuildItem operator, int idx) {
-        String step = operator.step().name() == null ? "Step" : operator.step().name();
+        String step = operator.step().name();
         String normalized = step.replaceAll("[^A-Za-z0-9]", "");
         if (normalized.isBlank()) {
             normalized = "Step";

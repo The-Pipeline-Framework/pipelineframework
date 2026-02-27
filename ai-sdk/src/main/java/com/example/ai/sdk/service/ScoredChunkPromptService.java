@@ -15,7 +15,8 @@ public class ScoredChunkPromptService implements ReactiveService<ScoredChunk, Pr
         if (input == null || input.chunk() == null || input.chunk().content() == null) {
             return Uni.createFrom().failure(new IllegalArgumentException("ScoredChunk and chunk content must be non-null"));
         }
-        String id = "prompt_" + Math.abs(input.chunk().id().hashCode());
+        int nonNegativeHash = input.chunk().id().hashCode() & 0x7fffffff;
+        String id = "prompt_" + nonNegativeHash;
         String content = "Using this retrieved context: \"" + input.chunk().content()
                 + "\". Provide a concise summary for a business user.";
         return Uni.createFrom().item(new Prompt(id, content, 0.3d));

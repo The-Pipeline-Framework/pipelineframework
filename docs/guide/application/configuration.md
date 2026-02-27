@@ -88,7 +88,7 @@ FunctionTransportContext remoteUrlCtx = new FunctionTransportContext(requestId, 
 ```
 
 Here, "contract metadata" means stable, transport-level routing semantics carried with each invocation.
-"Remote invoke adapter path" means the runtime adapter implementation that reads these attributes and performs remote dispatch (for example `InvocationModeRoutingFunctionInvokeAdapter` delegating to `HttpRemoteFunctionInvokeAdapter`).
+"Remote invoke adapter path" means the runtime adapter implementation that reads these attributes and performs remote dispatch (for example, `InvocationModeRoutingFunctionInvokeAdapter` delegating to `HttpRemoteFunctionInvokeAdapter`).
 
 TPF transport deduplication is best-effort; authoritative deduplication remains in business/data stores.
 
