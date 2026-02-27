@@ -43,11 +43,13 @@ jobs:
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
 
-      - name: Install root POM and framework to local repository
+      - name: Install root POM, framework, and foundational plugins to local repository
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" -N install
           ./mvnw "${maven_args[@]}" -f framework/pom.xml clean install -DskipTests
+          ./mvnw "${maven_args[@]}" -f plugins/foundational/persistence/pom.xml clean install -DskipTests
+          ./mvnw "${maven_args[@]}" -f plugins/foundational/cache/pom.xml clean install -DskipTests
 
       - name: Package framework artifacts
         run: |
