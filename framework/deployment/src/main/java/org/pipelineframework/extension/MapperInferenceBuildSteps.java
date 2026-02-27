@@ -276,7 +276,15 @@ public class MapperInferenceBuildSteps {
             if (definition == null || definition.stepName() == null || definition.stepName().isBlank()) {
                 continue;
             }
-            deduped.put(definition.stepName(), definition);
+            StepDefinition existing = deduped.get(definition.stepName());
+            if (existing == null) {
+                deduped.put(definition.stepName(), definition);
+                continue;
+            }
+            if (!existing.equals(definition)) {
+                throw new IllegalStateException("Conflicting step definitions for stepName '"
+                        + definition.stepName() + "': existing=" + existing + ", incoming=" + definition);
+            }
         }
         return new ArrayList<>(deduped.values());
     }
@@ -387,7 +395,8 @@ public class MapperInferenceBuildSteps {
             return false;
         }
         for (Type interfaceType : classInfo.interfaceTypes()) {
-            if (MAP.equals(interfaceType.name())) {
+            DotName interfaceName = interfaceType.name();
+            if (MAP.equals(interfaceName) || isMapLike(interfaceName, index)) {
                 return true;
             }
         }

@@ -79,6 +79,7 @@ To demonstrate Phase 1 operator constraints (1->1 invocation path), the SDK also
 
 - `DocumentChunkingUnaryService` (`Document -> Uni<Chunk>`)
 - `ChunkEmbeddingService` (`Chunk -> Uni<Vector>`)
+- `VectorStoreService` (`Vector -> Uni<StoreResult>`)
 - `SimilaritySearchUnaryService` (`Vector -> Uni<ScoredChunk>`)
 - `ScoredChunkPromptService` (`ScoredChunk -> Uni<Prompt>`)
 - `LLMCompletionService` (`Prompt -> Uni<Completion>`)

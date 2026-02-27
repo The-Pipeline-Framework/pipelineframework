@@ -164,16 +164,16 @@ public final class OperatorInvokerBuildSteps {
     }
 
     /**
-     * Validates that an operator method meets Phase 1 restrictions and throws if any are violated.
+     * Collect matching operator methods from the full type hierarchy.
      *
-     * Ensures the method does not accept a streaming `Multi<T>` input, that the normalized output is not
-     * `Multi<T>`, and that reactive operators return `Uni<T>`.
+     * Traverses the given class, its interfaces, and superclass chain recursively, collecting methods that
+     * match the provided name and pass method-kind filtering.
      *
-     * @param method the operator method to validate
-     * @param operator the OperatorBuildItem describing the operator (used for error messages)
-     * @param normalizedRaw the normalized raw return type name (e.g., `Uni` or `Multi`)
-     * @throws DeploymentException if the method accepts a `Multi<T>` input, normalizes to `Multi<T>`, or
-     *         if an operator with category `REACTIVE` has a return type other than `Uni<T>`
+     * @param combinedIndex combined Jandex index used to resolve interfaces and superclasses
+     * @param classInfo current class being inspected
+     * @param methodName method name to match
+     * @param visited set of visited class names to avoid cycles
+     * @param matches output list where matching methods are added
      */
     private void collectMatchingMethods(
             CombinedIndexBuildItem combinedIndex,
@@ -230,6 +230,19 @@ public final class OperatorInvokerBuildSteps {
         key.append(')');
         return key.toString();
     }
+
+    /**
+     * Validates that an operator method meets Phase 1 restrictions and throws if any are violated.
+     *
+     * Ensures the method does not accept a streaming `Multi<T>` input, that the normalized output is not
+     * `Multi<T>`, and that reactive operators return `Uni<T>`.
+     *
+     * @param method the operator method to validate
+     * @param operator the OperatorBuildItem describing the operator (used for error messages)
+     * @param normalizedRaw the normalized raw return type name (e.g., `Uni` or `Multi`)
+     * @throws DeploymentException if the method accepts a `Multi<T>` input, normalizes to `Multi<T>`, or
+     *         if an operator with category `REACTIVE` has a return type other than `Uni<T>`
+     */
     private void enforcePhaseOneBoundaries(MethodInfo method, OperatorBuildItem operator, DotName normalizedRaw) {
         if (method.parametersCount() == 1 && MULTI.equals(method.parameterType(0).name())) {
             throw new DeploymentException("Step '" + operator.step().name()

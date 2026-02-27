@@ -29,12 +29,7 @@ public class DocumentChunkingUnaryService implements ReactiveService<Document, C
             throw new IllegalArgumentException("Document input must not be null");
         }
         return chunkingService.process(input)
-                .collect().asList()
-                .onItem().transform(chunks -> {
-                    if (chunks.isEmpty()) {
-                        throw new IllegalStateException("No chunks generated for input document");
-                    }
-                    return chunks.get(0);
-                });
+                .collect().first()
+                .onItem().ifNull().failWith(new IllegalStateException("No chunks generated for input document"));
     }
 }
