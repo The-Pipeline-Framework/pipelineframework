@@ -34,4 +34,8 @@ trap cleanup EXIT
 
 cp "$PIPELINE_RUNTIME_MAPPING" "$ACTIVE_MAPPING"
 PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT:-GRPC}"
+
+# Ensure module parent POM is available in local repository for Quarkus bootstrap/codegen.
+"$MVN_BIN" -f "$CSV_DIR/pom.xml" -N install
+
 "$MVN_BIN" -f "$CSV_DIR/pom.pipeline-runtime.xml" -Dcsv.runtime.layout=pipeline-runtime -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean install "$@"

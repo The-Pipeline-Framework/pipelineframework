@@ -36,6 +36,10 @@ cp "$MONOLITH_MAPPING" "$ACTIVE_MAPPING"
 # Build orchestrator-svc first to generate LOCAL client sources and metadata used by monolith-svc.
 echo "Building orchestrator-svc to generate LOCAL client sources..."
 PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT:-LOCAL}"
+
+# Ensure module parent POM is available in local repository for Quarkus bootstrap/codegen.
+"$MVN_BIN" -f "$CSV_DIR/pom.xml" -N install
+
 ORCHESTRATOR_ARGS=()
 for arg in "$@"; do
   if [[ "$arg" == "-DskipTests" ]]; then
