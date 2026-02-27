@@ -33,6 +33,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Set;
 import java.util.Enumeration;
 import java.util.List;
@@ -226,16 +227,20 @@ public class MapperInferenceBuildSteps {
      * @throws IllegalStateException if reading step definitions from classpath resources fails
      */
     private List<StepDefinition> readStepDefinitions(List<OperatorBuildItem> operators, IndexView index) {
+        List<StepDefinition> combined = new ArrayList<>();
         if (operators != null && !operators.isEmpty()) {
-            List<StepDefinition> stepDefinitions = deriveStepDefinitionsFromOperators(operators, index);
-            LOG.debugf("Derived %d step definitions from OperatorBuildItem list", stepDefinitions.size());
-            return stepDefinitions;
+            List<StepDefinition> derived = deriveStepDefinitionsFromOperators(operators, index);
+            LOG.debugf("Derived %d step definitions from OperatorBuildItem list", derived.size());
+            combined.addAll(derived);
         }
         try {
-            return readStepDefinitions();
+            combined.addAll(readStepDefinitions());
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read step definitions", e);
         }
+        List<StepDefinition> deduped = deduplicateStepDefinitions(combined);
+        LOG.debugf("Loaded %d total step definitions after merge/dedup", deduped.size());
+        return deduped;
     }
 
     /**
@@ -253,7 +258,9 @@ public class MapperInferenceBuildSteps {
         List<StepDefinition> stepDefinitions = new ArrayList<>();
         for (OperatorBuildItem operator : operators) {
             DotName domainIn = resolveDomainCandidate(unwrapPayloadType(operator.inputType()), index);
-            DotName domainOut = resolveDomainCandidate(extractNormalizedOutputType(operator.normalizedReturnType(), index), index);
+            DotName domainOut = resolveDomainCandidate(
+                    unwrapPayloadType(extractNormalizedOutputType(operator.normalizedReturnType(), index)),
+                    index);
             stepDefinitions.add(new StepDefinition(
                     operator.step().name(),
                     domainIn,
@@ -261,6 +268,17 @@ public class MapperInferenceBuildSteps {
                     cardinalityFromNormalizedType(operator.normalizedReturnType())));
         }
         return stepDefinitions;
+    }
+
+    private List<StepDefinition> deduplicateStepDefinitions(List<StepDefinition> definitions) {
+        LinkedHashMap<String, StepDefinition> deduped = new LinkedHashMap<>();
+        for (StepDefinition definition : definitions) {
+            if (definition == null || definition.stepName() == null || definition.stepName().isBlank()) {
+                continue;
+            }
+            deduped.put(definition.stepName(), definition);
+        }
+        return new ArrayList<>(deduped.values());
     }
 
     /**
