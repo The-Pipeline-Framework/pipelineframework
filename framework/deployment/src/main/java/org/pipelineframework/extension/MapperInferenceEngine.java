@@ -180,9 +180,10 @@ public class MapperInferenceEngine {
     }
 
     /**
-     * Finds and returns the Mapper generic signature (Mapper<Domain, External>) declared by the given mapper implementation.
+     * Locate the Mapper generic signature (Mapper<Domain, External>) declared by the given mapper implementation.
      *
-     * Searches implemented interfaces (including extended interfaces) first and then the superclass chain to locate and extract the two type arguments.
+     * Searches implemented interfaces (including extended interfaces) first and then the superclass chain to extract the two type
+     * arguments that define the Mapper signature.
      *
      * @param mapperClass the mapper implementation to inspect
      * @return the extracted MapperGenericSignature if found, or {@code null} if the Mapper signature cannot be resolved
@@ -209,11 +210,11 @@ public class MapperInferenceEngine {
     }
 
     /**
-     * Locate and return the generic signature Mapper<Domain, External> for the given type by searching its interfaces and superclass.
+     * Locate the {@code Mapper<Domain, External>} generic signature for the given type by searching its interfaces and superclass.
      *
-     * @param type the type to inspect for a Mapper signature; may be null
-     * @param visited a set of type names already visited to prevent infinite recursion
-     * @return the MapperGenericSignature when the type represents a parameterized Mapper with two type arguments, or `null` if no valid signature is found
+     * @param type    the type to inspect for a Mapper signature; may be {@code null}
+     * @param visited set of type names already visited to prevent infinite recursion
+     * @return the MapperGenericSignature when the type represents a parameterized {@code Mapper} with two type arguments, {@code null} if no valid signature is found
      */
     private MapperGenericSignature resolveMapperSignature(Type type, Set<DotName> visited) {
         if (type == null) {
@@ -276,9 +277,9 @@ public class MapperInferenceEngine {
      */
     private record MapperGenericSignature(Type domainType, Type externalType) {
         /**
-         * Checks if any of the type parameters are wildcards or erased.
+         * Determines whether either generic type parameter is a wildcard or an erased type.
          *
-         * @return true if wildcards or erased types are present
+         * @return true if either the domain or external type is a wildcard or a type variable (erased), false otherwise.
          */
         boolean hasWildcardOrErased() {
             return isWildcardOrErased(domainType) ||
@@ -310,9 +311,9 @@ public class MapperInferenceEngine {
         }
 
         /**
-         * Provide a human-readable representation of the mapper generic signature.
+         * Provides a compact human-readable representation of this mapper's generic signature.
          *
-         * @return a string formatted as `Mapper<domainType, externalType>` where each placeholder is the string form of the corresponding type
+         * @return a string formatted as Mapper<domainType, externalType>, where each placeholder is the string form of the corresponding type
          */
         @Override
         public String toString() {

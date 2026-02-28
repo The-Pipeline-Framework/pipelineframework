@@ -56,17 +56,17 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-     * Build a JAX-RS REST resource TypeSpec for the provided RestBinding and generation context.
-     *
-     * The generated class is a public REST resource annotated with @Path and a generated-role
-     * annotation, contains an injected domain service and optional mapper fields, extends the
-     * appropriate REST adapter, and includes DTO conversion and a process endpoint matching the
-     * service's streaming shape.
-     *
-     * @param binding the RestBinding containing the PipelineStepModel, service name, optional path override, and mapping info
-     * @param ctx the GenerationContext providing deployment role and output configuration
-     * @return a TypeSpec representing the generated REST resource class
-     */
+         * Builds a JAX-RS REST resource TypeSpec for the given RestBinding and generation context.
+         *
+         * The generated TypeSpec represents a public REST resource class annotated with @Path and a
+         * generated-role annotation, contains an injected domain service and optional mapper fields,
+         * extends the appropriate REST adapter, and exposes a process endpoint matching the service's
+         * streaming shape.
+         *
+         * @param binding the RestBinding containing the PipelineStepModel, service name, optional path override, and mapping info
+         * @param ctx the GenerationContext providing deployment role, processing environment, and output configuration
+         * @return a TypeSpec representing the generated REST resource class
+         */
     private TypeSpec buildRestResourceClass(RestBinding binding, GenerationContext ctx) {
         org.pipelineframework.processor.ir.DeploymentRole role = ctx.role();
         PipelineStepModel model = binding.model();
@@ -180,22 +180,22 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-         * Create the REST POST handler for the step's unary reactive "process" endpoint.
-         *
-         * The generated method is a public POST endpoint at the resolved operation path. When `cacheSideEffect`
-         * is true the method forwards the incoming DTO directly to the domain service; when false
-         * it converts the incoming DTO to a domain value using the inbound mapper and converts the
-         * service result back to a DTO using the outbound mapper.
-         *
-         * @param inputDtoClassName       the DTO type used as the method parameter
-         * @param outputDtoClassName      the DTO type produced by the method
-         * @param model                   the pipeline step model that provides execution metadata and domain types
-         * @param ctx                     the generation context carrying enabled aspects and deployment role
-         * @param inboundMapperFieldName  name of the injected inbound mapper field used to convert DTO to domain (used when `cacheSideEffect` is false)
-         * @param outboundMapperFieldName name of the injected outbound mapper field used to convert domain to DTO (used when `cacheSideEffect` is false)
-         * @param cacheSideEffect         if true, bypass mapping and pass DTOs directly to/from the domain service
-         * @return                        a MethodSpec representing a POST handler that returns a `Uni` of the output DTO
-         */
+     * Create the POST handler for the unary REST "process" endpoint for this pipeline step.
+     *
+     * Builds a JAX-RS POST method named `process` that is bound to the provided operation path.
+     * When `cacheSideEffect` is true the method forwards DTOs directly to the domain service; otherwise
+     * it converts the incoming DTO to the domain type using the inbound mapper and converts service
+     * responses back to DTOs using the outbound mapper.
+     *
+     * @param inputDtoClassName       the DTO type used as the method parameter
+     * @param outputDtoClassName      the DTO type produced by the method
+     * @param model                   the pipeline step model containing streaming, execution and domain type metadata
+     * @param inboundMapperFieldName  name of the injected inbound mapper field used to convert external DTOs to domain types
+     * @param outboundMapperFieldName name of the injected outbound mapper field used to convert domain results to external DTOs
+     * @param cacheSideEffect         if true, bypass mapping and pass DTOs directly to/from the domain service
+     * @param operationPath           the JAX-RS `@Path` value for the operation
+     * @return                        a `Uni` producing the output DTO type
+     */
     private MethodSpec createReactiveServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             PipelineStepModel model,
@@ -239,13 +239,16 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-     * Exposes a POST endpoint at the resolved operation path that accepts a single input DTO and returns a JSON stream of output DTOs.
+     * Builds a POST endpoint at the given operation path that accepts a single input DTO and returns a JSON stream of output DTOs.
      *
-     * @param model                   the pipeline step model that provides domain types and execution mode
-     * @param inboundMapperFieldName  name of the injected inbound mapper used to convert the input DTO to the domain type
-     * @param outboundMapperFieldName name of the injected outbound mapper used to convert domain outputs to DTOs
-     * @param skipValidation          when true, skips validation of REST mappings before generating mapping calls
-     * @return                        a `Multi` that emits output DTO instances produced from the service's domain outputs
+     * @param inputDtoClassName       the DTO type of the request body
+     * @param outputDtoClassName      the DTO type emitted by the response stream
+     * @param model                   the pipeline step model providing inbound/outbound domain types and execution mode
+     * @param inboundMapperFieldName  name of the injected mapper field used to convert the input DTO to the domain type
+     * @param outboundMapperFieldName name of the injected mapper field used to convert domain outputs to DTOs
+     * @param skipValidation          when true, skips calling validateRestMappings(model) before generating mapping calls
+     * @param operationPath           the operation path value to apply to the method's @Path annotation
+     * @return                        a Multi that emits output DTO instances produced from the service's domain outputs
      */
     private MethodSpec createReactiveStreamingServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
@@ -290,21 +293,14 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-     * Builds the reactive client-streaming JAX-RS "process" method for this REST resource.
+     * Creates the client-streaming POST "process" JAX-RS method that accepts a List of input DTOs and returns a Uni of output DTO.
      *
-     * The generated method is a public POST endpoint at the resolved operation path that accepts a Multi of input DTOs,
-     * maps each input DTO to a domain object using the inbound mapper, delegates processing to the domain service,
-     * maps the domain result to an output DTO using the outbound mapper, and returns a Uni of output DTOs.
-     * If skipValidation is false, REST mappings are validated before generation. If the model's execution mode is
-     * VIRTUAL_THREADS, the method will be annotated to run on virtual threads.
-     *
-     * @param inputDtoClassName        the TypeName used for individual input DTOs
-     * @param outputDtoClassName       the TypeName used for the output DTO
-     * @param model                    the pipeline step model; influences validation and execution-mode annotation
-     * @param inboundMapperFieldName   the injected inbound mapper field name used to convert DTOs to domain objects
-     * @param outboundMapperFieldName  the injected outbound mapper field name used to convert domain objects to DTOs
-     * @param skipValidation           if true, skips validateRestMappings(model) during generation
-     * @return                         a MethodSpec representing the generated "process" method
+     * @param model the pipeline step model; used to determine execution-mode annotation and (unless skipped) mapping validation
+     * @param inboundMapperFieldName name of the injected mapper field used to convert DTOs to domain objects via `fromExternal`
+     * @param outboundMapperFieldName name of the injected mapper field used to convert domain objects to DTOs via `toExternal`
+     * @param skipValidation if true, skip calling {@code validateRestMappings(model)}
+     * @param operationPath the JAX-RS path value for the endpoint
+     * @return the MethodSpec for the generated "process" endpoint
      */
     private MethodSpec createReactiveStreamingClientServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
@@ -346,16 +342,17 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-     * Exposes a bidirectional streaming POST endpoint at the resolved operation path that accepts a stream of input DTOs and returns a stream of output DTOs.
-     *
-     * @param inputDtoClassName       the DTO type of incoming stream elements
-     * @param outputDtoClassName      the DTO type of outgoing stream elements
-     * @param model                   pipeline step model; if its execution mode is VIRTUAL_THREADS the generated method is annotated with `@RunOnVirtualThread`
-     * @param inboundMapperFieldName  name of the injected mapper field used to convert incoming DTOs to domain objects
-     * @param outboundMapperFieldName name of the injected mapper field used to convert domain outputs to DTOs
-     * @param skipValidation          if true, REST mapping validation is skipped for this method
-     * @return                        a `Multi` of output DTO instances produced from the domain service's outputs
-     */
+         * Builds a bidirectional streaming POST endpoint method that accepts a stream of input DTOs and returns a stream of output DTOs at the given operation path.
+         *
+         * @param inputDtoClassName       the DTO TypeName for incoming stream elements
+         * @param outputDtoClassName      the DTO TypeName for outgoing stream elements
+         * @param model                   pipeline step model; if its execution mode is VIRTUAL_THREADS the generated method is annotated with `@RunOnVirtualThread`
+         * @param inboundMapperFieldName  name of the injected mapper field used to convert incoming DTOs to domain objects via `fromExternal`
+         * @param outboundMapperFieldName name of the injected mapper field used to convert domain outputs to DTOs via `toExternal`
+         * @param skipValidation          if true, skips calling validateRestMappings(model) before generating the method
+         * @param operationPath           the JAX-RS subpath to apply to the generated `@Path` annotation for the process operation
+         * @return                        a `Multi` of output DTO instances produced from the domain service's outputs
+         */
     private MethodSpec createReactiveBidirectionalStreamingServiceProcessMethod(
             TypeName inputDtoClassName, TypeName outputDtoClassName,
             PipelineStepModel model,
@@ -508,16 +505,16 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-     * Converts an input DTO into the step's domain input value.
+     * Convert an incoming DTO into the pipeline step's domain input value.
      *
-     * If `cacheSideEffect` is true, the DTO is returned unchanged; otherwise the inbound mapper
-     * referenced by `inboundMapperFieldName` is used to perform the conversion.
+     * If {@code cacheSideEffect} is {@code true}, the DTO is returned unchanged; otherwise the
+     * inbound mapper identified by {@code inboundMapperFieldName} is used to perform the conversion.
      *
      * @param model the pipeline step model providing domain type metadata
      * @param inputDtoClassName the compile-time type of the incoming DTO parameter
      * @param inboundMapperFieldName the name of the injected inbound mapper field to call when mapping
-     * @param cacheSideEffect when true, skip mapping and pass the DTO through as the domain input
-     * @return the domain input value derived from `dto`, or the original `dto` when `cacheSideEffect` is true
+     * @param cacheSideEffect when {@code true}, skip mapping and pass the DTO through as the domain input
+     * @return the domain input value derived from the provided DTO, or the original DTO when {@code cacheSideEffect} is {@code true}
      */
     private MethodSpec createFromDtoMethod(
             PipelineStepModel model,
@@ -541,12 +538,12 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-     * Convert a domain object into its outbound DTO.
+     * Convert a domain object to the outbound DTO used by this pipeline step.
      *
-     * @param model the pipeline step metadata used to determine domain/outbound types
+     * @param model metadata for the pipeline step, used to determine domain and outbound types when mapping is required
      * @param outputDtoClassName the DTO type returned by this method
-     * @param outboundMapperFieldName the name of the injected outbound mapper field to use when mapping is required
-     * @param cacheSideEffect if `true`, the method returns the input value unchanged; if `false`, the method delegates to the outbound mapper
+     * @param outboundMapperFieldName name of the injected outbound mapper field used to perform mapping when required
+     * @param cacheSideEffect if true, the input value is returned unchanged; if false, the method delegates to the outbound mapper
      * @return the outbound DTO corresponding to the given domain object
      */
     private MethodSpec createToDtoMethod(

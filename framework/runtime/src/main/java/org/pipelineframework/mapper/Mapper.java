@@ -32,10 +32,10 @@ public interface Mapper<Domain, External> {
     Domain fromExternal(External external);
 
     /**
-     * Converts an internal domain object into an external representation.
+     * Convert a domain object into its external representation.
      *
-     * @param domain internal domain object
-     * @return mapped external representation
+     * @param domain the domain object to convert
+     * @return the external representation corresponding to the provided domain object
      */
     External toExternal(Domain domain);
 }
