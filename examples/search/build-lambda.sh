@@ -21,8 +21,7 @@ PIPELINE_REST_NAMING_STRATEGY="${PIPELINE_REST_NAMING_STRATEGY:-RESOURCEFUL}"
 PIPELINE_LAMBDA_DEPENDENCY_SCOPE="${PIPELINE_LAMBDA_DEPENDENCY_SCOPE:-compile}"
 
 # Ensure module parent POM and foundational plugin coordinates are resolvable in clean local repositories.
-"$MVN_BIN" -f "$SEARCH_DIR/pom.xml" -N install
-"$MVN_BIN" -f "$ROOT_DIR/plugins/foundational/cache/pom.xml" -DskipTests install
+"$ROOT_DIR/scripts/ci/bootstrap-local-repo-prereqs.sh" search
 
 "$MVN_BIN" -f "$SEARCH_DIR/pom.xml" \
   -Dtpf.build.platform="$PIPELINE_PLATFORM" \

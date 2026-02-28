@@ -45,11 +45,7 @@ jobs:
 
       - name: Install root POM, framework, and foundational plugins to local repository
         run: |
-          read -r -a maven_args <<< "$MAVEN_ARGS"
-          ./mvnw "${maven_args[@]}" -N install
-          ./mvnw "${maven_args[@]}" -f framework/pom.xml clean install -DskipTests
-          ./mvnw "${maven_args[@]}" -f plugins/foundational/persistence/pom.xml clean install -DskipTests
-          ./mvnw "${maven_args[@]}" -f plugins/foundational/cache/pom.xml clean install -DskipTests
+          ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
 
       - name: Package framework artifacts
         run: |
