@@ -22,7 +22,6 @@ import org.jboss.jandex.DotName;
 import org.jboss.jandex.IndexView;
 import org.jboss.jandex.ParameterizedType;
 import org.jboss.jandex.Type;
-import org.jboss.jandex.WildcardType;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -51,7 +50,7 @@ import java.util.Set;
  * Mapper inference algorithm:
  * <ol>
  *   <li>Scan all known implementors of {@code org.pipelineframework.mapper.Mapper} via Jandex</li>
- *   <li>Extract generic type parameters from Mapper&lt;Grpc, Dto, Domain&gt;</li>
+ *   <li>Extract generic type parameters from Mapper&lt;Domain, External&gt;</li>
  *   <li>Validate: no wildcards, no raw types, no erased generics</li>
  *   <li>Build registry: Domain type → Mapper implementation</li>
  *   <li>Validate uniqueness: exactly one mapper per domain type</li>
@@ -141,7 +140,7 @@ public class MapperInferenceEngine {
         List<String> validationErrors = new ArrayList<>();
 
         for (ClassInfo mapper : mapperImplementors) {
-            // Extract generic signature from Mapper<Grpc, Dto, Domain>
+            // Extract generic signature from Mapper<Domain, External>
             MapperGenericSignature signature = extractMapperGenericSignature(mapper);
             if (signature == null) {
                 validationErrors.add("Mapper " + mapper.name() + " has invalid/erased generic parameters");
@@ -179,9 +178,9 @@ public class MapperInferenceEngine {
     }
 
     /**
-     * Finds and returns the Mapper generic signature (Mapper<Grpc, Dto, Domain>) declared by the given mapper implementation.
+     * Finds and returns the Mapper generic signature (Mapper<Domain, External>) declared by the given mapper implementation.
      *
-     * Searches implemented interfaces (including extended interfaces) first and then the superclass chain to locate and extract the three type arguments.
+     * Searches implemented interfaces (including extended interfaces) first and then the superclass chain to locate and extract the two type arguments.
      *
      * @param mapperClass the mapper implementation to inspect
      * @return the extracted MapperGenericSignature if found, or {@code null} if the Mapper signature cannot be resolved
@@ -208,11 +207,11 @@ public class MapperInferenceEngine {
     }
 
     /**
-     * Locate and return the generic signature Mapper<Grpc, Dto, Domain> for the given type by searching its interfaces and superclass.
+     * Locate and return the generic signature Mapper<Domain, External> for the given type by searching its interfaces and superclass.
      *
      * @param type the type to inspect for a Mapper signature; may be null
      * @param visited a set of type names already visited to prevent infinite recursion
-     * @return the MapperGenericSignature when the type represents a parameterized Mapper with three type arguments, or `null` if no valid signature is found
+     * @return the MapperGenericSignature when the type represents a parameterized Mapper with two type arguments, or `null` if no valid signature is found
      */
     private MapperGenericSignature resolveMapperSignature(Type type, Set<DotName> visited) {
         if (type == null) {
@@ -227,11 +226,10 @@ public class MapperInferenceEngine {
             if (type.kind() == Type.Kind.PARAMETERIZED_TYPE) {
                 ParameterizedType parameterizedType = type.asParameterizedType();
                 List<Type> typeArguments = parameterizedType.arguments();
-                if (typeArguments.size() == 3) {
+                if (typeArguments.size() == 2) {
                     return new MapperGenericSignature(
                         typeArguments.get(0),
-                        typeArguments.get(1),
-                        typeArguments.get(2));
+                        typeArguments.get(1));
                 }
             }
             // Mapper found but not parameterized.
@@ -271,20 +269,18 @@ public class MapperInferenceEngine {
     /**
      * Holds the extracted generic type parameters from a Mapper implementation.
      *
-     * @param grpcType the first generic parameter (Grpc message type)
-     * @param dtoType the second generic parameter (DTO type)
-     * @param domainType the third generic parameter (Domain entity type)
+     * @param domainType the first generic parameter (internal/domain type)
+     * @param externalType the second generic parameter (external representation type)
      */
-    private record MapperGenericSignature(Type grpcType, Type dtoType, Type domainType) {
+    private record MapperGenericSignature(Type domainType, Type externalType) {
         /**
          * Checks if any of the type parameters are wildcards or erased.
          *
          * @return true if wildcards or erased types are present
          */
         boolean hasWildcardOrErased() {
-            return isWildcardOrErased(grpcType) ||
-                   isWildcardOrErased(dtoType) ||
-                   isWildcardOrErased(domainType);
+            return isWildcardOrErased(domainType) ||
+                   isWildcardOrErased(externalType);
         }
 
         /**
@@ -314,11 +310,11 @@ public class MapperInferenceEngine {
         /**
          * Provide a human-readable representation of the mapper generic signature.
          *
-         * @return a string formatted as `Mapper<grpcType, dtoType, domainType>` where each placeholder is the string form of the corresponding type
+         * @return a string formatted as `Mapper<domainType, externalType>` where each placeholder is the string form of the corresponding type
          */
         @Override
         public String toString() {
-            return "Mapper<" + grpcType + ", " + dtoType + ", " + domainType + ">";
+            return "Mapper<" + domainType + ", " + externalType + ">";
         }
     }
 

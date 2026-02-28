@@ -87,90 +87,50 @@ class MapperInferenceEngineTest {
     static final class GrpcA2 {}
     static final class DtoA2 {}
 
-    static final class MapperA implements Mapper<GrpcA, DtoA, DomainA> {
+    static final class MapperA implements Mapper<DomainA, GrpcA> {
         @Override
-        public DtoA fromGrpc(GrpcA grpc) {
+        public DomainA fromExternal(GrpcA grpc) {
             return null;
         }
 
         @Override
-        public GrpcA toGrpc(DtoA dto) {
-            return null;
-        }
-
-        @Override
-        public DomainA fromDto(DtoA dto) {
-            return null;
-        }
-
-        @Override
-        public DtoA toDto(DomainA domain) {
+        public GrpcA toExternal(DomainA domain) {
             return null;
         }
     }
 
-    static final class MapperB implements Mapper<GrpcB, DtoB, DomainB> {
+    static final class MapperB implements Mapper<DomainB, GrpcB> {
         @Override
-        public DtoB fromGrpc(GrpcB grpc) {
+        public DomainB fromExternal(GrpcB grpc) {
             return null;
         }
 
         @Override
-        public GrpcB toGrpc(DtoB dto) {
-            return null;
-        }
-
-        @Override
-        public DomainB fromDto(DtoB dto) {
-            return null;
-        }
-
-        @Override
-        public DtoB toDto(DomainB domain) {
+        public GrpcB toExternal(DomainB domain) {
             return null;
         }
     }
 
-    static final class MapperADuplicate implements Mapper<GrpcA2, DtoA2, DomainA> {
+    static final class MapperADuplicate implements Mapper<DomainA, GrpcA2> {
         @Override
-        public DtoA2 fromGrpc(GrpcA2 grpc) {
+        public DomainA fromExternal(GrpcA2 grpc) {
             return null;
         }
 
         @Override
-        public GrpcA2 toGrpc(DtoA2 dto) {
-            return null;
-        }
-
-        @Override
-        public DomainA fromDto(DtoA2 dto) {
-            return null;
-        }
-
-        @Override
-        public DtoA2 toDto(DomainA domain) {
+        public GrpcA2 toExternal(DomainA domain) {
             return null;
         }
     }
 
-    static final class GenericMapper<T> implements Mapper<GrpcA, DtoA, T> {
+    static final class GenericMapper<T> implements Mapper<T, GrpcA> {
         @Override
-        public DtoA fromGrpc(GrpcA grpc) {
+        public T fromExternal(GrpcA grpc) {
             return null;
         }
 
         @Override
-        public GrpcA toGrpc(DtoA dto) {
-            return null;
-        }
-
-        @Override
-        public T fromDto(DtoA dto) {
-            return null;
-        }
-
-        @Override
-        public DtoA toDto(T domain) {
+        public GrpcA toExternal(T domain) {
             return null;
         }
     }

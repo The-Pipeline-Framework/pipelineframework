@@ -17,60 +17,25 @@
 package org.pipelineframework.mapper;
 
 /**
- * Interface for mapping from/to gRPC DTOs and domain.
+ * Domain-centric mapper between an internal (domain) type and one external representation.
  *
- * @param <Grpc>  the gRPC type
- * @param <Dto>   the DTO type
- * @param <Domain> the domain type
+ * @param <Domain> internal/domain type used by step services
+ * @param <External> external transport/operator representation type
  */
-public interface Mapper<Grpc, Dto, Domain> {
+public interface Mapper<Domain, External> {
     /**
-     * Converts from gRPC input type to domain input type.
+     * Converts an external representation into the internal domain representation.
      *
-     * @param grpcIn the gRPC input object
-     * @return the domain input object
+     * @param external external input object
+     * @return mapped internal domain object
      */
-    default Domain fromGrpcFromDto(Grpc grpcIn) {
-        return fromDto(fromGrpc(grpcIn));
-    }
+    Domain fromExternal(External external);
 
     /**
-     * Converts from domain type to gRPC type by first converting to DTO then to gRPC.
+     * Converts an internal domain object into an external representation.
      *
-     * @param domain the domain object
-     * @return the gRPC object
+     * @param domain internal domain object
+     * @return mapped external representation
      */
-    default Grpc toDtoToGrpc(Domain domain) {
-        return toGrpc(toDto(domain));
-    }
-
-    /**
-     * Converts from gRPC type to DTO type.
-     *
-     * @param grpc the gRPC object
-     * @return the DTO object
-     */
-    Dto fromGrpc(Grpc grpc);
-    /**
-     * Converts from DTO type to gRPC type.
-     *
-     * @param dto the DTO object
-     * @return the gRPC object
-     */
-    Grpc toGrpc(Dto dto);
-
-    /**
-     * Converts from DTO type to domain type.
-     *
-     * @param dto the DTO object
-     * @return the domain object
-     */
-    Domain fromDto(Dto dto);
-    /**
-     * Converts from domain type to DTO type.
-     *
-     * @param domain the domain object
-     * @return the DTO object
-     */
-    Dto toDto(Domain domain);
+    External toExternal(Domain domain);
 }

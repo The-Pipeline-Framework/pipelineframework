@@ -457,7 +457,7 @@ public class MapperInferenceBuildSteps {
                         validationErrors.add(String.format(
                                 "Step '%s' has no outbound mapper for input domain type '%s'. " +
                                 "PER REQUIREMENTS: All mappers MUST be resolved at build time. " +
-                                "Add a Mapper implementation: Mapper<?, ?, %s>",
+                                "Add a Mapper implementation: Mapper<%s, ?>",
                                 step.stepName(), step.domainIn(), step.domainIn()));
                     }
                 }
@@ -476,7 +476,7 @@ public class MapperInferenceBuildSteps {
                         validationErrors.add(String.format(
                                 "Step '%s' has no inbound mapper for output domain type '%s'. " +
                                 "PER REQUIREMENTS: All mappers MUST be resolved at build time. " +
-                                "Add a Mapper implementation: Mapper<?, ?, %s>",
+                                "Add a Mapper implementation: Mapper<%s, ?>",
                                 step.stepName(), step.domainOut(), step.domainOut()));
                     }
                 }

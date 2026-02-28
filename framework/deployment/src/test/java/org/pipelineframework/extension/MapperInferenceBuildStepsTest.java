@@ -195,24 +195,14 @@ class MapperInferenceBuildStepsTest {
     interface BaseMap<K, V> extends java.util.Map<K, V> {}
     interface IndirectMap<K, V> extends BaseMap<K, V> {}
 
-    static final class MapperA implements Mapper<GrpcA, DtoA, DomainA> {
+    static final class MapperA implements Mapper<DomainA, GrpcA> {
         @Override
-        public DtoA fromGrpc(GrpcA grpc) {
+        public DomainA fromExternal(GrpcA grpc) {
             return null;
         }
 
         @Override
-        public GrpcA toGrpc(DtoA dto) {
-            return null;
-        }
-
-        @Override
-        public DomainA fromDto(DtoA dto) {
-            return null;
-        }
-
-        @Override
-        public DtoA toDto(DomainA domain) {
+        public GrpcA toExternal(DomainA domain) {
             return null;
         }
     }

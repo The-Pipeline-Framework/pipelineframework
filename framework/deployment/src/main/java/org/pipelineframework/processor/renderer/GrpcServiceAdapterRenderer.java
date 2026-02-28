@@ -99,15 +99,13 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 : ClassName.OBJECT;
             TypeName inboundMapperType = ParameterizedTypeName.get(
                 ClassName.get("org.pipelineframework.mapper", "Mapper"),
-                inputGrpcType,
-                WildcardTypeName.subtypeOf(Object.class),
-                inputDomainType
+                inputDomainType,
+                inputGrpcType
             );
             TypeName outboundMapperType = ParameterizedTypeName.get(
                 ClassName.get("org.pipelineframework.mapper", "Mapper"),
-                outputGrpcType,
-                WildcardTypeName.subtypeOf(Object.class),
-                outputDomainType
+                outputDomainType,
+                outputGrpcType
             );
             grpcServiceBuilder.addField(FieldSpec.builder(inboundMapperType, "inboundMapper")
                 .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
@@ -510,7 +508,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 .returns(inputDomainType)
                 .addParameter(inputGrpcType, "grpcIn");
         if (!cacheSideEffect) {
-            fromGrpcMethodBuilder.addStatement("return inboundMapper.fromGrpcFromDto(grpcIn)");
+            fromGrpcMethodBuilder.addStatement("return inboundMapper.fromExternal(grpcIn)");
         } else {
             fromGrpcMethodBuilder.addStatement("return ($T) grpcIn", inputDomainType);
         }
@@ -521,7 +519,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
                 .returns(outputGrpcType)
                 .addParameter(outputDomainType, "output");
         if (!cacheSideEffect) {
-            toGrpcMethodBuilder.addStatement("return outboundMapper.toDtoToGrpc(output)");
+            toGrpcMethodBuilder.addStatement("return outboundMapper.toExternal(output)");
         } else {
             toGrpcMethodBuilder.addStatement("return ($T) output", outputGrpcType);
         }

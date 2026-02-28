@@ -127,15 +127,13 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         if (!cacheSideEffect) {
             TypeName inboundMapperType = ParameterizedTypeName.get(
                 ClassName.get("org.pipelineframework.mapper", "Mapper"),
-                WildcardTypeName.subtypeOf(Object.class),
-                inputDtoClassName,
-                domainInputType
+                domainInputType,
+                inputDtoClassName
             );
             TypeName outboundMapperType = ParameterizedTypeName.get(
                 ClassName.get("org.pipelineframework.mapper", "Mapper"),
-                WildcardTypeName.subtypeOf(Object.class),
-                outputDtoClassName,
-                domainOutputType
+                domainOutputType,
+                outputDtoClassName
             );
             resourceBuilder.addField(FieldSpec.builder(inboundMapperType, inboundMapperFieldName)
                 .addAnnotation(AnnotationSpec.builder(ClassName.get("jakarta.inject", "Inject")).build())
@@ -226,9 +224,9 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             TypeName domainInputType = model.inboundDomainType() != null
                 ? model.inboundDomainType()
                 : ClassName.OBJECT;
-            methodBuilder.addStatement("$T inputDomain = $L.fromDto(inputDto)",
+            methodBuilder.addStatement("$T inputDomain = $L.fromExternal(inputDto)",
                 domainInputType, inboundMapperFieldName);
-            methodBuilder.addStatement("return domainService.process(inputDomain).map(output -> $L.toDto(output))",
+            methodBuilder.addStatement("return domainService.process(inputDomain).map(output -> $L.toExternal(output))",
                 outboundMapperFieldName);
         }
 
@@ -278,9 +276,9 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         TypeName domainInputType = model.inboundDomainType() != null
             ? model.inboundDomainType()
             : ClassName.OBJECT;
-        methodBuilder.addStatement("$T inputDomain = $L.fromDto(inputDto)",
+        methodBuilder.addStatement("$T inputDomain = $L.fromExternal(inputDto)",
             domainInputType, inboundMapperFieldName);
-        methodBuilder.addStatement("return domainService.process(inputDomain).map(output -> $L.toDto(output))",
+        methodBuilder.addStatement("return domainService.process(inputDomain).map(output -> $L.toExternal(output))",
             outboundMapperFieldName);
 
         // Add @RunOnVirtualThread annotation if the property is enabled
@@ -334,7 +332,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
                 .build());
 
         methodBuilder.addStatement(
-            "return domainService.process($T.createFrom().iterable(inputDtos).map(item -> $L.fromDto(item))).map(output -> $L.toDto(output))",
+            "return domainService.process($T.createFrom().iterable(inputDtos).map(item -> $L.fromExternal(item))).map(output -> $L.toExternal(output))",
             ClassName.get(Multi.class),
             inboundMapperFieldName,
             outboundMapperFieldName);
@@ -392,7 +390,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
             .addParameter(multiInputDto, "inputDtos");
 
         methodBuilder.addStatement(
-            "return domainService.process(inputDtos.map(item -> $L.fromDto(item))).map(output -> $L.toDto(output))",
+            "return domainService.process(inputDtos.map(item -> $L.fromExternal(item))).map(output -> $L.toExternal(output))",
             inboundMapperFieldName,
             outboundMapperFieldName);
 
@@ -537,7 +535,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         if (cacheSideEffect) {
             builder.addStatement("return dto");
         } else {
-            builder.addStatement("return $L.fromDto(dto)", inboundMapperFieldName);
+            builder.addStatement("return $L.fromExternal(dto)", inboundMapperFieldName);
         }
         return builder.build();
     }
@@ -567,7 +565,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
         if (cacheSideEffect) {
             builder.addStatement("return domain");
         } else {
-            builder.addStatement("return $L.toDto(domain)", outboundMapperFieldName);
+            builder.addStatement("return $L.toExternal(domain)", outboundMapperFieldName);
         }
         return builder.build();
     }
