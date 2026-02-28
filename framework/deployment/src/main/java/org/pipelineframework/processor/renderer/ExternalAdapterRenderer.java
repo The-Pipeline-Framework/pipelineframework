@@ -28,6 +28,7 @@ import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
 import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.GenerationTarget;
+import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.ExternalAdapterBinding;
 import org.pipelineframework.processor.ir.StreamingShape;
@@ -95,6 +96,13 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
         // Get the input and output types for the external adapter
         TypeName applicationInputType = model.inboundDomainType();
         TypeName applicationOutputType = model.outboundDomainType();
+        TypeName operatorInputType = model.inputMapping() != null && model.inputMapping().entityType() != null
+            ? model.inputMapping().entityType()
+            : applicationInputType;
+        TypeName operatorOutputType = model.outputMapping() != null && model.outputMapping().entityType() != null
+            ? model.outputMapping().entityType()
+            : applicationOutputType;
+        boolean useJacksonFallback = externalMapperType == null && model.mapperFallbackMode() == MapperFallbackMode.JACKSON;
 
         // Create the class with appropriate annotations
         TypeSpec.Builder externalAdapterBuilder = TypeSpec.classBuilder(externalAdapterClassName)
@@ -135,6 +143,15 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
                     .build();
             externalAdapterBuilder.addField(externalMapperField);
         }
+        if (useJacksonFallback) {
+            FieldSpec objectMapperField = FieldSpec.builder(
+                    ClassName.get("com.fasterxml.jackson.databind", "ObjectMapper"),
+                    "objectMapper")
+                .addAnnotation(Inject.class)
+                .addModifiers(Modifier.PRIVATE)
+                .build();
+            externalAdapterBuilder.addField(objectMapperField);
+        }
 
         // Add default constructor
         MethodSpec constructor = MethodSpec.constructorBuilder()
@@ -147,8 +164,21 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
             model.streamingShape(),
             applicationInputType,
             applicationOutputType,
-            externalMapperType != null);
+            operatorInputType,
+            operatorOutputType,
+            externalMapperType != null,
+            useJacksonFallback);
         externalAdapterBuilder.addMethod(processMethod);
+        if (useJacksonFallback) {
+            externalAdapterBuilder.addMethod(buildFallbackInputConverter(
+                model.serviceName(),
+                applicationInputType,
+                operatorInputType));
+            externalAdapterBuilder.addMethod(buildFallbackOutputConverter(
+                model.serviceName(),
+                operatorOutputType,
+                applicationOutputType));
+        }
 
         return externalAdapterBuilder.build();
     }
@@ -171,7 +201,10 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
             StreamingShape streamingShape,
             TypeName applicationInputType,
             TypeName applicationOutputType,
-            boolean hasExternalMapper) {
+            TypeName operatorInputType,
+            TypeName operatorOutputType,
+            boolean hasExternalMapper,
+            boolean useJacksonFallback) {
 
         String methodName = "process";
         TypeName returnType;
@@ -219,6 +252,21 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
                 // For bidirectional streaming operations: Multi<I> -> Multi<O>
                 addStreamingMapperLogic(methodBuilder);
             }
+        } else if (useJacksonFallback) {
+            if (streamingShape == StreamingShape.UNARY_UNARY) {
+                methodBuilder.addStatement("$T operatorInput = convertInput(input)", operatorInputType)
+                    .addStatement("return delegateService.process(operatorInput).map(this::convertOutput)");
+            } else if (streamingShape == StreamingShape.UNARY_STREAMING) {
+                methodBuilder.addStatement("$T operatorInput = convertInput(input)", operatorInputType)
+                    .addStatement("return delegateService.process(operatorInput).map(this::convertOutput)");
+            } else if (streamingShape == StreamingShape.STREAMING_UNARY) {
+                methodBuilder.addStatement("var operatorInputs = input.map(this::convertInput)")
+                    .addStatement("return delegateService.process(operatorInputs).map(this::convertOutput)");
+            } else if (streamingShape == StreamingShape.STREAMING_STREAMING) {
+                methodBuilder.addStatement("var operatorInputs = input.map(this::convertInput)")
+                    .addStatement("var operatorOutputs = delegateService.process(operatorInputs)")
+                    .addStatement("return operatorOutputs.map(this::convertOutput)");
+            }
         } else {
             // If no operator mapper, just delegate directly
             methodBuilder.addStatement("return delegateService.process(input)");
@@ -254,6 +302,40 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
         methodBuilder
             .addStatement("var operatorInputs = input.map(appInput -> externalMapper.toOperatorInput(appInput))")
             .addStatement("return delegateService.process(operatorInputs).map(libOutput -> externalMapper.toApplicationOutput(libOutput))");
+    }
+
+    private MethodSpec buildFallbackInputConverter(String stepName, TypeName appInputType, TypeName operatorInputType) {
+        return MethodSpec.methodBuilder("convertInput")
+            .addModifiers(Modifier.PRIVATE)
+            .returns(operatorInputType)
+            .addParameter(appInputType, "input")
+            .beginControlFlow("try")
+            .addStatement("return objectMapper.convertValue(input, new $T<$T>() {})",
+                ClassName.get("com.fasterxml.jackson.core.type", "TypeReference"),
+                operatorInputType)
+            .nextControlFlow("catch ($T e)", RuntimeException.class)
+            .addStatement("throw new $T($S, e)",
+                ClassName.get("org.pipelineframework.step", "NonRetryableException"),
+                "Mapper fallback (JACKSON) failed for step '" + stepName + "' (inbound conversion)")
+            .endControlFlow()
+            .build();
+    }
+
+    private MethodSpec buildFallbackOutputConverter(String stepName, TypeName operatorOutputType, TypeName appOutputType) {
+        return MethodSpec.methodBuilder("convertOutput")
+            .addModifiers(Modifier.PRIVATE)
+            .returns(appOutputType)
+            .addParameter(operatorOutputType, "output")
+            .beginControlFlow("try")
+            .addStatement("return objectMapper.convertValue(output, new $T<$T>() {})",
+                ClassName.get("com.fasterxml.jackson.core.type", "TypeReference"),
+                appOutputType)
+            .nextControlFlow("catch ($T e)", RuntimeException.class)
+            .addStatement("throw new $T($S, e)",
+                ClassName.get("org.pipelineframework.step", "NonRetryableException"),
+                "Mapper fallback (JACKSON) failed for step '" + stepName + "' (outbound conversion)")
+            .endControlFlow()
+            .build();
     }
 
     /**

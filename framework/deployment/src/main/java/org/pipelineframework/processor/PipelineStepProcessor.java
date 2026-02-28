@@ -30,6 +30,7 @@ import javax.lang.model.element.TypeElement;
     "pipeline.platform", // Optional: target deployment platform (COMPUTE|FUNCTION; legacy: STANDARD|LAMBDA)
     "pipeline.transport", // Optional: transport mode (GRPC|REST|LOCAL)
     "pipeline.rest.naming.strategy", // Optional: REST naming strategy (LEGACY|RESOURCEFUL)
+    "pipeline.mapper.fallback.enabled", // Optional: enables delegated mapper fallback engine
     "pipeline.parallelism" // Optional: parallelism mode (PARALLEL|SEQUENTIAL|AUTO)
 })
 @SupportedSourceVersion(SourceVersion.RELEASE_21)

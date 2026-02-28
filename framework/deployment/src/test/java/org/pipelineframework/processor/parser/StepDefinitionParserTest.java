@@ -29,6 +29,7 @@ import javax.tools.Diagnostic;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.StepKind;
 
@@ -127,6 +128,26 @@ class StepDefinitionParserTest {
         assertEquals(StepKind.DELEGATED, step.kind());
         assertEquals("com.example.lib.ExternalService", step.executionClass().canonicalName());
         assertEquals("com.example.app.ExternalMapperImpl", step.externalMapper().canonicalName());
+        assertEquals(MapperFallbackMode.NONE, step.mapperFallback());
+    }
+
+    @Test
+    void parsesDelegatedMapperFallbackJackson() throws IOException {
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "fallback-step"
+                operator: "com.example.lib.ExternalService"
+                input: "com.example.app.InputType"
+                output: "com.example.app.OutputType"
+                mapperFallback: "JACKSON"
+            """);
+
+        assertEquals(1, steps.size());
+        StepDefinition step = steps.getFirst();
+        assertEquals(StepKind.DELEGATED, step.kind());
+        assertEquals(MapperFallbackMode.JACKSON, step.mapperFallback());
     }
 
     @Test

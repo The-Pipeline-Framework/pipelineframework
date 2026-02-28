@@ -31,6 +31,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.squareup.javapoet.ClassName;
 import org.jboss.logging.Logger;
+import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.StepKind;
 
@@ -50,6 +51,7 @@ public class StepDefinitionParser {
         "output",
         "operatorMapper",
         "externalMapper",
+        "mapperFallback",
         "cardinality",
         "inputTypeName",
         "inputFields",
@@ -226,6 +228,11 @@ public class StepDefinitionParser {
             }
         }
 
+        MapperFallbackMode mapperFallback = parseMapperFallback(stepData, name);
+        if (mapperFallback == null) {
+            return null;
+        }
+
         if (kind == StepKind.INTERNAL) {
             if (externalMapper != null) {
                 String message = "Ignoring 'operatorMapper'/'externalMapper' on internal step '" + name
@@ -241,6 +248,13 @@ public class StepDefinitionParser {
                 report(Diagnostic.Kind.WARNING, message);
                 inputType = null;
                 outputType = null;
+            }
+            if (mapperFallback != MapperFallbackMode.NONE) {
+                String message = "Ignoring 'mapperFallback' on internal step '" + name
+                    + "'; mapper fallback is only used for delegated steps";
+                LOG.warn(message);
+                report(Diagnostic.Kind.WARNING, message);
+                mapperFallback = MapperFallbackMode.NONE;
             }
         }
 
@@ -263,7 +277,7 @@ public class StepDefinitionParser {
             return null;
         }
 
-        return new StepDefinition(name, kind, executionClass, externalMapper, inputType, outputType);
+        return new StepDefinition(name, kind, executionClass, externalMapper, mapperFallback, inputType, outputType);
     }
 
     /**
@@ -319,6 +333,23 @@ public class StepDefinitionParser {
             LOG.warnf("Skipping step '%s': invalid %s class name '%s'", stepName, fieldName, typeName);
         }
         return parsed;
+    }
+
+    private MapperFallbackMode parseMapperFallback(Map<String, Object> stepData, String stepName) {
+        String raw = getStringValue(stepData, "mapperFallback");
+        if (isBlank(raw)) {
+            return MapperFallbackMode.NONE;
+        }
+        String normalized = raw.trim().toUpperCase(java.util.Locale.ROOT);
+        try {
+            return MapperFallbackMode.valueOf(normalized);
+        } catch (IllegalArgumentException ex) {
+            String message = "Skipping step '" + stepName + "': invalid mapperFallback '" + raw
+                + "'. Allowed values: NONE, JACKSON";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
     }
 
     /**

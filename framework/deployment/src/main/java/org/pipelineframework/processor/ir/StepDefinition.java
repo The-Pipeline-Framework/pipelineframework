@@ -28,6 +28,7 @@ import com.squareup.javapoet.ClassName;
  * @param kind The kind of step (INTERNAL or DELEGATED)
  * @param executionClass The class that provides the execution implementation
  * @param externalMapper The operator mapper class for mapping between domain and operator types (nullable)
+ * @param mapperFallback mapper fallback strategy when no mapper matches (never null)
  * @param inputType The input type for the step
  * @param outputType The output type for the step
  */
@@ -36,6 +37,7 @@ public record StepDefinition(
         StepKind kind,
         ClassName executionClass,
         @Nullable ClassName externalMapper,
+        MapperFallbackMode mapperFallback,
         @Nullable ClassName inputType,
         @Nullable ClassName outputType
 ) {
@@ -46,5 +48,6 @@ public record StepDefinition(
         }
         Objects.requireNonNull(kind, "Kind cannot be null");
         Objects.requireNonNull(executionClass, "Execution class cannot be null");
+        mapperFallback = mapperFallback == null ? MapperFallbackMode.NONE : mapperFallback;
     }
 }

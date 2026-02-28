@@ -27,6 +27,7 @@ import org.pipelineframework.processor.extractor.PipelineStepIRExtractor;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
+import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TypeMapping;
@@ -39,6 +40,7 @@ import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 public class ModelExtractionPhase implements PipelineCompilationPhase {
     public static final String NO_YAML_DEFINITIONS_MESSAGE =
         "No YAML step definitions were found. Falling back to annotation-driven extraction.";
+    private static final String MAPPER_FALLBACK_GLOBAL_OPTION = "pipeline.mapper.fallback.enabled";
 
     private final ModelContextRoleEnricher contextRoleEnricher;
 
@@ -278,6 +280,16 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             outputType,
             reactiveSignature.inputType(),
             reactiveSignature.outputType());
+        boolean fallbackGloballyEnabled = isMapperFallbackGloballyEnabled(ctx);
+        boolean fallbackRequested = stepDef.mapperFallback() == MapperFallbackMode.JACKSON;
+        boolean typesDiffer = !inputType.equals(reactiveSignature.inputType())
+            || !outputType.equals(reactiveSignature.outputType());
+        MapperFallbackMode effectiveFallback = MapperFallbackMode.NONE;
+
+        if (fallbackRequested && fallbackGloballyEnabled && externalMapper == null && typesDiffer) {
+            effectiveFallback = MapperFallbackMode.JACKSON;
+        }
+
         if (stepDef.externalMapper() != null && externalMapper == null) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.WARNING,
@@ -288,15 +300,19 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
         if (stepDef.externalMapper() == null
             && externalMapper == null
-            && (!inputType.equals(reactiveSignature.inputType())
-                || !outputType.equals(reactiveSignature.outputType()))) {
+            && typesDiffer
+            && effectiveFallback == MapperFallbackMode.NONE) {
+            String fallbackMessage = fallbackRequested && !fallbackGloballyEnabled
+                ? " Mapper fallback was requested but global option '" + MAPPER_FALLBACK_GLOBAL_OPTION + "' is disabled."
+                : "";
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.WARNING,
                 "Skipping delegated step '" + stepDef.name()
                     + "': no operator mapper provided and YAML types ["
                     + inputType + " -> " + outputType
                     + "] do not match delegate types ["
-                    + reactiveSignature.inputType() + " -> " + reactiveSignature.outputType() + "].");
+                    + reactiveSignature.inputType() + " -> " + reactiveSignature.outputType() + "]."
+                    + fallbackMessage);
             return null;
         }
 
@@ -310,8 +326,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         // Create type mappings based on the input/output types specified in the YAML
-        TypeMapping inputMapping = new TypeMapping(inputType, null, false);
-        TypeMapping outputMapping = new TypeMapping(outputType, null, false);
+        TypeMapping inputMapping = new TypeMapping(inputType, null, false, reactiveSignature.inputType());
+        TypeMapping outputMapping = new TypeMapping(outputType, null, false, reactiveSignature.outputType());
 
         // Derive package from execution class or use default
         String servicePackage = stepDef.executionClass().packageName().isEmpty()
@@ -337,7 +353,16 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .threadSafety(ThreadSafety.SAFE)
             .delegateService(stepDef.executionClass())
             .externalMapper(externalMapper)
+            .mapperFallbackMode(effectiveFallback)
             .build();
+    }
+
+    private boolean isMapperFallbackGloballyEnabled(PipelineCompilationContext ctx) {
+        if (ctx == null || ctx.getProcessingEnv() == null || ctx.getProcessingEnv().getOptions() == null) {
+            return false;
+        }
+        String configured = ctx.getProcessingEnv().getOptions().get(MAPPER_FALLBACK_GLOBAL_OPTION);
+        return configured != null && Boolean.parseBoolean(configured.trim());
     }
 
     /**

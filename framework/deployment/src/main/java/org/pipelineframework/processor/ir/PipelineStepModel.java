@@ -28,6 +28,7 @@ import org.pipelineframework.parallelism.ThreadSafety;
  * @param threadSafety Gets the thread safety declaration for the generated client step.
  * @param delegateService Gets the delegate service class if this is a delegation step, otherwise null.
  * @param externalMapper Gets the operator mapper class if operator mapping is used, otherwise null.
+ * @param mapperFallbackMode Gets mapper fallback mode used when no explicit/inferred mapper matches.
  */
 public record PipelineStepModel(
         String serviceName,
@@ -45,7 +46,8 @@ public record PipelineStepModel(
         OrderingRequirement orderingRequirement,
         ThreadSafety threadSafety,
         ClassName delegateService,
-        ClassName externalMapper
+        ClassName externalMapper,
+        MapperFallbackMode mapperFallbackMode
 ) {
     /**
          * Creates a new PipelineStepModel with the supplied service identity, type mappings and generation configuration.
@@ -64,6 +66,7 @@ public record PipelineStepModel(
      * @param threadSafety the thread safety declaration for the generated client step; may be null
      * @param delegateService the delegate service class if this is a delegation step, otherwise null
      * @param externalMapper the operator mapper class if operator mapping is used, otherwise null
+     * @param mapperFallbackMode mapper fallback strategy for delegated mapping when no mapper is resolved
      * @throws IllegalArgumentException if any parameter documented as 'must not be null' is null
      */
     @SuppressWarnings("ConstantValue")
@@ -82,7 +85,8 @@ public record PipelineStepModel(
             OrderingRequirement orderingRequirement,
             ThreadSafety threadSafety,
             ClassName delegateService,
-            ClassName externalMapper) {
+            ClassName externalMapper,
+            MapperFallbackMode mapperFallbackMode) {
         // Validate non-null invariants
         if (serviceName == null)
             throw new IllegalArgumentException("serviceName cannot be null");
@@ -117,6 +121,42 @@ public record PipelineStepModel(
         this.threadSafety = threadSafety != null ? threadSafety : ThreadSafety.SAFE;
         this.delegateService = delegateService;
         this.externalMapper = externalMapper;
+        this.mapperFallbackMode = mapperFallbackMode == null ? MapperFallbackMode.NONE : mapperFallbackMode;
+    }
+
+    public PipelineStepModel(String serviceName,
+            String generatedName,
+            String servicePackage,
+            ClassName serviceClassName,
+            TypeMapping inputMapping,
+            TypeMapping outputMapping,
+            StreamingShape streamingShape,
+            Set<GenerationTarget> enabledTargets,
+            ExecutionMode executionMode,
+            DeploymentRole deploymentRole,
+            boolean sideEffect,
+            ClassName cacheKeyGenerator,
+            OrderingRequirement orderingRequirement,
+            ThreadSafety threadSafety,
+            ClassName delegateService,
+            ClassName externalMapper) {
+        this(serviceName,
+            generatedName,
+            servicePackage,
+            serviceClassName,
+            inputMapping,
+            outputMapping,
+            streamingShape,
+            enabledTargets,
+            executionMode,
+            deploymentRole,
+            sideEffect,
+            cacheKeyGenerator,
+            orderingRequirement,
+            threadSafety,
+            delegateService,
+            externalMapper,
+            MapperFallbackMode.NONE);
     }
 
     /**
@@ -166,7 +206,8 @@ public record PipelineStepModel(
             OrderingRequirement.RELAXED,
             ThreadSafety.SAFE,
             null,
-            null);
+            null,
+            MapperFallbackMode.NONE);
     }
 
     /**
@@ -214,6 +255,7 @@ public record PipelineStepModel(
         private ThreadSafety threadSafety = ThreadSafety.SAFE;
         private ClassName delegateService;
         private ClassName externalMapper;
+        private MapperFallbackMode mapperFallbackMode = MapperFallbackMode.NONE;
 
         /**
          * Sets the service name.
@@ -402,6 +444,11 @@ public record PipelineStepModel(
             return this;
         }
 
+        public Builder mapperFallbackMode(MapperFallbackMode mapperFallbackMode) {
+            this.mapperFallbackMode = mapperFallbackMode;
+            return this;
+        }
+
         /**
          * Create a PipelineStepModel populated from the builder's current state.
          *
@@ -443,7 +490,8 @@ public record PipelineStepModel(
                     orderingRequirement,
                     threadSafety,
                     delegateService,
-                    externalMapper);
+                    externalMapper,
+                    mapperFallbackMode);
         }
     }
     
@@ -470,7 +518,8 @@ public record PipelineStepModel(
             orderingRequirement,
             threadSafety,
             delegateService,
-            externalMapper
+            externalMapper,
+            mapperFallbackMode
         );
     }
 
@@ -503,6 +552,7 @@ public record PipelineStepModel(
             .orderingRequirement(orderingRequirement)
             .threadSafety(threadSafety)
             .delegateService(delegateService)
-            .externalMapper(externalMapper);
+            .externalMapper(externalMapper)
+            .mapperFallbackMode(mapperFallbackMode);
     }
 }
