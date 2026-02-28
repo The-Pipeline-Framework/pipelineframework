@@ -68,6 +68,96 @@ class MapperInferenceEngineTest {
         assertTrue(error.getMessage().contains("erased"));
     }
 
+    @Test
+    void buildsEmptyRegistryWhenNoMappersFound() throws Exception {
+        Index index = indexOf(Mapper.class);
+
+        MapperInferenceEngine engine = new MapperInferenceEngine(index);
+        MapperInferenceEngine.MapperRegistry registry = engine.buildRegistry();
+
+        assertEquals(0, registry.pairToMapper().size());
+        assertEquals(0, registry.mapperToPair().size());
+    }
+
+    @Test
+    void failsWhenEngineConstructedWithNullIndex() {
+        assertThrows(NullPointerException.class, () -> new MapperInferenceEngine(null));
+    }
+
+    @Test
+    void inferenceResultRequiresMapperClassWhenSuccess() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> new MapperInferenceEngine.InferenceResult(null, true, null));
+        assertTrue(error.getMessage().contains("requires non-null mapperClass"));
+    }
+
+    @Test
+    void inferenceResultRequiresNullErrorMessageWhenSuccess() throws Exception {
+        Index index = indexOf(Mapper.class, GrpcA.class, DomainA.class, MapperA.class);
+        MapperInferenceEngine engine = new MapperInferenceEngine(index);
+        MapperInferenceEngine.MapperRegistry registry = engine.buildRegistry();
+        var mapperClass = registry.pairToMapper().values().iterator().next();
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> new MapperInferenceEngine.InferenceResult(mapperClass, true, "error"));
+        assertTrue(error.getMessage().contains("requires null errorMessage"));
+    }
+
+    @Test
+    void inferenceResultRequiresNullMapperClassWhenFailure() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> new MapperInferenceEngine.InferenceResult(null, false, null));
+        assertTrue(error.getMessage().contains("requires non-null, non-blank errorMessage"));
+    }
+
+    @Test
+    void inferenceResultRequiresErrorMessageWhenFailure() throws Exception {
+        Index index = indexOf(Mapper.class, GrpcA.class, DomainA.class, MapperA.class);
+        MapperInferenceEngine engine = new MapperInferenceEngine(index);
+        MapperInferenceEngine.MapperRegistry registry = engine.buildRegistry();
+        var mapperClass = registry.pairToMapper().values().iterator().next();
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> new MapperInferenceEngine.InferenceResult(mapperClass, false, "error"));
+        assertTrue(error.getMessage().contains("requires mapperClass==null"));
+    }
+
+    @Test
+    void inferenceResultAcceptsValidSuccessState() throws Exception {
+        Index index = indexOf(Mapper.class, GrpcA.class, DomainA.class, MapperA.class);
+        MapperInferenceEngine engine = new MapperInferenceEngine(index);
+        MapperInferenceEngine.MapperRegistry registry = engine.buildRegistry();
+        var mapperClass = registry.pairToMapper().values().iterator().next();
+
+        MapperInferenceEngine.InferenceResult result =
+            new MapperInferenceEngine.InferenceResult(mapperClass, true, null);
+        assertTrue(result.success());
+        assertNotNull(result.mapperClass());
+    }
+
+    @Test
+    void inferenceResultAcceptsValidFailureState() {
+        MapperInferenceEngine.InferenceResult result =
+            new MapperInferenceEngine.InferenceResult(null, false, "Test error");
+        assertFalse(result.success());
+        assertEquals("Test error", result.errorMessage());
+    }
+
+    @Test
+    void mapperPairKeyEquality() {
+        DotName domainA = DotName.createSimple(DomainA.class.getName());
+        DotName grpcA = DotName.createSimple(GrpcA.class.getName());
+        DotName domainB = DotName.createSimple(DomainB.class.getName());
+
+        MapperInferenceEngine.MapperPairKey key1 = new MapperInferenceEngine.MapperPairKey(domainA, grpcA);
+        MapperInferenceEngine.MapperPairKey key2 = new MapperInferenceEngine.MapperPairKey(domainA, grpcA);
+        MapperInferenceEngine.MapperPairKey key3 = new MapperInferenceEngine.MapperPairKey(domainB, grpcA);
+
+        assertEquals(key1, key2);
+        assertNotEquals(key1, key3);
+        assertEquals(key1.hashCode(), key2.hashCode());
+    }
+
     private static Index indexOf(Class<?>... classes) throws IOException {
         Indexer indexer = new Indexer();
         for (Class<?> clazz : classes) {

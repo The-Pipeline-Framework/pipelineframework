@@ -129,6 +129,138 @@ class MapperInferenceBuildStepsTest {
         assertTrue(mapLike);
     }
 
+    @Test
+    void handlesEmptyStepDefinitionsFile() throws Exception {
+        String content = "";
+        Path root = writeStepDefinitions(content);
+
+        Index index = indexOf(Mapper.class, GrpcA.class, DtoA.class, DomainA.class, MapperA.class);
+        CombinedIndexBuildItem combinedIndex = new CombinedIndexBuildItem(index, index);
+
+        List<MapperRegistryBuildItem> produced = new ArrayList<>();
+        BuildProducer<MapperRegistryBuildItem> producer = produced::add;
+
+        MapperInferenceBuildSteps steps = new MapperInferenceBuildSteps();
+        withContextClassLoader(root.toUri().toURL(), () -> steps.buildMapperRegistry(combinedIndex, producer));
+
+        assertEquals(1, produced.size());
+    }
+
+    @Test
+    void handlesStepDefinitionsWithComments() throws Exception {
+        String content = """
+            # This is a comment
+            com.example.ProcessA|%s|%s|ONE_TO_ONE
+            # Another comment
+            """.formatted(DomainA.class.getName(), DomainA.class.getName());
+        Path root = writeStepDefinitions(content);
+
+        Index index = indexOf(Mapper.class, GrpcA.class, DtoA.class, DomainA.class, MapperA.class);
+        CombinedIndexBuildItem combinedIndex = new CombinedIndexBuildItem(index, index);
+
+        List<MapperRegistryBuildItem> produced = new ArrayList<>();
+        BuildProducer<MapperRegistryBuildItem> producer = produced::add;
+
+        MapperInferenceBuildSteps steps = new MapperInferenceBuildSteps();
+        withContextClassLoader(root.toUri().toURL(), () -> steps.buildMapperRegistry(combinedIndex, producer));
+
+        assertEquals(1, produced.size());
+    }
+
+    @Test
+    void failsWhenStepDefinitionLineIsMalformed() throws Exception {
+        String content = "com.example.ProcessA|" + DomainA.class.getName() + "\n";
+        Path root = writeStepDefinitions(content);
+
+        Index index = indexOf(Mapper.class, GrpcA.class, DtoA.class, DomainA.class, MapperA.class);
+        CombinedIndexBuildItem combinedIndex = new CombinedIndexBuildItem(index, index);
+
+        MapperInferenceBuildSteps steps = new MapperInferenceBuildSteps();
+        assertThrows(Exception.class, () ->
+            withContextClassLoader(root.toUri().toURL(),
+                () -> steps.buildMapperRegistry(combinedIndex, item -> {})));
+    }
+
+    @Test
+    void handlesStepDefinitionsWithEmptyDomainFields() throws Exception {
+        String content = "com.example.ProcessA|||ONE_TO_ONE\n";
+        Path root = writeStepDefinitions(content);
+
+        Index index = indexOf(Mapper.class, GrpcA.class, DtoA.class, DomainA.class, MapperA.class);
+        CombinedIndexBuildItem combinedIndex = new CombinedIndexBuildItem(index, index);
+
+        List<MapperRegistryBuildItem> produced = new ArrayList<>();
+        BuildProducer<MapperRegistryBuildItem> producer = produced::add;
+
+        MapperInferenceBuildSteps steps = new MapperInferenceBuildSteps();
+        withContextClassLoader(root.toUri().toURL(), () -> steps.buildMapperRegistry(combinedIndex, producer));
+
+        assertEquals(1, produced.size());
+    }
+
+    @Test
+    void producesRegistryWithMultipleMappers() throws Exception {
+        String content = "com.example.ProcessA|"
+            + DomainA.class.getName()
+            + "|"
+            + DomainA.class.getName()
+            + "|ONE_TO_ONE\n";
+        Path root = writeStepDefinitions(content);
+
+        Index index = indexOf(
+            Mapper.class,
+            GrpcA.class, DtoA.class, DomainA.class, MapperA.class,
+            GrpcB.class, DtoB.class, DomainB.class, MapperB.class
+        );
+        CombinedIndexBuildItem combinedIndex = new CombinedIndexBuildItem(index, index);
+
+        List<MapperRegistryBuildItem> produced = new ArrayList<>();
+        BuildProducer<MapperRegistryBuildItem> producer = produced::add;
+
+        MapperInferenceBuildSteps steps = new MapperInferenceBuildSteps();
+        withContextClassLoader(root.toUri().toURL(), () -> steps.buildMapperRegistry(combinedIndex, producer));
+
+        assertEquals(1, produced.size());
+        MapperRegistryBuildItem item = produced.get(0);
+        assertEquals(2, item.size());
+    }
+
+    @Test
+    void isMapLikeReturnsFalseForNullDotName() throws Exception {
+        Index index = indexOf(Mapper.class);
+        MapperInferenceBuildSteps steps = new MapperInferenceBuildSteps();
+        Method method = MapperInferenceBuildSteps.class.getDeclaredMethod("isMapLike", DotName.class, IndexView.class);
+        method.setAccessible(true);
+
+        boolean mapLike = (boolean) method.invoke(steps, null, index);
+        assertFalse(mapLike);
+    }
+
+    @Test
+    void isMapLikeReturnsTrueForJavaUtilMap() throws Exception {
+        Index index = indexOf(java.util.Map.class);
+        MapperInferenceBuildSteps steps = new MapperInferenceBuildSteps();
+        Method method = MapperInferenceBuildSteps.class.getDeclaredMethod("isMapLike", DotName.class, IndexView.class);
+        method.setAccessible(true);
+
+        boolean mapLike = (boolean) method.invoke(steps, DotName.createSimple("java.util.Map"), index);
+        assertTrue(mapLike);
+    }
+
+    static final class GrpcB {}
+    static final class DtoB {}
+    static final class MapperB implements Mapper<DomainB, GrpcB> {
+        @Override
+        public DomainB fromExternal(GrpcB grpc) {
+            return null;
+        }
+
+        @Override
+        public GrpcB toExternal(DomainB domain) {
+            return null;
+        }
+    }
+
     private Path writeStepDefinitions(String content) throws IOException {
         Path metaInf = tempDir.resolve("META-INF").resolve("pipeline");
         Files.createDirectories(metaInf);
