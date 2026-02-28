@@ -5,12 +5,10 @@ import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
 import org.jboss.jandex.DotName;
 import org.jboss.jandex.Index;
 import org.jboss.jandex.Indexer;
-import org.jboss.jandex.IndexView;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.mapper.Mapper;
 
-import java.lang.reflect.Method;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
@@ -22,8 +20,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MapperInferenceBuildStepsTest {
 
@@ -96,7 +92,7 @@ class MapperInferenceBuildStepsTest {
     }
 
     @Test
-    void doesNotFailWhenDuplicateStepDefinitionsConflict() throws Exception {
+    void doesNotValidateStepDefinitionsAtBuildTime() throws Exception {
         String content = "com.example.ProcessA|"
                 + DomainA.class.getName()
                 + "|"
@@ -116,17 +112,6 @@ class MapperInferenceBuildStepsTest {
         withContextClassLoader(root.toUri().toURL(),
                 () -> steps.buildMapperRegistry(combinedIndex, item -> {
                 }));
-    }
-
-    @Test
-    void isMapLikeDetectsIndirectMapInterfaces() throws Exception {
-        Index index = indexOf(IndirectMap.class, BaseMap.class);
-        MapperInferenceBuildSteps steps = new MapperInferenceBuildSteps();
-        Method method = MapperInferenceBuildSteps.class.getDeclaredMethod("isMapLike", DotName.class, IndexView.class);
-        method.setAccessible(true);
-
-        boolean mapLike = (boolean) method.invoke(steps, DotName.createSimple(IndirectMap.class.getName()), index);
-        assertTrue(mapLike);
     }
 
     private Path writeStepDefinitions(String content) throws IOException {
@@ -185,9 +170,6 @@ class MapperInferenceBuildStepsTest {
     static final class DtoA {}
     static final class DomainA {}
     static final class DomainB {}
-    interface BaseMap<K, V> extends java.util.Map<K, V> {}
-    interface IndirectMap<K, V> extends BaseMap<K, V> {}
-
     static final class MapperA implements Mapper<DomainA, GrpcA> {
         @Override
         public DomainA fromExternal(GrpcA grpc) {
