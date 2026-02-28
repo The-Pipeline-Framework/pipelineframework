@@ -146,13 +146,14 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
                 streamingInput ? MULTI_SOURCE_ADAPTER : DEFAULT_UNARY_SOURCE_ADAPTER,
                 baseName + ".input",
                 API_VERSION)
-            .addStatement("$T<$T, $T> invokeLocal = new $T<>(resource::process, $S, $S)",
+            .addStatement("$T<$T, $T> invokeLocal = new $T<$T, $T>(resource::process, $S, $S)",
                 FUNCTION_INVOKE_ADAPTER, inputDto, outputDto,
                 selectInvokeAdapterForShape(shape,
                     LOCAL_UNARY_INVOKE_ADAPTER,
                     LOCAL_ONE_TO_MANY_INVOKE_ADAPTER,
                     LOCAL_MANY_TO_ONE_INVOKE_ADAPTER,
                     LOCAL_MANY_TO_MANY_INVOKE_ADAPTER),
+                inputDto, outputDto,
                 baseName + ".output",
                 API_VERSION)
             .addStatement("$T<$T, $T> invokeRemote = new $T<>()",

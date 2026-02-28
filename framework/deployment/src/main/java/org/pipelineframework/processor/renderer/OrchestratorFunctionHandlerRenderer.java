@@ -144,13 +144,14 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
                 FUNCTION_SOURCE_ADAPTER, inputEventType, inputDto,
                 selectSourceAdapter(streamingInput, DEFAULT_UNARY_SOURCE_ADAPTER, MULTI_SOURCE_ADAPTER),
                 ORCHESTRATOR_PREFIX + binding.inputTypeName(), API_VERSION)
-            .addStatement("$T<$T, $T> invokeLocal = new $T<>(resource::run, $S, $S)",
+            .addStatement("$T<$T, $T> invokeLocal = new $T<$T, $T>(resource::run, $S, $S)",
                 FUNCTION_INVOKE_ADAPTER, inputDto, outputDto,
                 selectInvokeAdapter(streamingInput, streamingOutput,
                     LOCAL_UNARY_INVOKE_ADAPTER,
                     LOCAL_ONE_TO_MANY_INVOKE_ADAPTER,
                     LOCAL_MANY_TO_ONE_INVOKE_ADAPTER,
                     LOCAL_MANY_TO_MANY_INVOKE_ADAPTER),
+                inputDto, outputDto,
                 ORCHESTRATOR_PREFIX + binding.outputTypeName(), API_VERSION)
             .addStatement("$T<$T, $T> invokeRemote = new $T<>()",
                 FUNCTION_INVOKE_ADAPTER, inputDto, outputDto,
