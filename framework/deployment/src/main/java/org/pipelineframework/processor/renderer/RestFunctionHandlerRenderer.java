@@ -129,6 +129,10 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
                 .addAnnotation(INJECT)
                 .build());
 
+        String localInvokeDelegate = streamingInput
+            ? "inputStream -> resource.process(inputStream.collect().asList().await().indefinitely())"
+            : "resource::process";
+
         MethodSpec handleRequest = MethodSpec.methodBuilder("handleRequest")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
@@ -146,7 +150,7 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
                 streamingInput ? MULTI_SOURCE_ADAPTER : DEFAULT_UNARY_SOURCE_ADAPTER,
                 baseName + ".input",
                 API_VERSION)
-            .addStatement("$T<$T, $T> invokeLocal = new $T<$T, $T>(resource::process, $S, $S)",
+            .addStatement("$T<$T, $T> invokeLocal = new $T<$T, $T>($L, $S, $S)",
                 FUNCTION_INVOKE_ADAPTER, inputDto, outputDto,
                 selectInvokeAdapterForShape(shape,
                     LOCAL_UNARY_INVOKE_ADAPTER,
@@ -154,6 +158,7 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
                     LOCAL_MANY_TO_ONE_INVOKE_ADAPTER,
                     LOCAL_MANY_TO_MANY_INVOKE_ADAPTER),
                 inputDto, outputDto,
+                localInvokeDelegate,
                 baseName + ".output",
                 API_VERSION)
             .addStatement("$T<$T, $T> invokeRemote = new $T<>()",
