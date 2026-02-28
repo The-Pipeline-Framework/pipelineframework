@@ -5,10 +5,12 @@ import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
 import org.jboss.jandex.DotName;
 import org.jboss.jandex.Index;
 import org.jboss.jandex.Indexer;
+import org.jboss.jandex.IndexView;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.mapper.Mapper;
 
+import java.lang.reflect.Method;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
@@ -97,6 +99,43 @@ class MapperInferenceBuildStepsTest {
         assertTrue(error.getMessage().contains("has no outbound mapper"));
     }
 
+    @Test
+    void failsWhenDuplicateStepDefinitionsConflict() throws Exception {
+        String content = "com.example.ProcessA|"
+                + DomainA.class.getName()
+                + "|"
+                + DomainA.class.getName()
+                + "|ONE_TO_ONE\n"
+                + "com.example.ProcessA|"
+                + DomainB.class.getName()
+                + "|"
+                + DomainB.class.getName()
+                + "|ONE_TO_ONE\n";
+        Path root = writeStepDefinitions(content);
+
+        Index index = indexOf(Mapper.class, GrpcA.class, DtoA.class, DomainA.class, MapperA.class, DomainB.class);
+        CombinedIndexBuildItem combinedIndex = new CombinedIndexBuildItem(index, index);
+
+        MapperInferenceBuildSteps steps = new MapperInferenceBuildSteps();
+        IllegalStateException error = withContextClassLoader(root.toUri().toURL(),
+                () -> assertThrows(IllegalStateException.class,
+                        () -> steps.buildMapperRegistry(combinedIndex, item -> {
+                        })));
+
+        assertTrue(error.getMessage().contains("Conflicting step definitions for stepName 'com.example.ProcessA'"));
+    }
+
+    @Test
+    void isMapLikeDetectsIndirectMapInterfaces() throws Exception {
+        Index index = indexOf(IndirectMap.class, BaseMap.class);
+        MapperInferenceBuildSteps steps = new MapperInferenceBuildSteps();
+        Method method = MapperInferenceBuildSteps.class.getDeclaredMethod("isMapLike", DotName.class, IndexView.class);
+        method.setAccessible(true);
+
+        boolean mapLike = (boolean) method.invoke(steps, DotName.createSimple(IndirectMap.class.getName()), index);
+        assertTrue(mapLike);
+    }
+
     private Path writeStepDefinitions(String content) throws IOException {
         Path metaInf = tempDir.resolve("META-INF").resolve("pipeline");
         Files.createDirectories(metaInf);
@@ -153,6 +192,8 @@ class MapperInferenceBuildStepsTest {
     static final class DtoA {}
     static final class DomainA {}
     static final class DomainB {}
+    interface BaseMap<K, V> extends java.util.Map<K, V> {}
+    interface IndirectMap<K, V> extends BaseMap<K, V> {}
 
     static final class MapperA implements Mapper<GrpcA, DtoA, DomainA> {
         @Override

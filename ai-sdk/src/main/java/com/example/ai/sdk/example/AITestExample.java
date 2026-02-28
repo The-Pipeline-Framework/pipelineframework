@@ -4,9 +4,13 @@ import com.example.ai.sdk.entity.Chunk;
 import com.example.ai.sdk.entity.Document;
 import com.example.ai.sdk.entity.Prompt;
 import com.example.ai.sdk.service.DocumentChunkingService;
+import com.example.ai.sdk.service.DocumentChunkingUnaryService;
 import com.example.ai.sdk.service.EmbeddingService;
+import com.example.ai.sdk.service.ChunkEmbeddingService;
 import com.example.ai.sdk.service.LLMCompletionService;
 import com.example.ai.sdk.service.SimilaritySearchService;
+import com.example.ai.sdk.service.SimilaritySearchUnaryService;
+import com.example.ai.sdk.service.ScoredChunkPromptService;
 import com.example.ai.sdk.service.VectorStoreService;
 
 import java.time.Duration;
@@ -71,6 +75,23 @@ public class AITestExample {
         var prompt = new Prompt("prompt1", "Summarize the key concepts of document processing and vector storage.", 0.7); // Temperature controls output randomness.
         var completion = llmService.process(prompt).await().atMost(Duration.ofSeconds(30));
         System.out.println("LLM Response: " + completion.content());
+
+        // Example 4: Phase-1 unary operator-style pipeline (1->1 services only)
+        System.out.println("\n=== Phase 1 Unary Operator Pipeline ===");
+        DocumentChunkingUnaryService unaryChunking = new DocumentChunkingUnaryService();
+        ChunkEmbeddingService chunkEmbedding = new ChunkEmbeddingService();
+        SimilaritySearchUnaryService unarySearch = new SimilaritySearchUnaryService();
+        ScoredChunkPromptService promptFromChunk = new ScoredChunkPromptService();
+
+        var topChunk = unaryChunking.process(doc).await().atMost(Duration.ofSeconds(30));
+        var topChunkEmbedding = chunkEmbedding.process(topChunk).await().atMost(Duration.ofSeconds(30));
+        var topMatch = unarySearch.process(topChunkEmbedding).await().atMost(Duration.ofSeconds(30));
+        var generatedPrompt = promptFromChunk.process(topMatch).await().atMost(Duration.ofSeconds(30));
+        var unaryCompletion = llmService.process(generatedPrompt).await().atMost(Duration.ofSeconds(30));
+
+        System.out.println("Top chunk id: " + topChunk.id());
+        System.out.println("Top similarity score: " + topMatch.score());
+        System.out.println("Unary pipeline completion: " + unaryCompletion.content());
         
         System.out.println("\n=== SDK Demo Complete ===");
     }

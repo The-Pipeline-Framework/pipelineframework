@@ -37,6 +37,13 @@ Teams typically aim for:
 2. Predictable scaling: each step scales on its own workload characteristics.
 3. Better ROI: less boilerplate, shorter lead times, and fewer bespoke integration layers.
 
+## Reuse Existing Compute Logic
+
+Operators let teams wire proven Java logic into `pipeline.yaml` without rewriting step/service code.
+That reduces migration risk and preserves prior engineering investment while still benefiting from TPF build-time validation and generated invocation layers.
+
+Typical reuse targets include domain rule engines, validators/enrichers, and transformation libraries already used in production.
+
 ## Jump to Guides
 
 <div class="value-links">
@@ -44,6 +51,8 @@ Teams typically aim for:
 - [Quick Start](/guide/getting-started/)
 - [Canvas Guide](/guide/getting-started/canvas-guide)
 - [Runtime Layouts](/guide/build/runtime-layouts/)
+- [Operators](/guide/build/operators)
+- [Operator Reuse Strategy](/guide/design/operator-reuse-strategy)
 - [Using Plugins](/guide/development/using-plugins)
 - [Observability](/guide/operations/observability/)
 
