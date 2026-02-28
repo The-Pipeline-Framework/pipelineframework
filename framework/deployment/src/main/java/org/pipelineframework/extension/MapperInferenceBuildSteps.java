@@ -34,6 +34,7 @@ import java.nio.charset.StandardCharsets;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.Enumeration;
 import java.util.List;
@@ -42,8 +43,7 @@ import java.util.List;
  * Build steps for mapper inference using the Jandex index.
  * <p>
  * This class provides the build step that consumes the CombinedIndexBuildItem
- * and produces the MapperRegistryBuildItem containing all resolved mapper
- * assignments.
+ * and produces the MapperRegistryBuildItem containing all resolved mapper pair assignments.
  * <p>
  * PER REQUIREMENTS:
  * <ul>
@@ -160,8 +160,8 @@ public class MapperInferenceBuildSteps {
     /**
      * Builds and emits a MapperRegistryBuildItem representing mappers discovered in the application's Jandex index.
      *
-     * Reads pipeline step definitions, discovers Mapper implementations in the index, validates that each step's
-     * input and output domain types have corresponding mappers, and produces a MapperRegistryBuildItem for downstream build steps.
+     * Discovers Mapper implementations in the index and produces a MapperRegistryBuildItem for downstream build steps.
+     * Step-specific mapper validation is demand-driven and performed by consumers that know required inbound/outbound pairs.
      *
      * @param combinedIndex the combined Jandex index of application and dependency classes
      * @param operators optional list of OperatorBuildItem used to derive step definitions; when empty, step definitions are read from resources
@@ -176,32 +176,27 @@ public class MapperInferenceBuildSteps {
         LOG.debugf("Building mapper registry from Jandex index");
 
         IndexView index = combinedIndex.getIndex();
-        List<StepDefinition> stepDefinitions = readStepDefinitions(operators, index);
-
-        LOG.debugf("Read %d step definitions", stepDefinitions.size());
-
         MapperInferenceEngine engine = new MapperInferenceEngine(index);
 
         // Build the mapper registry from all discovered mappers
         MapperRegistry registry = engine.buildRegistry();
 
-        LOG.debugf("Mapper registry built with %d mappers", registry.domainToMapper().size());
+        LOG.debugf("Mapper registry built with %d mapper pairs", registry.pairToMapper().size());
 
         // Log discovered mappers for debugging
         if (LOG.isDebugEnabled()) {
-            for (DotName domainType : registry.domainToMapper().keySet()) {
-                ClassInfo mapper = registry.domainToMapper().get(domainType);
-                LOG.debugf("  Mapper for %s: %s", domainType, mapper.name());
+            for (Map.Entry<MapperInferenceEngine.MapperPairKey, ClassInfo> entry : registry.pairToMapper().entrySet()) {
+                LOG.debugf("  Mapper for (%s, %s): %s",
+                        entry.getKey().domainType(),
+                        entry.getKey().externalType(),
+                        entry.getValue().name());
             }
         }
 
-        // Validate that all steps have mappers for their domain types
-        validateStepMappers(stepDefinitions, registry, index);
-
         // Produce the registry build item
         mapperRegistry.produce(new MapperRegistryBuildItem(
-                registry.domainToMapper(),
-                registry.mapperToDomain()));
+                registry.pairToMapper(),
+                registry.mapperToPair()));
     }
 
     /**
@@ -424,69 +419,4 @@ public class MapperInferenceBuildSteps {
         return "";
     }
 
-    /**
-     * Ensure every pipeline step has mappers for its input and output domain types.
-     *
-     * <p>Per requirements, fails fast on any missing mapper and reports whether the domain type
-     * itself is absent from the Jandex index or present but missing a mapper implementation.</p>
-     *
-     * @param stepDefinitions the step definitions to validate
-     * @param registry the mapper registry mapping domain types to discovered mappers
-     * @param index the Jandex index used to determine whether a domain type is present in the application index
-     * @throws IllegalStateException if one or more steps are missing required mappers or referenced domain types are not indexed
-     */
-    private void validateStepMappers(
-            List<StepDefinition> stepDefinitions,
-            MapperRegistry registry,
-            IndexView index) {
-
-        List<String> validationErrors = new ArrayList<>();
-
-        for (StepDefinition step : stepDefinitions) {
-            // Validate input domain mapper (outbound mapper: entity -> DTO -> proto)
-            if (step.domainIn() != null) {
-                if (!registry.domainToMapper().containsKey(step.domainIn())) {
-                    // Check if the domain type exists in the index
-                    ClassInfo domainClass = index.getClassByName(step.domainIn());
-                    if (domainClass == null) {
-                        validationErrors.add(String.format(
-                                "Step '%s' references input domain type '%s' that is not in the Jandex index. " +
-                                "Ensure the class is indexed by Quarkus.",
-                                step.stepName(), step.domainIn()));
-                    } else {
-                        validationErrors.add(String.format(
-                                "Step '%s' has no outbound mapper for input domain type '%s'. " +
-                                "PER REQUIREMENTS: All mappers MUST be resolved at build time. " +
-                                "Add a Mapper implementation: Mapper<%s, ?>",
-                                step.stepName(), step.domainIn(), step.domainIn()));
-                    }
-                }
-            }
-
-            // Validate output domain mapper (inbound mapper: proto -> DTO -> entity)
-            if (step.domainOut() != null) {
-                if (!registry.domainToMapper().containsKey(step.domainOut())) {
-                    ClassInfo domainClass = index.getClassByName(step.domainOut());
-                    if (domainClass == null) {
-                        validationErrors.add(String.format(
-                                "Step '%s' references output domain type '%s' that is not in the Jandex index. " +
-                                "Ensure the class is indexed by Quarkus.",
-                                step.stepName(), step.domainOut()));
-                    } else {
-                        validationErrors.add(String.format(
-                                "Step '%s' has no inbound mapper for output domain type '%s'. " +
-                                "PER REQUIREMENTS: All mappers MUST be resolved at build time. " +
-                                "Add a Mapper implementation: Mapper<%s, ?>",
-                                step.stepName(), step.domainOut(), step.domainOut()));
-                    }
-                }
-            }
-        }
-
-        // Fail fast if any validation errors
-        if (!validationErrors.isEmpty()) {
-            throw new IllegalStateException("Mapper validation failed for pipeline steps:\n" +
-                    String.join("\n", validationErrors));
-        }
-    }
 }

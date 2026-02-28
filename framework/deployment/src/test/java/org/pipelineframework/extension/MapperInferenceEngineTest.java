@@ -17,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class MapperInferenceEngineTest {
 
     @Test
-    void buildsRegistryForUniqueDomainMappers() throws Exception {
+    void buildsRegistryForUniqueMapperPairs() throws Exception {
         Index index = indexOf(
             Mapper.class,
             GrpcA.class, DtoA.class, DomainA.class, MapperA.class,
@@ -29,16 +29,20 @@ class MapperInferenceEngineTest {
 
         DotName domainA = DotName.createSimple(DomainA.class.getName());
         DotName domainB = DotName.createSimple(DomainB.class.getName());
+        DotName grpcA = DotName.createSimple(GrpcA.class.getName());
+        DotName grpcB = DotName.createSimple(GrpcB.class.getName());
 
-        assertEquals(2, registry.domainToMapper().size());
-        assertNotNull(registry.domainToMapper().get(domainA));
-        assertNotNull(registry.domainToMapper().get(domainB));
-        assertEquals(MapperA.class.getName(), registry.domainToMapper().get(domainA).name().toString());
-        assertEquals(MapperB.class.getName(), registry.domainToMapper().get(domainB).name().toString());
+        assertEquals(2, registry.pairToMapper().size());
+        assertNotNull(registry.pairToMapper().get(new MapperInferenceEngine.MapperPairKey(domainA, grpcA)));
+        assertNotNull(registry.pairToMapper().get(new MapperInferenceEngine.MapperPairKey(domainB, grpcB)));
+        assertEquals(MapperA.class.getName(),
+                registry.pairToMapper().get(new MapperInferenceEngine.MapperPairKey(domainA, grpcA)).name().toString());
+        assertEquals(MapperB.class.getName(),
+                registry.pairToMapper().get(new MapperInferenceEngine.MapperPairKey(domainB, grpcB)).name().toString());
     }
 
     @Test
-    void failsWhenDomainHasDuplicateMappers() throws Exception {
+    void failsWhenPairHasDuplicateMappers() throws Exception {
         Index index = indexOf(
             Mapper.class,
             GrpcA.class, DtoA.class, DomainA.class, MapperA.class,
@@ -48,7 +52,7 @@ class MapperInferenceEngineTest {
         MapperInferenceEngine engine = new MapperInferenceEngine(index);
 
         IllegalStateException error = assertThrows(IllegalStateException.class, engine::buildRegistry);
-        assertTrue(error.getMessage().contains("Duplicate mapper found for domain type"));
+        assertTrue(error.getMessage().contains("Duplicate mapper found for pair"));
     }
 
     @Test
@@ -111,14 +115,14 @@ class MapperInferenceEngineTest {
         }
     }
 
-    static final class MapperADuplicate implements Mapper<DomainA, GrpcA2> {
+    static final class MapperADuplicate implements Mapper<DomainA, GrpcA> {
         @Override
-        public DomainA fromExternal(GrpcA2 grpc) {
+        public DomainA fromExternal(GrpcA grpc) {
             return null;
         }
 
         @Override
-        public GrpcA2 toExternal(DomainA domain) {
+        public GrpcA toExternal(DomainA domain) {
             return null;
         }
     }

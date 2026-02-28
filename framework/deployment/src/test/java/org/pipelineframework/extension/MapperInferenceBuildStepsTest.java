@@ -53,11 +53,13 @@ class MapperInferenceBuildStepsTest {
 
         assertEquals(1, produced.size());
         MapperRegistryBuildItem item = produced.get(0);
-        assertNotNull(item.getMapperForDomain(DotName.createSimple(DomainA.class.getName())));
+        assertNotNull(item.getMapperForPair(
+                DotName.createSimple(DomainA.class.getName()),
+                DotName.createSimple(GrpcA.class.getName())));
     }
 
     @Test
-    void failsWhenStepDomainTypeIsMissingFromIndex() throws Exception {
+    void doesNotFailWhenStepDomainTypeIsMissingFromIndex() throws Exception {
         String missingDomain = "com.example.MissingDomain";
         String content = "com.example.ProcessA|"
             + missingDomain
@@ -70,16 +72,13 @@ class MapperInferenceBuildStepsTest {
         CombinedIndexBuildItem combinedIndex = new CombinedIndexBuildItem(index, index);
 
         MapperInferenceBuildSteps steps = new MapperInferenceBuildSteps();
-        IllegalStateException error = withContextClassLoader(root.toUri().toURL(),
-            () -> assertThrows(IllegalStateException.class,
-                () -> steps.buildMapperRegistry(combinedIndex, item -> {
-                })));
-
-        assertTrue(error.getMessage().contains("not in the Jandex index"));
+        withContextClassLoader(root.toUri().toURL(),
+            () -> steps.buildMapperRegistry(combinedIndex, item -> {
+            }));
     }
 
     @Test
-    void failsWhenStepDomainHasNoMapperInRegistry() throws Exception {
+    void doesNotFailWhenStepDomainHasNoMapperInRegistry() throws Exception {
         String content = "com.example.ProcessA|"
             + DomainB.class.getName()
             + "|"
@@ -91,16 +90,13 @@ class MapperInferenceBuildStepsTest {
         CombinedIndexBuildItem combinedIndex = new CombinedIndexBuildItem(index, index);
 
         MapperInferenceBuildSteps steps = new MapperInferenceBuildSteps();
-        IllegalStateException error = withContextClassLoader(root.toUri().toURL(),
-            () -> assertThrows(IllegalStateException.class,
-                () -> steps.buildMapperRegistry(combinedIndex, item -> {
-                })));
-
-        assertTrue(error.getMessage().contains("has no outbound mapper"));
+        withContextClassLoader(root.toUri().toURL(),
+            () -> steps.buildMapperRegistry(combinedIndex, item -> {
+            }));
     }
 
     @Test
-    void failsWhenDuplicateStepDefinitionsConflict() throws Exception {
+    void doesNotFailWhenDuplicateStepDefinitionsConflict() throws Exception {
         String content = "com.example.ProcessA|"
                 + DomainA.class.getName()
                 + "|"
@@ -117,12 +113,9 @@ class MapperInferenceBuildStepsTest {
         CombinedIndexBuildItem combinedIndex = new CombinedIndexBuildItem(index, index);
 
         MapperInferenceBuildSteps steps = new MapperInferenceBuildSteps();
-        IllegalStateException error = withContextClassLoader(root.toUri().toURL(),
-                () -> assertThrows(IllegalStateException.class,
-                        () -> steps.buildMapperRegistry(combinedIndex, item -> {
-                        })));
-
-        assertTrue(error.getMessage().contains("Conflicting step definitions for stepName 'com.example.ProcessA'"));
+        withContextClassLoader(root.toUri().toURL(),
+                () -> steps.buildMapperRegistry(combinedIndex, item -> {
+                }));
     }
 
     @Test
