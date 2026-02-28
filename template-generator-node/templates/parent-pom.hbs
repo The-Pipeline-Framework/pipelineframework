@@ -262,22 +262,6 @@
                             </sources>
                         </configuration>
                     </execution>
-                    <execution>
-                        <id>add-pipeline-generated-test-sources</id>
-                        <phase>generate-test-sources</phase>
-                        <goals>
-                            <goal>add-test-source</goal>
-                        </goals>
-                        <configuration>
-                            <sources>
-                                <source>${project.build.directory}/generated-sources/pipeline/orchestrator-client</source>
-                                <source>${project.build.directory}/generated-sources/pipeline/pipeline-server</source>
-                                <source>${project.build.directory}/generated-sources/pipeline/plugin-client</source>
-                                <source>${project.build.directory}/generated-sources/pipeline/plugin-server</source>
-                                <source>${project.build.directory}/generated-sources/pipeline/rest-server</source>
-                            </sources>
-                        </configuration>
-                    </execution>
                 </executions>
             </plugin>
         </plugins>

@@ -49,6 +49,7 @@ const mainSidebar = [
                 ]
             },
             {text: 'Pipeline Compilation', link: '/guide/build/pipeline-compilation'},
+            {text: 'Operators', link: '/guide/build/operators'},
             {
                 text: 'Runtime Layouts',
                 link: '/guide/build/runtime-layouts/',
@@ -77,6 +78,7 @@ const mainSidebar = [
         items: [
             {text: 'Application Structure', link: '/guide/design/application-structure'},
             {text: 'Common Module Structure', link: '/guide/design/common-module-structure'},
+            {text: 'Operator Reuse Strategy', link: '/guide/design/operator-reuse-strategy'},
             {text: 'Expansion and Reduction', link: '/guide/design/expansion-and-reduction'},
             {text: 'Runtime Topology Strategy', link: '/guide/design/runtime-topology-strategy'}
         ]
@@ -87,6 +89,7 @@ const mainSidebar = [
         items: [
             {text: '@PipelineStep Annotation', link: '/guide/development/pipeline-step'},
             {text: 'Code a Step', link: '/guide/development/code-a-step'},
+            {text: 'Operators', link: '/guide/development/operators'},
             {text: 'Mappers and DTOs', link: '/guide/development/mappers-and-dtos'},
             {text: 'Handling File Operations', link: '/guide/development/handling-file-operations'},
             {text: 'Testing with Testcontainers', link: '/guide/development/testing'},
@@ -102,6 +105,7 @@ const mainSidebar = [
         items: [
             {text: 'Error Handling & DLQ', link: '/guide/operations/error-handling'},
             {text: 'In-flight Probe', link: '/guide/operations/in-flight-probe'},
+            {text: 'Operators', link: '/guide/operations/operators'},
             {text: 'AWS Lambda SnapStart', link: '/guide/operations/aws-lambda-snapstart'},
             {
                 text: 'Observability',
@@ -157,6 +161,7 @@ const mainSidebar = [
             },
             {text: 'Annotation Processor Architecture (Compat)', link: '/guide/evolve/annotation-processor-architecture'},
             {text: 'Compiler Pipeline Architecture', link: '/guide/evolve/compiler-pipeline-architecture'},
+            {text: 'Operators Internals', link: '/guide/evolve/operators-internals'},
             {text: 'Data Types', link: '/guide/evolve/data-types'},
             {
                 text: 'Runtime Mapping',

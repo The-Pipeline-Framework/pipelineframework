@@ -73,6 +73,19 @@ The generated classes will be located in the package specified in the `.proto` f
 - **Function**: Generates text completions from prompts
 - **Implementation**: `org.pipelineframework.service.ReactiveService<Prompt, Completion>`
 
+## Phase 1 Unary Operator Variants
+
+To demonstrate Phase 1 operator constraints (1->1 invocation path), the SDK also includes unary adapters:
+
+- `DocumentChunkingUnaryService` (`Document -> Uni<Chunk>`)
+- `ChunkEmbeddingService` (`Chunk -> Uni<Vector>`)
+- `VectorStoreService` (`Vector -> Uni<StoreResult>`)
+- `SimilaritySearchUnaryService` (`Vector -> Uni<ScoredChunk>`)
+- `ScoredChunkPromptService` (`ScoredChunk -> Uni<Prompt>`)
+- `LLMCompletionService` (`Prompt -> Uni<Completion>`)
+
+These can be chained into a complete unary pipeline suitable for current operator invocation boundaries.
+
 ## Mapper Classes
 
 All mappers follow the naming convention of the TPF Mapper interface for easy integration when the SDK is used with TPF. The methods are:
@@ -82,31 +95,28 @@ All mappers follow the naming convention of the TPF Mapper interface for easy in
 - `toDto(Entity entity)` - Entity to DTO
 - `fromGrpc(Proto proto)` - Proto to DTO
 
-## Usage with TPF Delegation
+## Usage with TPF Operators (Phase 1)
 
-The SDK is designed to be used with TPF delegation:
+The SDK can be used with build-time operator references:
 
 ```yaml
 steps:
-  name: chunkDoc
-  delegate: DocumentChunkingService.class
-  
-steps:
-  name: generateEmbedding
-  delegate: EmbeddingService.class
-  
-steps:
-  name: storeVector
-  delegate: VectorStoreService.class
-  
-steps:
-  name: searchSimilar
-  delegate: SimilaritySearchService.class
-  
-steps:
-  name: llmComplete
-  delegate: LLMCompletionService.class
+  - name: "Chunk Document"
+    operator: "com.example.ai.sdk.service.DocumentChunkingUnaryService::process"
+  - name: "Embed Chunk"
+    operator: "com.example.ai.sdk.service.ChunkEmbeddingService::process"
+  - name: "Store Vector"
+    operator: "com.example.ai.sdk.service.VectorStoreService::process"
+  - name: "Search Similar"
+    operator: "com.example.ai.sdk.service.SimilaritySearchUnaryService::process"
+  - name: "Build Prompt"
+    operator: "com.example.ai.sdk.service.ScoredChunkPromptService::process"
+  - name: "LLM Complete"
+    operator: "com.example.ai.sdk.service.LLMCompletionService::process"
 ```
+
+The same full 6-step chain is committed in this module at `ai-sdk/config/pipeline.yaml`.
+This is the PoC centerpiece: pipeline assembly via YAML operator references, without `@PipelineStep` wrapper classes.
 
 ## Key Features
 

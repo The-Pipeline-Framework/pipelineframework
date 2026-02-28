@@ -87,8 +87,8 @@ The annotation processor reads `src/main/resources/application.properties` durin
 | `pipeline.rest.path.<fully.qualified.ServiceClass>` | string | none    | Overrides REST path by service class name. |
 
 When `pipeline.rest.naming.strategy=RESOURCEFUL` (default), generated REST paths are:
-- 1-1 (`UNARY_UNARY`) and N-1 (`STREAMING_UNARY`): `/api/v1/<output-type>/`
-- 1-N (`UNARY_STREAMING`) and M-N (`STREAMING_STREAMING`): `/api/v1/<input-type>/`
+- 1-1 (`UNARY_UNARY`) and N-1 (`STREAMING_UNARY`): `/api/v1/<output-type>`
+- 1-N (`UNARY_STREAMING`) and M-N (`STREAMING_STREAMING`): `/api/v1/<input-type>`
 - side effects append plugin token when available (for example `/api/v1/ack-payment-sent/persistence`)
 
 When `pipeline.rest.naming.strategy=LEGACY`, generated REST paths stay in the older form:
