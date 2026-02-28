@@ -44,3 +44,4 @@ If your scaffold is modular, `layout: monolith` in mapping is a logical target. 
 1. Keep the generated scaffold running with defaults first.
 2. Add runtime mapping gradually.
 3. Validate runtime shape with topology-aware tests (not only functional E2E).
+4. Keep one canonical build entrypoint per layout and require it to work from a clean local Maven repository state.
