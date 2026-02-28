@@ -177,10 +177,10 @@ class PipelineStepModelTest {
                 .mapperFallbackMode(MapperFallbackMode.JACKSON)
                 .build();
 
-        PipelineStepModel modified = original.withDeploymentRole(DeploymentRole.ORCHESTRATOR_SERVER);
+        PipelineStepModel modified = original.withDeploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT);
 
         assertEquals(MapperFallbackMode.JACKSON, modified.mapperFallbackMode());
-        assertEquals(DeploymentRole.ORCHESTRATOR_SERVER, modified.deploymentRole());
+        assertEquals(DeploymentRole.ORCHESTRATOR_CLIENT, modified.deploymentRole());
     }
 
     @Test

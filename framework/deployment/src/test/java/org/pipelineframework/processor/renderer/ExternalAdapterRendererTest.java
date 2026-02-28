@@ -62,9 +62,11 @@ class ExternalAdapterRendererTest {
                 .build();
 
         ExternalAdapterBinding binding = new ExternalAdapterBinding(
+                model,
                 "ProcessDataService",
                 "com.example.pipeline",
-                model);
+                delegateService.canonicalName(),
+                null);
 
         ExternalAdapterRenderer renderer = new ExternalAdapterRenderer(GenerationTarget.EXTERNAL_ADAPTER);
 
@@ -72,9 +74,12 @@ class ExternalAdapterRendererTest {
             new TestProcessingEnvironment();
 
         GenerationContext ctx = new GenerationContext(
-                tempDir,
                 mockProcessingEnv,
-                DeploymentRole.PIPELINE_SERVER);
+                tempDir,
+                DeploymentRole.PIPELINE_SERVER,
+                Set.of(),
+                null,
+                null);
 
         renderer.render(binding, ctx);
 
@@ -133,9 +138,11 @@ class ExternalAdapterRendererTest {
                 .build();
 
         ExternalAdapterBinding binding = new ExternalAdapterBinding(
+                model,
                 "ProcessDataService",
                 "com.example.pipeline",
-                model);
+                delegateService.canonicalName(),
+                externalMapper.canonicalName());
 
         ExternalAdapterRenderer renderer = new ExternalAdapterRenderer(GenerationTarget.EXTERNAL_ADAPTER);
 
@@ -143,9 +150,12 @@ class ExternalAdapterRendererTest {
             new TestProcessingEnvironment();
 
         GenerationContext ctx = new GenerationContext(
-                tempDir,
                 mockProcessingEnv,
-                DeploymentRole.PIPELINE_SERVER);
+                tempDir,
+                DeploymentRole.PIPELINE_SERVER,
+                Set.of(),
+                null,
+                null);
 
         renderer.render(binding, ctx);
 
@@ -237,9 +247,11 @@ class ExternalAdapterRendererTest {
                 .build();
 
         ExternalAdapterBinding binding = new ExternalAdapterBinding(
+                model,
                 "StreamingService",
                 "com.example.pipeline",
-                model);
+                delegateService.canonicalName(),
+                null);
 
         ExternalAdapterRenderer renderer = new ExternalAdapterRenderer(GenerationTarget.EXTERNAL_ADAPTER);
 
@@ -247,9 +259,12 @@ class ExternalAdapterRendererTest {
             new TestProcessingEnvironment();
 
         GenerationContext ctx = new GenerationContext(
-                tempDir,
                 mockProcessingEnv,
-                DeploymentRole.PIPELINE_SERVER);
+                tempDir,
+                DeploymentRole.PIPELINE_SERVER,
+                Set.of(),
+                null,
+                null);
 
         renderer.render(binding, ctx);
 
