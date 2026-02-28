@@ -208,8 +208,11 @@ class GrpcServiceAdapterRendererTest {
         renderer.render(binding, context);
 
         String source = readGeneratedService("TestService");
-        assertTrue(source.contains("Mapper<InputType, InputType> inboundMapper"));
-        assertTrue(source.contains("Mapper<OutputType, OutputType> outboundMapper"));
+        assertTrue(source.contains("import com.example.domain.InputType;"));
+        assertTrue(source.contains("import com.example.domain.OutputType;"));
+        assertTrue(source.contains("import com.example.grpc.TestServiceOuterClass;"));
+        assertTrue(source.contains("Mapper<InputType, TestServiceOuterClass.InputType> inboundMapper"));
+        assertTrue(source.contains("Mapper<OutputType, TestServiceOuterClass.OutputType> outboundMapper"));
         assertTrue(source.contains("inboundMapper.fromExternal(grpcIn)"));
         assertTrue(source.contains("outboundMapper.toExternal(output)"));
     }

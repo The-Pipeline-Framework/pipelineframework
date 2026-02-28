@@ -1,6 +1,7 @@
 package org.pipelineframework.extension;
 
 import org.jboss.jandex.DotName;
+import org.jboss.jandex.ClassInfo;
 import org.jboss.jandex.Index;
 import org.jboss.jandex.Indexer;
 import org.junit.jupiter.api.Test;
