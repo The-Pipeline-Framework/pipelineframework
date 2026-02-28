@@ -37,5 +37,7 @@ PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT:-GRPC}"
 
 # Ensure module parent POM is available in local repository for Quarkus bootstrap/codegen.
 "$MVN_BIN" -f "$CSV_DIR/pom.xml" -N install
+# Ensure foundational plugin coordinates are resolvable even from a clean local repository.
+"$MVN_BIN" -f "$ROOT_DIR/plugins/foundational/persistence/pom.xml" -DskipTests install
 
 "$MVN_BIN" -f "$CSV_DIR/pom.pipeline-runtime.xml" -Dcsv.runtime.layout=pipeline-runtime -Dtpf.build.transport="$PIPELINE_TRANSPORT" clean install "$@"

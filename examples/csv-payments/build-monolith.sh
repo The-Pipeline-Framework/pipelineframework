@@ -39,6 +39,8 @@ PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT:-LOCAL}"
 
 # Ensure module parent POM is available in local repository for Quarkus bootstrap/codegen.
 "$MVN_BIN" -f "$CSV_DIR/pom.xml" -N install
+# Ensure foundational plugin coordinates are resolvable even from a clean local repository.
+"$MVN_BIN" -f "$ROOT_DIR/plugins/foundational/persistence/pom.xml" -DskipTests install
 
 ORCHESTRATOR_ARGS=()
 for arg in "$@"; do
