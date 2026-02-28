@@ -48,16 +48,12 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
     }
 
     /**
-     * Builds a JavaPoet TypeSpec for the gRPC service adapter class corresponding to the given binding.
+     * Builds a JavaPoet TypeSpec for the gRPC service adapter class for the provided binding.
      *
-     * The generated class is annotated as a gRPC service, registered as a singleton and unremovable,
-     * given a generated role indicating a pipeline server, extends the resolved gRPC base class,
-     * conditionally declares injected mapper fields, and implements the appropriate remote method
-     * for the model's streaming shape.
-     *
-     * @param binding   the gRPC binding containing the pipeline step model and service metadata used to generate the class
-     * @param messager  a Messager for reporting diagnostics and assisting type resolution during generation
-     * @return          a TypeSpec representing the complete gRPC service adapter class to be written to a Java file
+     * @param binding the gRPC binding providing the pipeline step model and service metadata
+     * @param messager a Messager for reporting diagnostics during type resolution
+     * @param role the deployment role applied to the generated class's GeneratedRole annotation
+     * @return a TypeSpec representing the gRPC service adapter class to be written to a Java file
      */
     private TypeSpec buildGrpcServiceClass(GrpcBinding binding, Messager messager, org.pipelineframework.processor.ir.DeploymentRole role) {
         PipelineStepModel model = binding.model();
@@ -386,14 +382,15 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
     }
 
     /**
-     * Adds a bidirectional gRPC `remoteProcess` method to the generated service class.
+     * Adds a bidirectional gRPC streaming `remoteProcess` implementation to the generated service class.
      *
-     * The generated method overrides `remoteProcess`, accepts a `Multi` of gRPC request messages,
-     * and returns a `Multi` of gRPC response messages by delegating to an inline streaming adapter.
+     * <p>The generated method overrides `remoteProcess(Multi<Req>)`, returns `Multi<Resp>`, delegates processing
+     * to an inline bidirectional streaming adapter that bridges gRPC DTOs and domain types, records RPC metrics
+     * on termination, and is annotated to run on virtual threads when the step's execution mode requires it.</p>
      *
      * @param builder the TypeSpec builder for the service class being generated
      * @param binding the gRPC binding containing the pipeline step model and service metadata
-     * @param messager a processing messager used for type resolution diagnostics
+     * @param messager a processing messager used for type-resolution diagnostics
      * @throws IllegalStateException if required gRPC parameter/return types or domain types are missing for the service
      */
     private void addStreamingStreamingMethod(TypeSpec.Builder builder, GrpcBinding binding, Messager messager) {
@@ -468,14 +465,14 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
     }
 
     /**
-         * Create an anonymous subclass of the specified gRPC adapter that bridges between gRPC DTO types and domain types.
-         *
-         * @param binding              the gRPC binding containing the pipeline step model and service metadata
-         * @param grpcAdapterClassName the adapter base class to extend (parameterized with input/output gRPC and domain types)
-         * @param messager             a Messager used by the type resolver for diagnostics
-         * @return                     a TypeSpec for an anonymous class that implements `getService`, `fromGrpc`, and `toGrpc`
-         * @throws IllegalStateException if required gRPC parameter/return types or required domain input/output types are missing for the binding
-         */
+     * Create an anonymous subclass of the specified gRPC adapter that maps between gRPC DTOs and domain types for the provided binding.
+     *
+     * @param binding the gRPC binding that provides the pipeline step model and service metadata
+     * @param grpcAdapterClassName the adapter base class to extend
+     * @param messager a diagnostic Messager used during type resolution
+     * @return a TypeSpec for an anonymous class that implements `getService`, `fromGrpc`, and `toGrpc`
+     * @throws IllegalStateException if required gRPC parameter/return types or required domain input/output types are missing for the binding
+     */
     private TypeSpec inlineAdapterBuilder(
             GrpcBinding binding,
             ClassName grpcAdapterClassName,
