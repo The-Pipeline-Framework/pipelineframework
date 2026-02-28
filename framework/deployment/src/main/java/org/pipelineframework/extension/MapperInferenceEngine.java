@@ -309,9 +309,9 @@ public class MapperInferenceEngine {
         }
 
         /**
-         * Provide a human-readable representation of the mapper generic signature.
+         * Provides a compact human-readable representation of this mapper's generic signature.
          *
-         * @return a string formatted as `Mapper<domainType, externalType>` where each placeholder is the string form of the corresponding type
+         * @return a string formatted as Mapper<domainType, externalType>, where each placeholder is the string form of the corresponding type
          */
         @Override
         public String toString() {
