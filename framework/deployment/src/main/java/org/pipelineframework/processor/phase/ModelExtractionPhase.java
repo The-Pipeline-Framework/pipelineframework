@@ -273,20 +273,26 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return null;
         }
 
+        boolean fallbackGloballyEnabled = isMapperFallbackGloballyEnabled(ctx);
+        boolean fallbackRequested = stepDef.mapperFallback() == MapperFallbackMode.JACKSON;
+        boolean typesDiffer = !inputType.equals(reactiveSignature.inputType())
+            || !outputType.equals(reactiveSignature.outputType());
+        boolean allowFallbackNoMapper = stepDef.externalMapper() == null
+            && fallbackRequested
+            && fallbackGloballyEnabled
+            && typesDiffer;
+
         ClassName externalMapper = resolveDelegatedExternalMapper(
             ctx,
             stepDef,
             inputType,
             outputType,
             reactiveSignature.inputType(),
-            reactiveSignature.outputType());
-        boolean fallbackGloballyEnabled = isMapperFallbackGloballyEnabled(ctx);
-        boolean fallbackRequested = stepDef.mapperFallback() == MapperFallbackMode.JACKSON;
-        boolean typesDiffer = !inputType.equals(reactiveSignature.inputType())
-            || !outputType.equals(reactiveSignature.outputType());
+            reactiveSignature.outputType(),
+            allowFallbackNoMapper);
         MapperFallbackMode effectiveFallback = MapperFallbackMode.NONE;
 
-        if (fallbackRequested && fallbackGloballyEnabled && externalMapper == null && typesDiffer) {
+        if (allowFallbackNoMapper && externalMapper == null) {
             effectiveFallback = MapperFallbackMode.JACKSON;
         }
 
@@ -384,7 +390,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             TypeName applicationInputType,
             TypeName applicationOutputType,
             TypeName operatorInputType,
-            TypeName operatorOutputType) {
+            TypeName operatorOutputType,
+            boolean allowFallbackNoMapper) {
         if (stepDef.externalMapper() != null) {
             TypeElement mapperElement = ctx.getProcessingEnv().getElementUtils()
                 .getTypeElement(stepDef.externalMapper().canonicalName());
@@ -418,7 +425,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             applicationInputType,
             operatorInputType,
             applicationOutputType,
-            operatorOutputType);
+            operatorOutputType,
+            !allowFallbackNoMapper);
     }
 
     /**
@@ -438,7 +446,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             TypeName applicationInputType,
             TypeName operatorInputType,
             TypeName applicationOutputType,
-            TypeName operatorOutputType) {
+            TypeName operatorOutputType,
+            boolean reportMissingCandidateError) {
         if (ctx.getRoundEnv() == null) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
@@ -468,14 +477,16 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         if (matchingCandidates.isEmpty()) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
-                "Step '" + stepName + "' requires an operator mapper for types ["
-                    + applicationInputType + " -> " + operatorInputType + ", "
-                    + operatorOutputType + " -> " + applicationOutputType
-                    + "], but no matching ExternalMapper implementation was found. "
-                    + "The mapper may be in a dependency JAR or produced in a different processing round. "
-                    + "Ensure it is compiled in this round or specify it explicitly in YAML.");
+            if (reportMissingCandidateError) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.ERROR,
+                    "Step '" + stepName + "' requires an operator mapper for types ["
+                        + applicationInputType + " -> " + operatorInputType + ", "
+                        + operatorOutputType + " -> " + applicationOutputType
+                        + "], but no matching ExternalMapper implementation was found. "
+                        + "The mapper may be in a dependency JAR or produced in a different processing round. "
+                        + "Ensure it is compiled in this round or specify it explicitly in YAML.");
+            }
             return null;
         }
 

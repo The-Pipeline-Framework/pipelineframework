@@ -18,6 +18,7 @@ package org.pipelineframework.processor.renderer;
 
 import java.io.IOException;
 import javax.lang.model.element.Modifier;
+import javax.tools.Diagnostic;
 
 import com.squareup.javapoet.*;
 import io.quarkus.arc.Unremovable;
@@ -103,6 +104,9 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
             ? model.outputMapping().entityType()
             : applicationOutputType;
         boolean useJacksonFallback = externalMapperType == null && model.mapperFallbackMode() == MapperFallbackMode.JACKSON;
+        if (useJacksonFallback) {
+            ensureJacksonAvailable(ctx, model);
+        }
 
         // Create the class with appropriate annotations
         TypeSpec.Builder externalAdapterBuilder = TypeSpec.classBuilder(externalAdapterClassName)
@@ -302,6 +306,35 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
         methodBuilder
             .addStatement("var operatorInputs = input.map(appInput -> externalMapper.toOperatorInput(appInput))")
             .addStatement("return delegateService.process(operatorInputs).map(libOutput -> externalMapper.toApplicationOutput(libOutput))");
+    }
+
+    private void ensureJacksonAvailable(GenerationContext ctx, PipelineStepModel model) {
+        if (isJacksonAvailable(ctx)) {
+            return;
+        }
+        String message = "Delegated step '" + model.serviceName()
+            + "' requested mapperFallbackMode=JACKSON, but Jackson is not available on the processor classpath. "
+            + "Add Jackson dependencies or disable mapper fallback for this step.";
+        if (ctx != null && ctx.processingEnv() != null && ctx.processingEnv().getMessager() != null) {
+            ctx.processingEnv().getMessager().printMessage(Diagnostic.Kind.ERROR, message);
+        }
+        throw new IllegalStateException(message);
+    }
+
+    private boolean isJacksonAvailable(GenerationContext ctx) {
+        if (ctx != null && ctx.processingEnv() != null && ctx.processingEnv().getElementUtils() != null) {
+            if (ctx.processingEnv().getElementUtils().getTypeElement("com.fasterxml.jackson.databind.ObjectMapper") != null
+                && ctx.processingEnv().getElementUtils().getTypeElement("com.fasterxml.jackson.core.type.TypeReference") != null) {
+                return true;
+            }
+        }
+        try {
+            Class.forName("com.fasterxml.jackson.databind.ObjectMapper", false, ExternalAdapterRenderer.class.getClassLoader());
+            Class.forName("com.fasterxml.jackson.core.type.TypeReference", false, ExternalAdapterRenderer.class.getClassLoader());
+            return true;
+        } catch (ClassNotFoundException e) {
+            return false;
+        }
     }
 
     private MethodSpec buildFallbackInputConverter(String stepName, TypeName appInputType, TypeName operatorInputType) {

@@ -444,6 +444,12 @@ public record PipelineStepModel(
             return this;
         }
 
+        /**
+         * Sets the mapper fallback behavior for this step model.
+         *
+         * @param mapperFallbackMode fallback strategy to use when no mapper is resolved
+         * @return this {@link PipelineStepModel.Builder} for chaining
+         */
         public Builder mapperFallbackMode(MapperFallbackMode mapperFallbackMode) {
             this.mapperFallbackMode = mapperFallbackMode;
             return this;
