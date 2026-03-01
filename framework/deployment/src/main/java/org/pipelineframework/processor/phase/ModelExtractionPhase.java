@@ -192,6 +192,10 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                     .getTypeElement(stepDef.executionClass().canonicalName());
 
                 if (serviceClass == null) {
+                    PipelineStepModel syntheticModel = createCrossModuleInternalModel(stepDef, ctx);
+                    if (syntheticModel != null) {
+                        yield syntheticModel;
+                    }
                     ctx.getProcessingEnv().getMessager().printMessage(
                         javax.tools.Diagnostic.Kind.ERROR,
                         "Internal step service class '" + stepDef.executionClass().canonicalName() +
@@ -221,6 +225,71 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 yield createDelegatedStepModel(ctx, stepDef);
             }
         };
+    }
+
+    private PipelineStepModel createCrossModuleInternalModel(
+            org.pipelineframework.processor.ir.StepDefinition stepDef,
+            PipelineCompilationContext ctx) {
+        if (stepDef.inputType() == null || stepDef.outputType() == null) {
+            return null;
+        }
+        TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), stepDef.executionClass());
+        TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), stepDef.executionClass());
+        StreamingShape streamingShape = stepDef.streamingShapeHint() != null
+            ? stepDef.streamingShapeHint()
+            : StreamingShape.UNARY_UNARY;
+
+        Set<GenerationTarget> targets = EnumSet.of(GenerationTarget.CLIENT_STEP);
+        if (ctx.isTransportModeRest()) {
+            targets.add(GenerationTarget.REST_CLIENT_STEP);
+        }
+        if (ctx.isTransportModeLocal()) {
+            targets.add(GenerationTarget.LOCAL_CLIENT_STEP);
+        }
+
+        String servicePackage = stepDef.executionClass().packageName().isEmpty()
+            ? "org.pipelineframework.pipeline"
+            : stepDef.executionClass().packageName() + ".pipeline";
+        String serviceName = toYamlServiceName(stepDef.name());
+
+        if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.WARNING,
+                "Internal step '" + stepDef.name() + "' is defined in YAML but service class '"
+                    + stepDef.executionClass().canonicalName()
+                    + "' is not on this module classpath. Using YAML type/cardinality metadata for cross-module compilation.");
+        }
+
+        return new PipelineStepModel.Builder()
+            .serviceName(serviceName)
+            .generatedName(serviceName)
+            .servicePackage(servicePackage)
+            .serviceClassName(stepDef.executionClass())
+            .inputMapping(new TypeMapping(inputType, null, false, inputType))
+            .outputMapping(new TypeMapping(outputType, null, false, outputType))
+            .streamingShape(streamingShape)
+            .enabledTargets(targets)
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+            .sideEffect(false)
+            .cacheKeyGenerator(null)
+            .orderingRequirement(OrderingRequirement.RELAXED)
+            .threadSafety(ThreadSafety.SAFE)
+            .build();
+    }
+
+    private TypeName normalizeLegacyDomainType(TypeName declaredType, ClassName executionClass) {
+        if (!(declaredType instanceof ClassName className) || !className.packageName().isEmpty()) {
+            return declaredType;
+        }
+        String executionPkg = executionClass.packageName();
+        if (executionPkg == null || executionPkg.isBlank()) {
+            return declaredType;
+        }
+        String basePackage = executionPkg.endsWith(".service")
+            ? executionPkg.substring(0, executionPkg.length() - ".service".length())
+            : executionPkg;
+        return ClassName.bestGuess(basePackage + ".common.domain." + className.simpleName());
     }
 
     /**

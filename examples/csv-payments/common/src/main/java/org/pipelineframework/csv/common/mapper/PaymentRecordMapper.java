@@ -29,29 +29,43 @@ import org.pipelineframework.csv.grpc.ProcessCsvPaymentsInputSvc;
     componentModel = "jakarta",
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface PaymentRecordMapper extends org.pipelineframework.mapper.Mapper<ProcessCsvPaymentsInputSvc.PaymentRecord, PaymentRecordDto, PaymentRecord> {
+public interface PaymentRecordMapper extends org.pipelineframework.mapper.Mapper<PaymentRecord, ProcessCsvPaymentsInputSvc.PaymentRecord> {
 
   PaymentRecordMapper INSTANCE = Mappers.getMapper( PaymentRecordMapper.class );
 
   // Domain ↔ DTO
-  @Override
   PaymentRecordDto toDto(PaymentRecord entity);
 
-  @Override
   PaymentRecord fromDto(PaymentRecordDto dto);
 
   // DTO ↔ gRPC
-  @Override
   @Mapping(target = "id", qualifiedByName = "uuidToString")
   @Mapping(target = "amount", qualifiedByName = "bigDecimalToString")
   @Mapping(target = "currency", qualifiedByName = "currencyToString")
   @Mapping(target = "csvPaymentsInputFilePath", qualifiedByName = "pathToString")
   ProcessCsvPaymentsInputSvc.PaymentRecord toGrpc(PaymentRecordDto dto);
 
-  @Override
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
   @Mapping(target = "amount", qualifiedByName = "stringToBigDecimal")
   @Mapping(target = "currency", qualifiedByName = "stringToCurrency")
   @Mapping(target = "csvPaymentsInputFilePath", qualifiedByName = "stringToPath")
   PaymentRecordDto fromGrpc(ProcessCsvPaymentsInputSvc.PaymentRecord grpc);
+
+  @Override
+  default PaymentRecord fromExternal(ProcessCsvPaymentsInputSvc.PaymentRecord external) {
+    return fromDto(fromGrpc(external));
+  }
+
+  @Override
+  default ProcessCsvPaymentsInputSvc.PaymentRecord toExternal(PaymentRecord domain) {
+    return toGrpc(toDto(domain));
+  }
+
+  default ProcessCsvPaymentsInputSvc.PaymentRecord toDtoToGrpc(PaymentRecord domain) {
+    return toExternal(domain);
+  }
+
+  default PaymentRecord fromGrpcFromDto(ProcessCsvPaymentsInputSvc.PaymentRecord grpc) {
+    return fromExternal(grpc);
+  }
 }

@@ -31,6 +31,7 @@ import com.squareup.javapoet.ClassName;
  * @param mapperFallback mapper fallback strategy when no mapper matches (never null)
  * @param inputType The input type for the step
  * @param outputType The output type for the step
+ * @param streamingShapeHint Optional streaming shape hint parsed from YAML cardinality
  */
 public record StepDefinition(
         String name,
@@ -39,7 +40,8 @@ public record StepDefinition(
         @Nullable ClassName externalMapper,
         MapperFallbackMode mapperFallback,
         @Nullable ClassName inputType,
-        @Nullable ClassName outputType
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint
 ) {
     public StepDefinition {
         Objects.requireNonNull(name, "Name cannot be null");

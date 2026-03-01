@@ -26,25 +26,39 @@ import org.pipelineframework.csv.grpc.ProcessFolderSvc;
 
 @SuppressWarnings("unused")
 @Mapper(componentModel = "jakarta", uses = {CommonConverters.class}, unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface CsvPaymentsInputFileMapper extends org.pipelineframework.mapper.Mapper<ProcessFolderSvc.CsvPaymentsInputFile, CsvPaymentsInputFileDto, CsvPaymentsInputFile>{
+public interface CsvPaymentsInputFileMapper extends org.pipelineframework.mapper.Mapper<CsvPaymentsInputFile, ProcessFolderSvc.CsvPaymentsInputFile> {
 
   CsvPaymentsInputFileMapper INSTANCE = Mappers.getMapper( CsvPaymentsInputFileMapper.class );
 
-  @Override
   CsvPaymentsInputFileDto toDto(CsvPaymentsInputFile entity);
 
-  @Override
   CsvPaymentsInputFile fromDto(CsvPaymentsInputFileDto dto);
 
-  @Override
   @Mapping(target = "id", qualifiedByName = "uuidToString")
   @Mapping(target = "filepath", qualifiedByName = "pathToString")
   @Mapping(target = "csvFolderPath", qualifiedByName = "pathToString")
   ProcessFolderSvc.CsvPaymentsInputFile toGrpc(CsvPaymentsInputFileDto entity);
 
-  @Override
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
   @Mapping(target = "filepath", qualifiedByName = "stringToPath")
   @Mapping(target = "csvFolderPath", qualifiedByName = "stringToPath")
   CsvPaymentsInputFileDto fromGrpc(ProcessFolderSvc.CsvPaymentsInputFile proto);
+
+  @Override
+  default CsvPaymentsInputFile fromExternal(ProcessFolderSvc.CsvPaymentsInputFile external) {
+    return fromDto(fromGrpc(external));
+  }
+
+  @Override
+  default ProcessFolderSvc.CsvPaymentsInputFile toExternal(CsvPaymentsInputFile domain) {
+    return toGrpc(toDto(domain));
+  }
+
+  default ProcessFolderSvc.CsvPaymentsInputFile toDtoToGrpc(CsvPaymentsInputFile domain) {
+    return toExternal(domain);
+  }
+
+  default CsvPaymentsInputFile fromGrpcFromDto(ProcessFolderSvc.CsvPaymentsInputFile grpc) {
+    return fromExternal(grpc);
+  }
 }

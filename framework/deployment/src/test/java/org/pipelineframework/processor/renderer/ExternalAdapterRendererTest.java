@@ -90,7 +90,9 @@ class ExternalAdapterRendererTest {
 
         // Verify ObjectMapper field is generated
         assertTrue(content.contains("@Inject"), "Should have @Inject annotation");
-        assertTrue(content.contains("private com.fasterxml.jackson.databind.ObjectMapper objectMapper"),
+        assertTrue(content.contains("import com.fasterxml.jackson.databind.ObjectMapper;"),
+                "Should import ObjectMapper");
+        assertTrue(content.contains("private ObjectMapper objectMapper"),
                 "Should have ObjectMapper field");
 
         // Verify convertInput method is generated

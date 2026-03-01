@@ -163,7 +163,8 @@ class ModelExtractionPhaseTest {
                 null,  // no explicit mapper
                 org.pipelineframework.processor.ir.MapperFallbackMode.JACKSON,
                 com.squareup.javapoet.ClassName.get("com.example.app", "AppInput"),
-                com.squareup.javapoet.ClassName.get("com.example.app", "AppOutput")
+                com.squareup.javapoet.ClassName.get("com.example.app", "AppOutput"),
+                null
         );
 
         context.setStepDefinitions(List.of(stepDef));
@@ -192,7 +193,8 @@ class ModelExtractionPhaseTest {
                 null,
                 org.pipelineframework.processor.ir.MapperFallbackMode.JACKSON,
                 com.squareup.javapoet.ClassName.get("com.example.app", "AppInput"),
-                com.squareup.javapoet.ClassName.get("com.example.app", "AppOutput")
+                com.squareup.javapoet.ClassName.get("com.example.app", "AppOutput"),
+                null
         );
 
         context.setStepDefinitions(List.of(stepDef));
@@ -218,7 +220,8 @@ class ModelExtractionPhaseTest {
                 null,
                 org.pipelineframework.processor.ir.MapperFallbackMode.JACKSON,
                 com.squareup.javapoet.ClassName.get("com.example.app", "AppInput"),
-                com.squareup.javapoet.ClassName.get("com.example.app", "AppOutput")
+                com.squareup.javapoet.ClassName.get("com.example.app", "AppOutput"),
+                null
         );
 
         context.setStepDefinitions(List.of(stepDef));
@@ -243,7 +246,8 @@ class ModelExtractionPhaseTest {
                 null,
                 org.pipelineframework.processor.ir.MapperFallbackMode.NONE,
                 com.squareup.javapoet.ClassName.get("com.example.app", "AppInput"),
-                com.squareup.javapoet.ClassName.get("com.example.app", "AppOutput")
+                com.squareup.javapoet.ClassName.get("com.example.app", "AppOutput"),
+                null
         );
 
         context.setStepDefinitions(List.of(stepDef));

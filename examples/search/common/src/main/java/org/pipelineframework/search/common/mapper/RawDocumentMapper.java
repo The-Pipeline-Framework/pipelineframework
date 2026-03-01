@@ -11,21 +11,35 @@ import org.pipelineframework.search.common.dto.RawDocumentDto;
     componentModel = "cdi",
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface RawDocumentMapper extends org.pipelineframework.mapper.Mapper<org.pipelineframework.search.grpc.CrawlSourceSvc.RawDocument, RawDocumentDto, RawDocument> {
+public interface RawDocumentMapper extends org.pipelineframework.mapper.Mapper<RawDocument, RawDocumentDto> {
 
   RawDocumentMapper INSTANCE = Mappers.getMapper( RawDocumentMapper.class );
 
   // Domain ↔ DTO
-  @Override
   RawDocumentDto toDto(RawDocument entity);
 
-  @Override
   RawDocument fromDto(RawDocumentDto dto);
 
   // DTO ↔ gRPC
-  @Override
   org.pipelineframework.search.grpc.CrawlSourceSvc.RawDocument toGrpc(RawDocumentDto dto);
 
-  @Override
   RawDocumentDto fromGrpc(org.pipelineframework.search.grpc.CrawlSourceSvc.RawDocument grpc);
+
+  @Override
+  default RawDocument fromExternal(RawDocumentDto external) {
+    return fromDto(external);
+  }
+
+  @Override
+  default RawDocumentDto toExternal(RawDocument domain) {
+    return toDto(domain);
+  }
+
+  default org.pipelineframework.search.grpc.CrawlSourceSvc.RawDocument toDtoToGrpc(RawDocument domain) {
+    return toGrpc(toDto(domain));
+  }
+
+  default RawDocument fromGrpcFromDto(org.pipelineframework.search.grpc.CrawlSourceSvc.RawDocument grpc) {
+    return fromDto(fromGrpc(grpc));
+  }
 }
