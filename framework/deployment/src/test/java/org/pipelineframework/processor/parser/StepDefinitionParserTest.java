@@ -27,6 +27,7 @@ import java.util.stream.Collectors;
 
 import javax.tools.Diagnostic;
 
+import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.processor.ir.MapperFallbackMode;
@@ -88,8 +89,8 @@ class StepDefinitionParserTest {
         assertEquals(1, steps.size());
         StepDefinition step = steps.getFirst();
         assertEquals(StepKind.INTERNAL, step.kind());
-        assertNull(step.inputType());
-        assertNull(step.outputType());
+        assertEquals(ClassName.get("com.example.app", "InputType"), step.inputType());
+        assertEquals(ClassName.get("com.example.app", "OutputType"), step.outputType());
         String warningSummary = diagnostics.stream().collect(Collectors.joining(" | "));
         assertTrue(warningSummary.contains(Diagnostic.Kind.WARNING.name()));
         assertTrue(warningSummary.contains("Ignoring 'input'/'output' on internal step"));

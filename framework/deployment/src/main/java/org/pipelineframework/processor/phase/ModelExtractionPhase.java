@@ -525,11 +525,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             TypeName operatorInputType,
             TypeName applicationOutputType,
             TypeName operatorOutputType,
-            boolean reportMissingCandidateError) {
+            boolean reportMissingCandidateErrorFlag) {
         if (ctx.getRoundEnv() == null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
-                "Step '" + stepName + "' requires an operator mapper, but no source candidates were available for inference.");
+            reportMissingCandidateError(ctx, stepName, reportMissingCandidateErrorFlag);
             return null;
         }
 
@@ -555,7 +553,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         if (matchingCandidates.isEmpty()) {
-            if (reportMissingCandidateError) {
+            if (reportMissingCandidateErrorFlag) {
                 ctx.getProcessingEnv().getMessager().printMessage(
                     javax.tools.Diagnostic.Kind.ERROR,
                     "Step '" + stepName + "' requires an operator mapper for types ["
@@ -580,6 +578,18 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         return matchingCandidates.getFirst();
+    }
+
+    private void reportMissingCandidateError(
+            PipelineCompilationContext ctx,
+            String stepName,
+            boolean reportMissingCandidateError) {
+        if (!reportMissingCandidateError) {
+            return;
+        }
+        ctx.getProcessingEnv().getMessager().printMessage(
+            javax.tools.Diagnostic.Kind.ERROR,
+            "Step '" + stepName + "' requires an operator mapper, but no source candidates were available for inference.");
     }
 
     /**

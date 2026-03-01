@@ -176,8 +176,10 @@ class ModelExtractionPhaseTest {
 
         context.setStepDefinitions(List.of(stepDef));
 
-        // Note: This test verifies the configuration is read; actual mapper creation requires
-        // full annotation processing infrastructure which is beyond the scope of unit tests
+        phase.execute(context);
+
+        assertNotNull(context.getStepModels());
+        assertTrue(context.getStepModels().isEmpty());
         assertNotNull(context.getStepDefinitions());
         assertEquals(1, context.getStepDefinitions().size());
         assertEquals(org.pipelineframework.processor.ir.MapperFallbackMode.JACKSON,
@@ -206,8 +208,10 @@ class ModelExtractionPhaseTest {
 
         context.setStepDefinitions(List.of(stepDef));
 
-        // The step definition retains the JACKSON mode, but the phase should not enable it
-        // without the global option. Verification would require integration testing.
+        phase.execute(context);
+
+        assertNotNull(context.getStepModels());
+        assertTrue(context.getStepModels().isEmpty());
         assertNotNull(context.getStepDefinitions());
     }
 
@@ -233,6 +237,10 @@ class ModelExtractionPhaseTest {
 
         context.setStepDefinitions(List.of(stepDef));
 
+        phase.execute(context);
+
+        assertNotNull(context.getStepModels());
+        assertTrue(context.getStepModels().isEmpty());
         assertNotNull(context.getStepDefinitions());
     }
 
@@ -259,6 +267,10 @@ class ModelExtractionPhaseTest {
 
         context.setStepDefinitions(List.of(stepDef));
 
+        phase.execute(context);
+
+        assertNotNull(context.getStepModels());
+        assertTrue(context.getStepModels().isEmpty());
         assertEquals(org.pipelineframework.processor.ir.MapperFallbackMode.NONE,
                 context.getStepDefinitions().get(0).mapperFallback());
     }

@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
+import java.util.regex.Pattern;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.util.Elements;
 
@@ -175,7 +176,8 @@ class ExternalAdapterRendererTest {
                 "Should have externalMapper field");
 
         // Verify ObjectMapper is NOT generated when explicit mapper is present
-        assertFalse(content.contains("private com.fasterxml.jackson.databind.ObjectMapper objectMapper"),
+        assertFalse(Pattern.compile("private\\s+\\S*ObjectMapper\\s+objectMapper\\s*;")
+                .matcher(content).find(),
                 "Should not have ObjectMapper field when explicit mapper is provided");
 
         // Verify process uses externalMapper

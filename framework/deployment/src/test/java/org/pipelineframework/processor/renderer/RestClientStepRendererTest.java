@@ -173,12 +173,20 @@ class RestClientStepRendererTest {
 
         Path clientStep = tempDir.resolve(
             "org/pipelineframework/search/service/pipeline/ProcessCrawlSourceRestClientStep.java");
+        Path clientInterface = tempDir.resolve(
+            "org/pipelineframework/search/service/pipeline/ProcessCrawlSourceRestClient.java");
         assertTrue(Files.exists(clientStep));
+        assertTrue(Files.exists(clientInterface));
         String stepSource = Files.readString(clientStep);
+        String interfaceSource = Files.readString(clientInterface);
         assertTrue(stepSource.contains("package org.pipelineframework.search.service.pipeline;"));
         assertTrue(stepSource.contains("class ProcessCrawlSourceRestClientStep"));
         assertTrue(stepSource.contains("CrawlRequestDto"));
         assertTrue(stepSource.contains("RawDocumentDto"));
         assertTrue(stepSource.contains("applyOneToOne("));
+        assertTrue(interfaceSource.contains("interface ProcessCrawlSourceRestClient"));
+        assertTrue(interfaceSource.contains("CrawlRequestDto"));
+        assertTrue(interfaceSource.contains("RawDocumentDto"));
+        assertTrue(interfaceSource.contains("process("));
     }
 }

@@ -273,11 +273,9 @@ public class StepDefinitionParser {
             }
             if (!isBlank(inputTypeName) || !isBlank(outputTypeName)) {
                 String message = "Ignoring 'input'/'output' on internal step '" + name
-                    + "'; internal types are derived from the @PipelineStep service signature";
+                    + "' unless the service is not resolvable in this module; keeping YAML types as cross-module fallback metadata";
                 LOG.warn(message);
                 report(Diagnostic.Kind.WARNING, message);
-                inputType = null;
-                outputType = null;
             }
             if (mapperFallback != MapperFallbackMode.NONE) {
                 String message = "Ignoring 'mapperFallback' on internal step '" + name
@@ -416,7 +414,8 @@ public class StepDefinitionParser {
         return switch (normalized) {
             case "ONE_TO_ONE" -> StreamingShape.UNARY_UNARY;
             case "EXPANSION", "ONE_TO_MANY" -> StreamingShape.UNARY_STREAMING;
-            case "MANY_TO_ONE" -> StreamingShape.STREAMING_UNARY;
+            case "MANY_TO_ONE", "REDUCTION" -> StreamingShape.STREAMING_UNARY;
+            case "SIDE_EFFECT" -> StreamingShape.UNARY_UNARY;
             case "MANY_TO_MANY" -> StreamingShape.STREAMING_STREAMING;
             default -> {
                 LOG.warnf(

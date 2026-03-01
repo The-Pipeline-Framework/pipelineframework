@@ -61,7 +61,7 @@ class IndexAckResourceTest {
                     false,
                     Thread.currentThread().getContextClassLoader());
             return true;
-        } catch (ClassNotFoundException e) {
+        } catch (ClassNotFoundException | LinkageError e) {
             return false;
         }
     }
