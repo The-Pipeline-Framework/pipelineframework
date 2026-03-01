@@ -374,6 +374,71 @@ class YamlDrivenStepGenerationTest {
         assertTrue(result.success(), "Expected delegated external mapper inference to succeed: " + result.errorSummary());
     }
 
+    @Test
+    void allowsDelegatedStepWithoutMapperWhenJacksonFallbackEnabled() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-delegate-fallback.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "fallback-embed"
+                operator: "com.example.lib.FallbackEmbeddingService"
+                input: "com.example.app.FallbackInput"
+                output: "com.example.app.FallbackOutput"
+                mapperFallback: "JACKSON"
+            """);
+
+        Path delegateSource = writeSource("FallbackEmbeddingService.java", """
+            package com.example.lib;
+
+            import io.smallrye.mutiny.Uni;
+            import org.pipelineframework.service.ReactiveService;
+
+            public class FallbackEmbeddingService implements ReactiveService<LibraryFallbackInput, LibraryFallbackOutput> {
+                @Override
+                public Uni<LibraryFallbackOutput> process(LibraryFallbackInput input) {
+                    return Uni.createFrom().item(new LibraryFallbackOutput());
+                }
+            }
+            """);
+        Path libInput = writeSource("LibraryFallbackInput.java", """
+            package com.example.lib;
+
+            public class LibraryFallbackInput {
+            }
+            """);
+        Path libOutput = writeSource("LibraryFallbackOutput.java", """
+            package com.example.lib;
+
+            public class LibraryFallbackOutput {
+            }
+            """);
+        Path appInput = writeSource("FallbackInput.java", """
+            package com.example.app;
+
+            public class FallbackInput {
+            }
+            """);
+        Path appOutput = writeSource("FallbackOutput.java", """
+            package com.example.app;
+
+            public class FallbackOutput {
+            }
+            """);
+        Path uniStub = writeUniStub();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(delegateSource, libInput, libOutput, appInput, appOutput, uniStub),
+            List.of("-Apipeline.mapper.fallback.enabled=true"));
+
+        assertTrue(result.success(), "Expected delegated step fallback compilation to succeed: " + result.errorSummary());
+        String warnings = result.messagesOfKind(Diagnostic.Kind.WARNING);
+        assertFalse(warnings.contains("Skipping delegated step 'fallback-embed'"),
+            "Expected delegated step not to be skipped when mapper fallback is enabled: " + warnings);
+    }
+
     private Path writeSource(String fileName, String content) throws IOException {
         Path baseDir = tempDir;
         Matcher matcher = PACKAGE_PATTERN.matcher(content);
@@ -406,6 +471,10 @@ class YamlDrivenStepGenerationTest {
     }
 
     private CompilationResult compile(Path yamlFile, List<Path> sources) throws IOException {
+        return compile(yamlFile, sources, List.of());
+    }
+
+    private CompilationResult compile(Path yamlFile, List<Path> sources, List<String> extraOptions) throws IOException {
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         assertNotNull(compiler, "JavaCompiler should be available");
         DiagnosticCollector<JavaFileObject> diagnostics = new DiagnosticCollector<>();
@@ -415,18 +484,21 @@ class YamlDrivenStepGenerationTest {
         Files.createDirectories(classesDir);
 
         try (StandardJavaFileManager fileManager = compiler.getStandardFileManager(diagnostics, null, null)) {
+            List<String> options = new ArrayList<>(List.of(
+                "-proc:only",
+                "-s", generatedDir.toString(),
+                "-d", classesDir.toString(),
+                "-classpath", System.getProperty("java.class.path"),
+                "-processor", "org.pipelineframework.processor.PipelineStepProcessor",
+                "-Apipeline.config=" + yamlFile
+            ));
+            options.addAll(extraOptions);
+
             JavaCompiler.CompilationTask task = compiler.getTask(
                 null,
                 fileManager,
                 diagnostics,
-                List.of(
-                    "-proc:only",
-                    "-s", generatedDir.toString(),
-                    "-d", classesDir.toString(),
-                    "-classpath", System.getProperty("java.class.path"),
-                    "-processor", "org.pipelineframework.processor.PipelineStepProcessor",
-                    "-Apipeline.config=" + yamlFile
-                ),
+                options,
                 null,
                 fileManager.getJavaFileObjectsFromPaths(sources)
             );

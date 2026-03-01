@@ -29,12 +29,11 @@ import org.pipelineframework.csv.grpc.ProcessSendPaymentRecordSvc;
     componentModel = "jakarta",
     uses = {CommonConverters.class, PaymentRecordMapper.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface AckPaymentSentMapper extends org.pipelineframework.mapper.Mapper<ProcessSendPaymentRecordSvc.AckPaymentSent, AckPaymentSentDto, AckPaymentSent> {
+public interface AckPaymentSentMapper extends org.pipelineframework.mapper.Mapper<AckPaymentSent, ProcessSendPaymentRecordSvc.AckPaymentSent> {
 
   AckPaymentSentMapper INSTANCE = Mappers.getMapper( AckPaymentSentMapper.class );
 
   // Domain ↔ DTO
-  @Override
   @Mapping(target = "id")
   @Mapping(target = "conversationId")
   @Mapping(target = "paymentRecordId")
@@ -43,7 +42,6 @@ public interface AckPaymentSentMapper extends org.pipelineframework.mapper.Mappe
   @Mapping(target = "paymentRecord")
   AckPaymentSentDto toDto(AckPaymentSent domain);
 
-  @Override
   @Mapping(target = "id")
   @Mapping(target = "conversationId")
   @Mapping(target = "paymentRecordId")
@@ -53,7 +51,6 @@ public interface AckPaymentSentMapper extends org.pipelineframework.mapper.Mappe
   AckPaymentSent fromDto(AckPaymentSentDto dto);
 
   // DTO ↔ gRPC
-  @Override
   @Mapping(target = "id", qualifiedByName = "uuidToString")
   @Mapping(target = "conversationId", qualifiedByName = "uuidToString")
   @Mapping(target = "paymentRecordId", qualifiedByName = "uuidToString")
@@ -62,7 +59,6 @@ public interface AckPaymentSentMapper extends org.pipelineframework.mapper.Mappe
   @Mapping(target = "paymentRecord")
   ProcessSendPaymentRecordSvc.AckPaymentSent toGrpc(AckPaymentSentDto dto);
 
-  @Override
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
   @Mapping(target = "conversationId", qualifiedByName = "stringToUUID")
   @Mapping(target = "paymentRecordId", qualifiedByName = "stringToUUID")
@@ -70,4 +66,22 @@ public interface AckPaymentSentMapper extends org.pipelineframework.mapper.Mappe
   @Mapping(target = "message")
   @Mapping(target = "paymentRecord")
   AckPaymentSentDto fromGrpc(ProcessSendPaymentRecordSvc.AckPaymentSent grpc);
+
+  @Override
+  default AckPaymentSent fromExternal(ProcessSendPaymentRecordSvc.AckPaymentSent external) {
+    return fromDto(fromGrpc(external));
+  }
+
+  @Override
+  default ProcessSendPaymentRecordSvc.AckPaymentSent toExternal(AckPaymentSent domain) {
+    return toGrpc(toDto(domain));
+  }
+
+  default ProcessSendPaymentRecordSvc.AckPaymentSent toDtoToGrpc(AckPaymentSent domain) {
+    return toExternal(domain);
+  }
+
+  default AckPaymentSent fromGrpcFromDto(ProcessSendPaymentRecordSvc.AckPaymentSent grpc) {
+    return fromExternal(grpc);
+  }
 }

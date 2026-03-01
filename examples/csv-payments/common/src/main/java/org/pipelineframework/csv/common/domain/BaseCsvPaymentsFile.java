@@ -49,11 +49,10 @@ public abstract class BaseCsvPaymentsFile extends BaseEntity implements Serializ
 
   public BaseCsvPaymentsFile(File file) {
     super();
-
-    setCsvFile(file);
-    setFilepath(Path.of(file.getPath()));
-    setCsvFolderPath(Path.of(file.getParent()));
-    setCsvFolder(new CsvFolder(getCsvFolderPath()));
+    this.csvFile = file;
+    this.filepath = Path.of(file.getPath());
+    this.csvFolderPath = Path.of(file.getParent());
+    this.csvFolder = new CsvFolder(this.csvFolderPath);
   }
 
   @Override
@@ -63,6 +62,6 @@ public abstract class BaseCsvPaymentsFile extends BaseEntity implements Serializ
 
   @Override
   public int hashCode() {
-    return Objects.hash(getFilepath());
+    return Objects.hash(filepath);
   }
 }

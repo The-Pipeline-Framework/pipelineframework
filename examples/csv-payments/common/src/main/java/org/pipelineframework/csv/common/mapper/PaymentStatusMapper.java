@@ -29,19 +29,16 @@ import org.pipelineframework.csv.grpc.ProcessAckPaymentSentSvc;
     componentModel = "jakarta",
     uses = {CommonConverters.class, AckPaymentSentMapper.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface PaymentStatusMapper extends org.pipelineframework.mapper.Mapper<ProcessAckPaymentSentSvc.PaymentStatus, PaymentStatusDto, PaymentStatus> {
+public interface PaymentStatusMapper extends org.pipelineframework.mapper.Mapper<PaymentStatus, ProcessAckPaymentSentSvc.PaymentStatus> {
 
   PaymentStatusMapper INSTANCE = Mappers.getMapper( PaymentStatusMapper.class );
 
   // Domain ↔ DTO
-  @Override
   PaymentStatusDto toDto(PaymentStatus entity);
 
-  @Override
   PaymentStatus fromDto(PaymentStatusDto dto);
 
   // DTO ↔ gRPC
-  @Override
   @Mapping(target = "id", qualifiedByName = "uuidToString")
   @Mapping(target = "fee", qualifiedByName = "bigDecimalToString")
   @Mapping(target = "ackPaymentSentId", qualifiedByName = "uuidToString")
@@ -54,10 +51,27 @@ public interface PaymentStatusMapper extends org.pipelineframework.mapper.Mapper
    * @param grpcRequest the gRPC PaymentStatus message to convert
    * @return the DTO representation of the provided gRPC PaymentStatus
    */
-  @Override
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
   @Mapping(target = "fee", qualifiedByName = "stringToBigDecimal")
   @Mapping(target = "ackPaymentSentId", qualifiedByName = "stringToUUID")
   @Mapping(target = "ackPaymentSent")
   PaymentStatusDto fromGrpc(ProcessAckPaymentSentSvc.PaymentStatus grpcRequest);
+
+  @Override
+  default PaymentStatus fromExternal(ProcessAckPaymentSentSvc.PaymentStatus external) {
+    return fromDto(fromGrpc(external));
+  }
+
+  @Override
+  default ProcessAckPaymentSentSvc.PaymentStatus toExternal(PaymentStatus domain) {
+    return toGrpc(toDto(domain));
+  }
+
+  default ProcessAckPaymentSentSvc.PaymentStatus toDtoToGrpc(PaymentStatus domain) {
+    return toExternal(domain);
+  }
+
+  default PaymentStatus fromGrpcFromDto(ProcessAckPaymentSentSvc.PaymentStatus grpc) {
+    return fromExternal(grpc);
+  }
 }

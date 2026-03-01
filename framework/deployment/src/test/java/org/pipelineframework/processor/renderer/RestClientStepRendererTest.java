@@ -132,4 +132,47 @@ class RestClientStepRendererTest {
         String stepSource = Files.readString(clientStep);
         assertTrue(stepSource.contains("CacheReadBypass"));
     }
+
+    @Test
+    void rendersRestClientStepWithoutExplicitMapperWhenDomainTypesArePresent() throws IOException {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("ProcessCrawlSourceService")
+            .servicePackage("org.pipelineframework.search.service")
+            .serviceClassName(ClassName.get(
+                "org.pipelineframework.search.service",
+                "ProcessCrawlSourceService"))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.DEFAULT)
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.search.common.domain", "CrawlRequest"),
+                null,
+                false))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.search.common.domain", "RawDocument"),
+                null,
+                false))
+            .enabledTargets(java.util.Set.of(GenerationTarget.REST_CLIENT_STEP))
+            .build();
+
+        RestBinding binding = new RestBinding(
+            model,
+            "/ProcessCrawlSourceService/remoteProcess");
+
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(Map.of());
+        GenerationContext context = new GenerationContext(
+            processingEnv,
+            tempDir,
+            DeploymentRole.ORCHESTRATOR_CLIENT,
+            java.util.Set.of(),
+            null,
+            null);
+
+        RestClientStepRenderer renderer = new RestClientStepRenderer();
+        renderer.render(binding, context);
+
+        Path clientStep = tempDir.resolve(
+            "org/pipelineframework/search/service/pipeline/ProcessCrawlSourceRestClientStep.java");
+        assertTrue(Files.exists(clientStep));
+    }
 }

@@ -11,21 +11,35 @@ import org.pipelineframework.search.common.dto.ParsedDocumentDto;
     componentModel = "cdi",
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface ParsedDocumentMapper extends org.pipelineframework.mapper.Mapper<org.pipelineframework.search.grpc.ParseDocumentSvc.ParsedDocument, ParsedDocumentDto, ParsedDocument> {
+public interface ParsedDocumentMapper extends org.pipelineframework.mapper.Mapper<ParsedDocument, ParsedDocumentDto> {
 
   ParsedDocumentMapper INSTANCE = Mappers.getMapper( ParsedDocumentMapper.class );
 
   // Domain ↔ DTO
-  @Override
   ParsedDocumentDto toDto(ParsedDocument entity);
 
-  @Override
   ParsedDocument fromDto(ParsedDocumentDto dto);
 
   // DTO ↔ gRPC
-  @Override
   org.pipelineframework.search.grpc.ParseDocumentSvc.ParsedDocument toGrpc(ParsedDocumentDto dto);
 
-  @Override
   ParsedDocumentDto fromGrpc(org.pipelineframework.search.grpc.ParseDocumentSvc.ParsedDocument grpc);
+
+  @Override
+  default ParsedDocument fromExternal(ParsedDocumentDto external) {
+    return fromDto(external);
+  }
+
+  @Override
+  default ParsedDocumentDto toExternal(ParsedDocument domain) {
+    return toDto(domain);
+  }
+
+  default org.pipelineframework.search.grpc.ParseDocumentSvc.ParsedDocument toDtoToGrpc(ParsedDocument domain) {
+    return toGrpc(toDto(domain));
+  }
+
+  default ParsedDocument fromGrpcFromDto(org.pipelineframework.search.grpc.ParseDocumentSvc.ParsedDocument grpc) {
+    return fromDto(fromGrpc(grpc));
+  }
 }

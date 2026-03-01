@@ -29,17 +29,14 @@ import org.pipelineframework.csv.grpc.ProcessPaymentStatusSvc;
     componentModel = "jakarta",
     uses = {CommonConverters.class, PaymentStatusMapper.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface PaymentOutputMapper extends org.pipelineframework.mapper.Mapper<ProcessPaymentStatusSvc.PaymentOutput, PaymentOutputDto, PaymentOutput> {
+public interface PaymentOutputMapper extends org.pipelineframework.mapper.Mapper<PaymentOutput, ProcessPaymentStatusSvc.PaymentOutput> {
 
   PaymentOutputMapper INSTANCE = Mappers.getMapper( PaymentOutputMapper.class );
 
-  @Override
   PaymentOutputDto toDto(PaymentOutput entity);
 
-  @Override
   PaymentOutput fromDto(PaymentOutputDto dto);
 
-  @Override
   @Mapping(target = "id", qualifiedByName = "uuidToString")
   @Mapping(target = "amount", qualifiedByName = "bigDecimalToString")
   @Mapping(target = "currency", qualifiedByName = "currencyToString")
@@ -47,11 +44,28 @@ public interface PaymentOutputMapper extends org.pipelineframework.mapper.Mapper
   @Mapping(target = "paymentStatus")
   ProcessPaymentStatusSvc.PaymentOutput toGrpc(PaymentOutputDto dto);
 
-  @Override
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
   @Mapping(target = "amount", qualifiedByName = "stringToBigDecimal")
   @Mapping(target = "currency", qualifiedByName = "stringToCurrency")
   @Mapping(target = "fee", qualifiedByName = "stringToBigDecimal")
   @Mapping(target = "paymentStatus")
   PaymentOutputDto fromGrpc(ProcessPaymentStatusSvc.PaymentOutput grpc);
+
+  @Override
+  default PaymentOutput fromExternal(ProcessPaymentStatusSvc.PaymentOutput external) {
+    return fromDto(fromGrpc(external));
+  }
+
+  @Override
+  default ProcessPaymentStatusSvc.PaymentOutput toExternal(PaymentOutput domain) {
+    return toGrpc(toDto(domain));
+  }
+
+  default ProcessPaymentStatusSvc.PaymentOutput toDtoToGrpc(PaymentOutput domain) {
+    return toExternal(domain);
+  }
+
+  default PaymentOutput fromGrpcFromDto(ProcessPaymentStatusSvc.PaymentOutput grpc) {
+    return fromExternal(grpc);
+  }
 }

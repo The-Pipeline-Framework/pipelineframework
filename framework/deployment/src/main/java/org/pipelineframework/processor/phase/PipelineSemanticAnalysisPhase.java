@@ -523,7 +523,8 @@ public class PipelineSemanticAnalysisPhase implements PipelineCompilationPhase {
                     String delegateOutputType = delegateOutputDomainType == null ? "absent" : delegateOutputDomainType.toString();
                     boolean inputDiffers = !Objects.equals(stepInputType, delegateInputType);
                     boolean outputDiffers = !Objects.equals(stepOutputType, delegateOutputType);
-                    if (inputDiffers || outputDiffers) {
+                    if ((inputDiffers || outputDiffers)
+                        && model.mapperFallbackMode() != org.pipelineframework.processor.ir.MapperFallbackMode.JACKSON) {
                         messager.printMessage(
                             Diagnostic.Kind.ERROR,
                             "Delegated step '" + model.serviceName()
