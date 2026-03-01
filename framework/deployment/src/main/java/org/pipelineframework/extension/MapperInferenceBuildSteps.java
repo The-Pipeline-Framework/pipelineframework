@@ -26,7 +26,6 @@ import org.jboss.logging.Logger;
 import org.pipelineframework.extension.MapperInferenceEngine.MapperRegistry;
 
 import java.util.Map;
-import java.util.List;
 
 /**
  * Build steps for mapper inference using the Jandex index.
@@ -54,13 +53,11 @@ public class MapperInferenceBuildSteps {
      * Step-specific mapper validation is demand-driven and performed by consumers that know required inbound/outbound pairs.
      *
      * @param combinedIndex the combined Jandex index of application and dependency classes
-     * @param operators optional list of OperatorBuildItem used to derive step definitions; when empty, step definitions are read from resources
      * @param mapperRegistry producer used to emit the resulting MapperRegistryBuildItem
      */
     @BuildStep
     void buildMapperRegistry(
             CombinedIndexBuildItem combinedIndex,
-            List<OperatorBuildItem> operators,
             BuildProducer<MapperRegistryBuildItem> mapperRegistry) {
 
         LOG.debugf("Building mapper registry from Jandex index");
@@ -87,18 +84,6 @@ public class MapperInferenceBuildSteps {
         mapperRegistry.produce(new MapperRegistryBuildItem(
                 registry.pairToMapper(),
                 registry.mapperToPair()));
-    }
-
-    /**
-     * Delegates to the main buildMapperRegistry overload using an empty operator list; provided for unit tests.
-     *
-     * @param combinedIndex the combined Jandex index build item used to locate types
-     * @param mapperRegistry producer to emit the resulting MapperRegistryBuildItem
-     */
-    void buildMapperRegistry(
-            CombinedIndexBuildItem combinedIndex,
-            BuildProducer<MapperRegistryBuildItem> mapperRegistry) {
-        buildMapperRegistry(combinedIndex, List.of(), mapperRegistry);
     }
 
 }

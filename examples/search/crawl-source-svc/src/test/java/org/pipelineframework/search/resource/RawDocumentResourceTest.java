@@ -56,9 +56,11 @@ class RawDocumentResourceTest {
     private static boolean isGeneratedRestResourcePresent() {
         try {
             Class.forName(
-                    "org.pipelineframework.search.crawl_source.service.pipeline.ProcessCrawlSourceResource");
+                    "org.pipelineframework.search.crawl_source.service.pipeline.ProcessCrawlSourceResource",
+                    false,
+                    Thread.currentThread().getContextClassLoader());
             return true;
-        } catch (ClassNotFoundException e) {
+        } catch (ClassNotFoundException | LinkageError e) {
             return false;
         }
     }

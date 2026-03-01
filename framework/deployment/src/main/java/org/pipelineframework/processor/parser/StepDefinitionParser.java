@@ -43,6 +43,12 @@ public class StepDefinitionParser {
 
     private static final Logger LOG = Logger.getLogger(StepDefinitionParser.class);
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
+    /**
+     * Legacy suffix used to resolve short-form internal step types.
+     * For legacy internal steps, {@code input/output: Foo} resolves to
+     * {@code <basePackage> + LEGACY_INTERNAL_PACKAGE_SUFFIX + Foo}.
+     */
+    public static final String DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX = ".common.domain.";
     private static final Set<String> SUPPORTED_STEP_KEYS = Set.of(
         "name",
         "service",
@@ -59,6 +65,7 @@ public class StepDefinitionParser {
         "outputTypeName",
         "outputFields");
     private final BiConsumer<Diagnostic.Kind, String> diagnosticReporter;
+    private final String legacyInternalPackageSuffix;
 
     /**
      * Creates a StepDefinitionParser that uses a no-op diagnostic reporter.
@@ -67,7 +74,7 @@ public class StepDefinitionParser {
      */
     public StepDefinitionParser() {
         this((kind, message) -> {
-        });
+        }, DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX);
     }
 
     /**
@@ -76,8 +83,23 @@ public class StepDefinitionParser {
      * @param diagnosticReporter reporter used to surface parse diagnostics (e.g. via annotation processing Messager)
      */
     public StepDefinitionParser(BiConsumer<Diagnostic.Kind, String> diagnosticReporter) {
+        this(diagnosticReporter, DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX);
+    }
+
+    /**
+     * Creates a StepDefinitionParser with a diagnostic reporter and configurable legacy internal package suffix.
+     *
+     * @param diagnosticReporter reporter used to surface parse diagnostics (e.g. via annotation processing Messager)
+     * @param legacyInternalPackageSuffix suffix used when resolving short-form legacy internal input/output type names
+     */
+    public StepDefinitionParser(
+        BiConsumer<Diagnostic.Kind, String> diagnosticReporter,
+        String legacyInternalPackageSuffix) {
         this.diagnosticReporter = diagnosticReporter == null ? (kind, message) -> {
         } : diagnosticReporter;
+        this.legacyInternalPackageSuffix = isBlank(legacyInternalPackageSuffix)
+            ? DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX
+            : legacyInternalPackageSuffix;
     }
     
     /**
@@ -311,7 +333,7 @@ public class StepDefinitionParser {
                 capitalizeNext = true;
             }
         }
-        if (simpleName.length() == 0) {
+        if (simpleName.isEmpty()) {
             return null;
         }
         String candidate = simpleName.toString();
@@ -376,7 +398,7 @@ public class StepDefinitionParser {
         }
         String candidate = typeName;
         if (legacyInternalStep && !typeName.contains(".") && !isBlank(basePackage)) {
-            candidate = basePackage + ".common.domain." + typeName;
+            candidate = basePackage + legacyInternalPackageSuffix + typeName;
         }
         ClassName parsed = parseClassName(candidate);
         if (parsed == null) {

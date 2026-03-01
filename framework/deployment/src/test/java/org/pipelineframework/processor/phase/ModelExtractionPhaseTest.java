@@ -18,7 +18,6 @@ package org.pipelineframework.processor.phase;
 
 import java.util.List;
 import java.util.Set;
-import java.lang.reflect.Method;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
@@ -281,13 +280,7 @@ class ModelExtractionPhaseTest {
             StreamingShape.UNARY_UNARY
         );
 
-        Method method = ModelExtractionPhase.class.getDeclaredMethod(
-            "createCrossModuleInternalModel",
-            StepDefinition.class,
-            PipelineCompilationContext.class);
-        method.setAccessible(true);
-
-        PipelineStepModel model = (PipelineStepModel) method.invoke(phase, stepDefinition, context);
+        PipelineStepModel model = phase.createCrossModuleInternalModel(stepDefinition, context);
 
         assertNotNull(model);
         assertEquals(DeploymentRole.ORCHESTRATOR_CLIENT, model.deploymentRole());

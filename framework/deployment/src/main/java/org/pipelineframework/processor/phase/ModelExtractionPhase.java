@@ -227,7 +227,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         };
     }
 
-    private PipelineStepModel createCrossModuleInternalModel(
+    PipelineStepModel createCrossModuleInternalModel(
             org.pipelineframework.processor.ir.StepDefinition stepDef,
             PipelineCompilationContext ctx) {
         if (stepDef.inputType() == null || stepDef.outputType() == null) {

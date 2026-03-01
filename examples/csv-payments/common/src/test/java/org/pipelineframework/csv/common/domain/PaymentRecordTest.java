@@ -196,13 +196,7 @@ class PaymentRecordTest {
 
         // When
         int hashCode = record.hashCode();
-        int expectedHashCode =
-                java.util.Objects.hash(
-                        id,
-                        record.getCsvId(),
-                        record.getRecipient(),
-                        record.getAmount(),
-                        record.getCurrency());
+        int expectedHashCode = java.util.Objects.hash(id);
 
         // Then
         assertEquals(expectedHashCode, hashCode);

@@ -56,10 +56,20 @@ public interface CsvPaymentsOutputFileMapper extends org.pipelineframework.mappe
     return toGrpc(toDto(domain));
   }
 
+  /**
+   * @deprecated use {@link #toExternal(CsvPaymentsOutputFile)}. Transitional bridge method retained for
+   *             compatibility and scheduled for removal in a future major release.
+   */
+  @Deprecated(since = "26.2.5", forRemoval = true)
   default ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile toDtoToGrpc(CsvPaymentsOutputFile domain) {
     return toExternal(domain);
   }
 
+  /**
+   * @deprecated use {@link #fromExternal(ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile)}. Transitional bridge
+   *             method retained for compatibility and scheduled for removal in a future major release.
+   */
+  @Deprecated(since = "26.2.5", forRemoval = true)
   default CsvPaymentsOutputFile fromGrpcFromDto(ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile grpc) {
     return fromExternal(grpc);
   }

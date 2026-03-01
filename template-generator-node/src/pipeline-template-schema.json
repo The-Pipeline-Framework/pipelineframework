@@ -171,7 +171,7 @@
               "mapperFallback": {
                 "type": "string",
                 "description": "Optional mapper fallback strategy used when no operator mapper matches. Effective only when global pipeline.mapper.fallback.enabled=true.",
-                "enum": ["NONE", "JACKSON"]
+                "enum": ["NONE", "JACKSON", "none", "jackson"]
               }
             },
             "oneOf": [

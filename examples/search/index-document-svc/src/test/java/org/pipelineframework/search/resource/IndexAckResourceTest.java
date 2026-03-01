@@ -57,7 +57,9 @@ class IndexAckResourceTest {
     private static boolean isGeneratedRestResourcePresent() {
         try {
             Class.forName(
-                    "org.pipelineframework.search.index_document.service.pipeline.ProcessIndexDocumentResource");
+                    "org.pipelineframework.search.index_document.service.pipeline.ProcessIndexDocumentResource",
+                    false,
+                    Thread.currentThread().getContextClassLoader());
             return true;
         } catch (ClassNotFoundException e) {
             return false;

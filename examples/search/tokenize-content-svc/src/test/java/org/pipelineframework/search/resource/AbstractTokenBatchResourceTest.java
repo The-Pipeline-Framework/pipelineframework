@@ -61,7 +61,9 @@ abstract class AbstractTokenBatchResourceTest {
     private static boolean isGeneratedRestResourcePresent() {
         try {
             Class.forName(
-                    "org.pipelineframework.search.tokenize_content.service.pipeline.ProcessTokenizeContentResource");
+                    "org.pipelineframework.search.tokenize_content.service.pipeline.ProcessTokenizeContentResource",
+                    false,
+                    Thread.currentThread().getContextClassLoader());
             return true;
         } catch (ClassNotFoundException e) {
             return false;

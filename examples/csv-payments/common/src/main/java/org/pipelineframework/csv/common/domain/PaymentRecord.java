@@ -76,6 +76,6 @@ public class PaymentRecord extends BaseEntity implements Serializable {
 
   @Override
   public int hashCode() {
-    return Objects.hash(id, csvId, recipient, amount, currency);
+    return Objects.hash(id);
   }
 }
