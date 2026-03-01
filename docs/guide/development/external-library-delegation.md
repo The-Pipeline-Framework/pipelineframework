@@ -82,6 +82,13 @@ steps:
     input: com.app.domain.TextChunk
     output: com.app.domain.Embedding
     operatorMapper: com.app.mapper.TextEmbeddingMapper
+
+  # Delegated step with mapper fallback (opt-in)
+  - name: enrich-profile
+    operator: com.example.profile.service.ProfileService
+    input: com.app.domain.ProfileInput
+    output: com.app.domain.ProfileResult
+    mapperFallback: JACKSON
     
   # Delegated step without operator mapper (uses operator types directly)
   - name: send-email
@@ -227,6 +234,8 @@ At compile time, TPF validates:
 | YAML references operator not implementing ReactiveService | Fail |
 | Operator without transport mappers | Fails in strict validation mode and may be a warning in relaxed mode, depending on processor settings and mapper discovery |
 | Missing operatorMapper when types differ | Fail |
+| Missing operatorMapper when types differ + `mapperFallback: JACKSON` + `-Apipeline.mapper.fallback.enabled=true` | OK (Jackson fallback is generated) |
+| `mapperFallback: JACKSON` but global fallback option disabled | Fail |
 | Annotated service not referenced in YAML | No generation (warning if `pipeline.warnUnreferencedSteps=true`) |
 
 ## Processing Options
@@ -237,6 +246,7 @@ The following annotation processor options control YAML-driven generation:
 |--------|---------|-------------|
 | `pipeline.config` | (none) | Path to the pipeline YAML configuration file |
 | `pipeline.warnUnreferencedSteps` | `true` | Whether to warn about @PipelineStep classes not referenced in YAML |
+| `pipeline.mapper.fallback.enabled` | `false` | Global gate for delegated mapper fallback; per-step `mapperFallback: JACKSON` is effective only when this is true |
 
 Example Maven configuration:
 
@@ -255,6 +265,7 @@ Example Maven configuration:
         <compilerArgs>
             <arg>-Apipeline.config=${project.basedir}/src/main/resources/pipeline.yaml</arg>
             <arg>-Apipeline.warnUnreferencedSteps=true</arg>
+            <arg>-Apipeline.mapper.fallback.enabled=true</arg>
         </compilerArgs>
     </configuration>
 </plugin>

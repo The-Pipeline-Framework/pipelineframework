@@ -20,6 +20,7 @@ import io.smallrye.common.annotation.Experimental;
 import org.jboss.jandex.ClassInfo;
 import org.jboss.jandex.DotName;
 import org.jboss.jandex.IndexView;
+import org.jboss.jandex.MethodInfo;
 import org.jboss.jandex.ParameterizedType;
 import org.jboss.jandex.Type;
 
@@ -52,8 +53,8 @@ import java.util.Set;
  *   <li>Scan all known implementors of {@code org.pipelineframework.mapper.Mapper} via Jandex</li>
  *   <li>Extract generic type parameters from Mapper&lt;Domain, External&gt;</li>
  *   <li>Validate: no wildcards, no raw types, no erased generics</li>
- *   <li>Build registry: Domain type → Mapper implementation</li>
- *   <li>Validate uniqueness: exactly one mapper per domain type</li>
+ *   <li>Build registry: (Domain type, External type) pair → Mapper implementation</li>
+ *   <li>Validate uniqueness: exactly one mapper per pair</li>
  * </ol>
  */
 @Experimental("Mapper inference based on Jandex index")
@@ -117,14 +118,14 @@ public class MapperInferenceEngine {
     }
 
     /**
-     * Builds an immutable registry that maps domain types to their unique Mapper implementations discovered in the Jandex index.
+     * Builds an immutable registry that maps (domain, external) pairs to unique Mapper implementations discovered in the Jandex index.
      *
      * Scans all implementors of the Mapper interface, extracts and validates each Mapper's generic signature, and records
-     * a one-to-one mapping from domain type to mapper and back. Validation enforces that generic parameters are present
-     * and not wildcards or erased, and that exactly one mapper exists per domain type.
+     * a one-to-one mapping from (domain, external) pair to mapper and back. Validation enforces that generic parameters are
+     * present and not wildcards or erased, and that exactly one mapper exists per pair.
      *
-     * @return a MapperRegistry mapping domain type names (DotName) to their Mapper ClassInfo and the inverse mapping
-     * @throws IllegalStateException if any validation errors are encountered (for example: missing/erased/wildcard generic parameters or duplicate mappers); the exception message aggregates all validation errors
+     * @return a MapperRegistry mapping (domain, external) pair keys to Mapper ClassInfo and inverse mappings
+     * @throws IllegalStateException if any validation errors are encountered (for example: missing/erased/wildcard generic parameters or duplicate mappers for the same pair); the exception message aggregates all validation errors
      */
     public MapperRegistry buildRegistry() {
         // Get all classes implementing Mapper interface
@@ -135,14 +136,19 @@ public class MapperInferenceEngine {
             return new MapperRegistry(Map.of(), Map.of());
         }
 
-        Map<DotName, ClassInfo> domainToMapper = new HashMap<>();
-        Map<ClassInfo, DotName> mapperToDomain = new HashMap<>();
+        Map<MapperPairKey, ClassInfo> pairToMapper = new HashMap<>();
+        Map<ClassInfo, MapperPairKey> mapperToPair = new HashMap<>();
         List<String> validationErrors = new ArrayList<>();
 
         for (ClassInfo mapper : mapperImplementors) {
             // Extract generic signature from Mapper<Domain, External>
             MapperGenericSignature signature = extractMapperGenericSignature(mapper);
             if (signature == null) {
+                if (isGeneratedMapperImplementation(mapper)) {
+                    // MapStruct/bytecode-generated implementations may erase generic signature data in Jandex.
+                    // Keep strict validation for authored mappers, but do not fail build on generated impls.
+                    continue;
+                }
                 validationErrors.add("Mapper " + mapper.name() + " has invalid/erased generic parameters");
                 continue;
             }
@@ -153,18 +159,26 @@ public class MapperInferenceEngine {
                 continue;
             }
 
-            DotName domainType = signature.domainType().name();
+            MapperPairKey pairKey = new MapperPairKey(
+                signature.domainType().name(),
+                signature.externalType().name());
 
             // Check for duplicates - FAIL FAST on ambiguity
-            if (domainToMapper.containsKey(domainType)) {
-                ClassInfo existingMapper = domainToMapper.get(domainType);
-                validationErrors.add(String.format(
-                    "Duplicate mapper found for domain type '%s': %s and %s. " +
-                    "PER REQUIREMENTS: Exactly one mapper per domain type required.",
-                    domainType, existingMapper.name(), mapper.name()));
+            if (pairToMapper.containsKey(pairKey)) {
+                ClassInfo existingMapper = pairToMapper.get(pairKey);
+                ClassInfo preferred = preferConcreteMapper(existingMapper, mapper);
+                if (preferred == null) {
+                    validationErrors.add(String.format(
+                        "Duplicate mapper found for pair (%s, %s): %s and %s. " +
+                        "PER REQUIREMENTS: Exactly one mapper per (domain, external) pair required.",
+                        pairKey.domainType(), pairKey.externalType(), existingMapper.name(), mapper.name()));
+                } else {
+                    pairToMapper.put(pairKey, preferred);
+                    mapperToPair.put(preferred, pairKey);
+                }
             } else {
-                domainToMapper.put(domainType, mapper);
-                mapperToDomain.put(mapper, domainType);
+                pairToMapper.put(pairKey, mapper);
+                mapperToPair.put(mapper, pairKey);
             }
         }
 
@@ -174,7 +188,7 @@ public class MapperInferenceEngine {
                 String.join("\n", validationErrors));
         }
 
-        return new MapperRegistry(domainToMapper, mapperToDomain);
+        return new MapperRegistry(pairToMapper, mapperToPair);
     }
 
     /**
@@ -249,7 +263,88 @@ public class MapperInferenceEngine {
             }
         }
 
-        return resolveMapperSignature(classInfo.superClassType(), visited);
+        MapperGenericSignature fromSuper = resolveMapperSignature(classInfo.superClassType(), visited);
+        if (fromSuper != null) {
+            return fromSuper;
+        }
+
+        // Fallback: infer Mapper<Domain, External> from concrete bridge/default methods.
+        return inferSignatureFromMethods(classInfo);
+    }
+
+    /**
+     * Infer a mapper signature from concrete/default method signatures when generic supertype
+     * metadata is erased by tooling-generated classes.
+     */
+    private MapperGenericSignature inferSignatureFromMethods(ClassInfo classInfo) {
+        MethodInfo fromExternal = null;
+        MethodInfo toExternal = null;
+
+        for (MethodInfo method : classInfo.methods()) {
+            if (method.isConstructor() || method.isStaticInitializer()) {
+                continue;
+            }
+            if ("fromExternal".equals(method.name()) && method.parametersCount() == 1) {
+                fromExternal = method;
+            } else if ("toExternal".equals(method.name()) && method.parametersCount() == 1) {
+                toExternal = method;
+            }
+        }
+
+        if (fromExternal == null || toExternal == null) {
+            return null;
+        }
+
+        Type inferredDomain = fromExternal.returnType();
+        Type inferredExternal = fromExternal.parameterType(0);
+        Type toExternalDomain = toExternal.parameterType(0);
+        Type toExternalExternal = toExternal.returnType();
+
+        if (isInvalidMapperMethodType(inferredDomain)
+                || isInvalidMapperMethodType(inferredExternal)
+                || isInvalidMapperMethodType(toExternalDomain)
+                || isInvalidMapperMethodType(toExternalExternal)) {
+            return null;
+        }
+
+        if (!sameTypeName(inferredDomain, toExternalDomain)
+                || !sameTypeName(inferredExternal, toExternalExternal)) {
+            return null;
+        }
+
+        return new MapperGenericSignature(inferredDomain, inferredExternal);
+    }
+
+    private boolean isInvalidMapperMethodType(Type type) {
+        return type == null
+                || type.kind() == Type.Kind.VOID
+                || type.kind() == Type.Kind.TYPE_VARIABLE
+                || type.kind() == Type.Kind.WILDCARD_TYPE;
+    }
+
+    private boolean sameTypeName(Type left, Type right) {
+        return left != null
+                && right != null
+                && left.name() != null
+                && left.name().equals(right.name());
+    }
+
+    private ClassInfo preferConcreteMapper(ClassInfo first, ClassInfo second) {
+        if (first == null || second == null) {
+            return null;
+        }
+        if (first.isInterface() && !second.isInterface()) {
+            return second;
+        }
+        if (!first.isInterface() && second.isInterface()) {
+            return first;
+        }
+        return null;
+    }
+
+    private boolean isGeneratedMapperImplementation(ClassInfo mapper) {
+        String simpleName = mapper.name().withoutPackagePrefix();
+        return simpleName.endsWith("Impl") || simpleName.contains("$$");
     }
 
     /**
@@ -320,18 +415,27 @@ public class MapperInferenceEngine {
     }
 
     /**
+     * Pair key representing one mapper binding between a domain type and an external type.
+     *
+     * @param domainType internal/domain type
+     * @param externalType external representation type
+     */
+    public record MapperPairKey(DotName domainType, DotName externalType) {
+    }
+
+    /**
      * Immutable mapper registry built from Jandex index.
      */
     public record MapperRegistry(
-        Map<DotName, ClassInfo> domainToMapper,
-        Map<ClassInfo, DotName> mapperToDomain
+        Map<MapperPairKey, ClassInfo> pairToMapper,
+        Map<ClassInfo, MapperPairKey> mapperToPair
     ) {
         /**
          * Creates a new mapper registry.
          */
         public MapperRegistry {
-            domainToMapper = Map.copyOf(domainToMapper);
-            mapperToDomain = Map.copyOf(mapperToDomain);
+            pairToMapper = Map.copyOf(pairToMapper);
+            mapperToPair = Map.copyOf(mapperToPair);
         }
     }
 }

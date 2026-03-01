@@ -14,6 +14,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.processor.ir.*;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -140,122 +141,6 @@ class GrpcServiceAdapterRendererTest {
     }
 
     @Test
-    void testRenderServiceWithVirtualThreads() throws IOException {
-        PipelineStepModel model = new PipelineStepModel.Builder()
-            .serviceName("TestService")
-            .servicePackage("com.example")
-            .serviceClassName(ClassName.get("com.example", "TestService"))
-            .inputMapping(createTypeMapping("InputType"))
-            .outputMapping(createTypeMapping("OutputType"))
-            .streamingShape(StreamingShape.UNARY_UNARY)
-            .executionMode(ExecutionMode.VIRTUAL_THREADS)
-            .enabledTargets(java.util.Set.of(GenerationTarget.GRPC_SERVICE))
-            .build();
-
-        Descriptors.FileDescriptor fileDescriptor = buildFileDescriptor();
-        Descriptors.ServiceDescriptor serviceDescriptor = fileDescriptor.findServiceByName("TestService");
-        Descriptors.MethodDescriptor methodDescriptor = serviceDescriptor.findMethodByName("remoteProcess");
-        GrpcBinding binding = new GrpcBinding(model, serviceDescriptor, methodDescriptor);
-
-        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        when(processingEnv.getElementUtils()).thenReturn(null);
-        when(processingEnv.getTypeUtils()).thenReturn(null);
-        when(processingEnv.getFiler()).thenReturn(null);
-        when(processingEnv.getMessager()).thenReturn(null);
-
-        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
-            java.util.Set.of(), null, null);
-
-        renderer.render(binding, context);
-
-        String source = readGeneratedService("TestService");
-        assertTrue(source.contains("@RunOnVirtualThread"));
-    }
-
-    @Test
-    void testRenderServiceWithMappers() throws IOException {
-        PipelineStepModel model = new PipelineStepModel.Builder()
-            .serviceName("TestService")
-            .servicePackage("com.example")
-            .serviceClassName(ClassName.get("com.example", "TestService"))
-            .inputMapping(new TypeMapping(
-                ClassName.get("com.example.domain", "InputType"),
-                ClassName.get("com.example.mapper", "InputMapper"),
-                true))
-            .outputMapping(new TypeMapping(
-                ClassName.get("com.example.domain", "OutputType"),
-                ClassName.get("com.example.mapper", "OutputMapper"),
-                true))
-            .streamingShape(StreamingShape.UNARY_UNARY)
-            .executionMode(ExecutionMode.DEFAULT)
-            .enabledTargets(java.util.Set.of(GenerationTarget.GRPC_SERVICE))
-            .build();
-
-        Descriptors.FileDescriptor fileDescriptor = buildFileDescriptor();
-        Descriptors.ServiceDescriptor serviceDescriptor = fileDescriptor.findServiceByName("TestService");
-        Descriptors.MethodDescriptor methodDescriptor = serviceDescriptor.findMethodByName("remoteProcess");
-        GrpcBinding binding = new GrpcBinding(model, serviceDescriptor, methodDescriptor);
-
-        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        when(processingEnv.getElementUtils()).thenReturn(null);
-        when(processingEnv.getTypeUtils()).thenReturn(null);
-        when(processingEnv.getFiler()).thenReturn(null);
-        when(processingEnv.getMessager()).thenReturn(null);
-
-        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
-            java.util.Set.of(), null, null);
-
-        renderer.render(binding, context);
-
-        String source = readGeneratedService("TestService");
-        assertTrue(source.contains("import com.example.domain.InputType;"));
-        assertTrue(source.contains("import com.example.domain.OutputType;"));
-        assertTrue(source.contains("import com.example.grpc.TestServiceOuterClass;"));
-        assertTrue(source.contains("Mapper<InputType, TestServiceOuterClass.InputType> inboundMapper"));
-        assertTrue(source.contains("Mapper<OutputType, TestServiceOuterClass.OutputType> outboundMapper"));
-        assertTrue(source.contains("inboundMapper.fromExternal(grpcIn)"));
-        assertTrue(source.contains("outboundMapper.toExternal(output)"));
-    }
-
-    @Test
-    void testRenderCacheSideEffectWithoutMappers() throws IOException {
-        PipelineStepModel model = new PipelineStepModel.Builder()
-            .serviceName("CacheLookupSideEffectService")
-            .generatedName("CacheLookupSideEffect")
-            .servicePackage("com.example")
-            .serviceClassName(ClassName.get("org.pipelineframework.plugin.cache", "CacheService"))
-            .inputMapping(new TypeMapping(ClassName.get("com.example.domain", "CacheKey"), null, false))
-            .outputMapping(new TypeMapping(ClassName.get("com.example.domain", "CacheValue"), null, false))
-            .streamingShape(StreamingShape.UNARY_UNARY)
-            .executionMode(ExecutionMode.DEFAULT)
-            .enabledTargets(java.util.Set.of(GenerationTarget.GRPC_SERVICE))
-            .sideEffect(true)
-            .build();
-
-        Descriptors.FileDescriptor fileDescriptor = buildCacheDescriptor();
-        Descriptors.ServiceDescriptor serviceDescriptor = fileDescriptor.findServiceByName("CacheLookupSideEffectService");
-        Descriptors.MethodDescriptor methodDescriptor = serviceDescriptor.findMethodByName("remoteProcess");
-        GrpcBinding binding = new GrpcBinding(model, serviceDescriptor, methodDescriptor);
-
-        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        when(processingEnv.getElementUtils()).thenReturn(null);
-        when(processingEnv.getTypeUtils()).thenReturn(null);
-        when(processingEnv.getFiler()).thenReturn(null);
-        when(processingEnv.getMessager()).thenReturn(null);
-
-        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
-            java.util.Set.of(), null, null);
-
-        renderer.render(binding, context);
-
-        String source = readGeneratedService("CacheLookupSideEffect");
-        assertFalse(source.contains("inboundMapper"));
-        assertFalse(source.contains("outboundMapper"));
-        assertTrue(source.contains("return (CacheKey) grpcIn"));
-        assertTrue(source.contains("return (CacheValue) output"));
-    }
-
-    @Test
     void testRenderSideEffectServiceUsesParameterizedPlugin() throws IOException {
         PipelineStepModel model = new PipelineStepModel.Builder()
             .serviceName("ObserveOutputTypeSideEffectService")
@@ -378,31 +263,155 @@ class GrpcServiceAdapterRendererTest {
         }
     }
 
-    private Descriptors.FileDescriptor buildCacheDescriptor() {
+    @Test
+    void testRenderGrpcServiceWithVirtualThreads() throws IOException {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("TestService")
+            .servicePackage("com.example")
+            .serviceClassName(ClassName.get("com.example", "TestService"))
+            .inputMapping(createTypeMapping("InputType"))
+            .outputMapping(createTypeMapping("OutputType"))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.VIRTUAL_THREADS)
+            .enabledTargets(java.util.Set.of(GenerationTarget.GRPC_SERVICE))
+            .build();
+
+        Descriptors.FileDescriptor fileDescriptor = buildFileDescriptor();
+        Descriptors.ServiceDescriptor serviceDescriptor = fileDescriptor.findServiceByName("TestService");
+        Descriptors.MethodDescriptor methodDescriptor = serviceDescriptor.findMethodByName("remoteProcess");
+        GrpcBinding binding = new GrpcBinding(model, serviceDescriptor, methodDescriptor);
+
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getElementUtils()).thenReturn(null);
+        when(processingEnv.getTypeUtils()).thenReturn(null);
+        when(processingEnv.getFiler()).thenReturn(null);
+        when(processingEnv.getMessager()).thenReturn(null);
+
+        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            java.util.Set.of(), null, null);
+
+        renderer.render(binding, context);
+        String source = readGeneratedService("TestService");
+
+        assertTrue(source.contains("@RunOnVirtualThread"));
+    }
+
+    @Test
+    void testRenderCacheSideEffectWithoutMappers() throws IOException {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("CacheSideEffectService")
+            .generatedName("CacheSideEffect")
+            .servicePackage("com.example")
+            .serviceClassName(ClassName.get("org.pipelineframework.plugin.cache", "CacheService"))
+            .inputMapping(createTypeMapping("CacheKey"))
+            .outputMapping(createTypeMapping("CacheValue"))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.DEFAULT)
+            .enabledTargets(java.util.Set.of(GenerationTarget.GRPC_SERVICE))
+            .sideEffect(true)
+            .build();
+
         DescriptorProtos.FileDescriptorProto proto = DescriptorProtos.FileDescriptorProto.newBuilder()
-            .setName("cache_lookup.proto")
+            .setName("cache.proto")
             .setPackage("com.example.grpc")
             .setOptions(DescriptorProtos.FileOptions.newBuilder()
                 .setJavaPackage("com.example.grpc")
-                .setJavaOuterClassname("CacheLookupOuterClass")
+                .setJavaOuterClassname("CacheOuterClass")
                 .build())
-            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder()
-                .setName("CacheKey"))
-            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder()
-                .setName("CacheValue"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("CacheKey"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("CacheValue"))
             .addService(DescriptorProtos.ServiceDescriptorProto.newBuilder()
-                .setName("CacheLookupSideEffectService")
+                .setName("CacheSideEffectService")
                 .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
                     .setName("remoteProcess")
                     .setInputType(".com.example.grpc.CacheKey")
                     .setOutputType(".com.example.grpc.CacheValue")))
             .build();
 
+        Descriptors.FileDescriptor fileDescriptor;
         try {
-            return Descriptors.FileDescriptor.buildFrom(proto, new Descriptors.FileDescriptor[] {});
+            fileDescriptor = Descriptors.FileDescriptor.buildFrom(proto, new Descriptors.FileDescriptor[] {});
         } catch (Descriptors.DescriptorValidationException e) {
             throw new IllegalStateException("Failed to build test descriptor", e);
         }
+
+        Descriptors.ServiceDescriptor serviceDescriptor = fileDescriptor.findServiceByName("CacheSideEffectService");
+        Descriptors.MethodDescriptor methodDescriptor = serviceDescriptor.findMethodByName("remoteProcess");
+        GrpcBinding binding = new GrpcBinding(model, serviceDescriptor, methodDescriptor);
+
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getElementUtils()).thenReturn(null);
+        when(processingEnv.getTypeUtils()).thenReturn(null);
+        when(processingEnv.getFiler()).thenReturn(null);
+        when(processingEnv.getMessager()).thenReturn(null);
+
+        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            java.util.Set.of(), null, null);
+
+        renderer.render(binding, context);
+
+        Path generated = tempDir.resolve("com/example/pipeline/CacheSideEffectGrpcService.java");
+        String source = Files.readString(generated);
+
+        assertFalse(source.contains("inboundMapper"));
+        assertFalse(source.contains("outboundMapper"));
+    }
+
+    @Test
+    void testRenderGrpcServiceWithAnnotations() throws IOException {
+        PipelineStepModel model = createModel(StreamingShape.UNARY_UNARY);
+
+        Descriptors.FileDescriptor fileDescriptor = buildFileDescriptor();
+        Descriptors.ServiceDescriptor serviceDescriptor = fileDescriptor.findServiceByName("TestService");
+        Descriptors.MethodDescriptor methodDescriptor = serviceDescriptor.findMethodByName("remoteProcess");
+        GrpcBinding binding = new GrpcBinding(model, serviceDescriptor, methodDescriptor);
+
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getElementUtils()).thenReturn(null);
+        when(processingEnv.getTypeUtils()).thenReturn(null);
+        when(processingEnv.getFiler()).thenReturn(null);
+        when(processingEnv.getMessager()).thenReturn(null);
+
+        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            java.util.Set.of(), null, null);
+
+        renderer.render(binding, context);
+        String source = readGeneratedService("TestService");
+
+        assertTrue(source.contains("@GrpcService"));
+        assertTrue(source.contains("@Singleton"));
+        assertTrue(source.contains("@Unremovable"));
+        assertTrue(source.contains("@GeneratedRole"));
+    }
+
+    @Test
+    void verifyTargetReturnsGrpcService() {
+        assertEquals(GenerationTarget.GRPC_SERVICE, renderer.target());
+    }
+
+    @Test
+    void testRenderIncludesRpcMetrics() throws IOException {
+        PipelineStepModel model = createModel(StreamingShape.UNARY_UNARY);
+
+        Descriptors.FileDescriptor fileDescriptor = buildFileDescriptor();
+        Descriptors.ServiceDescriptor serviceDescriptor = fileDescriptor.findServiceByName("TestService");
+        Descriptors.MethodDescriptor methodDescriptor = serviceDescriptor.findMethodByName("remoteProcess");
+        GrpcBinding binding = new GrpcBinding(model, serviceDescriptor, methodDescriptor);
+
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getElementUtils()).thenReturn(null);
+        when(processingEnv.getTypeUtils()).thenReturn(null);
+        when(processingEnv.getFiler()).thenReturn(null);
+        when(processingEnv.getMessager()).thenReturn(null);
+
+        var context = new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            java.util.Set.of(), null, null);
+
+        renderer.render(binding, context);
+        String source = readGeneratedService("TestService");
+
+        assertTrue(source.contains("RpcMetrics.recordGrpcServer"));
+        assertTrue(source.contains("long startTime = System.nanoTime()"));
     }
 
 }

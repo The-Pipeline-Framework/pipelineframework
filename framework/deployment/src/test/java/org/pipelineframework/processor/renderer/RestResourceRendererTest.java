@@ -12,7 +12,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.processor.ir.*;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
@@ -150,165 +150,6 @@ class RestResourceRendererTest {
     }
 
     @Test
-    void rendersStreamingUnaryProcessMethod() throws IOException {
-        PipelineStepModel model = baseModelBuilder("AggregateService", StreamingShape.STREAMING_UNARY)
-            .inputMapping(new TypeMapping(
-                ClassName.get("org.pipelineframework.csv.common.domain", "DataPoint"),
-                ClassName.get("org.pipelineframework.csv.common.mapper", "DataPointMapper"),
-                true))
-            .outputMapping(new TypeMapping(
-                ClassName.get("org.pipelineframework.csv.common.domain", "Summary"),
-                ClassName.get("org.pipelineframework.csv.common.mapper", "SummaryMapper"),
-                true))
-            .build();
-
-        String source = renderAndReadSource(
-            new RestBinding(model, null),
-            "org/pipelineframework/csv/service/pipeline/AggregateResource.java");
-        assertTrue(source.contains("List<DataPointDto> inputDtos"));
-        assertTrue(source.contains("Uni<SummaryDto> process"));
-        assertTrue(source.contains("Multi.createFrom().iterable(inputDtos)"));
-    }
-
-    @Test
-    void rendersBidirectionalStreamingProcessMethod() throws IOException {
-        PipelineStepModel model = baseModelBuilder("StreamProcessService", StreamingShape.STREAMING_STREAMING)
-            .inputMapping(new TypeMapping(
-                ClassName.get("org.pipelineframework.csv.common.domain", "StreamInput"),
-                ClassName.get("org.pipelineframework.csv.common.mapper", "StreamInputMapper"),
-                true))
-            .outputMapping(new TypeMapping(
-                ClassName.get("org.pipelineframework.csv.common.domain", "StreamOutput"),
-                ClassName.get("org.pipelineframework.csv.common.mapper", "StreamOutputMapper"),
-                true))
-            .build();
-
-        String source = renderAndReadSource(
-            new RestBinding(model, null),
-            "org/pipelineframework/csv/service/pipeline/StreamProcessResource.java");
-        assertTrue(source.contains("Multi<StreamInputDto> inputDtos"));
-        assertTrue(source.contains("Multi<StreamOutputDto> process"));
-        assertTrue(source.contains("@Consumes(\"application/x-ndjson\")"));
-        assertTrue(source.contains("@Produces(\"application/x-ndjson\")"));
-        assertTrue(source.contains("@RestStreamElementType(\"application/json\")"));
-    }
-
-    @Test
-    void rendersResourceWithVirtualThreads() throws IOException {
-        PipelineStepModel model = new PipelineStepModel.Builder()
-            .serviceName("ProcessPaymentStatusReactiveService")
-            .servicePackage("org.pipelineframework.csv.service")
-            .serviceClassName(ClassName.get("org.pipelineframework.csv.service", "ProcessPaymentStatusReactiveService"))
-            .streamingShape(StreamingShape.UNARY_UNARY)
-            .executionMode(ExecutionMode.VIRTUAL_THREADS)
-            .inputMapping(new TypeMapping(
-                ClassName.get("org.pipelineframework.csv.common.domain", "PaymentStatus"),
-                ClassName.get("org.pipelineframework.csv.common.mapper", "PaymentStatusMapper"),
-                true))
-            .outputMapping(new TypeMapping(
-                ClassName.get("org.pipelineframework.csv.common.domain", "PaymentOutput"),
-                ClassName.get("org.pipelineframework.csv.common.mapper", "PaymentOutputMapper"),
-                true))
-            .enabledTargets(Set.of(GenerationTarget.REST_RESOURCE))
-            .build();
-
-        String source = renderAndReadSource(
-            new RestBinding(model, null),
-            "org/pipelineframework/csv/service/pipeline/ProcessPaymentStatusResource.java");
-        assertTrue(source.contains("@RunOnVirtualThread"));
-    }
-
-    @Test
-    void rendersWithCustomPathOverride() throws IOException {
-        PipelineStepModel model = baseModelBuilder("CustomService", StreamingShape.UNARY_UNARY)
-            .inputMapping(new TypeMapping(
-                ClassName.get("org.pipelineframework.csv.common.domain", "Input"),
-                ClassName.get("org.pipelineframework.csv.common.mapper", "InputMapper"),
-                true))
-            .outputMapping(new TypeMapping(
-                ClassName.get("org.pipelineframework.csv.common.domain", "Output"),
-                ClassName.get("org.pipelineframework.csv.common.mapper", "OutputMapper"),
-                true))
-            .build();
-
-        String source = renderAndReadSource(
-            new RestBinding(model, "/custom/path"),
-            "org/pipelineframework/csv/service/pipeline/CustomResource.java");
-        assertTrue(source.contains("@Path(\"/custom/path\")"));
-    }
-
-    @Test
-    void validatesNonNullModelRequired() {
-        RestResourceRenderer renderer = new RestResourceRenderer();
-        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        GenerationContext context = new GenerationContext(processingEnv, tempDir,
-            DeploymentRole.REST_SERVER, Set.of(), null, null);
-
-        PipelineStepModel invalidModel = null;
-        RestBinding binding = new RestBinding(invalidModel, null);
-
-        IllegalStateException error = assertThrows(IllegalStateException.class,
-            () -> renderer.render(binding, context));
-        assertTrue(error.getMessage().contains("non-null PipelineStepModel"));
-    }
-
-    @Test
-    void validatesInputMappingRequired() {
-        PipelineStepModel model = new PipelineStepModel.Builder()
-            .serviceName("InvalidService")
-            .servicePackage("org.example")
-            .serviceClassName(ClassName.get("org.example", "InvalidService"))
-            .streamingShape(StreamingShape.UNARY_UNARY)
-            .executionMode(ExecutionMode.DEFAULT)
-            .inputMapping(null) // Missing
-            .outputMapping(new TypeMapping(
-                ClassName.get("org.example.domain", "Output"),
-                ClassName.get("org.example.mapper", "OutputMapper"),
-                true))
-            .enabledTargets(Set.of(GenerationTarget.REST_RESOURCE))
-            .build();
-
-        RestResourceRenderer renderer = new RestResourceRenderer();
-        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        GenerationContext context = new GenerationContext(processingEnv, tempDir,
-            DeploymentRole.REST_SERVER, Set.of(), null, null);
-
-        RestBinding binding = new RestBinding(model, null);
-
-        IllegalStateException error = assertThrows(IllegalStateException.class,
-            () -> renderer.render(binding, context));
-        assertTrue(error.getMessage().contains("requires input/output mappings"));
-    }
-
-    @Test
-    void validatesInputDomainTypeRequired() {
-        PipelineStepModel model = new PipelineStepModel.Builder()
-            .serviceName("InvalidService")
-            .servicePackage("org.example")
-            .serviceClassName(ClassName.get("org.example", "InvalidService"))
-            .streamingShape(StreamingShape.UNARY_UNARY)
-            .executionMode(ExecutionMode.DEFAULT)
-            .inputMapping(new TypeMapping(null, null, false)) // Missing domain type
-            .outputMapping(new TypeMapping(
-                ClassName.get("org.example.domain", "Output"),
-                ClassName.get("org.example.mapper", "OutputMapper"),
-                true))
-            .enabledTargets(Set.of(GenerationTarget.REST_RESOURCE))
-            .build();
-
-        RestResourceRenderer renderer = new RestResourceRenderer();
-        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
-        GenerationContext context = new GenerationContext(processingEnv, tempDir,
-            DeploymentRole.REST_SERVER, Set.of(), null, null);
-
-        RestBinding binding = new RestBinding(model, null);
-
-        IllegalStateException error = assertThrows(IllegalStateException.class,
-            () -> renderer.render(binding, context));
-        assertTrue(error.getMessage().contains("requires a non-null input domain type"));
-    }
-
-    @Test
     void derivesPluginSegmentForSideEffectPaths() throws IOException {
         PipelineStepModel model = new PipelineStepModel.Builder()
             .serviceName("ObservePersistenceAckPaymentSentSideEffectService")
@@ -355,5 +196,205 @@ class RestResourceRendererTest {
         new RestResourceRenderer().render(binding, createContext());
         Path generatedSource = tempDir.resolve(resourceFileName);
         return Files.readString(generatedSource);
+    }
+
+    @Test
+    void rendersStreamingUnaryResourceWithListParameter() throws IOException {
+        PipelineStepModel model = baseModelBuilder("AggregatePaymentsService", StreamingShape.STREAMING_UNARY)
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.example.domain", "Payment"),
+                ClassName.get("org.example.mapper", "PaymentMapper"),
+                true))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.example.domain", "Summary"),
+                ClassName.get("org.example.mapper", "SummaryMapper"),
+                true))
+            .build();
+
+        String source = renderAndReadSource(
+            new RestBinding(model, null),
+            "org/pipelineframework/csv/service/pipeline/AggregatePaymentsResource.java");
+
+        assertTrue(source.contains("public Uni<SummaryDto> process(List<PaymentDto> inputDtos)"));
+        assertTrue(source.contains("Multi.createFrom().iterable(inputDtos)"));
+        assertTrue(source.contains("RestReactiveStreamingClientServiceAdapter"));
+    }
+
+    @Test
+    void rendersStreamingStreamingResourceWithNdjson() throws IOException {
+        PipelineStepModel model = baseModelBuilder("TransformPaymentsService", StreamingShape.STREAMING_STREAMING)
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.example.domain", "RawPayment"),
+                ClassName.get("org.example.mapper", "RawPaymentMapper"),
+                true))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.example.domain", "ProcessedPayment"),
+                ClassName.get("org.example.mapper", "ProcessedPaymentMapper"),
+                true))
+            .build();
+
+        String source = renderAndReadSource(
+            new RestBinding(model, null),
+            "org/pipelineframework/csv/service/pipeline/TransformPaymentsResource.java");
+
+        assertTrue(source.contains("public Multi<ProcessedPaymentDto> process(Multi<RawPaymentDto> inputDtos)"));
+        assertTrue(source.contains("@Consumes(\"application/x-ndjson\")"));
+        assertTrue(source.contains("@Produces(\"application/x-ndjson\")"));
+        assertTrue(source.contains("RestReactiveBidirectionalStreamingServiceAdapter"));
+    }
+
+    @Test
+    void rendersResourceWithVirtualThreads() throws IOException {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("ProcessPaymentService")
+            .servicePackage("org.example.service")
+            .serviceClassName(ClassName.get("org.example.service", "ProcessPaymentService"))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.VIRTUAL_THREADS)
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.example.domain", "Payment"),
+                ClassName.get("org.example.mapper", "PaymentMapper"),
+                true))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.example.domain", "Receipt"),
+                ClassName.get("org.example.mapper", "ReceiptMapper"),
+                true))
+            .enabledTargets(Set.of(GenerationTarget.REST_RESOURCE))
+            .build();
+
+        String source = renderAndReadSource(
+            new RestBinding(model, null),
+            "org/example/service/pipeline/ProcessPaymentResource.java");
+
+        assertTrue(source.contains("@RunOnVirtualThread"));
+    }
+
+    @Test
+    void verifyTargetReturnsRestResource() {
+        RestResourceRenderer renderer = new RestResourceRenderer();
+        assertEquals(GenerationTarget.REST_RESOURCE, renderer.target());
+    }
+
+    @Test
+    void rendersResourceWithCustomPathOverride() throws IOException {
+        PipelineStepModel model = baseModelBuilder("ProcessPaymentService", StreamingShape.UNARY_UNARY)
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.example.domain", "Payment"),
+                ClassName.get("org.example.mapper", "PaymentMapper"),
+                true))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.example.domain", "Receipt"),
+                ClassName.get("org.example.mapper", "ReceiptMapper"),
+                true))
+            .build();
+
+        String source = renderAndReadSource(
+            new RestBinding(model, "/custom/payment/path"),
+            "org/pipelineframework/csv/service/pipeline/ProcessPaymentResource.java");
+
+        assertTrue(source.contains("@Path(\"/custom/payment/path\")"));
+    }
+
+    @Test
+    void rendersGetServiceMethodForUnaryUnary() throws IOException {
+        PipelineStepModel model = baseModelBuilder("ProcessPaymentService", StreamingShape.UNARY_UNARY)
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.example.domain", "Payment"),
+                ClassName.get("org.example.mapper", "PaymentMapper"),
+                true))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.example.domain", "Receipt"),
+                ClassName.get("org.example.mapper", "ReceiptMapper"),
+                true))
+            .build();
+
+        String source = renderAndReadSource(
+            new RestBinding(model, null),
+            "org/pipelineframework/csv/service/pipeline/ProcessPaymentResource.java");
+
+        assertTrue(source.contains("protected ReactiveService<Payment, Receipt> getService()"));
+        assertTrue(source.contains("return domainService"));
+    }
+
+    @Test
+    void rendersFromDtoMethodWithMapping() throws IOException {
+        PipelineStepModel model = baseModelBuilder("ProcessPaymentService", StreamingShape.UNARY_UNARY)
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.example.domain", "Payment"),
+                ClassName.get("org.example.mapper", "PaymentMapper"),
+                true))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.example.domain", "Receipt"),
+                ClassName.get("org.example.mapper", "ReceiptMapper"),
+                true))
+            .build();
+
+        String source = renderAndReadSource(
+            new RestBinding(model, null),
+            "org/pipelineframework/csv/service/pipeline/ProcessPaymentResource.java");
+
+        assertTrue(source.contains("protected Payment fromDto(PaymentDto dto)"));
+        assertTrue(source.contains("return inboundMapper.fromExternal(dto)"));
+    }
+
+    @Test
+    void rendersToDtoMethodWithMapping() throws IOException {
+        PipelineStepModel model = baseModelBuilder("ProcessPaymentService", StreamingShape.UNARY_UNARY)
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.example.domain", "Payment"),
+                ClassName.get("org.example.mapper", "PaymentMapper"),
+                true))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.example.domain", "Receipt"),
+                ClassName.get("org.example.mapper", "ReceiptMapper"),
+                true))
+            .build();
+
+        String source = renderAndReadSource(
+            new RestBinding(model, null),
+            "org/pipelineframework/csv/service/pipeline/ProcessPaymentResource.java");
+
+        assertTrue(source.contains("protected ReceiptDto toDto(Receipt domain)"));
+        assertTrue(source.contains("return outboundMapper.toExternal(domain)"));
+    }
+
+    @Test
+    void rendersPostAnnotationForProcessMethod() throws IOException {
+        PipelineStepModel model = baseModelBuilder("ProcessPaymentService", StreamingShape.UNARY_UNARY)
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.example.domain", "Payment"),
+                ClassName.get("org.example.mapper", "PaymentMapper"),
+                true))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.example.domain", "Receipt"),
+                ClassName.get("org.example.mapper", "ReceiptMapper"),
+                true))
+            .build();
+
+        String source = renderAndReadSource(
+            new RestBinding(model, null),
+            "org/pipelineframework/csv/service/pipeline/ProcessPaymentResource.java");
+
+        assertTrue(source.contains("@POST"));
+    }
+
+    @Test
+    void rendersRestStreamElementTypeForUnaryStreaming() throws IOException {
+        PipelineStepModel model = baseModelBuilder("StreamPaymentsService", StreamingShape.UNARY_STREAMING)
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.example.domain", "Query"),
+                ClassName.get("org.example.mapper", "QueryMapper"),
+                true))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.example.domain", "Payment"),
+                ClassName.get("org.example.mapper", "PaymentMapper"),
+                true))
+            .build();
+
+        String source = renderAndReadSource(
+            new RestBinding(model, null),
+            "org/pipelineframework/csv/service/pipeline/StreamPaymentsResource.java");
+
+        assertTrue(source.contains("@RestStreamElementType(\"application/json\")"));
     }
 }

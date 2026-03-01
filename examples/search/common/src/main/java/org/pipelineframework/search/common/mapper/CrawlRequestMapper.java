@@ -11,21 +11,35 @@ import org.pipelineframework.search.common.dto.CrawlRequestDto;
     componentModel = "cdi",
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface CrawlRequestMapper extends org.pipelineframework.mapper.Mapper<org.pipelineframework.search.grpc.CrawlSourceSvc.CrawlRequest, CrawlRequestDto, CrawlRequest> {
+public interface CrawlRequestMapper extends org.pipelineframework.mapper.Mapper<CrawlRequest, CrawlRequestDto> {
 
   CrawlRequestMapper INSTANCE = Mappers.getMapper( CrawlRequestMapper.class );
 
   // Domain ↔ DTO
-  @Override
   CrawlRequestDto toDto(CrawlRequest entity);
 
-  @Override
   CrawlRequest fromDto(CrawlRequestDto dto);
 
   // DTO ↔ gRPC
-  @Override
   org.pipelineframework.search.grpc.CrawlSourceSvc.CrawlRequest toGrpc(CrawlRequestDto dto);
 
-  @Override
   CrawlRequestDto fromGrpc(org.pipelineframework.search.grpc.CrawlSourceSvc.CrawlRequest grpc);
+
+  @Override
+  default CrawlRequest fromExternal(CrawlRequestDto external) {
+    return fromDto(external);
+  }
+
+  @Override
+  default CrawlRequestDto toExternal(CrawlRequest domain) {
+    return toDto(domain);
+  }
+
+  default org.pipelineframework.search.grpc.CrawlSourceSvc.CrawlRequest toDtoToGrpc(CrawlRequest domain) {
+    return toGrpc(toDto(domain));
+  }
+
+  default CrawlRequest fromGrpcFromDto(org.pipelineframework.search.grpc.CrawlSourceSvc.CrawlRequest grpc) {
+    return fromDto(fromGrpc(grpc));
+  }
 }
