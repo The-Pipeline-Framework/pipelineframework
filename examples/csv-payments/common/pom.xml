@@ -233,6 +233,12 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <!-- Exclude integration tests that require full Quarkus runtime with TLS certs -->
+                        <exclude>**/ApplicationConfigurationIntegrationTest.java</exclude>
+                    </excludes>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>io.quarkus</groupId>

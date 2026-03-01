@@ -115,6 +115,11 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
             // External adapter generation is bound later in PipelineBindingConstructionPhase.
             return Set.of(GenerationTarget.LOCAL_CLIENT_STEP);
         }
+        if (transportMode == TransportMode.LOCAL
+            && model.sideEffect()
+            && model.deploymentRole() == DeploymentRole.PLUGIN_SERVER) {
+            return Set.of(GenerationTarget.LOCAL_CLIENT_STEP);
+        }
         return resolveTargetsForRole(model.deploymentRole(), transportMode);
     }
 }

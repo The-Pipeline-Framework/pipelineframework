@@ -62,6 +62,9 @@ class OrchestratorFunctionHandlerRendererTest {
             source.contains("implements RequestHandler<Multi<InputTypeDto>, OutputTypeDto>"),
             () -> "expected full RequestHandler signature missing. source:\n" + source);
         assertTrue(
+            source.contains("inputStream -> resource.run(inputStream.collect().asList().await().indefinitely())"),
+            () -> "expected streaming-input lambda bridge missing. source:\n" + source);
+        assertTrue(
             source.contains("return FunctionTransportBridge.invokeManyToOne(input, transportContext, source, invoke, sink)"),
             () -> "expected FunctionTransportBridge.invokeManyToOne invocation missing. source:\n" + source);
     }
@@ -84,6 +87,9 @@ class OrchestratorFunctionHandlerRendererTest {
         assertTrue(
             source.contains("implements RequestHandler<Multi<InputTypeDto>, List<OutputTypeDto>>"),
             () -> "expected full RequestHandler signature missing. source:\n" + source);
+        assertTrue(
+            source.contains("inputStream -> resource.run(inputStream.collect().asList().await().indefinitely())"),
+            () -> "expected streaming-input lambda bridge missing. source:\n" + source);
         assertTrue(
             source.contains("return FunctionTransportBridge.invokeManyToMany(input, transportContext, source, invoke, sink)"),
             () -> "expected FunctionTransportBridge.invokeManyToMany invocation missing. source:\n" + source);
