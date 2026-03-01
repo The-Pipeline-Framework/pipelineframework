@@ -31,8 +31,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.squareup.javapoet.ClassName;
 import org.jboss.logging.Logger;
+import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.StepKind;
+import org.pipelineframework.processor.ir.StreamingShape;
 
 /**
  * Parser for extracting StepDefinition objects from pipeline template YAML files.
@@ -41,6 +43,12 @@ public class StepDefinitionParser {
 
     private static final Logger LOG = Logger.getLogger(StepDefinitionParser.class);
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
+    /**
+     * Legacy suffix used to resolve short-form internal step types.
+     * For legacy internal steps, {@code input/output: Foo} resolves to
+     * {@code <basePackage> + LEGACY_INTERNAL_PACKAGE_SUFFIX + Foo}.
+     */
+    public static final String DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX = ".common.domain.";
     private static final Set<String> SUPPORTED_STEP_KEYS = Set.of(
         "name",
         "service",
@@ -50,12 +58,14 @@ public class StepDefinitionParser {
         "output",
         "operatorMapper",
         "externalMapper",
+        "mapperFallback",
         "cardinality",
         "inputTypeName",
         "inputFields",
         "outputTypeName",
         "outputFields");
     private final BiConsumer<Diagnostic.Kind, String> diagnosticReporter;
+    private final String legacyInternalPackageSuffix;
 
     /**
      * Creates a StepDefinitionParser that uses a no-op diagnostic reporter.
@@ -64,7 +74,7 @@ public class StepDefinitionParser {
      */
     public StepDefinitionParser() {
         this((kind, message) -> {
-        });
+        }, DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX);
     }
 
     /**
@@ -73,8 +83,23 @@ public class StepDefinitionParser {
      * @param diagnosticReporter reporter used to surface parse diagnostics (e.g. via annotation processing Messager)
      */
     public StepDefinitionParser(BiConsumer<Diagnostic.Kind, String> diagnosticReporter) {
+        this(diagnosticReporter, DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX);
+    }
+
+    /**
+     * Creates a StepDefinitionParser with a diagnostic reporter and configurable legacy internal package suffix.
+     *
+     * @param diagnosticReporter reporter used to surface parse diagnostics (e.g. via annotation processing Messager)
+     * @param legacyInternalPackageSuffix suffix used when resolving short-form legacy internal input/output type names
+     */
+    public StepDefinitionParser(
+        BiConsumer<Diagnostic.Kind, String> diagnosticReporter,
+        String legacyInternalPackageSuffix) {
         this.diagnosticReporter = diagnosticReporter == null ? (kind, message) -> {
         } : diagnosticReporter;
+        this.legacyInternalPackageSuffix = isBlank(legacyInternalPackageSuffix)
+            ? DEFAULT_LEGACY_INTERNAL_PACKAGE_SUFFIX
+            : legacyInternalPackageSuffix;
     }
     
     /**
@@ -93,6 +118,7 @@ public class StepDefinitionParser {
         String yamlContent = Files.readString(templatePath);
         @SuppressWarnings("unchecked")
         Map<String, Object> templateData = YAML_MAPPER.readValue(yamlContent, Map.class);
+        String basePackage = getStringValue(templateData, "basePackage");
 
         Object stepsObj = templateData.get("steps");
         if (!(stepsObj instanceof List)) {
@@ -109,7 +135,7 @@ public class StepDefinitionParser {
             }
             @SuppressWarnings("unchecked")
             Map<String, Object> stepData = (Map<String, Object>) stepObj;
-            StepDefinition stepDef = parseStepDefinition(stepData);
+            StepDefinition stepDef = parseStepDefinition(stepData, basePackage);
             if (stepDef != null) {
                 stepDefinitions.add(stepDef);
             }
@@ -130,7 +156,7 @@ public class StepDefinitionParser {
      * @param stepData the map containing step configuration data (YAML-derived keys described above)
      * @return a StepDefinition for the parsed step, or null if the step is invalid, unsupported, or should be skipped
      */
-    private StepDefinition parseStepDefinition(Map<String, Object> stepData) {
+    private StepDefinition parseStepDefinition(Map<String, Object> stepData, String basePackage) {
         String name = getStringValue(stepData, "name");
         if (isBlank(name)) {
             LOG.warnf("Skipping step with null or blank name: %s", stepData);
@@ -162,6 +188,7 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
+        boolean inferredLegacyInternal = isBlank(delegatedClassName) && isBlank(serviceClassName);
 
         StepKind kind;
         String executionClassName;
@@ -173,9 +200,14 @@ public class StepDefinitionParser {
             kind = StepKind.INTERNAL;
             executionClassName = serviceClassName;
         } else {
-            // Legacy template-format steps are handled by template model extraction for backward compatibility.
-            LOG.debugf("Skipping legacy step '%s' from YAML-driven StepDefinition parsing", name);
-            return null;
+            String inferredService = deriveLegacyServiceClassName(basePackage, name);
+            if (isBlank(inferredService)) {
+                // Legacy template-format steps without basePackage cannot be mapped to an internal service class.
+                LOG.debugf("Skipping legacy step '%s' from YAML-driven StepDefinition parsing", name);
+                return null;
+            }
+            kind = StepKind.INTERNAL;
+            executionClassName = inferredService;
         }
 
         // Parse input and output types
@@ -192,8 +224,8 @@ public class StepDefinitionParser {
         }
 
         // Keep delegated input/output optional so they can be derived from delegate generics.
-        ClassName inputType = parseOptionalClassName(inputTypeName, name, "input");
-        ClassName outputType = parseOptionalClassName(outputTypeName, name, "output");
+        ClassName inputType = parseOptionalClassName(inputTypeName, name, "input", basePackage, inferredLegacyInternal);
+        ClassName outputType = parseOptionalClassName(outputTypeName, name, "output", basePackage, inferredLegacyInternal);
         if (!isBlank(inputTypeName) && inputType == null) {
             return null;
         }
@@ -226,7 +258,12 @@ public class StepDefinitionParser {
             }
         }
 
-        if (kind == StepKind.INTERNAL) {
+        MapperFallbackMode mapperFallback = parseMapperFallback(stepData, name);
+        if (mapperFallback == null) {
+            return null;
+        }
+
+        if (kind == StepKind.INTERNAL && !inferredLegacyInternal) {
             if (externalMapper != null) {
                 String message = "Ignoring 'operatorMapper'/'externalMapper' on internal step '" + name
                     + "'; mapper override is only used for delegated steps";
@@ -236,11 +273,16 @@ public class StepDefinitionParser {
             }
             if (!isBlank(inputTypeName) || !isBlank(outputTypeName)) {
                 String message = "Ignoring 'input'/'output' on internal step '" + name
-                    + "'; internal types are derived from the @PipelineStep service signature";
+                    + "' unless the service is not resolvable in this module; keeping YAML types as cross-module fallback metadata";
                 LOG.warn(message);
                 report(Diagnostic.Kind.WARNING, message);
-                inputType = null;
-                outputType = null;
+            }
+            if (mapperFallback != MapperFallbackMode.NONE) {
+                String message = "Ignoring 'mapperFallback' on internal step '" + name
+                    + "'; mapper fallback is only used for delegated steps";
+                LOG.warn(message);
+                report(Diagnostic.Kind.WARNING, message);
+                mapperFallback = MapperFallbackMode.NONE;
             }
         }
 
@@ -263,7 +305,40 @@ public class StepDefinitionParser {
             return null;
         }
 
-        return new StepDefinition(name, kind, executionClass, externalMapper, inputType, outputType);
+        return new StepDefinition(
+            name,
+            kind,
+            executionClass,
+            externalMapper,
+            mapperFallback,
+            inputType,
+            outputType,
+            parseStreamingShapeHint(stepData, name));
+    }
+
+    private String deriveLegacyServiceClassName(String basePackage, String stepName) {
+        if (isBlank(basePackage) || isBlank(stepName)) {
+            return null;
+        }
+        StringBuilder simpleName = new StringBuilder();
+        boolean capitalizeNext = true;
+        for (int i = 0; i < stepName.length(); i++) {
+            char c = stepName.charAt(i);
+            if (Character.isLetterOrDigit(c)) {
+                simpleName.append(capitalizeNext ? Character.toUpperCase(c) : c);
+                capitalizeNext = false;
+            } else {
+                capitalizeNext = true;
+            }
+        }
+        if (simpleName.isEmpty()) {
+            return null;
+        }
+        String candidate = simpleName.toString();
+        if (!candidate.endsWith("Service")) {
+            candidate = candidate + "Service";
+        }
+        return basePackage + ".service." + candidate;
     }
 
     /**
@@ -310,15 +385,63 @@ public class StepDefinitionParser {
      * @param fieldName  the field name (e.g., "input", "output", "operatorMapper") used for diagnostics
      * @return           the parsed ClassName, or `null` if `typeName` is blank or not a valid class name
      */
-    private ClassName parseOptionalClassName(String typeName, String stepName, String fieldName) {
+    private ClassName parseOptionalClassName(
+            String typeName,
+            String stepName,
+            String fieldName,
+            String basePackage,
+            boolean legacyInternalStep) {
         if (isBlank(typeName)) {
             return null;
         }
-        ClassName parsed = parseClassName(typeName);
+        String candidate = typeName;
+        if (legacyInternalStep && !typeName.contains(".") && !isBlank(basePackage)) {
+            candidate = basePackage + legacyInternalPackageSuffix + typeName;
+        }
+        ClassName parsed = parseClassName(candidate);
         if (parsed == null) {
             LOG.warnf("Skipping step '%s': invalid %s class name '%s'", stepName, fieldName, typeName);
         }
         return parsed;
+    }
+
+    private StreamingShape parseStreamingShapeHint(Map<String, Object> stepData, String stepName) {
+        String raw = getStringValue(stepData, "cardinality");
+        if (isBlank(raw)) {
+            return null;
+        }
+        String normalized = raw.trim().toUpperCase(java.util.Locale.ROOT);
+        return switch (normalized) {
+            case "ONE_TO_ONE" -> StreamingShape.UNARY_UNARY;
+            case "EXPANSION", "ONE_TO_MANY" -> StreamingShape.UNARY_STREAMING;
+            case "MANY_TO_ONE", "REDUCTION" -> StreamingShape.STREAMING_UNARY;
+            case "SIDE_EFFECT" -> StreamingShape.UNARY_UNARY;
+            case "MANY_TO_MANY" -> StreamingShape.STREAMING_STREAMING;
+            default -> {
+                LOG.warnf(
+                    "Unrecognized cardinality '%s' for step '%s'; default streaming shape inference may apply",
+                    raw,
+                    stepName);
+                yield null;
+            }
+        };
+    }
+
+    private MapperFallbackMode parseMapperFallback(Map<String, Object> stepData, String stepName) {
+        String raw = getStringValue(stepData, "mapperFallback");
+        if (isBlank(raw)) {
+            return MapperFallbackMode.NONE;
+        }
+        String normalized = raw.trim().toUpperCase(java.util.Locale.ROOT);
+        try {
+            return MapperFallbackMode.valueOf(normalized);
+        } catch (IllegalArgumentException ex) {
+            String message = "Skipping step '" + stepName + "': invalid mapperFallback '" + raw
+                + "'. Allowed values: NONE, JACKSON";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
     }
 
     /**

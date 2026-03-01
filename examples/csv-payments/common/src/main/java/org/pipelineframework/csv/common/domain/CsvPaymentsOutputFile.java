@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
@@ -47,7 +48,7 @@ public class CsvPaymentsOutputFile extends BaseCsvPaymentsFile implements AutoCl
   public CsvPaymentsOutputFile(@NonNull Path csvPaymentsInputFilepath) throws IOException {
     super(new File(MessageFormat.format("{0}.out", csvPaymentsInputFilepath)));
     // Create the CSV writer
-    writer = new BufferedWriter(new FileWriter(String.valueOf(this.getFilepath())));
+    writer = new BufferedWriter(new FileWriter(String.valueOf(this.filepath)));
     sbc =
         new StatefulBeanToCsvBuilder<PaymentOutput>(writer)
             .withQuotechar('\'')
@@ -60,7 +61,12 @@ public class CsvPaymentsOutputFile extends BaseCsvPaymentsFile implements AutoCl
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
     CsvPaymentsOutputFile that = (CsvPaymentsOutputFile) o;
-    return this.getId() != null && this.getId().equals(that.getId());
+    return this.id != null && this.id.equals(that.id);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(id);
   }
 
   @Override

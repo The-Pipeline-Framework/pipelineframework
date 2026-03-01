@@ -433,11 +433,11 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-     * Ensure the pipeline step model contains the required REST input and output mappings, domain types, and mappers.
+     * Ensure the pipeline step model contains the required REST input and output mappings and domain types.
      *
      * @param model the pipeline step model to validate
      * @throws IllegalStateException if the model is null; if input or output mappings are missing; or if either mapping
-     *                               lacks a mapper or a non-null domain type
+     *                               has a null domain type
      */
     private void validateRestMappings(PipelineStepModel model) {
         if (model == null) {
@@ -448,14 +448,14 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                 "REST client generation for '%s' requires input/output mappings to be present",
                 model.serviceName()));
         }
-        if (!model.inputMapping().hasMapper() || model.inputMapping().domainType() == null) {
+        if (model.inputMapping().domainType() == null) {
             throw new IllegalStateException(String.format(
-                "REST client generation for '%s' requires a non-null input domain type and inbound mapper",
+                "REST client generation for '%s' requires a non-null input domain type",
                 model.serviceName()));
         }
-        if (!model.outputMapping().hasMapper() || model.outputMapping().domainType() == null) {
+        if (model.outputMapping().domainType() == null) {
             throw new IllegalStateException(String.format(
-                "REST client generation for '%s' requires a non-null output domain type and outbound mapper",
+                "REST client generation for '%s' requires a non-null output domain type",
                 model.serviceName()));
         }
     }

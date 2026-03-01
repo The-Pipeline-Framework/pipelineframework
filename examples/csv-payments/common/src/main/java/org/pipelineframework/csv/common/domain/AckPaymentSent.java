@@ -51,7 +51,7 @@ public class AckPaymentSent extends BaseEntity implements Serializable {
   public String toString() {
     return format(
         "AckPaymentSent'{'id=''{0}'', conversationId=''{1}'', status={2}, message={3}, recordId={4}'}'",
-        getId(), conversationId, status, message, paymentRecordId);
+        id, conversationId, status, message, paymentRecordId);
   }
 
   @Override
@@ -59,6 +59,11 @@ public class AckPaymentSent extends BaseEntity implements Serializable {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
     AckPaymentSent that = (AckPaymentSent) o;
-    return this.getId() != null && this.getId().equals(that.getId());
+    return this.id != null && this.id.equals(that.id);
+  }
+
+  @Override
+  public int hashCode() {
+    return this.id != null ? this.id.hashCode() : 0;
   }
 }

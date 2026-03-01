@@ -27,6 +27,7 @@ import org.pipelineframework.processor.extractor.PipelineStepIRExtractor;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
+import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TypeMapping;
@@ -39,6 +40,7 @@ import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 public class ModelExtractionPhase implements PipelineCompilationPhase {
     public static final String NO_YAML_DEFINITIONS_MESSAGE =
         "No YAML step definitions were found. Falling back to annotation-driven extraction.";
+    private static final String MAPPER_FALLBACK_GLOBAL_OPTION = "pipeline.mapper.fallback.enabled";
 
     private final ModelContextRoleEnricher contextRoleEnricher;
 
@@ -190,6 +192,10 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                     .getTypeElement(stepDef.executionClass().canonicalName());
 
                 if (serviceClass == null) {
+                    PipelineStepModel syntheticModel = createCrossModuleInternalModel(stepDef, ctx);
+                    if (syntheticModel != null) {
+                        yield syntheticModel;
+                    }
                     ctx.getProcessingEnv().getMessager().printMessage(
                         javax.tools.Diagnostic.Kind.ERROR,
                         "Internal step service class '" + stepDef.executionClass().canonicalName() +
@@ -219,6 +225,75 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 yield createDelegatedStepModel(ctx, stepDef);
             }
         };
+    }
+
+    PipelineStepModel createCrossModuleInternalModel(
+            org.pipelineframework.processor.ir.StepDefinition stepDef,
+            PipelineCompilationContext ctx) {
+        if (stepDef.inputType() == null || stepDef.outputType() == null) {
+            return null;
+        }
+        TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), stepDef.executionClass());
+        TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), stepDef.executionClass());
+        StreamingShape streamingShape = stepDef.streamingShapeHint() != null
+            ? stepDef.streamingShapeHint()
+            : StreamingShape.UNARY_UNARY;
+
+        Set<GenerationTarget> targets = EnumSet.of(GenerationTarget.CLIENT_STEP);
+        if (ctx.isTransportModeRest()) {
+            targets.add(GenerationTarget.REST_CLIENT_STEP);
+        }
+        if (ctx.isTransportModeLocal()) {
+            targets.add(GenerationTarget.LOCAL_CLIENT_STEP);
+        }
+
+        String servicePackage = stepDef.executionClass().packageName().isEmpty()
+            ? "org.pipelineframework.pipeline"
+            : stepDef.executionClass().packageName() + ".pipeline";
+        String serviceName = toYamlServiceName(stepDef.name());
+
+        if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.WARNING,
+                "Internal step '" + stepDef.name() + "' is defined in YAML but service class '"
+                    + stepDef.executionClass().canonicalName()
+                    + "' is not on this module classpath. Using YAML type/cardinality metadata for cross-module compilation.");
+        }
+
+        DeploymentRole crossModuleRole = ctx.isPluginHost()
+            ? DeploymentRole.PLUGIN_CLIENT
+            : DeploymentRole.ORCHESTRATOR_CLIENT;
+
+        return new PipelineStepModel.Builder()
+            .serviceName(serviceName)
+            .generatedName(serviceName)
+            .servicePackage(servicePackage)
+            .serviceClassName(stepDef.executionClass())
+            .inputMapping(new TypeMapping(inputType, null, false, inputType))
+            .outputMapping(new TypeMapping(outputType, null, false, outputType))
+            .streamingShape(streamingShape)
+            .enabledTargets(targets)
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(crossModuleRole)
+            .sideEffect(false)
+            .cacheKeyGenerator(null)
+            .orderingRequirement(OrderingRequirement.RELAXED)
+            .threadSafety(ThreadSafety.SAFE)
+            .build();
+    }
+
+    private TypeName normalizeLegacyDomainType(TypeName declaredType, ClassName executionClass) {
+        if (!(declaredType instanceof ClassName className) || !className.packageName().isEmpty()) {
+            return declaredType;
+        }
+        String executionPkg = executionClass.packageName();
+        if (executionPkg == null || executionPkg.isBlank()) {
+            return declaredType;
+        }
+        String basePackage = executionPkg.endsWith(".service")
+            ? executionPkg.substring(0, executionPkg.length() - ".service".length())
+            : executionPkg;
+        return ClassName.bestGuess(basePackage + ".common.domain." + className.simpleName());
     }
 
     /**
@@ -276,13 +351,29 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return null;
         }
 
+        boolean fallbackGloballyEnabled = isMapperFallbackGloballyEnabled(ctx);
+        boolean fallbackRequested = stepDef.mapperFallback() == MapperFallbackMode.JACKSON;
+        boolean typesDiffer = !inputType.equals(reactiveSignature.inputType())
+            || !outputType.equals(reactiveSignature.outputType());
+        boolean allowFallbackNoMapper = stepDef.externalMapper() == null
+            && fallbackRequested
+            && fallbackGloballyEnabled
+            && typesDiffer;
+
         ClassName externalMapper = resolveDelegatedExternalMapper(
             ctx,
             stepDef,
             inputType,
             outputType,
             reactiveSignature.inputType(),
-            reactiveSignature.outputType());
+            reactiveSignature.outputType(),
+            allowFallbackNoMapper);
+        MapperFallbackMode effectiveFallback = MapperFallbackMode.NONE;
+
+        if (allowFallbackNoMapper && externalMapper == null) {
+            effectiveFallback = MapperFallbackMode.JACKSON;
+        }
+
         if (stepDef.externalMapper() != null && externalMapper == null) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.WARNING,
@@ -293,15 +384,19 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
         if (stepDef.externalMapper() == null
             && externalMapper == null
-            && (!inputType.equals(reactiveSignature.inputType())
-                || !outputType.equals(reactiveSignature.outputType()))) {
+            && typesDiffer
+            && effectiveFallback == MapperFallbackMode.NONE) {
+            String fallbackMessage = fallbackRequested && !fallbackGloballyEnabled
+                ? " Mapper fallback was requested but global option '" + MAPPER_FALLBACK_GLOBAL_OPTION + "' is disabled."
+                : "";
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.WARNING,
                 "Skipping delegated step '" + stepDef.name()
                     + "': no operator mapper provided and YAML types ["
                     + inputType + " -> " + outputType
                     + "] do not match delegate types ["
-                    + reactiveSignature.inputType() + " -> " + reactiveSignature.outputType() + "].");
+                    + reactiveSignature.inputType() + " -> " + reactiveSignature.outputType() + "]."
+                    + fallbackMessage);
             return null;
         }
 
@@ -315,8 +410,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         // Create type mappings based on the input/output types specified in the YAML
-        TypeMapping inputMapping = new TypeMapping(inputType, null, false);
-        TypeMapping outputMapping = new TypeMapping(outputType, null, false);
+        TypeMapping inputMapping = new TypeMapping(inputType, null, false, reactiveSignature.inputType());
+        TypeMapping outputMapping = new TypeMapping(outputType, null, false, reactiveSignature.outputType());
 
         // Derive package from execution class or use default
         String servicePackage = stepDef.executionClass().packageName().isEmpty()
@@ -342,7 +437,16 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .threadSafety(ThreadSafety.SAFE)
             .delegateService(stepDef.executionClass())
             .externalMapper(externalMapper)
+            .mapperFallbackMode(effectiveFallback)
             .build();
+    }
+
+    private boolean isMapperFallbackGloballyEnabled(PipelineCompilationContext ctx) {
+        if (ctx == null || ctx.getProcessingEnv() == null || ctx.getProcessingEnv().getOptions() == null) {
+            return false;
+        }
+        String configured = ctx.getProcessingEnv().getOptions().get(MAPPER_FALLBACK_GLOBAL_OPTION);
+        return configured != null && Boolean.parseBoolean(configured.trim());
     }
 
     /**
@@ -364,7 +468,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             TypeName applicationInputType,
             TypeName applicationOutputType,
             TypeName operatorInputType,
-            TypeName operatorOutputType) {
+            TypeName operatorOutputType,
+            boolean allowFallbackNoMapper) {
         if (stepDef.externalMapper() != null) {
             TypeElement mapperElement = ctx.getProcessingEnv().getElementUtils()
                 .getTypeElement(stepDef.externalMapper().canonicalName());
@@ -398,7 +503,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             applicationInputType,
             operatorInputType,
             applicationOutputType,
-            operatorOutputType);
+            operatorOutputType,
+            !allowFallbackNoMapper);
     }
 
     /**
@@ -418,11 +524,10 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             TypeName applicationInputType,
             TypeName operatorInputType,
             TypeName applicationOutputType,
-            TypeName operatorOutputType) {
+            TypeName operatorOutputType,
+            boolean reportMissingCandidateErrorFlag) {
         if (ctx.getRoundEnv() == null) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
-                "Step '" + stepName + "' requires an operator mapper, but no source candidates were available for inference.");
+            reportMissingCandidateError(ctx, stepName, reportMissingCandidateErrorFlag);
             return null;
         }
 
@@ -448,14 +553,16 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         if (matchingCandidates.isEmpty()) {
-            ctx.getProcessingEnv().getMessager().printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
-                "Step '" + stepName + "' requires an operator mapper for types ["
-                    + applicationInputType + " -> " + operatorInputType + ", "
-                    + operatorOutputType + " -> " + applicationOutputType
-                    + "], but no matching ExternalMapper implementation was found. "
-                    + "The mapper may be in a dependency JAR or produced in a different processing round. "
-                    + "Ensure it is compiled in this round or specify it explicitly in YAML.");
+            if (reportMissingCandidateErrorFlag) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.ERROR,
+                    "Step '" + stepName + "' requires an operator mapper for types ["
+                        + applicationInputType + " -> " + operatorInputType + ", "
+                        + operatorOutputType + " -> " + applicationOutputType
+                        + "], but no matching ExternalMapper implementation was found. "
+                        + "The mapper may be in a dependency JAR or produced in a different processing round. "
+                        + "Ensure it is compiled in this round or specify it explicitly in YAML.");
+            }
             return null;
         }
 
@@ -471,6 +578,18 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         return matchingCandidates.getFirst();
+    }
+
+    private void reportMissingCandidateError(
+            PipelineCompilationContext ctx,
+            String stepName,
+            boolean reportMissingCandidateError) {
+        if (!reportMissingCandidateError) {
+            return;
+        }
+        ctx.getProcessingEnv().getMessager().printMessage(
+            javax.tools.Diagnostic.Kind.ERROR,
+            "Step '" + stepName + "' requires an operator mapper, but no source candidates were available for inference.");
     }
 
     /**

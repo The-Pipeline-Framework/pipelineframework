@@ -44,12 +44,12 @@ public class CsvPaymentsInputFile extends BaseCsvPaymentsFile implements CsvPaym
 
   @Override
   public String getSourceName() {
-    return getFilepath().toString();
+    return filepath.toString();
   }
 
   @Override
   public HeaderColumnNameMappingStrategy<PaymentRecord> veryOwnStrategy() {
-    var strategy = new FilePathAwareMappingStrategy<PaymentRecord>(this.getFilepath());
+    var strategy = new FilePathAwareMappingStrategy<PaymentRecord>(this.filepath);
     strategy.setType(PaymentRecord.class);
 
     return strategy;
@@ -60,6 +60,6 @@ public class CsvPaymentsInputFile extends BaseCsvPaymentsFile implements CsvPaym
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
     CsvPaymentsInputFile that = (CsvPaymentsInputFile) o;
-    return this.getId() != null && this.getId().equals(that.getId());
+    return this.id != null && this.id.equals(that.id);
   }
 }

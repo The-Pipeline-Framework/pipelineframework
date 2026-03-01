@@ -195,11 +195,19 @@ public class PipelineRunner implements AutoCloseable {
         java.util.Optional<List<String>> resourceOrder =
             org.pipelineframework.config.pipeline.PipelineOrderResourceLoader.loadOrder();
         if (resourceOrder.isEmpty()) {
+            if (!org.pipelineframework.config.pipeline.PipelineOrderResourceLoader.requiresOrder()) {
+                logger.debug("Pipeline order metadata not found and not required; preserving existing step order.");
+                return steps;
+            }
             throw new IllegalStateException(
                 "Pipeline order metadata not found. Ensure META-INF/pipeline/order.json is generated at build time.");
         }
         List<String> filteredPipelineOrder = resourceOrder.get();
         if (filteredPipelineOrder.isEmpty()) {
+            if (!org.pipelineframework.config.pipeline.PipelineOrderResourceLoader.requiresOrder()) {
+                logger.debug("Pipeline order metadata is empty and not required; preserving existing step order.");
+                return steps;
+            }
             throw new IllegalStateException(
                 "Pipeline order metadata is empty. Ensure pipeline.yaml defines steps for order generation.");
         }

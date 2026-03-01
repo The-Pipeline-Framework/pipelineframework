@@ -41,11 +41,11 @@ public class CsvFolder extends BaseEntity implements Serializable {
 
     @Override
     public String toString() {
-        return format("CsvFolder'{'filepath=''{0}'''}'", getPath());
+        return format("CsvFolder'{'filepath=''{0}'''}'", path);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(getPath());
+        return Objects.hash(path);
     }
 }

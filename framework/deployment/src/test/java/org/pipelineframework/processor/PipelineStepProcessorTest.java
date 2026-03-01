@@ -130,11 +130,9 @@ class PipelineStepProcessorTest {
         import test.common.domain.CrawlRequestGrpcMessage;
         import test.common.dto.CrawlRequestDto;
 
-        public class CrawlRequestMapper implements Mapper<CrawlRequestGrpcMessage, CrawlRequestDto, CrawlRequest> {
-            public CrawlRequestDto fromGrpc(CrawlRequestGrpcMessage grpc) { return new CrawlRequestDto(); }
-            public CrawlRequestGrpcMessage toGrpc(CrawlRequestDto dto) { return new CrawlRequestGrpcMessage(); }
-            public CrawlRequest fromDto(CrawlRequestDto dto) { return new CrawlRequest(); }
-            public CrawlRequestDto toDto(CrawlRequest domain) { return new CrawlRequestDto(); }
+        public class CrawlRequestMapper implements Mapper<CrawlRequest, CrawlRequestGrpcMessage> {
+            public CrawlRequest fromExternal(CrawlRequestGrpcMessage grpc) { return new CrawlRequest(); }
+            public CrawlRequestGrpcMessage toExternal(CrawlRequest domain) { return new CrawlRequestGrpcMessage(); }
         }
         """;
 
@@ -143,14 +141,11 @@ class PipelineStepProcessorTest {
 
         import org.pipelineframework.mapper.Mapper;
         import test.common.domain.RawDocument;
-        import test.common.domain.RawDocumentGrpcMessage;
         import test.common.dto.RawDocumentDto;
 
-        public class RawDocumentMapper implements Mapper<RawDocumentGrpcMessage, RawDocumentDto, RawDocument> {
-            public RawDocumentDto fromGrpc(RawDocumentGrpcMessage grpc) { return new RawDocumentDto(); }
-            public RawDocumentGrpcMessage toGrpc(RawDocumentDto dto) { return new RawDocumentGrpcMessage(); }
-            public RawDocument fromDto(RawDocumentDto dto) { return new RawDocument(); }
-            public RawDocumentDto toDto(RawDocument domain) { return new RawDocumentDto(); }
+        public class RawDocumentMapper implements Mapper<RawDocument, RawDocumentDto> {
+            public RawDocument fromExternal(RawDocumentDto dto) { return new RawDocument(); }
+            public RawDocumentDto toExternal(RawDocument domain) { return new RawDocumentDto(); }
         }
         """;
 
@@ -159,14 +154,11 @@ class PipelineStepProcessorTest {
 
         import org.pipelineframework.mapper.Mapper;
         import test.common.domain.ParsedDocument;
-        import test.common.domain.ParsedDocumentGrpcMessage;
         import test.common.dto.ParsedDocumentDto;
 
-        public class ParsedDocumentMapper implements Mapper<ParsedDocumentGrpcMessage, ParsedDocumentDto, ParsedDocument> {
-            public ParsedDocumentDto fromGrpc(ParsedDocumentGrpcMessage grpc) { return new ParsedDocumentDto(); }
-            public ParsedDocumentGrpcMessage toGrpc(ParsedDocumentDto dto) { return new ParsedDocumentGrpcMessage(); }
-            public ParsedDocument fromDto(ParsedDocumentDto dto) { return new ParsedDocument(); }
-            public ParsedDocumentDto toDto(ParsedDocument domain) { return new ParsedDocumentDto(); }
+        public class ParsedDocumentMapper implements Mapper<ParsedDocument, ParsedDocumentDto> {
+            public ParsedDocument fromExternal(ParsedDocumentDto dto) { return new ParsedDocument(); }
+            public ParsedDocumentDto toExternal(ParsedDocument domain) { return new ParsedDocumentDto(); }
         }
         """;
 

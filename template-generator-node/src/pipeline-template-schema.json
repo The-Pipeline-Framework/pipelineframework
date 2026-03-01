@@ -167,6 +167,11 @@
                 "type": "string",
                 "description": "Legacy alias for operatorMapper (deprecated; prefer 'operatorMapper')",
                 "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+              },
+              "mapperFallback": {
+                "type": "string",
+                "description": "Optional mapper fallback strategy used when no operator mapper matches. Effective only when global pipeline.mapper.fallback.enabled=true.",
+                "enum": ["NONE", "JACKSON", "none", "jackson"]
               }
             },
             "oneOf": [

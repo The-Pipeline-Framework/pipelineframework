@@ -26,15 +26,27 @@ import org.pipelineframework.csv.grpc.ProcessFolderSvc;
 
 @SuppressWarnings("unused")
 @Mapper(componentModel = "jakarta", uses = {CommonConverters.class}, unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface CsvFolderMapper extends org.pipelineframework.mapper.Mapper<ProcessFolderSvc.CsvFolder, CsvFolderDto, CsvFolder> {
+public interface CsvFolderMapper extends org.pipelineframework.mapper.Mapper<CsvFolder, ProcessFolderSvc.CsvFolder> {
 
     CsvFolderMapper INSTANCE = Mappers.getMapper( CsvFolderMapper.class );
 
-    @Override
+    CsvFolderDto toDto(CsvFolder domain);
+
+    CsvFolder fromDto(CsvFolderDto dto);
+
     @Mapping(target = "path", qualifiedByName = "stringToPath")
     CsvFolderDto fromGrpc(ProcessFolderSvc.CsvFolder grpc);
 
-    @Override
     @Mapping(target = "path", qualifiedByName = "pathToString")
     ProcessFolderSvc.CsvFolder toGrpc(CsvFolderDto dto);
+
+    @Override
+    default CsvFolder fromExternal(ProcessFolderSvc.CsvFolder external) {
+        return fromDto(fromGrpc(external));
+    }
+
+    @Override
+    default ProcessFolderSvc.CsvFolder toExternal(CsvFolder domain) {
+        return toGrpc(toDto(domain));
+    }
 }

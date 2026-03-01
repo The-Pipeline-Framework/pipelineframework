@@ -11,21 +11,35 @@ import org.pipelineframework.search.common.dto.IndexAckDto;
     componentModel = "cdi",
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface IndexAckMapper extends org.pipelineframework.mapper.Mapper<org.pipelineframework.search.grpc.IndexDocumentSvc.IndexAck, IndexAckDto, IndexAck> {
+public interface IndexAckMapper extends org.pipelineframework.mapper.Mapper<IndexAck, IndexAckDto> {
 
   IndexAckMapper INSTANCE = Mappers.getMapper( IndexAckMapper.class );
 
   // Domain ↔ DTO
-  @Override
   IndexAckDto toDto(IndexAck entity);
 
-  @Override
   IndexAck fromDto(IndexAckDto dto);
 
   // DTO ↔ gRPC
-  @Override
   org.pipelineframework.search.grpc.IndexDocumentSvc.IndexAck toGrpc(IndexAckDto dto);
 
-  @Override
   IndexAckDto fromGrpc(org.pipelineframework.search.grpc.IndexDocumentSvc.IndexAck grpc);
+
+  @Override
+  default IndexAck fromExternal(IndexAckDto external) {
+    return fromDto(external);
+  }
+
+  @Override
+  default IndexAckDto toExternal(IndexAck domain) {
+    return toDto(domain);
+  }
+
+  default org.pipelineframework.search.grpc.IndexDocumentSvc.IndexAck toDtoToGrpc(IndexAck domain) {
+    return toGrpc(toDto(domain));
+  }
+
+  default IndexAck fromGrpcFromDto(org.pipelineframework.search.grpc.IndexDocumentSvc.IndexAck grpc) {
+    return fromDto(fromGrpc(grpc));
+  }
 }

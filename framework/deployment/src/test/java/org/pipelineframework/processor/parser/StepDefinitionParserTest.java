@@ -27,8 +27,10 @@ import java.util.stream.Collectors;
 
 import javax.tools.Diagnostic;
 
+import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.StepDefinition;
 import org.pipelineframework.processor.ir.StepKind;
 
@@ -87,8 +89,8 @@ class StepDefinitionParserTest {
         assertEquals(1, steps.size());
         StepDefinition step = steps.getFirst();
         assertEquals(StepKind.INTERNAL, step.kind());
-        assertNull(step.inputType());
-        assertNull(step.outputType());
+        assertEquals(ClassName.get("com.example.app", "InputType"), step.inputType());
+        assertEquals(ClassName.get("com.example.app", "OutputType"), step.outputType());
         String warningSummary = diagnostics.stream().collect(Collectors.joining(" | "));
         assertTrue(warningSummary.contains(Diagnostic.Kind.WARNING.name()));
         assertTrue(warningSummary.contains("Ignoring 'input'/'output' on internal step"));
@@ -127,6 +129,26 @@ class StepDefinitionParserTest {
         assertEquals(StepKind.DELEGATED, step.kind());
         assertEquals("com.example.lib.ExternalService", step.executionClass().canonicalName());
         assertEquals("com.example.app.ExternalMapperImpl", step.externalMapper().canonicalName());
+        assertEquals(MapperFallbackMode.NONE, step.mapperFallback());
+    }
+
+    @Test
+    void parsesDelegatedMapperFallbackJackson() throws IOException {
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "fallback-step"
+                operator: "com.example.lib.ExternalService"
+                input: "com.example.app.InputType"
+                output: "com.example.app.OutputType"
+                mapperFallback: "JACKSON"
+            """);
+
+        assertEquals(1, steps.size());
+        StepDefinition step = steps.getFirst();
+        assertEquals(StepKind.DELEGATED, step.kind());
+        assertEquals(MapperFallbackMode.JACKSON, step.mapperFallback());
     }
 
     @Test
@@ -240,6 +262,142 @@ class StepDefinitionParserTest {
         assertTrue(warningSummary.contains(Diagnostic.Kind.WARNING.name()));
         assertTrue(warningSummary.contains("unsupported keys"));
         assertTrue(warningSummary.contains("unexpectedField"));
+    }
+
+    @Test
+    void ignoresMapperFallbackForInternalStep() throws IOException {
+        Path file = tempDir.resolve("pipeline.yaml");
+        Files.writeString(file, """
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "internal-with-fallback"
+                service: "com.example.app.InternalService"
+                mapperFallback: "JACKSON"
+            """);
+
+        List<String> diagnostics = new ArrayList<>();
+        StepDefinitionParser parser = new StepDefinitionParser((kind, message) ->
+            diagnostics.add(kind + ":" + message));
+        List<StepDefinition> steps = parser.parseStepDefinitions(file);
+
+        assertEquals(1, steps.size());
+        StepDefinition step = steps.getFirst();
+        assertEquals(StepKind.INTERNAL, step.kind());
+        assertEquals(MapperFallbackMode.NONE, step.mapperFallback());
+        String warningSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(warningSummary.contains(Diagnostic.Kind.WARNING.name()));
+        assertTrue(warningSummary.contains("Ignoring 'mapperFallback' on internal step"));
+    }
+
+    @Test
+    void defaultsMapperFallbackToNoneWhenNotSpecified() throws IOException {
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "no-fallback"
+                operator: "com.example.lib.ExternalService"
+                input: "com.example.app.InputType"
+                output: "com.example.app.OutputType"
+            """);
+
+        assertEquals(1, steps.size());
+        assertEquals(MapperFallbackMode.NONE, steps.getFirst().mapperFallback());
+    }
+
+    @Test
+    void rejectsInvalidMapperFallbackValue() throws IOException {
+        Path file = tempDir.resolve("pipeline.yaml");
+        Files.writeString(file, """
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "invalid-fallback"
+                operator: "com.example.lib.ExternalService"
+                input: "com.example.app.InputType"
+                output: "com.example.app.OutputType"
+                mapperFallback: "INVALID_MODE"
+            """);
+
+        List<String> diagnostics = new ArrayList<>();
+        StepDefinitionParser parser = new StepDefinitionParser((kind, message) ->
+            diagnostics.add(kind + ":" + message));
+        List<StepDefinition> steps = parser.parseStepDefinitions(file);
+
+        assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()));
+        assertTrue(errorSummary.contains("invalid mapperFallback"));
+        assertTrue(errorSummary.contains("INVALID_MODE"));
+    }
+
+    @Test
+    void parsesMapperFallbackCaseInsensitive() throws IOException {
+        List<StepDefinition> stepsLower = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "fallback-lower"
+                operator: "com.example.lib.ExternalService"
+                input: "com.example.app.InputType"
+                output: "com.example.app.OutputType"
+                mapperFallback: "jackson"
+            """);
+
+        assertEquals(1, stepsLower.size());
+        assertEquals(MapperFallbackMode.JACKSON, stepsLower.getFirst().mapperFallback());
+
+        List<StepDefinition> stepsMixed = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "fallback-mixed"
+                operator: "com.example.lib.ExternalService"
+                input: "com.example.app.InputType"
+                output: "com.example.app.OutputType"
+                mapperFallback: "JaCkSoN"
+            """);
+
+        assertEquals(1, stepsMixed.size());
+        assertEquals(MapperFallbackMode.JACKSON, stepsMixed.getFirst().mapperFallback());
+    }
+
+    @Test
+    void parsesMapperFallbackNone() throws IOException {
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "fallback-none"
+                operator: "com.example.lib.ExternalService"
+                input: "com.example.app.InputType"
+                output: "com.example.app.OutputType"
+                mapperFallback: "NONE"
+            """);
+
+        assertEquals(1, steps.size());
+        assertEquals(MapperFallbackMode.NONE, steps.getFirst().mapperFallback());
+    }
+
+    @Test
+    void allowsBothOperatorMapperAndMapperFallback() throws IOException {
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "mapper-and-fallback"
+                operator: "com.example.lib.ExternalService"
+                input: "com.example.app.InputType"
+                output: "com.example.app.OutputType"
+                operatorMapper: "com.example.app.ExternalMapperImpl"
+                mapperFallback: "JACKSON"
+            """);
+
+        assertEquals(1, steps.size());
+        StepDefinition step = steps.getFirst();
+        assertNotNull(step.externalMapper());
+        assertEquals(MapperFallbackMode.JACKSON, step.mapperFallback());
     }
 
     private List<StepDefinition> parse(String yaml) throws IOException {

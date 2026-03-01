@@ -5,12 +5,10 @@ import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
 import org.jboss.jandex.DotName;
 import org.jboss.jandex.Index;
 import org.jboss.jandex.Indexer;
-import org.jboss.jandex.IndexView;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.mapper.Mapper;
 
-import java.lang.reflect.Method;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
@@ -22,8 +20,6 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MapperInferenceBuildStepsTest {
 
@@ -53,11 +49,13 @@ class MapperInferenceBuildStepsTest {
 
         assertEquals(1, produced.size());
         MapperRegistryBuildItem item = produced.get(0);
-        assertNotNull(item.getMapperForDomain(DotName.createSimple(DomainA.class.getName())));
+        assertNotNull(item.getMapperForPair(
+                DotName.createSimple(DomainA.class.getName()),
+                DotName.createSimple(GrpcA.class.getName())));
     }
 
     @Test
-    void failsWhenStepDomainTypeIsMissingFromIndex() throws Exception {
+    void doesNotFailWhenStepDomainTypeIsMissingFromIndex() throws Exception {
         String missingDomain = "com.example.MissingDomain";
         String content = "com.example.ProcessA|"
             + missingDomain
@@ -70,16 +68,13 @@ class MapperInferenceBuildStepsTest {
         CombinedIndexBuildItem combinedIndex = new CombinedIndexBuildItem(index, index);
 
         MapperInferenceBuildSteps steps = new MapperInferenceBuildSteps();
-        IllegalStateException error = withContextClassLoader(root.toUri().toURL(),
-            () -> assertThrows(IllegalStateException.class,
-                () -> steps.buildMapperRegistry(combinedIndex, item -> {
-                })));
-
-        assertTrue(error.getMessage().contains("not in the Jandex index"));
+        withContextClassLoader(root.toUri().toURL(),
+            () -> steps.buildMapperRegistry(combinedIndex, item -> {
+            }));
     }
 
     @Test
-    void failsWhenStepDomainHasNoMapperInRegistry() throws Exception {
+    void doesNotFailWhenStepDomainHasNoMapperInRegistry() throws Exception {
         String content = "com.example.ProcessA|"
             + DomainB.class.getName()
             + "|"
@@ -91,16 +86,13 @@ class MapperInferenceBuildStepsTest {
         CombinedIndexBuildItem combinedIndex = new CombinedIndexBuildItem(index, index);
 
         MapperInferenceBuildSteps steps = new MapperInferenceBuildSteps();
-        IllegalStateException error = withContextClassLoader(root.toUri().toURL(),
-            () -> assertThrows(IllegalStateException.class,
-                () -> steps.buildMapperRegistry(combinedIndex, item -> {
-                })));
-
-        assertTrue(error.getMessage().contains("has no outbound mapper"));
+        withContextClassLoader(root.toUri().toURL(),
+            () -> steps.buildMapperRegistry(combinedIndex, item -> {
+            }));
     }
 
     @Test
-    void failsWhenDuplicateStepDefinitionsConflict() throws Exception {
+    void doesNotValidateStepDefinitionsAtBuildTime() throws Exception {
         String content = "com.example.ProcessA|"
                 + DomainA.class.getName()
                 + "|"
@@ -117,23 +109,9 @@ class MapperInferenceBuildStepsTest {
         CombinedIndexBuildItem combinedIndex = new CombinedIndexBuildItem(index, index);
 
         MapperInferenceBuildSteps steps = new MapperInferenceBuildSteps();
-        IllegalStateException error = withContextClassLoader(root.toUri().toURL(),
-                () -> assertThrows(IllegalStateException.class,
-                        () -> steps.buildMapperRegistry(combinedIndex, item -> {
-                        })));
-
-        assertTrue(error.getMessage().contains("Conflicting step definitions for stepName 'com.example.ProcessA'"));
-    }
-
-    @Test
-    void isMapLikeDetectsIndirectMapInterfaces() throws Exception {
-        Index index = indexOf(IndirectMap.class, BaseMap.class);
-        MapperInferenceBuildSteps steps = new MapperInferenceBuildSteps();
-        Method method = MapperInferenceBuildSteps.class.getDeclaredMethod("isMapLike", DotName.class, IndexView.class);
-        method.setAccessible(true);
-
-        boolean mapLike = (boolean) method.invoke(steps, DotName.createSimple(IndirectMap.class.getName()), index);
-        assertTrue(mapLike);
+        withContextClassLoader(root.toUri().toURL(),
+                () -> steps.buildMapperRegistry(combinedIndex, item -> {
+                }));
     }
 
     private Path writeStepDefinitions(String content) throws IOException {
@@ -192,27 +170,14 @@ class MapperInferenceBuildStepsTest {
     static final class DtoA {}
     static final class DomainA {}
     static final class DomainB {}
-    interface BaseMap<K, V> extends java.util.Map<K, V> {}
-    interface IndirectMap<K, V> extends BaseMap<K, V> {}
-
-    static final class MapperA implements Mapper<GrpcA, DtoA, DomainA> {
+    static final class MapperA implements Mapper<DomainA, GrpcA> {
         @Override
-        public DtoA fromGrpc(GrpcA grpc) {
+        public DomainA fromExternal(GrpcA grpc) {
             return null;
         }
 
         @Override
-        public GrpcA toGrpc(DtoA dto) {
-            return null;
-        }
-
-        @Override
-        public DomainA fromDto(DtoA dto) {
-            return null;
-        }
-
-        @Override
-        public DtoA toDto(DomainA domain) {
+        public GrpcA toExternal(DomainA domain) {
             return null;
         }
     }

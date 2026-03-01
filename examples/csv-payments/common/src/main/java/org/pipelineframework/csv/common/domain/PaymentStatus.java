@@ -59,6 +59,6 @@ public class PaymentStatus extends BaseEntity implements Serializable {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
     PaymentStatus that = (PaymentStatus) o;
-    return this.getId() != null && this.getId().equals(that.getId());
+    return this.id != null && this.id.equals(that.id);
   }
 }

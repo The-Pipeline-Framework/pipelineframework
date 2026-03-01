@@ -132,11 +132,9 @@ class RestBindingSkipTest {
                         import org.pipelineframework.mapper.Mapper;
 
                         @org.mapstruct.Mapper
-                        public interface FooInputMapper extends Mapper<FooInputGrpcMessage, FooInputDto, FooInput> {
-                            FooInputDto fromGrpc(FooInputGrpcMessage grpc);
-                            FooInputGrpcMessage toGrpc(FooInputDto dto);
-                            FooInput fromDto(FooInputDto dto);
-                            FooInputDto toDto(FooInput domain);
+                        public interface FooInputMapper extends Mapper<FooInput, FooInputDto> {
+                            FooInput fromExternal(FooInputDto dto);
+                            FooInputDto toExternal(FooInput domain);
                         }
                         """),
                 JavaFileObjects.forSourceString(
@@ -150,11 +148,9 @@ class RestBindingSkipTest {
                         import org.pipelineframework.mapper.Mapper;
 
                         @org.mapstruct.Mapper
-                        public interface FooOutputMapper extends Mapper<FooOutputGrpcMessage, FooOutputDto, FooOutput> {
-                            FooOutputDto fromGrpc(FooOutputGrpcMessage grpc);
-                            FooOutputGrpcMessage toGrpc(FooOutputDto dto);
-                            FooOutput fromDto(FooOutputDto dto);
-                            FooOutputDto toDto(FooOutput domain);
+                        public interface FooOutputMapper extends Mapper<FooOutput, FooOutputDto> {
+                            FooOutput fromExternal(FooOutputDto dto);
+                            FooOutputDto toExternal(FooOutput domain);
                         }
                         """));
 

@@ -28,19 +28,49 @@ import org.pipelineframework.csv.grpc.ProcessCsvPaymentsOutputFileSvc;
     componentModel = "jakarta",
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface CsvPaymentsOutputFileMapper extends org.pipelineframework.mapper.Mapper<ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile, CsvPaymentsOutputFileDto, CsvPaymentsOutputFile>{
+public interface CsvPaymentsOutputFileMapper extends org.pipelineframework.mapper.Mapper<CsvPaymentsOutputFile, ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile> {
 
   CsvPaymentsOutputFileMapper INSTANCE = Mappers.getMapper( CsvPaymentsOutputFileMapper.class );
 
-  @Override
+  CsvPaymentsOutputFileDto toDto(CsvPaymentsOutputFile domain);
+
+  CsvPaymentsOutputFile fromDto(CsvPaymentsOutputFileDto dto);
+
   @Mapping(target = "id", qualifiedByName = "uuidToString")
   @Mapping(target = "filepath", qualifiedByName = "pathToString")
   @Mapping(target = "csvFolderPath", qualifiedByName = "pathToString")
   ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile toGrpc(CsvPaymentsOutputFileDto dto);
 
-  @Override
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
   @Mapping(target = "filepath", qualifiedByName = "stringToPath")
   @Mapping(target = "csvFolderPath", qualifiedByName = "stringToPath")
   CsvPaymentsOutputFileDto fromGrpc(ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile proto);
+
+  @Override
+  default CsvPaymentsOutputFile fromExternal(ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile external) {
+    return fromDto(fromGrpc(external));
+  }
+
+  @Override
+  default ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile toExternal(CsvPaymentsOutputFile domain) {
+    return toGrpc(toDto(domain));
+  }
+
+  /**
+   * @deprecated use {@link #toExternal(CsvPaymentsOutputFile)}. Transitional bridge method retained for
+   *             compatibility and scheduled for removal in a future major release.
+   */
+  @Deprecated(since = "26.2.5", forRemoval = true)
+  default ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile toDtoToGrpc(CsvPaymentsOutputFile domain) {
+    return toExternal(domain);
+  }
+
+  /**
+   * @deprecated use {@link #fromExternal(ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile)}. Transitional bridge
+   *             method retained for compatibility and scheduled for removal in a future major release.
+   */
+  @Deprecated(since = "26.2.5", forRemoval = true)
+  default CsvPaymentsOutputFile fromGrpcFromDto(ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile grpc) {
+    return fromExternal(grpc);
+  }
 }

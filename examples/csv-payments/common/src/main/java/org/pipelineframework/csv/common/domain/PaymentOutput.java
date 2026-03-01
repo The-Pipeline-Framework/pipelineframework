@@ -67,12 +67,12 @@ public class PaymentOutput extends BaseEntity implements Serializable {
     if (this == o) return true;
     if (o == null || getClass() != o.getClass()) return false;
     PaymentOutput that = (PaymentOutput) o;
-    return this.getId() != null && this.getId().equals(that.getId());
+    return this.id != null && this.id.equals(that.id);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(getId(), getCsvId(), getRecipient(), getAmount(), getCurrency());
+    return Objects.hash(id);
   }
 
 }

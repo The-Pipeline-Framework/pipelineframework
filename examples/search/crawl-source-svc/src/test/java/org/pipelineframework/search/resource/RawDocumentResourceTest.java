@@ -23,6 +23,7 @@ import io.restassured.RestAssured;
 import io.restassured.config.SSLConfig;
 import io.restassured.http.ContentType;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -34,6 +35,10 @@ class RawDocumentResourceTest {
 
     @BeforeAll
     static void setUp() {
+        Assumptions.assumeTrue(
+                isGeneratedRestResourcePresent(),
+                "Generated REST resource not present in this build; skipping REST endpoint assertions.");
+
         // Configure RestAssured to use HTTPS and trust all certificates for testing
         RestAssured.useRelaxedHTTPSValidation();
         RestAssured.config =
@@ -46,6 +51,18 @@ class RawDocumentResourceTest {
     static void tearDown() {
         // Reset RestAssured to default configuration
         RestAssured.reset();
+    }
+
+    private static boolean isGeneratedRestResourcePresent() {
+        try {
+            Class.forName(
+                    "org.pipelineframework.search.crawl_source.service.pipeline.ProcessCrawlSourceResource",
+                    false,
+                    Thread.currentThread().getContextClassLoader());
+            return true;
+        } catch (ClassNotFoundException | LinkageError e) {
+            return false;
+        }
     }
 
     @Test

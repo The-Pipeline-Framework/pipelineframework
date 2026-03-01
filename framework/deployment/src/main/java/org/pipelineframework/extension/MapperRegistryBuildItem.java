@@ -20,155 +20,148 @@ import io.quarkus.builder.item.SimpleBuildItem;
 import io.smallrye.common.annotation.Experimental;
 import org.jboss.jandex.ClassInfo;
 import org.jboss.jandex.DotName;
+import org.pipelineframework.extension.MapperInferenceEngine.MapperPairKey;
 
-import java.util.Collections;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
 /**
- * Build item containing the resolved mapper registry built from the Jandex index.
+ * Build item containing the resolved pair-based mapper registry built from the Jandex index.
  * <p>
- * This build item is produced by the mapper inference build step and consumed
- * by code generation phases. It contains a complete mapping of domain types
- * to their corresponding Mapper implementations.
- * <p>
- * PER REQUIREMENTS: All mappers MUST be resolved at build time with zero runtime resolution.
- * "Fail fast on ambiguity" - "Never use runtime reflection" - "No fallback. No silent transport bypass."
+ * Mappers are keyed by exact (domain, external) type pairs so inbound and outbound conversions
+ * can be resolved independently without domain-only ambiguity.
  */
 @Experimental("Mapper inference based on Jandex index")
 public final class MapperRegistryBuildItem extends SimpleBuildItem {
 
-    private final Map<DotName, ClassInfo> domainToMapper;
-    private final Map<ClassInfo, DotName> mapperToDomain;
+    private final Map<MapperPairKey, ClassInfo> pairToMapper;
+    private final Map<ClassInfo, MapperPairKey> mapperToPair;
 
     /**
-     * Constructs a build item that holds a bidirectional, immutable mapping between domain types and mapper classes.
+     * Constructs a build item that holds a bidirectional immutable mapping between mapper pair keys and mapper classes.
      *
-     * <p>Validates that each entry in one map is the inverse of the corresponding entry in the other map and stores
-     * unmodifiable copies of both maps.</p>
-     *
-     * @param domainToMapper map from domain type {@link DotName} to mapper {@link ClassInfo}
-     * @param mapperToDomain map from mapper {@link ClassInfo} to domain type {@link DotName}
-     * @throws IllegalArgumentException if the two maps are not consistent inverses of each other
+     * @param pairToMapper map from (domain, external) pair key to mapper implementation
+     * @param mapperToPair map from mapper implementation to (domain, external) pair key
      */
-    public MapperRegistryBuildItem(Map<DotName, ClassInfo> domainToMapper, Map<ClassInfo, DotName> mapperToDomain) {
-        Map<DotName, ClassInfo> domainToMapperCopy = new HashMap<>(Objects.requireNonNull(domainToMapper));
-        Map<ClassInfo, DotName> mapperToDomainCopy = new HashMap<>(Objects.requireNonNull(mapperToDomain));
+    public MapperRegistryBuildItem(Map<MapperPairKey, ClassInfo> pairToMapper, Map<ClassInfo, MapperPairKey> mapperToPair) {
+        Map<MapperPairKey, ClassInfo> pairToMapperCopy = new HashMap<>(Objects.requireNonNull(pairToMapper));
+        Map<ClassInfo, MapperPairKey> mapperToPairCopy = new HashMap<>(Objects.requireNonNull(mapperToPair));
 
-        // Verify equal sizes upfront for a clear error message on mismatched entries
-        if (domainToMapperCopy.size() != mapperToDomainCopy.size()) {
+        if (pairToMapperCopy.size() != mapperToPairCopy.size()) {
             throw new IllegalArgumentException(String.format(
-                    "Inconsistent mapper registry: domainToMapper has %d entries but mapperToDomain has %d entries. " +
-                    "Ensure both maps have the same entries. domainToMapper sample key: %s, mapperToDomain sample key: %s",
-                    domainToMapperCopy.size(),
-                    mapperToDomainCopy.size(),
-                    domainToMapperCopy.keySet().isEmpty() ? "N/A" : domainToMapperCopy.keySet().iterator().next(),
-                    mapperToDomainCopy.keySet().isEmpty() ? "N/A" : mapperToDomainCopy.keySet().iterator().next()));
+                    "Inconsistent mapper registry: pairToMapper has %d entries but mapperToPair has %d entries.",
+                    pairToMapperCopy.size(),
+                    mapperToPairCopy.size()));
         }
 
-        for (Map.Entry<DotName, ClassInfo> entry : domainToMapperCopy.entrySet()) {
-            DotName domain = entry.getKey();
+        for (Map.Entry<MapperPairKey, ClassInfo> entry : pairToMapperCopy.entrySet()) {
+            MapperPairKey pair = entry.getKey();
             ClassInfo mapper = entry.getValue();
-            DotName reverseDomain = mapperToDomainCopy.get(mapper);
-            if (!domain.equals(reverseDomain)) {
+            MapperPairKey reversePair = mapperToPairCopy.get(mapper);
+            if (!pair.equals(reversePair)) {
                 throw new IllegalArgumentException(String.format(
-                        "Inconsistent mapper registry: domainToMapper contains %s -> %s but mapperToDomain contains %s -> %s",
-                        domain, mapper, mapper, reverseDomain));
+                        "Inconsistent mapper registry: pairToMapper contains %s -> %s but mapperToPair contains %s -> %s",
+                        pair, mapper, mapper, reversePair));
             }
         }
-        for (Map.Entry<ClassInfo, DotName> entry : mapperToDomainCopy.entrySet()) {
+        for (Map.Entry<ClassInfo, MapperPairKey> entry : mapperToPairCopy.entrySet()) {
             ClassInfo mapper = entry.getKey();
-            DotName domain = entry.getValue();
-            ClassInfo reverseMapper = domainToMapperCopy.get(domain);
+            MapperPairKey pair = entry.getValue();
+            ClassInfo reverseMapper = pairToMapperCopy.get(pair);
             if (!mapper.equals(reverseMapper)) {
                 throw new IllegalArgumentException(String.format(
-                        "Inconsistent mapper registry: mapperToDomain contains %s -> %s but domainToMapper contains %s -> %s",
-                        mapper, domain, domain, reverseMapper));
+                        "Inconsistent mapper registry: mapperToPair contains %s -> %s but pairToMapper contains %s -> %s",
+                        mapper, pair, pair, reverseMapper));
             }
         }
 
-        this.domainToMapper = Collections.unmodifiableMap(domainToMapperCopy);
-        this.mapperToDomain = Collections.unmodifiableMap(mapperToDomainCopy);
+        this.pairToMapper = Collections.unmodifiableMap(pairToMapperCopy);
+        this.mapperToPair = Collections.unmodifiableMap(mapperToPairCopy);
     }
 
     /**
-     * Gets the mapper ClassInfo for a given domain type.
+     * Gets the mapper for an exact (domain, external) pair.
      *
-     * @param domainType the domain type DotName
-     * @return the mapper ClassInfo, or null if no mapper is registered for this domain type
+     * @param domainType domain/internal type
+     * @param externalType external representation type
+     * @return mapper class or null if no mapper is registered for the pair
      */
-    public ClassInfo getMapperForDomain(DotName domainType) {
-        return domainToMapper.get(domainType);
+    public ClassInfo getMapperForPair(DotName domainType, DotName externalType) {
+        return pairToMapper.get(new MapperPairKey(domainType, externalType));
     }
 
     /**
-     * Gets the domain type for a given mapper.
+     * Checks if a mapper is registered for an exact (domain, external) pair.
      *
-     * @param mapper the mapper ClassInfo
-     * @return the domain type DotName, or null if the mapper is not in the registry
+     * @param domainType domain/internal type
+     * @param externalType external representation type
+     * @return true when a mapper exists for the pair
      */
-    public DotName getDomainForMapper(ClassInfo mapper) {
-        return mapperToDomain.get(mapper);
+    public boolean hasMapperForPair(DotName domainType, DotName externalType) {
+        return pairToMapper.containsKey(new MapperPairKey(domainType, externalType));
     }
 
     /**
-     * Checks if a mapper is registered for a given domain type.
+     * Gets the pair key for a given mapper class.
      *
-     * @param domainType the domain type DotName
-     * @return true if a mapper is registered, false otherwise
+     * @param mapper mapper implementation class
+     * @return pair key or null if mapper is not in registry
      */
-    public boolean hasMapperForDomain(DotName domainType) {
-        return domainToMapper.containsKey(domainType);
+    public MapperPairKey getPairForMapper(ClassInfo mapper) {
+        return mapperToPair.get(mapper);
     }
 
     /**
-     * Report how many mappers are registered.
+     * Number of registered mapper pairs.
      *
-     * @return the number of registered mappers
+     * @return number of pair entries in the registry
      */
     public int size() {
-        return domainToMapper.size();
+        return pairToMapper.size();
     }
 
     /**
-     * Gets all registered domain types.
+     * All registered pair keys.
      *
-     * @return an unmodifiable set of domain type DotNames
+     * @return unmodifiable set of pair keys
      */
-    public Set<DotName> getAllDomainTypes() {
-        return domainToMapper.keySet();
+    public Set<MapperPairKey> getAllPairs() {
+        return pairToMapper.keySet();
     }
 
     /**
-     * All registered mapper ClassInfo instances.
+     * All registered mapper classes.
      *
-     * @return an unmodifiable collection of mapper ClassInfo instances present in the registry
+     * @return unmodifiable collection of mapper classes
      */
     public Collection<ClassInfo> getAllMappers() {
-        return domainToMapper.values();
+        return pairToMapper.values();
     }
 
     /**
-     * Gets the underlying domain-to-mapper map.
-     * <p>
-     * Returns an unmodifiable view - modifications are not allowed.
+     * Underlying pair-to-mapper map.
      *
-     * @return the domain-to-mapper map
+     * @return unmodifiable map from pair key to mapper class
      */
-    public Map<DotName, ClassInfo> getDomainToMapperMap() {
-        return domainToMapper;
+    public Map<MapperPairKey, ClassInfo> getPairToMapperMap() {
+        return pairToMapper;
     }
 
     /**
-     * String representation of this build item that includes the number of registered mappers.
+     * Underlying mapper-to-pair map.
      *
-     * @return the string in the form {@code MapperRegistryBuildItem{size=<n>}} where {@code n} is the number of mappings
+     * @return unmodifiable map from mapper class to pair key
      */
+    public Map<ClassInfo, MapperPairKey> getMapperToPairMap() {
+        return mapperToPair;
+    }
+
     @Override
     public String toString() {
-        return "MapperRegistryBuildItem{size=" + domainToMapper.size() + '}';
+        return "MapperRegistryBuildItem{size=" + pairToMapper.size() + '}';
     }
 }
