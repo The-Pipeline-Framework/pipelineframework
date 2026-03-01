@@ -184,6 +184,10 @@ class ModelExtractionPhaseTest {
         assertEquals(1, context.getStepDefinitions().size());
         assertEquals(org.pipelineframework.processor.ir.MapperFallbackMode.JACKSON,
                 context.getStepDefinitions().get(0).mapperFallback());
+        verify(messager).printMessage(
+            org.mockito.ArgumentMatchers.eq(javax.tools.Diagnostic.Kind.ERROR),
+            org.mockito.ArgumentMatchers.contains(
+                "Delegate service class 'com.example.DelegateService' not found for step 'test-step'"));
     }
 
     @Test
