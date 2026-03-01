@@ -70,8 +70,8 @@ public class LocalClientStepTargetGenerator implements TargetGenerator {
                 sideEffectBeanService.generateSideEffectBean(
                     ctx,
                     model,
-                    DeploymentRole.PLUGIN_SERVER,
-                    DeploymentRole.ORCHESTRATOR_CLIENT,
+                    DeploymentRole.PLUGIN_CLIENT,
+                    DeploymentRole.PLUGIN_CLIENT,
                     request.grpcBinding());
             }
         }

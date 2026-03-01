@@ -226,7 +226,6 @@
                                     <directory>${project.basedir}/../orchestrator-svc/target/classes/META-INF/pipeline</directory>
                                     <filtering>false</filtering>
                                     <includes>
-                                        <include>order.json</include>
                                         <include>telemetry.json</include>
                                         <include>orchestrator-clients.properties</include>
                                     </includes>

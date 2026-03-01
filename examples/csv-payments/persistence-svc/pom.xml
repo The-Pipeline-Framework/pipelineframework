@@ -113,4 +113,97 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>pipeline-runtime-source-aggregation</id>
+            <activation>
+                <property>
+                    <name>csv.runtime.layout</name>
+                    <value>pipeline-runtime</value>
+                </property>
+            </activation>
+            <properties>
+                <pipeline.runtime.source.root>${project.basedir}/..</pipeline.runtime.source.root>
+                <pipeline.runtime.source.dir.input>${pipeline.runtime.source.root}/input-csv-file-processing-svc/src/main/java</pipeline.runtime.source.dir.input>
+                <pipeline.runtime.source.dir.payments>${pipeline.runtime.source.root}/payments-processing-svc/src/main/java</pipeline.runtime.source.dir.payments>
+                <pipeline.runtime.source.dir.status>${pipeline.runtime.source.root}/payment-status-svc/src/main/java</pipeline.runtime.source.dir.status>
+                <pipeline.runtime.source.dir.output>${pipeline.runtime.source.root}/output-csv-file-processing-svc/src/main/java</pipeline.runtime.source.dir.output>
+                <pipeline.runtime.source.exclude.executor>org/pipelineframework/csv/service/ExecutorProducer.java</pipeline.runtime.source.exclude.executor>
+                <pipeline.runtime.duplicate.check.script>${pipeline.runtime.source.root}/build-tools/check-duplicate-sources.sh</pipeline.runtime.duplicate.check.script>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-antrun-plugin</artifactId>
+                        <version>3.2.0</version>
+                        <executions>
+                            <execution>
+                                <id>collect-pipeline-runtime-sources</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>run</goal>
+                                </goals>
+                                <configuration>
+                                    <target>
+                                        <delete dir="${project.build.directory}/pipeline-runtime-sources"/>
+                                        <mkdir dir="${project.build.directory}/pipeline-runtime-sources"/>
+                                        <condition property="is.windows">
+                                            <os family="windows"/>
+                                        </condition>
+                                        <fail if="is.windows">
+                                            persistence-svc source aggregation runs a Unix shell script (`check-duplicate-sources.sh`). Run this module on Unix-like environments (Linux/macOS/WSL).
+                                        </fail>
+                                        <exec executable="bash" failonerror="true">
+                                            <arg value="${pipeline.runtime.duplicate.check.script}"/>
+                                            <arg value="${project.build.directory}/pipeline-runtime-sources"/>
+                                            <arg value="${pipeline.runtime.source.dir.input}"/>
+                                            <arg value="${pipeline.runtime.source.dir.payments}"/>
+                                            <arg value="${pipeline.runtime.source.dir.status}"/>
+                                            <arg value="${pipeline.runtime.source.dir.output}"/>
+                                        </exec>
+                                        <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                            <fileset dir="${pipeline.runtime.source.dir.input}"/>
+                                        </copy>
+                                        <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                            <fileset dir="${pipeline.runtime.source.dir.payments}">
+                                                <exclude name="${pipeline.runtime.source.exclude.executor}"/>
+                                            </fileset>
+                                        </copy>
+                                        <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                            <fileset dir="${pipeline.runtime.source.dir.status}"/>
+                                        </copy>
+                                        <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                            <fileset dir="${pipeline.runtime.source.dir.output}">
+                                                <exclude name="${pipeline.runtime.source.exclude.executor}"/>
+                                            </fileset>
+                                        </copy>
+                                    </target>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <version>3.6.0</version>
+                        <executions>
+                            <execution>
+                                <id>add-pipeline-runtime-sources</id>
+                                <phase>generate-sources</phase>
+                                <goals>
+                                    <goal>add-source</goal>
+                                </goals>
+                                <configuration>
+                                    <sources>
+                                        <source>${project.build.directory}/pipeline-runtime-sources</source>
+                                    </sources>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

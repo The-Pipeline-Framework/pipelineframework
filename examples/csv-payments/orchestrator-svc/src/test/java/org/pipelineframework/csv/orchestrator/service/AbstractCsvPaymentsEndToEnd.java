@@ -415,7 +415,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
      */
     private static void ensureWritable(Path path) {
         try {
-            String permission = Files.isDirectory(path) ? "rwxr-xr-x" : "rw-r--r--";
+            // Containers may run as non-root/non-host UID, so mounted test paths must be writable by all.
+            String permission = Files.isDirectory(path) ? "rwxrwxrwx" : "rw-rw-rw-";
             Set<PosixFilePermission> perms = PosixFilePermissions.fromString(permission);
             Files.setPosixFilePermissions(path, perms);
         } catch (IOException | UnsupportedOperationException e) {

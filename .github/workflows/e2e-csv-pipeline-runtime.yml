@@ -1,19 +1,16 @@
-name: CI — CSV Pipeline Runtime E2E
+name: Reusable — CSV Pipeline Runtime E2E
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "framework/**"
-      - "examples/csv-payments/**"
-      - "pom.xml"
-      - ".github/workflows/e2e-csv-pipeline-runtime.yml"
-      - ".github/workflows/full-tests.yml"
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      artifact_name:
+        description: 'Name of the Maven artifacts tarball'
+        required: false
+        default: 'framework-m2-cache'
+        type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-e2e-csv-pipeline-runtime
   cancel-in-progress: true
 
 env:
@@ -24,7 +21,6 @@ jobs:
   csv-pipeline-runtime-e2e:
     name: CSV Pipeline Runtime E2E
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.event.head_commit.message, 'maven-release-plugin') }}
 
     steps:
       - name: Checkout
@@ -40,34 +36,22 @@ jobs:
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
 
-      - name: Ensure Docker is ready for Testcontainers
+      - name: Download framework artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: /tmp/m2-artifacts
+
+      - name: Extract framework artifacts
         run: |
-          set -euo pipefail
-          echo "DOCKER_HOST=unix:///var/run/docker.sock" >> "$GITHUB_ENV"
-          if ! docker info >/dev/null 2>&1; then
-            sudo systemctl start docker || true
-          fi
-          for i in {1..10}; do
-            if docker info >/dev/null 2>&1; then
-              break
-            fi
-            sleep 3
-          done
-          if ! docker info >/dev/null 2>&1; then
-            echo "::error::Docker daemon did not become ready after 30 seconds"
-            exit 1
-          fi
-          SERVER_API="$(docker version --format '{{.Server.APIVersion}}')"
-          echo "DOCKER_API_VERSION=$SERVER_API" >> "$GITHUB_ENV"
-          echo "TESTCONTAINERS_DOCKER_CLIENT_STRATEGY=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" >> "$GITHUB_ENV"
-          echo "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock" >> "$GITHUB_ENV"
-          echo "JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
-          echo "MAVEN_OPTS=${MAVEN_OPTS} -Djava.util.logging.manager=org.jboss.logmanager.LogManager" >> "$GITHUB_ENV"
-          echo "docker.client.strategy=org.testcontainers.dockerclient.UnixSocketClientProviderStrategy" > "$HOME/.testcontainers.properties"
-          echo "docker.host=unix:///var/run/docker.sock" >> "$HOME/.testcontainers.properties"
+          mkdir -p ~/.m2/repository
+          tar -xzf /tmp/m2-artifacts/${{ inputs.artifact_name }}.tar.gz -C ~/.m2/repository
+
+      - name: Setup Testcontainers Docker environment
+        uses: ./.github/actions/setup-testcontainers
 
       - name: Build csv-payments pipeline-runtime topology
-        run: ./examples/csv-payments/build-pipeline-runtime.sh -DskipTests
+        run: ./examples/csv-payments/build-pipeline-runtime.sh
 
       - name: Run csv-payments pipeline-runtime topology + E2E
         run: |

@@ -24,6 +24,7 @@ This page documents the grouped pipeline-runtime topology in `examples/csv-payme
 What the script does:
 
 - Applies `pipeline-runtime.yaml` as active runtime mapping.
+- Installs `examples/csv-payments/pom.xml` (`-N install`) so module parent descriptors are resolvable in clean local repositories (including CI jobs).
 - Builds `pom.pipeline-runtime.xml`.
 - Uses `GRPC` transport by default (override with `PIPELINE_TRANSPORT=REST|LOCAL` if needed).
 - Restores the previous active mapping file after the build.
