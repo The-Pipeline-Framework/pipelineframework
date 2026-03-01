@@ -130,16 +130,16 @@ public class ProcessCsvPaymentsOutputFileService
                                       return Uni.createFrom().item(file);
                                   } catch (IOException e) {
                                       logger.errorf(e, "Failed to create output file: %s", inputFile);
-                                      return Uni.createFrom().nullItem();
+                                      return Uni.createFrom().failure(e);
                                   } catch (CsvDataTypeMismatchException e) {
                                       logger.errorf(e, "CSV data type mismatch: %s", inputFile);
-                                      return Uni.createFrom().nullItem();
+                                      return Uni.createFrom().failure(e);
                                   } catch (CsvRequiredFieldEmptyException e) {
                                       logger.errorf(e, "A required field is empty: %s", inputFile);
-                                      return Uni.createFrom().nullItem();
+                                      return Uni.createFrom().failure(e);
                                   } catch (Exception e) {
                                       logger.errorf(e, "Failed to write output file: %s", inputFile);
-                                      return Uni.createFrom().nullItem();
+                                      return Uni.createFrom().failure(e);
                                   }
                               });
 
@@ -155,7 +155,7 @@ public class ProcessCsvPaymentsOutputFileService
                                       .toMulti();
                           });
               })
-              .filter(Objects::nonNull); // drop nulls just in case
+              .filter(Objects::nonNull);
   }
 
   /**

@@ -20,10 +20,10 @@ This page documents the current monolith topology in `examples/csv-payments`.
 `monolith-svc` uses the same merge pattern as other csv-payments modules:
 
 - `maven-resources-plugin` merges role outputs from `target/classes-pipeline/*` into `target/classes` before Quarkus packaging.
-- Monolith additionally copies orchestrator pipeline metadata into `target/classes/META-INF/pipeline`:
-  - `order.json`
+- Monolith additionally copies orchestrator metadata needed by the harness/runtime boundary into `target/classes/META-INF/pipeline`:
   - `telemetry.json`
   - `orchestrator-clients.properties`
+- `order.json` must come from monolith generation for the active transport/layout. It should not be overwritten by orchestrator metadata.
 
 Without these metadata files, monolith startup can fail with errors such as:
 `Pipeline order metadata not found. Ensure META-INF/pipeline/order.json is generated at build time.`
@@ -37,6 +37,8 @@ Without these metadata files, monolith startup can fail with errors such as:
 What the script does:
 
 - Applies monolith runtime mapping.
+- Installs `examples/csv-payments/pom.xml` (`-N install`) so module parent descriptors are resolvable in clean local repositories (including CI jobs).
+- Ensures development certificates exist for module-local test/runtime launches.
 - Builds `pom.monolith.xml`.
 - Uses local transport for in-process step calls.
 - Restores previous runtime mapping file after build.

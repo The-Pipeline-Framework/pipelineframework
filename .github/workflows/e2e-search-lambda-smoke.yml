@@ -1,19 +1,16 @@
-name: CI — Search Lambda Smoke
+name: Reusable — Search Lambda Smoke
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "framework/**"
-      - "examples/search/**"
-      - "pom.xml"
-      - ".github/workflows/e2e-search-lambda-smoke.yml"
-      - ".github/workflows/full-tests.yml"
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      artifact_name:
+        description: 'Name of the Maven artifacts tarball'
+        required: false
+        default: 'framework-m2-cache'
+        type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-e2e-search-lambda
   cancel-in-progress: true
 
 env:
@@ -24,7 +21,6 @@ jobs:
   search-lambda-smoke:
     name: Search Lambda Smoke
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.event.head_commit.message, 'maven-release-plugin') }}
 
     steps:
       - name: Checkout
@@ -38,21 +34,25 @@ jobs:
           cache: maven
 
       - name: Configure Maven
-        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> "$GITHUB_ENV"
+        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
+
+      - name: Download framework artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: /tmp/m2-artifacts
+
+      - name: Extract framework artifacts
+        run: |
+          mkdir -p ~/.m2/repository
+          tar -xzf /tmp/m2-artifacts/${{ inputs.artifact_name }}.tar.gz -C ~/.m2/repository
+
+      - name: Build search Lambda topology prerequisites
+        run: ./examples/search/build-lambda.sh -DskipTests -Dquarkus.container-image.build=false
 
       - name: Run search Lambda mock-server smoke test
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
-          ./mvnw "${maven_args[@]}" -f examples/search/pom.xml \
-            -pl orchestrator-svc \
-            -am \
-            -Dtpf.build.platform=FUNCTION \
-            -Dtpf.build.transport=REST \
-            -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
-            -Dtpf.build.lambda.scope=compile \
-            -Dquarkus.profile=lambda \
-            -DskipTests \
-            compile
           ./mvnw "${maven_args[@]}" -f examples/search/pom.xml \
             -pl orchestrator-svc \
             -Dtpf.build.platform=FUNCTION \

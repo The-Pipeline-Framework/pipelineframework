@@ -13,10 +13,12 @@ import javax.tools.StandardLocation;
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
+import org.pipelineframework.config.pipeline.PipelineOrderExpander;
 import org.pipelineframework.config.pipeline.PipelineYamlStep;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.TransportMode;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolution;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMappingResolver;
@@ -68,6 +70,15 @@ public class OrchestratorClientPropertiesGenerator {
         List<PipelineStepModel> sideEffects = clientModels.stream()
             .filter(PipelineStepModel::sideEffect)
             .toList();
+        Set<String> emittedClientNames = new LinkedHashSet<>();
+        orderedBaseSteps.stream()
+            .map(OrchestratorClientNaming::clientNameForModel)
+            .filter(Objects::nonNull)
+            .forEach(emittedClientNames::add);
+        sideEffects.stream()
+            .map(OrchestratorClientNaming::clientNameForModel)
+            .filter(Objects::nonNull)
+            .forEach(emittedClientNames::add);
 
         List<String> moduleOrder = resolveModuleOrder(orderedBaseSteps, sideEffects, mapping);
         mapping = mapping.withResolvedModules(moduleOrder);
@@ -77,6 +88,7 @@ public class OrchestratorClientPropertiesGenerator {
 
         if (ctx.isTransportModeGrpc()) {
             renderGrpcClients(writer, orderedBaseSteps, sideEffects, mapping);
+            appendMissingSideEffectGrpcClients(writer, ctx, orderedBaseSteps, emittedClientNames, mapping);
         } else {
             renderRestClients(writer, orderedBaseSteps, sideEffects, mapping);
         }
@@ -398,6 +410,76 @@ public class OrchestratorClientPropertiesGenerator {
                     .append(".plain-text=false\n");
             }
         }
+    }
+
+    private void appendMissingSideEffectGrpcClients(
+        StringWriter writer,
+        PipelineCompilationContext ctx,
+        List<PipelineStepModel> orderedBaseSteps,
+        Set<String> emittedClientNames,
+        OrchestratorClientModuleMapping mapping
+    ) {
+        PipelineYamlConfig config = loadPipelineConfig(ctx);
+        if (config == null || config.steps() == null || config.steps().isEmpty()) {
+            return;
+        }
+        TransportMode mode = ctx.getTransportMode() == null ? TransportMode.GRPC : ctx.getTransportMode();
+        String suffix = mode.clientStepSuffix();
+        List<String> baseClassNames = orderedBaseSteps.stream()
+            .map(model -> model.servicePackage() + ".pipeline."
+                + model.generatedName().replace("Service", "") + suffix)
+            .toList();
+        List<String> expanded = PipelineOrderExpander.expand(baseClassNames, config, null);
+        if (expanded == null || expanded.isEmpty()) {
+            return;
+        }
+
+        for (String className : expanded) {
+            String clientName = sideEffectClientNameFromClass(className);
+            if (clientName == null || emittedClientNames.contains(clientName)) {
+                continue;
+            }
+            OrchestratorClientModuleMapping.ClientConfig client = mapping.clientConfigForName(clientName);
+            if (client == null) {
+                continue;
+            }
+            writer.append("\n# Talk to ").append(client.name()).append(" service\n");
+            writer.append("quarkus.grpc.clients.").append(client.name()).append(".host=")
+                .append(client.host()).append("\n");
+            writer.append("quarkus.grpc.clients.").append(client.name()).append(".port=")
+                .append(String.valueOf(client.port())).append("\n");
+            writer.append("quarkus.grpc.clients.").append(client.name())
+                .append(".use-quarkus-grpc-client=true\n");
+            if (client.tlsConfigurationName() != null) {
+                String tlsDefault = client.tlsConfigurationName();
+                String tlsExpression = "${pipeline.client.tls-configuration-name:" + tlsDefault + "}";
+                writer.append("quarkus.grpc.clients.").append(client.name())
+                    .append(".tls-configuration-name=")
+                    .append(tlsExpression).append("\n");
+                writer.append("quarkus.grpc.clients.").append(client.name())
+                    .append(".tls.enabled=true\n");
+                writer.append("quarkus.grpc.clients.").append(client.name())
+                    .append(".plain-text=false\n");
+            }
+            emittedClientNames.add(client.name());
+        }
+    }
+
+    private String sideEffectClientNameFromClass(String className) {
+        if (className == null || className.isBlank()) {
+            return null;
+        }
+        int lastDot = className.lastIndexOf('.');
+        String simple = lastDot == -1 ? className : className.substring(lastDot + 1);
+        simple = simple.replaceAll("(GrpcClientStep|RestClientStep|LocalClientStep)(_Subclass)?$", "");
+        if (!simple.endsWith("SideEffect")) {
+            return null;
+        }
+        String core = simple.substring(0, simple.length() - "SideEffect".length());
+        if (core.isBlank()) {
+            return null;
+        }
+        return "observe-" + OrchestratorClientNaming.toKebabCase(core) + "-side-effect";
     }
 
     /**

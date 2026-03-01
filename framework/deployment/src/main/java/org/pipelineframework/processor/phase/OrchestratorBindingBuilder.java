@@ -27,7 +27,8 @@ class OrchestratorBindingBuilder {
      */
     static OrchestratorBinding buildOrchestratorBinding(
             PipelineTemplateConfig config,
-            Set<? extends Element> orchestratorElements) {
+            Set<? extends Element> orchestratorElements,
+            String resolvedTransport) {
         if (config == null) {
             return null;
         }
@@ -80,10 +81,14 @@ class OrchestratorBindingBuilder {
         String cliDescription = orchestratorAnnotation == null ? null : NamingPolicy.emptyToNull(orchestratorAnnotation.description());
         String cliVersion = orchestratorAnnotation == null ? null : NamingPolicy.emptyToNull(orchestratorAnnotation.version());
 
+        String transport = (resolvedTransport == null || resolvedTransport.isBlank())
+            ? config.transport()
+            : resolvedTransport;
+
         return new OrchestratorBinding(
             model,
             basePackage,
-            config.transport(),
+            transport,
             inputType,
             outputType,
             inputStreaming,
