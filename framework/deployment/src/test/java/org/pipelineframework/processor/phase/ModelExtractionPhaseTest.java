@@ -18,11 +18,13 @@ package org.pipelineframework.processor.phase;
 
 import java.util.List;
 import java.util.Set;
+import java.lang.reflect.Method;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
 
+import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +34,12 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.processor.PipelineCompilationContext;
+import org.pipelineframework.processor.ir.DeploymentRole;
+import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.StepDefinition;
+import org.pipelineframework.processor.ir.StepKind;
+import org.pipelineframework.processor.ir.MapperFallbackMode;
+import org.pipelineframework.processor.ir.StreamingShape;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static javax.tools.Diagnostic.Kind.NOTE;
@@ -254,5 +262,34 @@ class ModelExtractionPhaseTest {
 
         assertEquals(org.pipelineframework.processor.ir.MapperFallbackMode.NONE,
                 context.getStepDefinitions().get(0).mapperFallback());
+    }
+
+    @Test
+    void crossModuleInternalModelUsesClientDeploymentRole() throws Exception {
+        ModelExtractionPhase phase = new ModelExtractionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        context.setPluginHost(false);
+
+        StepDefinition stepDefinition = new StepDefinition(
+            "Process Ack Payment Sent",
+            StepKind.INTERNAL,
+            ClassName.get("org.pipelineframework.csv.service", "ProcessAckPaymentSentService"),
+            null,
+            MapperFallbackMode.NONE,
+            ClassName.get("org.pipelineframework.csv.common.domain", "AckPaymentSent"),
+            ClassName.get("org.pipelineframework.csv.common.domain", "PaymentStatus"),
+            StreamingShape.UNARY_UNARY
+        );
+
+        Method method = ModelExtractionPhase.class.getDeclaredMethod(
+            "createCrossModuleInternalModel",
+            StepDefinition.class,
+            PipelineCompilationContext.class);
+        method.setAccessible(true);
+
+        PipelineStepModel model = (PipelineStepModel) method.invoke(phase, stepDefinition, context);
+
+        assertNotNull(model);
+        assertEquals(DeploymentRole.ORCHESTRATOR_CLIENT, model.deploymentRole());
     }
 }

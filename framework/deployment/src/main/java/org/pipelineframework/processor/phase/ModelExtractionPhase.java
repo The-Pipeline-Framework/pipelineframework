@@ -260,6 +260,10 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                     + "' is not on this module classpath. Using YAML type/cardinality metadata for cross-module compilation.");
         }
 
+        DeploymentRole crossModuleRole = ctx.isPluginHost()
+            ? DeploymentRole.PLUGIN_CLIENT
+            : DeploymentRole.ORCHESTRATOR_CLIENT;
+
         return new PipelineStepModel.Builder()
             .serviceName(serviceName)
             .generatedName(serviceName)
@@ -270,7 +274,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .streamingShape(streamingShape)
             .enabledTargets(targets)
             .executionMode(ExecutionMode.DEFAULT)
-            .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+            .deploymentRole(crossModuleRole)
             .sideEffect(false)
             .cacheKeyGenerator(null)
             .orderingRequirement(OrderingRequirement.RELAXED)
