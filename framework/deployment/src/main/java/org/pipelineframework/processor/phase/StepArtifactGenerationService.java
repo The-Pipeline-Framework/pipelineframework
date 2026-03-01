@@ -142,15 +142,15 @@ class StepArtifactGenerationService {
                     if (model.sideEffect()) {
                         String sideEffectBeanKey = model.servicePackage() + PIPELINE_DOT + model.serviceName();
                         if (generatedSideEffectBeans.add(sideEffectBeanKey)) {
-                            DeploymentRole sideEffectRole =
-                                model.deploymentRole() == null
-                                    ? DeploymentRole.ORCHESTRATOR_CLIENT
-                                    : model.deploymentRole();
+                            DeploymentRole sideEffectRole = resolveClientRole(model.deploymentRole());
+                            if (sideEffectRole == null) {
+                                sideEffectRole = DeploymentRole.ORCHESTRATOR_CLIENT;
+                            }
                             sideEffectBeanService.generateSideEffectBean(
                                 ctx,
                                 model,
                                 sideEffectRole,
-                                DeploymentRole.ORCHESTRATOR_CLIENT,
+                                sideEffectRole,
                                 grpcBinding);
                         }
                     }

@@ -1,19 +1,16 @@
-name: CI — CSV Monolith E2E
+name: Reusable — CSV Monolith E2E
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "framework/**"
-      - "examples/csv-payments/**"
-      - "pom.xml"
-      - ".github/workflows/e2e-csv-monolith.yml"
-      - ".github/workflows/full-tests.yml"
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      artifact_name:
+        description: 'Name of the Maven artifacts tarball'
+        required: false
+        default: 'framework-m2-cache'
+        type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-e2e-csv-monolith
   cancel-in-progress: true
 
 env:
@@ -24,7 +21,6 @@ jobs:
   csv-monolith-e2e:
     name: CSV Monolith E2E
     runs-on: ubuntu-latest
-    if: ${{ !contains(github.event.head_commit.message, 'maven-release-plugin') }}
 
     steps:
       - name: Checkout
@@ -40,11 +36,22 @@ jobs:
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
 
+      - name: Download framework artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: /tmp/m2-artifacts
+
+      - name: Extract framework artifacts
+        run: |
+          mkdir -p ~/.m2/repository
+          tar -xzf /tmp/m2-artifacts/${{ inputs.artifact_name }}.tar.gz -C ~/.m2/repository
+
       - name: Setup Testcontainers Docker environment
         uses: ./.github/actions/setup-testcontainers
 
       - name: Build csv-payments monolith runtime
-        run: ./examples/csv-payments/build-monolith.sh -DskipTests
+        run: ./examples/csv-payments/build-monolith.sh -DskipTests -Dquarkus.container-image.build=false
 
       - name: Run csv-payments monolith E2E
         run: |

@@ -16,23 +16,39 @@
 
 package org.pipelineframework.search.cache_invalidation.service.pipeline;
 
-import jakarta.inject.Inject;
+import jakarta.enterprise.inject.Instance;
+import jakarta.enterprise.inject.literal.NamedLiteral;
+import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Named;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
+import org.pipelineframework.search.lambda.NoopLambdaHandler;
 
 /**
  * Default cache invalidation Lambda entrypoint that delegates to the generated raw-document side-effect handler.
  */
 @Named("CacheInvalidationFunctionHandler")
 public class CacheInvalidationFunctionHandler implements RequestHandler<Object, Object> {
-
-    @Inject
-    @Named("CacheRawDocumentSideEffectFunctionHandler")
-    RequestHandler<Object, Object> delegate;
+    private static final String DELEGATE_HANDLER_NAME = "CacheRawDocumentSideEffectFunctionHandler";
 
     @Override
     public Object handleRequest(Object input, Context context) {
-        return delegate.handleRequest(input, context);
+        return resolveDelegate().handleRequest(input, context);
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private RequestHandler<Object, Object> resolveDelegate() {
+        Instance<RequestHandler> namedHandlers = CDI.current()
+            .select(RequestHandler.class, NamedLiteral.of(DELEGATE_HANDLER_NAME));
+        if (namedHandlers.isResolvable()) {
+            return namedHandlers.get();
+        }
+
+        Instance<NoopLambdaHandler> noopHandlers = CDI.current().select(NoopLambdaHandler.class);
+        if (noopHandlers.isResolvable()) {
+            return noopHandlers.get();
+        }
+
+        return new NoopLambdaHandler();
     }
 }

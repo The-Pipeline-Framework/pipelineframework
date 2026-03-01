@@ -84,6 +84,11 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         if (hasYamlStepDefinitions) {
             // Extract pipeline step models based on explicit YAML step definitions.
             stepModels = new ArrayList<>(extractStepModelsFromYaml(ctx, stepDefinitions));
+            // Some template-driven YAMLs declare logical steps without resolvable execution classes
+            // for plugin-host modules. Keep legacy behavior by falling back to annotation extraction.
+            if (stepModels.isEmpty()) {
+                stepModels = new ArrayList<>(extractStepModelsFromAnnotations(ctx));
+            }
             List<PipelineStepModel> contextualModels = contextRoleEnricher.enrich(ctx, stepModels);
             if (contextualModels != null && !contextualModels.isEmpty()) {
                 stepModels = contextualModels;
