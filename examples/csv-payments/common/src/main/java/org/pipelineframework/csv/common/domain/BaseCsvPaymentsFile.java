@@ -49,9 +49,10 @@ public abstract class BaseCsvPaymentsFile extends BaseEntity implements Serializ
 
   public BaseCsvPaymentsFile(File file) {
     super();
-    this.csvFile = file;
-    this.filepath = Path.of(file.getPath());
-    this.csvFolderPath = Path.of(file.getParent());
+    this.csvFile = Objects.requireNonNull(file, "file must not be null");
+    this.filepath = file.toPath();
+    Path parent = this.filepath.getParent();
+    this.csvFolderPath = parent != null ? parent : Path.of(".");
     this.csvFolder = new CsvFolder(this.csvFolderPath);
   }
 

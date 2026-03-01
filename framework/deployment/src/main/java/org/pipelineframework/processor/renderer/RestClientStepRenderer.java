@@ -433,11 +433,11 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
     }
 
     /**
-     * Ensure the pipeline step model contains the required REST input and output mappings, domain types, and mappers.
+     * Ensure the pipeline step model contains the required REST input and output mappings and domain types.
      *
      * @param model the pipeline step model to validate
      * @throws IllegalStateException if the model is null; if input or output mappings are missing; or if either mapping
-     *                               lacks a mapper or a non-null domain type
+     *                               has a null domain type
      */
     private void validateRestMappings(PipelineStepModel model) {
         if (model == null) {

@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.text.MessageFormat;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
@@ -61,6 +62,11 @@ public class CsvPaymentsOutputFile extends BaseCsvPaymentsFile implements AutoCl
     if (o == null || getClass() != o.getClass()) return false;
     CsvPaymentsOutputFile that = (CsvPaymentsOutputFile) o;
     return this.id != null && this.id.equals(that.id);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(id);
   }
 
   @Override

@@ -323,18 +323,10 @@ public record ExternalAdapterRenderer(GenerationTarget target) implements Pipeli
 
     private boolean isJacksonAvailable(GenerationContext ctx) {
         if (ctx != null && ctx.processingEnv() != null && ctx.processingEnv().getElementUtils() != null) {
-            if (ctx.processingEnv().getElementUtils().getTypeElement("com.fasterxml.jackson.databind.ObjectMapper") != null
-                && ctx.processingEnv().getElementUtils().getTypeElement("com.fasterxml.jackson.core.type.TypeReference") != null) {
-                return true;
-            }
+            return ctx.processingEnv().getElementUtils().getTypeElement("com.fasterxml.jackson.databind.ObjectMapper") != null
+                && ctx.processingEnv().getElementUtils().getTypeElement("com.fasterxml.jackson.core.type.TypeReference") != null;
         }
-        try {
-            Class.forName("com.fasterxml.jackson.databind.ObjectMapper", false, ExternalAdapterRenderer.class.getClassLoader());
-            Class.forName("com.fasterxml.jackson.core.type.TypeReference", false, ExternalAdapterRenderer.class.getClassLoader());
-            return true;
-        } catch (ClassNotFoundException e) {
-            return false;
-        }
+        return false;
     }
 
     private MethodSpec buildFallbackInputConverter(String stepName, TypeName appInputType, TypeName operatorInputType) {

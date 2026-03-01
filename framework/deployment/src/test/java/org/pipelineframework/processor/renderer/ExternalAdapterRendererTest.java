@@ -27,8 +27,12 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.util.Elements;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Tests for ExternalAdapterRenderer with Jackson fallback functionality.
@@ -311,17 +315,17 @@ class ExternalAdapterRendererTest {
 
         @Override
         public javax.annotation.processing.Filer getFiler() {
-            return null;
+            throw new UnsupportedOperationException("Filer is not used by this test processing environment");
         }
 
         @Override
         public javax.lang.model.util.Elements getElementUtils() {
-            return null;
+            return jacksonElements();
         }
 
         @Override
         public javax.lang.model.util.Types getTypeUtils() {
-            return null;
+            throw new UnsupportedOperationException("TypeUtils is not used by this test processing environment");
         }
 
         @Override
@@ -332,6 +336,15 @@ class ExternalAdapterRendererTest {
         @Override
         public java.util.Locale getLocale() {
             return java.util.Locale.getDefault();
+        }
+
+        private Elements jacksonElements() {
+            Elements elements = mock(Elements.class);
+            TypeElement objectMapperElement = mock(TypeElement.class);
+            TypeElement typeReferenceElement = mock(TypeElement.class);
+            when(elements.getTypeElement("com.fasterxml.jackson.databind.ObjectMapper")).thenReturn(objectMapperElement);
+            when(elements.getTypeElement("com.fasterxml.jackson.core.type.TypeReference")).thenReturn(typeReferenceElement);
+            return elements;
         }
     }
 }

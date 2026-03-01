@@ -61,4 +61,9 @@ public class AckPaymentSent extends BaseEntity implements Serializable {
     AckPaymentSent that = (AckPaymentSent) o;
     return this.id != null && this.id.equals(that.id);
   }
+
+  @Override
+  public int hashCode() {
+    return this.id != null ? this.id.hashCode() : 0;
+  }
 }
