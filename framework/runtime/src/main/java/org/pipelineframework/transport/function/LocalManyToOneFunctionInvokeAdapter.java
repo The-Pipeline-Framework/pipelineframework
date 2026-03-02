@@ -192,8 +192,13 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
             .map(envelope -> AdapterUtils.normalizeOrDefault(
                 envelope.idempotencyKey(),
                 AdapterUtils.normalizeOrDefault(envelope.itemId(), "item")))
+            .map(this::escapeDelimitedComponent)
             .toList();
         return String.join("|", components);
+    }
+
+    private String escapeDelimitedComponent(String component) {
+        return component.replace("\\", "\\\\").replace("|", "\\|");
     }
 
     private String computeMergedItemId(List<TraceEnvelope<I>> ordered, String traceId) {

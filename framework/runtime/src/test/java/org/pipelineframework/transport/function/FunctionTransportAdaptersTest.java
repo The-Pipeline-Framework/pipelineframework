@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -199,6 +200,30 @@ class FunctionTransportAdaptersTest {
         assertEquals("a-item", rightToLeft.previousItemRef().previousItemId());
         assertEquals("a-item,b-item", leftToRight.meta().get("previousItemIds"));
         assertEquals("a-item,b-item", rightToLeft.meta().get("previousItemIds"));
+    }
+
+    @Test
+    void localManyToOneFallbackIdempotencyKeyEscapesDelimiterComponents() {
+        LocalManyToOneFunctionInvokeAdapter<Integer, Integer> adapter = new LocalManyToOneFunctionInvokeAdapter<>(
+            payloads -> payloads.collect().asList().onItem().transform(list -> list.stream().mapToInt(Integer::intValue).sum()),
+            "search.token.sum",
+            "v1");
+        FunctionTransportContext context = FunctionTransportContext.of("req-escape", "search-handler", "invoke-step");
+
+        TraceEnvelope<Integer> firstA = TraceEnvelope.root("trace-escape", "item-1", "search.token", "v1", "a|b", 1);
+        TraceEnvelope<Integer> secondA = TraceEnvelope.root("trace-escape", "item-2", "search.token", "v1", "c", 2);
+        TraceEnvelope<Integer> firstB = TraceEnvelope.root("trace-escape", "item-3", "search.token", "v1", "a", 1);
+        TraceEnvelope<Integer> secondB = TraceEnvelope.root("trace-escape", "item-4", "search.token", "v1", "b|c", 2);
+
+        TraceEnvelope<Integer> mergedA = adapter.invokeManyToOne(Multi.createFrom().items(firstA, secondA), context)
+            .await().atMost(Duration.ofSeconds(2));
+        TraceEnvelope<Integer> mergedB = adapter.invokeManyToOne(Multi.createFrom().items(firstB, secondB), context)
+            .await().atMost(Duration.ofSeconds(2));
+
+        assertNotEquals(
+            mergedA.idempotencyKey(),
+            mergedB.idempotencyKey(),
+            "Escaped fallback components must avoid delimiter collisions");
     }
 
     @Test
