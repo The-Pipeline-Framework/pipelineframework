@@ -17,7 +17,9 @@
 package org.pipelineframework.extension;
 
 import io.quarkus.deployment.annotations.BuildStep;
+import io.quarkus.deployment.annotations.Produce;
 import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
+import io.quarkus.deployment.pkg.builditem.ArtifactResultBuildItem;
 import jakarta.enterprise.inject.spi.DeploymentException;
 import org.jboss.jandex.ClassInfo;
 import org.jboss.jandex.DotName;
@@ -42,6 +44,7 @@ public final class OperatorLinkValidationBuildSteps {
     private static final DotName JAVA_LANG_OBJECT = DotName.createSimple("java.lang.Object");
 
     @BuildStep
+    @Produce(ArtifactResultBuildItem.class)
     void validateOperatorLinks(
             List<OperatorBuildItem> steps,
             MapperRegistryBuildItem mapperRegistry,
@@ -150,11 +153,67 @@ public final class OperatorLinkValidationBuildSteps {
             return false;
         }
         if (fromName.equals(toName)) {
-            return true;
+            return hasCompatibleTypeArguments(fromRef, toRef, index);
         }
 
         ClassInfo fromClass = index.getClassByName(fromName);
         return isAssignableTo(fromClass, toName, index, new HashSet<>());
+    }
+
+    private boolean hasCompatibleTypeArguments(Type producedType, Type expectedType, IndexView index) {
+        boolean producedParameterized = producedType.kind() == Type.Kind.PARAMETERIZED_TYPE;
+        boolean expectedParameterized = expectedType.kind() == Type.Kind.PARAMETERIZED_TYPE;
+        if (!producedParameterized && !expectedParameterized) {
+            return true;
+        }
+        if (producedParameterized != expectedParameterized) {
+            return false;
+        }
+
+        List<Type> producedArguments = producedType.asParameterizedType().arguments();
+        List<Type> expectedArguments = expectedType.asParameterizedType().arguments();
+        if (producedArguments.size() != expectedArguments.size()) {
+            return false;
+        }
+
+        for (int i = 0; i < producedArguments.size(); i++) {
+            if (!isTypeArgumentCompatible(producedArguments.get(i), expectedArguments.get(i), index)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean isTypeArgumentCompatible(Type producedArg, Type expectedArg, IndexView index) {
+        if (expectedArg.kind() == Type.Kind.WILDCARD_TYPE) {
+            Type superBound = expectedArg.asWildcardType().superBound();
+            if (superBound != null) {
+                return isAssignable(superBound, producedArg, index);
+            }
+            Type extendsBound = expectedArg.asWildcardType().extendsBound();
+            if (extendsBound != null) {
+                return isAssignable(producedArg, extendsBound, index);
+            }
+            return true;
+        }
+
+        if (producedArg.kind() == Type.Kind.WILDCARD_TYPE) {
+            return false;
+        }
+
+        if (producedArg.equals(expectedArg) || producedArg.toString().equals(expectedArg.toString())) {
+            return true;
+        }
+
+        Type producedRef = toReferenceType(producedArg);
+        Type expectedRef = toReferenceType(expectedArg);
+        DotName producedName = typeName(producedRef);
+        DotName expectedName = typeName(expectedRef);
+        if (producedName == null || expectedName == null || !producedName.equals(expectedName)) {
+            return false;
+        }
+
+        return hasCompatibleTypeArguments(producedRef, expectedRef, index);
     }
 
     private boolean isAssignableTo(ClassInfo classInfo, DotName target, IndexView index, Set<DotName> visited) {
@@ -177,11 +236,11 @@ public final class OperatorLinkValidationBuildSteps {
         }
 
         Type superType = classInfo.superClassType();
+        if (superType != null && target.equals(superType.name())) {
+            return true;
+        }
         if (superType == null || superType.name() == null || JAVA_LANG_OBJECT.equals(superType.name())) {
             return false;
-        }
-        if (target.equals(superType.name())) {
-            return true;
         }
         return isAssignableTo(index.getClassByName(superType.name()), target, index, visited);
     }

@@ -31,8 +31,8 @@ class OperatorLinkValidationBuildStepsTest {
     @Test
     void passesForUniToUniWithAssignableTypes() throws Exception {
         Index index = indexOf(Source.class, Sink.class, MapperOne.class, MapperTwo.class);
-        OperatorBuildItem source = operator(index, "Source", "java.lang.String", uniType(String.class));
-        OperatorBuildItem sink = operator(index, "Sink", "java.lang.String", uniType(String.class));
+        OperatorBuildItem source = operator(index, Source.class, "Source", "java.lang.String", uniType(String.class));
+        OperatorBuildItem sink = operator(index, Sink.class, "Sink", "java.lang.String", uniType(String.class));
 
         assertDoesNotThrow(() -> buildSteps.validateOperatorLinks(
                 List.of(source, sink),
@@ -43,8 +43,8 @@ class OperatorLinkValidationBuildStepsTest {
     @Test
     void failsForMultiToUniCardinality() throws Exception {
         Index index = indexOf(Source.class, Sink.class, MapperOne.class, MapperTwo.class);
-        OperatorBuildItem source = operator(index, "Source", "java.lang.String", multiType(String.class));
-        OperatorBuildItem sink = operator(index, "Sink", "java.lang.String", uniType(String.class));
+        OperatorBuildItem source = operator(index, Source.class, "Source", "java.lang.String", multiType(String.class));
+        OperatorBuildItem sink = operator(index, Sink.class, "Sink", "java.lang.String", uniType(String.class));
 
         try {
             buildSteps.validateOperatorLinks(List.of(source, sink), emptyRegistry(), index);
@@ -58,8 +58,8 @@ class OperatorLinkValidationBuildStepsTest {
     @Test
     void failsWhenNoMapperExistsForIncompatibleAdjacentTypes() throws Exception {
         Index index = indexOf(Source.class, Sink.class, MapperOne.class, MapperTwo.class);
-        OperatorBuildItem source = operator(index, "Source", "java.lang.String", uniType(String.class));
-        OperatorBuildItem sink = operator(index, "Sink", "java.lang.Integer", uniType(Integer.class));
+        OperatorBuildItem source = operator(index, Source.class, "Source", "java.lang.String", uniType(String.class));
+        OperatorBuildItem sink = operator(index, Sink.class, "Sink", "java.lang.Integer", uniType(Integer.class));
 
         try {
             buildSteps.validateOperatorLinks(List.of(source, sink), emptyRegistry(), index);
@@ -75,8 +75,8 @@ class OperatorLinkValidationBuildStepsTest {
     @Test
     void passesWhenSingleMapperExistsForProducedDomain() throws Exception {
         Index index = indexOf(Source.class, Sink.class, MapperOne.class, MapperTwo.class);
-        OperatorBuildItem source = operator(index, "Source", "java.lang.String", uniType(String.class));
-        OperatorBuildItem sink = operator(index, "Sink", "java.lang.Integer", uniType(Integer.class));
+        OperatorBuildItem source = operator(index, Source.class, "Source", "java.lang.String", uniType(String.class));
+        OperatorBuildItem sink = operator(index, Sink.class, "Sink", "java.lang.Integer", uniType(Integer.class));
 
         ClassInfo mapperOne = classInfo(index, MapperOne.class);
         MapperRegistryBuildItem registry = registry(Map.of(
@@ -91,8 +91,8 @@ class OperatorLinkValidationBuildStepsTest {
     @Test
     void failsWhenMultipleMappersExistForProducedDomain() throws Exception {
         Index index = indexOf(Source.class, Sink.class, MapperOne.class, MapperTwo.class);
-        OperatorBuildItem source = operator(index, "Source", "java.lang.String", uniType(String.class));
-        OperatorBuildItem sink = operator(index, "Sink", "java.lang.Integer", uniType(Integer.class));
+        OperatorBuildItem source = operator(index, Source.class, "Source", "java.lang.String", uniType(String.class));
+        OperatorBuildItem sink = operator(index, Sink.class, "Sink", "java.lang.Integer", uniType(Integer.class));
 
         ClassInfo mapperOne = classInfo(index, MapperOne.class);
         ClassInfo mapperTwo = classInfo(index, MapperTwo.class);
@@ -116,15 +116,20 @@ class OperatorLinkValidationBuildStepsTest {
         }
     }
 
-    private OperatorBuildItem operator(Index index, String stepName, String inputTypeName, Type normalizedReturnType) {
-        ClassInfo sourceClass = classInfo(index, Source.class);
-        MethodInfo method = sourceClass.methods().stream()
+    private OperatorBuildItem operator(
+            Index index,
+            Class<?> ownerClass,
+            String stepName,
+            String inputTypeName,
+            Type normalizedReturnType) {
+        ClassInfo ownerInfo = classInfo(index, ownerClass);
+        MethodInfo method = ownerInfo.methods().stream()
                 .filter(m -> "map".equals(m.name()))
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException("Expected map method on " + sourceClass.name()));
+                .orElseThrow(() -> new IllegalStateException("Expected map method on " + ownerInfo.name()));
         return new OperatorBuildItem(
                 new PipelineConfigBuildItem.StepConfig(stepName, "com.example." + stepName + "::map"),
-                sourceClass,
+                ownerInfo,
                 method,
                 Type.create(DotName.createSimple(inputTypeName), Type.Kind.CLASS),
                 normalizedReturnType,

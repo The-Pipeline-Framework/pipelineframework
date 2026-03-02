@@ -29,6 +29,8 @@ import io.quarkus.gizmo.FieldDescriptor;
 import io.quarkus.gizmo.MethodCreator;
 import io.quarkus.gizmo.MethodDescriptor;
 import io.quarkus.gizmo.ResultHandle;
+import io.quarkus.gizmo.TryBlock;
+import io.quarkus.gizmo.BytecodeCreator;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.groups.MultiCreate;
@@ -60,6 +62,7 @@ public final class OperatorInvokerBuildSteps {
     private static final MethodDescriptor OBJ_CTOR = MethodDescriptor.ofConstructor(Object.class);
     private static final MethodDescriptor UNI_CREATE_FROM = MethodDescriptor.ofMethod(Uni.class, "createFrom", UniCreate.class);
     private static final MethodDescriptor UNI_ITEM = MethodDescriptor.ofMethod(UniCreate.class, "item", Uni.class, Object.class);
+    private static final MethodDescriptor UNI_FAILURE = MethodDescriptor.ofMethod(UniCreate.class, "failure", Uni.class, Throwable.class);
 
     /**
      * Generate CDI invoker beans for each provided operator.
@@ -345,9 +348,17 @@ public final class OperatorInvokerBuildSteps {
                 process.addAnnotation("io.smallrye.common.annotation.Blocking");
             }
 
-            ResultHandle invocationResult = invokeTarget(process, operator, targetField);
-            ResultHandle returned = adaptReturn(process, operator, invocationResult);
-            process.returnValue(returned);
+            ResultHandle[] args = buildInvocationArgs(process, operator.method());
+            TryBlock tryBlock = process.tryBlock();
+            ResultHandle invocationResult = invokeTarget(tryBlock, operator, targetField, args);
+            ResultHandle returned = adaptReturn(tryBlock, operator, invocationResult);
+            tryBlock.returnValue(returned);
+
+            var catchBlock = tryBlock.addCatch(Exception.class);
+            ResultHandle exception = catchBlock.getCaughtException();
+            ResultHandle create = catchBlock.invokeStaticMethod(UNI_CREATE_FROM);
+            ResultHandle failure = catchBlock.invokeVirtualMethod(UNI_FAILURE, create, exception);
+            catchBlock.returnValue(failure);
         }
     }
 
@@ -360,12 +371,11 @@ public final class OperatorInvokerBuildSteps {
      * @return            the ResultHandle representing the value returned by the invoked operator method
      */
     private ResultHandle invokeTarget(
-            MethodCreator process,
+            BytecodeCreator process,
             ValidatedOperator operator,
-            FieldDescriptor targetField) {
+            FieldDescriptor targetField,
+            ResultHandle[] args) {
         MethodDescriptor targetMethod = MethodDescriptor.of(operator.method());
-        ResultHandle[] args = buildInvocationArgs(process, operator.method());
-
         if (Modifier.isStatic(operator.method().flags())) {
             return process.invokeStaticMethod(targetMethod, args);
         }
@@ -436,7 +446,7 @@ public final class OperatorInvokerBuildSteps {
      * @param result the raw invocation result to adapt
      * @return a `ResultHandle` referencing a `Uni` that yields the operator's result (`null` for void returns when wrapped)
      */
-    private ResultHandle adaptReturn(MethodCreator process, ValidatedOperator operator, ResultHandle result) {
+    private ResultHandle adaptReturn(BytecodeCreator process, ValidatedOperator operator, ResultHandle result) {
         if (operator.buildItem().category() == OperatorCategory.REACTIVE) {
             // Safe in Phase 1: enforcePhaseOneBoundaries guarantees reactive returns are Uni.
             return process.checkCast(result, Uni.class);
@@ -457,7 +467,7 @@ public final class OperatorInvokerBuildSteps {
      * @param value the result value to box if primitive
      * @return the boxed wrapper object when `returnType` is a primitive type, otherwise the original `value`
      */
-    private ResultHandle boxIfPrimitive(MethodCreator process, Type returnType, ResultHandle value) {
+    private ResultHandle boxIfPrimitive(BytecodeCreator process, Type returnType, ResultHandle value) {
         if (returnType.kind() != Type.Kind.PRIMITIVE) {
             return value;
         }
