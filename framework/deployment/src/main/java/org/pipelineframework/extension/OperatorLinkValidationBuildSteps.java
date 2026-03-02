@@ -220,6 +220,9 @@ public final class OperatorLinkValidationBuildSteps {
 
         ClassInfo fromClass = index.getClassByName(fromName);
         if (fromClass == null) {
+            if (fromRef.kind() == Type.Kind.PARAMETERIZED_TYPE || toRef.kind() == Type.Kind.PARAMETERIZED_TYPE) {
+                return false;
+            }
             return isAssignableUsingReflection(fromName, toName);
         }
         return isAssignableTo(fromClass, toRef, index, new HashSet<>());
