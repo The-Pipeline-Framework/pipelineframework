@@ -38,7 +38,7 @@ When application domain types differ from operator I/O types, mapper coverage is
 
 - REST flow can work with direct JSON/domain mapping paths.
 - gRPC flow requires descriptor + mapper-compatible bindings.
-- Mapper fallback policies are configuration-driven; do not rely on implicit conversion by default.
+- Mapper fallback policies are configuration-driven; implicit conversion is not enabled by default.
 
 ## Example: AI Pipeline Chain
 

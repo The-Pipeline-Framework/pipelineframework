@@ -12,7 +12,7 @@ flowchart TD
 
 Operator issues split into two classes:
 - Build-time contract failures (class/method/signature/mapper/proto prerequisites).
-- Runtime behavior issues (latency, dependency faults, throughput pressure).
+- Runtime behaviour issues (latency, dependency faults, throughput pressure).
 
 ## Operational Expectations
 
@@ -45,4 +45,4 @@ Operator issues split into two classes:
 
 - [Operators](/guide/build/operators)
 - [Observability](/guide/operations/observability/)
-- [Error Handling](/guide/operations/error-handling)
+- [Error Handling](/guide/operations/error-handling/)

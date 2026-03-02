@@ -14,9 +14,12 @@ import lombok.Setter;
 @NoArgsConstructor
 public class IndexAck extends BaseEntity implements Serializable {
 
-  public String indexVersion;
-  public String tokensHash;
-  public Instant indexedAt;
-  public Boolean success;
+  private String indexVersion;
+  private String tokensHash;
+  private Integer tokenBatchCount;
+  private Integer uniqueTokenCount;
+  private String topToken;
+  private Instant indexedAt;
+  private Boolean success;
 
 }

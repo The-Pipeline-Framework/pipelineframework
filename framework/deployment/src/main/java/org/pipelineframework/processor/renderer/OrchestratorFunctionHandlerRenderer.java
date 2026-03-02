@@ -237,10 +237,7 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
     }
 
     private static String localInvokeDelegate(boolean streamingInput, boolean streamingOutput) {
-        if (!streamingInput) {
-            return "resource::run";
-        }
-        if (!streamingOutput) {
+        if (streamingInput && !streamingOutput) {
             return "inputStream -> inputStream.collect().asList().onItem().transformToUni(resource::run)";
         }
         return "resource::run";

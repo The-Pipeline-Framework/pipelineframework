@@ -124,7 +124,8 @@ class RestFunctionHandlerRendererTest {
         assertTrue(source.contains("FunctionSourceAdapter<Multi<ParsedDocumentDto>, ParsedDocumentDto> source"));
         assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invoke"));
         assertFalse(source.contains("inputStream -> resource.process(inputStream.collect().asList().await().indefinitely())"));
-        assertTrue(source.contains("resource::process"));
+        assertTrue(source.contains(
+            "invokeLocal = new LocalManyToManyFunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto>(resource::process"));
         assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invokeRemote = new HttpRemoteFunctionInvokeAdapter<>()"));
         assertTrue(source.contains("FunctionSinkAdapter<IndexAckDto, List<IndexAckDto>> sink"));
         assertTrue(source.contains("return FunctionTransportBridge.invokeManyToMany(input, transportContext, source, invoke, sink)"));

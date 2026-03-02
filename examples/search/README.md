@@ -92,6 +92,21 @@ Cardinality guarantees covered by tests:
   then merges into exactly one `IndexAck`.
 - `IndexAckResourceTest#testIndexAckRejectsMixedDocIdsInSingleBatch` verifies fan-in rejects mixed `docId` input.
 
+### Branching Reference Lane (Business Semantics)
+
+The search pipeline includes a non-unary business lane:
+
+1. `Tokenize Content` (`ONE_TO_MANY`) expands one `ParsedDocument` into multiple `TokenBatch` units.
+2. `Index Document` (`MANY_TO_ONE`) reduces all batches for the same `docId` into one meaningful `IndexAck`.
+
+The reduced `IndexAck` now carries aggregate document signals:
+
+- `tokenBatchCount`: how many batches participated in fan-in.
+- `uniqueTokenCount`: unique vocabulary size for the reduced document.
+- `topToken`: most frequent token across all batches.
+
+This keeps the lane business-relevant (document-level indexing summary), not just structural fan-out/fan-in.
+
 ### Handler Selection For Modules With Multiple Generated Handlers
 
 Some modules can contain more than one generated function handler (for example, step handlers plus side effect handlers).

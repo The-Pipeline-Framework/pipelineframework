@@ -34,6 +34,10 @@ import io.smallrye.mutiny.Uni;
  * @param <O> output payload type
  */
 public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements FunctionInvokeAdapter<I, O> {
+    private static final Comparator<TraceEnvelope<?>> LINEAGE_ORDER = Comparator
+        .comparing((TraceEnvelope<?> envelope) -> AdapterUtils.normalizeOrDefault(envelope.itemId(), ""))
+        .thenComparing(envelope -> AdapterUtils.normalizeOrDefault(envelope.idempotencyKey(), ""));
+
     private final Function<Multi<I>, Uni<O>> delegate;
     private final String outputPayloadModel;
     private final String outputPayloadModelVersion;
@@ -192,8 +196,13 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
             .map(envelope -> AdapterUtils.normalizeOrDefault(
                 envelope.idempotencyKey(),
                 AdapterUtils.normalizeOrDefault(envelope.itemId(), "item")))
+            .map(this::escapeDelimitedComponent)
             .toList();
         return String.join("|", components);
+    }
+
+    private String escapeDelimitedComponent(String component) {
+        return component.replace("\\", "\\\\").replace("|", "\\|");
     }
 
     private String computeMergedItemId(List<TraceEnvelope<I>> ordered, String traceId) {
@@ -218,8 +227,8 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
     private Comparator<TraceEnvelope<I>> lineageOrder() {
         // Merge lineage is deterministic: inputs are ordered by itemId then idempotencyKey.
         // This ordering drives previousItemRef, previousItemIds metadata, merged itemId, and idempotency key.
-        return Comparator
-            .comparing((TraceEnvelope<I> envelope) -> AdapterUtils.normalizeOrDefault(envelope.itemId(), ""))
-            .thenComparing(envelope -> AdapterUtils.normalizeOrDefault(envelope.idempotencyKey(), ""));
+        @SuppressWarnings("unchecked")
+        Comparator<TraceEnvelope<I>> comparator = (Comparator<TraceEnvelope<I>>) (Comparator<?>) LINEAGE_ORDER;
+        return comparator;
     }
 }
