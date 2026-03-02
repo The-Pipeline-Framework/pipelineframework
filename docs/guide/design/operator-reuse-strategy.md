@@ -1,60 +1,57 @@
 # Operator Reuse Strategy
 
-This guide helps architects and product leaders decide when to reuse external libraries as operators in TPF pipelines.
+This guide helps teams decide when to reuse existing libraries as operators in TPF pipelines.
 
-## Why This Matters
+## Decision Lens
 
-Operator reuse changes delivery economics:
+```mermaid
+flowchart LR
+  A["Existing proven library"] --> B{"Stable method contract?"}
+  B -- no --> C["Refactor before reuse"]
+  B -- yes --> D{"Operationally manageable?"}
+  D -- no --> E["Contain or redesign dependency"]
+  D -- yes --> F["Adopt as operator"]
+```
 
-- You keep proven compute logic instead of rewriting it as new step services.
-- You reduce migration scope and delivery risk.
-- You can modernize orchestration and transport incrementally while preserving domain logic ownership.
+## Why Reuse Operators
 
-## What Can Be Reused
+- Preserve validated domain logic.
+- Reduce rewrite scope during migration.
+- Keep ownership with domain teams while standardizing orchestration.
 
-In practice, operators are a good fit for:
+## Typical Fit
 
 | Library Type | Typical Fit | Notes |
 | --- | --- | --- |
-| Domain calculators/rules engines | High | Deterministic logic, stable contracts, low integration risk. |
-| Validation/enrichment libraries | High | Works well as unary request/response operators. |
-| Data transformation/mapping libraries | High | Good for normalization and shaping steps. |
-| ML/AI client wrappers | Medium | Useful when wrapped as unary calls with explicit DTO contracts. |
-| Legacy service facades | Medium | Valuable for migration, but dependency/runtime constraints must be reviewed. |
-| Heavy streaming engines | Low (current) | Current invocation path is unary-focused. |
+| Rules/validation engines | High | Works well as unary operator methods. |
+| Enrichment calculators | High | Clear input/output contracts. |
+| Data transforms | High | Good for deterministic step boundaries. |
+| AI client wrappers | Medium | Useful with explicit DTO/domain contracts. |
+| Legacy facades | Medium | Good transition strategy, watch dependencies. |
+| Heavy streaming engines | Lower (current) | Operator invoker generation is unary-focused today. |
 
-## Readiness Checklist for a Reusable Operator Library
+## Readiness Checklist
 
-- Packaged as a dependency (module/JAR) available to the pipeline build/runtime.
-- Public operator method with unambiguous name/signature.
-- Compatible input/output contract for pipeline flow.
-- Indexed for build-time resolution (Jandex visibility).
-- If instance method: CDI-manageable class and dependencies.
+- Library is packaged as a dependency (module/JAR).
+- Public operator methods have unambiguous signatures.
+- Contracts are versioned and testable.
+- Classpath/index visibility is guaranteed at build time.
+- For instance methods, class is CDI-manageable.
 
-## Architecture Decisions
+## Transport and Contract Notes
 
-When to prefer operator reuse:
+- Operator category (`NON_REACTIVE`/`REACTIVE`) should not drive transport selection.
+- REST and local adapter paths can be composed around operator invokers.
+- gRPC paths add prerequisites (descriptor + mapper-compatible bindings for delegated/operator flows).
 
-- Existing logic is trusted, tested, and already in production.
-- Time-to-value is prioritized over rebuilding internals.
-- Teams want central orchestration with distributed logic ownership.
+## Portfolio Planning Pattern
 
-When to avoid operator reuse:
-
-- Library API is unstable or tightly coupled to a specific runtime environment.
-- The logic requires deep streaming semantics not yet supported in the target flow.
-- Ownership/governance of the external library is unclear.
-
-## Product Planning Signal
-
-For portfolio planning, operators are useful when you need visible progress without full rewrites:
-
-1. Reuse core business compute now.
-2. Standardize transport and orchestration in TPF.
-3. Replace/refactor internals later only where ROI is clear.
+1. Reuse core compute logic now.
+2. Standardize orchestration/transport in TPF.
+3. Incrementally replace internals where ROI is clear.
 
 ## Related
 
 - [Operators](/guide/build/operators)
+- [Operators Architecture](/guide/build/operators-architecture)
 - [Runtime Topology Strategy](/guide/design/runtime-topology-strategy)
-- [Business Value](/value/business-value)

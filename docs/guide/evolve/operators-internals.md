@@ -1,50 +1,49 @@
 # Operator Invocation Internals
 
-## Build-Time Processing Flow
+## Build-Time Flow
 
 ```mermaid
 flowchart TD
   A["PipelineConfigBuildSteps"] --> B["PipelineConfigBuildItem"]
   B --> C["OperatorResolutionBuildSteps"]
   C --> D["OperatorBuildItem"]
-  D --> E["OperatorInvokerBuildSteps"]
-  E --> F["Generated invoker CDI beans"]
-  D --> G["MapperInferenceBuildSteps"]
+  D --> E["OperatorLinkValidationBuildSteps"]
+  D --> F["OperatorInvokerBuildSteps"]
+  F --> G["Generated CDI invoker beans"]
 ```
 
 ## Core Build Items
 
-- `PipelineConfigBuildItem`: parsed YAML operator step config.
+- `PipelineConfigBuildItem`: parsed operator step declarations.
 - `OperatorBuildItem`: resolved class/method/input/normalized return/category metadata.
 
-## Resolution Contract (Current)
+## Resolution Contract
 
-- Resolve operator classes/methods from Jandex only.
-- Reject ambiguous signatures and unsupported method shapes at build time.
-- Normalize return metadata to reactive shape for downstream generation.
+- Jandex-only resolution for operator classes and methods.
+- Fail-fast diagnostics for unresolved or ambiguous methods.
+- Return-type normalization to reactive metadata (`Uni<T>` / `Multi<T>`).
 
-## Invocation Contract (Current)
+## Link Validation Contract
 
-- Invocation code is generated with Gizmo.
-- No reflection or runtime method-name lookups.
-- Generator enforces unary constraints and clear deployment-time failures.
+`OperatorLinkValidationBuildSteps` validates adjacent links before generation:
+- cardinality constraints,
+- assignability checks (with generic compatibility),
+- mapper presence checks when direct assignability fails.
 
-## Generated Bean Shape
+## Invoker Generation Contract
 
-The invoker is generated as a CDI bean that calls the resolved operator method directly.
-The Java below shows the generated equivalent for each operator category.
+`OperatorInvokerBuildSteps` generates bytecode invokers with Gizmo:
+- direct invocation (no reflection lookup),
+- CDI bean registration,
+- unary reactive contract (`ReactiveService`),
+- checked/runtime exceptions adapted to `Uni.createFrom().failure(e)`.
 
-### Non-Reactive Operator Category
+## Generated Equivalent (Conceptual)
+
+### Non-reactive operator
 
 ```java
-package org.pipelineframework.generated.operator;
-
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
-import io.smallrye.mutiny.Uni;
-import org.pipelineframework.service.ReactiveService;
-
-@ApplicationScoped
+@Singleton
 public class EnrichPaymentOperatorInvoker implements ReactiveService<PaymentIn, PaymentOut> {
 
     @Inject
@@ -52,23 +51,20 @@ public class EnrichPaymentOperatorInvoker implements ReactiveService<PaymentIn, 
 
     @Override
     public Uni<PaymentOut> process(PaymentIn input) {
-        PaymentOut result = target.enrich(input);
-        return Uni.createFrom().item(result);
+        try {
+            PaymentOut out = target.enrich(input);
+            return Uni.createFrom().item(out);
+        } catch (Exception e) {
+            return Uni.createFrom().failure(e);
+        }
     }
 }
 ```
 
-### Reactive Operator Category
+### Reactive operator
 
 ```java
-package org.pipelineframework.generated.operator;
-
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
-import io.smallrye.mutiny.Uni;
-import org.pipelineframework.service.ReactiveService;
-
-@ApplicationScoped
+@Singleton
 public class ScorePaymentOperatorInvoker implements ReactiveService<PaymentIn, PaymentScore> {
 
     @Inject
@@ -76,18 +72,19 @@ public class ScorePaymentOperatorInvoker implements ReactiveService<PaymentIn, P
 
     @Override
     public Uni<PaymentScore> process(PaymentIn input) {
-        return target.score(input);
+        try {
+            return target.score(input);
+        } catch (Exception e) {
+            return Uni.createFrom().failure(e);
+        }
     }
 }
 ```
 
-## Change-Safety Notes
+## Current Scope
 
-- Keep resolution and invocation concerns separated (`OperatorResolutionBuildSteps` vs `OperatorInvokerBuildSteps`).
-- Preserve fail-fast `DeploymentException` messages; they are user-facing diagnostics.
-- When adding new reactive shapes, update both:
-  - classification/normalization logic
-  - invoker adaptation and validation boundaries
+- Unary invocation is the supported path for generated operator invokers.
+- Streaming service interfaces exist in runtime and transport layers, but operator invoker generation is still unary-scoped.
 
 ## Related
 
