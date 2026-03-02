@@ -1,0 +1,115 @@
+# Operator Runbook
+
+This runbook is for operating and debugging pipelines that execute operator methods.
+
+## CI-Equivalent Execution Commands
+
+Use the same command families used in validation lanes:
+
+```bash
+# Framework build + tests
+./mvnw -f framework/pom.xml verify
+
+# Search function-platform smoke lane
+./mvnw -f examples/search/pom.xml -pl orchestrator-svc -am \
+  -Dpipeline.platform=FUNCTION \
+  -Dpipeline.transport=REST \
+  -Dpipeline.rest.naming.strategy=RESOURCEFUL \
+  -DskipTests compile
+
+./mvnw -f examples/search/pom.xml -pl orchestrator-svc \
+  -Dpipeline.platform=FUNCTION \
+  -Dpipeline.transport=REST \
+  -Dpipeline.rest.naming.strategy=RESOURCEFUL \
+  -Dtest=LambdaMockEventServerSmokeTest test
+```
+
+For operator fan-out/fan-in regression slices:
+
+```bash
+./mvnw -f examples/search/common/pom.xml -DskipTests install
+./mvnw -f examples/search/tokenize-content-svc/pom.xml -Dtest=ProcessTokenizeContentServiceTest test
+./mvnw -f examples/search/index-document-svc/pom.xml -Dtest=ProcessIndexDocumentServiceReliabilityTest test
+./mvnw -f examples/search/orchestrator-svc/pom.xml -DskipTests test-compile
+```
+
+## Run Modes and Lanes
+
+### Compute/REST lane
+
+- Build transport and platform defaults from `pipeline.yaml`.
+- Use module-local Quarkus run/test commands for step services and orchestrator.
+- Expect generated REST handlers/resources for configured steps.
+
+### Function/REST lane
+
+- Build with:
+  - `-Dpipeline.platform=FUNCTION`
+  - `-Dpipeline.transport=REST`
+  - `-Dpipeline.rest.naming.strategy=RESOURCEFUL`
+- Validate handler path with `LambdaMockEventServerSmokeTest`.
+
+## Signals to Watch
+
+### Health
+
+- Quarkus health endpoints (`/q/health`) for service readiness/liveness.
+- Generated handler/resource availability in startup logs.
+
+### Metrics and logs
+
+- Step latency trends around fan-out and fan-in boundaries.
+- Error-rate spikes grouped by service/step.
+- Retry exhaustion and parking events (for example index reducer parking logs).
+- Backpressure symptoms: sustained queue growth or long tail latency in streaming/reduction steps.
+
+### Build artifact integrity
+
+- Confirm `META-INF/pipeline/*` metadata exists in built artifacts.
+- Validate generated handlers/adapters are present in expected module outputs.
+
+## Recovery Playbook
+
+### Retry exhaustion
+
+1. Identify the failing step and failure type (transient vs non-retryable).
+2. Confirm whether the failure is dependency/systemic or payload/data specific.
+3. If systemic: stabilise dependency first, then replay.
+4. If data-specific: isolate failing payloads and route to DLQ/parking investigation.
+
+### Parking growth
+
+1. Alert on sustained growth in parked failures for the same step.
+2. Correlate parked entries with a specific dependency, payload signature, or rollout.
+3. Mitigate by rollback/config correction, then replay parked items in controlled batches.
+
+### Timeout pressure
+
+1. Identify whether timeout is upstream IO, operator logic, or downstream persistence.
+2. Validate traffic and payload size changes at the same timestamp.
+3. Reduce load and/or increase capacity first; only then tune retry/backoff/timeout controls.
+
+## Material Environment and Config Inputs
+
+Only include keys that change behaviour materially:
+
+- `SEARCH_INDEX_VERSION`: changes effective index schema/version used by index acknowledgement.
+- `search.index.chaos.enabled`: enables test/chaos marker handling in index reducer logic.
+- `tpf.function.invocation.mode`: controls local vs remote function invoke routing behaviour.
+- `pipeline.platform`: selects platform generation mode (for example `FUNCTION`).
+- `pipeline.transport`: selects transport generation mode (for example `REST`).
+- `pipeline.rest.naming.strategy`: affects generated REST naming and route conventions.
+- `quarkus.lambda.handler`: selects explicit lambda handler entrypoint when multiple handlers exist.
+
+## Intentional Limitations (Current)
+
+- Unary operator invocation is the primary supported execution path.
+- gRPC delegated/operator lanes require descriptors and mapper-compatible bindings.
+- No implicit mapper conversion by default; fallback behaviour is configuration-driven.
+- Operational controls are service-specific; there is no single global operator circuit-breaker switch.
+
+## Related
+
+- [Operator Troubleshooting Matrix](/guide/operations/operators-troubleshooting)
+- [Error Handling & DLQ](/guide/operations/error-handling)
+- [Observability](/guide/operations/observability/)

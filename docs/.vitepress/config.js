@@ -106,6 +106,8 @@ const mainSidebar = [
             {text: 'Error Handling & DLQ', link: '/guide/operations/error-handling'},
             {text: 'In-flight Probe', link: '/guide/operations/in-flight-probe'},
             {text: 'Operators', link: '/guide/operations/operators'},
+            {text: 'Operator Runbook', link: '/guide/operations/operators-playbook'},
+            {text: 'Operator Troubleshooting', link: '/guide/operations/operators-troubleshooting'},
             {text: 'AWS Lambda SnapStart', link: '/guide/operations/aws-lambda-snapstart'},
             {
                 text: 'Observability',
