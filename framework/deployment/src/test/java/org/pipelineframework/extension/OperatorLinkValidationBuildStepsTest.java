@@ -73,7 +73,7 @@ class OperatorLinkValidationBuildStepsTest {
     }
 
     @Test
-    void passesWhenSingleMapperExistsForProducedDomain() throws Exception {
+    void passesWhenExactMapperPairExists() throws Exception {
         Index index = indexOf(Source.class, Sink.class, MapperOne.class, MapperTwo.class);
         OperatorBuildItem source = operator(index, Source.class, "Source", classType(String.class), uniType(String.class));
         OperatorBuildItem sink = operator(index, Sink.class, "Sink", classType(Integer.class), uniType(Integer.class));
@@ -82,14 +82,14 @@ class OperatorLinkValidationBuildStepsTest {
         MapperRegistryBuildItem registry = registry(Map.of(
                 new MapperPairKey(
                         DotName.createSimple(String.class.getName()),
-                        DotName.createSimple(Long.class.getName())),
+                        DotName.createSimple(Integer.class.getName())),
                 mapperOne));
 
         assertDoesNotThrow(() -> buildSteps.validateOperatorLinks(List.of(source, sink), registry, index));
     }
 
     @Test
-    void failsWhenMultipleMappersExistForProducedDomain() throws Exception {
+    void failsWhenNoExactMapperPairExists() throws Exception {
         Index index = indexOf(Source.class, Sink.class, MapperOne.class, MapperTwo.class);
         OperatorBuildItem source = operator(index, Source.class, "Source", classType(String.class), uniType(String.class));
         OperatorBuildItem sink = operator(index, Sink.class, "Sink", classType(Integer.class), uniType(Integer.class));
@@ -110,9 +110,9 @@ class OperatorLinkValidationBuildStepsTest {
             buildSteps.validateOperatorLinks(List.of(source, sink), registry, index);
             fail("Expected DeploymentException");
         } catch (DeploymentException e) {
-            assertTrue(e.getMessage().contains("multiple mappers found"));
-            assertTrue(e.getMessage().contains(MapperOne.class.getName()));
-            assertTrue(e.getMessage().contains(MapperTwo.class.getName()));
+            assertTrue(e.getMessage().contains("no mapper found for produced/expected pair"));
+            assertTrue(e.getMessage().contains("java.lang.String"));
+            assertTrue(e.getMessage().contains("java.lang.Integer"));
         }
     }
 

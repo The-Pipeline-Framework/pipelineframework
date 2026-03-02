@@ -26,9 +26,6 @@ import org.jboss.jandex.DotName;
 import org.jboss.jandex.IndexView;
 import org.jboss.jandex.PrimitiveType;
 import org.jboss.jandex.Type;
-import org.pipelineframework.extension.MapperInferenceEngine.MapperPairKey;
-
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -97,50 +94,14 @@ public final class OperatorLinkValidationBuildSteps {
                 continue;
             }
 
-            List<ClassInfo> matches = findMappersByDomain(mapperRegistry, typeName(produced.type()));
-            if (matches.isEmpty()) {
+            DotName producedTypeName = typeName(produced.type());
+            DotName expectedTypeName = typeName(expected.type());
+            ClassInfo exactPairMapper = mapperRegistry.getMapperForPair(producedTypeName, expectedTypeName);
+            if (exactPairMapper == null) {
                 throw mismatch(current, produced.type(), next, expected.type(),
-                        "no mapper found for produced domain type " + produced.type());
-            }
-            if (matches.size() > 1) {
-                throw mismatch(current, produced.type(), next, expected.type(),
-                        "multiple mappers found for produced domain type " + produced.type() + ": " + mapperNames(matches));
+                        "no mapper found for produced/expected pair (" + produced.type() + " -> " + expected.type() + ")");
             }
         }
-    }
-
-    /**
-     * Finds mappers registered for the given domain type.
-     *
-     * @param domainType the domain type's DotName to match; if null, the method returns an empty list
-     * @return a list of ClassInfo for mappers whose MapperPairKey domainType equals the provided domainType; empty if none found
-     */
-    private List<ClassInfo> findMappersByDomain(MapperRegistryBuildItem mapperRegistry, DotName domainType) {
-        List<ClassInfo> matches = new ArrayList<>();
-        if (domainType == null) {
-            return matches;
-        }
-        for (var entry : mapperRegistry.getPairToMapperMap().entrySet()) {
-            MapperPairKey key = entry.getKey();
-            if (domainType.equals(key.domainType())) {
-                matches.add(entry.getValue());
-            }
-        }
-        return matches;
-    }
-
-    /**
-     * Produces a comma-separated list of fully-qualified class names from the provided matches.
-     *
-     * @param matches list of ClassInfo objects whose names will be used; may be empty
-     * @return a string containing the fully-qualified names joined by ", ", or an empty string if {@code matches} is empty
-     */
-    private String mapperNames(List<ClassInfo> matches) {
-        List<String> names = new ArrayList<>(matches.size());
-        for (ClassInfo match : matches) {
-            names.add(match.name().toString());
-        }
-        return String.join(", ", names);
     }
 
     /**
