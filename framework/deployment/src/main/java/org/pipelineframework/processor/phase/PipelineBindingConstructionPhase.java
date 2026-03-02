@@ -81,10 +81,14 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
 
         DescriptorProtos.FileDescriptorSet descriptorSet = ctx.getDescriptorSet();
 
-        if (descriptorSet == null && needsGrpcBindings(ctx)) {
+        boolean grpcTransport = ctx.isTransportModeGrpc();
+        boolean requiresGrpcArtifacts = ctx.getStepModels().stream().anyMatch(this::isGrpcBoundStep);
+        if (descriptorSet == null && ((grpcTransport && requiresGrpcArtifacts) || needsGrpcBindings(ctx))) {
             descriptorSet = loadDescriptorSet(ctx);
             ctx.setDescriptorSet(descriptorSet);
         }
+
+        validateTransportOrthogonality(ctx, descriptorSet);
 
         bindingsMap.putAll(stepBindingConstructionService.buildBindings(ctx, descriptorSet));
         
@@ -103,6 +107,45 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
         
         // Store the bindings map in the context
         ctx.setRendererBindings(bindingsMap);
+    }
+
+    private void validateTransportOrthogonality(
+            PipelineCompilationContext ctx,
+            DescriptorProtos.FileDescriptorSet descriptorSet) {
+        if (!ctx.isTransportModeGrpc()) {
+            return;
+        }
+        boolean hasGrpcDelegatedSteps = ctx.getStepModels().stream()
+            .anyMatch(model -> model.delegateService() != null && isGrpcBoundStep(model));
+        if (!hasGrpcDelegatedSteps) {
+            return;
+        }
+        if (descriptorSet == null) {
+            throw new IllegalStateException(
+                "gRPC transport requires protobuf descriptors, but no descriptor set was available");
+        }
+        for (PipelineStepModel model : ctx.getStepModels()) {
+            if (model.delegateService() == null || !isGrpcBoundStep(model)) {
+                continue;
+            }
+            if (model.externalMapper() == null) {
+                throw new IllegalStateException(
+                    "Step '" + model.serviceName()
+                        + "' uses gRPC transport but has no mapper. "
+                        + "gRPC delegated/operator steps require an explicit or inferred mapper.");
+            }
+            if (model.mapperFallbackMode() == MapperFallbackMode.JACKSON) {
+                throw new IllegalStateException(
+                    "Step '" + model.serviceName()
+                        + "' uses gRPC transport but mapper fallback JACKSON is enabled. "
+                        + "gRPC delegated/operator steps require a mapper and do not allow mapper fallback.");
+            }
+        }
+    }
+
+    private boolean isGrpcBoundStep(PipelineStepModel model) {
+        return model.enabledTargets().contains(GenerationTarget.CLIENT_STEP)
+            || model.enabledTargets().contains(GenerationTarget.GRPC_SERVICE);
     }
 
     /**
