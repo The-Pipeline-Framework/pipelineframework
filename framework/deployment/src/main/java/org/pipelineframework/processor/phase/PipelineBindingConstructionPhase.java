@@ -120,7 +120,7 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
         if (!hasGrpcDelegatedSteps) {
             return;
         }
-        if (descriptorSet == null) {
+        if (descriptorSet == null || descriptorSet.getFileCount() == 0) {
             throw new IllegalStateException(
                 "gRPC transport requires protobuf descriptors, but no descriptor set was available");
         }

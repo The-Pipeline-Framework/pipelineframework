@@ -16,6 +16,7 @@
 
 package org.pipelineframework.processor.phase;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -220,8 +221,26 @@ class PipelineBindingConstructionPhaseTest {
             .build();
         context.setStepModels(List.of(delegatedModel));
 
-        Exception error = assertThrows(Exception.class, () -> phase.execute(context));
+        IOException error = assertThrows(IOException.class, () -> phase.execute(context));
         assertTrue(error.getMessage().contains("No protobuf descriptor file found"));
+    }
+
+    @Test
+    void delegatedGrpcStepWithEmptyDescriptorSetFailsValidation() {
+        PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
+        PipelineStepModel delegatedModel = TestModelFactory
+            .createTestModelWithTargets("ProcessDelegatedEmptyDescriptorService", Set.of(GenerationTarget.CLIENT_STEP))
+            .toBuilder()
+            .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
+            .externalMapper(ClassName.get("com.example.mapper", "EmbeddingMapper"))
+            .build();
+        context.setStepModels(List.of(delegatedModel));
+        context.setDescriptorSet(DescriptorProtos.FileDescriptorSet.newBuilder().build());
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> phase.execute(context));
+        assertTrue(error.getMessage().contains("gRPC transport requires protobuf descriptors, but no descriptor set was available"));
     }
 
     private static DescriptorProtos.FileDescriptorSet descriptorSetForService(String serviceName) {
