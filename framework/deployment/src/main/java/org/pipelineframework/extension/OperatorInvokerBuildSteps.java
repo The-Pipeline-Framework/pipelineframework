@@ -348,8 +348,8 @@ public final class OperatorInvokerBuildSteps {
                 process.addAnnotation("io.smallrye.common.annotation.Blocking");
             }
 
-            ResultHandle[] args = buildInvocationArgs(process, operator.method());
             TryBlock tryBlock = process.tryBlock();
+            ResultHandle[] args = buildInvocationArgs(tryBlock, operator.method());
             ResultHandle invocationResult = invokeTarget(tryBlock, operator, targetField, args);
             ResultHandle returned = adaptReturn(tryBlock, operator, invocationResult);
             tryBlock.returnValue(returned);
@@ -389,11 +389,11 @@ public final class OperatorInvokerBuildSteps {
     /**
      * Builds invocation argument handles for the operator method, converting the single input parameter when present.
      *
-     * @param process the Gizmo MethodCreator used to generate bytecode for the invoker
+     * @param process the Gizmo bytecode creator used to generate bytecode for the invoker
      * @param method the operator method metadata describing expected parameter types
      * @return an array of `ResultHandle` values containing the converted argument; empty if the method has no parameters
      */
-    private ResultHandle[] buildInvocationArgs(MethodCreator process, MethodInfo method) {
+    private ResultHandle[] buildInvocationArgs(BytecodeCreator process, MethodInfo method) {
         if (method.parametersCount() == 0) {
             return new ResultHandle[0];
         }
@@ -405,7 +405,7 @@ public final class OperatorInvokerBuildSteps {
     /**
      * Casts and converts an input ResultHandle to the specified expected type for method invocation.
      *
-     * @param process the Gizmo MethodCreator used to emit bytecode operations
+     * @param process the Gizmo bytecode creator used to emit bytecode operations
      * @param input the handle representing the original input value
      * @param expectedType the required parameter type; if primitive the value is unboxed from its wrapper,
      *                     if array the value is cast using the array descriptor, otherwise cast to the raw type name
@@ -413,7 +413,7 @@ public final class OperatorInvokerBuildSteps {
      * @throws IllegalArgumentException if an array type contains an unresolved symbol
      * @throws DeploymentException if the expected type has no resolvable raw name
      */
-    private ResultHandle castInput(MethodCreator process, ResultHandle input, Type expectedType) {
+    private ResultHandle castInput(BytecodeCreator process, ResultHandle input, Type expectedType) {
         if (expectedType.kind() == Type.Kind.PRIMITIVE) {
             ResultHandle boxed = process.checkCast(input, boxedType(expectedType.asPrimitiveType().primitive()).getName());
             return unbox(process, boxed, expectedType.asPrimitiveType().primitive());
@@ -499,7 +499,7 @@ public final class OperatorInvokerBuildSteps {
      * @param primitive the target primitive kind to unbox to
      * @return a ResultHandle representing the primitive value extracted from the wrapper
      */
-    private ResultHandle unbox(MethodCreator process, ResultHandle value, org.jboss.jandex.PrimitiveType.Primitive primitive) {
+    private ResultHandle unbox(BytecodeCreator process, ResultHandle value, org.jboss.jandex.PrimitiveType.Primitive primitive) {
         return switch (primitive) {
             case BOOLEAN -> process.invokeVirtualMethod(
                     MethodDescriptor.ofMethod(Boolean.class, "booleanValue", boolean.class), value);

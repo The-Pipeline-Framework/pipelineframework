@@ -219,7 +219,21 @@ public final class OperatorLinkValidationBuildSteps {
         }
 
         ClassInfo fromClass = index.getClassByName(fromName);
-        return isAssignableTo(fromClass, toName, index, new HashSet<>());
+        if (fromClass == null) {
+            return isAssignableUsingReflection(fromName, toName);
+        }
+        return isAssignableTo(fromClass, toRef, index, new HashSet<>());
+    }
+
+    private boolean isAssignableUsingReflection(DotName fromName, DotName toName) {
+        try {
+            ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+            Class<?> fromClass = Class.forName(fromName.toString(), false, classLoader);
+            Class<?> toClass = Class.forName(toName.toString(), false, classLoader);
+            return toClass.isAssignableFrom(fromClass);
+        } catch (ClassNotFoundException | LinkageError e) {
+            return false;
+        }
     }
 
     /**
@@ -300,22 +314,27 @@ public final class OperatorLinkValidationBuildSteps {
      * Recursively determines whether the provided class or any of its superclasses or implemented interfaces matches the given target type name.
      *
      * @param classInfo the class to inspect; may be null
-     * @param target the DotName of the target type to match
+     * @param target the target type to match, preserving parameterized type arguments
      * @param index the index view used to resolve referenced classes by name
      * @param visited a set of already visited type names to avoid infinite recursion caused by cycles
      * @return `true` if `classInfo` or any traversed superclass/interface has a name equal to `target`, `false` otherwise
      */
-    private boolean isAssignableTo(ClassInfo classInfo, DotName target, IndexView index, Set<DotName> visited) {
+    private boolean isAssignableTo(ClassInfo classInfo, Type target, IndexView index, Set<DotName> visited) {
         if (classInfo == null || classInfo.name() == null || !visited.add(classInfo.name())) {
             return false;
         }
-        if (target.equals(classInfo.name())) {
+        DotName targetName = typeName(target);
+        if (targetName == null) {
+            return false;
+        }
+        Type currentType = Type.create(classInfo.name(), Type.Kind.CLASS);
+        if (targetName.equals(classInfo.name()) && hasCompatibleTypeArguments(currentType, target, index)) {
             return true;
         }
 
         for (Type interfaceType : classInfo.interfaceTypes()) {
             DotName interfaceName = interfaceType.name();
-            if (target.equals(interfaceName)) {
+            if (targetName.equals(interfaceName) && hasCompatibleTypeArguments(interfaceType, target, index)) {
                 return true;
             }
             ClassInfo interfaceClass = interfaceName == null ? null : index.getClassByName(interfaceName);
@@ -325,7 +344,7 @@ public final class OperatorLinkValidationBuildSteps {
         }
 
         Type superType = classInfo.superClassType();
-        if (superType != null && target.equals(superType.name())) {
+        if (superType != null && targetName.equals(superType.name()) && hasCompatibleTypeArguments(superType, target, index)) {
             return true;
         }
         if (superType == null || superType.name() == null || JAVA_LANG_OBJECT.equals(superType.name())) {

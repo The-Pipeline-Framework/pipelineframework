@@ -31,8 +31,8 @@ class OperatorLinkValidationBuildStepsTest {
     @Test
     void passesForUniToUniWithAssignableTypes() throws Exception {
         Index index = indexOf(Source.class, Sink.class, MapperOne.class, MapperTwo.class);
-        OperatorBuildItem source = operator(index, Source.class, "Source", "java.lang.String", uniType(String.class));
-        OperatorBuildItem sink = operator(index, Sink.class, "Sink", "java.lang.String", uniType(String.class));
+        OperatorBuildItem source = operator(index, Source.class, "Source", classType(String.class), uniType(String.class));
+        OperatorBuildItem sink = operator(index, Sink.class, "Sink", classType(String.class), uniType(String.class));
 
         assertDoesNotThrow(() -> buildSteps.validateOperatorLinks(
                 List.of(source, sink),
@@ -43,8 +43,8 @@ class OperatorLinkValidationBuildStepsTest {
     @Test
     void failsForMultiToUniCardinality() throws Exception {
         Index index = indexOf(Source.class, Sink.class, MapperOne.class, MapperTwo.class);
-        OperatorBuildItem source = operator(index, Source.class, "Source", "java.lang.String", multiType(String.class));
-        OperatorBuildItem sink = operator(index, Sink.class, "Sink", "java.lang.String", uniType(String.class));
+        OperatorBuildItem source = operator(index, Source.class, "Source", classType(String.class), multiType(String.class));
+        OperatorBuildItem sink = operator(index, Sink.class, "Sink", classType(String.class), uniType(String.class));
 
         try {
             buildSteps.validateOperatorLinks(List.of(source, sink), emptyRegistry(), index);
@@ -58,8 +58,8 @@ class OperatorLinkValidationBuildStepsTest {
     @Test
     void failsWhenNoMapperExistsForIncompatibleAdjacentTypes() throws Exception {
         Index index = indexOf(Source.class, Sink.class, MapperOne.class, MapperTwo.class);
-        OperatorBuildItem source = operator(index, Source.class, "Source", "java.lang.String", uniType(String.class));
-        OperatorBuildItem sink = operator(index, Sink.class, "Sink", "java.lang.Integer", uniType(Integer.class));
+        OperatorBuildItem source = operator(index, Source.class, "Source", classType(String.class), uniType(String.class));
+        OperatorBuildItem sink = operator(index, Sink.class, "Sink", classType(Integer.class), uniType(Integer.class));
 
         try {
             buildSteps.validateOperatorLinks(List.of(source, sink), emptyRegistry(), index);
@@ -75,8 +75,8 @@ class OperatorLinkValidationBuildStepsTest {
     @Test
     void passesWhenSingleMapperExistsForProducedDomain() throws Exception {
         Index index = indexOf(Source.class, Sink.class, MapperOne.class, MapperTwo.class);
-        OperatorBuildItem source = operator(index, Source.class, "Source", "java.lang.String", uniType(String.class));
-        OperatorBuildItem sink = operator(index, Sink.class, "Sink", "java.lang.Integer", uniType(Integer.class));
+        OperatorBuildItem source = operator(index, Source.class, "Source", classType(String.class), uniType(String.class));
+        OperatorBuildItem sink = operator(index, Sink.class, "Sink", classType(Integer.class), uniType(Integer.class));
 
         ClassInfo mapperOne = classInfo(index, MapperOne.class);
         MapperRegistryBuildItem registry = registry(Map.of(
@@ -91,8 +91,8 @@ class OperatorLinkValidationBuildStepsTest {
     @Test
     void failsWhenMultipleMappersExistForProducedDomain() throws Exception {
         Index index = indexOf(Source.class, Sink.class, MapperOne.class, MapperTwo.class);
-        OperatorBuildItem source = operator(index, Source.class, "Source", "java.lang.String", uniType(String.class));
-        OperatorBuildItem sink = operator(index, Sink.class, "Sink", "java.lang.Integer", uniType(Integer.class));
+        OperatorBuildItem source = operator(index, Source.class, "Source", classType(String.class), uniType(String.class));
+        OperatorBuildItem sink = operator(index, Sink.class, "Sink", classType(Integer.class), uniType(Integer.class));
 
         ClassInfo mapperOne = classInfo(index, MapperOne.class);
         ClassInfo mapperTwo = classInfo(index, MapperTwo.class);
@@ -116,11 +116,43 @@ class OperatorLinkValidationBuildStepsTest {
         }
     }
 
+    @Test
+    void passesForAssignableSupertype() throws Exception {
+        Index index = indexOf(Source.class, Sink.class, MapperOne.class, MapperTwo.class);
+        OperatorBuildItem source = operator(index, Source.class, "Source", classType(String.class), uniType(String.class));
+        OperatorBuildItem sink = operator(index, Sink.class, "Sink", classType(Object.class), uniType(Object.class));
+
+        assertDoesNotThrow(() -> buildSteps.validateOperatorLinks(
+                List.of(source, sink),
+                emptyRegistry(),
+                index));
+    }
+
+    @Test
+    void failsForRawTypeWithIncompatibleGenerics() throws Exception {
+        Index index = indexOf(Source.class, Sink.class, MapperOne.class, MapperTwo.class);
+        Type listOfString = listType(String.class);
+        Type listOfInteger = listType(Integer.class);
+
+        OperatorBuildItem source = operator(index, Source.class, "Source", listOfString, uniType(listOfString));
+        OperatorBuildItem sink = operator(index, Sink.class, "Sink", listOfInteger, uniType(Integer.class));
+
+        try {
+            buildSteps.validateOperatorLinks(List.of(source, sink), emptyRegistry(), index);
+            fail("Expected DeploymentException");
+        } catch (DeploymentException e) {
+            assertTrue(e.getMessage().contains("Step 'Source' produces"));
+            assertTrue(e.getMessage().contains("step 'Sink' expects"));
+            assertTrue(e.getMessage().contains("java.util.List<java.lang.String>"));
+            assertTrue(e.getMessage().contains("java.util.List<java.lang.Integer>"));
+        }
+    }
+
     private OperatorBuildItem operator(
             Index index,
             Class<?> ownerClass,
             String stepName,
-            String inputTypeName,
+            Type inputType,
             Type normalizedReturnType) {
         ClassInfo ownerInfo = classInfo(index, ownerClass);
         MethodInfo method = ownerInfo.methods().stream()
@@ -131,7 +163,7 @@ class OperatorLinkValidationBuildStepsTest {
                 new PipelineConfigBuildItem.StepConfig(stepName, "com.example." + stepName + "::map"),
                 ownerInfo,
                 method,
-                Type.create(DotName.createSimple(inputTypeName), Type.Kind.CLASS),
+                inputType,
                 normalizedReturnType,
                 OperatorCategory.REACTIVE);
     }
@@ -149,11 +181,26 @@ class OperatorLinkValidationBuildStepsTest {
     }
 
     private static Type uniType(Class<?> argument) {
-        return ParameterizedType.create(UNI, new Type[]{Type.create(DotName.createSimple(argument.getName()), Type.Kind.CLASS)}, null);
+        return uniType(classType(argument));
+    }
+
+    private static Type uniType(Type argument) {
+        return ParameterizedType.create(UNI, new Type[]{argument}, null);
     }
 
     private static Type multiType(Class<?> argument) {
         return ParameterizedType.create(MULTI, new Type[]{Type.create(DotName.createSimple(argument.getName()), Type.Kind.CLASS)}, null);
+    }
+
+    private static Type classType(Class<?> clazz) {
+        return Type.create(DotName.createSimple(clazz.getName()), Type.Kind.CLASS);
+    }
+
+    private static Type listType(Class<?> argument) {
+        return ParameterizedType.create(
+                DotName.createSimple(List.class.getName()),
+                new Type[]{Type.create(DotName.createSimple(argument.getName()), Type.Kind.CLASS)},
+                null);
     }
 
     private static ClassInfo classInfo(Index index, Class<?> type) {
