@@ -1,0 +1,353 @@
+/*
+ * Copyright (c) 2023-2025 Mariano Barcia
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.pipelineframework.extension;
+
+import io.quarkus.deployment.annotations.BuildStep;
+import io.quarkus.deployment.annotations.Produce;
+import io.quarkus.deployment.builditem.CombinedIndexBuildItem;
+import io.quarkus.deployment.pkg.builditem.ArtifactResultBuildItem;
+import jakarta.enterprise.inject.spi.DeploymentException;
+import org.jboss.jandex.ClassInfo;
+import org.jboss.jandex.DotName;
+import org.jboss.jandex.IndexView;
+import org.jboss.jandex.PrimitiveType;
+import org.jboss.jandex.Type;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+
+/**
+ * Validates adjacent operator links at build time.
+ */
+public final class OperatorLinkValidationBuildSteps {
+
+    private static final DotName UNI = DotName.createSimple("io.smallrye.mutiny.Uni");
+    private static final DotName MULTI = DotName.createSimple("io.smallrye.mutiny.Multi");
+    private static final DotName JAVA_LANG_OBJECT = DotName.createSimple("java.lang.Object");
+
+    /**
+     * Triggers build-time validation of adjacent operator links, ensuring each step's produced type is compatible
+     * with the next step's expected type using the provided mapper registry and combined index.
+     *
+     * @param steps          the ordered list of operator build items to validate
+     * @param mapperRegistry the mapper registry used to resolve domain-to-target mappings when types differ
+     * @param combinedIndex  the combined Jandex index of application classes used for type assignability checks
+     */
+    @BuildStep
+    @Produce(ArtifactResultBuildItem.class)
+    void validateOperatorLinks(
+            List<OperatorBuildItem> steps,
+            MapperRegistryBuildItem mapperRegistry,
+            CombinedIndexBuildItem combinedIndex) {
+        validateOperatorLinks(steps, mapperRegistry, combinedIndex.getIndex());
+    }
+
+    /**
+     * Validate compatibility between adjacent operator build steps' outputs and the next step's inputs.
+     *
+     * Performs cardinality checks (rejects Multi feeding Uni), ensures the produced type is assignable to the
+     * next step's expected type, and when not assignable consults the mapper registry for mappers matching the
+     * produced domain type. Throws a deployment exception describing the mismatch if validation fails.
+     *
+     * @param steps the ordered list of operator build steps to validate; adjacent pairs are compared
+     * @param mapperRegistry registry used to discover mappers for produced domain types
+     * @param index the Jandex index view used to determine type assignability
+     * @throws NullPointerException if {@code steps}, {@code mapperRegistry}, {@code index}, or any required step is null
+     * @throws DeploymentException if a cardinality mismatch, an unassignable type, no mapper, or multiple mappers are found
+     */
+    void validateOperatorLinks(
+            List<OperatorBuildItem> steps,
+            MapperRegistryBuildItem mapperRegistry,
+            IndexView index) {
+        Objects.requireNonNull(steps, "steps must not be null");
+        Objects.requireNonNull(mapperRegistry, "mapperRegistry must not be null");
+        Objects.requireNonNull(index, "index must not be null");
+
+        for (int i = 0; i < steps.size() - 1; i++) {
+            OperatorBuildItem current = Objects.requireNonNull(steps.get(i), "steps[" + i + "] must not be null");
+            OperatorBuildItem next = Objects.requireNonNull(steps.get(i + 1), "steps[" + (i + 1) + "] must not be null");
+
+            ResolvedType produced = unwrapReactive(current.normalizedReturnType());
+            ResolvedType expected = unwrapReactive(next.inputType());
+
+            if (produced.cardinality() == Cardinality.MULTI && expected.cardinality() == Cardinality.UNI) {
+                throw mismatch(current, produced.type(), next, expected.type(),
+                        "cardinality mismatch: Multi<T> cannot feed Uni<T>");
+            }
+
+            if (isAssignable(produced.type(), expected.type(), index)) {
+                continue;
+            }
+
+            DotName producedTypeName = typeName(produced.type());
+            DotName expectedTypeName = typeName(expected.type());
+            ClassInfo exactPairMapper = mapperRegistry.getMapperForPair(producedTypeName, expectedTypeName);
+            if (exactPairMapper == null) {
+                throw mismatch(current, produced.type(), next, expected.type(),
+                        "no mapper found for produced/expected pair (" + produced.type() + " -> " + expected.type() + ")");
+            }
+        }
+    }
+
+    /**
+     * Constructs a DeploymentException describing a type mismatch between two adjacent operator steps.
+     *
+     * @param current the operator that produces the value
+     * @param producedType the actual type produced by the current operator
+     * @param next the operator that consumes the value
+     * @param expectedType the type expected by the next operator
+     * @param detail additional context to include in the error message
+     * @return a DeploymentException with a formatted message identifying the producing step, the produced type,
+     *         the consuming step, the expected type, and the provided detail
+     */
+    private DeploymentException mismatch(
+            OperatorBuildItem current,
+            Type producedType,
+            OperatorBuildItem next,
+            Type expectedType,
+            String detail) {
+        return new DeploymentException(String.format(
+                "Step '%s' produces %s but step '%s' expects %s (%s)",
+                current.step().name(),
+                producedType,
+                next.step().name(),
+                expectedType,
+                detail));
+    }
+
+    /**
+     * Unwraps a Mutiny reactive type (`Uni` or `Multi`) to its inner element type and indicates whether it represents
+     * a single value or multiple values.
+     *
+     * @param type the type to inspect; may be parameterized (e.g., `Uni<T>`/`Multi<T>`) or a raw type
+     * @return a {@code ResolvedType} whose {@code type} is the inner type when {@code type} is a parameterized `Uni` or
+     *         `Multi` with exactly one type argument, otherwise the original {@code type}; the {@code Cardinality} is
+     *         `MULTI` when the raw type is `Multi`, `UNI` otherwise
+     */
+    private ResolvedType unwrapReactive(Type type) {
+        DotName raw = typeName(type);
+        if (type != null && type.kind() == Type.Kind.PARAMETERIZED_TYPE && (UNI.equals(raw) || MULTI.equals(raw))) {
+            List<Type> arguments = type.asParameterizedType().arguments();
+            if (arguments.size() == 1) {
+                return new ResolvedType(UNI.equals(raw) ? Cardinality.UNI : Cardinality.MULTI, arguments.get(0));
+            }
+        }
+        return new ResolvedType(MULTI.equals(raw) ? Cardinality.MULTI : Cardinality.UNI, type);
+    }
+
+    /**
+     * Determines whether a value of `fromType` can be assigned to a variable of `toType`,
+     * taking into account primitive boxing and the type hierarchy available via the index.
+     *
+     * @param fromType the source type to assign from; may be a primitive or reference type
+     * @param toType the target type to assign to; may be a primitive or reference type
+     * @param index the index used to resolve class and interface hierarchies
+     * @return `true` if a value of `fromType` is assignable to `toType`, `false` otherwise
+     */
+    private boolean isAssignable(Type fromType, Type toType, IndexView index) {
+        if (fromType == null || toType == null) {
+            return false;
+        }
+        if (fromType.equals(toType) || fromType.toString().equals(toType.toString())) {
+            return true;
+        }
+
+        Type fromRef = toReferenceType(fromType);
+        Type toRef = toReferenceType(toType);
+        DotName fromName = typeName(fromRef);
+        DotName toName = typeName(toRef);
+
+        if (fromName == null || toName == null) {
+            return false;
+        }
+        if (fromName.equals(toName)) {
+            return hasCompatibleTypeArguments(fromRef, toRef, index);
+        }
+
+        ClassInfo fromClass = index.getClassByName(fromName);
+        if (fromClass == null) {
+            if (fromRef.kind() == Type.Kind.PARAMETERIZED_TYPE || toRef.kind() == Type.Kind.PARAMETERIZED_TYPE) {
+                return false;
+            }
+            return isAssignableUsingReflection(fromName, toName);
+        }
+        return isAssignableTo(fromClass, toRef, index, new HashSet<>());
+    }
+
+    private boolean isAssignableUsingReflection(DotName fromName, DotName toName) {
+        try {
+            ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+            Class<?> fromClass = Class.forName(fromName.toString(), false, classLoader);
+            Class<?> toClass = Class.forName(toName.toString(), false, classLoader);
+            return toClass.isAssignableFrom(fromClass);
+        } catch (ClassNotFoundException | LinkageError e) {
+            return false;
+        }
+    }
+
+    /**
+     * Checks whether two types with the same raw name have compatible generic type arguments.
+     *
+     * @param producedType the produced/source type
+     * @param expectedType the expected/target type
+     * @param index the index used for nested type-argument assignability checks
+     * @return true when generic arguments are structurally compatible, false otherwise
+     */
+    private boolean hasCompatibleTypeArguments(Type producedType, Type expectedType, IndexView index) {
+        boolean producedParameterized = producedType.kind() == Type.Kind.PARAMETERIZED_TYPE;
+        boolean expectedParameterized = expectedType.kind() == Type.Kind.PARAMETERIZED_TYPE;
+        if (!producedParameterized && !expectedParameterized) {
+            return true;
+        }
+        if (producedParameterized != expectedParameterized) {
+            return false;
+        }
+
+        List<Type> producedArguments = producedType.asParameterizedType().arguments();
+        List<Type> expectedArguments = expectedType.asParameterizedType().arguments();
+        if (producedArguments.size() != expectedArguments.size()) {
+            return false;
+        }
+
+        for (int i = 0; i < producedArguments.size(); i++) {
+            if (!isTypeArgumentCompatible(producedArguments.get(i), expectedArguments.get(i), index)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Checks compatibility between one produced and expected generic type argument.
+     *
+     * Supports wildcard bounds on the expected side and rejects produced wildcards.
+     *
+     * @param producedArg produced argument type
+     * @param expectedArg expected argument type
+     * @param index index used for recursive assignability checks
+     * @return true when the argument types are compatible, false otherwise
+     */
+    private boolean isTypeArgumentCompatible(Type producedArg, Type expectedArg, IndexView index) {
+        if (expectedArg.kind() == Type.Kind.WILDCARD_TYPE) {
+            Type superBound = expectedArg.asWildcardType().superBound();
+            if (superBound != null) {
+                return isAssignable(superBound, producedArg, index);
+            }
+            Type extendsBound = expectedArg.asWildcardType().extendsBound();
+            if (extendsBound != null) {
+                return isAssignable(producedArg, extendsBound, index);
+            }
+            return true;
+        }
+
+        if (producedArg.kind() == Type.Kind.WILDCARD_TYPE) {
+            return false;
+        }
+
+        if (producedArg.equals(expectedArg) || producedArg.toString().equals(expectedArg.toString())) {
+            return true;
+        }
+
+        Type producedRef = toReferenceType(producedArg);
+        Type expectedRef = toReferenceType(expectedArg);
+        DotName producedName = typeName(producedRef);
+        DotName expectedName = typeName(expectedRef);
+        if (producedName == null || expectedName == null || !producedName.equals(expectedName)) {
+            return false;
+        }
+
+        return hasCompatibleTypeArguments(producedRef, expectedRef, index);
+    }
+
+    /**
+     * Recursively determines whether the provided class or any of its superclasses or implemented interfaces matches the given target type name.
+     *
+     * @param classInfo the class to inspect; may be null
+     * @param target the target type to match, preserving parameterized type arguments
+     * @param index the index view used to resolve referenced classes by name
+     * @param visited a set of already visited type names to avoid infinite recursion caused by cycles
+     * @return `true` if `classInfo` or any traversed superclass/interface has a name equal to `target`, `false` otherwise
+     */
+    private boolean isAssignableTo(ClassInfo classInfo, Type target, IndexView index, Set<DotName> visited) {
+        if (classInfo == null || classInfo.name() == null || !visited.add(classInfo.name())) {
+            return false;
+        }
+        DotName targetName = typeName(target);
+        if (targetName == null) {
+            return false;
+        }
+        Type currentType = Type.create(classInfo.name(), Type.Kind.CLASS);
+        if (targetName.equals(classInfo.name()) && hasCompatibleTypeArguments(currentType, target, index)) {
+            return true;
+        }
+
+        for (Type interfaceType : classInfo.interfaceTypes()) {
+            DotName interfaceName = interfaceType.name();
+            if (targetName.equals(interfaceName) && hasCompatibleTypeArguments(interfaceType, target, index)) {
+                return true;
+            }
+            ClassInfo interfaceClass = interfaceName == null ? null : index.getClassByName(interfaceName);
+            if (isAssignableTo(interfaceClass, target, index, visited)) {
+                return true;
+            }
+        }
+
+        Type superType = classInfo.superClassType();
+        if (superType != null && targetName.equals(superType.name()) && hasCompatibleTypeArguments(superType, target, index)) {
+            return true;
+        }
+        if (superType == null || superType.name() == null || JAVA_LANG_OBJECT.equals(superType.name())) {
+            return false;
+        }
+        return isAssignableTo(index.getClassByName(superType.name()), target, index, visited);
+    }
+
+    /**
+     * Convert a primitive Type to its corresponding boxed reference Type; leaves reference types unchanged.
+     *
+     * @param type the type to convert; may be null
+     * @return the boxed reference Type if the input is a primitive, the original type if it's already a reference, or `null` if the input is null
+     */
+    private Type toReferenceType(Type type) {
+        if (type == null) {
+            return null;
+        }
+        if (type.kind() == Type.Kind.PRIMITIVE) {
+            return PrimitiveType.box(type.asPrimitiveType());
+        }
+        return type;
+    }
+
+    /**
+     * Obtain the DotName of the provided Type, or null when the input is null.
+     *
+     * @param type the type whose DotName is required; may be null
+     * @return the type's DotName, or null if {@code type} is null
+     */
+    private DotName typeName(Type type) {
+        return type == null ? null : type.name();
+    }
+
+    private enum Cardinality {
+        UNI,
+        MULTI
+    }
+
+    private record ResolvedType(Cardinality cardinality, Type type) {
+    }
+}
