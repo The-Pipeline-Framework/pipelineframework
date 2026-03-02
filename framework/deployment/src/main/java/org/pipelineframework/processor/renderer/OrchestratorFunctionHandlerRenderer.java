@@ -128,9 +128,7 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
                 .addAnnotation(INJECT)
                 .build());
 
-        String localInvokeDelegate = streamingInput
-            ? "inputStream -> resource.run(inputStream.collect().asList().await().indefinitely())"
-            : "resource::run";
+        String localInvokeDelegate = localInvokeDelegate(streamingInput, streamingOutput);
 
         MethodSpec handleRequest = MethodSpec.methodBuilder("handleRequest")
             .addAnnotation(Override.class)
@@ -236,5 +234,15 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
             return "invokeManyToOne";
         }
         return "invokeManyToMany";
+    }
+
+    private static String localInvokeDelegate(boolean streamingInput, boolean streamingOutput) {
+        if (!streamingInput) {
+            return "resource::run";
+        }
+        if (!streamingOutput) {
+            return "inputStream -> inputStream.collect().asList().onItem().transformToUni(resource::run)";
+        }
+        return "resource::run";
     }
 }

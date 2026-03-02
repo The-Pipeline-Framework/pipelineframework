@@ -22,6 +22,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class RestFunctionHandlerRendererTest {
+    // Parity matrix (FUNCTION handler -> bridge method):
+    // UNARY_UNARY -> UnaryFunctionTransportBridge.invoke
+    // UNARY_STREAMING -> FunctionTransportBridge.invokeOneToMany
+    // STREAMING_UNARY -> FunctionTransportBridge.invokeManyToOne (non-blocking list reduction delegate)
+    // STREAMING_STREAMING -> FunctionTransportBridge.invokeManyToMany (stream-preserving delegate)
 
     @TempDir
     Path tempDir;
@@ -95,7 +100,7 @@ class RestFunctionHandlerRendererTest {
         assertTrue(source.contains("FunctionTransportContext transportContext = FunctionTransportContext.of("));
         assertTrue(source.contains("FunctionSourceAdapter<Multi<ParsedDocumentDto>, ParsedDocumentDto> source"));
         assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invoke"));
-        assertTrue(source.contains("inputStream -> resource.process(inputStream.collect().asList().await().indefinitely())"));
+        assertTrue(source.contains("inputStream -> inputStream.collect().asList().onItem().transformToUni(resource::process)"));
         assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invokeRemote = new HttpRemoteFunctionInvokeAdapter<>()"));
         assertTrue(source.contains("FunctionSinkAdapter<IndexAckDto, IndexAckDto> sink"));
         assertTrue(source.contains("return FunctionTransportBridge.invokeManyToOne(input, transportContext, source, invoke, sink)"));
@@ -118,7 +123,8 @@ class RestFunctionHandlerRendererTest {
         assertTrue(source.contains("FunctionTransportContext transportContext = FunctionTransportContext.of("));
         assertTrue(source.contains("FunctionSourceAdapter<Multi<ParsedDocumentDto>, ParsedDocumentDto> source"));
         assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invoke"));
-        assertTrue(source.contains("inputStream -> resource.process(inputStream.collect().asList().await().indefinitely())"));
+        assertFalse(source.contains("inputStream -> resource.process(inputStream.collect().asList().await().indefinitely())"));
+        assertTrue(source.contains("resource::process"));
         assertTrue(source.contains("FunctionInvokeAdapter<ParsedDocumentDto, IndexAckDto> invokeRemote = new HttpRemoteFunctionInvokeAdapter<>()"));
         assertTrue(source.contains("FunctionSinkAdapter<IndexAckDto, List<IndexAckDto>> sink"));
         assertTrue(source.contains("return FunctionTransportBridge.invokeManyToMany(input, transportContext, source, invoke, sink)"));

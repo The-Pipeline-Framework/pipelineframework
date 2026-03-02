@@ -31,6 +31,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
 
 class FunctionTransportBridgeTest {
+    // Parity matrix for FUNCTION transport bridge:
+    // 1->1 invokeOneToOne, 1->N invokeOneToMany, N->1 invokeManyToOne, N->M invokeManyToMany.
+    // These tests lock expected cardinality/failure semantics across bridge entry points.
     private FunctionTransportContext context;
 
     @BeforeEach

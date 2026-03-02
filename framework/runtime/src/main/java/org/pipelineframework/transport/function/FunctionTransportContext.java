@@ -127,7 +127,8 @@ public record FunctionTransportContext(
     /**
      * Resolves function invocation mode from context attributes.
      *
-     * @return invocation mode; defaults to LOCAL when unset/unknown
+     * @return invocation mode; defaults to LOCAL when unset
+     * @throws IllegalArgumentException when a non-empty invocation mode value is not LOCAL or REMOTE
      */
     public FunctionInvocationMode invocationMode() {
         String raw = attributes.get(ATTR_INVOCATION_MODE);
@@ -141,9 +142,8 @@ public record FunctionTransportContext(
         if ("REMOTE".equals(normalized)) {
             return FunctionInvocationMode.REMOTE;
         }
-        LOG.warning(() -> "Unknown function invocation mode '" + raw
-            + "'; falling back to " + FunctionInvocationMode.LOCAL);
-        return FunctionInvocationMode.LOCAL;
+        throw new IllegalArgumentException(
+            "Unsupported function invocation mode '" + raw + "'. Expected LOCAL or REMOTE.");
     }
 
     /**

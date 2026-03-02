@@ -78,6 +78,13 @@ Bridge mapping exercised by targeted tests:
 - `ONE_TO_MANY` -> `FunctionTransportBridge.invokeOneToMany(...)`
 - `MANY_TO_ONE` -> `FunctionTransportBridge.invokeManyToOne(...)`
 
+Runtime parity notes:
+
+- FUNCTION handlers keep the same cardinality contract used by COMPUTE/REST for these shapes.
+- `STREAMING_UNARY` handlers reduce non-blockingly (`collect().asList().onItem().transformToUni(...)`).
+- `STREAMING_STREAMING` handlers preserve stream-to-stream delegation (`resource::process`) without forced list collection.
+- Invalid `tpf.function.invocation.mode` values now fail fast with an explicit error (no silent fallback to LOCAL).
+
 Cardinality guarantees covered by tests:
 
 - `SearchPipelineEndToEndIT#tokenizeAndIndexPersistFanoutBatchesPerDocId` verifies one `docId` flows
