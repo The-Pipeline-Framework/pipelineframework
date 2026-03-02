@@ -43,6 +43,14 @@ public final class OperatorLinkValidationBuildSteps {
     private static final DotName MULTI = DotName.createSimple("io.smallrye.mutiny.Multi");
     private static final DotName JAVA_LANG_OBJECT = DotName.createSimple("java.lang.Object");
 
+    /**
+     * Triggers build-time validation of adjacent operator links, ensuring each step's produced type is compatible
+     * with the next step's expected type using the provided mapper registry and combined index.
+     *
+     * @param steps          the ordered list of operator build items to validate
+     * @param mapperRegistry the mapper registry used to resolve domain-to-target mappings when types differ
+     * @param combinedIndex  the combined Jandex index of application classes used for type assignability checks
+     */
     @BuildStep
     @Produce(ArtifactResultBuildItem.class)
     void validateOperatorLinks(
@@ -52,6 +60,19 @@ public final class OperatorLinkValidationBuildSteps {
         validateOperatorLinks(steps, mapperRegistry, combinedIndex.getIndex());
     }
 
+    /**
+     * Validate compatibility between adjacent operator build steps' outputs and the next step's inputs.
+     *
+     * Performs cardinality checks (rejects Multi feeding Uni), ensures the produced type is assignable to the
+     * next step's expected type, and when not assignable consults the mapper registry for mappers matching the
+     * produced domain type. Throws a deployment exception describing the mismatch if validation fails.
+     *
+     * @param steps the ordered list of operator build steps to validate; adjacent pairs are compared
+     * @param mapperRegistry registry used to discover mappers for produced domain types
+     * @param index the Jandex index view used to determine type assignability
+     * @throws NullPointerException if {@code steps}, {@code mapperRegistry}, {@code index}, or any required step is null
+     * @throws DeploymentException if a cardinality mismatch, an unassignable type, no mapper, or multiple mappers are found
+     */
     void validateOperatorLinks(
             List<OperatorBuildItem> steps,
             MapperRegistryBuildItem mapperRegistry,
@@ -88,6 +109,12 @@ public final class OperatorLinkValidationBuildSteps {
         }
     }
 
+    /**
+     * Finds mappers registered for the given domain type.
+     *
+     * @param domainType the domain type's DotName to match; if null, the method returns an empty list
+     * @return a list of ClassInfo for mappers whose MapperPairKey domainType equals the provided domainType; empty if none found
+     */
     private List<ClassInfo> findMappersByDomain(MapperRegistryBuildItem mapperRegistry, DotName domainType) {
         List<ClassInfo> matches = new ArrayList<>();
         if (domainType == null) {
@@ -102,6 +129,12 @@ public final class OperatorLinkValidationBuildSteps {
         return matches;
     }
 
+    /**
+     * Produces a comma-separated list of fully-qualified class names from the provided matches.
+     *
+     * @param matches list of ClassInfo objects whose names will be used; may be empty
+     * @return a string containing the fully-qualified names joined by ", ", or an empty string if {@code matches} is empty
+     */
     private String mapperNames(List<ClassInfo> matches) {
         List<String> names = new ArrayList<>(matches.size());
         for (ClassInfo match : matches) {
@@ -110,6 +143,17 @@ public final class OperatorLinkValidationBuildSteps {
         return String.join(", ", names);
     }
 
+    /**
+     * Constructs a DeploymentException describing a type mismatch between two adjacent operator steps.
+     *
+     * @param current the operator that produces the value
+     * @param producedType the actual type produced by the current operator
+     * @param next the operator that consumes the value
+     * @param expectedType the type expected by the next operator
+     * @param detail additional context to include in the error message
+     * @return a DeploymentException with a formatted message identifying the producing step, the produced type,
+     *         the consuming step, the expected type, and the provided detail
+     */
     private DeploymentException mismatch(
             OperatorBuildItem current,
             Type producedType,
@@ -125,6 +169,15 @@ public final class OperatorLinkValidationBuildSteps {
                 detail));
     }
 
+    /**
+     * Unwraps a Mutiny reactive type (`Uni` or `Multi`) to its inner element type and indicates whether it represents
+     * a single value or multiple values.
+     *
+     * @param type the type to inspect; may be parameterized (e.g., `Uni<T>`/`Multi<T>`) or a raw type
+     * @return a {@code ResolvedType} whose {@code type} is the inner type when {@code type} is a parameterized `Uni` or
+     *         `Multi` with exactly one type argument, otherwise the original {@code type}; the {@code Cardinality} is
+     *         `MULTI` when the raw type is `Multi`, `UNI` otherwise
+     */
     private ResolvedType unwrapReactive(Type type) {
         DotName raw = typeName(type);
         if (type != null && type.kind() == Type.Kind.PARAMETERIZED_TYPE && (UNI.equals(raw) || MULTI.equals(raw))) {
@@ -136,6 +189,15 @@ public final class OperatorLinkValidationBuildSteps {
         return new ResolvedType(MULTI.equals(raw) ? Cardinality.MULTI : Cardinality.UNI, type);
     }
 
+    /**
+     * Determines whether a value of `fromType` can be assigned to a variable of `toType`,
+     * taking into account primitive boxing and the type hierarchy available via the index.
+     *
+     * @param fromType the source type to assign from; may be a primitive or reference type
+     * @param toType the target type to assign to; may be a primitive or reference type
+     * @param index the index used to resolve class and interface hierarchies
+     * @return `true` if a value of `fromType` is assignable to `toType`, `false` otherwise
+     */
     private boolean isAssignable(Type fromType, Type toType, IndexView index) {
         if (fromType == null || toType == null) {
             return false;
@@ -160,6 +222,14 @@ public final class OperatorLinkValidationBuildSteps {
         return isAssignableTo(fromClass, toName, index, new HashSet<>());
     }
 
+    /**
+     * Checks whether two types with the same raw name have compatible generic type arguments.
+     *
+     * @param producedType the produced/source type
+     * @param expectedType the expected/target type
+     * @param index the index used for nested type-argument assignability checks
+     * @return true when generic arguments are structurally compatible, false otherwise
+     */
     private boolean hasCompatibleTypeArguments(Type producedType, Type expectedType, IndexView index) {
         boolean producedParameterized = producedType.kind() == Type.Kind.PARAMETERIZED_TYPE;
         boolean expectedParameterized = expectedType.kind() == Type.Kind.PARAMETERIZED_TYPE;
@@ -184,6 +254,16 @@ public final class OperatorLinkValidationBuildSteps {
         return true;
     }
 
+    /**
+     * Checks compatibility between one produced and expected generic type argument.
+     *
+     * Supports wildcard bounds on the expected side and rejects produced wildcards.
+     *
+     * @param producedArg produced argument type
+     * @param expectedArg expected argument type
+     * @param index index used for recursive assignability checks
+     * @return true when the argument types are compatible, false otherwise
+     */
     private boolean isTypeArgumentCompatible(Type producedArg, Type expectedArg, IndexView index) {
         if (expectedArg.kind() == Type.Kind.WILDCARD_TYPE) {
             Type superBound = expectedArg.asWildcardType().superBound();
@@ -216,6 +296,15 @@ public final class OperatorLinkValidationBuildSteps {
         return hasCompatibleTypeArguments(producedRef, expectedRef, index);
     }
 
+    /**
+     * Recursively determines whether the provided class or any of its superclasses or implemented interfaces matches the given target type name.
+     *
+     * @param classInfo the class to inspect; may be null
+     * @param target the DotName of the target type to match
+     * @param index the index view used to resolve referenced classes by name
+     * @param visited a set of already visited type names to avoid infinite recursion caused by cycles
+     * @return `true` if `classInfo` or any traversed superclass/interface has a name equal to `target`, `false` otherwise
+     */
     private boolean isAssignableTo(ClassInfo classInfo, DotName target, IndexView index, Set<DotName> visited) {
         if (classInfo == null || classInfo.name() == null || !visited.add(classInfo.name())) {
             return false;
@@ -245,6 +334,12 @@ public final class OperatorLinkValidationBuildSteps {
         return isAssignableTo(index.getClassByName(superType.name()), target, index, visited);
     }
 
+    /**
+     * Convert a primitive Type to its corresponding boxed reference Type; leaves reference types unchanged.
+     *
+     * @param type the type to convert; may be null
+     * @return the boxed reference Type if the input is a primitive, the original type if it's already a reference, or `null` if the input is null
+     */
     private Type toReferenceType(Type type) {
         if (type == null) {
             return null;
@@ -255,6 +350,12 @@ public final class OperatorLinkValidationBuildSteps {
         return type;
     }
 
+    /**
+     * Obtain the DotName of the provided Type, or null when the input is null.
+     *
+     * @param type the type whose DotName is required; may be null
+     * @return the type's DotName, or null if {@code type} is null
+     */
     private DotName typeName(Type type) {
         return type == null ? null : type.name();
     }
