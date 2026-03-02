@@ -4,50 +4,46 @@
 
 ```mermaid
 flowchart TD
-  A["Operator library (modules/JARs)"] --> B["Pipeline config (operator refs)"]
-  B --> C["TPF build-time resolver"]
+  A["Operator libraries (modules/JARs)"] --> B["pipeline.yaml operator references"]
+  B --> C["Build-time resolution + validation"]
   C --> D["Generated invocation layer"]
-  D --> E["Transport adapters (REST/gRPC/local)"]
+  D --> E["Transport adapters"]
 ```
 
 ## Architectural Contract
 
-- Operator references are declared in YAML as `fully.qualified.Class::method`.
-- Resolution is build-time and index-driven (Jandex), not reflection-driven.
-- Invalid operator contracts fail fast during build.
+- Operator references are declared as `fully.qualified.Class::method`.
+- Resolution is build-time and Jandex-driven.
+- Invocation code is generated ahead of runtime.
+- Invalid contracts fail during build, not at runtime.
 
-## Why This Design
+## Separation of Concerns
 
-- Deterministic builds: class/method/type failures are caught before runtime.
-- Strong governance: platform teams can enforce operator shape and exposure policy centrally.
-- Upgrade safety: normalization and category metadata provide stable downstream signals.
+```mermaid
+flowchart LR
+  A["Operator category\n(NON_REACTIVE/REACTIVE)"] --> B["Invocation adaptation"]
+  C["Transport choice\n(REST/gRPC/local)"] --> D["Adapter generation"]
+  A -.does not choose.-> D
+  C -.does not mutate.-> B
+```
 
-## Integration Pattern
+The key rule is transport orthogonality: operator category affects invocation adaptation, not transport selection.
 
-1. Keep domain logic in dedicated services/modules.
-2. Expose selected methods as operator entrypoints.
-3. Bind pipeline sequencing in YAML.
-4. Let TPF generate invocation and transport layer artifacts from build metadata.
+## Reuse Pattern
 
-## Example Topology Decision
+1. Package domain compute logic in reusable libraries.
+2. Expose stable public methods as operator entry points.
+3. Compose flow and sequencing in YAML.
+4. Let TPF generate invocation and transport artifacts.
 
-- Team A owns a mature fraud library in a shared JAR.
-- Team B wires it into a pipeline via `operator: com.acme.fraud.FraudOps::score`.
-- Platform keeps transport and deployment concerns in TPF while the fraud team keeps logic ownership.
+## Practical Constraints (Current)
 
-## Current Scope and Near-Term Evolution
-
-- Current: unary operator invocation path is prioritized for delivery speed and platform safety.
-- Next: expanded streaming/remote/polyglot pathways can build on the same metadata model.
-
-## Design Considerations
-
-- Prefer explicit method signatures and generic return types (`Uni<T>`/`Multi<T>` with type args).
-- Avoid overload ambiguity for operator methods.
-- Keep operator methods public and dependency-injection friendly.
+- Unary operator invocation path is the primarily supported execution shape.
+- Operator classes must be available and indexed on the build classpath.
+- gRPC paths require descriptor availability and mapper-compatible bindings.
 
 ## Related
 
 - [Operators](/guide/build/operators)
-- [Pipeline Compilation](/guide/build/pipeline-compilation)
+- [Operator Reuse Strategy](/guide/design/operator-reuse-strategy)
 - [Runtime Layouts](/guide/build/runtime-layouts/)

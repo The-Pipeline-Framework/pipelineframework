@@ -1,18 +1,18 @@
 # Operators
 
-This guide describes operator syntax and behavior for pipeline authors.
+Operators let you compose pipelines directly from existing Java methods declared in `pipeline.yaml`.
 
 ## End-to-End Shape
 
 ```mermaid
 flowchart LR
   A["pipeline.yaml (operator: Class::method)"] --> B["Build-time resolution (Jandex)"]
-  B --> C["Operator metadata (input/normalized return/category)"]
-  C --> D["Generated invoker beans"]
-  D --> E["Runtime execution"]
+  B --> C["Operator metadata (input, normalized return, category)"]
+  C --> D["Generated invoker bean"]
+  D --> E["Transport adapters (REST/gRPC/local)"]
 ```
 
-## Operator Step Syntax
+## Operator Syntax
 
 Use `operator` in `fully.qualified.Class::method` format.
 
@@ -25,8 +25,9 @@ steps:
 Rules:
 - Exactly one `::` separator.
 - Class and method segments must be non-blank.
+- Method must resolve uniquely in the indexed class hierarchy.
 
-Unary chain example (from the AI SDK PoC):
+## Working Example
 
 ```yaml
 steps:
@@ -34,6 +35,8 @@ steps:
     operator: "com.example.ai.sdk.service.DocumentChunkingUnaryService::process"
   - name: "Embed Chunk"
     operator: "com.example.ai.sdk.service.ChunkEmbeddingService::process"
+  - name: "Store Vector"
+    operator: "com.example.ai.sdk.service.VectorStoreService::process"
   - name: "Search Similar"
     operator: "com.example.ai.sdk.service.SimilaritySearchUnaryService::process"
   - name: "Build Prompt"
@@ -42,46 +45,40 @@ steps:
     operator: "com.example.ai.sdk.service.LLMCompletionService::process"
 ```
 
-In the repo, this is captured as a real pipeline config at `ai-sdk/config/pipeline.yaml`.
+This exact chain is available in `ai-sdk/config/pipeline.yaml`.
 
-Example:
-
-```yaml
-steps:
-  - name: "Enrich Payment"
-    operator: "com.acme.payment.ExternalPaymentLibrary::enrich"
-```
-
-## Build-Time Resolution
+## Build-Time Contract
 
 At build time, TPF:
-1. Parses operator step references from YAML.
-2. Resolves class/method from Jandex index (no reflection).
-3. Validates method uniqueness and supported signature.
-4. Infers operator category (`NON_REACTIVE` or `REACTIVE`).
-5. Normalizes return type to reactive shape (`Uni<T>` or `Multi<T>` metadata).
+1. Parses operator references from YAML.
+2. Resolves class/method via Jandex (no reflection-based operator lookup).
+3. Validates method contract (visibility, ambiguity, parameter shape).
+4. Classifies operator category (`NON_REACTIVE` or `REACTIVE`).
+5. Normalizes return metadata to reactive shape (`Uni<T>` / `Multi<T>`).
+6. Generates invocation beans for executable operators.
 
-Validation fails fast when:
-- class not found,
-- method not found,
-- multiple matching methods,
-- method parameter count is unsupported,
-- reactive type arguments are missing.
+Validation fails fast when class/method cannot be resolved, method contracts are invalid, or return generics are unsupported.
 
-## Invocation Scope
+## Current Invocation Scope
 
-Current generated invokers support unary operators only:
-- input must be unary (not `Multi<T>`),
-- normalized output must be `Uni<T>`,
-- operator classes must be available on the build/runtime classpath (typically as project modules or JAR dependencies).
+Generated invokers currently support unary execution:
+- input: unary (not `Multi<T>`),
+- output: unary `Uni<T>` path.
 
-Streaming input/output shapes currently fail with descriptive build errors.
+Streaming operator invocation is planned, but unary covers the current production path.
+
+## Transport Orthogonality
+
+Operator category does not select transport.
+
+- REST transport: allowed for operator steps.
+- gRPC transport: requires protobuf descriptors and mapper-compatible bindings for delegated/operator paths.
+- `NON_REACTIVE` and `REACTIVE` categories follow the same transport prerequisites.
 
 ## Related
 
 - [Pipeline Compilation](/guide/build/pipeline-compilation)
-- [Configuration Reference](/guide/build/configuration/)
-- [Operator Reuse Strategy](/guide/design/operator-reuse-strategy)
+- [Application Configuration](/guide/application/configuration)
 - [Developing with Operators](/guide/development/operators)
 - [Operator Runtime Operations](/guide/operations/operators)
-- [Operator Generation Internals](/guide/evolve/operators-internals)
+- [Operator Internals](/guide/evolve/operators-internals)

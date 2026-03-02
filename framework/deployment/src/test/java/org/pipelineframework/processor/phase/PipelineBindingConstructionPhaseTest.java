@@ -16,6 +16,7 @@
 
 package org.pipelineframework.processor.phase;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -136,6 +137,7 @@ class PipelineBindingConstructionPhaseTest {
             .createTestModelWithTargets("ProcessDelegatedService", Set.of(GenerationTarget.CLIENT_STEP))
             .toBuilder()
             .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
+            .externalMapper(ClassName.get("com.example.mapper", "EmbeddingMapper"))
             .build();
         context.setStepModels(List.of(delegatedModel));
         context.setDescriptorSet(descriptorSetForService("ProcessDelegatedService"));
@@ -177,6 +179,7 @@ class PipelineBindingConstructionPhaseTest {
                 GenerationTarget.LOCAL_CLIENT_STEP))
             .toBuilder()
             .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
+            .externalMapper(ClassName.get("com.example.mapper", "EmbeddingMapper"))
             .build();
         context.setStepModels(List.of(delegatedModel));
         context.setDescriptorSet(descriptorSetForService("ProcessDelegatedServerTargetService"));
@@ -186,6 +189,58 @@ class PipelineBindingConstructionPhaseTest {
         verify(messager).printMessage(
             eq(javax.tools.Diagnostic.Kind.WARNING),
             contains("Delegated step 'ProcessDelegatedServerTargetService' ignores server targets"));
+    }
+
+    @Test
+    void delegatedGrpcStepWithoutMapperFailsValidation() {
+        PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
+        PipelineStepModel delegatedModel = TestModelFactory
+            .createTestModelWithTargets("ProcessDelegatedNoMapperService", Set.of(GenerationTarget.CLIENT_STEP))
+            .toBuilder()
+            .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
+            .build();
+        context.setStepModels(List.of(delegatedModel));
+        context.setDescriptorSet(descriptorSetForService("ProcessDelegatedNoMapperService"));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> phase.execute(context));
+        assertTrue(error.getMessage().contains("uses gRPC transport but has no mapper"));
+    }
+
+    @Test
+    void delegatedGrpcStepWithoutDescriptorFailsValidation() {
+        PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
+        PipelineStepModel delegatedModel = TestModelFactory
+            .createTestModelWithTargets("ProcessDelegatedNoDescriptorService", Set.of(GenerationTarget.CLIENT_STEP))
+            .toBuilder()
+            .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
+            .externalMapper(ClassName.get("com.example.mapper", "EmbeddingMapper"))
+            .build();
+        context.setStepModels(List.of(delegatedModel));
+
+        IOException error = assertThrows(IOException.class, () -> phase.execute(context));
+        assertTrue(error.getMessage().contains("No protobuf descriptor file found"));
+    }
+
+    @Test
+    void delegatedGrpcStepWithEmptyDescriptorSetFailsValidation() {
+        PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
+        PipelineStepModel delegatedModel = TestModelFactory
+            .createTestModelWithTargets("ProcessDelegatedEmptyDescriptorService", Set.of(GenerationTarget.CLIENT_STEP))
+            .toBuilder()
+            .delegateService(ClassName.get("com.example.lib", "EmbeddingService"))
+            .externalMapper(ClassName.get("com.example.mapper", "EmbeddingMapper"))
+            .build();
+        context.setStepModels(List.of(delegatedModel));
+        context.setDescriptorSet(DescriptorProtos.FileDescriptorSet.newBuilder().build());
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> phase.execute(context));
+        assertTrue(error.getMessage().contains("gRPC transport requires protobuf descriptors, but no descriptor set was available"));
     }
 
     private static DescriptorProtos.FileDescriptorSet descriptorSetForService(String serviceName) {

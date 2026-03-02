@@ -1,49 +1,48 @@
 # Operator Runtime Operations
 
-## Operational Expectations
-
-- Operator contracts are validated at build time, reducing runtime signature failures.
-- Build failures should be treated as deployment gate signals, not runtime incidents.
-- Runtime behavior still depends on upstream/downstream services, transport, and resource limits.
-
-## Runtime Path
+## What Fails Where
 
 ```mermaid
-flowchart LR
-  A["Request/trigger"] --> B["Generated invoker"]
-  B --> C["Operator bean/method"]
-  C --> D["Uni/Multi result path"]
-  D --> E["Downstream step/transport"]
+flowchart TD
+  A["Build-time validation"] --> B["Generated operator invokers"]
+  B --> C["Runtime execution"]
+  A --> D["Contract failures in CI"]
+  C --> E["Latency/error/backpressure signals"]
 ```
+
+Operator issues split into two classes:
+- Build-time contract failures (class/method/signature/mapper/proto prerequisites).
+- Runtime behavior issues (latency, dependency faults, throughput pressure).
+
+## Operational Expectations
+
+- Most operator contract defects should fail in CI/CD before deployment.
+- Runtime incidents are typically dependency/load/resource issues, not signature lookup issues.
+- For gRPC operator/delegated paths, descriptor and mapper prerequisites must be present.
 
 ## What to Monitor
 
-- Startup/build artifact integrity (`META-INF/pipeline/*` metadata presence).
-- Invocation latency and error rates per step/operator path.
-- Backpressure and queue behavior for high-volume or expansion/reduction flows.
-- Dependency health of services hosting reused operator logic.
+- Build artifact integrity (`META-INF/pipeline/*` metadata).
+- Step latency and error rates for operator-heavy stages.
+- Throughput and backpressure indicators.
+- Dependency health for external operator libraries/services.
 
-## Incident Clues
+## Incident Triage Checklist
 
-- Contract/shape issues: usually appear during CI build, not production runtime.
-- Metadata-not-found errors: usually indicate packaging/build lifecycle drift.
-- Throughput issues: usually indicate operator logic cost, blocking sections, or transport bottlenecks.
+1. Confirm the deployed artifact matches the commit built in CI.
+2. Confirm `META-INF/pipeline` metadata exists in packaged artifacts.
+3. Confirm operator library versions match expected dependencies.
+4. Confirm gRPC descriptor and mapper generation outputs (for gRPC transport).
+5. Correlate runtime spikes with specific operator steps.
 
-## Runbook Pointers
+## Common Signals
 
-- Validate module build ordering and generated artifact packaging.
-- Verify generated pipeline metadata in built artifacts.
-- Reproduce locally with the same build profile and pipeline config path used in CI.
-
-## Fast Incident Checklist
-
-1. Confirm artifact contains `META-INF/pipeline/*` metadata expected by runtime.
-2. Confirm operator dependency JAR/module version matches what was built/tested.
-3. Confirm no stale incremental build artifacts in CI workspace.
-4. Confirm step-level latency/error spikes align with operator-heavy stages.
+- Build error mentioning operator class/method: configuration or dependency drift.
+- Build error mentioning mapper/protobuf for gRPC: transport prerequisites missing.
+- Runtime timeout/latency spike: operator logic cost or downstream saturation.
 
 ## Related
 
-- [Best Practices](/guide/operations/best-practices)
-- [Observability](/guide/operations/observability/)
 - [Operators](/guide/build/operators)
+- [Observability](/guide/operations/observability/)
+- [Error Handling](/guide/operations/error-handling)

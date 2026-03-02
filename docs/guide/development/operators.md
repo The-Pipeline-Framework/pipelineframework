@@ -1,6 +1,6 @@
 # Developing with Operators
 
-## Quick Start
+## Minimal Example
 
 ```yaml
 steps:
@@ -18,14 +18,29 @@ public class PaymentOperators {
 }
 ```
 
-## Developer Rules
+## Method Contract Checklist
 
-- Operator format: `fully.qualified.Class::method`.
-- Method must be uniquely resolvable (no ambiguous overloads).
-- Method must have at most one parameter.
-- Use explicit generics for reactive returns (`Uni<T>`, `Multi<T>`).
+- Format: `fully.qualified.Class::method`.
+- Method must be public and non-abstract.
+- At most one input parameter.
+- No ambiguous overload resolution.
+- Reactive returns should be explicit (`Uni<T>` / `Multi<T>` with generic type).
 
-## AI SDK Example
+## Library Packaging Requirements
+
+- Operator class is shipped in a module/JAR available at build/runtime.
+- The library is visible in Jandex indexing.
+- Instance operators are CDI-manageable.
+
+## Mapper and Transport Notes
+
+When application domain types differ from operator I/O types, mapper coverage is required for delegated/operator adapter paths.
+
+- REST flow can work with direct JSON/domain mapping paths.
+- gRPC flow requires descriptor + mapper-compatible bindings.
+- Mapper fallback policies are configuration-driven; do not rely on implicit conversion by default.
+
+## Example: AI Pipeline Chain
 
 ```yaml
 steps:
@@ -33,6 +48,8 @@ steps:
     operator: "com.example.ai.sdk.service.DocumentChunkingUnaryService::process"
   - name: "Embed Chunk"
     operator: "com.example.ai.sdk.service.ChunkEmbeddingService::process"
+  - name: "Store Vector"
+    operator: "com.example.ai.sdk.service.VectorStoreService::process"
   - name: "Search Similar"
     operator: "com.example.ai.sdk.service.SimilaritySearchUnaryService::process"
   - name: "Build Prompt"
@@ -41,33 +58,15 @@ steps:
     operator: "com.example.ai.sdk.service.LLMCompletionService::process"
 ```
 
-## Return Shape Behavior
+## Troubleshooting
 
-- Non-reactive returns are normalized to reactive metadata at build time.
-- Streaming shapes may be represented in metadata, but current invocation focuses on unary flow.
-
-## Operator Library Requirements
-
-- The operator class must be packaged in a module/JAR available on the build/runtime classpath.
-- The class must be indexed so build-time resolution can find it via Jandex.
-- Operator methods must be public, non-abstract, and unambiguous.
-- Reactive returns must use explicit generic parameters (`Uni<T>`/`Multi<T>`).
-- For instance methods, the class must be CDI-manageable so TPF can inject and invoke it.
-- If your pipeline domain types differ from operator I/O types, ensure mapper coverage for those types in your project.
-
-## Practical Guidance
-
-- Keep operator methods small and domain-focused.
-- Prefer stable DTO/domain contracts between steps.
-- Treat operator methods as pipeline API surfaces: version carefully.
-
-## Troubleshooting Example
-
-- Error: class or method not found.
-- Check: operator FQCN/method name, module dependency, and Jandex indexing visibility.
+- `class not found`: verify module dependency and package name.
+- `method not found/ambiguous`: verify signature and overloads.
+- `unsupported return shape`: verify unary constraints for current invoker scope.
+- `gRPC mapper/proto error`: verify mapper binding and descriptor generation.
 
 ## Related
 
 - [Operators](/guide/build/operators)
+- [External Library Delegation](/guide/development/external-library-delegation)
 - [Mappers and DTOs](/guide/development/mappers-and-dtos)
-- [Testing with Testcontainers](/guide/development/testing)
