@@ -131,10 +131,10 @@ class FunctionTransportAdaptersTest {
         assertEquals("item-om", outputs.get(0).previousItemRef().previousItemId());
         assertEquals("item-om", outputs.get(1).previousItemRef().previousItemId());
         assertEquals(
-            AdapterUtils.deterministicId("invoke-one-to-many", "item-om", "search.token.out", "v1", "0"),
+            AdapterUtils.deterministicId("invoke-one-to-many", "trace-om", "item-om", "search.token.out", "v1", "0"),
             outputs.get(0).itemId());
         assertEquals(
-            AdapterUtils.deterministicId("invoke-one-to-many", "item-om", "search.token.out", "v1", "1"),
+            AdapterUtils.deterministicId("invoke-one-to-many", "trace-om", "item-om", "search.token.out", "v1", "1"),
             outputs.get(1).itemId());
     }
 

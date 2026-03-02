@@ -216,10 +216,34 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
     }
 
     private Comparator<TraceEnvelope<I>> lineageOrder() {
-        // Merge lineage is deterministic: inputs are ordered by itemId then idempotencyKey.
+        // Merge lineage is deterministic: inputs are ordered by stable envelope attributes.
         // This ordering drives previousItemRef, previousItemIds metadata, merged itemId, and idempotency key.
         return Comparator
             .comparing((TraceEnvelope<I> envelope) -> AdapterUtils.normalizeOrDefault(envelope.itemId(), ""))
-            .thenComparing(envelope -> AdapterUtils.normalizeOrDefault(envelope.idempotencyKey(), ""));
+            .thenComparing(envelope -> AdapterUtils.normalizeOrDefault(envelope.idempotencyKey(), ""))
+            .thenComparing(envelope -> AdapterUtils.normalizeOrDefault(envelope.traceId(), ""))
+            .thenComparing(envelope -> AdapterUtils.normalizeOrDefault(envelope.payloadModel(), ""))
+            .thenComparing(envelope -> AdapterUtils.normalizeOrDefault(envelope.payloadModelVersion(), ""))
+            .thenComparing(envelope -> envelope.previousItemRef() == null
+                ? ""
+                : AdapterUtils.normalizeOrDefault(envelope.previousItemRef().previousItemId(), ""))
+            .thenComparing(this::metaFingerprint)
+            .thenComparing(this::payloadFingerprint);
+    }
+
+    private String metaFingerprint(TraceEnvelope<I> envelope) {
+        if (envelope.meta() == null || envelope.meta().isEmpty()) {
+            return "";
+        }
+        return envelope.meta().entrySet().stream()
+            .sorted(Map.Entry.comparingByKey())
+            .map(entry -> AdapterUtils.normalizeOrDefault(entry.getKey(), "")
+                + "=" + AdapterUtils.normalizeOrDefault(entry.getValue(), ""))
+            .collect(Collectors.joining(";"));
+    }
+
+    private String payloadFingerprint(TraceEnvelope<I> envelope) {
+        Object payload = envelope.payload();
+        return payload == null ? "" : payload.getClass().getName() + ":" + String.valueOf(payload);
     }
 }

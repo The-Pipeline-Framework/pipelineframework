@@ -47,13 +47,18 @@ final class AdapterUtils {
     }
 
     static String deterministicId(String namespace, String... components) {
-        StringBuilder builder = new StringBuilder(normalizeOrDefault(namespace, "lineage"));
+        StringBuilder builder = new StringBuilder();
+        appendFramed(builder, normalizeOrDefault(namespace, "lineage"));
         if (components != null) {
             for (String component : components) {
-                builder.append('|').append(normalizeOrDefault(component, ""));
+                appendFramed(builder, normalizeOrDefault(component, ""));
             }
         }
         return UUID.nameUUIDFromBytes(builder.toString().getBytes(StandardCharsets.UTF_8)).toString();
+    }
+
+    private static void appendFramed(StringBuilder builder, String value) {
+        builder.append('#').append(value.length()).append(':').append(value);
     }
 
     static Map<String, String> buildContextMeta(FunctionTransportContext context) {

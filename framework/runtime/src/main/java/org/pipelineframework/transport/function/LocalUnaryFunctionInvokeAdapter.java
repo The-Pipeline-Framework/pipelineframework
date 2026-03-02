@@ -57,6 +57,9 @@ public final class LocalUnaryFunctionInvokeAdapter<I, O> implements FunctionInvo
             return Uni.createFrom().failure(new NullPointerException(
                 "LocalUnaryFunctionInvokeAdapter input payload must not be null"));
         }
+        String traceScope = AdapterUtils.normalizeOrDefault(
+            input.traceId(),
+            AdapterUtils.normalizeOrDefault(context.requestId(), "trace"));
         return Uni.createFrom().deferred(() -> {
                 Uni<O> result = delegate.apply(payload);
                 if (result == null) {
@@ -71,6 +74,7 @@ public final class LocalUnaryFunctionInvokeAdapter<I, O> implements FunctionInvo
             .transform(output -> input.next(
                 AdapterUtils.deterministicId(
                     "invoke-one-to-one",
+                    traceScope,
                     AdapterUtils.normalizeOrDefault(input.itemId(), "source"),
                     outputPayloadModel,
                     outputPayloadModelVersion),
