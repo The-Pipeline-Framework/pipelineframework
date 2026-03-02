@@ -128,6 +128,14 @@ class FunctionTransportAdaptersTest {
         Set<String> idempotencyKeys = new HashSet<>();
         outputs.forEach(envelope -> idempotencyKeys.add(envelope.idempotencyKey()));
         assertEquals(outputs.size(), idempotencyKeys.size());
+        assertEquals("item-om", outputs.get(0).previousItemRef().previousItemId());
+        assertEquals("item-om", outputs.get(1).previousItemRef().previousItemId());
+        assertEquals(
+            AdapterUtils.deterministicId("invoke-one-to-many", "item-om", "search.token.out", "v1", "0"),
+            outputs.get(0).itemId());
+        assertEquals(
+            AdapterUtils.deterministicId("invoke-one-to-many", "item-om", "search.token.out", "v1", "1"),
+            outputs.get(1).itemId());
     }
 
     @Test
@@ -163,6 +171,34 @@ class FunctionTransportAdaptersTest {
         assertEquals("trace-m1", output.traceId());
         assertEquals("search.token.sum", output.payloadModel());
         assertNotNull(output.previousItemRef());
+        assertEquals("item-m1", output.previousItemRef().previousItemId());
+        assertEquals("item-m1,item-m2", output.meta().get("previousItemIds"));
+    }
+
+    @Test
+    void localManyToOneAdapterProducesDeterministicMergeLineageAcrossInputOrders() {
+        LocalManyToOneFunctionInvokeAdapter<Integer, Integer> adapter = new LocalManyToOneFunctionInvokeAdapter<>(
+            payloads -> payloads.collect().asList().onItem().transform(list -> list.stream().mapToInt(Integer::intValue).sum()),
+            "search.token.sum",
+            "v1");
+        FunctionTransportContext context = FunctionTransportContext.of("req-order", "search-handler", "invoke-step");
+
+        TraceEnvelope<Integer> first = TraceEnvelope.root("trace-order", "b-item", "search.token", "v1", "idem-b", 2);
+        TraceEnvelope<Integer> second = TraceEnvelope.root("trace-order", "a-item", "search.token", "v1", "idem-a", 3);
+
+        TraceEnvelope<Integer> leftToRight = adapter.invokeManyToOne(Multi.createFrom().items(first, second), context)
+            .await().atMost(Duration.ofSeconds(2));
+        TraceEnvelope<Integer> rightToLeft = adapter.invokeManyToOne(Multi.createFrom().items(second, first), context)
+            .await().atMost(Duration.ofSeconds(2));
+
+        assertEquals(5, leftToRight.payload());
+        assertEquals(5, rightToLeft.payload());
+        assertEquals(leftToRight.itemId(), rightToLeft.itemId());
+        assertEquals(leftToRight.idempotencyKey(), rightToLeft.idempotencyKey());
+        assertEquals("a-item", leftToRight.previousItemRef().previousItemId());
+        assertEquals("a-item", rightToLeft.previousItemRef().previousItemId());
+        assertEquals("a-item,b-item", leftToRight.meta().get("previousItemIds"));
+        assertEquals("a-item,b-item", rightToLeft.meta().get("previousItemIds"));
     }
 
     @Test
@@ -302,6 +338,27 @@ class FunctionTransportAdaptersTest {
 
         assertEquals(1, envelopes.size());
         assertEquals("csv-id-77", envelopes.get(0).idempotencyKey());
+    }
+
+    @Test
+    void sourceAdaptersProduceStableItemIdsAcrossReplays() {
+        DefaultUnaryFunctionSourceAdapter<String> unary = new DefaultUnaryFunctionSourceAdapter<>("search.raw", "v1");
+        MultiFunctionSourceAdapter<Integer> streaming = new MultiFunctionSourceAdapter<>("search.token", "v1");
+        FunctionTransportContext context = FunctionTransportContext.of("req-replay", "search-handler", "ingress");
+
+        List<TraceEnvelope<String>> unaryRun1 = unary.adapt("payload", context)
+            .collect().asList().await().atMost(Duration.ofSeconds(2));
+        List<TraceEnvelope<String>> unaryRun2 = unary.adapt("payload", context)
+            .collect().asList().await().atMost(Duration.ofSeconds(2));
+        assertEquals(unaryRun1.get(0).itemId(), unaryRun2.get(0).itemId());
+        assertEquals(unaryRun1.get(0).idempotencyKey(), unaryRun2.get(0).idempotencyKey());
+
+        List<TraceEnvelope<Integer>> streamRun1 = streaming.adapt(Multi.createFrom().items(1, 2, 3), context)
+            .collect().asList().await().atMost(Duration.ofSeconds(2));
+        List<TraceEnvelope<Integer>> streamRun2 = streaming.adapt(Multi.createFrom().items(1, 2, 3), context)
+            .collect().asList().await().atMost(Duration.ofSeconds(2));
+        assertEquals(streamRun1.stream().map(TraceEnvelope::itemId).toList(), streamRun2.stream().map(TraceEnvelope::itemId).toList());
+        assertEquals(streamRun1.stream().map(TraceEnvelope::idempotencyKey).toList(), streamRun2.stream().map(TraceEnvelope::idempotencyKey).toList());
     }
 
     @Test

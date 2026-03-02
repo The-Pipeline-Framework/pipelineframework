@@ -17,7 +17,6 @@
 package org.pipelineframework.transport.function;
 
 import java.util.Objects;
-import java.util.UUID;
 import java.util.function.Function;
 
 import io.smallrye.mutiny.Uni;
@@ -70,7 +69,11 @@ public final class LocalUnaryFunctionInvokeAdapter<I, O> implements FunctionInvo
                 "LocalUnaryFunctionInvokeAdapter delegate emitted null output"))
             .onItem()
             .transform(output -> input.next(
-                UUID.randomUUID().toString(),
+                AdapterUtils.deterministicId(
+                    "invoke-one-to-one",
+                    AdapterUtils.normalizeOrDefault(input.itemId(), "source"),
+                    outputPayloadModel,
+                    outputPayloadModelVersion),
                 outputPayloadModel,
                 outputPayloadModelVersion,
                 input.idempotencyKey(),

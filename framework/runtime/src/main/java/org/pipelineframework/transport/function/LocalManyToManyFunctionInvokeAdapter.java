@@ -19,7 +19,6 @@ package org.pipelineframework.transport.function;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
@@ -74,13 +73,17 @@ public final class LocalManyToManyFunctionInvokeAdapter<I, O> implements Functio
                 if (output == null) {
                     throw new NullPointerException("LocalManyToManyFunctionInvokeAdapter delegate emitted null output");
                 }
-                String envelopeId = UUID.randomUUID().toString();
                 long index = outputIndex.getAndIncrement();
                 String idempotencyKey = resolveIdempotencyKey(context, traceId, index);
                 return new TraceEnvelope<>(
                     traceId,
                     null, // spanId
-                    envelopeId,
+                    AdapterUtils.deterministicId(
+                        "invoke-many-to-many",
+                        traceId,
+                        outputPayloadModel,
+                        outputPayloadModelVersion,
+                        Long.toString(index)),
                     null, // previousItemRef
                     outputPayloadModel,
                     outputPayloadModelVersion,
