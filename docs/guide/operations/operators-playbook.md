@@ -90,7 +90,7 @@ Optional example lane (Search reference project):
 
 Only include keys that change behaviour materially:
 
-- `tpf.function.invocation.mode`: controls local vs remote function invoke routing behaviour.
+- `tpf.function.invocation.mode`: controls local vs remote function invoke routing behaviour; invalid values fail fast with an explicit error (no silent fallback).
 - `pipeline.platform`: selects platform generation mode (For example `FUNCTION`).
 - `pipeline.transport`: selects transport generation mode (for example `REST`).
 - `pipeline.rest.naming.strategy`: affects generated REST naming and route conventions.
