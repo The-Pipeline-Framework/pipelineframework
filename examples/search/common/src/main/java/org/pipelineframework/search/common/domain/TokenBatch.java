@@ -29,7 +29,7 @@ public class TokenBatch extends BaseEntity implements Serializable {
   public Instant tokenizedAt;
 
   @PrePersist
-  protected void ensureBatchIndex() {
+  protected void validateRequiredFields() {
     if (batchIndex == null) {
       throw new IllegalStateException("batchIndex is required");
     }

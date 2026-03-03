@@ -260,7 +260,7 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
 
     private String payloadFingerprint(TraceEnvelope<I> envelope) {
         Object payload = envelope.payload();
-        return payload == null ? "" : payload.getClass().getName() + ":" + String.valueOf(payload);
+        return payload == null ? "" : payload.getClass().getName() + ":" + System.identityHashCode(payload);
     }
 
     @SuppressWarnings("unchecked")

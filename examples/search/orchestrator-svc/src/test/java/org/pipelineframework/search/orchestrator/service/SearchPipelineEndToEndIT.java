@@ -704,9 +704,10 @@ class SearchPipelineEndToEndIT {
         }
         if (node.isObject()
             && node.hasNonNull("docId")
-            && node.has("indexVersion")
-            && node.has("tokenBatchCount")
-            && node.has("uniqueTokenCount")) {
+            && node.hasNonNull("indexVersion")
+            && node.hasNonNull("tokenBatchCount")
+            && node.hasNonNull("uniqueTokenCount")
+            && node.hasNonNull("topToken")) {
             return node;
         }
         if (node.isObject()) {

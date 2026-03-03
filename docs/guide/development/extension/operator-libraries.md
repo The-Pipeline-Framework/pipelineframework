@@ -13,7 +13,7 @@ This guide is for teams publishing reusable operator libraries consumed by multi
 
 1. Publish the library artifact to your internal/external repository.
 2. Add it as a dependency in the pipeline module whose pipeline YAML declares an `operator:` key (for example, `operator: "com.acme.lib.payment.PaymentOperators::enrich"`).
-3. Ensure the operator classes are index-visible at build time: they must be discoverable in Jandex (for example via `META-INF/jandex.idx`; see [Jandex Maven Plugin](https://github.com/wildfly/jandex/tree/main/maven-plugin)).
+3. Ensure the operator classes are index-visible at build time: they must be discoverable in Jandex (for example, via `META-INF/jandex.idx`; see [Jandex Maven Plugin](https://github.com/wildfly/jandex/tree/main/maven-plugin)).
 4. For instance methods, make classes CDI-manageable in the target runtime.
 
 ## Versioning Strategy

@@ -111,6 +111,7 @@ class ProcessIndexDocumentServiceReliabilityTest {
     batch.batchIndex = batchIndex;
     batch.tokens = tokens;
     batch.tokensHash = tokensHash;
+    batch.tokenCount = tokens == null || tokens.isBlank() ? 1 : tokens.trim().split("\\s+").length;
     return batch;
   }
 }
