@@ -691,24 +691,28 @@ class SearchPipelineEndToEndIT {
 
     private JsonNode findIndexAckNode(String responseBody) throws Exception {
         JsonNode root = OBJECT_MAPPER.readTree(responseBody);
-        JsonNode found = findNodeWithField(root, "indexVersion");
+        JsonNode found = findNodeByIndexAckShape(root);
         if (found == null || found.isMissingNode()) {
             throw new IllegalStateException("IndexAck payload was not found in orchestrator response: " + responseBody);
         }
         return found;
     }
 
-    private JsonNode findNodeWithField(JsonNode node, String fieldName) {
+    private JsonNode findNodeByIndexAckShape(JsonNode node) {
         if (node == null || node.isNull()) {
             return null;
         }
-        if (node.isObject() && node.has(fieldName)) {
+        if (node.isObject()
+            && node.hasNonNull("docId")
+            && node.has("indexVersion")
+            && node.has("tokenBatchCount")
+            && node.has("uniqueTokenCount")) {
             return node;
         }
         if (node.isObject()) {
             java.util.Iterator<JsonNode> values = node.elements();
             while (values.hasNext()) {
-                JsonNode found = findNodeWithField(values.next(), fieldName);
+                JsonNode found = findNodeByIndexAckShape(values.next());
                 if (found != null) {
                     return found;
                 }
@@ -717,7 +721,7 @@ class SearchPipelineEndToEndIT {
         }
         if (node.isArray()) {
             for (JsonNode element : node) {
-                JsonNode found = findNodeWithField(element, fieldName);
+                JsonNode found = findNodeByIndexAckShape(element);
                 if (found != null) {
                     return found;
                 }
