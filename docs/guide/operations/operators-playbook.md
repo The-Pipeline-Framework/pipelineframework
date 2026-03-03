@@ -2,35 +2,32 @@
 
 This runbook is for operating and debugging pipelines that execute operator methods.
 
+## Terminology
+
+- `lane`: a reproducible command path (build/test/run sequence) for one execution mode or scope.
+- `parked item`: an item that exhausted configured retries or was classified as non-retryable and moved out of the hot path.
+- `parking queue` (or parking area): the operational store/queue where parked items are retained for triage and replay.
+
 ## CI-Equivalent Execution Commands
 
 Use the same command families used in validation lanes:
 
 ```bash
-# Framework build + tests
-./mvnw -f framework/pom.xml verify
+# Whole repository verification
+./mvnw verify
 
-# Search function-platform smoke lane
+# Framework-only verification
+./mvnw -f framework/pom.xml verify
+```
+
+Optional example lane (Search reference project):
+
+```bash
 ./mvnw -f examples/search/pom.xml -pl orchestrator-svc -am \
   -Dpipeline.platform=FUNCTION \
   -Dpipeline.transport=REST \
   -Dpipeline.rest.naming.strategy=RESOURCEFUL \
   -DskipTests compile
-
-./mvnw -f examples/search/pom.xml -pl orchestrator-svc \
-  -Dpipeline.platform=FUNCTION \
-  -Dpipeline.transport=REST \
-  -Dpipeline.rest.naming.strategy=RESOURCEFUL \
-  -Dtest=LambdaMockEventServerSmokeTest test
-```
-
-For operator fan-out/fan-in regression slices:
-
-```bash
-./mvnw -f examples/search/common/pom.xml -DskipTests install
-./mvnw -f examples/search/tokenize-content-svc/pom.xml -Dtest=ProcessTokenizeContentServiceTest test
-./mvnw -f examples/search/index-document-svc/pom.xml -Dtest=ProcessIndexDocumentServiceReliabilityTest test
-./mvnw -f examples/search/orchestrator-svc/pom.xml -DskipTests test-compile
 ```
 
 ## Run Modes and Lanes
@@ -93,8 +90,6 @@ For operator fan-out/fan-in regression slices:
 
 Only include keys that change behaviour materially:
 
-- `SEARCH_INDEX_VERSION`: changes effective index schema/version used by index acknowledgement.
-- `search.index.chaos.enabled`: enables test/chaos marker handling in index reducer logic.
 - `tpf.function.invocation.mode`: controls local vs remote function invoke routing behaviour.
 - `pipeline.platform`: selects platform generation mode (for example `FUNCTION`).
 - `pipeline.transport`: selects transport generation mode (for example `REST`).
@@ -111,5 +106,6 @@ Only include keys that change behaviour materially:
 ## Related
 
 - [Operator Troubleshooting Matrix](/guide/operations/operators-troubleshooting)
+- [Operator Build Troubleshooting](/guide/development/operators-build-troubleshooting)
 - [Error Handling & DLQ](/guide/operations/error-handling)
 - [Observability](/guide/operations/observability/)

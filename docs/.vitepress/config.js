@@ -90,6 +90,8 @@ const mainSidebar = [
             {text: '@PipelineStep Annotation', link: '/guide/development/pipeline-step'},
             {text: 'Code a Step', link: '/guide/development/code-a-step'},
             {text: 'Operators', link: '/guide/development/operators'},
+            {text: 'Operator Build Troubleshooting', link: '/guide/development/operators-build-troubleshooting'},
+            {text: 'Extending Operator Libraries', link: '/guide/development/extension/operator-libraries'},
             {text: 'Mappers and DTOs', link: '/guide/development/mappers-and-dtos'},
             {text: 'Handling File Operations', link: '/guide/development/handling-file-operations'},
             {text: 'Testing with Testcontainers', link: '/guide/development/testing'},

@@ -19,9 +19,9 @@ flowchart LR
 
 ## Scope of This Guide
 
-- Running operator lanes in CI-equivalent modes.
+- Running operator lanes (reproducible command paths) in CI-equivalent modes.
 - Diagnosing failure signatures quickly.
-- Recovering from retry exhaustion, parking growth, and timeout pressure.
+- Recovering from retry exhaustion, parking queue growth, and timeout pressure.
 - Understanding current intentional limitations.
 
 ## Related
