@@ -26,7 +26,7 @@ public interface TokenBatchMapper extends org.pipelineframework.mapper.Mapper<To
 
   TokenBatchDto fromGrpc(org.pipelineframework.search.grpc.TokenizeContentSvc.TokenBatch grpc);
 
-  `@BeforeMapping`
+  @BeforeMapping
   default void validateTokenBatchDto(TokenBatchDto dto) {
     if (dto == null) {
       return;
