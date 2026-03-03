@@ -155,6 +155,11 @@ public class ProcessIndexDocumentService
     if (batches.stream().anyMatch(batch -> batch.docId == null || !docId.equals(batch.docId))) {
       return Uni.createFrom().failure(new IllegalArgumentException("all token batches must share the same docId"));
     }
+    if (batches.stream().anyMatch(batch ->
+        batch.batchIndex == null || batch.batchIndex < 0 || batch.tokenCount == null || batch.tokenCount <= 0)) {
+      return Uni.createFrom().failure(new IllegalArgumentException(
+          "invalid token batch metrics for docId " + docId + ": batchIndex must be >= 0 and tokenCount must be > 0"));
+    }
     List<TokenBatch> orderedBatches = orderBatchesForAggregation(batches);
     FailureDirective directive = evaluateFailureDirective(orderedBatches, docId);
     if (directive != null) {

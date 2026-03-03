@@ -166,6 +166,7 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
         String previousIds = envelopes.stream()
             .map(TraceEnvelope::itemId)
             .filter(Objects::nonNull)
+            .map(this::escapeCommaDelimitedComponent)
             .collect(Collectors.joining(","));
         if (!previousIds.isEmpty()) {
             merged.put("previousItemIds", previousIds);
@@ -203,6 +204,10 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
 
     private String escapeDelimitedComponent(String component) {
         return component.replace("\\", "\\\\").replace("|", "\\|");
+    }
+
+    private String escapeCommaDelimitedComponent(String component) {
+        return component.replace("\\", "\\\\").replace(",", "\\,");
     }
 
     private String computeMergedItemId(List<TraceEnvelope<I>> ordered, String traceId) {

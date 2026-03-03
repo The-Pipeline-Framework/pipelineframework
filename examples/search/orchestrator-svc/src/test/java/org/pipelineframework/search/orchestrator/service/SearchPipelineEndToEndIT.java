@@ -692,7 +692,7 @@ class SearchPipelineEndToEndIT {
     private JsonNode findIndexAckNode(String responseBody) throws Exception {
         JsonNode root = OBJECT_MAPPER.readTree(responseBody);
         JsonNode found = findNodeByIndexAckShape(root);
-        if (found == null || found.isMissingNode()) {
+        if (found == null) {
             throw new IllegalStateException("IndexAck payload was not found in orchestrator response: " + responseBody);
         }
         return found;
