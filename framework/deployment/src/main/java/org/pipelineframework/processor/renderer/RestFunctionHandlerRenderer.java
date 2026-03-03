@@ -90,7 +90,10 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
     @Override
     public void render(RestBinding binding, GenerationContext ctx) throws IOException {
         PipelineStepModel model = binding.model();
-        StreamingShape shape = model.streamingShape() == null ? StreamingShape.UNARY_UNARY : model.streamingShape();
+        StreamingShape shape = model.streamingShape();
+        if (shape == null) {
+            throw new IllegalStateException("Function handler generation requires non-null streamingShape for " + model.serviceName());
+        }
         boolean streamingInput = shape == StreamingShape.STREAMING_UNARY || shape == StreamingShape.STREAMING_STREAMING;
         boolean streamingOutput = shape == StreamingShape.UNARY_STREAMING || shape == StreamingShape.STREAMING_STREAMING;
 
@@ -129,9 +132,7 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
                 .addAnnotation(INJECT)
                 .build());
 
-        String localInvokeDelegate = streamingInput
-            ? "inputStream -> resource.process(inputStream.collect().asList().await().indefinitely())"
-            : "resource::process";
+        String localInvokeDelegate = localInvokeDelegate(shape);
 
         MethodSpec handleRequest = MethodSpec.methodBuilder("handleRequest")
             .addAnnotation(Override.class)
@@ -267,6 +268,14 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
             case UNARY_STREAMING -> "return $T.invokeOneToMany(input, transportContext, source, invoke, sink)";
             case STREAMING_UNARY -> "return $T.invokeManyToOne(input, transportContext, source, invoke, sink)";
             case STREAMING_STREAMING -> "return $T.invokeManyToMany(input, transportContext, source, invoke, sink)";
+        };
+    }
+
+    private static String localInvokeDelegate(StreamingShape shape) {
+        return switch (shape) {
+            case UNARY_UNARY, UNARY_STREAMING, STREAMING_STREAMING -> "resource::process";
+            case STREAMING_UNARY ->
+                "inputStream -> inputStream.collect().asList().onItem().transformToUni(resource::process)";
         };
     }
 

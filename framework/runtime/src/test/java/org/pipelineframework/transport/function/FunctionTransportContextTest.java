@@ -23,6 +23,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FunctionTransportContextTest {
@@ -93,13 +94,14 @@ class FunctionTransportContextTest {
     }
 
     @Test
-    void fallsBackUnknownInvocationModeToLocal() {
+    void rejectsUnknownInvocationMode() {
         FunctionTransportContext context = new FunctionTransportContext(
             "req-8",
             "fn",
             "invoke",
             Map.of(FunctionTransportContext.ATTR_INVOCATION_MODE, "somewhere"));
-        assertEquals(FunctionInvocationMode.LOCAL, context.invocationMode());
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, context::invocationMode);
+        assertTrue(error.getMessage().contains("Unsupported function invocation mode"));
     }
 
     @Test

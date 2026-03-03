@@ -15,6 +15,9 @@ public class IndexAckDto {
   UUID docId;
   String indexVersion;
   String tokensHash;
+  Integer tokenBatchCount;
+  Integer uniqueTokenCount;
+  String topToken;
   Instant indexedAt;
   Boolean success;
 

@@ -31,6 +31,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.fail;
 
 class FunctionTransportBridgeTest {
+    // Parity matrix for FUNCTION transport bridge:
+    // 1->1 invokeOneToOne, 1->N invokeOneToMany, N->1 invokeManyToOne, N->M invokeManyToMany.
+    // These tests lock expected cardinality/failure semantics across bridge entry points.
     private FunctionTransportContext context;
 
     @BeforeEach
@@ -47,6 +50,58 @@ class FunctionTransportBridgeTest {
             createOneToManyInvokeAdapter(),
             listSinkAdapter());
         assertEquals(List.of(5, 6), payloads);
+    }
+
+    @Test
+    void executesOneToOneFlow() {
+        Integer result = FunctionTransportBridge.invokeOneToOne(
+            "hello",
+            context,
+            createUnarySourceAdapter("search.raw-document", "v1"),
+            new LocalUnaryFunctionInvokeAdapter<>(
+                payload -> Uni.createFrom().item(payload.length()),
+                "search.out",
+                "v1"),
+            unarySinkAdapter());
+        assertEquals(5, result);
+    }
+
+    @Test
+    void rejectsEmptySourceForOneToOne() {
+        FunctionSourceAdapter<String, String> source = (event, ctx) -> Multi.createFrom().empty();
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> FunctionTransportBridge.invokeOneToOne(
+                "hello",
+                context,
+                source,
+                new LocalUnaryFunctionInvokeAdapter<>(
+                    payload -> Uni.createFrom().item(payload.length()),
+                    "search.out",
+                    "v1"),
+                unarySinkAdapter()));
+        assertEquals("Function transport expected exactly one source item but received 0.", ex.getMessage());
+    }
+
+    @Test
+    void rejectsMultipleSourceItemsForOneToOne() {
+        FunctionSourceAdapter<String, String> source = (event, ctx) -> Multi.createFrom().items(
+            TraceEnvelope.root("trace-1", "item-1", "search.raw-document", "v1", "idem-1", event),
+            TraceEnvelope.root("trace-1", "item-2", "search.raw-document", "v1", "idem-2", event));
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> FunctionTransportBridge.invokeOneToOne(
+                "hello",
+                context,
+                source,
+                new LocalUnaryFunctionInvokeAdapter<>(
+                    payload -> Uni.createFrom().item(payload.length()),
+                    "search.out",
+                    "v1"),
+                unarySinkAdapter()));
+        assertEquals("Function transport expected exactly one source item but received 2.", ex.getMessage());
     }
 
     @Test

@@ -36,8 +36,8 @@ public class IndexCacheKeyStrategy implements CacheKeyStrategy {
     String tokensHash;
     String indexVersion;
     if (item instanceof IndexAck ack) {
-      tokensHash = ack.tokensHash;
-      indexVersion = ack.indexVersion;
+      tokensHash = ack.getTokensHash();
+      indexVersion = ack.getIndexVersion();
     } else if (item instanceof IndexAckDto dto) {
       tokensHash = dto.getTokensHash();
       indexVersion = dto.getIndexVersion();

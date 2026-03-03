@@ -42,7 +42,7 @@ flowchart LR
 
 - Operator category (`NON_REACTIVE`/`REACTIVE`) should not drive transport selection.
 - REST and local adapter paths can be composed around operator invokers.
-- gRPC paths add prerequisites (descriptor + mapper-compatible bindings for delegated/operator flows).
+- gRPC paths add prerequisites: descriptor and mapper-compatible bindings for delegated/operator flows.
 
 ## Portfolio Planning Pattern
 

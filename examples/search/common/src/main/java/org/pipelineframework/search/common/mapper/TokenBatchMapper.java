@@ -1,7 +1,7 @@
 package org.pipelineframework.search.common.mapper;
 
 import org.mapstruct.Mapper;
-import org.mapstruct.Mapping;
+import org.mapstruct.BeforeMapping;
 import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.search.common.domain.TokenBatch;
@@ -19,13 +19,31 @@ public interface TokenBatchMapper extends org.pipelineframework.mapper.Mapper<To
   // Domain ↔ DTO
   TokenBatchDto toDto(TokenBatch entity);
 
-  @Mapping(target = "batchIndex", ignore = true)
   TokenBatch fromDto(TokenBatchDto dto);
 
   // DTO ↔ gRPC
   org.pipelineframework.search.grpc.TokenizeContentSvc.TokenBatch toGrpc(TokenBatchDto dto);
 
   TokenBatchDto fromGrpc(org.pipelineframework.search.grpc.TokenizeContentSvc.TokenBatch grpc);
+
+  @BeforeMapping
+  default void validateTokenBatchDto(TokenBatchDto dto) {
+    if (dto == null) {
+      return;
+    }
+    if (dto.getBatchIndex() == null) {
+      throw new IllegalArgumentException("TokenBatchDto.batchIndex must not be null");
+    }
+    if (dto.getBatchIndex() < 0) {
+      throw new IllegalArgumentException("TokenBatchDto.batchIndex must be >= 0");
+    }
+    if (dto.getTokenCount() == null) {
+      throw new IllegalArgumentException("TokenBatchDto.tokenCount must not be null");
+    }
+    if (dto.getTokenCount() <= 0) {
+      throw new IllegalArgumentException("TokenBatchDto.tokenCount must be > 0");
+    }
+  }
 
   @Override
   default TokenBatch fromExternal(TokenBatchDto external) {
