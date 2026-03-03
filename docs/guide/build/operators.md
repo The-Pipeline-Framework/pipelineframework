@@ -62,7 +62,7 @@ Validation fails fast in the following cases:
 - method contracts are invalid,
 - unsupported return generic forms are used: nested generics (`List<List<Foo>>`), wildcard returns (`List<?>`, `List<? extends Foo>`), raw types (`List`), unresolved type variables (`T`), or generic arrays (`T[]`).
 
-Simple concrete parameterized returns such as `List<Foo>` and `Map<String, Foo>` are supported.
+Simple concrete parameterised returns such as `List<Foo>` and `Map<String, Foo>` are supported.
 
 ## Current Invocation Scope
 

@@ -88,6 +88,19 @@ class ProcessIndexDocumentServiceReliabilityTest {
     assertEquals(HashingUtils.sha256Base64Url("hash-a|hash-b|hash-c"), ack.getTokensHash());
   }
 
+  @Test
+  void choosesLexicographicallySmallestTopTokenWhenFrequenciesTie() {
+    UUID docId = UUID.randomUUID();
+    TokenBatch batch0 = tokenBatch(docId, 0, "alpha beta", "hash-a");
+    TokenBatch batch1 = tokenBatch(docId, 1, "beta alpha", "hash-b");
+
+    IndexAck ack =
+        service.process(Multi.createFrom().items(batch0, batch1)).await().atMost(Duration.ofSeconds(5));
+
+    assertNotNull(ack);
+    assertEquals("alpha", ack.getTopToken());
+  }
+
   private TokenBatch tokenBatch(UUID docId, String tokens, String tokensHash) {
     return tokenBatch(docId, 0, tokens, tokensHash);
   }

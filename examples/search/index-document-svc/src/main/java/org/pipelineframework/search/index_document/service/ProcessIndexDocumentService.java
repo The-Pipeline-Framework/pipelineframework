@@ -269,9 +269,10 @@ public class ProcessIndexDocumentService
     if (counts.isEmpty()) {
       return new AggregationSummary(0, null);
     }
+    // Tie-breaker is lexicographically smallest token when frequencies are equal.
     String topToken = counts.entrySet().stream()
         .max(Comparator.<Map.Entry<String, Integer>>comparingInt(Map.Entry::getValue)
-            .thenComparing(Map.Entry::getKey, Comparator.naturalOrder()))
+            .thenComparing(Map.Entry::getKey, Comparator.reverseOrder()))
         .map(Map.Entry::getKey)
         .orElse(null);
     return new AggregationSummary(counts.size(), topToken);

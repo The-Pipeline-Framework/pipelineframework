@@ -9,7 +9,7 @@ Build and CI failures are covered in the development guide:
 
 | Signature (exact/close match) | Likely Cause | First Actions |
 | --- | --- | --- |
-| `IllegalArgumentException` mentioning function invocation mode | Invalid `tpf.function.invocation.mode` value (no silent fallback) | Validate configured mode against supported values, correct config, and rerun the lane |
+| Invalid invocation mode (`IllegalArgumentException`) | Misconfigured/unsupported `tpf.function.invocation.mode` value | Verify configured `tpf.function.invocation.mode`, correct to a supported value, redeploy, classify affected payloads and replay if needed; add logs/metrics to capture bad config inputs |
 | Retry exhaustion (transient retries consumed) | Downstream dependency instability or persistent transient condition | Stabilise downstream service, then replay parked/failed workload |
 | Parking lot growth / repeated parked failures | Non-retryable payloads or repeated hard dependency failures | Classify by error type and payload pattern; route bad payloads and fix dependency |
 | Timeout/latency spikes on operator-heavy step | Operator compute cost increase (that is, steps running many stateful operators or CPU/GPU-intensive transforms per payload), saturation, or downstream pressure | Correlate with payload/traffic changes, scale or throttle, then tune retry/backoff |

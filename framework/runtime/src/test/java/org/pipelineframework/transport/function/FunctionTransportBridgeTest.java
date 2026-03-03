@@ -67,6 +67,44 @@ class FunctionTransportBridgeTest {
     }
 
     @Test
+    void rejectsEmptySourceForOneToOne() {
+        FunctionSourceAdapter<String, String> source = (event, ctx) -> Multi.createFrom().empty();
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> FunctionTransportBridge.invokeOneToOne(
+                "hello",
+                context,
+                source,
+                new LocalUnaryFunctionInvokeAdapter<>(
+                    payload -> Uni.createFrom().item(payload.length()),
+                    "search.out",
+                    "v1"),
+                unarySinkAdapter()));
+        assertEquals("Function transport expected exactly one source item but received 0.", ex.getMessage());
+    }
+
+    @Test
+    void rejectsMultipleSourceItemsForOneToOne() {
+        FunctionSourceAdapter<String, String> source = (event, ctx) -> Multi.createFrom().items(
+            TraceEnvelope.root("trace-1", "item-1", "search.raw-document", "v1", "idem-1", event),
+            TraceEnvelope.root("trace-1", "item-2", "search.raw-document", "v1", "idem-2", event));
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> FunctionTransportBridge.invokeOneToOne(
+                "hello",
+                context,
+                source,
+                new LocalUnaryFunctionInvokeAdapter<>(
+                    payload -> Uni.createFrom().item(payload.length()),
+                    "search.out",
+                    "v1"),
+                unarySinkAdapter()));
+        assertEquals("Function transport expected exactly one source item but received 2.", ex.getMessage());
+    }
+
+    @Test
     void executesManyToOneFlow() {
         Integer result = FunctionTransportBridge.invokeManyToOne(
             "ignored-event",

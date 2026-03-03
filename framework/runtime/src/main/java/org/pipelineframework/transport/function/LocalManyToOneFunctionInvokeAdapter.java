@@ -234,7 +234,7 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
     private Comparator<TraceEnvelope<I>> lineageOrder() {
         // Merge lineage is deterministic: inputs are ordered by stable envelope attributes.
         // This ordering drives previousItemRef, previousItemIds metadata, merged itemId, and idempotency key.
-        return LocalManyToOneFunctionInvokeAdapter.<TraceEnvelope<I>>typedComparator(LINEAGE_ORDER)
+        return LocalManyToOneFunctionInvokeAdapter.<TraceEnvelope<I>>asTypedComparator(LINEAGE_ORDER)
             .thenComparing(envelope -> AdapterUtils.normalizeOrDefault(envelope.traceId(), ""))
             .thenComparing(envelope -> AdapterUtils.normalizeOrDefault(envelope.payloadModel(), ""))
             .thenComparing(envelope -> AdapterUtils.normalizeOrDefault(envelope.payloadModelVersion(), ""))
@@ -264,7 +264,7 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> Comparator<T> typedComparator(Comparator<?> comparator) {
+    private static <T> Comparator<T> asTypedComparator(Comparator<? super T> comparator) {
         return (Comparator<T>) comparator;
     }
 }
