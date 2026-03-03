@@ -67,6 +67,7 @@ public class ProcessTokenizeContentService
     TokenBatch output = new TokenBatch();
     output.docId = input.docId;
     output.batchIndex = batchIndex;
+    output.tokenCount = countTokens(tokens);
     output.tokens = tokens;
     output.tokensHash = HashingUtils.sha256Base64Url(tokens);
     output.contentHash = input.contentHash;
@@ -111,7 +112,14 @@ public class ProcessTokenizeContentService
   private int countTokensFromBatches(List<String> tokenBatches) {
     return tokenBatches.stream()
         .filter(batch -> batch != null && !batch.isBlank())
-        .mapToInt(batch -> batch.trim().split("\\s+").length)
+        .mapToInt(this::countTokens)
         .sum();
+  }
+
+  private int countTokens(String tokens) {
+    if (tokens == null || tokens.isBlank()) {
+      return 0;
+    }
+    return tokens.trim().split("\\s+").length;
   }
 }

@@ -78,12 +78,34 @@ Bridge mapping exercised by targeted tests:
 - `ONE_TO_MANY` -> `FunctionTransportBridge.invokeOneToMany(...)`
 - `MANY_TO_ONE` -> `FunctionTransportBridge.invokeManyToOne(...)`
 
+Runtime parity notes:
+
+- FUNCTION handlers keep the same cardinality contract used by COMPUTE/REST for these shapes.
+- `STREAMING_UNARY` handlers reduce non-blockingly (`collect().asList().onItem().transformToUni(...)`).
+- `STREAMING_STREAMING` handlers preserve stream-to-stream delegation (`resource::process`) without forced list collection.
+- Invalid `tpf.function.invocation.mode` values now fail fast with an explicit error (no silent fallback to LOCAL).
+
 Cardinality guarantees covered by tests:
 
 - `SearchPipelineEndToEndIT#tokenizeAndIndexPersistFanoutBatchesPerDocId` verifies one `docId` flows
   through `RawDocument`/`ParsedDocument`, fans out into multiple persisted `TokenBatch` rows (`tokenBatchCount`),
   then merges into exactly one `IndexAck`.
 - `IndexAckResourceTest#testIndexAckRejectsMixedDocIdsInSingleBatch` verifies fan-in rejects mixed `docId` input.
+
+### Branching Reference Lane (Business Semantics)
+
+The search pipeline includes a non-unary business lane:
+
+1. `Tokenize Content` (`ONE_TO_MANY`) expands one `ParsedDocument` into multiple `TokenBatch` units.
+2. `Index Document` (`MANY_TO_ONE`) reduces all batches for the same `docId` into one meaningful `IndexAck`.
+
+The reduced `IndexAck` now carries aggregate document signals:
+
+- `tokenBatchCount`: how many batches participated in fan-in.
+- `uniqueTokenCount`: unique vocabulary size for the reduced document.
+- `topToken`: most frequent token across all batches; when frequencies tie, the lexicographically smallest token is selected.
+
+This keeps the lane business-relevant (document-level indexing summary), not just structural fan-out/fan-in.
 
 ### Handler Selection For Modules With Multiple Generated Handlers
 

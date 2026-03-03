@@ -16,6 +16,7 @@
 
 package org.pipelineframework.transport.function;
 
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -43,6 +44,21 @@ final class AdapterUtils {
             return UUID.randomUUID().toString();
         }
         return requestId.strip();
+    }
+
+    static String deterministicId(String namespace, String... components) {
+        StringBuilder builder = new StringBuilder();
+        appendFramed(builder, normalizeOrDefault(namespace, "lineage"));
+        if (components != null) {
+            for (String component : components) {
+                appendFramed(builder, normalizeOrDefault(component, ""));
+            }
+        }
+        return UUID.nameUUIDFromBytes(builder.toString().getBytes(StandardCharsets.UTF_8)).toString();
+    }
+
+    private static void appendFramed(StringBuilder builder, String value) {
+        builder.append('#').append(value.length()).append(':').append(value);
     }
 
     static Map<String, String> buildContextMeta(FunctionTransportContext context) {

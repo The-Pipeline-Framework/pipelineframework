@@ -226,7 +226,7 @@ class PipelineBindingConstructionPhaseTest {
     }
 
     @Test
-    void delegatedGrpcStepWithEmptyDescriptorSetFailsValidation() {
+    void delegatedGrpcStepWithEmptyDescriptorSetFailsAtBindingResolution() {
         PipelineBindingConstructionPhase phase = new PipelineBindingConstructionPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
 
@@ -240,7 +240,7 @@ class PipelineBindingConstructionPhaseTest {
         context.setDescriptorSet(DescriptorProtos.FileDescriptorSet.newBuilder().build());
 
         IllegalStateException error = assertThrows(IllegalStateException.class, () -> phase.execute(context));
-        assertTrue(error.getMessage().contains("gRPC transport requires protobuf descriptors, but no descriptor set was available"));
+        assertTrue(error.getMessage().contains("Service named 'ProcessDelegatedEmptyDescriptorService' not found in descriptor set"));
     }
 
     private static DescriptorProtos.FileDescriptorSet descriptorSetForService(String serviceName) {

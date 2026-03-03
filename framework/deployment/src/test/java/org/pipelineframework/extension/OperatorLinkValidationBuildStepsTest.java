@@ -18,8 +18,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assertions.fail;
 
 class OperatorLinkValidationBuildStepsTest {
 
@@ -46,13 +46,11 @@ class OperatorLinkValidationBuildStepsTest {
         OperatorBuildItem source = operator(index, Source.class, "Source", classType(String.class), multiType(String.class));
         OperatorBuildItem sink = operator(index, Sink.class, "Sink", classType(String.class), uniType(String.class));
 
-        try {
-            buildSteps.validateOperatorLinks(List.of(source, sink), emptyRegistry(), index);
-            fail("Expected DeploymentException");
-        } catch (DeploymentException e) {
-            assertTrue(e.getMessage().contains("Step 'Source' produces"));
-            assertTrue(e.getMessage().contains("step 'Sink' expects"));
-        }
+        DeploymentException e = assertThrows(
+                DeploymentException.class,
+                () -> buildSteps.validateOperatorLinks(List.of(source, sink), emptyRegistry(), index));
+        assertTrue(e.getMessage().contains("Step 'Source' produces"));
+        assertTrue(e.getMessage().contains("step 'Sink' expects"));
     }
 
     @Test
@@ -61,15 +59,13 @@ class OperatorLinkValidationBuildStepsTest {
         OperatorBuildItem source = operator(index, Source.class, "Source", classType(String.class), uniType(String.class));
         OperatorBuildItem sink = operator(index, Sink.class, "Sink", classType(Integer.class), uniType(Integer.class));
 
-        try {
-            buildSteps.validateOperatorLinks(List.of(source, sink), emptyRegistry(), index);
-            fail("Expected DeploymentException");
-        } catch (DeploymentException e) {
-            assertTrue(e.getMessage().contains("Step 'Source' produces"));
-            assertTrue(e.getMessage().contains("step 'Sink' expects"));
-            assertTrue(e.getMessage().contains("java.lang.String"));
-            assertTrue(e.getMessage().contains("java.lang.Integer"));
-        }
+        DeploymentException e = assertThrows(
+                DeploymentException.class,
+                () -> buildSteps.validateOperatorLinks(List.of(source, sink), emptyRegistry(), index));
+        assertTrue(e.getMessage().contains("Step 'Source' produces"));
+        assertTrue(e.getMessage().contains("step 'Sink' expects"));
+        assertTrue(e.getMessage().contains("java.lang.String"));
+        assertTrue(e.getMessage().contains("java.lang.Integer"));
     }
 
     @Test
@@ -106,14 +102,12 @@ class OperatorLinkValidationBuildStepsTest {
                         DotName.createSimple(Double.class.getName())),
                 mapperTwo));
 
-        try {
-            buildSteps.validateOperatorLinks(List.of(source, sink), registry, index);
-            fail("Expected DeploymentException");
-        } catch (DeploymentException e) {
-            assertTrue(e.getMessage().contains("no mapper found for produced/expected pair"));
-            assertTrue(e.getMessage().contains("java.lang.String"));
-            assertTrue(e.getMessage().contains("java.lang.Integer"));
-        }
+        DeploymentException e = assertThrows(
+                DeploymentException.class,
+                () -> buildSteps.validateOperatorLinks(List.of(source, sink), registry, index));
+        assertTrue(e.getMessage().contains("no mapper found for produced/expected pair"));
+        assertTrue(e.getMessage().contains("java.lang.String"));
+        assertTrue(e.getMessage().contains("java.lang.Integer"));
     }
 
     @Test
@@ -135,17 +129,15 @@ class OperatorLinkValidationBuildStepsTest {
         Type listOfInteger = listType(Integer.class);
 
         OperatorBuildItem source = operator(index, Source.class, "Source", listOfString, uniType(listOfString));
-        OperatorBuildItem sink = operator(index, Sink.class, "Sink", listOfInteger, uniType(Integer.class));
+        OperatorBuildItem sink = operator(index, Sink.class, "Sink", listOfInteger, uniType(listOfInteger));
 
-        try {
-            buildSteps.validateOperatorLinks(List.of(source, sink), emptyRegistry(), index);
-            fail("Expected DeploymentException");
-        } catch (DeploymentException e) {
-            assertTrue(e.getMessage().contains("Step 'Source' produces"));
-            assertTrue(e.getMessage().contains("step 'Sink' expects"));
-            assertTrue(e.getMessage().contains("java.util.List<java.lang.String>"));
-            assertTrue(e.getMessage().contains("java.util.List<java.lang.Integer>"));
-        }
+        DeploymentException e = assertThrows(
+                DeploymentException.class,
+                () -> buildSteps.validateOperatorLinks(List.of(source, sink), emptyRegistry(), index));
+        assertTrue(e.getMessage().contains("Step 'Source' produces"));
+        assertTrue(e.getMessage().contains("step 'Sink' expects"));
+        assertTrue(e.getMessage().contains("java.util.List<java.lang.String>"));
+        assertTrue(e.getMessage().contains("java.util.List<java.lang.Integer>"));
     }
 
     private OperatorBuildItem operator(

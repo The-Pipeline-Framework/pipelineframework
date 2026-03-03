@@ -17,7 +17,6 @@
 package org.pipelineframework.transport.function;
 
 import java.util.Objects;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 
@@ -60,6 +59,9 @@ public final class LocalOneToManyFunctionInvokeAdapter<I, O> implements Function
         String traceId = (rawTraceId == null || rawTraceId.isBlank())
             ? AdapterUtils.deriveTraceId(context.requestId())
             : rawTraceId.strip();
+        String traceScope = AdapterUtils.normalizeOrDefault(
+            input.traceId(),
+            AdapterUtils.normalizeOrDefault(context.requestId(), "trace"));
         AtomicLong outputIndex = new AtomicLong(0L);
         Multi<O> outputStream = delegate.apply(input.payload());
         if (outputStream == null) {
@@ -71,12 +73,18 @@ public final class LocalOneToManyFunctionInvokeAdapter<I, O> implements Function
                 if (output == null) {
                     throw new NullPointerException("LocalOneToManyFunctionInvokeAdapter delegate emitted null output");
                 }
-                String envelopeId = UUID.randomUUID().toString();
+                long index = outputIndex.getAndIncrement();
                 return input.next(
-                    envelopeId,
+                    AdapterUtils.deterministicId(
+                        "invoke-one-to-many",
+                        traceScope,
+                        AdapterUtils.normalizeOrDefault(input.itemId(), "source"),
+                        outputPayloadModel,
+                        outputPayloadModelVersion,
+                        Long.toString(index)),
                     outputPayloadModel,
                     outputPayloadModelVersion,
-                    resolveIdempotencyKey(context, traceId, input, outputIndex.getAndIncrement()),
+                    resolveIdempotencyKey(context, traceId, input, index),
                     output);
             });
     }

@@ -18,7 +18,6 @@ package org.pipelineframework.transport.function;
 
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.logging.Logger;
 
 import io.smallrye.mutiny.Multi;
@@ -49,7 +48,12 @@ public final class DefaultUnaryFunctionSourceAdapter<I> implements FunctionSourc
         Objects.requireNonNull(event, "event must not be null");
         Objects.requireNonNull(context, "context must not be null");
         String traceId = AdapterUtils.deriveTraceId(context.requestId());
-        String itemId = UUID.randomUUID().toString();
+        String itemId = AdapterUtils.deterministicId(
+            "source-unary",
+            traceId,
+            payloadModel,
+            payloadModelVersion,
+            context.requestId());
         String idempotencyKey = resolveIdempotencyKey(context, traceId);
 
         Map<String, String> meta = AdapterUtils.buildContextMeta(context);

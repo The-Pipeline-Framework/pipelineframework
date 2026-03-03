@@ -90,6 +90,8 @@ const mainSidebar = [
             {text: '@PipelineStep Annotation', link: '/guide/development/pipeline-step'},
             {text: 'Code a Step', link: '/guide/development/code-a-step'},
             {text: 'Operators', link: '/guide/development/operators'},
+            {text: 'Operator Build Troubleshooting', link: '/guide/development/operators-build-troubleshooting'},
+            {text: 'Extending Operator Libraries', link: '/guide/development/extension/operator-libraries'},
             {text: 'Mappers and DTOs', link: '/guide/development/mappers-and-dtos'},
             {text: 'Handling File Operations', link: '/guide/development/handling-file-operations'},
             {text: 'Testing with Testcontainers', link: '/guide/development/testing'},
@@ -106,6 +108,8 @@ const mainSidebar = [
             {text: 'Error Handling & DLQ', link: '/guide/operations/error-handling'},
             {text: 'In-flight Probe', link: '/guide/operations/in-flight-probe'},
             {text: 'Operators', link: '/guide/operations/operators'},
+            {text: 'Operator Playbook', link: '/guide/operations/operators-playbook'},
+            {text: 'Operator Troubleshooting', link: '/guide/operations/operators-troubleshooting'},
             {text: 'AWS Lambda SnapStart', link: '/guide/operations/aws-lambda-snapstart'},
             {
                 text: 'Observability',

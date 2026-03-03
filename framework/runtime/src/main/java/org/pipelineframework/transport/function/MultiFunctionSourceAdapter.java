@@ -18,7 +18,6 @@ package org.pipelineframework.transport.function;
 
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.logging.Logger;
 
@@ -61,13 +60,19 @@ public final class MultiFunctionSourceAdapter<I> implements FunctionSourceAdapte
         AtomicLong outputIndex = new AtomicLong(0);
 
         return boundedIngress(event).onItem().transform(item -> {
+            long index = outputIndex.getAndIncrement();
             String idempotencyKey = resolveIdempotencyKey(
                 context,
                 traceId,
-                outputIndex.getAndIncrement());
+                index);
             return TraceEnvelope.rootWithMeta(
                 traceId,
-                UUID.randomUUID().toString(),
+                AdapterUtils.deterministicId(
+                    "source-many",
+                    traceId,
+                    payloadModel,
+                    payloadModelVersion,
+                    Long.toString(index)),
                 payloadModel,
                 payloadModelVersion,
                 idempotencyKey,

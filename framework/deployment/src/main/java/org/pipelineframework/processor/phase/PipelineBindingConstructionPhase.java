@@ -115,17 +115,13 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
         if (!ctx.isTransportModeGrpc()) {
             return;
         }
-        boolean hasGrpcDelegatedSteps = ctx.getStepModels().stream()
-            .anyMatch(model -> model.delegateService() != null && isGrpcBoundStep(model));
-        if (!hasGrpcDelegatedSteps) {
-            return;
-        }
-        if (descriptorSet == null || descriptorSet.getFileCount() == 0) {
-            throw new IllegalStateException(
-                "gRPC transport requires protobuf descriptors, but no descriptor set was available");
-        }
+        boolean hasNonDelegatedGrpcSteps = false;
         for (PipelineStepModel model : ctx.getStepModels()) {
-            if (model.delegateService() == null || !isGrpcBoundStep(model)) {
+            if (!isGrpcBoundStep(model)) {
+                continue;
+            }
+            if (model.delegateService() == null) {
+                hasNonDelegatedGrpcSteps = true;
                 continue;
             }
             if (model.externalMapper() == null) {
@@ -140,6 +136,10 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
                         + "' uses gRPC transport but mapper fallback JACKSON is enabled. "
                         + "gRPC delegated/operator steps require a mapper and do not allow mapper fallback.");
             }
+        }
+        if (hasNonDelegatedGrpcSteps && (descriptorSet == null || descriptorSet.getFileCount() == 0)) {
+            throw new IllegalStateException(
+                "gRPC transport requires protobuf descriptors, but no descriptor set was available");
         }
     }
 

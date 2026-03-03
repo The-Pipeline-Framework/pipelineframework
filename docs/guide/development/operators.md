@@ -38,7 +38,7 @@ When application domain types differ from operator I/O types, mapper coverage is
 
 - REST flow can work with direct JSON/domain mapping paths.
 - gRPC flow requires descriptor + mapper-compatible bindings.
-- Mapper fallback policies are configuration-driven; do not rely on implicit conversion by default.
+- Mapper fallback policies are configuration-driven; implicit conversion is not enabled by default.
 
 ## Example: AI Pipeline Chain
 
@@ -64,9 +64,11 @@ steps:
 - `method not found/ambiguous`: verify signature and overloads.
 - `unsupported return shape`: verify unary constraints for current invoker scope.
 - `gRPC mapper/proto error`: verify mapper binding and descriptor generation.
+- Build/CI failures: for failure signatures and triage flow, use [Operator Build Troubleshooting](/guide/development/operators-build-troubleshooting).
 
 ## Related
 
 - [Operators](/guide/build/operators)
 - [External Library Delegation](/guide/development/external-library-delegation)
 - [Mappers and DTOs](/guide/development/mappers-and-dtos)
+- [Extending TPF with Operator Libraries](/guide/development/extension/operator-libraries)

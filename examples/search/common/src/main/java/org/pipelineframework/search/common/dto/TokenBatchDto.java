@@ -13,6 +13,8 @@ import lombok.Value;
 @JsonDeserialize(builder = TokenBatchDto.TokenBatchDtoBuilder.class)
 public class TokenBatchDto {
   UUID docId;
+  Integer batchIndex;
+  Integer tokenCount;
   String tokens;
   String tokensHash;
   String contentHash;

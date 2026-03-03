@@ -2,7 +2,10 @@ package org.pipelineframework.search.index_document.service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -152,25 +155,41 @@ public class ProcessIndexDocumentService
     if (batches.stream().anyMatch(batch -> batch.docId == null || !docId.equals(batch.docId))) {
       return Uni.createFrom().failure(new IllegalArgumentException("all token batches must share the same docId"));
     }
-    FailureDirective directive = evaluateFailureDirective(batches, docId);
+    if (batches.stream().anyMatch(batch ->
+        batch.batchIndex == null || batch.batchIndex < 0 || batch.tokenCount == null || batch.tokenCount <= 0)) {
+      return Uni.createFrom().failure(new IllegalArgumentException(
+          "invalid token batch metrics for docId " + docId + ": batchIndex must be >= 0 and tokenCount must be > 0"));
+    }
+    List<TokenBatch> orderedBatches = orderBatchesForAggregation(batches);
+    FailureDirective directive = evaluateFailureDirective(orderedBatches, docId);
     if (directive != null) {
       return Uni.createFrom().failure(directive.toException());
     }
 
     String indexVersion = resolveIndexVersion();
-    String joinedTokenHashes = batches.stream()
+    String joinedTokenHashes = orderedBatches.stream()
         .map(batch -> batch.tokensHash)
         .collect(Collectors.joining("|"));
     String combinedTokensHash = HashingUtils.sha256Base64Url(joinedTokenHashes);
+    AggregationSummary summary = summarizeTokens(orderedBatches);
 
     IndexAck output = new IndexAck();
     output.docId = docId;
-    output.indexVersion = indexVersion;
-    output.tokensHash = combinedTokensHash;
-    output.indexedAt = Instant.now();
-    output.success = true;
+    output.setIndexVersion(indexVersion);
+    output.setTokensHash(combinedTokensHash);
+    output.setTokenBatchCount(orderedBatches.size());
+    output.setUniqueTokenCount(summary.uniqueTokenCount());
+    output.setTopToken(summary.topToken());
+    output.setIndexedAt(Instant.now());
+    output.setSuccess(true);
 
-    LOGGER.debugf("Indexed doc %s from %s token batches (version=%s)", docId, batches.size(), indexVersion);
+    LOGGER.debugf(
+        "Indexed doc %s from %s token batches (version=%s, uniqueTokens=%s, topToken=%s)",
+        docId,
+        orderedBatches.size(),
+        indexVersion,
+        summary.uniqueTokenCount(),
+        summary.topToken());
     return Uni.createFrom().item(output);
   }
 
@@ -229,6 +248,43 @@ public class ProcessIndexDocumentService
     String prefix = docIdLabel + ":";
     transientAttemptsByDoc.keySet().removeIf(key -> key.startsWith(prefix));
   }
+
+  private List<TokenBatch> orderBatchesForAggregation(List<TokenBatch> batches) {
+    return batches.stream()
+        .sorted(Comparator
+            .comparing((TokenBatch batch) -> batch.batchIndex, Comparator.nullsLast(Integer::compareTo))
+            .thenComparing(batch -> batch.tokensHash, Comparator.nullsLast(String::compareTo))
+            .thenComparing(batch -> batch.tokens, Comparator.nullsLast(String::compareTo)))
+        .toList();
+  }
+
+  private AggregationSummary summarizeTokens(List<TokenBatch> batches) {
+    Map<String, Integer> counts = new HashMap<>();
+    for (TokenBatch batch : batches) {
+      if (batch.tokens == null || batch.tokens.isBlank()) {
+        continue;
+      }
+      for (String token : batch.tokens.trim().split("\\s+")) {
+        if (token.isBlank()) {
+          continue;
+        }
+        counts.merge(token, 1, Integer::sum);
+      }
+    }
+    if (counts.isEmpty()) {
+      return new AggregationSummary(0, null);
+    }
+    String topToken = counts.entrySet().stream()
+        .sorted(Comparator.<Map.Entry<String, Integer>>comparingInt(Map.Entry::getValue)
+            .reversed()
+            .thenComparing(Map.Entry::getKey, Comparator.naturalOrder()))
+        .map(Map.Entry::getKey)
+        .findFirst()
+        .orElse(null);
+    return new AggregationSummary(counts.size(), topToken);
+  }
+
+  private record AggregationSummary(int uniqueTokenCount, String topToken) {}
 
   private record FailureDirective(boolean transientFailure, String message) {
     static FailureDirective transientFailure(String message) {
