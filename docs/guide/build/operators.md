@@ -81,4 +81,6 @@ Operator category does not select transport.
 - [Application Configuration](/guide/application/configuration)
 - [Developing with Operators](/guide/development/operators)
 - [Operator Runtime Operations](/guide/operations/operators)
+- [Operator Playbook](/guide/operations/operators-playbook)
+- [Operator Troubleshooting](/guide/operations/operators-troubleshooting)
 - [Operator Internals](/guide/evolve/operators-internals)
