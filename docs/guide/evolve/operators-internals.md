@@ -32,11 +32,13 @@ flowchart TD
 
 ## Invoker Generation Contract
 
-`OperatorInvokerBuildSteps` generates bytecode invokers with Gizmo:
+`OperatorInvokerBuildSteps` generates operator invoker bytecode with Gizmo:
 - direct invocation (no reflection lookup),
 - CDI bean registration,
 - unary reactive contract (`ReactiveService`),
 - checked/runtime exceptions adapted to `Uni.createFrom().failure(e)`.
+
+Note: this is specific to operator invokers in the Quarkus build-step path. Other generation paths in the annotation processor still render Java sources with JavaPoet.
 
 ## Generated Equivalent (Conceptual)
 

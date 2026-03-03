@@ -15,6 +15,7 @@ import org.pipelineframework.processor.ir.OrchestratorBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -89,10 +90,10 @@ class OrchestratorFunctionHandlerRendererTest {
             source.contains("implements RequestHandler<Multi<InputTypeDto>, List<OutputTypeDto>>"),
             () -> "expected full RequestHandler signature missing. source:\n" + source);
         assertTrue(
-            source.contains("resource::run"),
+            source.contains("invokeLocal = new LocalManyToManyFunctionInvokeAdapter<InputTypeDto, OutputTypeDto>(resource::run"),
             () -> "expected streaming-input many-to-many direct delegate missing. source:\n" + source);
-        assertTrue(
-            !source.contains("inputStream -> resource.run(inputStream.collect().asList().await().indefinitely())"),
+        assertFalse(
+            source.contains("inputStream -> resource.run(inputStream.collect().asList().await().indefinitely())"),
             () -> "unexpected blocking streaming-input lambda found. source:\n" + source);
         assertTrue(
             source.contains("return FunctionTransportBridge.invokeManyToMany(input, transportContext, source, invoke, sink)"),

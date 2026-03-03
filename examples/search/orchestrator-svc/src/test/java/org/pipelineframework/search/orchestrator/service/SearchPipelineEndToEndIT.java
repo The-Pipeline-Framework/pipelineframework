@@ -32,6 +32,8 @@ import javax.net.ssl.SSLParameters;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -43,11 +45,13 @@ import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.lifecycle.Startables;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SearchPipelineEndToEndIT {
 
     private static final Logger LOG = Logger.getLogger(SearchPipelineEndToEndIT.class);
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private static final Network NETWORK = Network.newNetwork();
     private static final String CACHE_PREFIX = "pipeline-cache:";
     private static final Path DEV_CERTS_DIR =
@@ -432,6 +436,15 @@ class SearchPipelineEndToEndIT {
         assertEquals(1, indexAckCount,
             "Expected MANY_TO_ONE fan-in to persist exactly one IndexAck row for docId " + docId
                 + " but found " + indexAckCount);
+
+        JsonNode ackNode = findIndexAckNode(result.output);
+        assertEquals(docId.toString(), ackNode.path("docId").asText(), "Expected output docId to match");
+        assertEquals(tokenBatchCount, ackNode.path("tokenBatchCount").asInt(),
+            "Expected aggregated tokenBatchCount to match persisted fan-out rows");
+        assertTrue(ackNode.path("uniqueTokenCount").asInt() > 0,
+            "Expected aggregated uniqueTokenCount to be > 0");
+        assertFalse(ackNode.path("topToken").asText("").isBlank(),
+            "Expected aggregated topToken to be present");
     }
 
     @Test
@@ -674,6 +687,43 @@ class SearchPipelineEndToEndIT {
             index += marker.length();
         }
         return count;
+    }
+
+    private JsonNode findIndexAckNode(String responseBody) throws Exception {
+        JsonNode root = OBJECT_MAPPER.readTree(responseBody);
+        JsonNode found = findNodeWithField(root, "indexVersion");
+        if (found == null || found.isMissingNode()) {
+            throw new IllegalStateException("IndexAck payload was not found in orchestrator response: " + responseBody);
+        }
+        return found;
+    }
+
+    private JsonNode findNodeWithField(JsonNode node, String fieldName) {
+        if (node == null || node.isNull()) {
+            return null;
+        }
+        if (node.isObject() && node.has(fieldName)) {
+            return node;
+        }
+        if (node.isObject()) {
+            java.util.Iterator<JsonNode> values = node.elements();
+            while (values.hasNext()) {
+                JsonNode found = findNodeWithField(values.next(), fieldName);
+                if (found != null) {
+                    return found;
+                }
+            }
+            return null;
+        }
+        if (node.isArray()) {
+            for (JsonNode element : node) {
+                JsonNode found = findNodeWithField(element, fieldName);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
     }
 
     /**

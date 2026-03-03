@@ -53,6 +53,20 @@ class FunctionTransportBridgeTest {
     }
 
     @Test
+    void executesOneToOneFlow() {
+        Integer result = FunctionTransportBridge.invokeOneToOne(
+            "hello",
+            context,
+            createUnarySourceAdapter("search.raw-document", "v1"),
+            new LocalUnaryFunctionInvokeAdapter<>(
+                payload -> Uni.createFrom().item(payload.length()),
+                "search.out",
+                "v1"),
+            unarySinkAdapter());
+        assertEquals(5, result);
+    }
+
+    @Test
     void executesManyToOneFlow() {
         Integer result = FunctionTransportBridge.invokeManyToOne(
             "ignored-event",

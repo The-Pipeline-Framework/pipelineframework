@@ -24,8 +24,10 @@ import jakarta.enterprise.inject.spi.DeploymentException;
 import org.jboss.jandex.ClassInfo;
 import org.jboss.jandex.DotName;
 import org.jboss.jandex.IndexView;
+import org.jboss.jandex.ParameterizedType;
 import org.jboss.jandex.PrimitiveType;
 import org.jboss.jandex.Type;
+import org.jboss.jandex.TypeVariable;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -291,7 +293,8 @@ public final class OperatorLinkValidationBuildSteps {
         if (targetName == null) {
             return false;
         }
-        Type currentType = Type.create(classInfo.name(), Type.Kind.CLASS);
+        // Preserve declared type parameters when available; some parameterized links may still require explicit mappers.
+        Type currentType = declaredTypeForClass(classInfo);
         if (targetName.equals(classInfo.name()) && hasCompatibleTypeArguments(currentType, target, index)) {
             return true;
         }
@@ -341,6 +344,17 @@ public final class OperatorLinkValidationBuildSteps {
      */
     private DotName typeName(Type type) {
         return type == null ? null : type.name();
+    }
+
+    private Type declaredTypeForClass(ClassInfo classInfo) {
+        if (classInfo == null) {
+            return null;
+        }
+        List<TypeVariable> parameters = classInfo.typeParameters();
+        if (parameters == null || parameters.isEmpty()) {
+            return Type.create(classInfo.name(), Type.Kind.CLASS);
+        }
+        return ParameterizedType.create(classInfo.name(), parameters.toArray(new Type[0]), null);
     }
 
     private enum Cardinality {
