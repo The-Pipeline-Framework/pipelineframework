@@ -1,6 +1,6 @@
 # Operator Runtime Operations
 
-Operators are build-validated and runtime-executed. Most contract errors should fail before deploy; runtime failures should be diagnosable from logs, metrics, and step-level health signals.
+Operators are build-validated and runtime-executed. Most contract errors should fail before deployment; runtime failures should be diagnosable from logs, metrics, and step-level health signals.
 
 ## Operating Model
 

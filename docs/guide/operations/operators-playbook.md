@@ -34,7 +34,7 @@ Optional example lane (Search reference project):
 
 ### Compute/REST lane
 
-- Build transport and platform defaults from `pipeline.yaml`.
+- Build transport and platform defaults from `pipeline.yaml` (the pipeline manifest, typically at the repo root or a service `config/` directory; see [Configuration Reference](/guide/build/configuration/)).
 - Use module-local Quarkus run/test commands for step services and orchestrator.
 - Expect generated REST handlers/resources for configured steps.
 
@@ -57,7 +57,7 @@ Optional example lane (Search reference project):
 
 - Step latency trends around fan-out and fan-in boundaries.
 - Error-rate spikes grouped by service/step.
-- Retry exhaustion and parking events (for example index reducer parking logs).
+- Retry exhaustion and parking events (for example, index reducer parking logs).
 - Backpressure symptoms: sustained queue growth or long tail latency in streaming/reduction steps.
 
 ### Build artifact integrity
@@ -72,7 +72,7 @@ Optional example lane (Search reference project):
 1. Identify the failing step and failure type (transient vs non-retryable).
 2. Confirm whether the failure is dependency/systemic or payload/data specific.
 3. If systemic: stabilise dependency first, then replay.
-4. If data-specific: isolate failing payloads and route to DLQ/parking investigation.
+4. If data-specific: isolate failing payloads and route to DLQ (Dead Letter Queue)/parking investigation.
 
 ### Parking growth
 
@@ -91,7 +91,7 @@ Optional example lane (Search reference project):
 Only include keys that change behaviour materially:
 
 - `tpf.function.invocation.mode`: controls local vs remote function invoke routing behaviour.
-- `pipeline.platform`: selects platform generation mode (for example `FUNCTION`).
+- `pipeline.platform`: selects platform generation mode (For example `FUNCTION`).
 - `pipeline.transport`: selects transport generation mode (for example `REST`).
 - `pipeline.rest.naming.strategy`: affects generated REST naming and route conventions.
 - `quarkus.lambda.handler`: selects explicit lambda handler entrypoint when multiple handlers exist.

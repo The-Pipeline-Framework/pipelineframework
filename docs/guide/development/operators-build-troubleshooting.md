@@ -27,7 +27,7 @@ Use this matrix for compile-time/operator-resolution failures.
 ./mvnw -f framework/pom.xml verify
 ```
 
-Optional reference lane (Search example):
+### Optional Reference Lane (Search Example)
 
 ```bash
 ./mvnw -f examples/search/pom.xml -pl orchestrator-svc -am \

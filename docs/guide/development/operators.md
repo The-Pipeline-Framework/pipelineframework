@@ -64,7 +64,7 @@ steps:
 - `method not found/ambiguous`: verify signature and overloads.
 - `unsupported return shape`: verify unary constraints for current invoker scope.
 - `gRPC mapper/proto error`: verify mapper binding and descriptor generation.
-- for build/CI failure signatures and triage flow, use [Operator Build Troubleshooting](/guide/development/operators-build-troubleshooting).
+- Build/CI failures: for failure signatures and triage flow, use [Operator Build Troubleshooting](/guide/development/operators-build-troubleshooting).
 
 ## Related
 

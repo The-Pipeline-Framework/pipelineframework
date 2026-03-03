@@ -6,14 +6,14 @@ This guide is for teams publishing reusable operator libraries consumed by multi
 
 - Package operators in a regular dependency (`jar`) reachable from the consuming pipeline module.
 - Expose public, non-abstract methods in `Class::method` format.
-- Keep one input parameter max per operator entry method.
+- Keep at most one input parameter per operator entry method.
 - Avoid overloaded operator entry methods to keep resolution deterministic.
 
 ## Packaging Checklist
 
 1. Publish the library artifact to your internal/external repository.
-2. Add it as a dependency in the pipeline module that declares `operator:`.
-3. Ensure the operator classes are index-visible at build time (Jandex path).
+2. Add it as a dependency in the pipeline module whose pipeline YAML declares an `operator:` key (for example, `operator: "com.acme.lib.payment.PaymentOperators::enrich"`).
+3. Ensure the operator classes are index-visible at build time: they must be discoverable in Jandex (for example via `META-INF/jandex.idx`; see [Jandex Maven Plugin](https://github.com/wildfly/jandex/tree/main/maven-plugin)).
 4. For instance methods, make classes CDI-manageable in the target runtime.
 
 ## Versioning Strategy
@@ -24,7 +24,7 @@ This guide is for teams publishing reusable operator libraries consumed by multi
 
 ## Transport Notes
 
-- Operator category (`NON_REACTIVE`/`REACTIVE`) does not choose transport.
+- Operator category (`NON_REACTIVE`/`REACTIVE`) does not determine transport.
 - REST paths can use direct domain JSON mapping.
 - gRPC paths require protobuf descriptors and mapper-compatible bindings.
 
