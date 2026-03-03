@@ -17,8 +17,10 @@
 package org.pipelineframework.transport.function;
 
 import java.time.Duration;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import io.smallrye.mutiny.Multi;
@@ -224,6 +226,57 @@ class FunctionTransportAdaptersTest {
             mergedA.idempotencyKey(),
             mergedB.idempotencyKey(),
             "Escaped fallback components must avoid delimiter collisions");
+    }
+
+    @Test
+    void localManyToOneMergedItemIdIsCollisionResistantAcrossDelimiterLikeInputs() {
+        LocalManyToOneFunctionInvokeAdapter<Integer, Integer> adapter = new LocalManyToOneFunctionInvokeAdapter<>(
+            payloads -> payloads.collect().asList().onItem().transform(list -> list.stream().mapToInt(Integer::intValue).sum()),
+            "search.token.sum",
+            "v1");
+        FunctionTransportContext context = FunctionTransportContext.of("req-escape-item", "search-handler", "invoke-step");
+
+        TraceEnvelope<Integer> firstA = TraceEnvelope.root("trace-escape-item", "a|b", "search.token", "v1", "idem-1", 1);
+        TraceEnvelope<Integer> secondA = TraceEnvelope.root("trace-escape-item", "c", "search.token", "v1", "idem-2", 2);
+        TraceEnvelope<Integer> firstB = TraceEnvelope.root("trace-escape-item", "a", "search.token", "v1", "idem-3", 1);
+        TraceEnvelope<Integer> secondB = TraceEnvelope.root("trace-escape-item", "b|c", "search.token", "v1", "idem-4", 2);
+
+        TraceEnvelope<Integer> mergedA = adapter.invokeManyToOne(Multi.createFrom().items(firstA, secondA), context)
+            .await().atMost(Duration.ofSeconds(2));
+        TraceEnvelope<Integer> mergedB = adapter.invokeManyToOne(Multi.createFrom().items(firstB, secondB), context)
+            .await().atMost(Duration.ofSeconds(2));
+
+        assertNotEquals(
+            mergedA.itemId(),
+            mergedB.itemId(),
+            "Merged item ids must remain distinct when item ids contain delimiters");
+    }
+
+    @Test
+    void localManyToOneOrderingHandlesNullMetaKeysDeterministically() {
+        LocalManyToOneFunctionInvokeAdapter<Integer, Integer> adapter = new LocalManyToOneFunctionInvokeAdapter<>(
+            payloads -> payloads.collect().asList().onItem().transform(list -> list.stream().mapToInt(Integer::intValue).sum()),
+            "search.token.sum",
+            "v1");
+        FunctionTransportContext context = FunctionTransportContext.of("req-null-meta", "search-handler", "invoke-step");
+
+        Map<String, String> firstMeta = new HashMap<>();
+        firstMeta.put(null, "value-a");
+        firstMeta.put("k", "v1");
+        Map<String, String> secondMeta = new HashMap<>();
+        secondMeta.put(null, "value-b");
+        secondMeta.put("k", "v1");
+
+        TraceEnvelope<Integer> first = TraceEnvelope.rootWithMeta(
+            "trace-null-meta", "item-a", "search.token", "v1", "idem-a", 1, firstMeta);
+        TraceEnvelope<Integer> second = TraceEnvelope.rootWithMeta(
+            "trace-null-meta", "item-b", "search.token", "v1", "idem-b", 2, secondMeta);
+
+        TraceEnvelope<Integer> merged = adapter.invokeManyToOne(Multi.createFrom().items(first, second), context)
+            .await().atMost(Duration.ofSeconds(2));
+
+        assertEquals(3, merged.payload());
+        assertEquals("item-a,item-b", merged.meta().get("previousItemIds"));
     }
 
     @Test

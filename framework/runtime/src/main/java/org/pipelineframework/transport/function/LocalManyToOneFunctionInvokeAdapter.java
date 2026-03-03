@@ -209,9 +209,16 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
                 outputPayloadModel,
                 outputPayloadModelVersion);
         }
-        String lineageDigest = ordered.stream()
-            .map(envelope -> AdapterUtils.normalizeOrDefault(envelope.itemId(), "item"))
-            .collect(Collectors.joining("|"));
+        StringBuilder lineageDigestBuilder = new StringBuilder();
+        for (TraceEnvelope<I> envelope : ordered) {
+            String normalizedItemId = AdapterUtils.normalizeOrDefault(envelope.itemId(), "item");
+            lineageDigestBuilder
+                .append('#')
+                .append(normalizedItemId.length())
+                .append(':')
+                .append(normalizedItemId);
+        }
+        String lineageDigest = lineageDigestBuilder.toString();
         return AdapterUtils.deterministicId(
             "invoke-many-to-one",
             traceId,
@@ -241,7 +248,9 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
             return "";
         }
         return envelope.meta().entrySet().stream()
-            .sorted(Map.Entry.comparingByKey())
+            .sorted(Comparator
+                .comparing((Map.Entry<String, String> entry) -> AdapterUtils.normalizeOrDefault(entry.getKey(), ""))
+                .thenComparing(entry -> AdapterUtils.normalizeOrDefault(entry.getValue(), "")))
             .map(entry -> AdapterUtils.normalizeOrDefault(entry.getKey(), "")
                 + "=" + AdapterUtils.normalizeOrDefault(entry.getValue(), ""))
             .collect(Collectors.joining(";"));
