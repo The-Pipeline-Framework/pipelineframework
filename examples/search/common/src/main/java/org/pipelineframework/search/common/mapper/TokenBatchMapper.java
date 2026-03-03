@@ -26,7 +26,7 @@ public interface TokenBatchMapper extends org.pipelineframework.mapper.Mapper<To
 
   TokenBatchDto fromGrpc(org.pipelineframework.search.grpc.TokenizeContentSvc.TokenBatch grpc);
 
-  @BeforeMapping
+  `@BeforeMapping`
   default void validateTokenBatchDto(TokenBatchDto dto) {
     if (dto == null) {
       return;
@@ -34,8 +34,14 @@ public interface TokenBatchMapper extends org.pipelineframework.mapper.Mapper<To
     if (dto.getBatchIndex() == null) {
       throw new IllegalArgumentException("TokenBatchDto.batchIndex must not be null");
     }
+    if (dto.getBatchIndex() < 0) {
+      throw new IllegalArgumentException("TokenBatchDto.batchIndex must be >= 0");
+    }
     if (dto.getTokenCount() == null) {
       throw new IllegalArgumentException("TokenBatchDto.tokenCount must not be null");
+    }
+    if (dto.getTokenCount() <= 0) {
+      throw new IllegalArgumentException("TokenBatchDto.tokenCount must be > 0");
     }
   }
 
