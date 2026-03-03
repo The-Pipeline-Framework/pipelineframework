@@ -57,7 +57,12 @@ At build time, TPF:
 5. Normalises return metadata to reactive shape (`Uni<T>` / `Multi<T>`).
 6. Generates invocation beans for executable operators.
 
-Validation fails fast when class/method cannot be resolved, method contracts are invalid, or return generic forms are unsupported: nested generics (`List<List<Foo>>`), wildcard returns (`List<?>`, `List<? extends Foo>`), raw types (`List`), unresolved type variables (`T`), and generic arrays (`T[]`). Simple concrete parameterized returns such as `List<Foo>` and `Map<String, Foo>` are supported.
+Validation fails fast in the following cases:
+- class or method cannot be resolved,
+- method contracts are invalid,
+- unsupported return generic forms are used: nested generics (`List<List<Foo>>`), wildcard returns (`List<?>`, `List<? extends Foo>`), raw types (`List`), unresolved type variables (`T`), or generic arrays (`T[]`).
+
+Simple concrete parameterized returns such as `List<Foo>` and `Map<String, Foo>` are supported.
 
 ## Current Invocation Scope
 
@@ -72,7 +77,9 @@ Streaming operator invocation is planned, but unary covers the current productio
 Operator category does not select transport.
 
 - REST transport: allowed for operator steps.
-- gRPC transport: requires protobuf descriptors and mapper-compatible bindings for delegated/operator paths (see [Application Configuration](/guide/application/configuration)); mapper-compatible bindings means generated protobuf/service bindings must match delegated/operator routing conventions (field/service naming) so RPC requests map to the intended operator implementation.
+- gRPC transport: requires protobuf descriptors and mapper-compatible bindings for delegated/operator paths (see [Application Configuration](/guide/application/configuration)).
+- Mapper-compatible bindings mean generated protobuf/service bindings must match delegated/operator routing conventions (field/service naming).
+- This ensures RPC requests map to the intended operator implementation.
 - `NON_REACTIVE` and `REACTIVE` categories follow the same transport prerequisites.
 
 ## Related

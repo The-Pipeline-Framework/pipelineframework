@@ -33,8 +33,14 @@ public class TokenBatch extends BaseEntity implements Serializable {
     if (batchIndex == null) {
       throw new IllegalStateException("batchIndex is required");
     }
+    if (batchIndex < 0) {
+      throw new IllegalStateException("batchIndex must be >= 0");
+    }
     if (tokenCount == null) {
       throw new IllegalStateException("tokenCount is required");
+    }
+    if (tokenCount <= 0) {
+      throw new IllegalStateException("tokenCount must be > 0");
     }
   }
 }

@@ -38,7 +38,7 @@ The key rule is transport orthogonality: operator category affects invocation ad
 
 ## Practical Constraints (Current)
 
-- Unary operator invocation path is the primary supported execution shape.
+- Unary operator invocation path is the primary execution shape currently supported.
 - Operator classes must be available and indexed on the build classpath.
 - gRPC paths require descriptor availability and mapper-compatible bindings.
 

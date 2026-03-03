@@ -227,8 +227,11 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
     private Comparator<TraceEnvelope<I>> lineageOrder() {
         // Merge lineage is deterministic: inputs are ordered by itemId then idempotencyKey.
         // This ordering drives previousItemRef, previousItemIds metadata, merged itemId, and idempotency key.
-        @SuppressWarnings("unchecked")
-        Comparator<TraceEnvelope<I>> comparator = (Comparator<TraceEnvelope<I>>) (Comparator<?>) LINEAGE_ORDER;
-        return comparator;
+        return typedComparator(LINEAGE_ORDER);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> Comparator<T> typedComparator(Comparator<?> comparator) {
+        return (Comparator<T>) comparator;
     }
 }

@@ -156,7 +156,7 @@ public class ProcessIndexDocumentService
       return Uni.createFrom().failure(new IllegalArgumentException("all token batches must share the same docId"));
     }
     List<TokenBatch> orderedBatches = orderBatchesForAggregation(batches);
-    FailureDirective directive = evaluateFailureDirective(batches, docId);
+    FailureDirective directive = evaluateFailureDirective(orderedBatches, docId);
     if (directive != null) {
       return Uni.createFrom().failure(directive.toException());
     }
