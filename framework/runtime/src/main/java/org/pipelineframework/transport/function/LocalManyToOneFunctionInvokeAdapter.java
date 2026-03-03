@@ -213,9 +213,16 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
                 outputPayloadModel,
                 outputPayloadModelVersion);
         }
-        String lineageDigest = ordered.stream()
-            .map(envelope -> AdapterUtils.normalizeOrDefault(envelope.itemId(), "item"))
-            .collect(Collectors.joining("|"));
+        StringBuilder lineageDigestBuilder = new StringBuilder();
+        for (TraceEnvelope<I> envelope : ordered) {
+            String normalizedItemId = AdapterUtils.normalizeOrDefault(envelope.itemId(), "item");
+            lineageDigestBuilder
+                .append('#')
+                .append(normalizedItemId.length())
+                .append(':')
+                .append(normalizedItemId);
+        }
+        String lineageDigest = lineageDigestBuilder.toString();
         return AdapterUtils.deterministicId(
             "invoke-many-to-one",
             traceId,
@@ -225,9 +232,35 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
     }
 
     private Comparator<TraceEnvelope<I>> lineageOrder() {
-        // Merge lineage is deterministic: inputs are ordered by itemId then idempotencyKey.
+        // Merge lineage is deterministic: inputs are ordered by stable envelope attributes.
         // This ordering drives previousItemRef, previousItemIds metadata, merged itemId, and idempotency key.
-        return typedComparator(LINEAGE_ORDER);
+        return LocalManyToOneFunctionInvokeAdapter.<TraceEnvelope<I>>typedComparator(LINEAGE_ORDER)
+            .thenComparing(envelope -> AdapterUtils.normalizeOrDefault(envelope.traceId(), ""))
+            .thenComparing(envelope -> AdapterUtils.normalizeOrDefault(envelope.payloadModel(), ""))
+            .thenComparing(envelope -> AdapterUtils.normalizeOrDefault(envelope.payloadModelVersion(), ""))
+            .thenComparing(envelope -> envelope.previousItemRef() == null
+                ? ""
+                : AdapterUtils.normalizeOrDefault(envelope.previousItemRef().previousItemId(), ""))
+            .thenComparing(this::metaFingerprint)
+            .thenComparing(this::payloadFingerprint);
+    }
+
+    private String metaFingerprint(TraceEnvelope<I> envelope) {
+        if (envelope.meta() == null || envelope.meta().isEmpty()) {
+            return "";
+        }
+        return envelope.meta().entrySet().stream()
+            .sorted(Comparator
+                .comparing((Map.Entry<String, String> entry) -> AdapterUtils.normalizeOrDefault(entry.getKey(), ""))
+                .thenComparing(entry -> AdapterUtils.normalizeOrDefault(entry.getValue(), "")))
+            .map(entry -> AdapterUtils.normalizeOrDefault(entry.getKey(), "")
+                + "=" + AdapterUtils.normalizeOrDefault(entry.getValue(), ""))
+            .collect(Collectors.joining(";"));
+    }
+
+    private String payloadFingerprint(TraceEnvelope<I> envelope) {
+        Object payload = envelope.payload();
+        return payload == null ? "" : payload.getClass().getName() + ":" + String.valueOf(payload);
     }
 
     @SuppressWarnings("unchecked")

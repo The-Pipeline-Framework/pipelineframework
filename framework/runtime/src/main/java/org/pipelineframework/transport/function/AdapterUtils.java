@@ -47,18 +47,17 @@ final class AdapterUtils {
     }
 
     static String deterministicId(String namespace, String... components) {
-        String normalizedNamespace = normalizeOrDefault(namespace, "lineage");
         StringBuilder builder = new StringBuilder();
-        appendFramedComponent(builder, normalizedNamespace);
+        appendFramed(builder, normalizeOrDefault(namespace, "lineage"));
         if (components != null) {
             for (String component : components) {
-                appendFramedComponent(builder, normalizeOrDefault(component, ""));
+                appendFramed(builder, normalizeOrDefault(component, ""));
             }
         }
         return UUID.nameUUIDFromBytes(builder.toString().getBytes(StandardCharsets.UTF_8)).toString();
     }
 
-    private static void appendFramedComponent(StringBuilder builder, String value) {
+    private static void appendFramed(StringBuilder builder, String value) {
         builder.append('#').append(value.length()).append(':').append(value);
     }
 
