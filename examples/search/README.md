@@ -104,6 +104,7 @@ The reduced `IndexAck` now carries aggregate document signals:
 - `tokenBatchCount`: how many batches participated in fan-in.
 - `uniqueTokenCount`: unique vocabulary size for the reduced document.
 - `topToken`: most frequent token across all batches; when frequencies tie, the lexicographically smallest token is selected.
+- fan-in input invariants: each `TokenBatch` must have `batchIndex >= 0` and `tokenCount > 0`; malformed batches fail fast before aggregation.
 
 This keeps the lane business-relevant (document-level indexing summary), not just structural fan-out/fan-in.
 

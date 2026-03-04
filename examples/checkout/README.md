@@ -18,6 +18,16 @@ This mirrors the TPF checkpoint model:
 - Intra-pipeline consistency is guaranteed by pipeline completion.
 - Cross-pipeline composition is explicit and policy-driven.
 
+## Canonical lane role
+
+This lane is the executable FTGo progression starter and CI gate for connector semantics:
+
+- deterministic lineage at pipeline handoff,
+- strict idempotency/dedup at connector boundaries,
+- gRPC ingest handoff correctness.
+
+The full FTGo clone target extends this lane with additional bounded contexts (consumer validation, restaurant acceptance, kitchen, dispatch, delivery, payment, and explicit failure pipelines).
+
 ## Config files
 
 - `config/create-order-pipeline.yaml`
@@ -40,9 +50,9 @@ Build them explicitly from `examples/checkout` while the reference implementatio
 
 ## Next implementation steps
 
-1. Add connector policies (idempotency + backpressure) before production-style sync composition.
-2. Add operational controls for the bridge (enable/disable flag, reconnect/backoff tuning, metrics).
-3. Add end-to-end workflow assertions that include business service execution (not only bridge-level handoff).
+1. Expand from checkout/deliver to full FTGo bounded-context chain.
+2. Add parity E2E for REST, gRPC, and FUNCTION/LAMBDA execution paths.
+3. Add observer/tap runtime assertions on checkpoint vs mid-step outputs.
 
 ## Testing
 
@@ -54,9 +64,16 @@ Bridge behavior is covered in two modes:
 - Real gRPC handoff mode (create bridge streams into an embedded downstream gRPC `ingest` endpoint):
   - `CreateToDeliverGrpcBridgeE2ETest`
 
-Run all checkout bridge tests:
+Run the stable checkout deliver bridge smoke test:
 
-`./mvnw -f examples/checkout/pom.xml -pl create-order-orchestrator-svc,deliver-order-orchestrator-svc -am -Dtest=CreateToDeliverBridgeE2ETest,CreateToDeliverGrpcBridgeE2ETest,DeliverForwardBridgeE2ETest -Dsurefire.failIfNoSpecifiedTests=false test`
+`./mvnw -f examples/checkout/pom.xml -pl deliver-order-orchestrator-svc -am -Dtest=DeliverForwardBridgeE2ETest -Dsurefire.failIfNoSpecifiedTests=false test`
+
+CI also runs this lane via reusable workflow:
+
+- `.github/workflows/e2e-checkout-ftgo-smoke.yml`
+
+The create-order bridge lane remains part of the FTGo clone target.
+It is tracked for follow-up once generated orchestrator-client MANY_TO_ONE shape compatibility is aligned.
 
 ## Notes
 

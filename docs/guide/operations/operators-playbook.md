@@ -30,6 +30,23 @@ Optional example path (Search reference project):
   -DskipTests compile
 ```
 
+FTGo reference command paths:
+
+```bash
+# Lineage determinism checks (runtime focus)
+./mvnw -f framework/pom.xml -pl runtime -Dtest=FunctionTransportAdaptersTest test
+
+# Parity checks (FUNCTION local/remote routing)
+./mvnw -f framework/pom.xml -pl runtime -Dtest=FunctionTransportContextTest,InvocationModeRoutingParityTest test
+
+# Checkout bridge parity smoke
+./mvnw -f examples/checkout/pom.xml -pl create-order-orchestrator-svc,deliver-order-orchestrator-svc -am test -DskipITs
+
+# Branching lane reliability checks
+./mvnw -f examples/search/common/pom.xml install -DskipTests
+./mvnw -f examples/search/index-document-svc/pom.xml -Dtest=ProcessIndexDocumentServiceReliabilityTest test
+```
+
 ## Run Modes and Command Paths
 
 ### Compute/REST mode

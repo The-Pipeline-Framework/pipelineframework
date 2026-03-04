@@ -164,7 +164,7 @@ public class LocalClientStepRenderer implements PipelineRenderer<LocalBinding> {
                 clientStepBuilder.addMethod(applyOneToManyMethod);
             }
             case STREAMING_UNARY -> {
-                MethodSpec applyBatchMultiMethod = MethodSpec.methodBuilder("applyBatchMulti")
+                MethodSpec applyReduceMethod = MethodSpec.methodBuilder("applyReduce")
                     .addAnnotation(Override.class)
                     .addModifiers(Modifier.PUBLIC)
                     .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputType))
@@ -172,7 +172,7 @@ public class LocalClientStepRenderer implements PipelineRenderer<LocalBinding> {
                     .addStatement("return $T.traceUnary($S, $S, this.service.process(inputs))",
                         tracing, rpcServiceName, rpcMethodName)
                     .build();
-                clientStepBuilder.addMethod(applyBatchMultiMethod);
+                clientStepBuilder.addMethod(applyReduceMethod);
             }
             case STREAMING_STREAMING -> {
                 MethodSpec applyTransformMethod = MethodSpec.methodBuilder("applyTransform")

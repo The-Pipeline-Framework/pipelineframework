@@ -45,6 +45,9 @@ public final class PipelineContextHeaders {
     /** Header name for optional parent lineage item identifier. */
     public static final String TPF_PARENT_ITEM_ID = "x-tpf-parent-item-id";
 
+    /**
+     * Prevents instantiation of this utility class.
+     */
     private PipelineContextHeaders() {
     }
 }
