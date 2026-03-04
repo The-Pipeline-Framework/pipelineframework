@@ -127,8 +127,8 @@ Behavior rules:
 - JSON remote behavior remains default unless this protocol is explicitly enabled
 
 Successful response contract:
-- success returns raw protobuf bytes (`application/x-protobuf`) from the remote handler response payload.
-- malformed or missing canonical header values should be rejected with `4xx` and a deterministic failure envelope.
+- success payload must follow the current adapter decoder contract: protobuf `google.protobuf.BytesValue` whose `value` bytes contain UTF-8 JSON for the envelope payload.
+- malformed/missing canonical headers should be rejected with deterministic `4xx` responses and failure envelopes; non-conforming protobuf payloads should also fail deterministically (`4xx` for validation/contract errors, `5xx` for unexpected server failures).
 - validate and sanitize incoming header values (including numeric fields), and keep TLS plus gateway/signature validation in place to reduce header injection/tampering risk.
 
 ## ID Ownership and Idempotency Boundaries

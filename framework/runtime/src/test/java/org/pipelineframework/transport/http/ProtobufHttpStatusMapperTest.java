@@ -17,6 +17,7 @@
 package org.pipelineframework.transport.http;
 
 import com.google.rpc.Code;
+import com.google.rpc.RequestInfo;
 import com.google.rpc.Status;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.step.NonRetryableException;
@@ -44,7 +45,17 @@ class ProtobufHttpStatusMapperTest {
         assertEquals(Code.FAILED_PRECONDITION_VALUE, status.getCode());
         assertEquals(412, ProtobufHttpStatusMapper.toHttpStatus(status));
         assertTrue(status.getMessage().contains("do not retry"));
-        assertTrue(status.getMessage().contains("exec-2") || status.getDetailsCount() > 0);
+        assertTrue(status.getMessage().contains("exec-2")
+            || status.getDetailsList().stream().anyMatch(detail -> {
+                if (detail.is(RequestInfo.class)) {
+                    try {
+                        return detail.unpack(RequestInfo.class).getRequestId().contains("exec-2");
+                    } catch (com.google.protobuf.InvalidProtocolBufferException ignored) {
+                        return false;
+                    }
+                }
+                return false;
+            }));
     }
 
     @Test
@@ -55,7 +66,17 @@ class ProtobufHttpStatusMapperTest {
         assertEquals(Code.INTERNAL_VALUE, status.getCode());
         assertEquals(500, ProtobufHttpStatusMapper.toHttpStatus(status));
         assertTrue(status.getMessage().contains("boom"));
-        assertTrue(status.getMessage().contains("step-3") || status.getDetailsCount() > 0);
+        assertTrue(status.getMessage().contains("exec-3")
+            || status.getDetailsList().stream().anyMatch(detail -> {
+                if (detail.is(RequestInfo.class)) {
+                    try {
+                        return detail.unpack(RequestInfo.class).getRequestId().contains("exec-3");
+                    } catch (com.google.protobuf.InvalidProtocolBufferException ignored) {
+                        return false;
+                    }
+                }
+                return false;
+            }));
     }
 
     @Test

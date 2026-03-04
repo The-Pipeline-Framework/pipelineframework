@@ -17,6 +17,7 @@
 package org.pipelineframework.context.rest;
 
 import java.util.List;
+import java.util.Objects;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.core.MultivaluedMap;
 
@@ -183,6 +184,6 @@ public class PipelineContextClientHeadersFactory implements ClientHeadersFactory
     }
 
     private String toStringValue(Object value) {
-        return value == null ? null : value.toString();
+        return Objects.toString(value, null);
     }
 }

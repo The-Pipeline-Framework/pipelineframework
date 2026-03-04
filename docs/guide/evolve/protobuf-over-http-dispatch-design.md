@@ -9,7 +9,7 @@ For every outbound dispatch, orchestrator must emit:
 - `x-tpf-execution-id`
 - `x-tpf-idempotency-key`
 - `x-tpf-retry-attempt`
-- `x-tpf-deadline-epoch-ms`
+- `x-tpf-deadline-epoch-ms` (optional; when absent, receiver executes without deadline guard)
 - `x-tpf-dispatch-ts-epoch-ms`
 - `x-tpf-parent-item-id` (optional)
 

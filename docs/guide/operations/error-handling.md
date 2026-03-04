@@ -150,7 +150,7 @@ The persistence plugin applies this automatically:
 ### Protobuf-over-HTTP Failure Envelope
 
 For unary Protobuf-over-HTTP paths, terminal failures are encoded as `google.rpc.Status` and mapped automatically by TPF runtime exception mappers.
-The list below is representative of explicit mappings; any unspecified/unknown code defaults to `500`.
+Codes not explicitly mapped by runtime `ProtobufHttpStatusMapper` default to `500`.
 
 - `INVALID_ARGUMENT` -> `400`
 - `FAILED_PRECONDITION` -> `412`
@@ -170,6 +170,7 @@ Operationally relevant metadata is propagated with canonical headers:
 - `x-tpf-retry-attempt`: 0-based retry/redelivery attempt counter.
 - `x-tpf-deadline-epoch-ms`: absolute UTC deadline as Unix epoch milliseconds.
 - `x-tpf-dispatch-ts-epoch-ms`: UTC dispatch timestamp as Unix epoch milliseconds.
+- `x-tpf-parent-item-id` (optional): lineage parent item id for split/merge tracing.
 
 Use these fields to correlate retries, duplicate deliveries, and deadline-expired failures across transport boundaries.
 
@@ -182,6 +183,7 @@ x-tpf-idempotency-key: checkout:deliver:order-123:0
 x-tpf-retry-attempt: 1
 x-tpf-deadline-epoch-ms: 1762432335123
 x-tpf-dispatch-ts-epoch-ms: 1762432329123
+x-tpf-parent-item-id: order-123:split-1
 ```
 
 ### Circuit Breaker Pattern

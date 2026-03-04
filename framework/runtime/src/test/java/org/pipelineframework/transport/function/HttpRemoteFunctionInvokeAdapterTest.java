@@ -206,6 +206,40 @@ class HttpRemoteFunctionInvokeAdapterTest {
     }
 
     @Test
+    void surfacesProtobufStatusOnHttpFailureWithoutContentType() throws Exception {
+        Status status = Status.newBuilder()
+            .setCode(Code.INVALID_ARGUMENT_VALUE)
+            .setMessage("invalid payload")
+            .build();
+
+        try (ServerHandle server = startServer(exchange -> {
+            byte[] response = status.toByteArray();
+            exchange.sendResponseHeaders(400, response.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(response);
+            }
+        })) {
+            HttpRemoteFunctionInvokeAdapter<Integer, Integer> adapter = new HttpRemoteFunctionInvokeAdapter<>();
+            FunctionTransportContext context = FunctionTransportContext.of(
+                "req-remote-failure-no-ct",
+                "handler",
+                "invoke",
+                Map.of(
+                    FunctionTransportContext.ATTR_TARGET_URL, server.url(),
+                    FunctionTransportContext.ATTR_TRANSPORT_PROTOCOL, "PROTOBUF_HTTP_V1"));
+
+            TraceEnvelope<Integer> input = TraceEnvelope.root(
+                "trace-local", "item-local", "search.in", "v1", "idem-local", 5);
+
+            IllegalStateException ex = assertThrows(
+                IllegalStateException.class,
+                () -> adapter.invokeOneToOne(input, context).await().atMost(Duration.ofSeconds(2)));
+            assertTrue(ex.getMessage().contains("INVALID_ARGUMENT"));
+            assertTrue(ex.getMessage().contains("invalid payload"));
+        }
+    }
+
+    @Test
     void failsWhenTargetUrlIsMissing() {
         HttpRemoteFunctionInvokeAdapter<Integer, Integer> adapter = new HttpRemoteFunctionInvokeAdapter<>();
         FunctionTransportContext context = FunctionTransportContext.of("req-remote-3", "handler", "invoke");
