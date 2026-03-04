@@ -23,9 +23,12 @@ import jakarta.ws.rs.client.ClientRequestFilter;
 import jakarta.ws.rs.ext.Provider;
 
 import io.quarkus.arc.Unremovable;
+import java.util.Objects;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHeaders;
 import org.pipelineframework.context.PipelineContextHolder;
+import org.pipelineframework.context.TransportDispatchMetadata;
+import org.pipelineframework.context.TransportDispatchMetadataHolder;
 
 /**
  * Propagates pipeline context headers on REST client requests.
@@ -50,11 +53,29 @@ public class PipelineContextClientRequestFilter implements ClientRequestFilter {
         putIfPresent(requestContext, PipelineContextHeaders.VERSION, context.versionTag());
         putIfPresent(requestContext, PipelineContextHeaders.REPLAY, context.replayMode());
         putIfPresent(requestContext, PipelineContextHeaders.CACHE_POLICY, context.cachePolicy());
+        TransportDispatchMetadata metadata = TransportDispatchMetadataHolder.get();
+        if (metadata != null) {
+            putIfPresent(requestContext, PipelineContextHeaders.TPF_CORRELATION_ID, metadata.correlationId());
+            putIfPresent(requestContext, PipelineContextHeaders.TPF_EXECUTION_ID, metadata.executionId());
+            putIfPresent(requestContext, PipelineContextHeaders.TPF_IDEMPOTENCY_KEY, metadata.idempotencyKey());
+            putIfPresent(requestContext, PipelineContextHeaders.TPF_RETRY_ATTEMPT, toStringValue(metadata.retryAttempt()));
+            putIfPresent(requestContext, PipelineContextHeaders.TPF_DEADLINE_EPOCH_MS, toStringValue(metadata.deadlineEpochMs()));
+            putIfPresent(requestContext, PipelineContextHeaders.TPF_DISPATCH_TS_EPOCH_MS, toStringValue(metadata.dispatchTsEpochMs()));
+            putIfPresent(requestContext, PipelineContextHeaders.TPF_PARENT_ITEM_ID, metadata.parentItemId());
+        }
     }
 
     private void putIfPresent(ClientRequestContext requestContext, String name, String value) {
+        Object existing = requestContext.getHeaders().getFirst(name);
+        if (existing instanceof String existingValue && !existingValue.isBlank()) {
+            return;
+        }
         if (value != null && !value.isBlank()) {
             requestContext.getHeaders().putSingle(name, value);
         }
+    }
+
+    private String toStringValue(Object value) {
+        return Objects.toString(value, null);
     }
 }

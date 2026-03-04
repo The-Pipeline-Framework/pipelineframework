@@ -147,6 +147,45 @@ The persistence plugin applies this automatically:
 - Non-transient database errors are wrapped in `NonRetryableException`.
 - Transient connectivity errors are retried according to the step configuration.
 
+### Protobuf-over-HTTP Failure Envelope
+
+For unary Protobuf-over-HTTP paths, terminal failures are encoded as `google.rpc.Status` and mapped automatically by TPF runtime exception mappers.
+Codes not explicitly mapped by runtime `ProtobufHttpStatusMapper` default to `500`.
+
+- `INVALID_ARGUMENT` -> `400`
+- `FAILED_PRECONDITION` -> `412`
+- `NOT_FOUND` -> `404`
+- `ALREADY_EXISTS` -> `409`
+- `UNAUTHENTICATED` -> `401`
+- `PERMISSION_DENIED` -> `403`
+- `DEADLINE_EXCEEDED` -> `504`
+- `UNAVAILABLE` -> `503`
+- `INTERNAL` -> `500`
+
+Operationally relevant metadata is propagated with canonical headers:
+
+- `x-tpf-correlation-id`: immutable business-flow correlation id across retries/replays.
+- `x-tpf-execution-id`: orchestrator execution instance id for the active run.
+- `x-tpf-idempotency-key`: stable deduplication token for at-least-once dispatch.
+- `x-tpf-retry-attempt`: 0-based retry/redelivery attempt counter.
+- `x-tpf-deadline-epoch-ms`: absolute UTC deadline as Unix epoch milliseconds.
+- `x-tpf-dispatch-ts-epoch-ms`: UTC dispatch timestamp as Unix epoch milliseconds.
+- `x-tpf-parent-item-id` (optional): lineage parent item id for split/merge tracing.
+
+Use these fields to correlate retries, duplicate deliveries, and deadline-expired failures across transport boundaries.
+
+Example response headers:
+
+```http
+x-tpf-correlation-id: 2ad0f2d0-8f8f-4f6c-9b54-650df36b58aa
+x-tpf-execution-id: 6f5bf8fd-10a5-4e30-8f79-b757ad7f6ad2
+x-tpf-idempotency-key: checkout:deliver:order-123:0
+x-tpf-retry-attempt: 1
+x-tpf-deadline-epoch-ms: 1762432335123
+x-tpf-dispatch-ts-epoch-ms: 1762432329123
+x-tpf-parent-item-id: order-123:split-1
+```
+
 ### Circuit Breaker Pattern
 
 Implement circuit breaker for external service calls:
