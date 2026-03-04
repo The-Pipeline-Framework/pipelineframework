@@ -130,4 +130,51 @@ class FunctionTransportContextTest {
         assertTrue(context.targetModule().isEmpty());
         assertTrue(context.targetHandler().isEmpty());
     }
+
+    @Test
+    void requiresNonNullRequestId() {
+        assertThrows(NullPointerException.class, () -> FunctionTransportContext.of(null, "fn", "stage"));
+    }
+
+    @Test
+    void defaultsNullFunctionNameAndStageToEmpty() {
+        FunctionTransportContext context = FunctionTransportContext.of("req", null, null);
+        assertEquals("", context.functionName());
+        assertEquals("", context.stage());
+    }
+
+    @Test
+    void resolvesCorrelationId() {
+        FunctionTransportContext context = FunctionTransportContext.of(
+            "req", "fn", "stage",
+            Map.of(FunctionTransportContext.ATTR_CORRELATION_ID, "corr-123"));
+        assertTrue(context.correlationId().isPresent());
+        assertEquals("corr-123", context.correlationId().get());
+    }
+
+    @Test
+    void resolvesRetryAttemptAsInteger() {
+        FunctionTransportContext context = FunctionTransportContext.of(
+            "req", "fn", "stage",
+            Map.of(FunctionTransportContext.ATTR_RETRY_ATTEMPT, "3"));
+        assertTrue(context.retryAttempt().isPresent());
+        assertEquals(3, context.retryAttempt().get());
+    }
+
+    @Test
+    void returnsEmptyRetryAttemptForInvalidNumber() {
+        FunctionTransportContext context = FunctionTransportContext.of(
+            "req", "fn", "stage",
+            Map.of(FunctionTransportContext.ATTR_RETRY_ATTEMPT, "not-a-number"));
+        assertTrue(context.retryAttempt().isEmpty());
+    }
+
+    @Test
+    void resolvesDeadlineEpochMs() {
+        FunctionTransportContext context = FunctionTransportContext.of(
+            "req", "fn", "stage",
+            Map.of(FunctionTransportContext.ATTR_DEADLINE_EPOCH_MS, "2000000000000"));
+        assertTrue(context.deadlineEpochMs().isPresent());
+        assertEquals(2000000000000L, context.deadlineEpochMs().get());
+    }
 }
