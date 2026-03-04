@@ -113,4 +113,23 @@ class PipelineContextClientHeadersFactoryTest {
 
         assertNull(result);
     }
+
+    @Test
+    void propagatesTransportDispatchMetadataHeaders() {
+        PipelineContextClientHeadersFactory factory = new PipelineContextClientHeadersFactory();
+        MultivaluedMap<String, String> incoming = new MultivaluedHashMap<>();
+        MultivaluedMap<String, String> outgoing = new MultivaluedHashMap<>();
+
+        incoming.add(PipelineContextHeaders.TPF_CORRELATION_ID, "corr-123");
+        incoming.add(PipelineContextHeaders.TPF_EXECUTION_ID, "exec-456");
+        incoming.add(PipelineContextHeaders.TPF_IDEMPOTENCY_KEY, "idem-789");
+        incoming.add(PipelineContextHeaders.TPF_RETRY_ATTEMPT, "2");
+
+        MultivaluedMap<String, String> result = factory.update(incoming, outgoing);
+
+        assertEquals("corr-123", result.getFirst(PipelineContextHeaders.TPF_CORRELATION_ID));
+        assertEquals("exec-456", result.getFirst(PipelineContextHeaders.TPF_EXECUTION_ID));
+        assertEquals("idem-789", result.getFirst(PipelineContextHeaders.TPF_IDEMPOTENCY_KEY));
+        assertEquals("2", result.getFirst(PipelineContextHeaders.TPF_RETRY_ATTEMPT));
+    }
 }
