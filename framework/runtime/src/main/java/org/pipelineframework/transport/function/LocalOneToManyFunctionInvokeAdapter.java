@@ -49,6 +49,19 @@ public final class LocalOneToManyFunctionInvokeAdapter<I, O> implements Function
         this.outputPayloadModelVersion = AdapterUtils.normalizeOrDefault(outputPayloadModelVersion, "v1");
     }
 
+    /**
+     * Invokes the local 1→N function for a single input envelope and returns a stream of output envelopes
+     * enriched with trace identifiers and idempotency keys.
+     *
+     * Each item emitted by the delegate is wrapped into a new TraceEnvelope with a deterministic id,
+     * the configured output payload model/version, and an idempotency key derived from the invocation context.
+     *
+     * @param input   the input TraceEnvelope whose payload is passed to the delegate
+     * @param context transport context used to derive trace and idempotency information
+     * @return        a Multi stream of TraceEnvelope objects representing each output item
+     * @throws NullPointerException if {@code input}, {@code context}, {@code input.payload()} is null,
+     *                              if the delegate returns a null Multi, or if the delegate emits a null item
+     */
     @Override
     public Multi<TraceEnvelope<O>> invokeOneToMany(TraceEnvelope<I> input, FunctionTransportContext context) {
         Objects.requireNonNull(input, "input envelope must not be null");
