@@ -2,6 +2,7 @@ package org.pipelineframework.orchestrator;
 
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import jakarta.enterprise.event.Event;
 
@@ -22,14 +23,7 @@ class EventWorkDispatcherTest {
     void setUp() {
         dispatcher = new EventWorkDispatcher();
         mockEvent = mock(Event.class);
-        // Use reflection to inject the mock event
-        try {
-            var field = EventWorkDispatcher.class.getDeclaredField("executionWorkEvent");
-            field.setAccessible(true);
-            field.set(dispatcher, mockEvent);
-        } catch (Exception e) {
-            fail("Failed to inject mock event: " + e.getMessage());
-        }
+        dispatcher.setExecutionWorkEvent(mockEvent);
     }
 
     @Test
@@ -89,9 +83,23 @@ class EventWorkDispatcherTest {
     }
 
     @Test
-    void shutdownStopsScheduler() {
-        // This test verifies shutdown doesn't throw
-        assertDoesNotThrow(() -> dispatcher.shutdown());
+    void shutdownStopsScheduler() throws InterruptedException {
+        CountDownLatch scheduledLatch = new CountDownLatch(1);
+        when(mockEvent.fireAsync(any())).thenAnswer(invocation -> {
+            scheduledLatch.countDown();
+            return null;
+        });
+
+        ExecutionWorkItem scheduledItem = new ExecutionWorkItem("tenant-shutdown", "exec-scheduled");
+        dispatcher.enqueueDelayed(scheduledItem, Duration.ofSeconds(5)).await().indefinitely();
+
+        dispatcher.shutdown();
+
+        assertFalse(scheduledLatch.await(250, TimeUnit.MILLISECONDS));
+        assertThrows(
+            RejectedExecutionException.class,
+            () -> dispatcher.enqueueDelayed(new ExecutionWorkItem("tenant-shutdown", "exec-rejected"), Duration.ofMillis(10))
+                .await().indefinitely());
     }
 
     @Test

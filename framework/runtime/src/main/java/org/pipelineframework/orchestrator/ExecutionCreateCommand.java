@@ -1,5 +1,7 @@
 package org.pipelineframework.orchestrator;
 
+import java.util.Objects;
+
 /**
  * Input command for creating or resolving an async execution.
  *
@@ -16,4 +18,7 @@ public record ExecutionCreateCommand(
     long nowEpochMs,
     long ttlEpochS
 ) {
+    public ExecutionCreateCommand {
+        Objects.requireNonNull(executionKey, "ExecutionCreateCommand.executionKey must not be null");
+    }
 }

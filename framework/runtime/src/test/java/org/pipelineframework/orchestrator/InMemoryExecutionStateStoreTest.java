@@ -134,6 +134,30 @@ class InMemoryExecutionStateStoreTest {
     }
 
     @Test
+    void expiredExecutionIsEvictedForGetAndClaim() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        CreateExecutionResult expired = store.createOrGetExecution(
+                new ExecutionCreateCommand("tenant-a", "key-expired-evict", "payload", now, now / 1000 - 1))
+            .await().indefinitely();
+
+        Optional<ExecutionRecord<Object, Object>> fetched = store.getExecution(
+                "tenant-a",
+                expired.record().executionId())
+            .await().indefinitely();
+        Optional<ExecutionRecord<Object, Object>> claimed = store.claimLease(
+                "tenant-a",
+                expired.record().executionId(),
+                "worker-1",
+                now + 1,
+                1000)
+            .await().indefinitely();
+
+        assertTrue(fetched.isEmpty());
+        assertTrue(claimed.isEmpty());
+    }
+
+    @Test
     void scopedCompositeKeysAvoidTenantAndKeySeparatorCollisions() {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
         long now = System.currentTimeMillis();

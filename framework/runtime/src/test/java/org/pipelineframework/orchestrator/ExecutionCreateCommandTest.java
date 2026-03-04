@@ -80,7 +80,7 @@ class ExecutionCreateCommandTest {
         assertEquals(ttl, command.ttlEpochS());
     }
 
-    `@Test`
+    @Test
     void executionKeyIsPreserved() {
         String key = "custom-idempotency-key-12345";
 
@@ -94,7 +94,7 @@ class ExecutionCreateCommandTest {
         assertEquals(key, command.executionKey());
     }
 
-    `@Test`
+    @Test
     void rejectsNullExecutionKey() {
         long now = System.currentTimeMillis();
         long ttl = now / 1000 + 3600;

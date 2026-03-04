@@ -20,6 +20,10 @@ public class EventWorkDispatcher implements WorkDispatcher {
     @Inject
     Event<ExecutionWorkItem> executionWorkEvent;
 
+    void setExecutionWorkEvent(Event<ExecutionWorkItem> executionWorkEvent) {
+        this.executionWorkEvent = executionWorkEvent;
+    }
+
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
         Thread thread = new Thread(runnable, "tpf-work-dispatcher");
         thread.setDaemon(true);

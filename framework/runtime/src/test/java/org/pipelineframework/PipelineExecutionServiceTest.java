@@ -18,7 +18,7 @@ import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -75,7 +75,7 @@ class PipelineExecutionServiceTest {
             1L,
             1L,
             99999999L);
-        when(executionStateStore.getExecution(anyString(), anyString()))
+        when(executionStateStore.getExecution("tenant-1", "exec-1"))
             .thenReturn(Uni.createFrom().item(Optional.of(record)));
 
         ExecutionStatusDto dto = service.getExecutionStatus("tenant-1", "exec-1").await().indefinitely();
@@ -83,6 +83,7 @@ class PipelineExecutionServiceTest {
         assertNotNull(dto);
         assertEquals("exec-1", dto.executionId());
         assertEquals(ExecutionStatus.RUNNING, dto.status());
+        verify(executionStateStore).getExecution("tenant-1", "exec-1");
     }
 
     private void setField(String fieldName, Object value) throws Exception {

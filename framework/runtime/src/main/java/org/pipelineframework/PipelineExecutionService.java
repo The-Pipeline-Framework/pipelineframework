@@ -338,9 +338,30 @@ public class PipelineExecutionService {
    * @return accepted response payload
    */
   public Uni<RunAsyncAcceptedDto> executePipelineAsync(Object input, String tenantId, String idempotencyKey) {
+    return executePipelineAsync(input, tenantId, idempotencyKey, false);
+  }
+
+  /**
+   * Submits an asynchronous orchestrator execution.
+   *
+   * @param input execution input payload
+   * @param tenantId tenant id from caller context
+   * @param idempotencyKey optional caller idempotency key
+   * @param outputStreaming whether the pipeline output is streaming
+   * @return accepted response payload
+   */
+  public Uni<RunAsyncAcceptedDto> executePipelineAsync(
+      Object input,
+      String tenantId,
+      String idempotencyKey,
+      boolean outputStreaming) {
     if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
       return Uni.createFrom().failure(new IllegalStateException(
           "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
+    }
+    if (outputStreaming) {
+      return Uni.createFrom().failure(new IllegalStateException(
+          "Async queue mode does not support streaming pipeline outputs yet."));
     }
     Object executionInput = normalizeExecutionInput(input);
     RuntimeException inputFailure = validateInputShape(executionInput);
@@ -348,30 +369,33 @@ public class PipelineExecutionService {
       return Uni.createFrom().failure(inputFailure);
     }
     String resolvedTenant = normalizeTenant(tenantId);
-    String executionKey;
-    try {
-      executionKey = resolveExecutionKey(resolvedTenant, input, idempotencyKey);
-    } catch (IllegalArgumentException e) {
-      return Uni.createFrom().failure(new BadRequestException(e.getMessage()));
-    }
     long now = System.currentTimeMillis();
     long ttlEpochS = Instant.ofEpochMilli(now)
         .plus(Duration.ofDays(Math.max(1, orchestratorConfig.executionTtlDays())))
         .getEpochSecond();
-    ExecutionCreateCommand command = new ExecutionCreateCommand(
-        resolvedTenant,
-        executionKey,
-        executionInput,
-        now,
-        ttlEpochS);
-    return executionStateStore.createOrGetExecution(command)
-        .onItem().transformToUni(created -> {
-          Uni<Void> enqueue = created.duplicate()
-              ? Uni.createFrom().voidItem()
-              : workDispatcher.enqueueNow(new ExecutionWorkItem(
-                  created.record().tenantId(),
-                  created.record().executionId()));
-          return enqueue.onItem().transform(ignored -> toRunAccepted(created, now));
+    return resolveExecutionInputPayload(executionInput)
+        .onItem().transformToUni(payload -> {
+          String executionKey;
+          try {
+            executionKey = resolveExecutionKey(resolvedTenant, payload, idempotencyKey);
+          } catch (IllegalArgumentException e) {
+            return Uni.createFrom().failure(new BadRequestException(e.getMessage()));
+          }
+          ExecutionCreateCommand command = new ExecutionCreateCommand(
+              resolvedTenant,
+              executionKey,
+              payload,
+              now,
+              ttlEpochS);
+          return executionStateStore.createOrGetExecution(command)
+              .onItem().transformToUni(created -> {
+                Uni<Void> enqueue = created.duplicate()
+                    ? Uni.createFrom().voidItem()
+                    : workDispatcher.enqueueNow(new ExecutionWorkItem(
+                        created.record().tenantId(),
+                        created.record().executionId()));
+                return enqueue.onItem().transform(ignored -> toRunAccepted(created, now));
+              });
         });
   }
 
@@ -630,6 +654,16 @@ public class PipelineExecutionService {
     return Uni.createFrom().item(input);
   }
 
+  private static Uni<Object> resolveExecutionInputPayload(Object input) {
+    if (input instanceof Uni<?> uni) {
+      return uni.onItem().transform(item -> (Object) item);
+    }
+    if (input instanceof Multi<?> multi) {
+      return multi.collect().asList().onItem().transform(list -> (Object) list);
+    }
+    return Uni.createFrom().item(input);
+  }
+
   private String normalizeTenant(String tenantId) {
     if (tenantId == null || tenantId.isBlank()) {
       return orchestratorConfig.defaultTenant();
@@ -700,8 +734,19 @@ public class PipelineExecutionService {
   }
 
   private Uni<List<?>> runAsyncExecution(Object inputPayload) {
-    return executePipelineStreaming(inputPayload).collect().asList()
-        .onItem().transform(list -> (List<?>) list);
+    Object reactiveInput = inputPayload instanceof List<?> list
+        ? Multi.createFrom().iterable(list)
+        : Uni.createFrom().item(inputPayload);
+    return executePipelineStreaming(reactiveInput)
+        .select().first(2)
+        .collect().asList()
+        .onItem().transformToUni(items -> {
+          if (items.size() > 1) {
+            return Uni.createFrom().failure(
+                new IllegalStateException("Async queue mode does not support streaming pipeline outputs yet."));
+          }
+          return Uni.createFrom().item((List<?>) List.copyOf(items));
+        });
   }
 
   private Uni<Void> handleExecutionFailure(
