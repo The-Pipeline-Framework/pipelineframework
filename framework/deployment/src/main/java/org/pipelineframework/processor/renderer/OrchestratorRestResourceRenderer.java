@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.renderer;
 
 import java.io.IOException;
+import java.util.List;
 import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.*;
@@ -43,6 +44,8 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
         ClassName path = ClassName.get("jakarta.ws.rs", "Path");
         ClassName post = ClassName.get("jakarta.ws.rs", "POST");
         ClassName get = ClassName.get("jakarta.ws.rs", "GET");
+        ClassName pathParam = ClassName.get("jakarta.ws.rs", "PathParam");
+        ClassName headerParam = ClassName.get("jakarta.ws.rs", "HeaderParam");
         ClassName consumes = ClassName.get("jakarta.ws.rs", "Consumes");
         ClassName produces = ClassName.get("jakarta.ws.rs", "Produces");
         ClassName restStream = ClassName.get("org.jboss.resteasy.reactive", "RestStreamElementType");
@@ -50,6 +53,8 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
         ClassName multi = ClassName.get("io.smallrye.mutiny", "Multi");
         ClassName executionService = ClassName.get("org.pipelineframework", "PipelineExecutionService");
         ClassName outputBus = ClassName.get("org.pipelineframework", "PipelineOutputBus");
+        ClassName runAsyncAcceptedDto = ClassName.get("org.pipelineframework.orchestrator.dto", "RunAsyncAcceptedDto");
+        ClassName executionStatusDto = ClassName.get("org.pipelineframework.orchestrator.dto", "ExecutionStatusDto");
 
         ClassName inputType = ClassName.get(binding.basePackage() + ".common.dto", binding.inputTypeName() + "Dto");
         ClassName outputType = ClassName.get(binding.basePackage() + ".common.dto", binding.outputTypeName() + "Dto");
@@ -116,6 +121,71 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
                 ".onItem().invoke(pipelineOutputBus::publish)", outputType)
             .build();
 
+        TypeName asyncInputType = binding.inputStreaming()
+            ? ParameterizedTypeName.get(ClassName.get(List.class), inputType)
+            : inputType;
+        MethodSpec.Builder runAsyncMethod = MethodSpec.methodBuilder("runAsync")
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(post)
+            .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/run-async").build())
+            .returns(ParameterizedTypeName.get(uni, runAsyncAcceptedDto))
+            .addParameter(asyncInputType, "input")
+            .addParameter(ParameterSpec.builder(String.class, "tenantId")
+                .addAnnotation(AnnotationSpec.builder(headerParam)
+                    .addMember("value", "$S", "x-tenant-id")
+                    .build())
+                .build())
+            .addParameter(ParameterSpec.builder(String.class, "idempotencyKey")
+                .addAnnotation(AnnotationSpec.builder(headerParam)
+                    .addMember("value", "$S", "Idempotency-Key")
+                    .build())
+                .build());
+        if (binding.inputStreaming()) {
+            runAsyncMethod.addStatement(
+                "return pipelineExecutionService.executePipelineAsync($T.createFrom().iterable(input), tenantId, idempotencyKey)",
+                multi);
+        } else {
+            runAsyncMethod.addStatement(
+                "return pipelineExecutionService.executePipelineAsync(input, tenantId, idempotencyKey)");
+        }
+
+        MethodSpec statusMethod = MethodSpec.methodBuilder("status")
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(get)
+            .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/executions/{executionId}").build())
+            .returns(ParameterizedTypeName.get(uni, executionStatusDto))
+            .addParameter(ParameterSpec.builder(String.class, "executionId")
+                .addAnnotation(AnnotationSpec.builder(pathParam).addMember("value", "$S", "executionId").build())
+                .build())
+            .addParameter(ParameterSpec.builder(String.class, "tenantId")
+                .addAnnotation(AnnotationSpec.builder(headerParam)
+                    .addMember("value", "$S", "x-tenant-id")
+                    .build())
+                .build())
+            .addStatement("return pipelineExecutionService.getExecutionStatus(tenantId, executionId)")
+            .build();
+
+        TypeName resultReturnType = binding.outputStreaming()
+            ? ParameterizedTypeName.get(uni, ParameterizedTypeName.get(ClassName.get(List.class), outputType))
+            : ParameterizedTypeName.get(uni, outputType);
+        MethodSpec resultMethod = MethodSpec.methodBuilder("result")
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(get)
+            .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/executions/{executionId}/result").build())
+            .returns(resultReturnType)
+            .addParameter(ParameterSpec.builder(String.class, "executionId")
+                .addAnnotation(AnnotationSpec.builder(pathParam).addMember("value", "$S", "executionId").build())
+                .build())
+            .addParameter(ParameterSpec.builder(String.class, "tenantId")
+                .addAnnotation(AnnotationSpec.builder(headerParam)
+                    .addMember("value", "$S", "x-tenant-id")
+                    .build())
+                .build())
+            .addStatement("return pipelineExecutionService.getExecutionResult(tenantId, executionId, $T.class, $L)",
+                outputType,
+                binding.outputStreaming())
+            .build();
+
         MethodSpec subscribeMethod = MethodSpec.methodBuilder("subscribe")
             .addModifiers(Modifier.PUBLIC)
             .addAnnotation(get)
@@ -135,7 +205,10 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
             .addField(executionField)
             .addField(outputBusField)
             .addMethod(runMethod.build())
+            .addMethod(runAsyncMethod.build())
             .addMethod(ingestMethod)
+            .addMethod(statusMethod)
+            .addMethod(resultMethod)
             .addMethod(subscribeMethod)
             .build();
 
