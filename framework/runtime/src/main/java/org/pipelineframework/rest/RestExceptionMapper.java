@@ -61,7 +61,7 @@ public class RestExceptionMapper {
             if (expectsProtobuf(headers)) {
                 TransportDispatchMetadata metadata = TransportDispatchMetadataHolder.get();
                 String executionId = metadata == null ? null : metadata.executionId();
-                LOG.errorf(ex, "Request failed (protobuf envelope), executionId=%s", executionId);
+                logExceptionAtAppropriateLevel(ex, executionId);
                 Status status = ProtobufHttpStatusMapper.fromThrowable(ex, executionId, "rest");
                 return Response.status(ProtobufHttpStatusMapper.toHttpStatus(status))
                     .type(ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF)
@@ -114,7 +114,28 @@ public class RestExceptionMapper {
 
     private boolean containsProtobufMediaType(String value) {
         return value != null && value.toLowerCase(java.util.Locale.ROOT)
-            .contains(ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF.toLowerCase(java.util.Locale.ROOT));
+            .contains(ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF);
+    }
+
+    private void logExceptionAtAppropriateLevel(Exception ex, String executionId) {
+        if (ex instanceof NotFoundException) {
+            LOG.debugf(ex, "Request did not match a REST endpoint (protobuf envelope), executionId=%s", executionId);
+            return;
+        }
+        if (ex instanceof CacheMissException) {
+            LOG.warnf(ex, "Required cache entry missing (protobuf envelope), executionId=%s", executionId);
+            return;
+        }
+        if (ex instanceof CachePolicyViolation) {
+            LOG.warnf(ex, "Cache policy violation (protobuf envelope), executionId=%s", executionId);
+            return;
+        }
+        Throwable root = rootCause(ex);
+        if (root instanceof IllegalArgumentException) {
+            LOG.warnf(ex, "Invalid request (protobuf envelope), executionId=%s", executionId);
+            return;
+        }
+        LOG.errorf(ex, "Unexpected error processing request (protobuf envelope), executionId=%s", executionId);
     }
 
     private Throwable rootCause(Throwable throwable) {
