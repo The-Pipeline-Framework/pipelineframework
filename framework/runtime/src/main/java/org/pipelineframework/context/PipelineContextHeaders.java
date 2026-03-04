@@ -29,6 +29,21 @@ public final class PipelineContextHeaders {
     public static final String CACHE_POLICY = "x-pipeline-cache-policy";
     /** Header name for cache status propagation. */
     public static final String CACHE_STATUS = "x-pipeline-cache-status";
+    /** Canonical Protobuf-over-HTTP transport metadata namespace (intentionally distinct from legacy x-pipeline-*). */
+    /** Header name for immutable end-to-end correlation id. */
+    public static final String TPF_CORRELATION_ID = "x-tpf-correlation-id";
+    /** Header name for orchestrator execution instance id. */
+    public static final String TPF_EXECUTION_ID = "x-tpf-execution-id";
+    /** Header name for idempotency token used for deduplication. */
+    public static final String TPF_IDEMPOTENCY_KEY = "x-tpf-idempotency-key";
+    /** Header name for retry attempt count (0-based). */
+    public static final String TPF_RETRY_ATTEMPT = "x-tpf-retry-attempt";
+    /** Header name for absolute deadline timestamp in epoch milliseconds. */
+    public static final String TPF_DEADLINE_EPOCH_MS = "x-tpf-deadline-epoch-ms";
+    /** Header name for dispatch timestamp in epoch milliseconds. */
+    public static final String TPF_DISPATCH_TS_EPOCH_MS = "x-tpf-dispatch-ts-epoch-ms";
+    /** Header name for optional parent lineage item identifier. */
+    public static final String TPF_PARENT_ITEM_ID = "x-tpf-parent-item-id";
 
     private PipelineContextHeaders() {
     }

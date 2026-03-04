@@ -92,6 +92,45 @@ Current baseline behavior:
 - runtime mapping still controls placement/topology; invocation metadata provides a stable contract for future/optional remote adapters
 - when `REMOTE` is set but no remote adapter is configured, handler wiring should still be treated as local unless an app/runtime-specific adapter overrides it
 
+### Protobuf-over-HTTP (Unary v1) in FUNCTION Remote Paths
+
+For remote function invocation, you can opt into unary Protobuf-over-HTTP.
+This protocol variant requires remote mode and keeps REST as the underlying transport:
+
+```properties
+pipeline.transport=REST
+tpf.function.invocation.mode=REMOTE
+tpf.transport.protocol=PROTOBUF_HTTP_V1
+```
+
+`PROTOBUF_HTTP_V1` only takes effect when `tpf.function.invocation.mode=REMOTE`.
+It configures payload/error encoding (`application/x-protobuf` + `google.rpc.Status`) while REST remains the wire transport.
+
+Choose `PROTOBUF_HTTP_V1` when you need smaller binary payloads, existing protobuf schema reuse, or tighter runtime serialization costs.
+Trade-offs are reduced ad-hoc readability and stricter schema/tooling compatibility requirements compared with JSON.
+
+When enabled:
+- request/response media type is `application/x-protobuf`
+- failure envelope is `google.rpc.Status`
+- canonical dispatch metadata is propagated via headers:
+  - `x-tpf-correlation-id`
+  - `x-tpf-execution-id`
+  - `x-tpf-idempotency-key`
+  - `x-tpf-retry-attempt`
+  - `x-tpf-deadline-epoch-ms`
+  - `x-tpf-dispatch-ts-epoch-ms`
+  - `x-tpf-parent-item-id` (optional)
+
+Behavior rules:
+- correlation id is immutable after ingress
+- deadline is absolute epoch milliseconds
+- JSON remote behavior remains default unless this protocol is explicitly enabled
+
+Successful response contract:
+- success payload must follow the current adapter decoder contract: protobuf `google.protobuf.BytesValue` whose `value` bytes contain UTF-8 JSON for the envelope payload.
+- malformed/missing canonical headers should be rejected with deterministic `4xx` responses and failure envelopes; non-conforming protobuf payloads should also fail deterministically (`4xx` for validation/contract errors, `5xx` for unexpected server failures).
+- validate and sanitize incoming header values (including numeric fields), and keep TLS plus gateway/signature validation in place to reduce header injection/tampering risk.
+
 ## ID Ownership and Idempotency Boundaries
 
 TPF distinguishes between business IDs and transport IDs:

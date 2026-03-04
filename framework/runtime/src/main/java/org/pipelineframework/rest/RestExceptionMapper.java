@@ -18,13 +18,18 @@ package org.pipelineframework.rest;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 
+import com.google.rpc.Status;
 import org.jboss.logging.Logger;
-import org.jboss.resteasy.reactive.RestResponse;
 import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 import org.pipelineframework.cache.CacheMissException;
 import org.pipelineframework.cache.CachePolicyViolation;
+import org.pipelineframework.context.TransportDispatchMetadata;
+import org.pipelineframework.context.TransportDispatchMetadataHolder;
+import org.pipelineframework.transport.http.ProtobufHttpContentTypes;
+import org.pipelineframework.transport.http.ProtobufHttpStatusMapper;
 
 /**
  * Default REST exception mapper used by generated resources.
@@ -51,26 +56,86 @@ public class RestExceptionMapper {
      * @return a RestResponse containing an HTTP status and a human-readable error message
      */
     @ServerExceptionMapper
-    public RestResponse<String> handleException(Exception ex) {
+    public Response handleException(Exception ex, HttpHeaders headers) {
+        try {
+            if (expectsProtobuf(headers)) {
+                TransportDispatchMetadata metadata = TransportDispatchMetadataHolder.get();
+                String executionId = metadata == null ? null : metadata.executionId();
+                logExceptionAtAppropriateLevel(ex, executionId);
+                Status status = ProtobufHttpStatusMapper.fromThrowable(ex, executionId, "rest");
+                return Response.status(ProtobufHttpStatusMapper.toHttpStatus(status))
+                    .type(ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF)
+                    .entity(status.toByteArray())
+                    .build();
+            }
+            if (ex instanceof CacheMissException) {
+                LOG.warn("Required cache entry missing", ex);
+                return Response.status(Response.Status.PRECONDITION_FAILED)
+                    .entity(ex.getMessage())
+                    .build();
+            }
+            if (ex instanceof CachePolicyViolation) {
+                LOG.warn("Cache policy violation", ex);
+                return Response.status(Response.Status.PRECONDITION_FAILED)
+                    .entity(ex.getMessage())
+                    .build();
+            }
+            if (ex instanceof NotFoundException) {
+                LOG.debug("Request did not match a REST endpoint", ex);
+                return Response.status(Response.Status.NOT_FOUND)
+                    .entity("Not Found")
+                    .build();
+            }
+            Throwable rootCause = rootCause(ex);
+            if (rootCause instanceof IllegalArgumentException) {
+                LOG.warn("Invalid request", ex);
+                return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("Invalid request")
+                    .build();
+            }
+            LOG.error("Unexpected error processing request", ex);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                .entity("An unexpected error occurred")
+                .build();
+        } finally {
+            TransportDispatchMetadataHolder.clear();
+        }
+    }
+
+    private boolean expectsProtobuf(HttpHeaders headers) {
+        if (headers == null) {
+            return false;
+        }
+        String accept = headers.getHeaderString("Accept");
+        String requestContentType = headers.getHeaderString("Content-Type");
+        return containsProtobufMediaType(accept)
+            || containsProtobufMediaType(requestContentType);
+    }
+
+    private boolean containsProtobufMediaType(String value) {
+        return value != null && value.toLowerCase(java.util.Locale.ROOT)
+            .contains(ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF);
+    }
+
+    private void logExceptionAtAppropriateLevel(Exception ex, String executionId) {
+        if (ex instanceof NotFoundException) {
+            LOG.debugf(ex, "Request did not match a REST endpoint (protobuf envelope), executionId=%s", executionId);
+            return;
+        }
         if (ex instanceof CacheMissException) {
-            LOG.warn("Required cache entry missing", ex);
-            return RestResponse.status(Response.Status.PRECONDITION_FAILED, ex.getMessage());
+            LOG.warnf(ex, "Required cache entry missing (protobuf envelope), executionId=%s", executionId);
+            return;
         }
         if (ex instanceof CachePolicyViolation) {
-            LOG.warn("Cache policy violation", ex);
-            return RestResponse.status(Response.Status.PRECONDITION_FAILED, ex.getMessage());
+            LOG.warnf(ex, "Cache policy violation (protobuf envelope), executionId=%s", executionId);
+            return;
         }
-        if (ex instanceof NotFoundException) {
-            LOG.debug("Request did not match a REST endpoint", ex);
-            return RestResponse.status(Response.Status.NOT_FOUND, "Not Found");
+        Throwable root = rootCause(ex);
+        if (root instanceof IllegalArgumentException) {
+            LOG.warnf(ex, "Invalid request (protobuf envelope), executionId=%s", executionId);
+            return;
         }
-        Throwable rootCause = rootCause(ex);
-        if (rootCause instanceof IllegalArgumentException) {
-            LOG.warn("Invalid request", ex);
-            return RestResponse.status(Response.Status.BAD_REQUEST, "Invalid request");
-        }
-        LOG.error("Unexpected error processing request", ex);
-        return RestResponse.status(Response.Status.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
+        LOG.errorf(ex, "Unexpected error processing request (protobuf envelope), executionId=%s", executionId);
     }
 
     private Throwable rootCause(Throwable throwable) {
