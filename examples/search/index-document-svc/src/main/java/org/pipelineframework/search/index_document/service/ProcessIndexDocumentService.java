@@ -266,7 +266,7 @@ public class ProcessIndexDocumentService
    * @param batches the token batches to aggregate
    * @return an AggregationSummary whose first element is the number of distinct tokens and whose second element is the most frequent token;
    *         if no tokens are present the unique token count is 0 and the top token is `null`. The top token is chosen by highest frequency,
-   *         with ties broken by selecting the token that is later in natural string order. 
+   *         with ties broken by selecting the lexicographically smaller token (earlier in natural string order).
    */
   private AggregationSummary summarizeTokens(List<TokenBatch> batches) {
     Map<String, Integer> counts = new HashMap<>();

@@ -16,7 +16,9 @@
 
 package org.pipelineframework.transport.function;
 
+import java.math.BigDecimal;
 import java.lang.reflect.Array;
+import java.lang.reflect.Method;
 import java.lang.reflect.RecordComponent;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -307,9 +309,14 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
             return "null";
         }
         if (payload instanceof CharSequence
-                || payload instanceof Number
                 || payload instanceof Boolean
                 || payload instanceof Enum<?>) {
+            return payload.toString();
+        }
+        if (payload instanceof BigDecimal bigDecimal) {
+            return bigDecimal.stripTrailingZeros().toPlainString();
+        }
+        if (payload instanceof Number) {
             return payload.toString();
         }
         if (payload instanceof Map<?, ?> map) {
@@ -376,7 +383,13 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
                         builder.append(',');
                     }
                     RecordComponent component = components[i];
-                    Object value = component.getAccessor().invoke(payload);
+                    Method accessor = component.getAccessor();
+                    try {
+                        accessor.setAccessible(true);
+                    } catch (RuntimeException ignored) {
+                        // Best-effort only; invocation may still work for accessible members.
+                    }
+                    Object value = accessor.invoke(payload);
                     builder.append(component.getName()).append('=').append(canonicalPayload(value, visited));
                 }
                 return builder.append('}').toString();
