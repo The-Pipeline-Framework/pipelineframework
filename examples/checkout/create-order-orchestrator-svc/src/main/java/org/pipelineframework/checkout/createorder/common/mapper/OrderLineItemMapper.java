@@ -6,7 +6,7 @@ import org.pipelineframework.checkout.createorder.grpc.OrderRequestProcessSvc;
 import org.pipelineframework.mapper.Mapper;
 
 @ApplicationScoped
-public class OrderLineItemMapper implements Mapper<OrderRequestProcessSvc.OrderLineItem, OrderLineItem, OrderLineItem> {
+public class OrderLineItemMapper implements Mapper<OrderLineItem, OrderRequestProcessSvc.OrderLineItem> {
     /**
      * Converts a gRPC OrderLineItem into the domain OrderLineItem.
      *
@@ -18,7 +18,7 @@ public class OrderLineItemMapper implements Mapper<OrderRequestProcessSvc.OrderL
      *                                  or if `quantity` is less than or equal to zero
      */
     @Override
-    public OrderLineItem fromGrpc(OrderRequestProcessSvc.OrderLineItem grpc) {
+    public OrderLineItem fromExternal(OrderRequestProcessSvc.OrderLineItem grpc) {
         if (grpc == null) {
             throw new IllegalArgumentException("grpc must not be null");
         }
@@ -47,7 +47,7 @@ public class OrderLineItemMapper implements Mapper<OrderRequestProcessSvc.OrderL
      * @throws IllegalArgumentException if `dto` is null or `dto.sku()` is null or blank
      */
     @Override
-    public OrderRequestProcessSvc.OrderLineItem toGrpc(OrderLineItem dto) {
+    public OrderRequestProcessSvc.OrderLineItem toExternal(OrderLineItem dto) {
         if (dto == null) {
             throw new IllegalArgumentException("dto must not be null");
         }
@@ -68,7 +68,6 @@ public class OrderLineItemMapper implements Mapper<OrderRequestProcessSvc.OrderL
      * @param dto the DTO to return
      * @return the same DTO instance passed as input
      */
-    @Override
     public OrderLineItem fromDto(OrderLineItem dto) {
         return dto;
     }
@@ -79,7 +78,6 @@ public class OrderLineItemMapper implements Mapper<OrderRequestProcessSvc.OrderL
      * @param domain the domain OrderLineItem to return
      * @return the same OrderLineItem instance passed as {@code domain}
      */
-    @Override
     public OrderLineItem toDto(OrderLineItem domain) {
         return domain;
     }

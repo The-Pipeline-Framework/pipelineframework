@@ -6,7 +6,7 @@ import org.pipelineframework.checkout.deliverorder.grpc.OrderDispatchSvc;
 import org.pipelineframework.mapper.Mapper;
 
 @ApplicationScoped
-public class DispatchedOrderMapper implements Mapper<OrderDispatchSvc.DispatchedOrder, DispatchedOrder, DispatchedOrder> {
+public class DispatchedOrderMapper implements Mapper<DispatchedOrder, OrderDispatchSvc.DispatchedOrder> {
     /**
      * Converts a gRPC OrderDispatchSvc.DispatchedOrder into a domain DispatchedOrder.
      *
@@ -15,7 +15,7 @@ public class DispatchedOrderMapper implements Mapper<OrderDispatchSvc.Dispatched
      * @throws IllegalArgumentException if {@code grpc} is null
      */
     @Override
-    public DispatchedOrder fromGrpc(OrderDispatchSvc.DispatchedOrder grpc) {
+    public DispatchedOrder fromExternal(OrderDispatchSvc.DispatchedOrder grpc) {
         if (grpc == null) {
             throw new IllegalArgumentException("grpc must not be null");
         }
@@ -35,7 +35,7 @@ public class DispatchedOrderMapper implements Mapper<OrderDispatchSvc.Dispatched
      * @throws IllegalArgumentException if {@code dto} is null
      */
     @Override
-    public OrderDispatchSvc.DispatchedOrder toGrpc(DispatchedOrder dto) {
+    public OrderDispatchSvc.DispatchedOrder toExternal(DispatchedOrder dto) {
         if (dto == null) {
             throw new IllegalArgumentException("dto must not be null");
         }
@@ -54,7 +54,6 @@ public class DispatchedOrderMapper implements Mapper<OrderDispatchSvc.Dispatched
      * @param dto the dispatched order DTO to map; returned unchanged
      * @return the same {@code DispatchedOrder} instance passed in
      */
-    @Override
     public DispatchedOrder fromDto(DispatchedOrder dto) {
         // Intentional identity mapping: domain and DTO share the same structure.
         return dto;
@@ -69,7 +68,6 @@ public class DispatchedOrderMapper implements Mapper<OrderDispatchSvc.Dispatched
      * @param domain the domain DispatchedOrder to be used as the DTO
      * @return the same DispatchedOrder instance provided as {@code domain}
      */
-    @Override
     public DispatchedOrder toDto(DispatchedOrder domain) {
         // Intentional identity mapping: domain and DTO share the same structure.
         return domain;

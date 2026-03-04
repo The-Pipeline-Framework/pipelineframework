@@ -193,8 +193,8 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
                     clientStepBuilder.addMethod(applyOneToManyMethod);
                     break;
                 case STREAMING_UNARY:
-                    // For ManyToOne: Multi<Input> -> Uni<Output> (ManyToOne interface has applyBatchMulti(Multi<Input> in) method)
-                    MethodSpec applyBatchMultiMethod = MethodSpec.methodBuilder("applyBatchMulti")
+                    // For ManyToOne: Multi<Input> -> Uni<Output> (StepManyToOne interface has applyReduce(Multi<Input> in) method)
+                    MethodSpec applyReduceMethod = MethodSpec.methodBuilder("applyReduce")
                             .addAnnotation(Override.class)
                             .addModifiers(Modifier.PUBLIC)
                             .returns(ParameterizedTypeName.get(ClassName.get(Uni.class),
@@ -204,7 +204,7 @@ public record ClientStepRenderer(GenerationTarget target) implements PipelineRen
                             .addStatement("return $T.traceUnary($S, $S, this.grpcClient.remoteProcess(inputs))",
                                 grpcClientTracing, rpcServiceName, rpcMethodName)
                             .build();
-                    clientStepBuilder.addMethod(applyBatchMultiMethod);
+                    clientStepBuilder.addMethod(applyReduceMethod);
                     break;
                 case STREAMING_STREAMING:
                     // For ManyToMany: Multi<Input> -> Multi<Output> (ManyToMany interface has applyTransform(Multi<Input> in) method)

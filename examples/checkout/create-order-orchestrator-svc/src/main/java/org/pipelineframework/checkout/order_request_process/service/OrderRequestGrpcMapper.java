@@ -10,7 +10,7 @@ import org.pipelineframework.checkout.createorder.grpc.OrderRequestProcessSvc;
 import org.pipelineframework.mapper.Mapper;
 
 @ApplicationScoped
-public class OrderRequestGrpcMapper implements Mapper<OrderRequestProcessSvc.OrderRequest, OrderRequestDto, OrderRequestDto> {
+public class OrderRequestGrpcMapper implements Mapper<OrderRequestDto, OrderRequestProcessSvc.OrderRequest> {
 
     /**
      * Converts a gRPC OrderRequest into an OrderRequestDto.
@@ -20,7 +20,7 @@ public class OrderRequestGrpcMapper implements Mapper<OrderRequestProcessSvc.Ord
      * @throws IllegalArgumentException if {@code grpc} is null
      */
     @Override
-    public OrderRequestDto fromGrpc(OrderRequestProcessSvc.OrderRequest grpc) {
+    public OrderRequestDto fromExternal(OrderRequestProcessSvc.OrderRequest grpc) {
         if (grpc == null) {
             throw new IllegalArgumentException("grpc must not be null");
         }
@@ -40,7 +40,7 @@ public class OrderRequestGrpcMapper implements Mapper<OrderRequestProcessSvc.Ord
      * @throws IllegalArgumentException if `dto` is null or if `dto.requestId()` or `dto.customerId()` is null
      */
     @Override
-    public OrderRequestProcessSvc.OrderRequest toGrpc(OrderRequestDto dto) {
+    public OrderRequestProcessSvc.OrderRequest toExternal(OrderRequestDto dto) {
         if (dto == null) {
             throw new IllegalArgumentException("dto must not be null");
         }
@@ -63,7 +63,6 @@ public class OrderRequestGrpcMapper implements Mapper<OrderRequestProcessSvc.Ord
      * @param dto the OrderRequestDto to return without modification
      * @return the same OrderRequestDto instance passed as {@code dto}
      */
-    @Override
     public OrderRequestDto fromDto(OrderRequestDto dto) {
         return dto;
     }
@@ -74,7 +73,6 @@ public class OrderRequestGrpcMapper implements Mapper<OrderRequestProcessSvc.Ord
      * @param domain the domain OrderRequestDto to return
      * @return the same {@code OrderRequestDto} instance passed in as {@code domain}
      */
-    @Override
     public OrderRequestDto toDto(OrderRequestDto domain) {
         return domain;
     }

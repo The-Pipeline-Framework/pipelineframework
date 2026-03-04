@@ -6,7 +6,7 @@ import org.pipelineframework.checkout.deliverorder.grpc.OrderDeliveredSvc;
 import org.pipelineframework.mapper.Mapper;
 
 @ApplicationScoped
-public class DeliveredOrderMapper implements Mapper<OrderDeliveredSvc.DeliveredOrder, DeliveredOrder, DeliveredOrder> {
+public class DeliveredOrderMapper implements Mapper<DeliveredOrder, OrderDeliveredSvc.DeliveredOrder> {
     /**
      * Converts a gRPC OrderDeliveredSvc.DeliveredOrder into a domain DeliveredOrder.
      *
@@ -15,7 +15,7 @@ public class DeliveredOrderMapper implements Mapper<OrderDeliveredSvc.DeliveredO
      * @throws IllegalArgumentException if {@code grpc} is null
      */
     @Override
-    public DeliveredOrder fromGrpc(OrderDeliveredSvc.DeliveredOrder grpc) {
+    public DeliveredOrder fromExternal(OrderDeliveredSvc.DeliveredOrder grpc) {
         if (grpc == null) {
             throw new IllegalArgumentException("grpc must not be null");
         }
@@ -36,7 +36,7 @@ public class DeliveredOrderMapper implements Mapper<OrderDeliveredSvc.DeliveredO
      * @throws IllegalArgumentException if {@code dto} is null
      */
     @Override
-    public OrderDeliveredSvc.DeliveredOrder toGrpc(DeliveredOrder dto) {
+    public OrderDeliveredSvc.DeliveredOrder toExternal(DeliveredOrder dto) {
         if (dto == null) {
             throw new IllegalArgumentException("dto must not be null");
         }
@@ -56,7 +56,6 @@ public class DeliveredOrderMapper implements Mapper<OrderDeliveredSvc.DeliveredO
      * @param dto the DeliveredOrder DTO to be returned
      * @return the same DeliveredOrder instance supplied as {@code dto}
      */
-    @Override
     public DeliveredOrder fromDto(DeliveredOrder dto) {
         return dto;
     }
@@ -67,7 +66,6 @@ public class DeliveredOrderMapper implements Mapper<OrderDeliveredSvc.DeliveredO
      * @param domain the DeliveredOrder to return
      * @return the same DeliveredOrder instance passed as input
      */
-    @Override
     public DeliveredOrder toDto(DeliveredOrder domain) {
         return domain;
     }

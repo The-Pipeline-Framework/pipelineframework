@@ -7,7 +7,7 @@ import org.pipelineframework.checkout.deliverorder.grpc.OrderDispatchSvc;
 import org.pipelineframework.mapper.Mapper;
 
 @ApplicationScoped
-public class DispatchedOrderGrpcMapper implements Mapper<OrderDispatchSvc.DispatchedOrder, DispatchedOrderDto, DispatchedOrderDto> {
+public class DispatchedOrderGrpcMapper implements Mapper<DispatchedOrderDto, OrderDispatchSvc.DispatchedOrder> {
 
     /**
      * Convert a gRPC OrderDispatchSvc.DispatchedOrder message into a DispatchedOrderDto.
@@ -17,7 +17,7 @@ public class DispatchedOrderGrpcMapper implements Mapper<OrderDispatchSvc.Dispat
      * @throws IllegalArgumentException if {@code grpc} is null
      */
     @Override
-    public DispatchedOrderDto fromGrpc(OrderDispatchSvc.DispatchedOrder grpc) {
+    public DispatchedOrderDto fromExternal(OrderDispatchSvc.DispatchedOrder grpc) {
         if (grpc == null) {
             throw new IllegalArgumentException("grpc must not be null");
         }
@@ -37,7 +37,7 @@ public class DispatchedOrderGrpcMapper implements Mapper<OrderDispatchSvc.Dispat
      * @throws IllegalArgumentException if dto is null
      */
     @Override
-    public OrderDispatchSvc.DispatchedOrder toGrpc(DispatchedOrderDto dto) {
+    public OrderDispatchSvc.DispatchedOrder toExternal(DispatchedOrderDto dto) {
         if (dto == null) {
             throw new IllegalArgumentException("dto must not be null");
         }
@@ -56,7 +56,6 @@ public class DispatchedOrderGrpcMapper implements Mapper<OrderDispatchSvc.Dispat
      * @param dto the DTO to return
      * @return the same {@code DispatchedOrderDto} instance passed as {@code dto}
      */
-    @Override
     public DispatchedOrderDto fromDto(DispatchedOrderDto dto) {
         return dto;
     }
@@ -67,7 +66,6 @@ public class DispatchedOrderGrpcMapper implements Mapper<OrderDispatchSvc.Dispat
      * @param domain the DTO to return
      * @return the same {@code DispatchedOrderDto} instance passed as {@code domain}
      */
-    @Override
     public DispatchedOrderDto toDto(DispatchedOrderDto domain) {
         return domain;
     }

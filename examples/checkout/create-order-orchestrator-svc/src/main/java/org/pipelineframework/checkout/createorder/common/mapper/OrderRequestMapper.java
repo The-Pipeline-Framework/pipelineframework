@@ -9,7 +9,7 @@ import org.pipelineframework.checkout.createorder.grpc.OrderRequestProcessSvc;
 import org.pipelineframework.mapper.Mapper;
 
 @ApplicationScoped
-public class OrderRequestMapper implements Mapper<OrderRequestProcessSvc.OrderRequest, OrderRequest, OrderRequest> {
+public class OrderRequestMapper implements Mapper<OrderRequest, OrderRequestProcessSvc.OrderRequest> {
     /**
      * Converts a gRPC OrderRequest into the domain OrderRequest.
      *
@@ -21,7 +21,7 @@ public class OrderRequestMapper implements Mapper<OrderRequestProcessSvc.OrderRe
      * @throws IllegalArgumentException if `grpc` is null or if `requestId`/`customerId` are present but not valid UUIDs
      */
     @Override
-    public OrderRequest fromGrpc(OrderRequestProcessSvc.OrderRequest grpc) {
+    public OrderRequest fromExternal(OrderRequestProcessSvc.OrderRequest grpc) {
         if (grpc == null) {
             throw new IllegalArgumentException("grpc must not be null");
         }
@@ -39,7 +39,7 @@ public class OrderRequestMapper implements Mapper<OrderRequestProcessSvc.OrderRe
      * @throws IllegalArgumentException if {@code dto} is null
      */
     @Override
-    public OrderRequestProcessSvc.OrderRequest toGrpc(OrderRequest dto) {
+    public OrderRequestProcessSvc.OrderRequest toExternal(OrderRequest dto) {
         if (dto == null) {
             throw new IllegalArgumentException("dto must not be null");
         }
@@ -55,7 +55,6 @@ public class OrderRequestMapper implements Mapper<OrderRequestProcessSvc.OrderRe
      *
      * @return the same OrderRequest instance that was supplied
      */
-    @Override
     public OrderRequest fromDto(OrderRequest dto) {
         return dto;
     }
@@ -66,7 +65,6 @@ public class OrderRequestMapper implements Mapper<OrderRequestProcessSvc.OrderRe
      * @param domain the domain OrderRequest to convert (returned as-is)
      * @return the same OrderRequest instance passed as domain
      */
-    @Override
     public OrderRequest toDto(OrderRequest domain) {
         return domain;
     }
