@@ -20,6 +20,13 @@ class DeadLetterPublisherTest {
     }
 
     @Test
+    void loggingPublisherExposesExpectedProviderContract() {
+        LoggingDeadLetterPublisher publisher = new LoggingDeadLetterPublisher();
+        assertEquals("log", publisher.providerName());
+        assertEquals(-100, publisher.priority());
+    }
+
+    @Test
     void canOverrideProviderName() {
         DeadLetterPublisher publisher = new DeadLetterPublisher() {
             @Override
@@ -65,7 +72,7 @@ class DeadLetterPublisherTest {
             System.currentTimeMillis());
 
         Uni<Void> result = publisher.publish(envelope);
-        assertNotNull(result);
+        assertDoesNotThrow(() -> result.await().indefinitely());
     }
 
     private static class TestPublisher implements DeadLetterPublisher {

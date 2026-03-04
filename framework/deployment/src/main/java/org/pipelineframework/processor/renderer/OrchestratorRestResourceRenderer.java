@@ -142,11 +142,13 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
                 .build());
         if (binding.inputStreaming()) {
             runAsyncMethod.addStatement(
-                "return pipelineExecutionService.executePipelineAsync($T.createFrom().iterable(input), tenantId, idempotencyKey)",
-                multi);
+                "return pipelineExecutionService.executePipelineAsync($T.createFrom().iterable(input), tenantId, idempotencyKey, $L)",
+                multi,
+                binding.outputStreaming());
         } else {
             runAsyncMethod.addStatement(
-                "return pipelineExecutionService.executePipelineAsync(input, tenantId, idempotencyKey)");
+                "return pipelineExecutionService.executePipelineAsync(input, tenantId, idempotencyKey, $L)",
+                binding.outputStreaming());
         }
 
         MethodSpec statusMethod = MethodSpec.methodBuilder("status")

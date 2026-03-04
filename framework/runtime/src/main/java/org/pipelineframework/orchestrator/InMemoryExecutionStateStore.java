@@ -83,7 +83,9 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
     public Uni<Optional<ExecutionRecord<Object, Object>>> getExecution(String tenantId, String executionId) {
         return Uni.createFrom().item(() -> {
             synchronized (lock) {
-                return Optional.ofNullable(executionsByScopedId.get(scopedExecutionId(tenantId, executionId)));
+                long nowEpochMs = System.currentTimeMillis();
+                String scopedId = scopedExecutionId(tenantId, executionId);
+                return Optional.ofNullable(getActiveRecord(scopedId, nowEpochMs));
             }
         });
     }
@@ -98,7 +100,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         return Uni.createFrom().item(() -> {
             synchronized (lock) {
                 String scopedId = scopedExecutionId(tenantId, executionId);
-                ExecutionRecord<Object, Object> current = executionsByScopedId.get(scopedId);
+                ExecutionRecord<Object, Object> current = getActiveRecord(scopedId, nowEpochMs);
                 if (current == null || current.status().terminal()) {
                     return Optional.empty();
                 }
@@ -143,7 +145,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         return Uni.createFrom().item(() -> {
             synchronized (lock) {
                 String scopedId = scopedExecutionId(tenantId, executionId);
-                ExecutionRecord<Object, Object> current = executionsByScopedId.get(scopedId);
+                ExecutionRecord<Object, Object> current = getActiveRecord(scopedId, nowEpochMs);
                 if (current == null || current.version() != expectedVersion) {
                     return Optional.empty();
                 }
@@ -186,7 +188,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         return Uni.createFrom().item(() -> {
             synchronized (lock) {
                 String scopedId = scopedExecutionId(tenantId, executionId);
-                ExecutionRecord<Object, Object> current = executionsByScopedId.get(scopedId);
+                ExecutionRecord<Object, Object> current = getActiveRecord(scopedId, nowEpochMs);
                 if (current == null || current.version() != expectedVersion) {
                     return Optional.empty();
                 }
@@ -231,7 +233,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         return Uni.createFrom().item(() -> {
             synchronized (lock) {
                 String scopedId = scopedExecutionId(tenantId, executionId);
-                ExecutionRecord<Object, Object> current = executionsByScopedId.get(scopedId);
+                ExecutionRecord<Object, Object> current = getActiveRecord(scopedId, nowEpochMs);
                 if (current == null || current.version() != expectedVersion) {
                     return Optional.empty();
                 }
@@ -264,10 +266,14 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
     public Uni<List<ExecutionRecord<Object, Object>>> findDueExecutions(long nowEpochMs, int limit) {
         return Uni.createFrom().item(() -> {
             synchronized (lock) {
-                long nowEpochS = Instant.ofEpochMilli(nowEpochMs).getEpochSecond();
                 List<ExecutionRecord<Object, Object>> due = new ArrayList<>();
-                for (ExecutionRecord<Object, Object> record : executionsByScopedId.values()) {
-                    if (record.ttlEpochS() > 0 && record.ttlEpochS() <= nowEpochS) {
+                var iterator = executionsByScopedId.entrySet().iterator();
+                while (iterator.hasNext()) {
+                    var entry = iterator.next();
+                    ExecutionRecord<Object, Object> record = entry.getValue();
+                    if (isExpired(record, nowEpochMs)) {
+                        iterator.remove();
+                        executionIdByScopedKey.remove(scopedExecutionKey(record.tenantId(), record.executionKey()));
                         continue;
                     }
                     if (record.status().terminal()) {
@@ -298,6 +304,19 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         }
         long nowEpochS = Instant.ofEpochMilli(nowEpochMs).getEpochSecond();
         return ttl <= nowEpochS;
+    }
+
+    private ExecutionRecord<Object, Object> getActiveRecord(String scopedId, long nowEpochMs) {
+        ExecutionRecord<Object, Object> current = executionsByScopedId.get(scopedId);
+        if (current == null) {
+            return null;
+        }
+        if (!isExpired(current, nowEpochMs)) {
+            return current;
+        }
+        executionsByScopedId.remove(scopedId);
+        executionIdByScopedKey.remove(scopedExecutionKey(current.tenantId(), current.executionKey()));
+        return null;
     }
 
     private static String scopedExecutionId(String tenantId, String executionId) {
