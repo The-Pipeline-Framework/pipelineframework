@@ -23,7 +23,6 @@ import jakarta.ws.rs.core.Response;
 
 import com.google.rpc.Status;
 import org.jboss.logging.Logger;
-import org.jboss.resteasy.reactive.RestResponse;
 import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 import org.pipelineframework.cache.CacheMissException;
 import org.pipelineframework.cache.CachePolicyViolation;
@@ -57,7 +56,7 @@ public class RestExceptionMapper {
      * @return a RestResponse containing an HTTP status and a human-readable error message
      */
     @ServerExceptionMapper
-    public Object handleException(Exception ex, HttpHeaders headers) {
+    public Response handleException(Exception ex, HttpHeaders headers) {
         if (expectsProtobuf(headers)) {
             TransportDispatchMetadata metadata = TransportDispatchMetadataHolder.get();
             String executionId = metadata == null ? null : metadata.executionId();
@@ -70,23 +69,33 @@ public class RestExceptionMapper {
         }
         if (ex instanceof CacheMissException) {
             LOG.warn("Required cache entry missing", ex);
-            return RestResponse.status(Response.Status.PRECONDITION_FAILED, ex.getMessage());
+            return Response.status(Response.Status.PRECONDITION_FAILED)
+                .entity(ex.getMessage())
+                .build();
         }
         if (ex instanceof CachePolicyViolation) {
             LOG.warn("Cache policy violation", ex);
-            return RestResponse.status(Response.Status.PRECONDITION_FAILED, ex.getMessage());
+            return Response.status(Response.Status.PRECONDITION_FAILED)
+                .entity(ex.getMessage())
+                .build();
         }
         if (ex instanceof NotFoundException) {
             LOG.debug("Request did not match a REST endpoint", ex);
-            return RestResponse.status(Response.Status.NOT_FOUND, "Not Found");
+            return Response.status(Response.Status.NOT_FOUND)
+                .entity("Not Found")
+                .build();
         }
         Throwable rootCause = rootCause(ex);
         if (rootCause instanceof IllegalArgumentException) {
             LOG.warn("Invalid request", ex);
-            return RestResponse.status(Response.Status.BAD_REQUEST, "Invalid request");
+            return Response.status(Response.Status.BAD_REQUEST)
+                .entity("Invalid request")
+                .build();
         }
         LOG.error("Unexpected error processing request", ex);
-        return RestResponse.status(Response.Status.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
+        return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+            .entity("An unexpected error occurred")
+            .build();
     }
 
     private boolean expectsProtobuf(HttpHeaders headers) {
