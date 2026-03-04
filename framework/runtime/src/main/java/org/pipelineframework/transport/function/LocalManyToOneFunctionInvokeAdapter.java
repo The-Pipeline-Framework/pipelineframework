@@ -325,10 +325,10 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
             }
             try {
                 return map.entrySet().stream()
-                    .map(entry -> canonicalPayload(entry.getKey(), visited)
-                        + "->" + canonicalPayload(entry.getValue(), visited))
+                    .map(entry -> frameToken(canonicalPayload(entry.getKey(), visited))
+                        + frameToken(canonicalPayload(entry.getValue(), visited)))
                     .sorted()
-                    .collect(Collectors.joining(",", "{", "}"));
+                    .collect(Collectors.joining("", "{", "}"));
             } finally {
                 visited.remove(payload);
             }
@@ -339,13 +339,8 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
             }
             try {
                 StringBuilder builder = new StringBuilder("[");
-                boolean first = true;
                 for (Object item : iterable) {
-                    if (!first) {
-                        builder.append(',');
-                    }
-                    builder.append(canonicalPayload(item, visited));
-                    first = false;
+                    builder.append(frameToken(canonicalPayload(item, visited)));
                 }
                 return builder.append(']').toString();
             } finally {
@@ -361,10 +356,7 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
                 int length = Array.getLength(payload);
                 StringBuilder builder = new StringBuilder("[");
                 for (int i = 0; i < length; i++) {
-                    if (i > 0) {
-                        builder.append(',');
-                    }
-                    builder.append(canonicalPayload(Array.get(payload, i), visited));
+                    builder.append(frameToken(canonicalPayload(Array.get(payload, i), visited)));
                 }
                 return builder.append(']').toString();
             } finally {
@@ -411,6 +403,11 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
             }
         }
         return payloadClass.getName() + ":" + rendered;
+    }
+
+    private String frameToken(String token) {
+        String normalized = token == null ? "null" : token;
+        return normalized.length() + ":" + normalized;
     }
 
     /**
