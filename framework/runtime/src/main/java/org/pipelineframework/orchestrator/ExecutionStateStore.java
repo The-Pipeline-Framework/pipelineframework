@@ -43,7 +43,7 @@ public interface ExecutionStateStore {
      * @param executionId execution identifier
      * @return execution record when available
      */
-    Uni<Optional<ExecutionRecord>> getExecution(String tenantId, String executionId);
+    Uni<Optional<ExecutionRecord<Object, Object>>> getExecution(String tenantId, String executionId);
 
     /**
      * Claims the lease and marks execution RUNNING.
@@ -55,7 +55,7 @@ public interface ExecutionStateStore {
      * @param leaseMs lease duration in ms
      * @return claimed execution with incremented version when claim succeeds
      */
-    Uni<Optional<ExecutionRecord>> claimLease(
+    Uni<Optional<ExecutionRecord<Object, Object>>> claimLease(
         String tenantId,
         String executionId,
         String leaseOwner,
@@ -73,7 +73,7 @@ public interface ExecutionStateStore {
      * @param nowEpochMs current timestamp
      * @return updated execution when write succeeds
      */
-    Uni<Optional<ExecutionRecord>> markSucceeded(
+    Uni<Optional<ExecutionRecord<Object, Object>>> markSucceeded(
         String tenantId,
         String executionId,
         long expectedVersion,
@@ -95,7 +95,7 @@ public interface ExecutionStateStore {
      * @param nowEpochMs current timestamp
      * @return updated execution when write succeeds
      */
-    Uni<Optional<ExecutionRecord>> scheduleRetry(
+    Uni<Optional<ExecutionRecord<Object, Object>>> scheduleRetry(
         String tenantId,
         String executionId,
         long expectedVersion,
@@ -119,7 +119,7 @@ public interface ExecutionStateStore {
      * @param nowEpochMs current timestamp
      * @return updated execution when write succeeds
      */
-    Uni<Optional<ExecutionRecord>> markTerminalFailure(
+    Uni<Optional<ExecutionRecord<Object, Object>>> markTerminalFailure(
         String tenantId,
         String executionId,
         long expectedVersion,
@@ -136,5 +136,5 @@ public interface ExecutionStateStore {
      * @param limit max records to return
      * @return due executions
      */
-    Uni<List<ExecutionRecord>> findDueExecutions(long nowEpochMs, int limit);
+    Uni<List<ExecutionRecord<Object, Object>>> findDueExecutions(long nowEpochMs, int limit);
 }

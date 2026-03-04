@@ -6,5 +6,5 @@ package org.pipelineframework.orchestrator;
  * @param record resolved execution record
  * @param duplicate true when an existing execution was reused
  */
-public record CreateExecutionResult(ExecutionRecord record, boolean duplicate) {
+public record CreateExecutionResult(ExecutionRecord<Object, Object> record, boolean duplicate) {
 }

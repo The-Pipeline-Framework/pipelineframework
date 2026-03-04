@@ -35,12 +35,12 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
-    public Uni<Optional<ExecutionRecord>> getExecution(String tenantId, String executionId) {
+    public Uni<Optional<ExecutionRecord<Object, Object>>> getExecution(String tenantId, String executionId) {
         return Uni.createFrom().failure(new UnsupportedOperationException(ERROR));
     }
 
     @Override
-    public Uni<Optional<ExecutionRecord>> claimLease(
+    public Uni<Optional<ExecutionRecord<Object, Object>>> claimLease(
         String tenantId,
         String executionId,
         String leaseOwner,
@@ -50,7 +50,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
-    public Uni<Optional<ExecutionRecord>> markSucceeded(
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markSucceeded(
         String tenantId,
         String executionId,
         long expectedVersion,
@@ -61,7 +61,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
-    public Uni<Optional<ExecutionRecord>> scheduleRetry(
+    public Uni<Optional<ExecutionRecord<Object, Object>>> scheduleRetry(
         String tenantId,
         String executionId,
         long expectedVersion,
@@ -75,7 +75,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
-    public Uni<Optional<ExecutionRecord>> markTerminalFailure(
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markTerminalFailure(
         String tenantId,
         String executionId,
         long expectedVersion,
@@ -88,7 +88,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
-    public Uni<List<ExecutionRecord>> findDueExecutions(long nowEpochMs, int limit) {
+    public Uni<List<ExecutionRecord<Object, Object>>> findDueExecutions(long nowEpochMs, int limit) {
         return Uni.createFrom().failure(new UnsupportedOperationException(ERROR));
     }
 }

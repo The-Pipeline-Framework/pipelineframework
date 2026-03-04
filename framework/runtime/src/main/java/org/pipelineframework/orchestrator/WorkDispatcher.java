@@ -20,6 +20,10 @@ public interface WorkDispatcher {
 
     /**
      * Provider priority used when multiple dispatchers are available.
+     * Higher numeric values have higher precedence and are selected over lower values.
+     * The default implementation returns {@code 0}, which intentionally takes
+     * precedence over built-ins such as {@code EventWorkDispatcher} ({@code -100})
+     * and {@code SqsWorkDispatcher} ({@code -1000}).
      *
      * @return provider priority
      */
@@ -38,8 +42,11 @@ public interface WorkDispatcher {
     /**
      * Enqueues work for delayed dispatch.
      *
-     * @param item work item
-     * @param delay delay before dispatch
+     * <p>Implementations must treat a {@code null} delay as zero delay
+     * (equivalent to {@code Duration.ofMillis(0)}).</p>
+     *
+     * @param item work item to enqueue
+     * @param delay delay before dispatch; {@code null} means no delay
      * @return completion signal
      */
     Uni<Void> enqueueDelayed(ExecutionWorkItem item, Duration delay);

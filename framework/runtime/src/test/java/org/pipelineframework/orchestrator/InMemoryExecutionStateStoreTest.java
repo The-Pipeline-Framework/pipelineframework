@@ -31,7 +31,7 @@ class InMemoryExecutionStateStoreTest {
             new ExecutionCreateCommand("tenant-a", "key-2", "payload", now, now / 1000 + 60))
             .await().indefinitely();
 
-        Optional<ExecutionRecord> claimed = store.claimLease(
+        Optional<ExecutionRecord<Object, Object>> claimed = store.claimLease(
                 "tenant-a",
                 created.record().executionId(),
                 "worker-1",
@@ -40,10 +40,10 @@ class InMemoryExecutionStateStoreTest {
             .await().indefinitely();
 
         assertTrue(claimed.isPresent());
-        ExecutionRecord record = claimed.get();
+        ExecutionRecord<Object, Object> record = claimed.get();
         assertEquals(ExecutionStatus.RUNNING, record.status());
 
-        Optional<ExecutionRecord> staleCommit = store.markSucceeded(
+        Optional<ExecutionRecord<Object, Object>> staleCommit = store.markSucceeded(
                 "tenant-a",
                 record.executionId(),
                 record.version() - 1,
@@ -53,7 +53,7 @@ class InMemoryExecutionStateStoreTest {
             .await().indefinitely();
         assertTrue(staleCommit.isEmpty());
 
-        Optional<ExecutionRecord> committed = store.markSucceeded(
+        Optional<ExecutionRecord<Object, Object>> committed = store.markSucceeded(
                 "tenant-a",
                 record.executionId(),
                 record.version(),
@@ -75,7 +75,7 @@ class InMemoryExecutionStateStoreTest {
                 new ExecutionCreateCommand("tenant-a", "key-3", "payload", now, now / 1000 + 60))
             .await().indefinitely();
 
-        Optional<ExecutionRecord> claimed = store.claimLease(
+        Optional<ExecutionRecord<Object, Object>> claimed = store.claimLease(
                 "tenant-a",
                 created.record().executionId(),
                 "worker-1",
@@ -85,7 +85,7 @@ class InMemoryExecutionStateStoreTest {
 
         assertTrue(claimed.isPresent());
 
-        Optional<ExecutionRecord> retried = store.scheduleRetry(
+        Optional<ExecutionRecord<Object, Object>> retried = store.scheduleRetry(
                 "tenant-a",
                 created.record().executionId(),
                 claimed.get().version(),
@@ -99,8 +99,25 @@ class InMemoryExecutionStateStoreTest {
 
         assertTrue(retried.isPresent());
 
-        List<ExecutionRecord> due = store.findDueExecutions(now + 2, 10).await().indefinitely();
+        List<ExecutionRecord<Object, Object>> due = store.findDueExecutions(now + 2, 10).await().indefinitely();
         assertEquals(1, due.size());
         assertEquals(created.record().executionId(), due.get(0).executionId());
+    }
+
+    @Test
+    void scopedCompositeKeysAvoidTenantAndKeySeparatorCollisions() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+
+        CreateExecutionResult first = store.createOrGetExecution(
+                new ExecutionCreateCommand("a|b", "c", "payload", now, now / 1000 + 60))
+            .await().indefinitely();
+        CreateExecutionResult second = store.createOrGetExecution(
+                new ExecutionCreateCommand("a", "b|c", "payload", now, now / 1000 + 60))
+            .await().indefinitely();
+
+        assertFalse(first.duplicate());
+        assertFalse(second.duplicate());
+        assertNotEquals(first.record().executionId(), second.record().executionId());
     }
 }

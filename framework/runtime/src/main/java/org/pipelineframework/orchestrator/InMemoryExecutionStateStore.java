@@ -6,6 +6,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -19,7 +20,7 @@ import io.smallrye.mutiny.Uni;
 public class InMemoryExecutionStateStore implements ExecutionStateStore {
 
     private final Object lock = new Object();
-    private final Map<String, ExecutionRecord> executionsByScopedId = new HashMap<>();
+    private final Map<String, ExecutionRecord<Object, Object>> executionsByScopedId = new HashMap<>();
     private final Map<String, String> executionIdByScopedKey = new HashMap<>();
 
     @Override
@@ -39,14 +40,15 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                 String scopedKey = scopedExecutionKey(command.tenantId(), command.executionKey());
                 String existingExecutionId = executionIdByScopedKey.get(scopedKey);
                 if (existingExecutionId != null) {
-                    ExecutionRecord existing = executionsByScopedId.get(scopedExecutionId(command.tenantId(), existingExecutionId));
+                    ExecutionRecord<Object, Object> existing =
+                        executionsByScopedId.get(scopedExecutionId(command.tenantId(), existingExecutionId));
                     if (existing != null) {
                         return new CreateExecutionResult(existing, true);
                     }
                 }
 
                 String executionId = UUID.randomUUID().toString();
-                ExecutionRecord created = new ExecutionRecord(
+                ExecutionRecord<Object, Object> created = new ExecutionRecord<>(
                     command.tenantId(),
                     executionId,
                     command.executionKey(),
@@ -74,7 +76,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
-    public Uni<Optional<ExecutionRecord>> getExecution(String tenantId, String executionId) {
+    public Uni<Optional<ExecutionRecord<Object, Object>>> getExecution(String tenantId, String executionId) {
         return Uni.createFrom().item(() -> {
             synchronized (lock) {
                 return Optional.ofNullable(executionsByScopedId.get(scopedExecutionId(tenantId, executionId)));
@@ -83,7 +85,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
-    public Uni<Optional<ExecutionRecord>> claimLease(
+    public Uni<Optional<ExecutionRecord<Object, Object>>> claimLease(
         String tenantId,
         String executionId,
         String leaseOwner,
@@ -92,7 +94,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         return Uni.createFrom().item(() -> {
             synchronized (lock) {
                 String scopedId = scopedExecutionId(tenantId, executionId);
-                ExecutionRecord current = executionsByScopedId.get(scopedId);
+                ExecutionRecord<Object, Object> current = executionsByScopedId.get(scopedId);
                 if (current == null || current.status().terminal()) {
                     return Optional.empty();
                 }
@@ -101,7 +103,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                 if (!leaseExpired || !due) {
                     return Optional.empty();
                 }
-                ExecutionRecord claimed = new ExecutionRecord(
+                ExecutionRecord<Object, Object> claimed = new ExecutionRecord<>(
                     current.tenantId(),
                     current.executionId(),
                     current.executionKey(),
@@ -127,7 +129,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
-    public Uni<Optional<ExecutionRecord>> markSucceeded(
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markSucceeded(
         String tenantId,
         String executionId,
         long expectedVersion,
@@ -137,11 +139,11 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         return Uni.createFrom().item(() -> {
             synchronized (lock) {
                 String scopedId = scopedExecutionId(tenantId, executionId);
-                ExecutionRecord current = executionsByScopedId.get(scopedId);
+                ExecutionRecord<Object, Object> current = executionsByScopedId.get(scopedId);
                 if (current == null || current.version() != expectedVersion) {
                     return Optional.empty();
                 }
-                ExecutionRecord updated = new ExecutionRecord(
+                ExecutionRecord<Object, Object> updated = new ExecutionRecord<>(
                     current.tenantId(),
                     current.executionId(),
                     current.executionKey(),
@@ -167,7 +169,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
-    public Uni<Optional<ExecutionRecord>> scheduleRetry(
+    public Uni<Optional<ExecutionRecord<Object, Object>>> scheduleRetry(
         String tenantId,
         String executionId,
         long expectedVersion,
@@ -180,11 +182,11 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         return Uni.createFrom().item(() -> {
             synchronized (lock) {
                 String scopedId = scopedExecutionId(tenantId, executionId);
-                ExecutionRecord current = executionsByScopedId.get(scopedId);
+                ExecutionRecord<Object, Object> current = executionsByScopedId.get(scopedId);
                 if (current == null || current.version() != expectedVersion) {
                     return Optional.empty();
                 }
-                ExecutionRecord updated = new ExecutionRecord(
+                ExecutionRecord<Object, Object> updated = new ExecutionRecord<>(
                     current.tenantId(),
                     current.executionId(),
                     current.executionKey(),
@@ -210,7 +212,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
-    public Uni<Optional<ExecutionRecord>> markTerminalFailure(
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markTerminalFailure(
         String tenantId,
         String executionId,
         long expectedVersion,
@@ -225,11 +227,11 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
         return Uni.createFrom().item(() -> {
             synchronized (lock) {
                 String scopedId = scopedExecutionId(tenantId, executionId);
-                ExecutionRecord current = executionsByScopedId.get(scopedId);
+                ExecutionRecord<Object, Object> current = executionsByScopedId.get(scopedId);
                 if (current == null || current.version() != expectedVersion) {
                     return Optional.empty();
                 }
-                ExecutionRecord updated = new ExecutionRecord(
+                ExecutionRecord<Object, Object> updated = new ExecutionRecord<>(
                     current.tenantId(),
                     current.executionId(),
                     current.executionKey(),
@@ -255,12 +257,12 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
-    public Uni<List<ExecutionRecord>> findDueExecutions(long nowEpochMs, int limit) {
+    public Uni<List<ExecutionRecord<Object, Object>>> findDueExecutions(long nowEpochMs, int limit) {
         return Uni.createFrom().item(() -> {
             synchronized (lock) {
                 long nowEpochS = Instant.ofEpochMilli(nowEpochMs).getEpochSecond();
-                List<ExecutionRecord> due = new ArrayList<>();
-                for (ExecutionRecord record : executionsByScopedId.values()) {
+                List<ExecutionRecord<Object, Object>> due = new ArrayList<>();
+                for (ExecutionRecord<Object, Object> record : executionsByScopedId.values()) {
                     if (record.ttlEpochS() > 0 && record.ttlEpochS() <= nowEpochS) {
                         continue;
                     }
@@ -283,11 +285,17 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
     }
 
     private static String scopedExecutionId(String tenantId, String executionId) {
-        return tenantId + "|" + executionId;
+        return compositeScopedKey("tenantId", tenantId, "executionId", executionId);
     }
 
     private static String scopedExecutionKey(String tenantId, String executionKey) {
-        return tenantId + "|" + executionKey;
+        return compositeScopedKey("tenantId", tenantId, "executionKey", executionKey);
+    }
+
+    private static String compositeScopedKey(String leftName, String left, String rightName, String right) {
+        String safeLeft = Objects.requireNonNull(left, leftName + " must not be null");
+        String safeRight = Objects.requireNonNull(right, rightName + " must not be null");
+        return safeLeft.length() + ":" + safeLeft + ":" + safeRight.length() + ":" + safeRight;
     }
 
     private static String truncate(String value) {

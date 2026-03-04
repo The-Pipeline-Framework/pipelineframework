@@ -3,7 +3,7 @@ package org.pipelineframework.orchestrator;
 /**
  * Durable execution state record used by async orchestration.
  */
-public record ExecutionRecord(
+public record ExecutionRecord<I, R>(
     String tenantId,
     String executionId,
     String executionKey,
@@ -15,8 +15,8 @@ public record ExecutionRecord(
     long leaseExpiresEpochMs,
     long nextDueEpochMs,
     String lastTransitionKey,
-    Object inputPayload,
-    Object resultPayload,
+    I inputPayload,
+    R resultPayload,
     String errorCode,
     String errorMessage,
     long createdAtEpochMs,
@@ -30,8 +30,8 @@ public record ExecutionRecord(
      * @param nowEpochMs update timestamp
      * @return updated record
      */
-    public ExecutionRecord withStatus(ExecutionStatus newStatus, long nowEpochMs) {
-        return new ExecutionRecord(
+    public ExecutionRecord<I, R> withStatus(ExecutionStatus newStatus, long nowEpochMs) {
+        return new ExecutionRecord<>(
             tenantId,
             executionId,
             executionKey,

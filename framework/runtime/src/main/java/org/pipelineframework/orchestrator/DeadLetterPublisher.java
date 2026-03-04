@@ -18,6 +18,9 @@ public interface DeadLetterPublisher {
 
     /**
      * Provider priority used when multiple publishers are available.
+     * Higher numeric values have higher precedence and are selected over lower values.
+     * The default implementation returns {@code 0}, which takes precedence over
+     * built-ins such as {@code LoggingDeadLetterPublisher} ({@code -100}).
      *
      * @return provider priority
      */

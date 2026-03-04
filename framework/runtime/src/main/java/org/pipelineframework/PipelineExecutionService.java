@@ -220,8 +220,10 @@ public class PipelineExecutionService {
     executionStateStore = selectExecutionStateStore(orchestratorConfig.stateProvider());
     workDispatcher = selectWorkDispatcher(orchestratorConfig.dispatcherProvider());
     deadLetterPublisher = selectDeadLetterPublisher(orchestratorConfig.dlqProvider());
-    if (orchestratorConfig.strictStartup() && orchestratorConfig.idempotencyPolicy() == null) {
-      throw new IllegalStateException("pipeline.orchestrator.idempotency-policy must be configured in queue mode.");
+    if (orchestratorConfig.strictStartup()
+        && orchestratorConfig.idempotencyPolicy() == OrchestratorIdempotencyPolicy.OPTIONAL_CLIENT_KEY) {
+      throw new IllegalStateException(
+          "pipeline.orchestrator.idempotency-policy must be explicitly configured for queue mode when strict startup is enabled.");
     }
     Duration interval = orchestratorConfig.sweepInterval();
     long intervalMs = Math.max(1000L, interval == null ? 30000L : interval.toMillis());
@@ -474,7 +476,7 @@ public class PipelineExecutionService {
           if (claimed.isEmpty()) {
             return Uni.createFrom().voidItem();
           }
-          ExecutionRecord record = claimed.get();
+          ExecutionRecord<Object, Object> record = claimed.get();
           String transitionKey = transitionKey(record.executionId(), record.currentStepIndex(), record.attempt());
           return runAsyncExecution(record.inputPayload())
               .onItem().transformToUni(resultPayload -> executionStateStore.markSucceeded(
@@ -488,8 +490,7 @@ public class PipelineExecutionService {
                 if (updated.isPresent()) {
                   return Uni.createFrom().voidItem();
                 }
-                return Uni.createFrom().failure(new IllegalStateException(
-                    "Stale success commit for execution " + record.executionId()));
+                return Uni.createFrom().voidItem();
               })
               .onFailure().recoverWithUni(failure -> handleExecutionFailure(record, transitionKey, failure));
         });
@@ -681,7 +682,7 @@ public class PipelineExecutionService {
         nowEpochMs);
   }
 
-  private static ExecutionStatusDto toStatusDto(ExecutionRecord record) {
+  private static ExecutionStatusDto toStatusDto(ExecutionRecord<Object, Object> record) {
     return new ExecutionStatusDto(
         record.executionId(),
         record.status(),
@@ -703,7 +704,10 @@ public class PipelineExecutionService {
         .onItem().transform(list -> (List<?>) list);
   }
 
-  private Uni<Void> handleExecutionFailure(ExecutionRecord record, String transitionKey, Throwable failure) {
+  private Uni<Void> handleExecutionFailure(
+      ExecutionRecord<Object, Object> record,
+      String transitionKey,
+      Throwable failure) {
     long now = System.currentTimeMillis();
     int nextAttempt = record.attempt() + 1;
     boolean retryAllowed = nextAttempt <= orchestratorConfig.maxRetries();
@@ -769,12 +773,22 @@ public class PipelineExecutionService {
     }
     long now = System.currentTimeMillis();
     executionStateStore.findDueExecutions(now, orchestratorConfig.sweepLimit())
+        .onItem().transformToUni(due -> {
+          if (due.isEmpty()) {
+            return Uni.createFrom().voidItem();
+          }
+          List<Uni<Void>> enqueueOperations = new ArrayList<>(due.size());
+          for (ExecutionRecord<Object, Object> record : due) {
+            enqueueOperations.add(workDispatcher.enqueueNow(new ExecutionWorkItem(record.tenantId(), record.executionId()))
+                .onFailure().transform(failure -> new IllegalStateException(
+                    "Failed to re-dispatch due execution " + record.executionId(),
+                    failure)));
+          }
+          return Uni.join().all(enqueueOperations).andCollectFailures().replaceWithVoid();
+        })
         .subscribe()
         .with(
-            due -> due.forEach(record -> workDispatcher.enqueueNow(
-                new ExecutionWorkItem(record.tenantId(), record.executionId()))
-                .subscribe().with(ignored -> { }, failure -> LOG.errorf(failure,
-                    "Failed to re-dispatch due execution %s", record.executionId()))),
+            ignored -> { },
             failure -> LOG.errorf(failure, "Failed sweeping due async executions"));
   }
 
