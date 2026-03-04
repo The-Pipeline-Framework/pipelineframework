@@ -45,6 +45,13 @@ public record FunctionTransportContext(
     public static final String ATTR_TARGET_RUNTIME = "tpf.function.target.runtime";
     public static final String ATTR_TARGET_MODULE = "tpf.function.target.module";
     public static final String ATTR_TARGET_HANDLER = "tpf.function.target.handler";
+    public static final String ATTR_TRANSPORT_PROTOCOL = "tpf.transport.protocol";
+    public static final String ATTR_CORRELATION_ID = "tpf.correlation.id";
+    public static final String ATTR_EXECUTION_ID = "tpf.execution.id";
+    public static final String ATTR_RETRY_ATTEMPT = "tpf.retry.attempt";
+    public static final String ATTR_DEADLINE_EPOCH_MS = "tpf.deadline.epoch.ms";
+    public static final String ATTR_DISPATCH_TS_EPOCH_MS = "tpf.dispatch.ts.epoch.ms";
+    public static final String ATTR_PARENT_ITEM_ID = "tpf.parent.item.id";
 
     /**
      * Creates a context with immutable attributes.
@@ -192,5 +199,97 @@ public record FunctionTransportContext(
             return Optional.empty();
         }
         return Optional.of(raw.strip());
+    }
+
+    /**
+     * Returns configured function transport protocol when present.
+     *
+     * @return protocol identifier
+     */
+    public Optional<String> transportProtocol() {
+        return normalizedAttribute(ATTR_TRANSPORT_PROTOCOL);
+    }
+
+    /**
+     * Returns immutable correlation id when present.
+     *
+     * @return correlation id
+     */
+    public Optional<String> correlationId() {
+        return normalizedAttribute(ATTR_CORRELATION_ID);
+    }
+
+    /**
+     * Returns execution id when present.
+     *
+     * @return execution id
+     */
+    public Optional<String> executionId() {
+        return normalizedAttribute(ATTR_EXECUTION_ID);
+    }
+
+    /**
+     * Returns retry attempt count when present.
+     *
+     * @return retry attempt count
+     */
+    public Optional<Integer> retryAttempt() {
+        return normalizedAttribute(ATTR_RETRY_ATTEMPT)
+            .flatMap(value -> toInteger(ATTR_RETRY_ATTEMPT, value));
+    }
+
+    /**
+     * Returns absolute deadline timestamp in epoch milliseconds when present.
+     *
+     * @return deadline epoch millis
+     */
+    public Optional<Long> deadlineEpochMs() {
+        return normalizedAttribute(ATTR_DEADLINE_EPOCH_MS)
+            .flatMap(value -> toLong(ATTR_DEADLINE_EPOCH_MS, value));
+    }
+
+    /**
+     * Returns dispatch timestamp in epoch milliseconds when present.
+     *
+     * @return dispatch timestamp epoch millis
+     */
+    public Optional<Long> dispatchTsEpochMs() {
+        return normalizedAttribute(ATTR_DISPATCH_TS_EPOCH_MS)
+            .flatMap(value -> toLong(ATTR_DISPATCH_TS_EPOCH_MS, value));
+    }
+
+    /**
+     * Returns lineage parent item id when present.
+     *
+     * @return parent item id
+     */
+    public Optional<String> parentItemId() {
+        return normalizedAttribute(ATTR_PARENT_ITEM_ID);
+    }
+
+    private Optional<Integer> toInteger(String key, String value) {
+        try {
+            return Optional.of(Integer.parseInt(value));
+        } catch (NumberFormatException e) {
+            LOG.warning(() -> "Ignoring invalid integer attribute"
+                + " requestId='" + requestId + "'"
+                + ", functionName='" + functionName + "'"
+                + ", key='" + key + "'"
+                + ", value='" + value + "'");
+            return Optional.empty();
+        }
+    }
+
+    private Optional<Long> toLong(String key, String value) {
+        try {
+            return Optional.of(Long.parseLong(value));
+        } catch (NumberFormatException e) {
+            LOG.warning(() -> "Ignoring invalid long attribute"
+                + " requestId='" + requestId + "'"
+                + ", functionName='" + functionName + "'"
+                + ", key='" + key + "'"
+                + ", value='" + value + "'");
+            return Optional.empty();
+        }
     }
 }

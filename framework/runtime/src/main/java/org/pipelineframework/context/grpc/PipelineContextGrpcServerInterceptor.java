@@ -26,6 +26,8 @@ import org.pipelineframework.context.PipelineCacheStatusHolder;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHeaders;
 import org.pipelineframework.context.PipelineContextHolder;
+import org.pipelineframework.context.TransportDispatchMetadata;
+import org.pipelineframework.context.TransportDispatchMetadataHolder;
 
 /**
  * Extracts pipeline context headers on gRPC server calls.
@@ -49,6 +51,20 @@ public class PipelineContextGrpcServerInterceptor implements ServerInterceptor {
         Metadata.Key.of(PipelineContextHeaders.CACHE_POLICY, Metadata.ASCII_STRING_MARSHALLER);
     private static final Metadata.Key<String> CACHE_STATUS_HEADER =
         Metadata.Key.of(PipelineContextHeaders.CACHE_STATUS, Metadata.ASCII_STRING_MARSHALLER);
+    private static final Metadata.Key<String> CORRELATION_ID_HEADER =
+        Metadata.Key.of(PipelineContextHeaders.TPF_CORRELATION_ID, Metadata.ASCII_STRING_MARSHALLER);
+    private static final Metadata.Key<String> EXECUTION_ID_HEADER =
+        Metadata.Key.of(PipelineContextHeaders.TPF_EXECUTION_ID, Metadata.ASCII_STRING_MARSHALLER);
+    private static final Metadata.Key<String> IDEMPOTENCY_KEY_HEADER =
+        Metadata.Key.of(PipelineContextHeaders.TPF_IDEMPOTENCY_KEY, Metadata.ASCII_STRING_MARSHALLER);
+    private static final Metadata.Key<String> RETRY_ATTEMPT_HEADER =
+        Metadata.Key.of(PipelineContextHeaders.TPF_RETRY_ATTEMPT, Metadata.ASCII_STRING_MARSHALLER);
+    private static final Metadata.Key<String> DEADLINE_EPOCH_MS_HEADER =
+        Metadata.Key.of(PipelineContextHeaders.TPF_DEADLINE_EPOCH_MS, Metadata.ASCII_STRING_MARSHALLER);
+    private static final Metadata.Key<String> DISPATCH_TS_EPOCH_MS_HEADER =
+        Metadata.Key.of(PipelineContextHeaders.TPF_DISPATCH_TS_EPOCH_MS, Metadata.ASCII_STRING_MARSHALLER);
+    private static final Metadata.Key<String> PARENT_ITEM_ID_HEADER =
+        Metadata.Key.of(PipelineContextHeaders.TPF_PARENT_ITEM_ID, Metadata.ASCII_STRING_MARSHALLER);
 
     @Override
     public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
@@ -61,6 +77,15 @@ public class PipelineContextGrpcServerInterceptor implements ServerInterceptor {
             headers.get(REPLAY_HEADER),
             headers.get(CACHE_POLICY_HEADER));
         PipelineContextHolder.set(context);
+        TransportDispatchMetadata transportDispatchMetadata = TransportDispatchMetadata.fromHeaders(
+            headers.get(CORRELATION_ID_HEADER),
+            headers.get(EXECUTION_ID_HEADER),
+            headers.get(IDEMPOTENCY_KEY_HEADER),
+            headers.get(RETRY_ATTEMPT_HEADER),
+            headers.get(DEADLINE_EPOCH_MS_HEADER),
+            headers.get(DISPATCH_TS_EPOCH_MS_HEADER),
+            headers.get(PARENT_ITEM_ID_HEADER));
+        TransportDispatchMetadataHolder.set(transportDispatchMetadata);
 
         ServerCall<ReqT, RespT> wrappedCall = new ForwardingServerCall.SimpleForwardingServerCall<>(call) {
             @Override
@@ -78,12 +103,14 @@ public class PipelineContextGrpcServerInterceptor implements ServerInterceptor {
             @Override
             public void onComplete() {
                 PipelineContextHolder.clear();
+                TransportDispatchMetadataHolder.clear();
                 super.onComplete();
             }
 
             @Override
             public void onCancel() {
                 PipelineContextHolder.clear();
+                TransportDispatchMetadataHolder.clear();
                 super.onCancel();
             }
         };

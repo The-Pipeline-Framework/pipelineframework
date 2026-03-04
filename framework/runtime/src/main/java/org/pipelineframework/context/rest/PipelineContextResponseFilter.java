@@ -28,6 +28,7 @@ import org.pipelineframework.cache.CacheStatus;
 import org.pipelineframework.context.PipelineCacheStatusHolder;
 import org.pipelineframework.context.PipelineContextHeaders;
 import org.pipelineframework.context.PipelineContextHolder;
+import org.pipelineframework.context.TransportDispatchMetadataHolder;
 
 /**
  * Clears pipeline context after REST responses are processed.
@@ -50,5 +51,6 @@ public class PipelineContextResponseFilter implements ContainerResponseFilter {
             responseContext.getHeaders().putSingle(PipelineContextHeaders.CACHE_STATUS, status.name());
         }
         PipelineContextHolder.clear();
+        TransportDispatchMetadataHolder.clear();
     }
 }
