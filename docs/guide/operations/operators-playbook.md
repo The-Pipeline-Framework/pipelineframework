@@ -30,32 +30,32 @@ Optional example lane (Search reference project):
   -DskipTests compile
 ```
 
-FTGo reference lanes:
+FTGo reference command paths:
 
 ```bash
-# Slice 1 lineage determinism (runtime focus)
+# Lineage determinism checks (runtime focus)
 ./mvnw -f framework/pom.xml -pl runtime -Dtest=FunctionTransportAdaptersTest test
 
-# Slice 2 parity checks (FUNCTION local/remote routing)
+# Parity checks (FUNCTION local/remote routing)
 ./mvnw -f framework/pom.xml -pl runtime -Dtest=FunctionTransportContextTest,InvocationModeRoutingParityTest test
 
-# Slice 2 checkout bridge parity smoke
+# Checkout bridge parity smoke
 ./mvnw -f examples/checkout/pom.xml -pl create-order-orchestrator-svc,deliver-order-orchestrator-svc -am test -DskipITs
 
-# Slice 3 branching lane reliability checks
+# Branching lane reliability checks
 ./mvnw -f examples/search/common/pom.xml install -DskipTests
 ./mvnw -f examples/search/index-document-svc/pom.xml -Dtest=ProcessIndexDocumentServiceReliabilityTest test
 ```
 
-## Run Modes and Lanes
+## Run Modes and Command Paths
 
-### Compute/REST lane
+### Compute/REST mode
 
 - Build transport and platform defaults from `pipeline.yaml` (the pipeline manifest, typically at the repo root or a service `config/` directory; see [Configuration Reference](/guide/build/configuration/)).
 - Use module-local Quarkus run/test commands for step services and orchestrator.
 - Expect generated REST handlers/resources for configured steps.
 
-### Function/REST lane
+### Function/REST mode
 
 - Build with:
   - `-Dpipeline.platform=FUNCTION`

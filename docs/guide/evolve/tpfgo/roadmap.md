@@ -117,23 +117,23 @@ Steps (each step persists its own type):
 
 ## Implemented Milestones (History)
 
-This roadmap started before the recent slice stack. The following FTGo-related milestones are already implemented:
+This roadmap started before the recent implementation stack. The following FTGo-related milestones are already implemented:
 
-- **2026-02-12 to 2026-02-13 (pre-slice groundwork)**:
+- **2026-02-12 to 2026-02-13 (early groundwork)**:
   - TraceEnvelope streaming lineage tests landed in runtime.
   - Search multi-e2e and cardinality stabilization work was merged.
   - TPFGo epic-next and search trace-envelope lineage branches were merged.
-- **2026-03-02 (Slice 1 and Slice 2 runtime core)**:
+- **2026-03-02 (runtime core milestones)**:
   - Split/merge lineage stabilization and deterministic-id hardening landed in runtime adapters.
   - FUNCTION mode parity across streaming handler shapes was implemented (FUNCTION/LAMBDA path).
-- **2026-03-03 (Slice 3 reference lane depth)**:
+- **2026-03-03 (reference lane depth milestone)**:
   - Search fan-out/fan-in reference lane was expanded with richer aggregation depth and additional reliability/lineage assertions.
 - **Current state**:
   - Core lineage baseline is implemented for current supported runtime paths; remaining work is primarily connector/pipeline-to-pipeline policy closure and full FTGo end-to-end parity expansion.
 
 ## TPFGo Closure Board (Epic Termination Criteria)
 
-This board is the authoritative closure tracker for the FTGo epic. No new slice should be opened while any merge-blocking item below remains open.
+This board is the authoritative closure tracker for the FTGo epic. No new parallel track should be opened while any merge-blocking item below remains open.
 
 Status legend: TODO, IN_PROGRESS, DONE
 
