@@ -117,19 +117,89 @@ Steps (each step persists its own type):
 
 ## Implemented Milestones (History)
 
-This roadmap started before the recent slice stack. The following FTGo-related milestones are already implemented:
+This roadmap started before the recent implementation stack. The following FTGo-related milestones are already implemented:
 
-- **2026-02-12 to 2026-02-13 (pre-slice groundwork)**:
+- **2026-02-12 to 2026-02-13 (early groundwork)**:
   - TraceEnvelope streaming lineage tests landed in runtime.
   - Search multi-e2e and cardinality stabilization work was merged.
   - TPFGo epic-next and search trace-envelope lineage branches were merged.
-- **2026-03-02 (Slice 1 and Slice 2 runtime core)**:
+- **2026-03-02 (runtime core milestones)**:
   - Split/merge lineage stabilization and deterministic-id hardening landed in runtime adapters.
   - FUNCTION mode parity across streaming handler shapes was implemented (FUNCTION/LAMBDA path).
-- **2026-03-03 (Slice 3 reference lane depth)**:
+- **2026-03-03 (reference lane depth milestone)**:
   - Search fan-out/fan-in reference lane was expanded with richer aggregation depth and additional reliability/lineage assertions.
 - **Current state**:
   - Core lineage baseline is implemented for current supported runtime paths; remaining work is primarily connector/pipeline-to-pipeline policy closure and full FTGo end-to-end parity expansion.
+
+## TPFGo Closure Board (Epic Termination Criteria)
+
+This board is the authoritative closure tracker for the FTGo epic. No new parallel track should be opened while any merge-blocking item below remains open.
+
+Status legend: TODO, IN_PROGRESS, DONE
+
+### Merge-blocking items
+
+1) **Connector idempotency and dedup policy closure**  
+Status: TODO  
+Done means:
+- Default duplicate-handling policy is documented and versioned.
+- Retry key derivation contract is explicit and deterministic.
+- Unit/integration tests cover duplicate/replay scenarios at connector boundaries.
+
+2) **Connector backpressure and buffering policy closure**  
+Status: TODO  
+Done means:
+- End-to-end demand signaling model is documented.
+- Buffer capacity/overflow behavior is explicit and tested.
+- Failure signatures under pressure are observable and documented.
+
+3) **Cross-pipeline handoff contract build-time enforcement**  
+Status: TODO  
+Done means:
+- Output-to-input contract checks fail fast at build time for incompatible handoffs.
+- Diagnostics include pipeline/step context and expected vs actual contract details.
+- Coverage includes version drift and mapper/payload mismatch cases.
+
+4) **Canonical full FTGo flow implemented end-to-end**  
+Status: TODO  
+Done means:
+- Full checkout -> validation -> restaurant acceptance -> preparation -> dispatch -> delivery -> payment flow exists in TPF.
+- Explicit failure/compensation pipelines are implemented for terminal failure checkpoints.
+- End-to-end test validates business correctness and deterministic lineage continuity.
+
+5) **Transport/platform parity gate (REST, gRPC, FUNCTION)**  
+Status: TODO  
+Done means:
+- Equivalent supported-shape behavior is validated across all required paths.
+- Unsupported shapes fail with explicit, consistent diagnostics.
+- Parity matrix tests are green and required in CI.
+
+6) **Partial-progress and recovery behavior closure**  
+Status: TODO  
+Done means:
+- Partial-progress scenarios are explicitly classified and tested.
+- Replay/remediation workflow is codified and verifiable.
+- Parking/retry exhaustion behavior is operationally diagnosable.
+
+7) **Docs/runbooks aligned to shipped behavior**  
+Status: IN_PROGRESS  
+Done means:
+- Build/development/operations/evolve docs agree on current capabilities.
+- Troubleshooting guidance maps concrete failure signatures to actions.
+- No planned-but-unimplemented capability is documented as available.
+
+8) **Single merge-blocking CI gate for epic acceptance**  
+Status: TODO  
+Done means:
+- CI includes framework verify + canonical FTGo E2E + parity matrix.
+- Gate is required for merges affecting FTGo-critical modules.
+- Failure output is actionable for on-call and contributors.
+
+### Execution rule
+
+- Prioritize closure of the eight merge-blocking items above.
+- Treat additional exploratory work as non-blocking unless it directly closes one of these items.
+- Epic is considered complete only when all eight items are DONE.
 
 ## Pain-Point Matrix
 
