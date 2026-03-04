@@ -21,6 +21,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.logging.Logger;
 
 /**
  * Context propagated at function transport boundaries.
@@ -36,6 +37,8 @@ public record FunctionTransportContext(
     String stage,
     Map<String, String> attributes
 ) {
+    private static final Logger LOG = Logger.getLogger(FunctionTransportContext.class.getName());
+
     public static final String ATTR_IDEMPOTENCY_POLICY = "tpf.idempotency.policy";
     public static final String ATTR_IDEMPOTENCY_KEY = "tpf.idempotency.key";
     public static final String ATTR_INVOCATION_MODE = "tpf.function.invocation.mode";
