@@ -115,6 +115,22 @@ Steps (each step persists its own type):
 
 **Outcome**: if the pipeline completes, `ReadyOrder` is valid and stable. No rollback. If a failure occurs, it goes to the error sink; optional ops remediation pipelines can be attached for automation.
 
+## Implemented Milestones (History)
+
+This roadmap started before the recent slice stack. The following FTGo-related milestones are already implemented:
+
+- **2026-02-12 to 2026-02-13 (pre-slice groundwork)**:
+  - TraceEnvelope streaming lineage tests landed in runtime.
+  - Search multi-e2e and cardinality stabilization work was merged.
+  - TPFGo epic-next and search trace-envelope lineage branches were merged.
+- **2026-03-02 (Slice 1 and Slice 2 runtime core)**:
+  - Split/merge lineage stabilization and deterministic-id hardening landed in runtime adapters.
+  - FUNCTION mode parity across streaming handler shapes was implemented.
+- **2026-03-03 (Slice 3 reference lane depth)**:
+  - Search fan-out/fan-in reference lane was expanded with richer aggregation depth and additional reliability/lineage assertions.
+- **Current state**:
+  - Core lineage + parity baseline is implemented for current supported runtime paths; remaining work is primarily connector/pipeline-to-pipeline policy closure.
+
 ## Pain-Point Matrix
 
 Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
@@ -136,28 +152,28 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 
 4) **Idempotency / duplicate handoff**
 - **Problem**: Connector retries can duplicate downstream processing.
-- **Stance**: Needs a connector-level idempotency key and de-dup policy. **Blocking for cross-pipeline sync composition** until the connector policy is defined. Action: define connector-level retry keys and de-dup semantics.
-- **Status**: OPEN
+- **Stance**: Function runtime now carries deterministic idempotency keys in envelopes and adapters, but connector-level de-dup policy is not yet fully formalized for all pipeline-to-pipeline handoffs. Action: define connector-level retry keys and de-dup semantics.
+- **Status**: PARTIAL
 
 5) **Traceability / lineage**
 - **Problem**: Track the lineage of items through steps and pipelines.
-- **Stance**: Implement "Russian doll" tracing in the runtime (TraceEnvelope with previous-item reference or inline payload).
-- **Status**: PROPOSED
+- **Stance**: "Russian doll" tracing is implemented in current supported runtime paths via `TraceEnvelope`, including deterministic split/merge lineage behavior and parity-oriented test coverage.
+- **Status**: RESOLVED
 
 6) **Type compatibility between pipelines**
 - **Problem**: Pipeline B should not depend on Pipeline A internals.
-- **Stance**: Use Pipeline B input DTO as the handoff contract; add build-time compatibility checks.
+- **Stance**: Use Pipeline B input DTO as the handoff contract; build-time checks exist for operator/mapping compatibility, with full cross-pipeline handoff contract governance still maturing.
 - **Status**: PARTIAL
 
 7) **Backpressure across pipelines**
 - **Problem**: Piping should preserve backpressure end-to-end.
-- **Stance**: Needs a connector policy that propagates demand (no unbounded buffers). **Blocking for cross-pipeline sync composition** until end-to-end demand signalling is defined. Action: specify end-to-end demand signalling and buffer limits.
-- **Status**: OPEN
+- **Stance**: Step/runtime backpressure controls are in place (buffer strategy/capacity), but connector-level end-to-end demand signalling and limits are still not a closed contract. Action: specify end-to-end demand signalling and buffer limits.
+- **Status**: PARTIAL
 
 8) **Branching outputs (multi-out steps)**
 - **Problem**: A step may need to emit different output types based on business decisions.
-- **Stance**: Allow workflow fan-out by piping sub-pipelines off a step output; require explicit branch policy (primary vs aux, required vs optional).
-- **Status**: PROPOSED
+- **Stance**: Fan-out/fan-in behavior is implemented in runtime paths and reference lanes, but formal branch policy (primary vs aux, required vs optional) remains design work.
+- **Status**: PARTIAL
 
 9) **Observers and mid-step taps**
 - **Problem**: Optional features (e.g., marketing) may want to observe outputs that are not stable checkpoints.
@@ -192,8 +208,7 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 - **Error Sink**: define a runtime error sink interface with a default StdErrSink and optional gRPC/REST sink service.
 - **Connector Backpressure Policy**: define demand propagation, buffer limits, and flow control. (Pain-point #7, Owner: TBD, Acceptance: documented policy + tests)
 - **Connector Idempotency Policy**: define de-duplication, retry keys, and exactly-once semantics. (Pain-point #4, Owner: TBD, Acceptance: documented policy + tests)
-- **TraceEnvelope**: add optional tracing that wraps step output with previous-item linkage.
-- **Build-Time Checks**: verify pipeline-to-pipeline handoff type compatibility.
+- **Build-Time Checks**: existing operator/mapping compatibility checks are in place; extend to explicit pipeline-to-pipeline handoff contracts.
 
 ## Open Questions
 
