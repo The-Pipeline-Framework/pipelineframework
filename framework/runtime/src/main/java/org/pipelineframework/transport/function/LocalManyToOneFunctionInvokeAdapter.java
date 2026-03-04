@@ -313,35 +313,56 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
             return payload.toString();
         }
         if (payload instanceof Map<?, ?> map) {
-            return map.entrySet().stream()
-                .map(entry -> canonicalPayload(entry.getKey(), visited)
-                    + "->" + canonicalPayload(entry.getValue(), visited))
-                .sorted()
-                .collect(Collectors.joining(",", "{", "}"));
+            if (!visited.add(payload)) {
+                return payload.getClass().getName() + "#cycle";
+            }
+            try {
+                return map.entrySet().stream()
+                    .map(entry -> canonicalPayload(entry.getKey(), visited)
+                        + "->" + canonicalPayload(entry.getValue(), visited))
+                    .sorted()
+                    .collect(Collectors.joining(",", "{", "}"));
+            } finally {
+                visited.remove(payload);
+            }
         }
         if (payload instanceof Iterable<?> iterable) {
-            StringBuilder builder = new StringBuilder("[");
-            boolean first = true;
-            for (Object item : iterable) {
-                if (!first) {
-                    builder.append(',');
-                }
-                builder.append(canonicalPayload(item, visited));
-                first = false;
+            if (!visited.add(payload)) {
+                return payload.getClass().getName() + "#cycle";
             }
-            return builder.append(']').toString();
+            try {
+                StringBuilder builder = new StringBuilder("[");
+                boolean first = true;
+                for (Object item : iterable) {
+                    if (!first) {
+                        builder.append(',');
+                    }
+                    builder.append(canonicalPayload(item, visited));
+                    first = false;
+                }
+                return builder.append(']').toString();
+            } finally {
+                visited.remove(payload);
+            }
         }
         Class<?> payloadClass = payload.getClass();
         if (payloadClass.isArray()) {
-            int length = Array.getLength(payload);
-            StringBuilder builder = new StringBuilder("[");
-            for (int i = 0; i < length; i++) {
-                if (i > 0) {
-                    builder.append(',');
-                }
-                builder.append(canonicalPayload(Array.get(payload, i), visited));
+            if (!visited.add(payload)) {
+                return payloadClass.getName() + "#cycle";
             }
-            return builder.append(']').toString();
+            try {
+                int length = Array.getLength(payload);
+                StringBuilder builder = new StringBuilder("[");
+                for (int i = 0; i < length; i++) {
+                    if (i > 0) {
+                        builder.append(',');
+                    }
+                    builder.append(canonicalPayload(Array.get(payload, i), visited));
+                }
+                return builder.append(']').toString();
+            } finally {
+                visited.remove(payload);
+            }
         }
         if (payloadClass.isRecord()) {
             if (!visited.add(payload)) {

@@ -69,12 +69,13 @@ public final class LocalOneToManyFunctionInvokeAdapter<I, O> implements Function
         Objects.requireNonNull(context, "context must not be null");
         Objects.requireNonNull(input.payload(), "LocalOneToManyFunctionInvokeAdapter input payload must not be null");
         String rawTraceId = input.traceId();
-        String traceId = (rawTraceId == null || rawTraceId.isBlank())
+        String derivedTraceId = (rawTraceId == null || rawTraceId.isBlank())
             ? AdapterUtils.deriveTraceId(context.requestId())
             : rawTraceId.strip();
+        String traceId = derivedTraceId;
         String traceScope = AdapterUtils.normalizeOrDefault(
             rawTraceId,
-            AdapterUtils.deriveTraceId(context.requestId()));
+            derivedTraceId);
         AtomicLong outputIndex = new AtomicLong(0L);
         Multi<O> outputStream = delegate.apply(input.payload());
         if (outputStream == null) {
