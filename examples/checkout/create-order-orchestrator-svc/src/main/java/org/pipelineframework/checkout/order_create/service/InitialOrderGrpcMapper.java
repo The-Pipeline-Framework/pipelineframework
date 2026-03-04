@@ -8,7 +8,7 @@ import org.pipelineframework.checkout.order_request_process.service.OrderRequest
 import org.pipelineframework.mapper.Mapper;
 
 @ApplicationScoped
-public class InitialOrderGrpcMapper implements Mapper<OrderCreateSvc.InitialOrder, InitialOrderDto, InitialOrderDto> {
+public class InitialOrderGrpcMapper implements Mapper<InitialOrderDto, OrderCreateSvc.InitialOrder> {
 
     /**
      * Converts a gRPC OrderCreateSvc.InitialOrder into an InitialOrderDto.
@@ -18,7 +18,7 @@ public class InitialOrderGrpcMapper implements Mapper<OrderCreateSvc.InitialOrde
      * @throws IllegalArgumentException if {@code grpc} is null or {@code grpc.getItemCount()} is less than 0
      */
     @Override
-    public InitialOrderDto fromGrpc(OrderCreateSvc.InitialOrder grpc) {
+    public InitialOrderDto fromExternal(OrderCreateSvc.InitialOrder grpc) {
         if (grpc == null) {
             throw new IllegalArgumentException("grpc must not be null");
         }
@@ -40,7 +40,7 @@ public class InitialOrderGrpcMapper implements Mapper<OrderCreateSvc.InitialOrde
      *                                  if {@code dto.customerId()} is null, or if {@code dto.itemCount()} is less than 0
      */
     @Override
-    public OrderCreateSvc.InitialOrder toGrpc(InitialOrderDto dto) {
+    public OrderCreateSvc.InitialOrder toExternal(InitialOrderDto dto) {
         if (dto == null) {
             throw new IllegalArgumentException("dto must not be null");
         }
@@ -66,7 +66,6 @@ public class InitialOrderGrpcMapper implements Mapper<OrderCreateSvc.InitialOrde
      * @param dto the InitialOrderDto to return
      * @return the same {@code dto} instance passed in
      */
-    @Override
     public InitialOrderDto fromDto(InitialOrderDto dto) {
         return dto;
     }
@@ -77,7 +76,6 @@ public class InitialOrderGrpcMapper implements Mapper<OrderCreateSvc.InitialOrde
      * @param domain the InitialOrderDto to return
      * @return the same InitialOrderDto instance passed in
      */
-    @Override
     public InitialOrderDto toDto(InitialOrderDto domain) {
         return domain;
     }

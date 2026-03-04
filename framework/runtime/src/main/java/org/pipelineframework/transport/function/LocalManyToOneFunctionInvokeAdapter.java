@@ -16,11 +16,20 @@
 
 package org.pipelineframework.transport.function;
 
+import java.math.BigDecimal;
+import java.lang.reflect.Array;
+import java.lang.reflect.Method;
+import java.lang.reflect.RecordComponent;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -263,11 +272,175 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
             .collect(Collectors.joining(";"));
     }
 
+    /**
+     * Produce a deterministic fingerprint for the envelope's payload.
+     *
+     * @param envelope the trace envelope whose payload will be fingerprinted
+     * @return `ClassName:SHA-256_HEX` for a non-null payload, or an empty string if the payload is null
+     */
     private String payloadFingerprint(TraceEnvelope<I> envelope) {
         Object payload = envelope.payload();
-        return payload == null ? "" : payload.getClass().getName() + ":" + System.identityHashCode(payload);
+        if (payload == null) {
+            return "";
+        }
+        String canonical = canonicalPayload(payload, java.util.Collections.newSetFromMap(new IdentityHashMap<>()));
+        return payload.getClass().getName() + ":" + sha256Hex(canonical);
     }
 
+    /**
+     * Produce a deterministic canonical string representation of a payload for stable fingerprinting.
+     *
+     * <p>Supports the following forms:
+     * <ul>
+     *   <li>null -> "null"</li>
+     *   <li>CharSequence, Number, Boolean, Enum -> their toString()</li>
+     *   <li>Map -> sorted entries formatted as "{key->value,...}" where keys and values are canonicalized</li>
+     *   <li>Iterable and arrays -> elements formatted as "[e1,e2,...]" with canonicalized elements</li>
+     *   <li>Record -> "ClassName{field=value,...}" with recursive canonicalization and cycle detection (returns "ClassName#cycle" for a detected cycle)</li>
+     *   <li>Other objects -> "ClassName:normalizedToString" unless toString() looks like "ClassName@hex", in which case "ClassName" is returned</li>
+     * </ul>
+     *
+     * @param payload the value to canonicalize
+     * @param visited a mutable set used to track already-visited reference instances to detect cycles (identity semantics expected)
+     * @return a stable, deterministic string representation of the payload suitable for hashing and comparison
+     */
+    private String canonicalPayload(Object payload, Set<Object> visited) {
+        if (payload == null) {
+            return "null";
+        }
+        if (payload instanceof CharSequence
+                || payload instanceof Boolean
+                || payload instanceof Enum<?>) {
+            return payload.toString();
+        }
+        if (payload instanceof BigDecimal bigDecimal) {
+            return bigDecimal.stripTrailingZeros().toPlainString();
+        }
+        if (payload instanceof Number) {
+            return payload.toString();
+        }
+        if (payload instanceof Map<?, ?> map) {
+            if (!visited.add(payload)) {
+                return payload.getClass().getName() + "#cycle";
+            }
+            try {
+                return map.entrySet().stream()
+                    .map(entry -> frameToken(canonicalPayload(entry.getKey(), visited))
+                        + frameToken(canonicalPayload(entry.getValue(), visited)))
+                    .sorted()
+                    .collect(Collectors.joining("", "{", "}"));
+            } finally {
+                visited.remove(payload);
+            }
+        }
+        if (payload instanceof Iterable<?> iterable) {
+            if (!visited.add(payload)) {
+                return payload.getClass().getName() + "#cycle";
+            }
+            try {
+                StringBuilder builder = new StringBuilder("[");
+                for (Object item : iterable) {
+                    builder.append(frameToken(canonicalPayload(item, visited)));
+                }
+                return builder.append(']').toString();
+            } finally {
+                visited.remove(payload);
+            }
+        }
+        Class<?> payloadClass = payload.getClass();
+        if (payloadClass.isArray()) {
+            if (!visited.add(payload)) {
+                return payloadClass.getName() + "#cycle";
+            }
+            try {
+                int length = Array.getLength(payload);
+                StringBuilder builder = new StringBuilder("[");
+                for (int i = 0; i < length; i++) {
+                    builder.append(frameToken(canonicalPayload(Array.get(payload, i), visited)));
+                }
+                return builder.append(']').toString();
+            } finally {
+                visited.remove(payload);
+            }
+        }
+        if (payloadClass.isRecord()) {
+            if (!visited.add(payload)) {
+                return payloadClass.getName() + "#cycle";
+            }
+            try {
+                StringBuilder builder = new StringBuilder(payloadClass.getName()).append('{');
+                RecordComponent[] components = payloadClass.getRecordComponents();
+                for (int i = 0; i < components.length; i++) {
+                    if (i > 0) {
+                        builder.append(',');
+                    }
+                    RecordComponent component = components[i];
+                    Method accessor = component.getAccessor();
+                    try {
+                        accessor.setAccessible(true);
+                    } catch (RuntimeException ignored) {
+                        // Best-effort only; invocation may still work for accessible members.
+                    }
+                    Object value = accessor.invoke(payload);
+                    builder.append(component.getName()).append('=').append(canonicalPayload(value, visited));
+                }
+                return builder.append('}').toString();
+            } catch (ReflectiveOperationException ignored) {
+                return payloadClass.getName() + ":" + AdapterUtils.normalizeOrDefault(payload.toString(), "");
+            } finally {
+                visited.remove(payload);
+            }
+        }
+        String rendered = AdapterUtils.normalizeOrDefault(payload.toString(), "");
+        String identityPrefix = payloadClass.getName() + "@";
+        if (rendered.startsWith(identityPrefix)) {
+            String suffix = rendered.substring(identityPrefix.length());
+            if (!suffix.isEmpty() && suffix.chars().allMatch(ch ->
+                (ch >= '0' && ch <= '9')
+                    || (ch >= 'a' && ch <= 'f')
+                    || (ch >= 'A' && ch <= 'F'))) {
+                return payloadClass.getName();
+            }
+        }
+        return payloadClass.getName() + ":" + rendered;
+    }
+
+    private String frameToken(String token) {
+        String normalized = token == null ? "null" : token;
+        return normalized.length() + ":" + normalized;
+    }
+
+    /**
+     * Compute the SHA-256 digest of the given string and return it as a lowercase hexadecimal string.
+     *
+     * @param value the input string to hash (treated as UTF-8)
+     * @return the SHA-256 digest encoded as a lowercase hex string
+     * @throws IllegalStateException if the SHA-256 algorithm is not available on the platform
+     */
+    private String sha256Hex(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                hex.append(Character.forDigit((b >>> 4) & 0xF, 16));
+                hex.append(Character.forDigit(b & 0xF, 16));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 algorithm is not available", e);
+        }
+    }
+
+    /**
+     * Casts a comparator with wildcard bounds to a comparator typed to `T`.
+     *
+     * <p>This is a convenience helper to treat a `Comparator<? super T>` as a `Comparator<T>` when such
+     * a cast is known to be safe at the call site.
+     *
+     * @param comparator the comparator to cast
+     * @return the provided comparator cast to `Comparator<T>`
+     */
     @SuppressWarnings("unchecked")
     private static <T> Comparator<T> asTypedComparator(Comparator<? super T> comparator) {
         return (Comparator<T>) comparator;

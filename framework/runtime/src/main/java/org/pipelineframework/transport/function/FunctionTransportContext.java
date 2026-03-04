@@ -97,9 +97,9 @@ public record FunctionTransportContext(
     /**
      * Resolves idempotency policy from context attributes.
      *
-     * @return resolved policy; defaults to CONTEXT_STABLE when unset/unknown.
-     *     Unknown values are logged and treated as CONTEXT_STABLE. Legacy RANDOM is accepted
-     *     as compatibility alias and normalized to CONTEXT_STABLE.
+     * @return resolved policy; defaults to CONTEXT_STABLE when unset.
+     *     Legacy RANDOM is accepted as compatibility alias and normalized to CONTEXT_STABLE.
+     * @throws IllegalArgumentException when a non-empty idempotency policy is not supported
      */
     public IdempotencyPolicy idempotencyPolicy() {
         String raw = attributes.get(ATTR_IDEMPOTENCY_POLICY);
@@ -113,9 +113,8 @@ public record FunctionTransportContext(
         if ("CONTEXT_STABLE".equals(normalized) || "RANDOM".equals(normalized)) {
             return IdempotencyPolicy.CONTEXT_STABLE;
         }
-        LOG.warning(() -> "Unknown idempotency policy '" + raw
-            + "'; falling back to " + IdempotencyPolicy.CONTEXT_STABLE);
-        return IdempotencyPolicy.CONTEXT_STABLE;
+        throw new IllegalArgumentException(
+            "Unsupported idempotency policy '" + raw + "'. Expected CONTEXT_STABLE, RANDOM, or EXPLICIT.");
     }
 
     /**

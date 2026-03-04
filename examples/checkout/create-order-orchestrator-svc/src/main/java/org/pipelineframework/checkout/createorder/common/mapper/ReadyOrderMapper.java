@@ -7,7 +7,7 @@ import org.pipelineframework.checkout.createorder.grpc.OrderReadySvc;
 import org.pipelineframework.mapper.Mapper;
 
 @ApplicationScoped
-public class ReadyOrderMapper implements Mapper<OrderReadySvc.ReadyOrder, ReadyOrder, ReadyOrder> {
+public class ReadyOrderMapper implements Mapper<ReadyOrder, OrderReadySvc.ReadyOrder> {
     /**
      * Converts a gRPC OrderReadySvc.ReadyOrder message into a domain ReadyOrder.
      *
@@ -16,7 +16,7 @@ public class ReadyOrderMapper implements Mapper<OrderReadySvc.ReadyOrder, ReadyO
      * @throws IllegalArgumentException if {@code grpc} is null
      */
     @Override
-    public ReadyOrder fromGrpc(OrderReadySvc.ReadyOrder grpc) {
+    public ReadyOrder fromExternal(OrderReadySvc.ReadyOrder grpc) {
         if (grpc == null) {
             throw new IllegalArgumentException("grpc must not be null");
         }
@@ -34,7 +34,7 @@ public class ReadyOrderMapper implements Mapper<OrderReadySvc.ReadyOrder, ReadyO
      * @throws IllegalArgumentException if {@code dto} is null
      */
     @Override
-    public OrderReadySvc.ReadyOrder toGrpc(ReadyOrder dto) {
+    public OrderReadySvc.ReadyOrder toExternal(ReadyOrder dto) {
         if (dto == null) {
             throw new IllegalArgumentException("dto must not be null");
         }
@@ -51,7 +51,6 @@ public class ReadyOrderMapper implements Mapper<OrderReadySvc.ReadyOrder, ReadyO
      * @param dto the DTO instance to return
      * @return the same DTO instance that was passed in
      */
-    @Override
     public ReadyOrder fromDto(ReadyOrder dto) {
         return dto;
     }
@@ -62,7 +61,6 @@ public class ReadyOrderMapper implements Mapper<OrderReadySvc.ReadyOrder, ReadyO
      * @param domain the domain ReadyOrder to convert
      * @return the same ReadyOrder instance provided as input
      */
-    @Override
     public ReadyOrder toDto(ReadyOrder domain) {
         return domain;
     }

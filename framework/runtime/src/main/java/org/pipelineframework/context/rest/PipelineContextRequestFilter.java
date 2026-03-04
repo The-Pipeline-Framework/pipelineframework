@@ -46,6 +46,17 @@ public class PipelineContextRequestFilter implements ContainerRequestFilter {
     public PipelineContextRequestFilter() {
     }
 
+    /**
+     * Extracts pipeline context and transport dispatch metadata from HTTP headers and stores them in their respective thread-local holders.
+     *
+     * Reads pipeline headers (version, replay, cache policy) and transport dispatch headers
+     * (correlation id, execution id, idempotency key, retry attempt, deadline epoch ms,
+     * dispatch timestamp epoch ms, parent item id) from the provided request context and sets
+     * the resulting PipelineContext and TransportDispatchMetadata into PipelineContextHolder
+     * and TransportDispatchMetadataHolder respectively.
+     *
+     * @param requestContext the JAX-RS request context used to read the HTTP headers
+     */
     @Override
     public void filter(ContainerRequestContext requestContext) {
         PipelineContext context = PipelineContext.fromHeaders(

@@ -258,6 +258,16 @@ public class ProcessIndexDocumentService
         .toList();
   }
 
+  /**
+   * Produces a summary of tokens found across the given token batches.
+   *
+   * Tokens are extracted by splitting each batch's `tokens` text on whitespace; null or blank token strings are ignored.
+   *
+   * @param batches the token batches to aggregate
+   * @return an AggregationSummary whose first element is the number of distinct tokens and whose second element is the most frequent token;
+   *         if no tokens are present the unique token count is 0 and the top token is `null`. The top token is chosen by highest frequency,
+   *         with ties broken by selecting the lexicographically smaller token (earlier in natural string order).
+   */
   private AggregationSummary summarizeTokens(List<TokenBatch> batches) {
     Map<String, Integer> counts = new HashMap<>();
     for (TokenBatch batch : batches) {
@@ -275,11 +285,9 @@ public class ProcessIndexDocumentService
       return new AggregationSummary(0, null);
     }
     String topToken = counts.entrySet().stream()
-        .sorted(Comparator.<Map.Entry<String, Integer>>comparingInt(Map.Entry::getValue)
-            .reversed()
-            .thenComparing(Map.Entry::getKey, Comparator.naturalOrder()))
+        .max(Comparator.<Map.Entry<String, Integer>>comparingInt(Map.Entry::getValue)
+            .thenComparing(Map.Entry::getKey, Comparator.reverseOrder()))
         .map(Map.Entry::getKey)
-        .findFirst()
         .orElse(null);
     return new AggregationSummary(counts.size(), topToken);
   }

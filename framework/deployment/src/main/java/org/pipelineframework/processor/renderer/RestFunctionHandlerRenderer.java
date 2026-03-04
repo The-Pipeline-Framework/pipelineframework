@@ -87,6 +87,19 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
         return GenerationTarget.REST_RESOURCE;
     }
 
+    /**
+     * Generates and writes a REST-oriented AWS Lambda RequestHandler class for the given pipeline binding.
+     *
+     * <p>The generated class implements the AWS Lambda RequestHandler interface for the binding's pipeline
+     * step, adapts domain types to DTOs, selects input/output adapters based on the step's streaming shape,
+     * constructs a function transport context, and emits a handler method that delegates processing to the
+     * pipeline resource.</p>
+     *
+     * @param binding the REST binding describing the pipeline step and service package
+     * @param ctx the generation context providing the output directory and generation utilities
+     * @throws IOException if writing the generated Java file to the output directory fails
+     * @throws IllegalStateException if the binding's PipelineStepModel has a null streamingShape
+     */
     @Override
     public void render(RestBinding binding, GenerationContext ctx) throws IOException {
         PipelineStepModel model = binding.model();
