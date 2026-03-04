@@ -99,6 +99,19 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
         return GenerationTarget.REST_RESOURCE;
     }
 
+    /**
+     * Generate and write a Lambda RequestHandler Java class that delegates orchestrator execution
+     * to the generated REST resource according to the provided binding.
+     *
+     * The produced handler class adapts to the binding's input/output streaming configuration,
+     * derives DTO and resource types from the binding's base package and type names, and selects
+     * appropriate source/invoke/sink/bridge adapters before writing the resulting Java file to the
+     * generation context's output directory.
+     *
+     * @param binding descriptor of the orchestrator (type names, base package, and streaming flags)
+     * @param ctx     generation context providing the output directory and related I/O helpers
+     * @throws IOException if writing the generated Java file fails
+     */
     @Override
     public void render(OrchestratorBinding binding, GenerationContext ctx) throws IOException {
         boolean streamingInput = binding.inputStreaming();
@@ -140,8 +153,22 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
             .addStatement("$T transportContext = $T.of("
                     + "context != null ? context.getAwsRequestId() : $S, "
                     + "context != null ? context.getFunctionName() : $S, "
-                    + "$S)",
-                FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT, UNKNOWN_REQUEST, HANDLER_CLASS, INGRESS)
+                    + "$S, "
+                    + "$T.of("
+                    + "$T.ATTR_TRANSPORT_PROTOCOL, $T.getProperty($S, $S), "
+                    + "$T.ATTR_CORRELATION_ID, context != null ? context.getAwsRequestId() : $S, "
+                    + "$T.ATTR_EXECUTION_ID, (context != null && context.getLogStreamName() != null "
+                    + "&& !context.getLogStreamName().isBlank()) ? context.getLogStreamName() : $T.randomUUID().toString(), "
+                    + "$T.ATTR_RETRY_ATTEMPT, $T.getProperty($S, $S), "
+                    + "$T.ATTR_DISPATCH_TS_EPOCH_MS, $T.toString($T.currentTimeMillis())))",
+                FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT,
+                UNKNOWN_REQUEST, HANDLER_CLASS, INGRESS,
+                ClassName.get("java.util", "Map"),
+                FUNCTION_TRANSPORT_CONTEXT, ClassName.get(System.class), "tpf.transport.protocol", "lambda",
+                FUNCTION_TRANSPORT_CONTEXT, UNKNOWN_REQUEST,
+                FUNCTION_TRANSPORT_CONTEXT, ClassName.get("java.util", "UUID"),
+                FUNCTION_TRANSPORT_CONTEXT, ClassName.get(System.class), "tpf.transport.retry-attempt", "0",
+                FUNCTION_TRANSPORT_CONTEXT, ClassName.get(Long.class), ClassName.get(System.class))
             .addStatement("$T<$T, $T> source = new $T<>($S, $S)",
                 FUNCTION_SOURCE_ADAPTER, inputEventType, inputDto,
                 selectSourceAdapter(streamingInput, DEFAULT_UNARY_SOURCE_ADAPTER, MULTI_SOURCE_ADAPTER),

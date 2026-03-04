@@ -28,6 +28,8 @@ import io.quarkus.arc.Unremovable;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHeaders;
 import org.pipelineframework.context.PipelineContextHolder;
+import org.pipelineframework.context.TransportDispatchMetadata;
+import org.pipelineframework.context.TransportDispatchMetadataHolder;
 
 /**
  * Extracts pipeline context headers from REST requests.
@@ -44,6 +46,17 @@ public class PipelineContextRequestFilter implements ContainerRequestFilter {
     public PipelineContextRequestFilter() {
     }
 
+    /**
+     * Extracts pipeline context and transport dispatch metadata from HTTP headers and stores them in their respective thread-local holders.
+     *
+     * Reads pipeline headers (version, replay, cache policy) and transport dispatch headers
+     * (correlation id, execution id, idempotency key, retry attempt, deadline epoch ms,
+     * dispatch timestamp epoch ms, parent item id) from the provided request context and sets
+     * the resulting PipelineContext and TransportDispatchMetadata into PipelineContextHolder
+     * and TransportDispatchMetadataHolder respectively.
+     *
+     * @param requestContext the JAX-RS request context used to read the HTTP headers
+     */
     @Override
     public void filter(ContainerRequestContext requestContext) {
         PipelineContext context = PipelineContext.fromHeaders(
@@ -51,5 +64,14 @@ public class PipelineContextRequestFilter implements ContainerRequestFilter {
             requestContext.getHeaderString(PipelineContextHeaders.REPLAY),
             requestContext.getHeaderString(PipelineContextHeaders.CACHE_POLICY));
         PipelineContextHolder.set(context);
+        TransportDispatchMetadata metadata = TransportDispatchMetadata.fromHeaders(
+            requestContext.getHeaderString(PipelineContextHeaders.TPF_CORRELATION_ID),
+            requestContext.getHeaderString(PipelineContextHeaders.TPF_EXECUTION_ID),
+            requestContext.getHeaderString(PipelineContextHeaders.TPF_IDEMPOTENCY_KEY),
+            requestContext.getHeaderString(PipelineContextHeaders.TPF_RETRY_ATTEMPT),
+            requestContext.getHeaderString(PipelineContextHeaders.TPF_DEADLINE_EPOCH_MS),
+            requestContext.getHeaderString(PipelineContextHeaders.TPF_DISPATCH_TS_EPOCH_MS),
+            requestContext.getHeaderString(PipelineContextHeaders.TPF_PARENT_ITEM_ID));
+        TransportDispatchMetadataHolder.set(metadata);
     }
 }

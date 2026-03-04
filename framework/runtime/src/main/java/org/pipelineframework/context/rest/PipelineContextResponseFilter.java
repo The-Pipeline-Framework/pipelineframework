@@ -28,6 +28,7 @@ import org.pipelineframework.cache.CacheStatus;
 import org.pipelineframework.context.PipelineCacheStatusHolder;
 import org.pipelineframework.context.PipelineContextHeaders;
 import org.pipelineframework.context.PipelineContextHolder;
+import org.pipelineframework.context.TransportDispatchMetadataHolder;
 
 /**
  * Clears pipeline context after REST responses are processed.
@@ -43,6 +44,15 @@ public class PipelineContextResponseFilter implements ContainerResponseFilter {
     public PipelineContextResponseFilter() {
     }
 
+    /**
+     * Adds the pipeline cache status to the response headers (when present) and clears pipeline and transport context data.
+     *
+     * <p>If a cached status exists, the method sets the response header named by PipelineContextHeaders.CACHE_STATUS
+     * to that status's name. It then clears the pipeline context and transport dispatch metadata.</p>
+     *
+     * @param requestContext  the incoming request context
+     * @param responseContext the outgoing response context to which the header may be added
+     */
     @Override
     public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) {
         CacheStatus status = PipelineCacheStatusHolder.getAndClear();
@@ -50,5 +60,6 @@ public class PipelineContextResponseFilter implements ContainerResponseFilter {
             responseContext.getHeaders().putSingle(PipelineContextHeaders.CACHE_STATUS, status.name());
         }
         PipelineContextHolder.clear();
+        TransportDispatchMetadataHolder.clear();
     }
 }

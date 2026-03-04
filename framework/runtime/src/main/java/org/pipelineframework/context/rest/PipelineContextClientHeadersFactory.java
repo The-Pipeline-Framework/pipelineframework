@@ -25,6 +25,8 @@ import org.eclipse.microprofile.rest.client.ext.ClientHeadersFactory;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHeaders;
 import org.pipelineframework.context.PipelineContextHolder;
+import org.pipelineframework.context.TransportDispatchMetadata;
+import org.pipelineframework.context.TransportDispatchMetadataHolder;
 
 /**
  * Propagates pipeline context headers on REST client requests.
@@ -42,18 +44,19 @@ public class PipelineContextClientHeadersFactory implements ClientHeadersFactory
     }
 
     /**
-     * Propagates pipeline context headers (VERSION, REPLAY, CACHE_POLICY) from incoming request headers
-     * to the provided client outgoing headers, using the current PipelineContext as a fallback.
-     *
-     * If a header is present (case-insensitive) in incomingHeaders its value is forwarded; if absent,
-     * the corresponding value is taken from PipelineContextHolder.get() when available. Only non-blank
-     * values are written into clientOutgoingHeaders.
-     *
-     * @param incomingHeaders      the incoming request headers to read values from; may be null
-     * @param clientOutgoingHeaders the outgoing client headers to update; if null, it is returned unchanged
-     * @return the clientOutgoingHeaders map after any propagated headers have been set, or null if
-     *         clientOutgoingHeaders was null
-     */
+         * Propagates pipeline context and transport dispatch metadata headers from an incoming request into
+         * the provided outgoing client headers.
+         *
+         * Performs a case-insensitive lookup of pipeline headers (VERSION, REPLAY, CACHE_POLICY) and TPF
+         * transport headers (TPF_CORRELATION_ID, TPF_EXECUTION_ID, TPF_IDEMPOTENCY_KEY,
+         * TPF_RETRY_ATTEMPT, TPF_DEADLINE_EPOCH_MS, TPF_DISPATCH_TS_EPOCH_MS, TPF_PARENT_ITEM_ID) in
+         * incomingHeaders; missing values are obtained from PipelineContextHolder and TransportDispatchMetadataHolder
+         * when available. Only non-blank values are written to clientOutgoingHeaders.
+         *
+         * @param incomingHeaders       the incoming request headers to read values from; may be null
+         * @param clientOutgoingHeaders the outgoing client headers to update; if null, it is returned unchanged
+         * @return the clientOutgoingHeaders map after propagated headers have been set, or null if clientOutgoingHeaders was null
+         */
     @Override
     public MultivaluedMap<String, String> update(
             MultivaluedMap<String, String> incomingHeaders,
@@ -64,6 +67,13 @@ public class PipelineContextClientHeadersFactory implements ClientHeadersFactory
         String version = headerValue(incomingHeaders, PipelineContextHeaders.VERSION);
         String replay = headerValue(incomingHeaders, PipelineContextHeaders.REPLAY);
         String cachePolicy = headerValue(incomingHeaders, PipelineContextHeaders.CACHE_POLICY);
+        String correlationId = headerValue(incomingHeaders, PipelineContextHeaders.TPF_CORRELATION_ID);
+        String executionId = headerValue(incomingHeaders, PipelineContextHeaders.TPF_EXECUTION_ID);
+        String idempotencyKey = headerValue(incomingHeaders, PipelineContextHeaders.TPF_IDEMPOTENCY_KEY);
+        String retryAttempt = headerValue(incomingHeaders, PipelineContextHeaders.TPF_RETRY_ATTEMPT);
+        String deadlineEpochMs = headerValue(incomingHeaders, PipelineContextHeaders.TPF_DEADLINE_EPOCH_MS);
+        String dispatchTsEpochMs = headerValue(incomingHeaders, PipelineContextHeaders.TPF_DISPATCH_TS_EPOCH_MS);
+        String parentItemId = headerValue(incomingHeaders, PipelineContextHeaders.TPF_PARENT_ITEM_ID);
 
         if (version == null || replay == null || cachePolicy == null) {
             PipelineContext context = PipelineContextHolder.get();
@@ -79,10 +89,45 @@ public class PipelineContextClientHeadersFactory implements ClientHeadersFactory
                 }
             }
         }
+        if (correlationId == null || executionId == null || idempotencyKey == null
+            || retryAttempt == null || deadlineEpochMs == null || dispatchTsEpochMs == null
+            || parentItemId == null) {
+            TransportDispatchMetadata metadata = TransportDispatchMetadataHolder.get();
+            if (metadata != null) {
+                if (correlationId == null) {
+                    correlationId = metadata.correlationId();
+                }
+                if (executionId == null) {
+                    executionId = metadata.executionId();
+                }
+                if (idempotencyKey == null) {
+                    idempotencyKey = metadata.idempotencyKey();
+                }
+                if (retryAttempt == null) {
+                    retryAttempt = toStringValue(metadata.retryAttempt());
+                }
+                if (deadlineEpochMs == null) {
+                    deadlineEpochMs = toStringValue(metadata.deadlineEpochMs());
+                }
+                if (dispatchTsEpochMs == null) {
+                    dispatchTsEpochMs = toStringValue(metadata.dispatchTsEpochMs());
+                }
+                if (parentItemId == null) {
+                    parentItemId = metadata.parentItemId();
+                }
+            }
+        }
 
         putIfPresent(clientOutgoingHeaders, PipelineContextHeaders.VERSION, version);
         putIfPresent(clientOutgoingHeaders, PipelineContextHeaders.REPLAY, replay);
         putIfPresent(clientOutgoingHeaders, PipelineContextHeaders.CACHE_POLICY, cachePolicy);
+        putIfPresent(clientOutgoingHeaders, PipelineContextHeaders.TPF_CORRELATION_ID, correlationId);
+        putIfPresent(clientOutgoingHeaders, PipelineContextHeaders.TPF_EXECUTION_ID, executionId);
+        putIfPresent(clientOutgoingHeaders, PipelineContextHeaders.TPF_IDEMPOTENCY_KEY, idempotencyKey);
+        putIfPresent(clientOutgoingHeaders, PipelineContextHeaders.TPF_RETRY_ATTEMPT, retryAttempt);
+        putIfPresent(clientOutgoingHeaders, PipelineContextHeaders.TPF_DEADLINE_EPOCH_MS, deadlineEpochMs);
+        putIfPresent(clientOutgoingHeaders, PipelineContextHeaders.TPF_DISPATCH_TS_EPOCH_MS, dispatchTsEpochMs);
+        putIfPresent(clientOutgoingHeaders, PipelineContextHeaders.TPF_PARENT_ITEM_ID, parentItemId);
         return clientOutgoingHeaders;
     }
 
@@ -136,5 +181,15 @@ public class PipelineContextClientHeadersFactory implements ClientHeadersFactory
         if (value != null && !value.isBlank()) {
             headers.putSingle(name, value);
         }
+    }
+
+    /**
+     * Convert the given object to its String representation or return null if the object is null.
+     *
+     * @param value the object to convert; may be null
+     * @return the result of {@code value.toString()}, or {@code null} if {@code value} is {@code null}
+     */
+    private String toStringValue(Object value) {
+        return value == null ? null : value.toString();
     }
 }
