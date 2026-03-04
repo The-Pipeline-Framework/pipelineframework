@@ -38,7 +38,6 @@ public record FunctionTransportContext(
     Map<String, String> attributes
 ) {
     private static final Logger LOG = Logger.getLogger(FunctionTransportContext.class.getName());
-
     public static final String ATTR_IDEMPOTENCY_POLICY = "tpf.idempotency.policy";
     public static final String ATTR_IDEMPOTENCY_KEY = "tpf.idempotency.key";
     public static final String ATTR_INVOCATION_MODE = "tpf.function.invocation.mode";
@@ -98,9 +97,9 @@ public record FunctionTransportContext(
     /**
      * Resolves idempotency policy from context attributes.
      *
-     * @return resolved policy; defaults to CONTEXT_STABLE when unset.
-     *     Legacy RANDOM is accepted as compatibility alias and normalized to CONTEXT_STABLE.
-     * @throws IllegalArgumentException when a non-empty idempotency policy is not supported
+     * @return resolved policy; defaults to CONTEXT_STABLE when unset/unknown.
+     *     Unknown values are logged and treated as CONTEXT_STABLE. Legacy RANDOM is accepted
+     *     as compatibility alias and normalized to CONTEXT_STABLE.
      */
     public IdempotencyPolicy idempotencyPolicy() {
         String raw = attributes.get(ATTR_IDEMPOTENCY_POLICY);
@@ -114,8 +113,9 @@ public record FunctionTransportContext(
         if ("CONTEXT_STABLE".equals(normalized) || "RANDOM".equals(normalized)) {
             return IdempotencyPolicy.CONTEXT_STABLE;
         }
-        throw new IllegalArgumentException(
-            "Unsupported idempotency policy '" + raw + "'. Expected CONTEXT_STABLE, RANDOM, or EXPLICIT.");
+        LOG.warning(() -> "Unknown idempotency policy '" + raw
+            + "'; falling back to " + IdempotencyPolicy.CONTEXT_STABLE);
+        return IdempotencyPolicy.CONTEXT_STABLE;
     }
 
     /**
@@ -193,12 +193,6 @@ public record FunctionTransportContext(
         return normalizedAttribute(ATTR_TARGET_HANDLER);
     }
 
-    /**
-     * Obtain the trimmed attribute value for the given key when it exists and is not blank.
-     *
-     * @param key the attribute key to look up
-     * @return an {@link Optional} containing the attribute value with surrounding whitespace removed if present and not blank, otherwise {@link Optional#empty()}
-     */
     private Optional<String> normalizedAttribute(String key) {
         String raw = attributes.get(key);
         if (raw == null || raw.isBlank()) {
@@ -208,36 +202,36 @@ public record FunctionTransportContext(
     }
 
     /**
-     * Configured transport protocol identifier when available.
+     * Returns configured function transport protocol when present.
      *
-     * @return an Optional containing the normalized protocol identifier if present, otherwise empty
+     * @return protocol identifier
      */
     public Optional<String> transportProtocol() {
         return normalizedAttribute(ATTR_TRANSPORT_PROTOCOL);
     }
 
     /**
-     * Retrieve the correlation identifier if present.
+     * Returns immutable correlation id when present.
      *
-     * @return an Optional containing the correlation id if present, otherwise an empty Optional
+     * @return correlation id
      */
     public Optional<String> correlationId() {
         return normalizedAttribute(ATTR_CORRELATION_ID);
     }
 
     /**
-     * Retrieves the execution identifier from the context attributes.
+     * Returns execution id when present.
      *
-     * @return an {@code Optional} containing the execution id if present and non-blank, otherwise an empty {@code Optional}
+     * @return execution id
      */
     public Optional<String> executionId() {
         return normalizedAttribute(ATTR_EXECUTION_ID);
     }
 
     /**
-     * Retrieve the retry attempt count from the context attributes when available.
+     * Returns retry attempt count when present.
      *
-     * @return an Optional containing the retry attempt count as an Integer if the attribute is present and a valid integer, otherwise an empty Optional
+     * @return retry attempt count
      */
     public Optional<Integer> retryAttempt() {
         return normalizedAttribute(ATTR_RETRY_ATTEMPT)
@@ -245,12 +239,9 @@ public record FunctionTransportContext(
     }
 
     /**
-     * Get the absolute deadline timestamp in epoch milliseconds when present.
+     * Returns absolute deadline timestamp in epoch milliseconds when present.
      *
-     * <p>Parses the ATTR_DEADLINE_EPOCH_MS attribute as a long; if the attribute is missing or
-     * cannot be parsed as a long, an empty Optional is returned.
-     *
-     * @return an {@link Optional} containing the deadline timestamp in milliseconds when present and parsable; empty otherwise
+     * @return deadline epoch millis
      */
     public Optional<Long> deadlineEpochMs() {
         return normalizedAttribute(ATTR_DEADLINE_EPOCH_MS)
@@ -258,9 +249,9 @@ public record FunctionTransportContext(
     }
 
     /**
-     * Dispatch timestamp in epoch milliseconds if present and parseable.
+     * Returns dispatch timestamp in epoch milliseconds when present.
      *
-     * @return an Optional containing the dispatch timestamp (milliseconds since epoch), or empty if the attribute is missing or cannot be parsed as a long
+     * @return dispatch timestamp epoch millis
      */
     public Optional<Long> dispatchTsEpochMs() {
         return normalizedAttribute(ATTR_DISPATCH_TS_EPOCH_MS)
@@ -268,43 +259,36 @@ public record FunctionTransportContext(
     }
 
     /**
-     * Retrieves the lineage parent item identifier if present.
+     * Returns lineage parent item id when present.
      *
-     * @return an Optional containing the parent item id if present, otherwise an empty Optional
+     * @return parent item id
      */
     public Optional<String> parentItemId() {
         return normalizedAttribute(ATTR_PARENT_ITEM_ID);
     }
 
-    /**
-     * Parses a string attribute value as an integer, returning an absent optional on parse failure.
-     *
-     * @param key   the attribute key (used only for logging on parse failure)
-     * @param value the string value to parse as an integer
-     * @return      an Optional containing the parsed integer if parsing succeeds, otherwise Optional.empty()
-     */
     private Optional<Integer> toInteger(String key, String value) {
         try {
             return Optional.of(Integer.parseInt(value));
         } catch (NumberFormatException e) {
-            LOG.warning(() -> "Ignoring invalid integer attribute '" + key + "' value '" + value + "'");
+            LOG.warning(() -> "Ignoring invalid integer attribute"
+                + " requestId='" + requestId + "'"
+                + ", functionName='" + functionName + "'"
+                + ", key='" + key + "'"
+                + ", value='" + value + "'");
             return Optional.empty();
         }
     }
 
-    /**
-     * Parses the provided attribute string value into a `Long` for the given attribute key.
-     *
-     * @param key   the attribute key (used in the warning message if parsing fails)
-     * @param value the string value to parse as a long
-     * @return      an Optional containing the parsed `Long`, or `Optional.empty()` if the value cannot be parsed;
-     *              a warning is logged when parsing fails
-     */
     private Optional<Long> toLong(String key, String value) {
         try {
             return Optional.of(Long.parseLong(value));
         } catch (NumberFormatException e) {
-            LOG.warning(() -> "Ignoring invalid long attribute '" + key + "' value '" + value + "'");
+            LOG.warning(() -> "Ignoring invalid long attribute"
+                + " requestId='" + requestId + "'"
+                + ", functionName='" + functionName + "'"
+                + ", key='" + key + "'"
+                + ", value='" + value + "'");
             return Optional.empty();
         }
     }

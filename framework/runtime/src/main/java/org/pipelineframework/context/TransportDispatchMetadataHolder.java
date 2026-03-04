@@ -27,18 +27,13 @@ public final class TransportDispatchMetadataHolder {
     private static final String CONTEXT_KEY = TransportDispatchMetadataHolder.class.getName() + ".context";
     private static final ThreadLocal<TransportDispatchMetadata> THREAD_LOCAL = new ThreadLocal<>();
 
-    /**
-     * Prevents instantiation of this utility class.
-     */
     private TransportDispatchMetadataHolder() {
     }
 
     /**
-     * Obtain the current transport dispatch metadata, preferring the Vert.x Context local storage when available.
+     * Returns current transport dispatch metadata.
      *
-     * If the active Vert.x Context does not support locals or is absent, falls back to a thread-local value.
-     *
-     * @return the current TransportDispatchMetadata, or {@code null} if none is set
+     * @return metadata, or null when absent
      */
     public static TransportDispatchMetadata get() {
         Context context = Vertx.currentContext();
@@ -75,10 +70,7 @@ public final class TransportDispatchMetadataHolder {
     }
 
     /**
-     * Removes any transport dispatch metadata stored for the current execution context.
-     *
-     * Attempts to remove the metadata from the current Vert.x Context locals when a context is available,
-     * and always clears the ThreadLocal fallback.
+     * Clears transport dispatch metadata.
      */
     public static void clear() {
         Context context = Vertx.currentContext();

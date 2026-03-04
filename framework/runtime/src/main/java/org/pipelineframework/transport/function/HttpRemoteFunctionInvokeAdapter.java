@@ -111,14 +111,6 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
             .onItem().transformToMulti(Multi.createFrom()::iterable);
     }
 
-    /**
-     * Sends the given payload to the remote function endpoint and returns the single deserialized TraceEnvelope response.
-     *
-     * @param payload the request payload (a TraceEnvelope or a collection of TraceEnvelopes depending on invocation)
-     * @param context transport context providing routing, protocol, and metadata used for the HTTP request
-     * @return the deserialized TraceEnvelope response from the remote function
-     * @throws IllegalStateException if the remote response body is empty, the invocation is interrupted, the target URL is malformed, the response cannot be parsed, or the remote endpoint returns a non-successful HTTP status
-     */
     private Uni<TraceEnvelope<O>> postForSingle(Object payload, FunctionTransportContext context) {
         return Uni.createFrom().item(() -> {
             try {
@@ -139,15 +131,6 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
         }).runSubscriptionOn(Infrastructure.getDefaultExecutor());
     }
 
-    /**
-     * Sends the given payload to the remote function and returns the list of output trace envelopes.
-     *
-     * @param payload the request payload to send (a single TraceEnvelope or a collection)
-     * @param context transport context containing routing and protocol metadata
-     * @return an immutable list of TraceEnvelope objects produced by the remote function
-     * @throws IllegalStateException if the response body is empty, not a JSON array, the invocation was interrupted,
-     *         the target URL is malformed, or the response cannot be parsed
-     */
     private Uni<List<TraceEnvelope<O>>> postForMany(Object payload, FunctionTransportContext context) {
         return Uni.createFrom().item(() -> {
             try {
@@ -175,15 +158,6 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
         }).runSubscriptionOn(Infrastructure.getDefaultExecutor());
     }
 
-    /**
-     * Send an HTTP POST to the resolved target URL using the encoded payload and canonical headers.
-     *
-     * @param payload the object to encode as the request body
-     * @param context transport context used to resolve the target URL, select protocol, and populate headers
-     * @return the HTTP response with its body as a byte array for successful (2xx) responses
-     * @throws IOException if an I/O error occurs while sending the request or reading the response
-     * @throws InterruptedException if the thread is interrupted while sending the request
-     */
     private HttpResponse<byte[]> send(Object payload, FunctionTransportContext context) throws IOException, InterruptedException {
         String targetUrl = resolveTargetUrl(context);
         WirePayload wirePayload = encodeRequestPayload(payload, context);
@@ -196,25 +170,11 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
         HttpRequest request = requestBuilder.build();
         HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw toRemoteFailure(response, targetUrl);
+            throw toRemoteFailure(response, targetUrl, context);
         }
         return response;
     }
 
-    /**
-     * Adds canonical pipeline headers to the given HTTP request builder using values derived from
-     * the provided payload and transport context.
-     *
-     * <p>Headers set:
-     * - TPF_CORRELATION_ID, TPF_EXECUTION_ID: sourced from context (or derived from requestId when absent)
-     * - TPF_IDEMPOTENCY_KEY: resolved from payload or context
-     * - TPF_RETRY_ATTEMPT, TPF_DISPATCH_TS_EPOCH_MS: sourced from context (dispatch timestamp defaults to now)
-     * - TPF_DEADLINE_EPOCH_MS, TPF_PARENT_ITEM_ID: added when present in context
-     *
-     * @param requestBuilder the HTTP request builder to modify with canonical headers
-     * @param payload the request payload used to resolve an idempotency key when applicable
-     * @param context the transport context providing correlation/execution ids, retry and timing metadata
-     */
     private void applyCanonicalHeaders(
         HttpRequest.Builder requestBuilder,
         Object payload,
@@ -237,40 +197,20 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
             requestBuilder.header(PipelineContextHeaders.TPF_PARENT_ITEM_ID, parent));
     }
 
-    /**
-     * Determines the idempotency key to use for the outgoing request.
-     *
-     * Chooses the idempotency key in this order: a non-blank idempotencyKey present on the input TraceEnvelope;
-     * if the payload is a non-empty List, the non-blank idempotencyKey of the first TraceEnvelope in that list;
-     * the explicit idempotency key from the transport context if present; otherwise a deterministic trace id derived
-     * from the context's requestId.
-     *
-     * @param payload the request payload, which may be a TraceEnvelope, a List of TraceEnvelope, or another type
-     * @param context the transport context providing optional explicit idempotency key and requestId for derivation
-     * @return the resolved idempotency key string to include on the outgoing request
-     */
     private String resolveIdempotencyKey(Object payload, FunctionTransportContext context) {
         if (payload instanceof TraceEnvelope<?> envelope && envelope.idempotencyKey() != null && !envelope.idempotencyKey().isBlank()) {
-            return envelope.idempotencyKey();
+            return envelope.idempotencyKey().strip();
         }
         // Batch payloads are treated as a single idempotent remote operation.
         // We intentionally use the first envelope key when available, then fall back to
         // explicit context override and finally deterministic request-id derivation.
         if (payload instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof TraceEnvelope<?> envelope
             && envelope.idempotencyKey() != null && !envelope.idempotencyKey().isBlank()) {
-            return envelope.idempotencyKey();
+            return envelope.idempotencyKey().strip();
         }
         return context.explicitIdempotencyKey().orElseGet(() -> AdapterUtils.deriveTraceId(context.requestId()));
     }
 
-    /**
-     * Encode the given payload into a WirePayload using JSON or Protobuf-wrapped JSON depending on the transport protocol specified in the context.
-     *
-     * @param payload the object to serialize for the HTTP request body
-     * @param context the transport context that may specify the protocol (e.g., Protobuf HTTP v1)
-     * @return a WirePayload containing the serialized request bytes and the appropriate Content-Type and Accept header values
-     * @throws IOException if serialization to JSON or protobuf bytes fails
-     */
     private WirePayload encodeRequestPayload(Object payload, FunctionTransportContext context) throws IOException {
         if (useProtobufHttpV1(context)) {
             String jsonPayload = objectMapper.writeValueAsString(payload);
@@ -288,15 +228,6 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
             ProtobufHttpContentTypes.APPLICATION_JSON);
     }
 
-    /**
-     * Parse the HTTP response body into a Jackson JsonNode, decoding protobuf-wrapped JSON when applicable.
-     *
-     * @param response the HTTP response whose Content-Type header and body will be inspected
-     * @param context  transport context used to select protobuf-http fallback when the Content-Type header is missing
-     * @return the parsed JSON tree from the response body
-     * @throws IOException if JSON parsing of the response body fails
-     * @throws IllegalStateException if the response is protobuf-formatted but cannot be parsed as a BytesValue
-     */
     private JsonNode decodeResponseAsJsonTree(HttpResponse<byte[]> response, FunctionTransportContext context) throws IOException {
         String contentType = response.headers().firstValue("Content-Type").orElse("");
         byte[] body = response.body() == null ? new byte[0] : response.body();
@@ -315,22 +246,13 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
         return objectMapper.readTree(body);
     }
 
-    /**
-     * Constructs a RuntimeException describing a remote function invocation failure using information
-     * extracted from the HTTP response and the provided target URL.
-     *
-     * <p>If the response contains a protobuf Status payload, that status's code and message are used;
-     * otherwise the response body (truncated if long) is mapped to a status and its code/message are used.
-     *
-     * @param response the HTTP response received from the remote target
-     * @param targetUrl the URL that was invoked
-     * @return an IllegalStateException containing the HTTP status, target URL, and a mapped or parsed
-     *         status code and message describing the remote failure
-     */
-    private RuntimeException toRemoteFailure(HttpResponse<byte[]> response, String targetUrl) {
+    private RuntimeException toRemoteFailure(HttpResponse<byte[]> response, String targetUrl, FunctionTransportContext context) {
         String contentType = response.headers().firstValue("Content-Type").orElse("");
         byte[] body = response.body() == null ? new byte[0] : response.body();
-        if (contentType.toLowerCase(java.util.Locale.ROOT).contains(ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF)) {
+        String normalizedContentType = contentType.toLowerCase(java.util.Locale.ROOT);
+        boolean protobufContentType = normalizedContentType.contains(ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF);
+        boolean missingContentType = normalizedContentType.isBlank();
+        if ((protobufContentType || (missingContentType && useProtobufHttpV1(context))) && body.length > 0) {
             try {
                 Status status = Status.parseFrom(body);
                 return new IllegalStateException(
@@ -351,28 +273,12 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
                 + " (" + Code.forNumber(mappedStatus.getCode()) + ": " + mappedStatus.getMessage() + ")");
     }
 
-    /**
-     * Determines whether the transport context requests the Protobuf-over-HTTP v1 protocol.
-     *
-     * @param context the transport context to inspect for a protocol preference
-     * @return `true` if the context's `transportProtocol` equals `PROTOBUF_HTTP_V1` (case-insensitive), `false` otherwise
-     */
     private boolean useProtobufHttpV1(FunctionTransportContext context) {
         return context.transportProtocol()
             .map(protocol -> PROTOCOL_PROTOBUF_HTTP_V1.equalsIgnoreCase(protocol))
             .orElse(false);
     }
 
-    /**
-     * Resolve the HTTP target URL for the remote function invocation.
-     *
-     * Attempts to use the explicit target URL from the transport context; if absent, attempts to
-     * resolve a URL from routing metadata. If neither source yields a URL an exception is thrown.
-     *
-     * @param context the transport context containing optional target URL, target handler, and target module
-     * @return the resolved target URL
-     * @throws IllegalStateException if no target URL can be resolved from the context or routing metadata
-     */
     private String resolveTargetUrl(FunctionTransportContext context) {
         return context.targetUrl()
             .or(() -> resolveFromRoutingMetadata(context))
@@ -456,12 +362,6 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
         return withBoundaries.toLowerCase(java.util.Locale.ROOT);
     }
 
-    /**
-     * Casts a TraceEnvelope with an unknown payload type to a TraceEnvelope parameterized with O.
-     *
-     * @param envelope the envelope to cast
-     * @return the same envelope cast to TraceEnvelope\<O>
-     */
     @SuppressWarnings("unchecked")
     private TraceEnvelope<O> castEnvelope(TraceEnvelope<?> envelope) {
         return (TraceEnvelope<O>) envelope;

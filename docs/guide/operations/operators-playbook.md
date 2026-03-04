@@ -4,13 +4,13 @@ This runbook is for operating and debugging pipelines that execute operator meth
 
 ## Terminology
 
-- `lane`: a reproducible command path (build/test/run sequence) for one execution mode or scope.
+- `lane` (alias: `command path`): a reproducible build/test/run sequence for one execution mode or scope.
 - `parked item`: an item that exhausted configured retries or was classified as non-retryable and moved out of the hot path.
 - `parking queue` (or parking area): the operational store/queue where parked items are retained for triage and replay.
 
 ## CI-Equivalent Execution Commands
 
-Use the same command families used in validation command paths:
+Use the same command families used in validation lanes (command paths):
 
 ```bash
 # Whole repository verification

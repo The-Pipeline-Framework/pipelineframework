@@ -66,14 +66,6 @@ public class PipelineContextGrpcClientInterceptor implements ClientInterceptor {
     private static final Metadata.Key<String> PARENT_ITEM_ID_HEADER =
         Metadata.Key.of(PipelineContextHeaders.TPF_PARENT_ITEM_ID, Metadata.ASCII_STRING_MARSHALLER);
 
-    /**
-     * Intercepts outgoing gRPC client calls to propagate pipeline context and transport dispatch headers and to capture cache status from responses.
-     *
-     * @param method the gRPC method descriptor being invoked
-     * @param callOptions the call options used to create the client call
-     * @param next the channel used to create the underlying client call
-     * @return a ClientCall that forwards to the underlying call while injecting pipeline and transport headers into requests and updating the local cache status holder from response headers
-     */
     @Override
     public <ReqT, RespT> ClientCall<ReqT, RespT> interceptCall(
         MethodDescriptor<ReqT, RespT> method,
@@ -112,25 +104,12 @@ public class PipelineContextGrpcClientInterceptor implements ClientInterceptor {
         };
     }
 
-    /**
-     * Inserts the given key and value into the provided Metadata if the value is non-null and not blank.
-     *
-     * @param headers the Metadata to modify
-     * @param key the metadata key to set
-     * @param value the value to write for the key; ignored if null or blank
-     */
     private static void putIfPresent(Metadata headers, Metadata.Key<String> key, String value) {
         if (value != null && !value.isBlank()) {
             headers.put(key, value);
         }
     }
 
-    /**
-     * Convert an object to its string representation or return null if the input is null.
-     *
-     * @param value the object to convert; may be null
-     * @return the result of {@code value.toString()}, or {@code null} if {@code value} is null
-     */
     private static String toStringValue(Object value) {
         return value == null ? null : value.toString();
     }

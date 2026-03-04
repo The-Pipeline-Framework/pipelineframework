@@ -36,24 +36,16 @@ import java.util.Set;
  * Maps runtime failures to/from {@link Status} envelopes for Protobuf-over-HTTP transport.
  */
 public final class ProtobufHttpStatusMapper {
-    /**
-     * Prevents instantiation of this utility class.
-     */
     private ProtobufHttpStatusMapper() {
     }
 
     /**
-     * Map a Throwable to a protobuf Status envelope enriched with execution and resource details.
+     * Converts a throwable into a protobuf status envelope with contextual details.
      *
-     * Maps common exception types to corresponding protobuf Status codes and attaches a reason
-     * in the Status details; if the throwable is null or its root cause is unrecognized, a
-     * default UNKNOWN or INTERNAL Status is produced.
-     *
-     * @param throwable   the failure to map (may be null)
-     * @param executionId identifier for the execution or request associated with the failure
-     * @param resourceName name of the resource or step related to the failure
-     * @return a protobuf Status representing the mapped failure with attached details (error reason,
-     *         request id and resource info when provided)
+     * @param throwable failure to map
+     * @param executionId execution identifier
+     * @param resourceName resource/step name
+     * @return protobuf status
      */
     public static Status fromThrowable(Throwable throwable, String executionId, String resourceName) {
         if (throwable == null) {
@@ -88,10 +80,10 @@ public final class ProtobufHttpStatusMapper {
     }
 
     /**
-     * Map a protobuf Status to the corresponding HTTP status code.
+     * Maps protobuf status code to HTTP status code.
      *
-     * @param status the protobuf Status to map; may be null
-     * @return the HTTP status code that corresponds to the protobuf status code, or 500 if the status is null or its code is unrecognized
+     * @param status protobuf status
+     * @return HTTP status
      */
     public static int toHttpStatus(Status status) {
         if (status == null) {
@@ -120,18 +112,6 @@ public final class ProtobufHttpStatusMapper {
         };
     }
 
-    /**
-     * Builds a protobuf Status containing the given code and message and attaches
-     * structured details (ErrorInfo plus optional RequestInfo and ResourceInfo).
-     *
-     * @param code the numeric protobuf status code to set on the Status
-     * @param message the status message; an empty string is used if null
-     * @param executionId optional execution identifier; when non-blank it is added as RequestInfo.requestId
-     * @param resourceName optional resource name; when non-blank it is added as ResourceInfo.resourceName with type "tpf.step"
-     * @param reason optional reason for the ErrorInfo; "UNKNOWN" is used if null
-     * @return a Status populated with the provided code/message and packed detail protos:
-     *         an ErrorInfo (domain "org.pipelineframework"), and optionally RequestInfo and ResourceInfo
-     */
     private static Status baseStatus(
         int code,
         String message,
@@ -165,16 +145,6 @@ public final class ProtobufHttpStatusMapper {
         return builder.build();
     }
 
-    /**
-     * Finds the deepest causal Throwable in a throwable chain.
-     *
-     * Traverses the chain of causes and returns the deepest non-null cause; if the input is null,
-     * no deeper cause exists, or a cyclic cause chain is detected, the original throwable (which may be null)
-     * is returned.
-     *
-     * @param throwable the throwable whose root cause should be found
-     * @return the deepest non-null cause in the causal chain, or the original throwable if none found
-     */
     private static Throwable rootCause(Throwable throwable) {
         Throwable current = throwable;
         Set<Throwable> visited = Collections.newSetFromMap(new IdentityHashMap<>());

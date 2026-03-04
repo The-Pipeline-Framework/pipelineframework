@@ -54,19 +54,16 @@ public record TransportDispatchMetadata(
 
 
     /**
-     * Create a TransportDispatchMetadata instance by normalizing and parsing header string values.
+     * Creates metadata from incoming headers, trimming blanks to null and parsing numeric values.
      *
-     * Trims blank strings to null and parses numeric header values; numeric fields are set to
-     * null when the corresponding header is blank or cannot be parsed as a number.
-     *
-     * @param correlationId   correlation id header (trimmed; blank -> null)
-     * @param executionId     execution id header (trimmed; blank -> null)
-     * @param idempotencyKey  idempotency key header (trimmed; blank -> null)
-     * @param retryAttempt    retry attempt header (parsed to Integer; blank or invalid -> null)
-     * @param deadlineEpochMs deadline epoch ms header (parsed to Long; blank or invalid -> null)
-     * @param dispatchTsEpochMs dispatch timestamp epoch ms header (parsed to Long; blank or invalid -> null)
-     * @param parentItemId    parent item id header (trimmed; blank -> null)
-     * @return a TransportDispatchMetadata with normalized string fields and parsed numeric fields (or null when absent/invalid)
+     * @param correlationId correlation id header
+     * @param executionId execution id header
+     * @param idempotencyKey idempotency key header
+     * @param retryAttempt retry attempt header
+     * @param deadlineEpochMs deadline header
+     * @param dispatchTsEpochMs dispatch timestamp header
+     * @param parentItemId parent item header
+     * @return normalized metadata
      */
     public static TransportDispatchMetadata fromHeaders(
         String correlationId,
@@ -87,12 +84,6 @@ public record TransportDispatchMetadata(
             normalize(parentItemId));
     }
 
-    /**
-     * Normalize a header-like string by trimming surrounding whitespace and treating null or blank inputs as absent.
-     *
-     * @param value the input string which may be null or contain only whitespace
-     * @return the trimmed string, or {@code null} if {@code value} is {@code null} or contains only whitespace
-     */
     private static String normalize(String value) {
         if (value == null || value.isBlank()) {
             return null;
@@ -100,12 +91,6 @@ public record TransportDispatchMetadata(
         return value.trim();
     }
 
-    /**
-     * Parses an Integer from a header-like string, returning null for blank or invalid input.
-     *
-     * @param value the raw string value to parse; may be null or blank
-     * @return the parsed Integer, or {@code null} if the input is null, blank, or not a valid integer
-     */
     private static Integer parseInt(String value) {
         String normalized = normalize(value);
         if (normalized == null) {
@@ -119,15 +104,6 @@ public record TransportDispatchMetadata(
         }
     }
 
-    /**
-     * Parses a string as a Long after trimming; blank or unparsable values produce {@code null}.
-     *
-     * <p>The input is trimmed and treated as {@code null} if blank. If the resulting value is a
-     * valid long literal it is returned, otherwise {@code null} is returned.
-     *
-     * @param value the string value to parse (may be null or blank)
-     * @return the parsed {@link Long}, or {@code null} if the input is null, blank, or not a valid long
-     */
     private static Long parseLong(String value) {
         String normalized = normalize(value);
         if (normalized == null) {

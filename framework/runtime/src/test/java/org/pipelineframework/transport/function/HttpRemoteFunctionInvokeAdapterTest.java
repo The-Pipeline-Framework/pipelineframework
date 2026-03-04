@@ -28,12 +28,16 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.protobuf.BytesValue;
+import com.google.rpc.Code;
+import com.google.rpc.Status;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import io.smallrye.mutiny.Multi;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -104,6 +108,134 @@ class HttpRemoteFunctionInvokeAdapterTest {
             if (serverFailure.get() != null) {
                 fail("server-side assertion failed", serverFailure.get());
             }
+        }
+    }
+
+    @Test
+    void invokesOneToOneOverProtobufHttpV1AndPropagatesCanonicalHeaders() throws Exception {
+        TraceEnvelope<Integer> responseEnvelope = TraceEnvelope.root(
+            "trace-remote", "item-remote", "search.out", "v1", "idem-remote", 77);
+        AtomicReference<byte[]> capturedRequestBody = new AtomicReference<>();
+        AtomicReference<String> correlationHeader = new AtomicReference<>();
+        AtomicReference<String> executionHeader = new AtomicReference<>();
+        AtomicReference<String> retryHeader = new AtomicReference<>();
+        AtomicReference<String> deadlineHeader = new AtomicReference<>();
+
+        try (ServerHandle server = startServer(exchange -> {
+            capturedRequestBody.set(exchange.getRequestBody().readAllBytes());
+            correlationHeader.set(exchange.getRequestHeaders().getFirst("x-tpf-correlation-id"));
+            executionHeader.set(exchange.getRequestHeaders().getFirst("x-tpf-execution-id"));
+            retryHeader.set(exchange.getRequestHeaders().getFirst("x-tpf-retry-attempt"));
+            deadlineHeader.set(exchange.getRequestHeaders().getFirst("x-tpf-deadline-epoch-ms"));
+
+            byte[] response = BytesValue.newBuilder()
+                .setValue(com.google.protobuf.ByteString.copyFromUtf8(MAPPER.writeValueAsString(responseEnvelope)))
+                .build()
+                .toByteArray();
+            exchange.getResponseHeaders().add("Content-Type", "application/x-protobuf");
+            exchange.sendResponseHeaders(200, response.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(response);
+            }
+        })) {
+            HttpRemoteFunctionInvokeAdapter<Integer, Integer> adapter = new HttpRemoteFunctionInvokeAdapter<>();
+            FunctionTransportContext context = FunctionTransportContext.of(
+                "req-remote-protobuf",
+                "handler",
+                "invoke",
+                Map.of(
+                    FunctionTransportContext.ATTR_TARGET_URL, server.url(),
+                    FunctionTransportContext.ATTR_TRANSPORT_PROTOCOL, "PROTOBUF_HTTP_V1",
+                    FunctionTransportContext.ATTR_CORRELATION_ID, "corr-123",
+                    FunctionTransportContext.ATTR_EXECUTION_ID, "exec-123",
+                    FunctionTransportContext.ATTR_RETRY_ATTEMPT, "2",
+                    FunctionTransportContext.ATTR_DEADLINE_EPOCH_MS, "2000000000000"));
+
+            TraceEnvelope<Integer> input = TraceEnvelope.root(
+                "trace-local", "item-local", "search.in", "v1", "idem-local", 1);
+            TraceEnvelope<Integer> output = adapter.invokeOneToOne(input, context)
+                .await().atMost(Duration.ofSeconds(2));
+
+            assertEquals(77, output.payload());
+            assertEquals("corr-123", correlationHeader.get());
+            assertEquals("exec-123", executionHeader.get());
+            assertEquals("2", retryHeader.get());
+            assertEquals("2000000000000", deadlineHeader.get());
+
+            byte[] expectedRequestBody = BytesValue.newBuilder()
+                .setValue(com.google.protobuf.ByteString.copyFromUtf8(MAPPER.writeValueAsString(input)))
+                .build()
+                .toByteArray();
+            assertArrayEquals(expectedRequestBody, capturedRequestBody.get());
+        }
+    }
+
+    @Test
+    void surfacesProtobufStatusOnHttpFailure() throws Exception {
+        Status status = Status.newBuilder()
+            .setCode(Code.INVALID_ARGUMENT_VALUE)
+            .setMessage("invalid payload")
+            .build();
+
+        try (ServerHandle server = startServer(exchange -> {
+            byte[] response = status.toByteArray();
+            exchange.getResponseHeaders().add("Content-Type", "application/x-protobuf");
+            exchange.sendResponseHeaders(400, response.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(response);
+            }
+        })) {
+            HttpRemoteFunctionInvokeAdapter<Integer, Integer> adapter = new HttpRemoteFunctionInvokeAdapter<>();
+            FunctionTransportContext context = FunctionTransportContext.of(
+                "req-remote-failure",
+                "handler",
+                "invoke",
+                Map.of(
+                    FunctionTransportContext.ATTR_TARGET_URL, server.url(),
+                    FunctionTransportContext.ATTR_TRANSPORT_PROTOCOL, "PROTOBUF_HTTP_V1"));
+
+            TraceEnvelope<Integer> input = TraceEnvelope.root(
+                "trace-local", "item-local", "search.in", "v1", "idem-local", 5);
+
+            IllegalStateException ex = assertThrows(
+                IllegalStateException.class,
+                () -> adapter.invokeOneToOne(input, context).await().atMost(Duration.ofSeconds(2)));
+            assertTrue(ex.getMessage().contains("INVALID_ARGUMENT"));
+            assertTrue(ex.getMessage().contains("invalid payload"));
+        }
+    }
+
+    @Test
+    void surfacesProtobufStatusOnHttpFailureWithoutContentType() throws Exception {
+        Status status = Status.newBuilder()
+            .setCode(Code.INVALID_ARGUMENT_VALUE)
+            .setMessage("invalid payload")
+            .build();
+
+        try (ServerHandle server = startServer(exchange -> {
+            byte[] response = status.toByteArray();
+            exchange.sendResponseHeaders(400, response.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(response);
+            }
+        })) {
+            HttpRemoteFunctionInvokeAdapter<Integer, Integer> adapter = new HttpRemoteFunctionInvokeAdapter<>();
+            FunctionTransportContext context = FunctionTransportContext.of(
+                "req-remote-failure-no-ct",
+                "handler",
+                "invoke",
+                Map.of(
+                    FunctionTransportContext.ATTR_TARGET_URL, server.url(),
+                    FunctionTransportContext.ATTR_TRANSPORT_PROTOCOL, "PROTOBUF_HTTP_V1"));
+
+            TraceEnvelope<Integer> input = TraceEnvelope.root(
+                "trace-local", "item-local", "search.in", "v1", "idem-local", 5);
+
+            IllegalStateException ex = assertThrows(
+                IllegalStateException.class,
+                () -> adapter.invokeOneToOne(input, context).await().atMost(Duration.ofSeconds(2)));
+            assertTrue(ex.getMessage().contains("INVALID_ARGUMENT"));
+            assertTrue(ex.getMessage().contains("invalid payload"));
         }
     }
 

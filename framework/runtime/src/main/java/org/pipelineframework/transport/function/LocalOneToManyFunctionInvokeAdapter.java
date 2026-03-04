@@ -69,6 +69,10 @@ public final class LocalOneToManyFunctionInvokeAdapter<I, O> implements Function
         Objects.requireNonNull(context, "context must not be null");
         Objects.requireNonNull(input.payload(), "LocalOneToManyFunctionInvokeAdapter input payload must not be null");
         String rawTraceId = input.traceId();
+        if ((rawTraceId == null || rawTraceId.isBlank()) && (context.requestId() == null || context.requestId().isBlank())) {
+            throw new IllegalArgumentException(
+                "LocalOneToManyFunctionInvokeAdapter requires a non-blank traceId or requestId for deterministic lineage");
+        }
         String derivedTraceId = (rawTraceId == null || rawTraceId.isBlank())
             ? AdapterUtils.deriveTraceId(context.requestId())
             : rawTraceId.strip();

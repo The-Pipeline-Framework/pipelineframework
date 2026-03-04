@@ -17,6 +17,7 @@
 package org.pipelineframework.context.rest;
 
 import java.util.List;
+import java.util.Objects;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.core.MultivaluedMap;
 
@@ -44,19 +45,18 @@ public class PipelineContextClientHeadersFactory implements ClientHeadersFactory
     }
 
     /**
-         * Propagates pipeline context and transport dispatch metadata headers from an incoming request into
-         * the provided outgoing client headers.
-         *
-         * Performs a case-insensitive lookup of pipeline headers (VERSION, REPLAY, CACHE_POLICY) and TPF
-         * transport headers (TPF_CORRELATION_ID, TPF_EXECUTION_ID, TPF_IDEMPOTENCY_KEY,
-         * TPF_RETRY_ATTEMPT, TPF_DEADLINE_EPOCH_MS, TPF_DISPATCH_TS_EPOCH_MS, TPF_PARENT_ITEM_ID) in
-         * incomingHeaders; missing values are obtained from PipelineContextHolder and TransportDispatchMetadataHolder
-         * when available. Only non-blank values are written to clientOutgoingHeaders.
-         *
-         * @param incomingHeaders       the incoming request headers to read values from; may be null
-         * @param clientOutgoingHeaders the outgoing client headers to update; if null, it is returned unchanged
-         * @return the clientOutgoingHeaders map after propagated headers have been set, or null if clientOutgoingHeaders was null
-         */
+     * Propagates pipeline context headers (VERSION, REPLAY, CACHE_POLICY) from incoming request headers
+     * to the provided client outgoing headers, using the current PipelineContext as a fallback.
+     *
+     * If a header is present (case-insensitive) in incomingHeaders its value is forwarded; if absent,
+     * the corresponding value is taken from PipelineContextHolder.get() when available. Only non-blank
+     * values are written into clientOutgoingHeaders.
+     *
+     * @param incomingHeaders      the incoming request headers to read values from; may be null
+     * @param clientOutgoingHeaders the outgoing client headers to update; if null, it is returned unchanged
+     * @return the clientOutgoingHeaders map after any propagated headers have been set, or null if
+     *         clientOutgoingHeaders was null
+     */
     @Override
     public MultivaluedMap<String, String> update(
             MultivaluedMap<String, String> incomingHeaders,
@@ -183,13 +183,7 @@ public class PipelineContextClientHeadersFactory implements ClientHeadersFactory
         }
     }
 
-    /**
-     * Convert the given object to its String representation or return null if the object is null.
-     *
-     * @param value the object to convert; may be null
-     * @return the result of {@code value.toString()}, or {@code null} if {@code value} is {@code null}
-     */
     private String toStringValue(Object value) {
-        return value == null ? null : value.toString();
+        return Objects.toString(value, null);
     }
 }

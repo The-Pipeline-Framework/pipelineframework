@@ -46,58 +46,62 @@ public class RestExceptionMapper {
     }
 
     /**
-     * Converts exceptions thrown by resources into corresponding HTTP responses.
+     * Convert exceptions thrown by resources into corresponding HTTP responses.
      *
-     * If the request accepts Protobuf (based on the Accept or Content-Type headers) this returns
-     * a JAX-RS {@link Response} whose entity is a protobuf-encoded
-     * {@link com.google.rpc.Status}. Otherwise maps specific exceptions to REST-friendly responses:
-     * CacheMissException and CachePolicyViolation -> 412 Precondition Failed; NotFoundException -> 404 Not Found;
-     * an underlying IllegalArgumentException -> 400 Bad Request; all other errors -> 500 Internal Server Error.
+     * Maps recognised pipeline and framework exceptions to specific HTTP status codes:
+     * cache-related exceptions yield 412 Precondition Failed, NotFoundException yields 404 Not Found,
+     * IllegalArgumentException yields 400 Bad Request, and all other exceptions yield 500 Internal Server Error.
      *
      * @param ex the exception thrown by a resource or during request processing
-     * @param headers the incoming request headers used to determine response content type (may be null)
-     * @return a JAX-RS {@link Response}; when protobuf is requested it carries a
-     *         protobuf Status payload, otherwise it carries a human-readable message
+     * @return a RestResponse containing an HTTP status and a human-readable error message
      */
     @ServerExceptionMapper
     public Response handleException(Exception ex, HttpHeaders headers) {
-        if (expectsProtobuf(headers)) {
-            TransportDispatchMetadata metadata = TransportDispatchMetadataHolder.get();
-            String executionId = metadata == null ? null : metadata.executionId();
-            LOG.errorf(ex, "Request failed (protobuf envelope), executionId=%s", executionId);
-            Status status = ProtobufHttpStatusMapper.fromThrowable(ex, executionId, "rest");
-            return Response.status(ProtobufHttpStatusMapper.toHttpStatus(status))
-                .type(ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF)
-                .entity(status.toByteArray())
+        try {
+            if (expectsProtobuf(headers)) {
+                TransportDispatchMetadata metadata = TransportDispatchMetadataHolder.get();
+                String executionId = metadata == null ? null : metadata.executionId();
+                logExceptionAtAppropriateLevel(ex, executionId);
+                Status status = ProtobufHttpStatusMapper.fromThrowable(ex, executionId, "rest");
+                return Response.status(ProtobufHttpStatusMapper.toHttpStatus(status))
+                    .type(ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF)
+                    .entity(status.toByteArray())
+                    .build();
+            }
+            if (ex instanceof CacheMissException) {
+                LOG.warn("Required cache entry missing", ex);
+                return Response.status(Response.Status.PRECONDITION_FAILED)
+                    .entity(ex.getMessage())
+                    .build();
+            }
+            if (ex instanceof CachePolicyViolation) {
+                LOG.warn("Cache policy violation", ex);
+                return Response.status(Response.Status.PRECONDITION_FAILED)
+                    .entity(ex.getMessage())
+                    .build();
+            }
+            if (ex instanceof NotFoundException) {
+                LOG.debug("Request did not match a REST endpoint", ex);
+                return Response.status(Response.Status.NOT_FOUND)
+                    .entity("Not Found")
+                    .build();
+            }
+            Throwable rootCause = rootCause(ex);
+            if (rootCause instanceof IllegalArgumentException) {
+                LOG.warn("Invalid request", ex);
+                return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("Invalid request")
+                    .build();
+            }
+            LOG.error("Unexpected error processing request", ex);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                .entity("An unexpected error occurred")
                 .build();
+        } finally {
+            TransportDispatchMetadataHolder.clear();
         }
-        if (ex instanceof CacheMissException) {
-            LOG.warn("Required cache entry missing", ex);
-            return Response.status(Response.Status.PRECONDITION_FAILED).entity(ex.getMessage()).build();
-        }
-        if (ex instanceof CachePolicyViolation) {
-            LOG.warn("Cache policy violation", ex);
-            return Response.status(Response.Status.PRECONDITION_FAILED).entity(ex.getMessage()).build();
-        }
-        if (ex instanceof NotFoundException) {
-            LOG.debug("Request did not match a REST endpoint", ex);
-            return Response.status(Response.Status.NOT_FOUND).entity("Not Found").build();
-        }
-        Throwable rootCause = rootCause(ex);
-        if (rootCause instanceof IllegalArgumentException) {
-            LOG.warn("Invalid request", ex);
-            return Response.status(Response.Status.BAD_REQUEST).entity("Invalid request").build();
-        }
-        LOG.error("Unexpected error processing request", ex);
-        return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity("An unexpected error occurred").build();
     }
 
-    /**
-     * Determines whether the request represented by the provided headers indicates a Protobuf media type.
-     *
-     * @param headers HTTP headers from the request; may be null
-     * @return true if the Accept or Content-Type header contains the Protobuf media type, false otherwise
-     */
     private boolean expectsProtobuf(HttpHeaders headers) {
         if (headers == null) {
             return false;
@@ -108,23 +112,32 @@ public class RestExceptionMapper {
             || containsProtobufMediaType(requestContentType);
     }
 
-    /**
-     * Checks whether the given header value contains the Protobuf media type.
-     *
-     * @param value the header value to inspect (may be null)
-     * @return `true` if `value` contains the Protobuf media type string, `false` otherwise
-     */
     private boolean containsProtobufMediaType(String value) {
         return value != null && value.toLowerCase(java.util.Locale.ROOT)
-            .contains(ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF.toLowerCase(java.util.Locale.ROOT));
+            .contains(ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF);
     }
 
-    /**
-     * Finds the deepest underlying cause in a throwable's cause chain.
-     *
-     * @param throwable the throwable to inspect; may be null
-     * @return the deepest non-null cause found, or the original `throwable` (which may be null) if no deeper cause exists
-     */
+    private void logExceptionAtAppropriateLevel(Exception ex, String executionId) {
+        if (ex instanceof NotFoundException) {
+            LOG.debugf(ex, "Request did not match a REST endpoint (protobuf envelope), executionId=%s", executionId);
+            return;
+        }
+        if (ex instanceof CacheMissException) {
+            LOG.warnf(ex, "Required cache entry missing (protobuf envelope), executionId=%s", executionId);
+            return;
+        }
+        if (ex instanceof CachePolicyViolation) {
+            LOG.warnf(ex, "Cache policy violation (protobuf envelope), executionId=%s", executionId);
+            return;
+        }
+        Throwable root = rootCause(ex);
+        if (root instanceof IllegalArgumentException) {
+            LOG.warnf(ex, "Invalid request (protobuf envelope), executionId=%s", executionId);
+            return;
+        }
+        LOG.errorf(ex, "Unexpected error processing request (protobuf envelope), executionId=%s", executionId);
+    }
+
     private Throwable rootCause(Throwable throwable) {
         Throwable current = throwable;
         while (current != null && current.getCause() != null && current.getCause() != current) {

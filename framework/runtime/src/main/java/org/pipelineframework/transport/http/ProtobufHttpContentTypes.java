@@ -23,11 +23,6 @@ public final class ProtobufHttpContentTypes {
     public static final String APPLICATION_X_PROTOBUF = "application/x-protobuf";
     public static final String APPLICATION_JSON = "application/json";
 
-    /**
-     * Private constructor to prevent instantiation of this utility class.
-     *
-     * @throws AssertionError always thrown to indicate that this class should not be instantiated
-     */
     private ProtobufHttpContentTypes() {
         throw new AssertionError("No instances");
     }
