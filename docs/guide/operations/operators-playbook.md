@@ -30,15 +30,32 @@ Optional example lane (Search reference project):
   -DskipTests compile
 ```
 
-## Run Modes and Lanes
+FTGo reference command paths:
 
-### Compute/REST lane
+```bash
+# Lineage determinism checks (runtime focus)
+./mvnw -f framework/pom.xml -pl runtime -Dtest=FunctionTransportAdaptersTest test
+
+# Parity checks (FUNCTION local/remote routing)
+./mvnw -f framework/pom.xml -pl runtime -Dtest=FunctionTransportContextTest,InvocationModeRoutingParityTest test
+
+# Checkout bridge parity smoke
+./mvnw -f examples/checkout/pom.xml -pl create-order-orchestrator-svc,deliver-order-orchestrator-svc -am test -DskipITs
+
+# Branching lane reliability checks
+./mvnw -f examples/search/common/pom.xml install -DskipTests
+./mvnw -f examples/search/index-document-svc/pom.xml -Dtest=ProcessIndexDocumentServiceReliabilityTest test
+```
+
+## Run Modes and Command Paths
+
+### Compute/REST mode
 
 - Build transport and platform defaults from `pipeline.yaml` (the pipeline manifest, typically at the repo root or a service `config/` directory; see [Configuration Reference](/guide/build/configuration/)).
 - Use module-local Quarkus run/test commands for step services and orchestrator.
 - Expect generated REST handlers/resources for configured steps.
 
-### Function/REST lane
+### Function/REST mode
 
 - Build with:
   - `-Dpipeline.platform=FUNCTION`
@@ -103,6 +120,7 @@ Only include keys that change behaviour materially:
 - gRPC delegated/operator lanes require descriptors and mapper-compatible bindings.
 - No implicit mapper conversion by default; fallback behaviour is configuration-driven.
 - Operational controls are service-specific; there is no single global operator circuit-breaker switch.
+- Protobuf-over-HTTP parity is not complete yet; treat it as a tracked next lane, not production parity.
 
 ## Related
 

@@ -101,6 +101,31 @@ class ProcessIndexDocumentServiceReliabilityTest {
     assertEquals("alpha", ack.getTopToken());
   }
 
+  @Test
+  void rejectsNegativeBatchIndexBeforeAggregation() {
+    UUID docId = UUID.randomUUID();
+    TokenBatch invalid = tokenBatch(docId, -1, "alpha beta", "hash-a");
+
+    IllegalArgumentException error = assertThrows(
+        IllegalArgumentException.class,
+        () -> service.process(Multi.createFrom().item(invalid)).await().atMost(Duration.ofSeconds(5)));
+
+    assertTrue(error.getMessage().contains("invalid token batch metrics for docId"));
+  }
+
+  @Test
+  void rejectsNonPositiveTokenCountBeforeAggregation() {
+    UUID docId = UUID.randomUUID();
+    TokenBatch invalid = tokenBatch(docId, 0, "alpha beta", "hash-a");
+    invalid.tokenCount = 0;
+
+    IllegalArgumentException error = assertThrows(
+        IllegalArgumentException.class,
+        () -> service.process(Multi.createFrom().item(invalid)).await().atMost(Duration.ofSeconds(5)));
+
+    assertTrue(error.getMessage().contains("invalid token batch metrics for docId"));
+  }
+
   private TokenBatch tokenBatch(UUID docId, String tokens, String tokensHash) {
     return tokenBatch(docId, 0, tokens, tokensHash);
   }
