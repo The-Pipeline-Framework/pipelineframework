@@ -10,7 +10,7 @@ This runbook is for operating and debugging pipelines that execute operator meth
 
 ## CI-Equivalent Execution Commands
 
-Use the same command families used in validation lanes:
+Use the same command families used in validation command paths:
 
 ```bash
 # Whole repository verification
@@ -20,7 +20,7 @@ Use the same command families used in validation lanes:
 ./mvnw -f framework/pom.xml verify
 ```
 
-Optional example lane (Search reference project):
+Optional example path (Search reference project):
 
 ```bash
 ./mvnw -f examples/search/pom.xml -pl orchestrator-svc -am \
@@ -30,15 +30,15 @@ Optional example lane (Search reference project):
   -DskipTests compile
 ```
 
-## Run Modes and Lanes
+## Run Modes and Command Paths
 
-### Compute/REST lane
+### Compute/REST mode
 
 - Build transport and platform defaults from `pipeline.yaml` (the pipeline manifest, typically at the repo root or a service `config/` directory; see [Configuration Reference](/guide/build/configuration/)).
 - Use module-local Quarkus run/test commands for step services and orchestrator.
 - Expect generated REST handlers/resources for configured steps.
 
-### Function/REST lane
+### Function/REST mode
 
 - Build with:
   - `-Dpipeline.platform=FUNCTION`
@@ -100,7 +100,7 @@ Only include keys that change behaviour materially:
 ## Intentional Limitations (Current)
 
 - Unary operator invocation is the primary supported execution path.
-- gRPC delegated/operator lanes require descriptors and mapper-compatible bindings.
+- gRPC delegated/operator paths require descriptors and mapper-compatible bindings.
 - No implicit mapper conversion by default; fallback behaviour is configuration-driven.
 - Operational controls are service-specific; there is no single global operator circuit-breaker switch.
 
