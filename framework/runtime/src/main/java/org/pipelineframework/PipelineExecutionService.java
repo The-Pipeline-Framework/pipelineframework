@@ -713,25 +713,24 @@ public class PipelineExecutionService {
     boolean retryAllowed = nextAttempt <= orchestratorConfig.maxRetries();
     if (retryAllowed) {
       long nextDue = now + retryDelayMillis(nextAttempt);
-      return executionStateStore.scheduleRetry(
-              record.tenantId(),
-              record.executionId(),
-              record.version(),
+          return executionStateStore.scheduleRetry(
+                  record.tenantId(),
+                  record.executionId(),
+                  record.version(),
               nextAttempt,
               nextDue,
               transitionKey,
               failure.getClass().getSimpleName(),
-              failure.getMessage(),
-              now)
-          .onItem().transformToUni(updated -> {
-            if (updated.isEmpty()) {
-              return Uni.createFrom().failure(new IllegalStateException(
-                  "Stale retry commit for execution " + record.executionId()));
-            }
-            Duration delay = Duration.ofMillis(Math.max(0L, nextDue - System.currentTimeMillis()));
-            return workDispatcher.enqueueDelayed(
-                new ExecutionWorkItem(record.tenantId(), record.executionId()),
-                delay);
+                  failure.getMessage(),
+                  now)
+              .onItem().transformToUni(updated -> {
+                if (updated.isEmpty()) {
+                  return Uni.createFrom().voidItem();
+                }
+                Duration delay = Duration.ofMillis(Math.max(0L, nextDue - System.currentTimeMillis()));
+                return workDispatcher.enqueueDelayed(
+                    new ExecutionWorkItem(record.tenantId(), record.executionId()),
+                    delay);
           });
     }
 
@@ -746,8 +745,7 @@ public class PipelineExecutionService {
             now)
         .onItem().transformToUni(updated -> {
           if (updated.isEmpty()) {
-            return Uni.createFrom().failure(new IllegalStateException(
-                "Stale terminal failure commit for execution " + record.executionId()));
+            return Uni.createFrom().voidItem();
           }
           DeadLetterEnvelope envelope = new DeadLetterEnvelope(
               record.tenantId(),

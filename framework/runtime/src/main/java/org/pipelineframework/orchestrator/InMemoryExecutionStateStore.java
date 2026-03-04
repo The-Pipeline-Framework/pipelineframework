@@ -43,8 +43,12 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     ExecutionRecord<Object, Object> existing =
                         executionsByScopedId.get(scopedExecutionId(command.tenantId(), existingExecutionId));
                     if (existing != null) {
-                        return new CreateExecutionResult(existing, true);
+                        if (!isExpired(existing, command.nowEpochMs())) {
+                            return new CreateExecutionResult(existing, true);
+                        }
+                        executionsByScopedId.remove(scopedExecutionId(command.tenantId(), existing.executionId()));
                     }
+                    executionIdByScopedKey.remove(scopedKey);
                 }
 
                 String executionId = UUID.randomUUID().toString();
@@ -276,12 +280,24 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     }
                 }
                 due.sort(Comparator.comparingLong(ExecutionRecord::nextDueEpochMs));
+                if (limit <= 0) {
+                    return List.of();
+                }
                 if (due.size() > limit) {
                     return List.copyOf(due.subList(0, limit));
                 }
                 return List.copyOf(due);
             }
         });
+    }
+
+    private static boolean isExpired(ExecutionRecord<Object, Object> record, long nowEpochMs) {
+        long ttl = record.ttlEpochS();
+        if (ttl <= 0) {
+            return false;
+        }
+        long nowEpochS = Instant.ofEpochMilli(nowEpochMs).getEpochSecond();
+        return ttl <= nowEpochS;
     }
 
     private static String scopedExecutionId(String tenantId, String executionId) {

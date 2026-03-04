@@ -21,6 +21,8 @@ public interface ExecutionStateStore {
 
     /**
      * Provider priority used when multiple stores are available.
+     * Higher numeric values have higher precedence and are selected over lower values.
+     * The default {@link #priority()} implementation returns {@code 0}.
      *
      * @return provider priority
      */

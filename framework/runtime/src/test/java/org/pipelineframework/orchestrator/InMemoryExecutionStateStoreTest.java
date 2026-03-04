@@ -105,6 +105,35 @@ class InMemoryExecutionStateStoreTest {
     }
 
     @Test
+    void dueSweepReturnsEmptyWhenLimitIsNonPositive() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        store.createOrGetExecution(new ExecutionCreateCommand("tenant-a", "key-limit", "payload", now, now / 1000 + 60))
+            .await().indefinitely();
+
+        assertTrue(store.findDueExecutions(now + 1, 0).await().indefinitely().isEmpty());
+        assertTrue(store.findDueExecutions(now + 1, -1).await().indefinitely().isEmpty());
+    }
+
+    @Test
+    void createOrGetRecreatesExecutionWhenExistingRecordExpired() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        CreateExecutionResult expired = store.createOrGetExecution(
+                new ExecutionCreateCommand("tenant-a", "key-expired", "payload", now, now / 1000 - 1))
+            .await().indefinitely();
+
+        CreateExecutionResult recreated = store.createOrGetExecution(
+                new ExecutionCreateCommand("tenant-a", "key-expired", "payload", now + 2000, now / 1000 + 60))
+            .await().indefinitely();
+
+        assertFalse(expired.duplicate());
+        assertFalse(recreated.duplicate());
+        assertNotEquals(expired.record().executionId(), recreated.record().executionId());
+        assertTrue(store.getExecution("tenant-a", expired.record().executionId()).await().indefinitely().isEmpty());
+    }
+
+    @Test
     void scopedCompositeKeysAvoidTenantAndKeySeparatorCollisions() {
         InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
         long now = System.currentTimeMillis();
@@ -119,5 +148,43 @@ class InMemoryExecutionStateStoreTest {
         assertFalse(first.duplicate());
         assertFalse(second.duplicate());
         assertNotEquals(first.record().executionId(), second.record().executionId());
+    }
+
+    @Test
+    void scopedCompositeKeysIsolateTerminalFailureAndLookupByExecutionId() {
+        InMemoryExecutionStateStore store = new InMemoryExecutionStateStore();
+        long now = System.currentTimeMillis();
+        CreateExecutionResult first = store.createOrGetExecution(
+                new ExecutionCreateCommand("a|b", "c", "payload", now, now / 1000 + 60))
+            .await().indefinitely();
+        CreateExecutionResult second = store.createOrGetExecution(
+                new ExecutionCreateCommand("a", "b|c", "payload", now, now / 1000 + 60))
+            .await().indefinitely();
+
+        Optional<ExecutionRecord<Object, Object>> failed = store.markTerminalFailure(
+                first.record().tenantId(),
+                first.record().executionId(),
+                first.record().version(),
+                ExecutionStatus.FAILED,
+                "transition",
+                "ERR",
+                "failed",
+                now + 1)
+            .await().indefinitely();
+        Optional<ExecutionRecord<Object, Object>> firstRead = store.getExecution(
+                first.record().tenantId(),
+                first.record().executionId())
+            .await().indefinitely();
+        Optional<ExecutionRecord<Object, Object>> secondRead = store.getExecution(
+                second.record().tenantId(),
+                second.record().executionId())
+            .await().indefinitely();
+
+        assertTrue(failed.isPresent());
+        assertTrue(firstRead.isPresent());
+        assertTrue(secondRead.isPresent());
+        assertEquals(ExecutionStatus.FAILED, firstRead.get().status());
+        assertTrue(firstRead.get().status().terminal());
+        assertFalse(secondRead.get().status().terminal());
     }
 }
