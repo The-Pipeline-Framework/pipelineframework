@@ -30,6 +30,23 @@ Optional example lane (Search reference project):
   -DskipTests compile
 ```
 
+FTGo reference lanes:
+
+```bash
+# Slice 1 lineage determinism (runtime focus)
+./mvnw -f framework/pom.xml -pl runtime -Dtest=FunctionTransportAdaptersTest test
+
+# Slice 2 parity checks (FUNCTION local/remote routing)
+./mvnw -f framework/pom.xml -pl runtime -Dtest=FunctionTransportContextTest,InvocationModeRoutingParityTest test
+
+# Slice 2 checkout bridge parity smoke
+./mvnw -f examples/checkout/pom.xml -pl create-order-orchestrator-svc,deliver-order-orchestrator-svc -am test -DskipITs
+
+# Slice 3 branching lane reliability checks
+./mvnw -f examples/search/common/pom.xml install -DskipTests
+./mvnw -f examples/search/index-document-svc/pom.xml -Dtest=ProcessIndexDocumentServiceReliabilityTest test
+```
+
 ## Run Modes and Lanes
 
 ### Compute/REST lane
@@ -103,6 +120,7 @@ Only include keys that change behaviour materially:
 - gRPC delegated/operator lanes require descriptors and mapper-compatible bindings.
 - No implicit mapper conversion by default; fallback behaviour is configuration-driven.
 - Operational controls are service-specific; there is no single global operator circuit-breaker switch.
+- Protobuf-over-HTTP parity is not complete yet; treat it as a tracked next lane, not production parity.
 
 ## Related
 
