@@ -170,7 +170,7 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
         HttpRequest request = requestBuilder.build();
         HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw toRemoteFailure(response, targetUrl);
+            throw toRemoteFailure(response, targetUrl, context);
         }
         return response;
     }
@@ -199,14 +199,14 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
 
     private String resolveIdempotencyKey(Object payload, FunctionTransportContext context) {
         if (payload instanceof TraceEnvelope<?> envelope && envelope.idempotencyKey() != null && !envelope.idempotencyKey().isBlank()) {
-            return envelope.idempotencyKey();
+            return envelope.idempotencyKey().strip();
         }
         // Batch payloads are treated as a single idempotent remote operation.
         // We intentionally use the first envelope key when available, then fall back to
         // explicit context override and finally deterministic request-id derivation.
         if (payload instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof TraceEnvelope<?> envelope
             && envelope.idempotencyKey() != null && !envelope.idempotencyKey().isBlank()) {
-            return envelope.idempotencyKey();
+            return envelope.idempotencyKey().strip();
         }
         return context.explicitIdempotencyKey().orElseGet(() -> AdapterUtils.deriveTraceId(context.requestId()));
     }
@@ -246,10 +246,13 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
         return objectMapper.readTree(body);
     }
 
-    private RuntimeException toRemoteFailure(HttpResponse<byte[]> response, String targetUrl) {
+    private RuntimeException toRemoteFailure(HttpResponse<byte[]> response, String targetUrl, FunctionTransportContext context) {
         String contentType = response.headers().firstValue("Content-Type").orElse("");
         byte[] body = response.body() == null ? new byte[0] : response.body();
-        if (contentType.toLowerCase(java.util.Locale.ROOT).contains(ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF)) {
+        String normalizedContentType = contentType.toLowerCase(java.util.Locale.ROOT);
+        boolean protobufContentType = normalizedContentType.contains(ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF);
+        boolean missingContentType = normalizedContentType.isBlank();
+        if ((protobufContentType || (missingContentType && useProtobufHttpV1(context))) && body.length > 0) {
             try {
                 Status status = Status.parseFrom(body);
                 return new IllegalStateException(

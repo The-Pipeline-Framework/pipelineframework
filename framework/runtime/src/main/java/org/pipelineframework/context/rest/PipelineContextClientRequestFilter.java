@@ -66,6 +66,10 @@ public class PipelineContextClientRequestFilter implements ClientRequestFilter {
     }
 
     private void putIfPresent(ClientRequestContext requestContext, String name, String value) {
+        Object existing = requestContext.getHeaders().getFirst(name);
+        if (existing instanceof String existingValue && !existingValue.isBlank()) {
+            return;
+        }
         if (value != null && !value.isBlank()) {
             requestContext.getHeaders().putSingle(name, value);
         }

@@ -57,45 +57,49 @@ public class RestExceptionMapper {
      */
     @ServerExceptionMapper
     public Response handleException(Exception ex, HttpHeaders headers) {
-        if (expectsProtobuf(headers)) {
-            TransportDispatchMetadata metadata = TransportDispatchMetadataHolder.get();
-            String executionId = metadata == null ? null : metadata.executionId();
-            LOG.errorf(ex, "Request failed (protobuf envelope), executionId=%s", executionId);
-            Status status = ProtobufHttpStatusMapper.fromThrowable(ex, executionId, "rest");
-            return Response.status(ProtobufHttpStatusMapper.toHttpStatus(status))
-                .type(ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF)
-                .entity(status.toByteArray())
+        try {
+            if (expectsProtobuf(headers)) {
+                TransportDispatchMetadata metadata = TransportDispatchMetadataHolder.get();
+                String executionId = metadata == null ? null : metadata.executionId();
+                LOG.errorf(ex, "Request failed (protobuf envelope), executionId=%s", executionId);
+                Status status = ProtobufHttpStatusMapper.fromThrowable(ex, executionId, "rest");
+                return Response.status(ProtobufHttpStatusMapper.toHttpStatus(status))
+                    .type(ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF)
+                    .entity(status.toByteArray())
+                    .build();
+            }
+            if (ex instanceof CacheMissException) {
+                LOG.warn("Required cache entry missing", ex);
+                return Response.status(Response.Status.PRECONDITION_FAILED)
+                    .entity(ex.getMessage())
+                    .build();
+            }
+            if (ex instanceof CachePolicyViolation) {
+                LOG.warn("Cache policy violation", ex);
+                return Response.status(Response.Status.PRECONDITION_FAILED)
+                    .entity(ex.getMessage())
+                    .build();
+            }
+            if (ex instanceof NotFoundException) {
+                LOG.debug("Request did not match a REST endpoint", ex);
+                return Response.status(Response.Status.NOT_FOUND)
+                    .entity("Not Found")
+                    .build();
+            }
+            Throwable rootCause = rootCause(ex);
+            if (rootCause instanceof IllegalArgumentException) {
+                LOG.warn("Invalid request", ex);
+                return Response.status(Response.Status.BAD_REQUEST)
+                    .entity("Invalid request")
+                    .build();
+            }
+            LOG.error("Unexpected error processing request", ex);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+                .entity("An unexpected error occurred")
                 .build();
+        } finally {
+            TransportDispatchMetadataHolder.clear();
         }
-        if (ex instanceof CacheMissException) {
-            LOG.warn("Required cache entry missing", ex);
-            return Response.status(Response.Status.PRECONDITION_FAILED)
-                .entity(ex.getMessage())
-                .build();
-        }
-        if (ex instanceof CachePolicyViolation) {
-            LOG.warn("Cache policy violation", ex);
-            return Response.status(Response.Status.PRECONDITION_FAILED)
-                .entity(ex.getMessage())
-                .build();
-        }
-        if (ex instanceof NotFoundException) {
-            LOG.debug("Request did not match a REST endpoint", ex);
-            return Response.status(Response.Status.NOT_FOUND)
-                .entity("Not Found")
-                .build();
-        }
-        Throwable rootCause = rootCause(ex);
-        if (rootCause instanceof IllegalArgumentException) {
-            LOG.warn("Invalid request", ex);
-            return Response.status(Response.Status.BAD_REQUEST)
-                .entity("Invalid request")
-                .build();
-        }
-        LOG.error("Unexpected error processing request", ex);
-        return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-            .entity("An unexpected error occurred")
-            .build();
     }
 
     private boolean expectsProtobuf(HttpHeaders headers) {

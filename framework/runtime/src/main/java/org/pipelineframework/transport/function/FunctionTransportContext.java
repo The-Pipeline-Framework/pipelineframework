@@ -271,7 +271,11 @@ public record FunctionTransportContext(
         try {
             return Optional.of(Integer.parseInt(value));
         } catch (NumberFormatException e) {
-            LOG.warning(() -> "Ignoring invalid integer attribute '" + key + "' value '" + value + "'");
+            LOG.warning(() -> "Ignoring invalid integer attribute"
+                + " requestId='" + requestId + "'"
+                + ", functionName='" + functionName + "'"
+                + ", key='" + key + "'"
+                + ", value='" + value + "'");
             return Optional.empty();
         }
     }
@@ -280,7 +284,11 @@ public record FunctionTransportContext(
         try {
             return Optional.of(Long.parseLong(value));
         } catch (NumberFormatException e) {
-            LOG.warning(() -> "Ignoring invalid long attribute '" + key + "' value '" + value + "'");
+            LOG.warning(() -> "Ignoring invalid long attribute"
+                + " requestId='" + requestId + "'"
+                + ", functionName='" + functionName + "'"
+                + ", key='" + key + "'"
+                + ", value='" + value + "'");
             return Optional.empty();
         }
     }
