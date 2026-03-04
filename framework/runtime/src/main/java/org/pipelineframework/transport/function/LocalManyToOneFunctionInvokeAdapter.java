@@ -270,6 +270,12 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
             .collect(Collectors.joining(";"));
     }
 
+    /**
+     * Produce a deterministic fingerprint for the envelope's payload.
+     *
+     * @param envelope the trace envelope whose payload will be fingerprinted
+     * @return `ClassName:SHA-256_HEX` for a non-null payload, or an empty string if the payload is null
+     */
     private String payloadFingerprint(TraceEnvelope<I> envelope) {
         Object payload = envelope.payload();
         if (payload == null) {
@@ -279,6 +285,23 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
         return payload.getClass().getName() + ":" + sha256Hex(canonical);
     }
 
+    /**
+     * Produce a deterministic canonical string representation of a payload for stable fingerprinting.
+     *
+     * <p>Supports the following forms:
+     * <ul>
+     *   <li>null -> "null"</li>
+     *   <li>CharSequence, Number, Boolean, Enum -> their toString()</li>
+     *   <li>Map -> sorted entries formatted as "{key->value,...}" where keys and values are canonicalized</li>
+     *   <li>Iterable and arrays -> elements formatted as "[e1,e2,...]" with canonicalized elements</li>
+     *   <li>Record -> "ClassName{field=value,...}" with recursive canonicalization and cycle detection (returns "ClassName#cycle" for a detected cycle)</li>
+     *   <li>Other objects -> "ClassName:normalizedToString" unless toString() looks like "ClassName@hex", in which case "ClassName" is returned</li>
+     * </ul>
+     *
+     * @param payload the value to canonicalize
+     * @param visited a mutable set used to track already-visited reference instances to detect cycles (identity semantics expected)
+     * @return a stable, deterministic string representation of the payload suitable for hashing and comparison
+     */
     private String canonicalPayload(Object payload, Set<Object> visited) {
         if (payload == null) {
             return "null";
@@ -290,35 +313,56 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
             return payload.toString();
         }
         if (payload instanceof Map<?, ?> map) {
-            return map.entrySet().stream()
-                .map(entry -> canonicalPayload(entry.getKey(), visited)
-                    + "->" + canonicalPayload(entry.getValue(), visited))
-                .sorted()
-                .collect(Collectors.joining(",", "{", "}"));
+            if (!visited.add(payload)) {
+                return payload.getClass().getName() + "#cycle";
+            }
+            try {
+                return map.entrySet().stream()
+                    .map(entry -> canonicalPayload(entry.getKey(), visited)
+                        + "->" + canonicalPayload(entry.getValue(), visited))
+                    .sorted()
+                    .collect(Collectors.joining(",", "{", "}"));
+            } finally {
+                visited.remove(payload);
+            }
         }
         if (payload instanceof Iterable<?> iterable) {
-            StringBuilder builder = new StringBuilder("[");
-            boolean first = true;
-            for (Object item : iterable) {
-                if (!first) {
-                    builder.append(',');
-                }
-                builder.append(canonicalPayload(item, visited));
-                first = false;
+            if (!visited.add(payload)) {
+                return payload.getClass().getName() + "#cycle";
             }
-            return builder.append(']').toString();
+            try {
+                StringBuilder builder = new StringBuilder("[");
+                boolean first = true;
+                for (Object item : iterable) {
+                    if (!first) {
+                        builder.append(',');
+                    }
+                    builder.append(canonicalPayload(item, visited));
+                    first = false;
+                }
+                return builder.append(']').toString();
+            } finally {
+                visited.remove(payload);
+            }
         }
         Class<?> payloadClass = payload.getClass();
         if (payloadClass.isArray()) {
-            int length = Array.getLength(payload);
-            StringBuilder builder = new StringBuilder("[");
-            for (int i = 0; i < length; i++) {
-                if (i > 0) {
-                    builder.append(',');
-                }
-                builder.append(canonicalPayload(Array.get(payload, i), visited));
+            if (!visited.add(payload)) {
+                return payloadClass.getName() + "#cycle";
             }
-            return builder.append(']').toString();
+            try {
+                int length = Array.getLength(payload);
+                StringBuilder builder = new StringBuilder("[");
+                for (int i = 0; i < length; i++) {
+                    if (i > 0) {
+                        builder.append(',');
+                    }
+                    builder.append(canonicalPayload(Array.get(payload, i), visited));
+                }
+                return builder.append(']').toString();
+            } finally {
+                visited.remove(payload);
+            }
         }
         if (payloadClass.isRecord()) {
             if (!visited.add(payload)) {
@@ -356,6 +400,13 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
         return payloadClass.getName() + ":" + rendered;
     }
 
+    /**
+     * Compute the SHA-256 digest of the given string and return it as a lowercase hexadecimal string.
+     *
+     * @param value the input string to hash (treated as UTF-8)
+     * @return the SHA-256 digest encoded as a lowercase hex string
+     * @throws IllegalStateException if the SHA-256 algorithm is not available on the platform
+     */
     private String sha256Hex(String value) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
@@ -371,6 +422,15 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
         }
     }
 
+    /**
+     * Casts a comparator with wildcard bounds to a comparator typed to `T`.
+     *
+     * <p>This is a convenience helper to treat a `Comparator<? super T>` as a `Comparator<T>` when such
+     * a cast is known to be safe at the call site.
+     *
+     * @param comparator the comparator to cast
+     * @return the provided comparator cast to `Comparator<T>`
+     */
     @SuppressWarnings("unchecked")
     private static <T> Comparator<T> asTypedComparator(Comparator<? super T> comparator) {
         return (Comparator<T>) comparator;
