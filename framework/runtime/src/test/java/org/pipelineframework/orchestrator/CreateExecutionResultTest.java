@@ -2,27 +2,15 @@ package org.pipelineframework.orchestrator;
 
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CreateExecutionResultTest {
 
     @Test
     void createsResultWithRecordAndDuplicateFlag() {
-        ExecutionRecord record = new ExecutionRecord(
-            "tenant1",
-            "exec1",
-            "key1",
-            ExecutionStatus.PENDING,
-            0,
-            1,
-            1,
-            null,
-            null,
-            null,
-            null,
-            0L,
-            1234567890L,
-            7654321L);
+        ExecutionRecord<Object, Object> record = createRecord("tenant-1", "exec-1", ExecutionStatus.QUEUED);
 
         CreateExecutionResult result = new CreateExecutionResult(record, true);
 
@@ -32,21 +20,7 @@ class CreateExecutionResultTest {
 
     @Test
     void createsResultWithNonDuplicate() {
-        ExecutionRecord record = new ExecutionRecord(
-            "tenant2",
-            "exec2",
-            "key2",
-            ExecutionStatus.RUNNING,
-            0,
-            1,
-            1,
-            null,
-            null,
-            null,
-            null,
-            0L,
-            1234567890L,
-            7654321L);
+        ExecutionRecord<Object, Object> record = createRecord("tenant-2", "exec-2", ExecutionStatus.RUNNING);
 
         CreateExecutionResult result = new CreateExecutionResult(record, false);
 
@@ -57,28 +31,37 @@ class CreateExecutionResultTest {
     @Test
     void recordClassAccessorsWork() {
         CreateExecutionResult result = new CreateExecutionResult(
-            new ExecutionRecord(
-                "tenant3",
-                "exec3",
-                "key3",
-                ExecutionStatus.SUCCEEDED,
-                2,
-                5,
-                1,
-                null,
-                "SUCCESS",
-                "completed",
-                null,
-                0L,
-                9876543210L,
-                7654321L),
+            createRecord("tenant-3", "exec-3", ExecutionStatus.SUCCEEDED),
             false);
 
-        assertEquals("tenant3", result.record().tenantId());
-        assertEquals("exec3", result.record().executionId());
-        assertEquals("key3", result.record().executionKey());
+        assertEquals("tenant-3", result.record().tenantId());
+        assertEquals("exec-3", result.record().executionId());
+        assertEquals("key-exec-3", result.record().executionKey());
         assertEquals(ExecutionStatus.SUCCEEDED, result.record().status());
-        assertEquals(2, result.record().currentStepIndex());
-        assertEquals(5, result.record().attempt());
+    }
+
+    private static ExecutionRecord<Object, Object> createRecord(
+        String tenantId,
+        String executionId,
+        ExecutionStatus status) {
+        return new ExecutionRecord<>(
+            tenantId,
+            executionId,
+            "key-" + executionId,
+            status,
+            1L,
+            0,
+            0,
+            null,
+            0L,
+            0L,
+            null,
+            null,
+            null,
+            null,
+            null,
+            123L,
+            456L,
+            789L);
     }
 }

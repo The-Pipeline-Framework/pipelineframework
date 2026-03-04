@@ -82,11 +82,11 @@ class PipelineContextResponseFilterTest {
 
     @Test
     void handlesMultipleCacheStatuses() {
-        PipelineCacheStatusHolder.set(CacheStatus.PARTIAL_HIT);
+        PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
 
         filter.filter(requestContext, responseContext);
 
         MultivaluedMap<String, Object> headers = responseContext.getHeaders();
-        assertEquals("PARTIAL_HIT", headers.getFirst(PipelineContextHeaders.CACHE_STATUS));
+        assertEquals("BYPASS", headers.getFirst(PipelineContextHeaders.CACHE_STATUS));
     }
 }

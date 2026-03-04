@@ -1,5 +1,7 @@
 package org.pipelineframework.context.grpc;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 import io.grpc.*;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -69,15 +71,21 @@ class PipelineContextGrpcServerInterceptorTest {
     void propagatesCacheStatusToResponse() {
         Metadata headers = new Metadata();
         PipelineCacheStatusHolder.set(CacheStatus.MISS);
+        AtomicReference<ServerCall<String, String>> wrappedCallRef = new AtomicReference<>();
 
         Metadata[] capturedHeaders = new Metadata[1];
         doAnswer(invocation -> {
             capturedHeaders[0] = invocation.getArgument(0);
             return null;
         }).when(serverCall).sendHeaders(any(Metadata.class));
+        when(handler.startCall(any(), any())).thenAnswer(invocation -> {
+            wrappedCallRef.set(invocation.getArgument(0));
+            return mock(ServerCall.Listener.class);
+        });
 
-        ServerCall<String, String> wrappedCall = (ServerCall<String, String>)
-            interceptor.interceptCall(serverCall, headers, handler);
+        interceptor.interceptCall(serverCall, headers, handler);
+        ServerCall<String, String> wrappedCall = wrappedCallRef.get();
+        assertNotNull(wrappedCall);
 
         // Simulate sending headers
         wrappedCall.sendHeaders(new Metadata());

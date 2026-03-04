@@ -41,7 +41,7 @@ class PipelineContextGrpcClientInterceptorTest {
         PipelineContextHolder.set(context);
 
         ClientCall<String, String> mockCall = mock(ClientCall.class);
-        when(channel.newCall(any(), any())).thenReturn(mockCall);
+        doReturn(mockCall).when(channel).newCall(any(), any());
 
         ClientCall<String, String> interceptedCall = interceptor.interceptCall(method, callOptions, channel);
 
@@ -63,7 +63,7 @@ class PipelineContextGrpcClientInterceptorTest {
         PipelineContextHolder.set(context);
 
         ClientCall<String, String> mockCall = mock(ClientCall.class);
-        when(channel.newCall(any(), any())).thenReturn(mockCall);
+        doReturn(mockCall).when(channel).newCall(any(), any());
 
         ClientCall<String, String> interceptedCall = interceptor.interceptCall(method, callOptions, channel);
 
@@ -82,7 +82,7 @@ class PipelineContextGrpcClientInterceptorTest {
     @Test
     void extractsCacheStatusFromResponse() {
         ClientCall<String, String> mockCall = mock(ClientCall.class);
-        when(channel.newCall(any(), any())).thenReturn(mockCall);
+        doReturn(mockCall).when(channel).newCall(any(), any());
 
         ClientCall<String, String> interceptedCall = interceptor.interceptCall(method, callOptions, channel);
 
@@ -115,7 +115,7 @@ class PipelineContextGrpcClientInterceptorTest {
         PipelineContextHolder.clear();
 
         ClientCall<String, String> mockCall = mock(ClientCall.class);
-        when(channel.newCall(any(), any())).thenReturn(mockCall);
+        doReturn(mockCall).when(channel).newCall(any(), any());
 
         ClientCall<String, String> interceptedCall = interceptor.interceptCall(method, callOptions, channel);
 
