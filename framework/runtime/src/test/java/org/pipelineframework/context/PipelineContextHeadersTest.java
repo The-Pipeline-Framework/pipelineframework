@@ -30,6 +30,7 @@ class PipelineContextHeadersTest {
     void classHasPrivateConstructor() throws Exception {
         var constructor = PipelineContextHeaders.class.getDeclaredConstructor();
         assertTrue(java.lang.reflect.Modifier.isPrivate(constructor.getModifiers()));
+        assertFalse(constructor.canAccess(null));
         constructor.setAccessible(true);
         assertDoesNotThrow(() -> constructor.newInstance());
     }
