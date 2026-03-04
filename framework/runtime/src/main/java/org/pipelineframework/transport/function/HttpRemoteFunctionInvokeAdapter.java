@@ -22,17 +22,25 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.protobuf.BytesValue;
+import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.rpc.Code;
+import com.google.rpc.Status;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.ConfigProvider;
+import org.pipelineframework.context.PipelineContextHeaders;
+import org.pipelineframework.transport.http.ProtobufHttpContentTypes;
+import org.pipelineframework.transport.http.ProtobufHttpStatusMapper;
 
 /**
  * Remote invoke adapter that dispatches envelopes to an HTTP endpoint.
@@ -52,6 +60,7 @@ import org.eclipse.microprofile.config.ConfigProvider;
  */
 public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvokeAdapter<I, O> {
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(10);
+    private static final String PROTOCOL_PROTOBUF_HTTP_V1 = "PROTOBUF_HTTP_V1";
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -105,8 +114,8 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
     private Uni<TraceEnvelope<O>> postForSingle(Object payload, FunctionTransportContext context) {
         return Uni.createFrom().item(() -> {
             try {
-                String responseBody = send(payload, context);
-                JsonNode node = objectMapper.readTree(responseBody);
+                HttpResponse<byte[]> response = send(payload, context);
+                JsonNode node = decodeResponseAsJsonTree(response, context);
                 if (node == null || node.isNull()) {
                     throw new IllegalStateException("Remote function response body was empty");
                 }
@@ -125,8 +134,8 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
     private Uni<List<TraceEnvelope<O>>> postForMany(Object payload, FunctionTransportContext context) {
         return Uni.createFrom().item(() -> {
             try {
-                String responseBody = send(payload, context);
-                JsonNode node = objectMapper.readTree(responseBody);
+                HttpResponse<byte[]> response = send(payload, context);
+                JsonNode node = decodeResponseAsJsonTree(response, context);
                 if (node == null || node.isNull()) {
                     throw new IllegalStateException("Remote function response body was empty");
                 }
@@ -149,26 +158,122 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
         }).runSubscriptionOn(Infrastructure.getDefaultExecutor());
     }
 
-    private String send(Object payload, FunctionTransportContext context) throws IOException, InterruptedException {
+    private HttpResponse<byte[]> send(Object payload, FunctionTransportContext context) throws IOException, InterruptedException {
         String targetUrl = resolveTargetUrl(context);
-        String requestBody = objectMapper.writeValueAsString(payload);
-        HttpRequest request = HttpRequest.newBuilder(URI.create(targetUrl))
+        WirePayload wirePayload = encodeRequestPayload(payload, context);
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder(URI.create(targetUrl))
             .timeout(DEFAULT_TIMEOUT)
-            .header("Content-Type", "application/json")
-            .header("Accept", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(requestBody))
-            .build();
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            .header("Content-Type", wirePayload.contentType())
+            .header("Accept", wirePayload.accept())
+            .POST(HttpRequest.BodyPublishers.ofByteArray(wirePayload.body()));
+        applyCanonicalHeaders(requestBuilder, payload, context);
+        HttpRequest request = requestBuilder.build();
+        HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            String responseBody = response.body() == null ? "" : response.body();
-            if (responseBody.length() > 512) {
-                responseBody = responseBody.substring(0, 512) + "...";
-            }
-            throw new IllegalStateException(
-                "Remote function invocation failed with HTTP " + response.statusCode() + " at " + targetUrl
-                    + " (body: " + responseBody + ")");
+            throw toRemoteFailure(response, targetUrl);
         }
-        return response.body();
+        return response;
+    }
+
+    private void applyCanonicalHeaders(
+        HttpRequest.Builder requestBuilder,
+        Object payload,
+        FunctionTransportContext context
+    ) {
+        String correlationId = context.correlationId().orElseGet(() -> AdapterUtils.deriveTraceId(context.requestId()));
+        String executionId = context.executionId().orElseGet(context::requestId);
+        String idempotencyKey = resolveIdempotencyKey(payload, context);
+        int retryAttempt = context.retryAttempt().orElse(0);
+        long dispatchTsEpochMs = context.dispatchTsEpochMs().orElseGet(() -> Instant.now().toEpochMilli());
+
+        requestBuilder.header(PipelineContextHeaders.TPF_CORRELATION_ID, correlationId);
+        requestBuilder.header(PipelineContextHeaders.TPF_EXECUTION_ID, executionId);
+        requestBuilder.header(PipelineContextHeaders.TPF_IDEMPOTENCY_KEY, idempotencyKey);
+        requestBuilder.header(PipelineContextHeaders.TPF_RETRY_ATTEMPT, Integer.toString(retryAttempt));
+        requestBuilder.header(PipelineContextHeaders.TPF_DISPATCH_TS_EPOCH_MS, Long.toString(dispatchTsEpochMs));
+        context.deadlineEpochMs().ifPresent(deadline ->
+            requestBuilder.header(PipelineContextHeaders.TPF_DEADLINE_EPOCH_MS, Long.toString(deadline)));
+        context.parentItemId().ifPresent(parent ->
+            requestBuilder.header(PipelineContextHeaders.TPF_PARENT_ITEM_ID, parent));
+    }
+
+    private String resolveIdempotencyKey(Object payload, FunctionTransportContext context) {
+        if (payload instanceof TraceEnvelope<?> envelope && envelope.idempotencyKey() != null && !envelope.idempotencyKey().isBlank()) {
+            return envelope.idempotencyKey();
+        }
+        // Batch payloads are treated as a single idempotent remote operation.
+        // We intentionally use the first envelope key when available, then fall back to
+        // explicit context override and finally deterministic request-id derivation.
+        if (payload instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof TraceEnvelope<?> envelope
+            && envelope.idempotencyKey() != null && !envelope.idempotencyKey().isBlank()) {
+            return envelope.idempotencyKey();
+        }
+        return context.explicitIdempotencyKey().orElseGet(() -> AdapterUtils.deriveTraceId(context.requestId()));
+    }
+
+    private WirePayload encodeRequestPayload(Object payload, FunctionTransportContext context) throws IOException {
+        if (useProtobufHttpV1(context)) {
+            String jsonPayload = objectMapper.writeValueAsString(payload);
+            BytesValue bytesValue = BytesValue.newBuilder()
+                .setValue(com.google.protobuf.ByteString.copyFromUtf8(jsonPayload))
+                .build();
+            return new WirePayload(
+                bytesValue.toByteArray(),
+                ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF,
+                ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF);
+        }
+        return new WirePayload(
+            objectMapper.writeValueAsBytes(payload),
+            ProtobufHttpContentTypes.APPLICATION_JSON,
+            ProtobufHttpContentTypes.APPLICATION_JSON);
+    }
+
+    private JsonNode decodeResponseAsJsonTree(HttpResponse<byte[]> response, FunctionTransportContext context) throws IOException {
+        String contentType = response.headers().firstValue("Content-Type").orElse("");
+        byte[] body = response.body() == null ? new byte[0] : response.body();
+        String normalizedContentType = contentType.toLowerCase(java.util.Locale.ROOT);
+        boolean protobufContentType = normalizedContentType.contains(ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF);
+        boolean missingContentType = normalizedContentType.isBlank();
+        if (protobufContentType || (missingContentType && useProtobufHttpV1(context))) {
+            try {
+                BytesValue bytesValue = BytesValue.parseFrom(body);
+                String json = bytesValue.getValue().toStringUtf8();
+                return objectMapper.readTree(json);
+            } catch (InvalidProtocolBufferException e) {
+                throw new IllegalStateException("Failed to decode protobuf response payload", e);
+            }
+        }
+        return objectMapper.readTree(body);
+    }
+
+    private RuntimeException toRemoteFailure(HttpResponse<byte[]> response, String targetUrl) {
+        String contentType = response.headers().firstValue("Content-Type").orElse("");
+        byte[] body = response.body() == null ? new byte[0] : response.body();
+        if (contentType.toLowerCase(java.util.Locale.ROOT).contains(ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF)) {
+            try {
+                Status status = Status.parseFrom(body);
+                return new IllegalStateException(
+                    "Remote function invocation failed with HTTP " + response.statusCode() + " at " + targetUrl
+                        + " (" + Code.forNumber(status.getCode()) + ": " + status.getMessage() + ")");
+            } catch (InvalidProtocolBufferException ignored) {
+                // Fall through to generic body decoding.
+            }
+        }
+        String responseBody = new String(body, java.nio.charset.StandardCharsets.UTF_8);
+        if (responseBody.length() > 512) {
+            responseBody = responseBody.substring(0, 512) + "...";
+        }
+        Status mappedStatus = ProtobufHttpStatusMapper.fromThrowable(
+            new IllegalStateException(responseBody), null, targetUrl);
+        return new IllegalStateException(
+            "Remote function invocation failed with HTTP " + response.statusCode() + " at " + targetUrl
+                + " (" + Code.forNumber(mappedStatus.getCode()) + ": " + mappedStatus.getMessage() + ")");
+    }
+
+    private boolean useProtobufHttpV1(FunctionTransportContext context) {
+        return context.transportProtocol()
+            .map(protocol -> PROTOCOL_PROTOBUF_HTTP_V1.equalsIgnoreCase(protocol))
+            .orElse(false);
     }
 
     private String resolveTargetUrl(FunctionTransportContext context) {
@@ -257,5 +362,8 @@ public final class HttpRemoteFunctionInvokeAdapter<I, O> implements FunctionInvo
     @SuppressWarnings("unchecked")
     private TraceEnvelope<O> castEnvelope(TraceEnvelope<?> envelope) {
         return (TraceEnvelope<O>) envelope;
+    }
+
+    private record WirePayload(byte[] body, String contentType, String accept) {
     }
 }

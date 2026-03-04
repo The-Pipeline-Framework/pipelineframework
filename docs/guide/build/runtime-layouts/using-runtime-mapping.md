@@ -95,3 +95,16 @@ Map<String, String> remoteAttrs = Map.of(
 
 The runtime reads these values via `FunctionTransportContext` accessors (`invocationMode()`, `targetRuntime()`, `targetModule()`, `targetHandler()`), while the runtime-mapping loader ignores them.
 The default behaviour is local (`LOCAL`) generated wiring, while stable contract fields are preserved for cross-runtime remote adapters.
+
+## Dispatch Contract Parity Across Transports
+
+Runtime mapping placement decisions should not change dispatch semantics.
+For the same logical step call, transport lanes (REST/gRPC/LOCAL) and platform mode (`pipeline.platform=FUNCTION`) should preserve:
+
+- immutable correlation id
+- stable idempotency key semantics for duplicate deliveries
+- monotonic retry-attempt propagation
+- absolute deadline semantics (`epoch-ms`)
+- consistent classification of terminal errors as retryable or non-retryable
+
+This is a runtime invariant for topology changes (modular, pipeline-runtime, monolith), not a transport-specific optimization.
