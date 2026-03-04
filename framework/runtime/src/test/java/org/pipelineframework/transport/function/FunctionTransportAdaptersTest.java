@@ -272,11 +272,17 @@ class FunctionTransportAdaptersTest {
         TraceEnvelope<Integer> second = TraceEnvelope.rootWithMeta(
             "trace-null-meta", "item-b", "search.token", "v1", "idem-b", 2, secondMeta);
 
-        TraceEnvelope<Integer> merged = adapter.invokeManyToOne(Multi.createFrom().items(first, second), context)
+        TraceEnvelope<Integer> mergedForward = adapter.invokeManyToOne(Multi.createFrom().items(first, second), context)
+            .await().atMost(Duration.ofSeconds(2));
+        TraceEnvelope<Integer> mergedReverse = adapter.invokeManyToOne(Multi.createFrom().items(second, first), context)
             .await().atMost(Duration.ofSeconds(2));
 
-        assertEquals(3, merged.payload());
-        assertEquals("item-a,item-b", merged.meta().get("previousItemIds"));
+        assertEquals(3, mergedForward.payload());
+        assertEquals(3, mergedReverse.payload());
+        assertEquals("item-a,item-b", mergedForward.meta().get("previousItemIds"));
+        assertEquals(mergedForward.itemId(), mergedReverse.itemId());
+        assertEquals(mergedForward.idempotencyKey(), mergedReverse.idempotencyKey());
+        assertEquals(mergedForward.meta().get("previousItemIds"), mergedReverse.meta().get("previousItemIds"));
     }
 
     @Test

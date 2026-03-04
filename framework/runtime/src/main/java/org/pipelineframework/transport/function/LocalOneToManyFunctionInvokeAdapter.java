@@ -60,8 +60,8 @@ public final class LocalOneToManyFunctionInvokeAdapter<I, O> implements Function
             ? AdapterUtils.deriveTraceId(context.requestId())
             : rawTraceId.strip();
         String traceScope = AdapterUtils.normalizeOrDefault(
-            input.traceId(),
-            AdapterUtils.normalizeOrDefault(context.requestId(), "trace"));
+            rawTraceId,
+            AdapterUtils.deriveTraceId(context.requestId()));
         AtomicLong outputIndex = new AtomicLong(0L);
         Multi<O> outputStream = delegate.apply(input.payload());
         if (outputStream == null) {
