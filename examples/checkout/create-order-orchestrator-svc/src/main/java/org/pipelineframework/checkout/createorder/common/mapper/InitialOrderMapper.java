@@ -6,7 +6,7 @@ import org.pipelineframework.checkout.createorder.grpc.OrderCreateSvc;
 import org.pipelineframework.mapper.Mapper;
 
 @ApplicationScoped
-public class InitialOrderMapper implements Mapper<OrderCreateSvc.InitialOrder, InitialOrder, InitialOrder> {
+public class InitialOrderMapper implements Mapper<InitialOrder, OrderCreateSvc.InitialOrder> {
     /**
      * Map a gRPC InitialOrder message to a domain InitialOrder.
      *
@@ -15,7 +15,7 @@ public class InitialOrderMapper implements Mapper<OrderCreateSvc.InitialOrder, I
      * @throws IllegalArgumentException if {@code grpc} is {@code null} or if {@code grpc.getItemCount()} is less than 0
      */
     @Override
-    public InitialOrder fromGrpc(OrderCreateSvc.InitialOrder grpc) {
+    public InitialOrder fromExternal(OrderCreateSvc.InitialOrder grpc) {
         if (grpc == null) {
             throw new IllegalArgumentException("grpc must not be null");
         }
@@ -36,7 +36,7 @@ public class InitialOrderMapper implements Mapper<OrderCreateSvc.InitialOrder, I
      * @throws IllegalArgumentException if {@code dto} is null or {@code dto.itemCount()} is less than or equal to 0
      */
     @Override
-    public OrderCreateSvc.InitialOrder toGrpc(InitialOrder dto) {
+    public OrderCreateSvc.InitialOrder toExternal(InitialOrder dto) {
         if (dto == null) {
             throw new IllegalArgumentException("dto must not be null");
         }
@@ -55,7 +55,6 @@ public class InitialOrderMapper implements Mapper<OrderCreateSvc.InitialOrder, I
      *
      * @return the same InitialOrder instance that was passed in
      */
-    @Override
     public InitialOrder fromDto(InitialOrder dto) {
         return dto;
     }
@@ -66,7 +65,6 @@ public class InitialOrderMapper implements Mapper<OrderCreateSvc.InitialOrder, I
      * @param domain the domain InitialOrder to convert
      * @return the same InitialOrder instance passed as {@code domain}
      */
-    @Override
     public InitialOrder toDto(InitialOrder domain) {
         return domain;
     }

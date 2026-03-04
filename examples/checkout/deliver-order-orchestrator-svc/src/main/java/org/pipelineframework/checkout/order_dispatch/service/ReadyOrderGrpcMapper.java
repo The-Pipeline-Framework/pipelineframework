@@ -10,7 +10,7 @@ import org.pipelineframework.checkout.deliverorder.grpc.OrderDispatchSvc;
 import org.pipelineframework.mapper.Mapper;
 
 @ApplicationScoped
-public class ReadyOrderGrpcMapper implements Mapper<OrderDispatchSvc.ReadyOrder, ReadyOrderDto, ReadyOrderDto> {
+public class ReadyOrderGrpcMapper implements Mapper<ReadyOrderDto, OrderDispatchSvc.ReadyOrder> {
 
     /**
      * Convert a gRPC OrderDispatchSvc.ReadyOrder into a ReadyOrderDto.
@@ -20,7 +20,7 @@ public class ReadyOrderGrpcMapper implements Mapper<OrderDispatchSvc.ReadyOrder,
      * @throws IllegalArgumentException if {@code grpc} is null, if any required field is missing, or if UUID/Instant parsing fails
      */
     @Override
-    public ReadyOrderDto fromGrpc(OrderDispatchSvc.ReadyOrder grpc) {
+    public ReadyOrderDto fromExternal(OrderDispatchSvc.ReadyOrder grpc) {
         if (grpc == null) {
             throw new IllegalArgumentException("grpc must not be null");
         }
@@ -44,7 +44,7 @@ public class ReadyOrderGrpcMapper implements Mapper<OrderDispatchSvc.ReadyOrder,
      * @throws IllegalArgumentException if {@code dto} is null
      */
     @Override
-    public OrderDispatchSvc.ReadyOrder toGrpc(ReadyOrderDto dto) {
+    public OrderDispatchSvc.ReadyOrder toExternal(ReadyOrderDto dto) {
         if (dto == null) {
             throw new IllegalArgumentException("dto must not be null");
         }
@@ -60,7 +60,6 @@ public class ReadyOrderGrpcMapper implements Mapper<OrderDispatchSvc.ReadyOrder,
      *
      * @return the same ReadyOrderDto instance that was passed in
      */
-    @Override
     public ReadyOrderDto fromDto(ReadyOrderDto dto) {
         // Deliberate no-op identity mapping: DTO and domain are the same type.
         return dto;
@@ -72,7 +71,6 @@ public class ReadyOrderGrpcMapper implements Mapper<OrderDispatchSvc.ReadyOrder,
      * @param domain the ReadyOrderDto to return
      * @return the same ReadyOrderDto instance passed in
      */
-    @Override
     public ReadyOrderDto toDto(ReadyOrderDto domain) {
         // Deliberate no-op identity mapping: DTO and domain are the same type.
         return domain;

@@ -125,11 +125,11 @@ This roadmap started before the recent slice stack. The following FTGo-related m
   - TPFGo epic-next and search trace-envelope lineage branches were merged.
 - **2026-03-02 (Slice 1 and Slice 2 runtime core)**:
   - Split/merge lineage stabilization and deterministic-id hardening landed in runtime adapters.
-  - FUNCTION mode parity across streaming handler shapes was implemented.
+  - FUNCTION mode parity across streaming handler shapes was implemented (FUNCTION/LAMBDA path).
 - **2026-03-03 (Slice 3 reference lane depth)**:
   - Search fan-out/fan-in reference lane was expanded with richer aggregation depth and additional reliability/lineage assertions.
 - **Current state**:
-  - Core lineage + parity baseline is implemented for current supported runtime paths; remaining work is primarily connector/pipeline-to-pipeline policy closure.
+  - Core lineage baseline is implemented for current supported runtime paths; remaining work is primarily connector/pipeline-to-pipeline policy closure and full FTGo end-to-end parity expansion.
 
 ## Pain-Point Matrix
 

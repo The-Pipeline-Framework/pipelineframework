@@ -45,13 +45,14 @@ class FunctionTransportContextTest {
     }
 
     @Test
-    void fallsBackUnknownPolicyToContextStable() {
+    void rejectsUnknownIdempotencyPolicy() {
         FunctionTransportContext context = new FunctionTransportContext(
             "req-3",
             "fn",
             "ingress",
             Map.of(FunctionTransportContext.ATTR_IDEMPOTENCY_POLICY, "WHATEVER"));
-        assertEquals(IdempotencyPolicy.CONTEXT_STABLE, context.idempotencyPolicy());
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, context::idempotencyPolicy);
+        assertTrue(error.getMessage().contains("Unsupported idempotency policy"));
     }
 
     @ParameterizedTest
