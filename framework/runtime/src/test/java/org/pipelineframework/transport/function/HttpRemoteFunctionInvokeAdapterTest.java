@@ -424,22 +424,6 @@ class HttpRemoteFunctionInvokeAdapterTest {
         assertThrows(NullPointerException.class, () -> adapter.invokeOneToOne(input, null));
     }
 
-    private static ServerHandle startServer(HttpHandler handler) throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
-        server.createContext("/", handler);
-        server.start();
-        return new ServerHandle(server);
-    }
-
-    private static void respondJson(HttpExchange exchange, String body) throws IOException {
-        byte[] bytes = body.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        exchange.getResponseHeaders().add("Content-Type", "application/json");
-        exchange.sendResponseHeaders(200, bytes.length);
-        try (OutputStream os = exchange.getResponseBody()) {
-            os.write(bytes);
-        }
-    }
-
     private record ServerHandle(HttpServer server) implements AutoCloseable {
         private String url() {
             return "http://127.0.0.1:" + server.getAddress().getPort() + "/";
