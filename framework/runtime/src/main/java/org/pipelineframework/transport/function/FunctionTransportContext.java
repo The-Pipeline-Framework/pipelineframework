@@ -43,6 +43,13 @@ public record FunctionTransportContext(
     public static final String ATTR_TARGET_RUNTIME = "tpf.function.target.runtime";
     public static final String ATTR_TARGET_MODULE = "tpf.function.target.module";
     public static final String ATTR_TARGET_HANDLER = "tpf.function.target.handler";
+    public static final String ATTR_TRANSPORT_PROTOCOL = "tpf.transport.protocol";
+    public static final String ATTR_CORRELATION_ID = "tpf.correlation.id";
+    public static final String ATTR_EXECUTION_ID = "tpf.execution.id";
+    public static final String ATTR_RETRY_ATTEMPT = "tpf.retry.attempt";
+    public static final String ATTR_DEADLINE_EPOCH_MS = "tpf.deadline.epoch.ms";
+    public static final String ATTR_DISPATCH_TS_EPOCH_MS = "tpf.dispatch.ts.epoch.ms";
+    public static final String ATTR_PARENT_ITEM_ID = "tpf.parent.item.id";
 
     /**
      * Creates a context with immutable attributes.
@@ -183,11 +190,119 @@ public record FunctionTransportContext(
         return normalizedAttribute(ATTR_TARGET_HANDLER);
     }
 
+    /**
+     * Obtain the trimmed attribute value for the given key when it exists and is not blank.
+     *
+     * @param key the attribute key to look up
+     * @return an {@link Optional} containing the attribute value with surrounding whitespace removed if present and not blank, otherwise {@link Optional#empty()}
+     */
     private Optional<String> normalizedAttribute(String key) {
         String raw = attributes.get(key);
         if (raw == null || raw.isBlank()) {
             return Optional.empty();
         }
         return Optional.of(raw.strip());
+    }
+
+    /**
+     * Configured transport protocol identifier when available.
+     *
+     * @return an Optional containing the normalized protocol identifier if present, otherwise empty
+     */
+    public Optional<String> transportProtocol() {
+        return normalizedAttribute(ATTR_TRANSPORT_PROTOCOL);
+    }
+
+    /**
+     * Retrieve the correlation identifier if present.
+     *
+     * @return an Optional containing the correlation id if present, otherwise an empty Optional
+     */
+    public Optional<String> correlationId() {
+        return normalizedAttribute(ATTR_CORRELATION_ID);
+    }
+
+    /**
+     * Retrieves the execution identifier from the context attributes.
+     *
+     * @return an {@code Optional} containing the execution id if present and non-blank, otherwise an empty {@code Optional}
+     */
+    public Optional<String> executionId() {
+        return normalizedAttribute(ATTR_EXECUTION_ID);
+    }
+
+    /**
+     * Retrieve the retry attempt count from the context attributes when available.
+     *
+     * @return an Optional containing the retry attempt count as an Integer if the attribute is present and a valid integer, otherwise an empty Optional
+     */
+    public Optional<Integer> retryAttempt() {
+        return normalizedAttribute(ATTR_RETRY_ATTEMPT)
+            .flatMap(value -> toInteger(ATTR_RETRY_ATTEMPT, value));
+    }
+
+    /**
+     * Get the absolute deadline timestamp in epoch milliseconds when present.
+     *
+     * <p>Parses the ATTR_DEADLINE_EPOCH_MS attribute as a long; if the attribute is missing or
+     * cannot be parsed as a long, an empty Optional is returned.
+     *
+     * @return an {@link Optional} containing the deadline timestamp in milliseconds when present and parsable; empty otherwise
+     */
+    public Optional<Long> deadlineEpochMs() {
+        return normalizedAttribute(ATTR_DEADLINE_EPOCH_MS)
+            .flatMap(value -> toLong(ATTR_DEADLINE_EPOCH_MS, value));
+    }
+
+    /**
+     * Dispatch timestamp in epoch milliseconds if present and parseable.
+     *
+     * @return an Optional containing the dispatch timestamp (milliseconds since epoch), or empty if the attribute is missing or cannot be parsed as a long
+     */
+    public Optional<Long> dispatchTsEpochMs() {
+        return normalizedAttribute(ATTR_DISPATCH_TS_EPOCH_MS)
+            .flatMap(value -> toLong(ATTR_DISPATCH_TS_EPOCH_MS, value));
+    }
+
+    /**
+     * Retrieves the lineage parent item identifier if present.
+     *
+     * @return an Optional containing the parent item id if present, otherwise an empty Optional
+     */
+    public Optional<String> parentItemId() {
+        return normalizedAttribute(ATTR_PARENT_ITEM_ID);
+    }
+
+    /**
+     * Parses a string attribute value as an integer, returning an absent optional on parse failure.
+     *
+     * @param key   the attribute key (used only for logging on parse failure)
+     * @param value the string value to parse as an integer
+     * @return      an Optional containing the parsed integer if parsing succeeds, otherwise Optional.empty()
+     */
+    private Optional<Integer> toInteger(String key, String value) {
+        try {
+            return Optional.of(Integer.parseInt(value));
+        } catch (NumberFormatException e) {
+            LOG.warning(() -> "Ignoring invalid integer attribute '" + key + "' value '" + value + "'");
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Parses the provided attribute string value into a `Long` for the given attribute key.
+     *
+     * @param key   the attribute key (used in the warning message if parsing fails)
+     * @param value the string value to parse as a long
+     * @return      an Optional containing the parsed `Long`, or `Optional.empty()` if the value cannot be parsed;
+     *              a warning is logged when parsing fails
+     */
+    private Optional<Long> toLong(String key, String value) {
+        try {
+            return Optional.of(Long.parseLong(value));
+        } catch (NumberFormatException e) {
+            LOG.warning(() -> "Ignoring invalid long attribute '" + key + "' value '" + value + "'");
+            return Optional.empty();
+        }
     }
 }
