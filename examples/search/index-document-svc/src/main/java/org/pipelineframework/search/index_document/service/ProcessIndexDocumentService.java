@@ -275,11 +275,9 @@ public class ProcessIndexDocumentService
       return new AggregationSummary(0, null);
     }
     String topToken = counts.entrySet().stream()
-        .sorted(Comparator.<Map.Entry<String, Integer>>comparingInt(Map.Entry::getValue)
-            .reversed()
-            .thenComparing(Map.Entry::getKey, Comparator.naturalOrder()))
+        .max(Comparator.<Map.Entry<String, Integer>>comparingInt(Map.Entry::getValue)
+            .thenComparing(Map.Entry::getKey, Comparator.reverseOrder()))
         .map(Map.Entry::getKey)
-        .findFirst()
         .orElse(null);
     return new AggregationSummary(counts.size(), topToken);
   }

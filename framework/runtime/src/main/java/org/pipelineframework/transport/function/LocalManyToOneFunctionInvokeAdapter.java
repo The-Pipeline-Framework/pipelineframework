@@ -16,11 +16,18 @@
 
 package org.pipelineframework.transport.function;
 
+import java.lang.reflect.Array;
+import java.lang.reflect.RecordComponent;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -265,7 +272,103 @@ public final class LocalManyToOneFunctionInvokeAdapter<I, O> implements Function
 
     private String payloadFingerprint(TraceEnvelope<I> envelope) {
         Object payload = envelope.payload();
-        return payload == null ? "" : payload.getClass().getName() + ":" + System.identityHashCode(payload);
+        if (payload == null) {
+            return "";
+        }
+        String canonical = canonicalPayload(payload, java.util.Collections.newSetFromMap(new IdentityHashMap<>()));
+        return payload.getClass().getName() + ":" + sha256Hex(canonical);
+    }
+
+    private String canonicalPayload(Object payload, Set<Object> visited) {
+        if (payload == null) {
+            return "null";
+        }
+        if (payload instanceof CharSequence
+                || payload instanceof Number
+                || payload instanceof Boolean
+                || payload instanceof Enum<?>) {
+            return payload.toString();
+        }
+        if (payload instanceof Map<?, ?> map) {
+            return map.entrySet().stream()
+                .map(entry -> canonicalPayload(entry.getKey(), visited)
+                    + "->" + canonicalPayload(entry.getValue(), visited))
+                .sorted()
+                .collect(Collectors.joining(",", "{", "}"));
+        }
+        if (payload instanceof Iterable<?> iterable) {
+            StringBuilder builder = new StringBuilder("[");
+            boolean first = true;
+            for (Object item : iterable) {
+                if (!first) {
+                    builder.append(',');
+                }
+                builder.append(canonicalPayload(item, visited));
+                first = false;
+            }
+            return builder.append(']').toString();
+        }
+        Class<?> payloadClass = payload.getClass();
+        if (payloadClass.isArray()) {
+            int length = Array.getLength(payload);
+            StringBuilder builder = new StringBuilder("[");
+            for (int i = 0; i < length; i++) {
+                if (i > 0) {
+                    builder.append(',');
+                }
+                builder.append(canonicalPayload(Array.get(payload, i), visited));
+            }
+            return builder.append(']').toString();
+        }
+        if (payloadClass.isRecord()) {
+            if (!visited.add(payload)) {
+                return payloadClass.getName() + "#cycle";
+            }
+            try {
+                StringBuilder builder = new StringBuilder(payloadClass.getName()).append('{');
+                RecordComponent[] components = payloadClass.getRecordComponents();
+                for (int i = 0; i < components.length; i++) {
+                    if (i > 0) {
+                        builder.append(',');
+                    }
+                    RecordComponent component = components[i];
+                    Object value = component.getAccessor().invoke(payload);
+                    builder.append(component.getName()).append('=').append(canonicalPayload(value, visited));
+                }
+                return builder.append('}').toString();
+            } catch (ReflectiveOperationException ignored) {
+                return payloadClass.getName() + ":" + AdapterUtils.normalizeOrDefault(payload.toString(), "");
+            } finally {
+                visited.remove(payload);
+            }
+        }
+        String rendered = AdapterUtils.normalizeOrDefault(payload.toString(), "");
+        String identityPrefix = payloadClass.getName() + "@";
+        if (rendered.startsWith(identityPrefix)) {
+            String suffix = rendered.substring(identityPrefix.length());
+            if (!suffix.isEmpty() && suffix.chars().allMatch(ch ->
+                (ch >= '0' && ch <= '9')
+                    || (ch >= 'a' && ch <= 'f')
+                    || (ch >= 'A' && ch <= 'F'))) {
+                return payloadClass.getName();
+            }
+        }
+        return payloadClass.getName() + ":" + rendered;
+    }
+
+    private String sha256Hex(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                hex.append(Character.forDigit((b >>> 4) & 0xF, 16));
+                hex.append(Character.forDigit(b & 0xF, 16));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 algorithm is not available", e);
+        }
     }
 
     @SuppressWarnings("unchecked")

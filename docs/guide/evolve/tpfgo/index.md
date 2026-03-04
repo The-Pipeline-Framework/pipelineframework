@@ -23,4 +23,17 @@ This guide is a lightweight index for a "TPFGo" reference implementation in TPF,
 - **Operational clarity** (errors, retries, and handoffs are visible and intentional).
 - **Adoption-friendly** paths (including slower JSON pipelines later).
 
+## Core terms used in this guide
+
+- **Connector**: the runtime handoff boundary between pipelines/contexts.
+  For example: ingest -> subscribe bridge path.
+  Responsibilities:
+  - idempotency/dedup
+  - backpressure policy
+  - retry/failure routing
+  - lineage continuity
+- **Tap**: a non-primary observer branch attached to step output.
+  - **Checkpoint observer**: observes stable, persisted outputs.
+  - **Mid-step tap**: observes transient outputs with weaker persistence/durability guarantees.
+
 If you are new to the conversation, start with the DDD alignment guide, then the design spectrum, and finish with the roadmap.
