@@ -144,8 +144,22 @@ public class RestFunctionHandlerRenderer implements PipelineRenderer<RestBinding
             .addStatement("$T transportContext = $T.of("
                     + "context != null ? context.getAwsRequestId() : $S, "
                     + "context != null ? context.getFunctionName() : $S, "
-                    + "$S)",
-                FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT, UNKNOWN_REQUEST, handlerClassName, INVOKE_STEP)
+                    + "$S, "
+                    + "$T.of("
+                    + "$T.ATTR_TRANSPORT_PROTOCOL, $T.getProperty($S, $S), "
+                    + "$T.ATTR_CORRELATION_ID, context != null ? context.getAwsRequestId() : $S, "
+                    + "$T.ATTR_EXECUTION_ID, (context != null && context.getLogStreamName() != null "
+                    + "&& !context.getLogStreamName().isBlank()) ? context.getLogStreamName() : $T.randomUUID().toString(), "
+                    + "$T.ATTR_RETRY_ATTEMPT, $T.getProperty($S, $S), "
+                    + "$T.ATTR_DISPATCH_TS_EPOCH_MS, $T.toString($T.currentTimeMillis())))",
+                FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT,
+                UNKNOWN_REQUEST, handlerClassName, INVOKE_STEP,
+                ClassName.get("java.util", "Map"),
+                FUNCTION_TRANSPORT_CONTEXT, ClassName.get(System.class), "tpf.transport.protocol", "lambda",
+                FUNCTION_TRANSPORT_CONTEXT, UNKNOWN_REQUEST,
+                FUNCTION_TRANSPORT_CONTEXT, ClassName.get("java.util", "UUID"),
+                FUNCTION_TRANSPORT_CONTEXT, ClassName.get(System.class), "tpf.transport.retry-attempt", "0",
+                FUNCTION_TRANSPORT_CONTEXT, ClassName.get(Long.class), ClassName.get(System.class))
             .addStatement("$T<$T, $T> source = new $T<>($S, $S)",
                 FUNCTION_SOURCE_ADAPTER, inputEventType, inputDto,
                 streamingInput ? MULTI_SOURCE_ADAPTER : DEFAULT_UNARY_SOURCE_ADAPTER,

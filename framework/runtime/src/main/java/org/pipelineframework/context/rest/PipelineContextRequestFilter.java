@@ -28,6 +28,8 @@ import io.quarkus.arc.Unremovable;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHeaders;
 import org.pipelineframework.context.PipelineContextHolder;
+import org.pipelineframework.context.TransportDispatchMetadata;
+import org.pipelineframework.context.TransportDispatchMetadataHolder;
 
 /**
  * Extracts pipeline context headers from REST requests.
@@ -51,5 +53,14 @@ public class PipelineContextRequestFilter implements ContainerRequestFilter {
             requestContext.getHeaderString(PipelineContextHeaders.REPLAY),
             requestContext.getHeaderString(PipelineContextHeaders.CACHE_POLICY));
         PipelineContextHolder.set(context);
+        TransportDispatchMetadata metadata = TransportDispatchMetadata.fromHeaders(
+            requestContext.getHeaderString(PipelineContextHeaders.TPF_CORRELATION_ID),
+            requestContext.getHeaderString(PipelineContextHeaders.TPF_EXECUTION_ID),
+            requestContext.getHeaderString(PipelineContextHeaders.TPF_IDEMPOTENCY_KEY),
+            requestContext.getHeaderString(PipelineContextHeaders.TPF_RETRY_ATTEMPT),
+            requestContext.getHeaderString(PipelineContextHeaders.TPF_DEADLINE_EPOCH_MS),
+            requestContext.getHeaderString(PipelineContextHeaders.TPF_DISPATCH_TS_EPOCH_MS),
+            requestContext.getHeaderString(PipelineContextHeaders.TPF_PARENT_ITEM_ID));
+        TransportDispatchMetadataHolder.set(metadata);
     }
 }

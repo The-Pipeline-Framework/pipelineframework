@@ -18,13 +18,19 @@ package org.pipelineframework.rest;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 
+import com.google.rpc.Status;
 import org.jboss.logging.Logger;
 import org.jboss.resteasy.reactive.RestResponse;
 import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 import org.pipelineframework.cache.CacheMissException;
 import org.pipelineframework.cache.CachePolicyViolation;
+import org.pipelineframework.context.TransportDispatchMetadata;
+import org.pipelineframework.context.TransportDispatchMetadataHolder;
+import org.pipelineframework.transport.http.ProtobufHttpContentTypes;
+import org.pipelineframework.transport.http.ProtobufHttpStatusMapper;
 
 /**
  * Default REST exception mapper used by generated resources.
@@ -51,7 +57,17 @@ public class RestExceptionMapper {
      * @return a RestResponse containing an HTTP status and a human-readable error message
      */
     @ServerExceptionMapper
-    public RestResponse<String> handleException(Exception ex) {
+    public Object handleException(Exception ex, HttpHeaders headers) {
+        if (expectsProtobuf(headers)) {
+            TransportDispatchMetadata metadata = TransportDispatchMetadataHolder.get();
+            String executionId = metadata == null ? null : metadata.executionId();
+            LOG.errorf(ex, "Request failed (protobuf envelope), executionId=%s", executionId);
+            Status status = ProtobufHttpStatusMapper.fromThrowable(ex, executionId, "rest");
+            return Response.status(ProtobufHttpStatusMapper.toHttpStatus(status))
+                .type(ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF)
+                .entity(status.toByteArray())
+                .build();
+        }
         if (ex instanceof CacheMissException) {
             LOG.warn("Required cache entry missing", ex);
             return RestResponse.status(Response.Status.PRECONDITION_FAILED, ex.getMessage());
@@ -71,6 +87,21 @@ public class RestExceptionMapper {
         }
         LOG.error("Unexpected error processing request", ex);
         return RestResponse.status(Response.Status.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
+    }
+
+    private boolean expectsProtobuf(HttpHeaders headers) {
+        if (headers == null) {
+            return false;
+        }
+        String accept = headers.getHeaderString("Accept");
+        String requestContentType = headers.getHeaderString("Content-Type");
+        return containsProtobufMediaType(accept)
+            || containsProtobufMediaType(requestContentType);
+    }
+
+    private boolean containsProtobufMediaType(String value) {
+        return value != null && value.toLowerCase(java.util.Locale.ROOT)
+            .contains(ProtobufHttpContentTypes.APPLICATION_X_PROTOBUF.toLowerCase(java.util.Locale.ROOT));
     }
 
     private Throwable rootCause(Throwable throwable) {
