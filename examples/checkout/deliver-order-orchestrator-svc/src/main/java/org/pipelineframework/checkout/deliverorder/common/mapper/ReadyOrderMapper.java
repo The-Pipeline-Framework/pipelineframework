@@ -9,7 +9,7 @@ import org.pipelineframework.checkout.deliverorder.grpc.OrderDispatchSvc;
 import org.pipelineframework.mapper.Mapper;
 
 @ApplicationScoped
-public class ReadyOrderMapper implements Mapper<OrderDispatchSvc.ReadyOrder, ReadyOrder, ReadyOrder> {
+public class ReadyOrderMapper implements Mapper<ReadyOrder, OrderDispatchSvc.ReadyOrder> {
     /**
      * Converts a gRPC OrderDispatchSvc.ReadyOrder into a domain ReadyOrder.
      *
@@ -22,7 +22,7 @@ public class ReadyOrderMapper implements Mapper<OrderDispatchSvc.ReadyOrder, Rea
      * @throws ReadyOrderMapperException if any of `orderId`, `customerId`, or `readyAt` are missing or invalid
      */
     @Override
-    public ReadyOrder fromGrpc(OrderDispatchSvc.ReadyOrder grpc) {
+    public ReadyOrder fromExternal(OrderDispatchSvc.ReadyOrder grpc) {
         if (grpc == null) {
             throw new IllegalArgumentException("grpc ReadyOrder is null");
         }
@@ -46,7 +46,7 @@ public class ReadyOrderMapper implements Mapper<OrderDispatchSvc.ReadyOrder, Rea
      * @return a gRPC OrderDispatchSvc.ReadyOrder with orderId, customerId, and readyAt populated from {@code dto}
      */
     @Override
-    public OrderDispatchSvc.ReadyOrder toGrpc(ReadyOrder dto) {
+    public OrderDispatchSvc.ReadyOrder toExternal(ReadyOrder dto) {
         if (dto == null) {
             throw new IllegalArgumentException("dto must not be null");
         }
@@ -63,7 +63,6 @@ public class ReadyOrderMapper implements Mapper<OrderDispatchSvc.ReadyOrder, Rea
      * @param dto the DTO instance to return
      * @return the same `dto` instance that was provided
      */
-    @Override
     public ReadyOrder fromDto(ReadyOrder dto) {
         return dto;
     }
@@ -74,7 +73,6 @@ public class ReadyOrderMapper implements Mapper<OrderDispatchSvc.ReadyOrder, Rea
      * @param domain the domain ReadyOrder to map (returned as-is)
      * @return the same ReadyOrder instance passed as {@code domain}
      */
-    @Override
     public ReadyOrder toDto(ReadyOrder domain) {
         return domain;
     }

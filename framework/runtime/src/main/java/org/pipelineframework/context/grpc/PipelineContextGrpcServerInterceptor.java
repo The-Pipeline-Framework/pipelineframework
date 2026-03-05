@@ -66,6 +66,21 @@ public class PipelineContextGrpcServerInterceptor implements ServerInterceptor {
     private static final Metadata.Key<String> PARENT_ITEM_ID_HEADER =
         Metadata.Key.of(PipelineContextHeaders.TPF_PARENT_ITEM_ID, Metadata.ASCII_STRING_MARSHALLER);
 
+    /**
+     * Intercepts a gRPC server call to extract request-side pipeline and dispatch metadata, make them available
+     * for the duration of the call, and ensure cache status is propagated to response headers.
+     *
+     * Extracts PipelineContext (version, replay, cache policy) and TransportDispatchMetadata
+     * (correlation id, execution id, idempotency key, retry attempt, deadline epoch ms, dispatch timestamp epoch ms,
+     * parent item id) from the incoming request headers and stores them in their respective holders.
+     * When response headers are sent, writes the current cache status (if any) under the configured cache status header.
+     * Clears both holders when the call completes or is cancelled.
+     *
+     * @param call the incoming server call being intercepted
+     * @param headers the request metadata containing pipeline and dispatch headers
+     * @param next the next handler in the interceptor chain
+     * @return a ServerCall.Listener that delegates to the next handler while ensuring header injection and holder cleanup
+     */
     @Override
     public <ReqT, RespT> ServerCall.Listener<ReqT> interceptCall(
         ServerCall<ReqT, RespT> call,

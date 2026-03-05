@@ -8,7 +8,7 @@ import org.pipelineframework.checkout.order_dispatch.service.ReadyOrderGrpcMappe
 import org.pipelineframework.mapper.Mapper;
 
 @ApplicationScoped
-public class DeliveredOrderGrpcMapper implements Mapper<OrderDeliveredSvc.DeliveredOrder, DeliveredOrderDto, DeliveredOrderDto> {
+public class DeliveredOrderGrpcMapper implements Mapper<DeliveredOrderDto, OrderDeliveredSvc.DeliveredOrder> {
 
     /**
      * Convert a gRPC OrderDeliveredSvc.DeliveredOrder message to a DeliveredOrderDto.
@@ -18,7 +18,7 @@ public class DeliveredOrderGrpcMapper implements Mapper<OrderDeliveredSvc.Delive
      * @throws IllegalArgumentException if {@code grpc} is null
      */
     @Override
-    public DeliveredOrderDto fromGrpc(OrderDeliveredSvc.DeliveredOrder grpc) {
+    public DeliveredOrderDto fromExternal(OrderDeliveredSvc.DeliveredOrder grpc) {
         if (grpc == null) {
             throw new IllegalArgumentException("grpc must not be null");
         }
@@ -39,7 +39,7 @@ public class DeliveredOrderGrpcMapper implements Mapper<OrderDeliveredSvc.Delive
      * @throws IllegalArgumentException if {@code dto} is null
      */
     @Override
-    public OrderDeliveredSvc.DeliveredOrder toGrpc(DeliveredOrderDto dto) {
+    public OrderDeliveredSvc.DeliveredOrder toExternal(DeliveredOrderDto dto) {
         if (dto == null) {
             throw new IllegalArgumentException("dto must not be null");
         }
@@ -59,7 +59,6 @@ public class DeliveredOrderGrpcMapper implements Mapper<OrderDeliveredSvc.Delive
      * @param dto the DeliveredOrderDto to return
      * @return the same DeliveredOrderDto instance passed in
      */
-    @Override
     public DeliveredOrderDto fromDto(DeliveredOrderDto dto) {
         return dto;
     }
@@ -70,7 +69,6 @@ public class DeliveredOrderGrpcMapper implements Mapper<OrderDeliveredSvc.Delive
      * @param domain the DeliveredOrderDto to return
      * @return the same DeliveredOrderDto instance passed in {@code domain}
      */
-    @Override
     public DeliveredOrderDto toDto(DeliveredOrderDto domain) {
         return domain;
     }

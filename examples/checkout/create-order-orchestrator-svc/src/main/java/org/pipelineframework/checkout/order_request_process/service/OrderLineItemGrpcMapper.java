@@ -7,7 +7,7 @@ import org.pipelineframework.checkout.createorder.grpc.OrderRequestProcessSvc;
 import org.pipelineframework.mapper.Mapper;
 
 @ApplicationScoped
-public class OrderLineItemGrpcMapper implements Mapper<OrderRequestProcessSvc.OrderLineItem, OrderLineItemDto, OrderLineItemDto> {
+public class OrderLineItemGrpcMapper implements Mapper<OrderLineItemDto, OrderRequestProcessSvc.OrderLineItem> {
 
     /**
      * Convert a gRPC OrderLineItem into an OrderLineItemDto.
@@ -17,7 +17,7 @@ public class OrderLineItemGrpcMapper implements Mapper<OrderRequestProcessSvc.Or
      * @throws IllegalArgumentException if `grpc` is null, if `requestId` or `customerId` are blank, or if `quantity` is less than or equal to 0
      */
     @Override
-    public OrderLineItemDto fromGrpc(OrderRequestProcessSvc.OrderLineItem grpc) {
+    public OrderLineItemDto fromExternal(OrderRequestProcessSvc.OrderLineItem grpc) {
         if (grpc == null) {
             throw new IllegalArgumentException("grpc must not be null");
         }
@@ -45,7 +45,7 @@ public class OrderLineItemGrpcMapper implements Mapper<OrderRequestProcessSvc.Or
      * @throws IllegalArgumentException if {@code dto} is null, or if {@code dto.requestId()} or {@code dto.customerId()} is null
      */
     @Override
-    public OrderRequestProcessSvc.OrderLineItem toGrpc(OrderLineItemDto dto) {
+    public OrderRequestProcessSvc.OrderLineItem toExternal(OrderLineItemDto dto) {
         if (dto == null) {
             throw new IllegalArgumentException("dto must not be null");
         }
@@ -68,7 +68,6 @@ public class OrderLineItemGrpcMapper implements Mapper<OrderRequestProcessSvc.Or
      *
      * @return the same OrderLineItemDto instance that was provided
      */
-    @Override
     public OrderLineItemDto fromDto(OrderLineItemDto dto) {
         return dto;
     }
@@ -79,7 +78,6 @@ public class OrderLineItemGrpcMapper implements Mapper<OrderRequestProcessSvc.Or
      * @param domain the DTO to return unchanged
      * @return the same OrderLineItemDto instance passed as {@code domain}
      */
-    @Override
     public OrderLineItemDto toDto(OrderLineItemDto domain) {
         return domain;
     }
