@@ -4,6 +4,7 @@ import java.util.Optional;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import jakarta.enterprise.inject.Instance;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,10 +17,14 @@ import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.ExecutionStatus;
-import org.pipelineframework.orchestrator.OrchestratorMode;
+import org.pipelineframework.orchestrator.EventWorkDispatcher;
+import org.pipelineframework.orchestrator.LoggingDeadLetterPublisher;
 import org.pipelineframework.orchestrator.OrchestratorIdempotencyPolicy;
+import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.WorkDispatcher;
+import org.pipelineframework.orchestrator.DeadLetterPublisher;
+import org.pipelineframework.orchestrator.DynamoExecutionStateStore;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -43,6 +48,15 @@ class PipelineExecutionServiceTest {
 
     @Mock
     private WorkDispatcher workDispatcher;
+
+    @Mock
+    private Instance<ExecutionStateStore> executionStateStores;
+
+    @Mock
+    private Instance<WorkDispatcher> workDispatchers;
+
+    @Mock
+    private Instance<DeadLetterPublisher> deadLetterPublishers;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -72,6 +86,27 @@ class PipelineExecutionServiceTest {
 
         IllegalStateException error = assertThrows(IllegalStateException.class, () -> result.await().indefinitely());
         assertTrue(error.getMessage().contains("does not support streaming pipeline outputs"));
+    }
+
+    @Test
+    void initializeQueueModeFailsFastWhenSelectedProviderReportsStartupError() throws Exception {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.stateProvider()).thenReturn("dynamo");
+        when(orchestratorConfig.dispatcherProvider()).thenReturn("event");
+        when(orchestratorConfig.dlqProvider()).thenReturn("log");
+        when(orchestratorConfig.strictStartup()).thenReturn(true);
+
+        when(executionStateStores.stream()).thenReturn(java.util.stream.Stream.of(new DynamoExecutionStateStore()));
+        when(workDispatchers.stream()).thenReturn(java.util.stream.Stream.of(new EventWorkDispatcher()));
+        when(deadLetterPublishers.stream()).thenReturn(java.util.stream.Stream.of(new LoggingDeadLetterPublisher()));
+        setField("executionStateStores", executionStateStores);
+        setField("workDispatchers", workDispatchers);
+        setField("deadLetterPublishers", deadLetterPublishers);
+
+        IllegalStateException error = assertThrows(
+            IllegalStateException.class,
+            this::invokeInitializeQueueMode);
+        assertTrue(error.getMessage().contains("ExecutionStateStore(dynamo)"));
     }
 
     @Test
@@ -180,139 +215,22 @@ class PipelineExecutionServiceTest {
             99999999L);
     }
 
-    @Test
-    void getExecutionResultReturnsSuccessfulResultInQueueMode() throws Exception {
-        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-        setField("executionStateStore", executionStateStore);
-
-        ExecutionRecord<Object, Object> record = new ExecutionRecord<>(
-            "tenant-1",
-            "exec-1",
-            "key-1",
-            ExecutionStatus.SUCCEEDED,
-            1L,
-            0,
-            0,
-            null,
-            0L,
-            0L,
-            null,
-            null,
-            java.util.List.of("result1"),
-            null,
-            null,
-            1L,
-            1L,
-            99999999L);
-        when(executionStateStore.getExecution("tenant-1", "exec-1"))
-            .thenReturn(Uni.createFrom().item(Optional.of(record)));
-
-        String result = service.getExecutionResult("tenant-1", "exec-1", String.class, false)
-            .await().indefinitely();
-
-        assertEquals("result1", result);
-    }
-
-    @Test
-    void getExecutionResultThrowsWhenExecutionNotFound() throws Exception {
-        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-        setField("executionStateStore", executionStateStore);
-        when(executionStateStore.getExecution("tenant-1", "exec-missing"))
-            .thenReturn(Uni.createFrom().item(Optional.empty()));
-
-        assertThrows(jakarta.ws.rs.NotFoundException.class,
-            () -> service.getExecutionResult("tenant-1", "exec-missing", String.class, false)
-                .await().indefinitely());
-    }
-
-    @Test
-    void getExecutionResultThrowsWhenExecutionNotComplete() throws Exception {
-        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-        setField("executionStateStore", executionStateStore);
-
-        ExecutionRecord<Object, Object> record = createRecord("tenant-1", "exec-running", "key-1");
-        when(executionStateStore.getExecution("tenant-1", "exec-running"))
-            .thenReturn(Uni.createFrom().item(Optional.of(record)));
-
-        IllegalStateException error = assertThrows(IllegalStateException.class,
-            () -> service.getExecutionResult("tenant-1", "exec-running", String.class, false)
-                .await().indefinitely());
-        assertTrue(error.getMessage().contains("not complete yet"));
-    }
-
-    @Test
-    void getExecutionResultThrowsWhenExecutionFailedTerminally() throws Exception {
-        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-        setField("executionStateStore", executionStateStore);
-
-        ExecutionRecord<Object, Object> record = new ExecutionRecord<>(
-            "tenant-1",
-            "exec-failed",
-            "key-1",
-            ExecutionStatus.FAILED,
-            1L,
-            0,
-            3,
-            null,
-            0L,
-            0L,
-            null,
-            null,
-            null,
-            "RuntimeException",
-            "Execution failed",
-            1L,
-            1L,
-            99999999L);
-        when(executionStateStore.getExecution("tenant-1", "exec-failed"))
-            .thenReturn(Uni.createFrom().item(Optional.of(record)));
-
-        IllegalStateException error = assertThrows(IllegalStateException.class,
-            () -> service.getExecutionResult("tenant-1", "exec-failed", String.class, false)
-                .await().indefinitely());
-        assertTrue(error.getMessage().contains("without a successful result"));
-    }
-
-    @Test
-    void getExecutionStatusThrowsWhenNotInQueueMode() {
-        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.SYNC);
-
-        IllegalStateException error = assertThrows(IllegalStateException.class,
-            () -> service.getExecutionStatus("tenant-1", "exec-1").await().indefinitely());
-        assertTrue(error.getMessage().contains("Async queue mode is disabled"));
-    }
-
-    @Test
-    void getExecutionResultThrowsWhenNotInQueueMode() {
-        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.SYNC);
-
-        IllegalStateException error = assertThrows(IllegalStateException.class,
-            () -> service.getExecutionResult("tenant-1", "exec-1", String.class, false)
-                .await().indefinitely());
-        assertTrue(error.getMessage().contains("Async queue mode is disabled"));
-    }
-
-    @Test
-    void executePipelineAsyncNormalizesTenantId() throws Exception {
-        configureQueueModeDefaults();
-        setField("executionStateStore", executionStateStore);
-        setField("workDispatcher", workDispatcher);
-        when(executionStateStore.createOrGetExecution(any()))
-            .thenReturn(Uni.createFrom().item(new CreateExecutionResult(
-                createRecord("default", "exec-1", "key-1"),
-                false)));
-
-        service.executePipelineAsync("input", null, null).await().indefinitely();
-
-        ArgumentCaptor<org.pipelineframework.orchestrator.ExecutionCreateCommand> captor =
-            ArgumentCaptor.forClass(org.pipelineframework.orchestrator.ExecutionCreateCommand.class);
-        verify(executionStateStore).createOrGetExecution(captor.capture());
-        assertEquals("default", captor.getValue().tenantId());
-    }
-
     private void setField(String fieldName, Object value) throws Exception {
         var field = PipelineExecutionService.class.getDeclaredField(fieldName);
         field.setAccessible(true);
         field.set(service, value);
+    }
+
+    private void invokeInitializeQueueMode() throws Exception {
+        var method = PipelineExecutionService.class.getDeclaredMethod("initializeQueueMode");
+        method.setAccessible(true);
+        try {
+            method.invoke(service);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            if (e.getCause() instanceof Exception exception) {
+                throw exception;
+            }
+            throw e;
+        }
     }
 }

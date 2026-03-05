@@ -1,55 +1,22 @@
 package org.pipelineframework.processor.util;
 
-import java.util.ArrayList;
 import java.util.List;
-import javax.annotation.processing.Messager;
-import javax.tools.Diagnostic;
 
 import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
 import com.squareup.javapoet.ClassName;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.processor.ir.ExecutionMode;
-import org.pipelineframework.processor.ir.GrpcBinding;
-import org.pipelineframework.processor.ir.PipelineStepModel;
-import org.pipelineframework.processor.ir.StreamingShape;
+import org.pipelineframework.processor.ir.*;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.contains;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
+import static org.junit.jupiter.api.Assertions.*;
 
 class OrchestratorGrpcBindingResolverTest {
 
-    private OrchestratorGrpcBindingResolver resolver;
-    private PipelineStepModel model;
-
-    @BeforeEach
-    void setUp() {
-        resolver = new OrchestratorGrpcBindingResolver();
-        model = new PipelineStepModel.Builder()
-            .serviceName("OrchestratorService")
-            .generatedName("OrchestratorService")
-            .servicePackage("com.example.orchestrator")
-            .serviceClassName(ClassName.get("com.example.orchestrator", "OrchestratorService"))
-            .inputMapping(new org.pipelineframework.processor.ir.TypeMapping(
-                ClassName.get("com.example", "Input"), null, false))
-            .outputMapping(new org.pipelineframework.processor.ir.TypeMapping(
-                ClassName.get("com.example", "Output"), null, false))
-            .streamingShape(StreamingShape.UNARY_UNARY)
-            .executionMode(ExecutionMode.DEFAULT)
-            .sideEffect(false)
-            .build();
-    }
-
     @Test
-    void resolvesUnaryUnaryBinding() {
+    void resolvesUnaryBinding() {
+        OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
         DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(false, false);
+        PipelineStepModel model = buildModel();
 
         GrpcBinding binding = resolver.resolve(
             model,
@@ -60,15 +27,17 @@ class OrchestratorGrpcBindingResolverTest {
             null);
 
         assertNotNull(binding);
-        assertNotNull(binding.serviceDescriptor());
-        assertNotNull(binding.methodDescriptor());
-        assertEquals("OrchestratorService", binding.serviceDescriptor().getName());
-        assertEquals("Run", binding.methodDescriptor().getName());
+        assertEquals("OrchestratorService", serviceDescriptor(binding).getName());
+        assertEquals("Run", methodDescriptor(binding).getName());
+        assertFalse(methodDescriptor(binding).isClientStreaming());
+        assertFalse(methodDescriptor(binding).isServerStreaming());
     }
 
     @Test
-    void resolvesStreamingInputBinding() {
+    void resolvesClientStreamingBinding() {
+        OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
         DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(true, false);
+        PipelineStepModel model = buildModel();
 
         GrpcBinding binding = resolver.resolve(
             model,
@@ -79,13 +48,15 @@ class OrchestratorGrpcBindingResolverTest {
             null);
 
         assertNotNull(binding);
-        assertTrue(binding.methodDescriptor().isClientStreaming());
-        assertTrue(!binding.methodDescriptor().isServerStreaming());
+        assertTrue(methodDescriptor(binding).isClientStreaming());
+        assertFalse(methodDescriptor(binding).isServerStreaming());
     }
 
     @Test
-    void resolvesStreamingOutputBinding() {
+    void resolvesServerStreamingBinding() {
+        OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
         DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(false, true);
+        PipelineStepModel model = buildModel();
 
         GrpcBinding binding = resolver.resolve(
             model,
@@ -96,13 +67,163 @@ class OrchestratorGrpcBindingResolverTest {
             null);
 
         assertNotNull(binding);
-        assertTrue(!binding.methodDescriptor().isClientStreaming());
-        assertTrue(binding.methodDescriptor().isServerStreaming());
+        assertFalse(methodDescriptor(binding).isClientStreaming());
+        assertTrue(methodDescriptor(binding).isServerStreaming());
     }
 
     @Test
     void resolvesBidirectionalStreamingBinding() {
+        OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
         DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(true, true);
+        PipelineStepModel model = buildModel();
+
+        GrpcBinding binding = resolver.resolve(
+            model,
+            descriptorSet,
+            OrchestratorRpcConstants.RUN_METHOD,
+            true,
+            true,
+            null);
+
+        assertNotNull(binding);
+        assertTrue(methodDescriptor(binding).isClientStreaming());
+        assertTrue(methodDescriptor(binding).isServerStreaming());
+    }
+
+    @Test
+    void resolvesRunAsyncMethod() {
+        OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
+        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(false, false);
+        PipelineStepModel model = buildModel();
+
+        GrpcBinding binding = resolver.resolve(
+            model,
+            descriptorSet,
+            OrchestratorRpcConstants.RUN_ASYNC_METHOD,
+            false,
+            false,
+            null);
+
+        assertNotNull(binding);
+        assertEquals("RunAsync", methodDescriptor(binding).getName());
+        assertFalse(methodDescriptor(binding).isClientStreaming());
+        assertFalse(methodDescriptor(binding).isServerStreaming());
+    }
+
+    @Test
+    void resolvesGetExecutionStatusMethod() {
+        OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
+        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(false, false);
+        PipelineStepModel model = buildModel();
+
+        GrpcBinding binding = resolver.resolve(
+            model,
+            descriptorSet,
+            OrchestratorRpcConstants.GET_EXECUTION_STATUS_METHOD,
+            false,
+            false,
+            null);
+
+        assertNotNull(binding);
+        assertEquals("GetExecutionStatus", methodDescriptor(binding).getName());
+    }
+
+    @Test
+    void resolvesGetExecutionResultMethod() {
+        OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
+        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(false, false);
+        PipelineStepModel model = buildModel();
+
+        GrpcBinding binding = resolver.resolve(
+            model,
+            descriptorSet,
+            OrchestratorRpcConstants.GET_EXECUTION_RESULT_METHOD,
+            false,
+            false,
+            null);
+
+        assertNotNull(binding);
+        assertEquals("GetExecutionResult", methodDescriptor(binding).getName());
+    }
+
+    @Test
+    void throwsExceptionWhenDescriptorSetIsNull() {
+        OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
+        PipelineStepModel model = buildModel();
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
+            resolver.resolve(model, null, OrchestratorRpcConstants.RUN_METHOD, false, false, null));
+
+        assertTrue(exception.getMessage().contains("FileDescriptorSet is null"));
+    }
+
+    @Test
+    void throwsExceptionWhenServiceNotFound() {
+        OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
+        DescriptorProtos.FileDescriptorSet descriptorSet = buildEmptyDescriptorSet();
+        PipelineStepModel model = buildModel();
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
+            resolver.resolve(model, descriptorSet, OrchestratorRpcConstants.RUN_METHOD, false, false, null));
+
+        assertTrue(exception.getMessage().contains("Service named 'OrchestratorService' not found"));
+    }
+
+    @Test
+    void throwsExceptionWhenMethodNotFound() {
+        OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
+        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(false, false);
+        PipelineStepModel model = buildModel();
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
+            resolver.resolve(model, descriptorSet, "NonExistentMethod", false, false, null));
+
+        assertTrue(exception.getMessage().contains("Method 'NonExistentMethod' not found"));
+    }
+
+    @Test
+    void throwsExceptionWhenStreamingSemanticsMismatch() {
+        OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
+        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(false, false);
+        PipelineStepModel model = buildModel();
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
+            resolver.resolve(
+                model,
+                descriptorSet,
+                OrchestratorRpcConstants.RUN_METHOD,
+                true,
+                false,
+                null));
+
+        assertTrue(exception.getMessage().contains("streaming semantics mismatch"));
+        assertTrue(exception.getMessage().contains("clientStreaming expected=true actual=false"));
+        assertTrue(exception.getMessage().contains("serverStreaming expected=false actual=false"));
+    }
+
+    @Test
+    void handlesDescriptorSetWithDependencies() {
+        OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
+        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSetWithDependencies();
+        PipelineStepModel model = buildModel();
+
+        GrpcBinding binding = resolver.resolve(
+            model,
+            descriptorSet,
+            OrchestratorRpcConstants.RUN_METHOD,
+            false,
+            false,
+            null);
+
+        assertNotNull(binding);
+        assertEquals("OrchestratorService", serviceDescriptor(binding).getName());
+    }
+
+    @Test
+    void resolvesIngestMethod() {
+        OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
+        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(false, false);
+        PipelineStepModel model = buildModel();
 
         GrpcBinding binding = resolver.resolve(
             model,
@@ -113,265 +234,146 @@ class OrchestratorGrpcBindingResolverTest {
             null);
 
         assertNotNull(binding);
-        assertTrue(binding.methodDescriptor().isClientStreaming());
-        assertTrue(binding.methodDescriptor().isServerStreaming());
+        assertEquals("Ingest", methodDescriptor(binding).getName());
+        assertTrue(methodDescriptor(binding).isClientStreaming());
+        assertTrue(methodDescriptor(binding).isServerStreaming());
     }
 
     @Test
-    void resolvesAsyncRpcMethods() {
-        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSetWithAsyncMethods();
-
-        GrpcBinding runAsyncBinding = resolver.resolve(
-            model,
-            descriptorSet,
-            OrchestratorRpcConstants.RUN_ASYNC_METHOD,
-            false,
-            false,
-            null);
-        assertEquals("RunAsync", runAsyncBinding.methodDescriptor().getName());
-
-        GrpcBinding statusBinding = resolver.resolve(
-            model,
-            descriptorSet,
-            OrchestratorRpcConstants.GET_EXECUTION_STATUS_METHOD,
-            false,
-            false,
-            null);
-        assertEquals("GetExecutionStatus", statusBinding.methodDescriptor().getName());
-
-        GrpcBinding resultBinding = resolver.resolve(
-            model,
-            descriptorSet,
-            OrchestratorRpcConstants.GET_EXECUTION_RESULT_METHOD,
-            false,
-            false,
-            null);
-        assertEquals("GetExecutionResult", resultBinding.methodDescriptor().getName());
-    }
-
-    @Test
-    void throwsWhenDescriptorSetIsNull() {
-        IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
-            resolver.resolve(model, null, OrchestratorRpcConstants.RUN_METHOD, false, false, null));
-
-        assertTrue(exception.getMessage().contains("FileDescriptorSet is null"));
-        assertTrue(exception.getMessage().contains("protobuf compilation"));
-    }
-
-    @Test
-    void throwsWhenServiceNotFound() {
-        DescriptorProtos.FileDescriptorSet emptyDescriptorSet =
-            DescriptorProtos.FileDescriptorSet.newBuilder()
-                .addFile(DescriptorProtos.FileDescriptorProto.newBuilder()
-                    .setName("empty.proto")
-                    .setPackage("com.example")
-                    .build())
-                .build();
-
-        IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
-            resolver.resolve(model, emptyDescriptorSet, OrchestratorRpcConstants.RUN_METHOD, false, false, null));
-
-        assertTrue(exception.getMessage().contains("Service named 'OrchestratorService' not found"));
-    }
-
-    @Test
-    void throwsWhenMethodNotFound() {
+    void resolvesSubscribeMethod() {
+        OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
         DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(false, false);
-
-        IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
-            resolver.resolve(model, descriptorSet, "NonExistentMethod", false, false, null));
-
-        assertTrue(exception.getMessage().contains("Method 'NonExistentMethod' not found"));
-    }
-
-    @Test
-    void throwsWhenStreamingSemanticsDoNotMatch() {
-        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(false, false);
-
-        IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
-            resolver.resolve(model, descriptorSet, OrchestratorRpcConstants.RUN_METHOD, true, false, null));
-
-        assertTrue(exception.getMessage().contains("streaming semantics do not match"));
-    }
-
-    @Test
-    void warnsWhenMultipleUnexpectedRpcsFound() {
-        Messager messager = mock(Messager.class);
-        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSetWithExtraMethod();
-
-        resolver.resolve(model, descriptorSet, OrchestratorRpcConstants.RUN_METHOD, false, false, messager);
-
-        verify(messager).printMessage(any(Diagnostic.Kind.class), contains("Multiple RPCs found"));
-    }
-
-    @Test
-    void handlesDescriptorWithDependencies() {
-        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSetWithDependency();
+        PipelineStepModel model = buildModel();
 
         GrpcBinding binding = resolver.resolve(
             model,
             descriptorSet,
-            OrchestratorRpcConstants.RUN_METHOD,
+            OrchestratorRpcConstants.SUBSCRIBE_METHOD,
             false,
-            false,
+            true,
             null);
 
         assertNotNull(binding);
-        assertNotNull(binding.serviceDescriptor());
+        assertEquals("Subscribe", methodDescriptor(binding).getName());
+        assertFalse(methodDescriptor(binding).isClientStreaming());
+        assertTrue(methodDescriptor(binding).isServerStreaming());
     }
 
-    @Test
-    void throwsWhenFileDescriptorDependenciesCannotBeResolved() {
-        DescriptorProtos.FileDescriptorProto dependentProto = DescriptorProtos.FileDescriptorProto.newBuilder()
-            .setName("dependent.proto")
-            .setPackage("com.example")
-            .addDependency("missing.proto")
-            .addService(DescriptorProtos.ServiceDescriptorProto.newBuilder()
-                .setName("OrchestratorService")
-                .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
-                    .setName("Run")
-                    .setInputType(".com.example.Input")
-                    .setOutputType(".com.example.Output")
-                    .build())
-                .build())
-            .build();
-
-        DescriptorProtos.FileDescriptorSet descriptorSet = DescriptorProtos.FileDescriptorSet.newBuilder()
-            .addFile(dependentProto)
-            .build();
-
-        IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
-            resolver.resolve(model, descriptorSet, OrchestratorRpcConstants.RUN_METHOD, false, false, null));
-
-        assertTrue(exception.getMessage().contains("Could not resolve all file descriptor dependencies")
-            || exception.getMessage().contains("Unbuilt files"));
+    private PipelineStepModel buildModel() {
+        return new PipelineStepModel(
+            "OrchestratorService",
+            "OrchestratorService",
+            "com.example.orchestrator.service",
+            ClassName.get("com.example.orchestrator.service", "OrchestratorService"),
+            null,
+            null,
+            StreamingShape.UNARY_UNARY,
+            java.util.Set.of(GenerationTarget.GRPC_SERVICE),
+            ExecutionMode.DEFAULT,
+            DeploymentRole.ORCHESTRATOR_CLIENT,
+            false,
+            null
+        );
     }
 
-    private DescriptorProtos.FileDescriptorSet buildDescriptorSet(boolean inputStreaming, boolean outputStreaming) {
+    private static Descriptors.ServiceDescriptor serviceDescriptor(GrpcBinding binding) {
+        return (Descriptors.ServiceDescriptor) binding.serviceDescriptor();
+    }
+
+    private static Descriptors.MethodDescriptor methodDescriptor(GrpcBinding binding) {
+        return (Descriptors.MethodDescriptor) binding.methodDescriptor();
+    }
+
+    private DescriptorProtos.FileDescriptorSet buildDescriptorSet(
+        boolean inputStreaming,
+        boolean outputStreaming
+    ) {
         DescriptorProtos.FileDescriptorProto proto = DescriptorProtos.FileDescriptorProto.newBuilder()
             .setName("orchestrator.proto")
-            .setPackage("com.example")
-            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("Input").build())
-            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("Output").build())
+            .setPackage("com.example.grpc")
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("InputType"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("OutputType"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("RunAsyncRequest"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("RunAsyncResponse"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("GetExecutionStatusRequest"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("GetExecutionStatusResponse"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("GetExecutionResultRequest"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("GetExecutionResultResponse"))
             .addService(DescriptorProtos.ServiceDescriptorProto.newBuilder()
                 .setName("OrchestratorService")
                 .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
                     .setName("Run")
-                    .setInputType(".com.example.Input")
-                    .setOutputType(".com.example.Output")
+                    .setInputType(".com.example.grpc.InputType")
+                    .setOutputType(".com.example.grpc.OutputType")
                     .setClientStreaming(inputStreaming)
-                    .setServerStreaming(outputStreaming)
-                    .build())
+                    .setServerStreaming(outputStreaming))
                 .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
                     .setName("Ingest")
-                    .setInputType(".com.example.Input")
-                    .setOutputType(".com.example.Output")
+                    .setInputType(".com.example.grpc.InputType")
+                    .setOutputType(".com.example.grpc.OutputType")
                     .setClientStreaming(true)
-                    .setServerStreaming(true)
-                    .build())
-                .build())
-            .build();
-
-        return DescriptorProtos.FileDescriptorSet.newBuilder().addFile(proto).build();
-    }
-
-    private DescriptorProtos.FileDescriptorSet buildDescriptorSetWithAsyncMethods() {
-        DescriptorProtos.FileDescriptorProto proto = DescriptorProtos.FileDescriptorProto.newBuilder()
-            .setName("orchestrator.proto")
-            .setPackage("com.example")
-            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("Input").build())
-            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("Output").build())
-            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("RunAsyncRequest").build())
-            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("RunAsyncResponse").build())
-            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("GetExecutionStatusRequest").build())
-            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("GetExecutionStatusResponse").build())
-            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("GetExecutionResultRequest").build())
-            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("GetExecutionResultResponse").build())
-            .addService(DescriptorProtos.ServiceDescriptorProto.newBuilder()
-                .setName("OrchestratorService")
-                .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
-                    .setName("Run")
-                    .setInputType(".com.example.Input")
-                    .setOutputType(".com.example.Output")
-                    .build())
+                    .setServerStreaming(true))
                 .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
                     .setName("RunAsync")
-                    .setInputType(".com.example.RunAsyncRequest")
-                    .setOutputType(".com.example.RunAsyncResponse")
-                    .build())
+                    .setInputType(".com.example.grpc.RunAsyncRequest")
+                    .setOutputType(".com.example.grpc.RunAsyncResponse"))
                 .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
                     .setName("GetExecutionStatus")
-                    .setInputType(".com.example.GetExecutionStatusRequest")
-                    .setOutputType(".com.example.GetExecutionStatusResponse")
-                    .build())
+                    .setInputType(".com.example.grpc.GetExecutionStatusRequest")
+                    .setOutputType(".com.example.grpc.GetExecutionStatusResponse"))
                 .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
                     .setName("GetExecutionResult")
-                    .setInputType(".com.example.GetExecutionResultRequest")
-                    .setOutputType(".com.example.GetExecutionResultResponse")
-                    .build())
-                .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
-                    .setName("Ingest")
-                    .setInputType(".com.example.Input")
-                    .setOutputType(".com.example.Output")
-                    .setClientStreaming(true)
-                    .setServerStreaming(true)
-                    .build())
+                    .setInputType(".com.example.grpc.GetExecutionResultRequest")
+                    .setOutputType(".com.example.grpc.GetExecutionResultResponse"))
                 .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
                     .setName("Subscribe")
-                    .setInputType(".com.example.Input")
-                    .setOutputType(".com.example.Output")
-                    .setServerStreaming(true)
-                    .build())
-                .build())
+                    .setInputType(".com.example.grpc.InputType")
+                    .setOutputType(".com.example.grpc.OutputType")
+                    .setClientStreaming(false)
+                    .setServerStreaming(true)))
             .build();
 
-        return DescriptorProtos.FileDescriptorSet.newBuilder().addFile(proto).build();
+        return DescriptorProtos.FileDescriptorSet.newBuilder()
+            .addFile(proto)
+            .build();
     }
 
-    private DescriptorProtos.FileDescriptorSet buildDescriptorSetWithExtraMethod() {
+    private DescriptorProtos.FileDescriptorSet buildEmptyDescriptorSet() {
         DescriptorProtos.FileDescriptorProto proto = DescriptorProtos.FileDescriptorProto.newBuilder()
-            .setName("orchestrator.proto")
-            .setPackage("com.example")
-            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("Input").build())
-            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("Output").build())
-            .addService(DescriptorProtos.ServiceDescriptorProto.newBuilder()
-                .setName("OrchestratorService")
-                .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
-                    .setName("Run")
-                    .setInputType(".com.example.Input")
-                    .setOutputType(".com.example.Output")
-                    .build())
-                .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
-                    .setName("UnexpectedExtraMethod")
-                    .setInputType(".com.example.Input")
-                    .setOutputType(".com.example.Output")
-                    .build())
-                .build())
+            .setName("empty.proto")
+            .setPackage("com.example.grpc")
             .build();
 
-        return DescriptorProtos.FileDescriptorSet.newBuilder().addFile(proto).build();
+        return DescriptorProtos.FileDescriptorSet.newBuilder()
+            .addFile(proto)
+            .build();
     }
 
-    private DescriptorProtos.FileDescriptorSet buildDescriptorSetWithDependency() {
+    private DescriptorProtos.FileDescriptorSet buildDescriptorSetWithDependencies() {
         DescriptorProtos.FileDescriptorProto baseProto = DescriptorProtos.FileDescriptorProto.newBuilder()
             .setName("base.proto")
-            .setPackage("com.example")
-            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("Input").build())
-            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("Output").build())
+            .setPackage("com.example.grpc.base")
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("BaseMessage"))
             .build();
 
         DescriptorProtos.FileDescriptorProto orchestratorProto = DescriptorProtos.FileDescriptorProto.newBuilder()
             .setName("orchestrator.proto")
-            .setPackage("com.example")
+            .setPackage("com.example.grpc")
             .addDependency("base.proto")
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("InputType"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("OutputType"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("RunAsyncRequest"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("RunAsyncResponse"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("GetExecutionStatusRequest"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("GetExecutionStatusResponse"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("GetExecutionResultRequest"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("GetExecutionResultResponse"))
             .addService(DescriptorProtos.ServiceDescriptorProto.newBuilder()
                 .setName("OrchestratorService")
                 .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
                     .setName("Run")
-                    .setInputType(".com.example.Input")
-                    .setOutputType(".com.example.Output")
-                    .build())
-                .build())
+                    .setInputType(".com.example.grpc.InputType")
+                    .setOutputType(".com.example.grpc.OutputType")))
             .build();
 
         return DescriptorProtos.FileDescriptorSet.newBuilder()

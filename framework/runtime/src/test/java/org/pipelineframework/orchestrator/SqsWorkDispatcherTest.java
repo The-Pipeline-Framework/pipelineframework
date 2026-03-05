@@ -83,4 +83,14 @@ class SqsWorkDispatcherTest {
         assertThrows(UnsupportedOperationException.class,
             () -> dispatcher.enqueueNow(null).await().indefinitely());
     }
+
+    @Test
+    void startupValidationReportsMissingImplementation() {
+        PipelineOrchestratorConfig config = org.mockito.Mockito.mock(PipelineOrchestratorConfig.class);
+
+        var validationError = dispatcher.startupValidationError(config);
+
+        assertTrue(validationError.isPresent());
+        assertTrue(validationError.get().contains("not implemented"));
+    }
 }

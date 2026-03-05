@@ -30,6 +30,11 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     }
 
     @Override
+    public Optional<String> startupValidationError(PipelineOrchestratorConfig config) {
+        return Optional.of(ERROR);
+    }
+
+    @Override
     public Uni<CreateExecutionResult> createOrGetExecution(ExecutionCreateCommand command) {
         return Uni.createFrom().failure(new UnsupportedOperationException(ERROR));
     }

@@ -97,4 +97,14 @@ class DynamoExecutionStateStoreTest {
             assertTrue(e.getMessage().contains("not implemented"));
         }
     }
+
+    @Test
+    void startupValidationReportsMissingImplementation() {
+        PipelineOrchestratorConfig config = org.mockito.Mockito.mock(PipelineOrchestratorConfig.class);
+
+        var validationError = store.startupValidationError(config);
+
+        assertTrue(validationError.isPresent());
+        assertTrue(validationError.get().contains("not implemented"));
+    }
 }
