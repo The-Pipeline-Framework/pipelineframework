@@ -372,7 +372,9 @@ class PipelineProtoGeneratorTest {
         PipelineProtoGenerator generator = new PipelineProtoGenerator();
         generator.generate(tempDir, configPath, outputDir);
 
-        assertFalse(Files.list(outputDir).findAny().isPresent());
+        try (var paths = Files.list(outputDir)) {
+            assertFalse(paths.findAny().isPresent());
+        }
     }
 
     @Test
