@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import java.time.Duration;
+import java.util.Optional;
 
 import io.smallrye.mutiny.Uni;
 
@@ -29,6 +30,19 @@ public interface WorkDispatcher {
      */
     default int priority() {
         return 0;
+    }
+
+    /**
+     * Validates provider readiness for queue-async orchestrator mode startup.
+     *
+     * <p>Return a non-empty value when the provider is selected but cannot safely operate
+     * with the current runtime configuration.</p>
+     *
+     * @param config orchestrator configuration
+     * @return optional startup validation error
+     */
+    default Optional<String> startupValidationError(PipelineOrchestratorConfig config) {
+        return Optional.empty();
     }
 
     /**

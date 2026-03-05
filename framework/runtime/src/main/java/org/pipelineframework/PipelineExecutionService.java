@@ -222,6 +222,22 @@ public class PipelineExecutionService {
     executionStateStore = selectExecutionStateStore(orchestratorConfig.stateProvider());
     workDispatcher = selectWorkDispatcher(orchestratorConfig.dispatcherProvider());
     deadLetterPublisher = selectDeadLetterPublisher(orchestratorConfig.dlqProvider());
+
+    List<String> providerReadinessErrors = new ArrayList<>();
+    executionStateStore.startupValidationError(orchestratorConfig)
+        .ifPresent(error -> providerReadinessErrors.add("ExecutionStateStore(" + executionStateStore.providerName() + "): " + error));
+    workDispatcher.startupValidationError(orchestratorConfig)
+        .ifPresent(error -> providerReadinessErrors.add("WorkDispatcher(" + workDispatcher.providerName() + "): " + error));
+    deadLetterPublisher.startupValidationError(orchestratorConfig)
+        .ifPresent(error -> providerReadinessErrors.add("DeadLetterPublisher(" + deadLetterPublisher.providerName() + "): " + error));
+    if (!providerReadinessErrors.isEmpty()) {
+      String readinessMessage = "Queue async provider startup validation failed: " + String.join("; ", providerReadinessErrors);
+      if (orchestratorConfig.strictStartup()) {
+        throw new IllegalStateException(readinessMessage);
+      }
+      LOG.warn(readinessMessage);
+    }
+
     if (orchestratorConfig.strictStartup()
         && orchestratorConfig.idempotencyPolicy() == OrchestratorIdempotencyPolicy.OPTIONAL_CLIENT_KEY) {
       throw new IllegalStateException(
