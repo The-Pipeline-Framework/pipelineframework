@@ -132,28 +132,25 @@ public interface PipelineOrchestratorConfig {
     String dlqProvider();
 
     /**
-     * External queue URL used by dispatcher providers, if configured.
+     * Optional queue URL for external dispatcher providers.
      *
-     * @return the configured queue URL, or empty if not configured
+     * @return queue url when configured
      */
     @WithName("queue-url")
     Optional<String> queueUrl();
 
     /**
-     * Configuration block for the DynamoDB provider settings.
+     * DynamoDB provider configuration.
      *
-     * Exposes provider-specific options such as the execution table name, execution-key table name,
-     * optional AWS region, and optional endpoint override.
-     *
-     * @return the DynamoDB provider configuration
+     * @return dynamo provider config
      */
     @WithName("dynamo")
     DynamoConfig dynamo();
 
     /**
-     * Configuration for the SQS provider.
+     * SQS provider configuration.
      *
-     * @return the SqsConfig containing SQS-specific settings (optional region, optional endpoint override, and the localLoopback flag)
+     * @return sqs provider config
      */
     @WithName("sqs")
     SqsConfig sqs();
@@ -161,7 +158,7 @@ public interface PipelineOrchestratorConfig {
     /**
      * Enables strict startup guards in queue mode.
      *
-     * @return `true` if startup should fail on invalid queue configuration, `false` otherwise.
+     * @return true when startup should fail on invalid queue config
      */
     @WithName("strict-startup")
     @WithDefault("true")
@@ -173,35 +170,35 @@ public interface PipelineOrchestratorConfig {
     interface DynamoConfig {
 
         /**
-         * The DynamoDB table name used to store execution records.
+         * Execution table name.
          *
-         * @return the DynamoDB execution table name
+         * @return execution table name
          */
         @WithName("execution-table")
         @WithDefault("tpf_execution")
         String executionTable();
 
         /**
-         * DynamoDB table name used to store execution keys for deduplication.
+         * Execution key deduplication table name.
          *
-         * @return the DynamoDB table name used to store execution keys for deduplication
+         * @return execution key table name
          */
         @WithName("execution-key-table")
         @WithDefault("tpf_execution_key")
         String executionKeyTable();
 
         /**
-         * Overrides the AWS region for the provider when configured.
+         * Optional region override.
          *
-         * @return the configured region if present, otherwise an empty Optional
+         * @return region when configured
          */
         @WithName("region")
         Optional<String> region();
 
         /**
-         * Endpoint URI used to override the service endpoint, typically for local development.
+         * Optional endpoint override, typically for local development.
          *
-         * @return the endpoint URI if configured, otherwise an empty Optional
+         * @return endpoint URI when configured
          */
         @WithName("endpoint-override")
         Optional<String> endpointOverride();
@@ -213,25 +210,25 @@ public interface PipelineOrchestratorConfig {
     interface SqsConfig {
 
         /**
-         * Overrides the AWS region for the provider when configured.
+         * Optional region override.
          *
-         * @return the configured region if present, otherwise an empty Optional
+         * @return region when configured
          */
         @WithName("region")
         Optional<String> region();
 
         /**
-         * Endpoint URI used to override the service endpoint, typically for local development.
+         * Optional endpoint override, typically for local development.
          *
-         * @return the endpoint URI if configured, otherwise an empty Optional
+         * @return endpoint URI when configured
          */
         @WithName("endpoint-override")
         Optional<String> endpointOverride();
 
         /**
-         * Enables local in-process dispatch in addition to enqueuing messages to SQS.
+         * Enables local in-process dispatch in addition to SQS enqueue.
          *
-         * @return `true` if local in-process dispatch is enabled in addition to SQS enqueueing, `false` otherwise.
+         * @return true to dispatch locally after enqueueing in SQS
          */
         @WithName("local-loopback")
         @WithDefault("true")

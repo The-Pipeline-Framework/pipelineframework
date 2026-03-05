@@ -381,7 +381,7 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
             .addMethod(statusHandleRequest)
             .build();
 
-        MethodSpec resultHandleRequest = MethodSpec.methodBuilder("handleRequest")
+        MethodSpec.Builder resultHandleRequestBuilder = MethodSpec.methodBuilder("handleRequest")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
             .returns(asyncResultType)
@@ -395,8 +395,8 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
                     + ".await().indefinitely()",
                 asyncResultType,
                 outputDto,
-                streamingOutput)
-            .build();
+                streamingOutput);
+        MethodSpec resultHandleRequest = resultHandleRequestBuilder.build();
 
         TypeSpec resultHandler = TypeSpec.classBuilder(RESULT_HANDLER_CLASS)
             .addModifiers(Modifier.PUBLIC)

@@ -96,7 +96,8 @@ return timer.recordCallable(() -> processPayment(record));
 
 ## Orchestrator Queue-Async Signals
 
-For `QUEUE_ASYNC`, include control-plane metrics in addition to step metrics:
+For `QUEUE_ASYNC`, include control-plane metrics in addition to step metrics.
+Treat these as required operational signals for GA readiness:
 
 1. lease claim conflicts (OCC contention),
 2. stale commit rejections,
@@ -106,6 +107,12 @@ For `QUEUE_ASYNC`, include control-plane metrics in addition to step metrics:
 6. queue depth and worker lag.
 
 Use these to separate dependency outages (high retries, low success) from coordination issues (high stale/lease conflicts).
+
+Implementation note:
+
+1. TPF core already emits step/pipeline telemetry.
+2. Control-plane metrics may be emitted by provider integration or surrounding platform telemetry (queue, datastore, worker runtime).
+3. Keep metric names stable per environment even if data comes from different backends.
 
 ## Design Tips
 

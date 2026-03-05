@@ -94,6 +94,13 @@ Use this flow when orchestrator async executions stall or fail:
 4. If execution is due but not progressing, verify sweeper activity and dispatcher health.
 5. Re-drive only after validating idempotency at downstream operator boundaries.
 
+Fast triage checklist:
+
+1. Confirm provider wiring (`state-provider`, `dispatcher-provider`) and queue URL at runtime.
+2. Confirm backlog behavior (queue age/depth) versus execution status progression.
+3. Check whether failures are stale-commit races (expected/no-op) or true terminal failures.
+4. Check lease expiration/takeover behavior before forcing manual replay.
+
 ### Retry exhaustion
 
 1. Identify the failing step and failure type (transient vs non-retryable).
@@ -107,6 +114,11 @@ Use this flow when orchestrator async executions stall or fail:
 2. Preserve the original transition identity when replaying.
 3. Re-drive in bounded batches and monitor duplicate suppression metrics/logs.
 4. Do not bulk replay until downstream idempotency controls are validated.
+
+Recommended transition identity:
+
+1. `executionId:stepIndex:attempt`
+2. Propagate it through transport headers/metadata when replaying manually.
 
 ### Parking growth
 

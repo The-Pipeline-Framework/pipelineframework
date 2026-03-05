@@ -74,22 +74,11 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     public DynamoExecutionStateStore() {
     }
 
-    /**
-     * Package-private constructor used for creating an instance with a preinitialized DynamoDbClient and configuration.
-     *
-     * @param client the DynamoDbClient to use for all DynamoDB operations (can be a test double)
-     * @param orchestratorConfig configuration values for table names, region, and endpoint overrides
-     */
     DynamoExecutionStateStore(DynamoDbClient client, PipelineOrchestratorConfig orchestratorConfig) {
         this.client = client;
         this.orchestratorConfig = orchestratorConfig;
     }
 
-    /**
-     * Identifies the storage provider name for this implementation.
-     *
-     * @return the provider name "dynamo"
-     */
     @Override
     public String providerName() {
         return "dynamo";
@@ -100,12 +89,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         return -1000;
     }
 
-    /**
-     * Validates required DynamoDB configuration for the orchestrator.
-     *
-     * @param config the PipelineOrchestratorConfig to validate
-     * @return an Optional containing a descriptive error message if validation fails, or an empty Optional if configuration is valid
-     */
     @Override
     public Optional<String> startupValidationError(PipelineOrchestratorConfig config) {
         if (config == null || config.dynamo() == null) {
@@ -122,39 +105,16 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         return Optional.empty();
     }
 
-    /**
-     * Create a new execution from the provided command or retrieve an existing execution when a duplicate is detected.
-     *
-     * @param command the execution creation request containing tenant, execution key, input payload, and other creation parameters
-     * @return a CreateExecutionResult containing the execution record and a flag indicating whether the execution already existed
-     */
     @Override
     public Uni<CreateExecutionResult> createOrGetExecution(ExecutionCreateCommand command) {
         return blocking(() -> createOrGetExecutionBlocking(command));
     }
 
-    /**
-     * Retrieve the execution record for the given tenant and execution ID.
-     *
-     * @param tenantId    the tenant identifier that scopes the execution
-     * @param executionId the execution identifier
-     * @return            an Optional containing the execution record if present and not expired; {@code Optional.empty()} if not found or expired
-     */
     @Override
     public Uni<Optional<ExecutionRecord<Object, Object>>> getExecution(String tenantId, String executionId) {
         return blocking(() -> getExecutionBlocking(tenantId, executionId, System.currentTimeMillis()));
     }
 
-    /**
-     * Attempt to claim a lease for the specified execution and return the updated record when claiming succeeds.
-     *
-     * @param tenantId    the tenant identifier owning the execution
-     * @param executionId the execution identifier to claim a lease for
-     * @param leaseOwner  identifier of the entity attempting to own the lease
-     * @param nowEpochMs  current time in milliseconds used for lease/TTL decisioning
-     * @param leaseMs     desired lease duration in milliseconds
-     * @return an Optional containing the updated ExecutionRecord if the lease was successfully claimed, or empty otherwise
-     */
     @Override
     public Uni<Optional<ExecutionRecord<Object, Object>>> claimLease(
         String tenantId,
@@ -166,17 +126,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         return blocking(() -> claimLeaseBlocking(tenantId, executionId, leaseOwner, nowEpochMs, leaseMs));
     }
 
-    /**
-     * Mark an execution as succeeded and store the provided result payload.
-     *
-     * @param tenantId the tenant that owns the execution
-     * @param executionId the execution identifier
-     * @param expectedVersion the expected current record version; the update is applied only if this matches the stored version
-     * @param transitionKey identifier for the transition that caused the success
-     * @param resultPayload the result payload to persist with the succeeded execution (may be null)
-     * @param nowEpochMs current time in milliseconds used for timestamps and TTL checks
-     * @return an Optional containing the updated ExecutionRecord when the execution was transitioned to SUCCEEDED; `Optional.empty()` if the execution was not found or the conditional update failed (e.g., version mismatch)
-     */
     @Override
     public Uni<Optional<ExecutionRecord<Object, Object>>> markSucceeded(
         String tenantId,
@@ -195,21 +144,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             nowEpochMs));
     }
 
-    /**
-     * Schedules a retry for the specified execution by updating its state to WAIT_RETRY with the provided
-     * attempt number and next-due timestamp, and recording transition and error details.
-     *
-     * @param tenantId the tenant that owns the execution
-     * @param executionId the id of the execution to update
-     * @param expectedVersion the expected current version for a conditional update (used for concurrency control)
-     * @param nextAttempt the next attempt number to set on the execution
-     * @param nextDueEpochMs the epoch millisecond when the execution should next be retried
-     * @param transitionKey a key describing the state transition
-     * @param errorCode an error code to record with the retry
-     * @param errorMessage an error message to record with the retry
-     * @param nowEpochMs the current epoch millisecond used for TTL and expiry checks
-     * @return `Optional` containing the updated ExecutionRecord if the conditional update succeeded, `Optional.empty()` otherwise
-     */
     @Override
     public Uni<Optional<ExecutionRecord<Object, Object>>> scheduleRetry(
         String tenantId,
@@ -234,21 +168,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             nowEpochMs));
     }
 
-    /**
-     * Attempts to mark the specified execution as a terminal failure and return the updated record.
-     *
-     * If `finalStatus` is not `FAILED` or `DLQ`, the method immediately returns `Optional.empty()`.
-     *
-     * @param tenantId the tenant owning the execution
-     * @param executionId the execution identifier
-     * @param expectedVersion the expected current version of the execution used for a conditional update
-     * @param finalStatus the terminal status to apply (only `FAILED` or `DLQ` are accepted)
-     * @param transitionKey a key describing the transition that led to the terminal state
-     * @param errorCode an optional error code to record with the terminal transition
-     * @param errorMessage an optional error message to record with the terminal transition
-     * @param nowEpochMs current time in epoch milliseconds used for TTL/timestamp checks
-     * @return an `Optional` containing the updated `ExecutionRecord` if the terminal transition was applied, `Optional.empty()` otherwise
-     */
     @Override
     public Uni<Optional<ExecutionRecord<Object, Object>>> markTerminalFailure(
         String tenantId,
@@ -261,7 +180,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         long nowEpochMs
     ) {
         if (finalStatus != ExecutionStatus.FAILED && finalStatus != ExecutionStatus.DLQ) {
-            return Uni.createFrom().item(Optional.empty());
+            return Uni.createFrom().failure(new IllegalArgumentException("Unsupported terminal status: " + finalStatus));
         }
         return blocking(() -> markTerminalFailureBlocking(
             tenantId,
@@ -274,13 +193,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             nowEpochMs));
     }
 
-    /**
-     * Finds executions that are due to run at or before the given timestamp.
-     *
-     * @param nowEpochMs current time in epoch milliseconds used to evaluate which executions are due
-     * @param limit maximum number of executions to return; values less than or equal to 0 produce an empty list
-     * @return a list of execution records due at or before {@code nowEpochMs}, ordered by next-due time ascending and limited to at most {@code limit} entries
-     */
     @Override
     public Uni<List<ExecutionRecord<Object, Object>>> findDueExecutions(long nowEpochMs, int limit) {
         if (limit <= 0) {
@@ -289,13 +201,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         return blocking(() -> findDueExecutionsBlocking(nowEpochMs, limit));
     }
 
-    /**
-     * Releases and closes the lazily-initialized DynamoDbClient if present, performing the operation
-     * in a thread-safe, idempotent manner.
-     *
-     * <p>The method attempts to close the client and clears the internal reference. Any exception
-     * thrown while closing is suppressed (logged at debug level) and does not propagate.
-     */
     @PreDestroy
     void closeClient() {
         DynamoDbClient active = client;
@@ -317,13 +222,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
     }
 
-    /**
-     * Create a new execution for the supplied create command or return an existing execution
-     * if a scoped deduplication key already maps to a stored execution.
-     *
-     * @param command the execution creation command containing tenantId, executionKey, timestamps, input payload, and TTL
-     * @return a CreateExecutionResult containing the execution record and a flag that is `true` if the execution already existed, `false` if a new execution was created
-     */
     private CreateExecutionResult createOrGetExecutionBlocking(ExecutionCreateCommand command) {
         Objects.requireNonNull(command, "command must not be null");
         long nowEpochMs = command.nowEpochMs();
@@ -372,14 +270,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
     }
 
-    /**
-     * Retrieves the execution for the given tenant and execution ID, returning it if present and not expired; expired records are removed as a side effect.
-     *
-     * @param tenantId the tenant identifier
-     * @param executionId the execution identifier
-     * @param nowEpochMs current time in milliseconds used to evaluate TTL/expiration
-     * @return an Optional containing the execution record if found and not expired, or empty otherwise
-     */
     private Optional<ExecutionRecord<Object, Object>> getExecutionBlocking(String tenantId, String executionId, long nowEpochMs) {
         GetItemRequest request = GetItemRequest.builder()
             .tableName(executionTable())
@@ -398,19 +288,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         return Optional.empty();
     }
 
-    /**
-     * Attempts to claim a lease for the specified execution and returns the updated execution record when the claim succeeds.
-     *
-     * The claim only succeeds if the execution is due (nextDue <= now), there is no active lease or the existing lease has expired,
-     * the execution is not in a terminal status (SUCCEEDED, FAILED, DLQ), and the record's TTL is not expired.
-     *
-     * @param tenantId the tenant identifier owning the execution
-     * @param executionId the execution identifier
-     * @param leaseOwner the identifier for the lease owner to set when claiming the lease
-     * @param nowEpochMs the current time in milliseconds since epoch used for evaluating due/expiry conditions
-     * @param leaseMs the lease duration in milliseconds to apply when the claim succeeds
-     * @return an Optional containing the updated ExecutionRecord with the claimed lease if the claim succeeded, or an empty Optional if the claim failed or conditions were not met
-     */
     private Optional<ExecutionRecord<Object, Object>> claimLeaseBlocking(
         String tenantId,
         String executionId,
@@ -418,6 +295,9 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         long nowEpochMs,
         long leaseMs
     ) {
+        if (leaseMs <= 0) {
+            throw new IllegalArgumentException("leaseMs must be > 0 for claimLease.");
+        }
         Map<String, String> names = Map.of(
             "#status", STATUS,
             "#nextDue", NEXT_DUE_EPOCH_MS,
@@ -463,24 +343,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
     }
 
-    /**
-     * Mark the specified execution as succeeded and update its terminal metadata.
-     *
-     * Updates the execution's status to SUCCEEDED, stores the provided transition key and result
-     * payload, clears lease and error fields, increments the version, and updates next-due/updated
-     * timestamps. The update is applied only if the current version equals {@code expectedVersion}
-     * and the item's TTL (if present) is still in the future.
-     *
-     * @param tenantId the tenant owning the execution
-     * @param executionId the execution identifier
-     * @param expectedVersion the expected current version for a conditional update
-     * @param transitionKey a transition key to record (may be null)
-     * @param resultPayload the result payload to store (may be null)
-     * @param nowEpochMs current time in milliseconds used to set timestamps and TTL checks
-     * @return an {@link Optional} containing the updated {@code ExecutionRecord} when the conditional
-     *         update succeeds, or an empty {@code Optional} if the condition fails or the item is
-     *         missing/expired
-     */
     private Optional<ExecutionRecord<Object, Object>> markSucceededBlocking(
         String tenantId,
         String executionId,
@@ -535,21 +397,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
     }
 
-    /**
-     * Atomically updates an execution to the WAIT_RETRY state with new attempt and next-due time,
-     * clears lease fields, records transition and error details, and returns the updated record when successful.
-     *
-     * @param tenantId the tenant identifier owning the execution
-     * @param executionId the execution identifier to update
-     * @param expectedVersion the expected current version used for conditional update
-     * @param nextAttempt the attempt count to set on the execution
-     * @param nextDueEpochMs the epoch millisecond timestamp when the execution should next be processed
-     * @param transitionKey an optional transition key to record (may be null)
-     * @param errorCode an optional error code to record (may be null)
-     * @param errorMessage an optional error message to record (may be null)
-     * @param nowEpochMs the current epoch millisecond timestamp used to set the updated timestamp and TTL checks
-     * @return an Optional containing the updated ExecutionRecord if the conditional update succeeds; Optional.empty() if the condition fails or the item does not exist
-     */
     private Optional<ExecutionRecord<Object, Object>> scheduleRetryBlocking(
         String tenantId,
         String executionId,
@@ -610,21 +457,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
     }
 
-    /**
-     * Set the execution to the given terminal failure status and return the updated record when the conditional update succeeds.
-     *
-     * The update is applied only if the stored version equals `expectedVersion` and the item's TTL (if present) is in the future.
-     *
-     * @param tenantId the tenant identifier owning the execution
-     * @param executionId the execution identifier to update
-     * @param expectedVersion the expected current version of the execution; the update is conditional on this matching
-     * @param finalStatus the terminal status to set (e.g., FAILED or DLQ)
-     * @param transitionKey an optional transition key to record; may be null
-     * @param errorCode an optional error code to record; may be null
-     * @param errorMessage an optional error message to record; may be null and will be truncated if excessively long
-     * @param nowEpochMs the current time in milliseconds used to update timestamps and compute TTL checks
-     * @return an Optional containing the updated ExecutionRecord if the conditional update succeeded, or empty if the condition failed or the item was not updated
-     */
     private Optional<ExecutionRecord<Object, Object>> markTerminalFailureBlocking(
         String tenantId,
         String executionId,
@@ -681,16 +513,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
     }
 
-    /**
-     * Finds executions that are due at or before the provided epoch millisecond timestamp and returns up to the specified limit.
-     *
-     * The returned candidates exclude executions that are expired (by TTL), in terminal statuses (SUCCEEDED, FAILED, DLQ),
-     * or currently leased; results are sorted by next due time ascending.
-     *
-     * @param nowEpochMs epoch millisecond instant used to evaluate due time, lease expiry, and TTL
-     * @param limit maximum number of execution records to return
-     * @return a list of execution records sorted by next due time (ascending), containing at most {@code limit} entries; empty list if none found
-     */
     private List<ExecutionRecord<Object, Object>> findDueExecutionsBlocking(long nowEpochMs, int limit) {
         Map<String, String> names = Map.of(
             "#status", STATUS,
@@ -750,15 +572,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         return List.copyOf(due);
     }
 
-    /**
-     * Looks up an execution by its scoped execution key and returns the corresponding execution record if present and not expired.
-     *
-     * @param tenantId the tenant identifier owning the execution
-     * @param scopedExecutionKey the deduplication key used to locate the execution in the execution-key table
-     * @param nowEpochMs current time in epoch milliseconds used to evaluate TTL/expiry
-     * @return an Optional containing the execution record when found and not expired; otherwise an empty Optional.
-     *         If a key entry is found but the referenced execution is missing or expired, the key entry is deleted as a best-effort cleanup.
-     */
     private Optional<ExecutionRecord<Object, Object>> findExistingByScopedExecutionKey(
         String tenantId,
         String scopedExecutionKey,
@@ -785,19 +598,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         return Optional.empty();
     }
 
-    /**
-     * Persists a new execution and its deduplication key atomically to DynamoDB.
-     *
-     * Writes an execution item to the configured execution table and a corresponding
-     * scoped key item to the execution-key table in a single transaction, ensuring
-     * neither item previously exists. The key item includes tenant, execution id,
-     * creation/update timestamps (milliseconds) and a TTL (seconds).
-     *
-     * @param scopedExecutionKey the tenant-scoped deduplication key for this execution
-     * @param record the execution record to persist
-     * @param nowEpochMs the creation/update timestamp in milliseconds to store on both items
-     * @param ttlEpochS the TTL epoch time in seconds to set for the persisted items
-     */
     private void writeNewExecution(
         String scopedExecutionKey,
         ExecutionRecord<Object, Object> record,
@@ -835,14 +635,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         dynamoClient().transactWriteItems(request);
     }
 
-    /**
-     * Attempts best-effort deletion of the DynamoDB execution item and its scoped key for the given record.
-     *
-     * Deletes the execution item from the configured execution table and then attempts to remove the associated
-     * scoped execution key; failures while deleting the execution item are ignored.
-     *
-     * @param record the execution record whose DynamoDB entries should be removed
-     */
     private void deleteExpiredRecord(ExecutionRecord<Object, Object> record) {
         try {
             dynamoClient().deleteItem(DeleteItemRequest.builder()
@@ -855,13 +647,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         deleteExecutionKey(scopedExecutionKey(record.tenantId(), record.executionKey()));
     }
 
-    /**
-     * Removes the deduplication entry for the given scoped execution key from the execution-key table.
-     *
-     * This is a best-effort cleanup; failures are ignored and do not propagate.
-     *
-     * @param scopedExecutionKey the tenant-scoped deduplication key to delete
-     */
     private void deleteExecutionKey(String scopedExecutionKey) {
         try {
             dynamoClient().deleteItem(DeleteItemRequest.builder()
@@ -873,17 +658,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
     }
 
-    /**
-     * Convert an ExecutionRecord into a DynamoDB item map suitable for persistence.
-     *
-     * <p>The resulting map contains the record's primary and metadata attributes (tenant, execution id,
-     * execution key, status, version, step/attempt/lease/timing fields, created/updated timestamps and TTL).
-     * Optional fields—lease owner, last transition key, input payload (with optional shape), result payload JSON,
-     * error code, and error message—are included only when present on the record.
-     *
-     * @param record the execution record to serialize into a DynamoDB attribute map
-     * @return a map of DynamoDB attribute names to AttributeValue representing the execution record
-     */
     private Map<String, AttributeValue> toItem(ExecutionRecord<Object, Object> record) {
         Map<String, AttributeValue> item = new HashMap<>();
         item.put(TENANT_ID, avS(record.tenantId()));
@@ -907,18 +681,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         return item;
     }
 
-    /**
-     * Adds the input payload to the provided DynamoDB item map.
-     *
-     * If `inputPayload` is null this method does nothing. If `inputPayload` is an
-     * ExecutionInputSnapshot, the snapshot's shape name is stored under the
-     * `INPUT_SHAPE` attribute and the snapshot payload is serialized and stored
-     * under `INPUT_PAYLOAD_JSON`. For any other non-null value the value is
-     * serialized and stored under `INPUT_PAYLOAD_JSON`.
-     *
-     * @param item         the DynamoDB item attribute map to modify
-     * @param inputPayload the execution input value or an ExecutionInputSnapshot containing shape metadata
-     */
     private void putInputPayload(Map<String, AttributeValue> item, Object inputPayload) {
         if (inputPayload == null) {
             return;
@@ -931,13 +693,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         putIfPresent(item, INPUT_PAYLOAD_JSON, toJson(inputPayload));
     }
 
-    /**
-     * Adds a string attribute to a DynamoDB item map when the provided value is not null or blank.
-     *
-     * @param item  the DynamoDB item map to modify
-     * @param key   the attribute name to set on the item
-     * @param value the string value to store; ignored if null or blank
-     */
     private static void putIfPresent(Map<String, AttributeValue> item, String key, String value) {
         if (value == null || value.isBlank()) {
             return;
@@ -945,11 +700,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         item.put(key, avS(value));
     }
 
-    /**
-     * Convert a DynamoDB item map into an ExecutionRecord populated with status, payloads, timestamps, and metadata.
-     *
-     * @return the ExecutionRecord built from the provided DynamoDB item map
-     */
     private ExecutionRecord<Object, Object> toRecord(Map<String, AttributeValue> item) {
         String tenantId = readString(item, TENANT_ID);
         String executionId = readString(item, EXECUTION_ID);
@@ -990,15 +740,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             ttlEpochS);
     }
 
-    /**
-     * Reads and deserializes the input payload (and optional input shape) from a DynamoDB item.
-     *
-     * @param item the DynamoDB item map containing input payload and optional shape attributes
-     * @return `null` if no payload is present; the deserialized payload object otherwise. If an input
-     *     shape attribute is present and matches a known ExecutionInputShape, returns an
-     *     ExecutionInputSnapshot that wraps the payload; if the shape attribute is unrecognized,
-     *     returns the deserialized payload object.
-     */
     private Object readInputPayload(Map<String, AttributeValue> item) {
         AttributeValue payloadValue = item.get(INPUT_PAYLOAD_JSON);
         if (payloadValue == null || payloadValue.s() == null || payloadValue.s().isBlank()) {
@@ -1017,14 +758,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
     }
 
-    /**
-     * Deserialize a JSON payload stored in a DynamoDB AttributeValue.
-     *
-     * If the attribute is null or contains a null/blank string, this returns `null`.
-     *
-     * @param value the DynamoDB AttributeValue containing a JSON string
-     * @return the deserialized Object, or `null` if the attribute is absent or blank
-     */
     private Object readPayload(AttributeValue value) {
         if (value == null || value.s() == null || value.s().isBlank()) {
             return null;
@@ -1032,47 +765,20 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         return fromJson(value.s());
     }
 
-    /**
-     * Get the DynamoDB execution table name from the orchestrator configuration.
-     *
-     * @return the configured execution table name
-     */
     private String executionTable() {
         return orchestratorConfig.dynamo().executionTable();
     }
 
-    /**
-     * Retrieve the configured DynamoDB table name used for mapping scoped execution keys to executions.
-     *
-     * @return the execution-key table name from configuration
-     */
     private String executionKeyTable() {
         return orchestratorConfig.dynamo().executionKeyTable();
     }
 
-    /**
-     * Builds the DynamoDB primary key map for an execution item.
-     *
-     * @param tenantId    the tenant identifier to use as the TENANT_ID attribute
-     * @param executionId the execution identifier to use as the EXECUTION_ID attribute
-     * @return a map mapping TENANT_ID and EXECUTION_ID to string AttributeValue instances suitable for DynamoDB requests
-     */
     private static Map<String, AttributeValue> executionPrimaryKey(String tenantId, String executionId) {
         return Map.of(
             TENANT_ID, avS(tenantId),
             EXECUTION_ID, avS(executionId));
     }
 
-    /**
-     * Determines whether an execution record is expired based on its TTL and a reference time.
-     *
-     * If the record's TTL is less than or equal to the provided reference time (in seconds), the
-     * record is considered expired. A non-positive TTL is treated as "no TTL" and is never expired.
-     *
-     * @param record     the execution record to check
-     * @param nowEpochMs the reference time in milliseconds since the epoch
-     * @return `true` if the record's TTL is less than or equal to the reference time, `false` otherwise
-     */
     private static boolean isExpired(ExecutionRecord<Object, Object> record, long nowEpochMs) {
         if (record.ttlEpochS() <= 0) {
             return false;
@@ -1081,33 +787,14 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         return record.ttlEpochS() <= nowEpochS;
     }
 
-    /**
-     * Create a DynamoDB string AttributeValue from the given string.
-     *
-     * @param value the string to store in the AttributeValue
-     * @return an AttributeValue representing the provided string
-     */
     private static AttributeValue avS(String value) {
         return AttributeValue.builder().s(value).build();
     }
 
-    /**
-     * Create a DynamoDB numeric AttributeValue from the given long.
-     *
-     * @param value the numeric value to convert
-     * @return an AttributeValue representing the numeric value
-     */
     private static AttributeValue avN(long value) {
         return AttributeValue.builder().n(Long.toString(value)).build();
     }
 
-    /**
-     * Read a string attribute from a DynamoDB item map.
-     *
-     * @param item the DynamoDB item map of attribute names to AttributeValue
-     * @param key  the attribute name to read
-     * @return     `null` if the attribute is absent, otherwise the attribute's string value
-     */
     private static String readString(Map<String, AttributeValue> item, String key) {
         AttributeValue value = item.get(key);
         if (value == null) {
@@ -1116,13 +803,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         return value.s();
     }
 
-    /**
-     * Convert a numeric DynamoDB attribute value to a primitive long.
-     *
-     * @param item the DynamoDB item map containing attribute values
-     * @param key the attribute key to read from the item
-     * @return `0` if the attribute is missing or empty; otherwise the attribute parsed as a `long`
-     */
     private static long readLong(Map<String, AttributeValue> item, String key) {
         AttributeValue value = item.get(key);
         if (value == null || value.n() == null || value.n().isBlank()) {
@@ -1131,26 +811,12 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         return Long.parseLong(value.n());
     }
 
-    /**
-     * Constructs a tenant-scoped execution key used for deduplication and lookups.
-     *
-     * @param tenantId     the tenant identifier (must not be null)
-     * @param executionKey the execution-level key (must not be null)
-     * @return             a scoped key string in the form "tenantLength:tenant:executionKeyLength:executionKey"
-     * @throws NullPointerException if {@code tenantId} or {@code executionKey} is null
-     */
     private static String scopedExecutionKey(String tenantId, String executionKey) {
         String safeTenant = Objects.requireNonNull(tenantId, "tenantId must not be null");
         String safeKey = Objects.requireNonNull(executionKey, "executionKey must not be null");
         return safeTenant.length() + ":" + safeTenant + ":" + safeKey.length() + ":" + safeKey;
     }
 
-    /**
-     * Truncates a string to at most 512 characters.
-     *
-     * @param value the input string, may be {@code null}
-     * @return {@code null} if {@code value} is {@code null}; otherwise the original string truncated to at most 512 characters
-     */
     private static String truncate(String value) {
         if (value == null) {
             return null;
@@ -1161,13 +827,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         return value.substring(0, 512);
     }
 
-    /**
-     * Serialize an object to a JSON string using the pipeline JSON mapper.
-     *
-     * @param value the object to serialize; may be null
-     * @return the JSON string representation of {@code value}, or {@code null} if {@code value} is null
-     * @throws IllegalStateException if serialization fails
-     */
     private static String toJson(Object value) {
         if (value == null) {
             return null;
@@ -1179,13 +838,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
     }
 
-    /**
-     * Deserialize a JSON string into a Java object.
-     *
-     * @param value JSON text to deserialize; may be null or blank
-     * @return the deserialized Object, or `null` if the input is null or blank
-     * @throws IllegalStateException if deserialization fails
-     */
     private static Object fromJson(String value) {
         if (value == null || value.isBlank()) {
             return null;
@@ -1197,14 +849,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
     }
 
-    /**
-     * Provides the shared DynamoDbClient, initializing and caching it on first use.
-     *
-     * The client is created once and reused for subsequent calls; initialization applies the
-     * optional region and endpoint override from the orchestrator configuration when present.
-     *
-     * @return the initialized and cached {@link DynamoDbClient} instance
-     */
     private DynamoDbClient dynamoClient() {
         DynamoDbClient active = client;
         if (active != null) {
@@ -1225,13 +869,6 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
     }
 
-    /**
-     * Run a blocking computation on the default Mutiny executor and expose its result as a Uni.
-     *
-     * @param <T> the type of the supplier result
-     * @param supplier the blocking computation to execute
-     * @return the supplier's result wrapped in a Uni
-     */
     private static <T> Uni<T> blocking(Supplier<T> supplier) {
         return Uni.createFrom().item(supplier).runSubscriptionOn(Infrastructure.getDefaultExecutor());
     }
