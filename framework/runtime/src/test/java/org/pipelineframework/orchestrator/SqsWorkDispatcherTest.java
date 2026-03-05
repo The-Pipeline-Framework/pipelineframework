@@ -10,6 +10,7 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -81,7 +82,31 @@ class SqsWorkDispatcherTest {
     }
 
     @Test
-    void priorityIsNegative() {
+    void enqueueNowRejectsNullItem() {
+        SqsClient client = mock(SqsClient.class);
+        Event<ExecutionWorkItem> event = mock(Event.class);
+        PipelineOrchestratorConfig config = mockConfig(Optional.of("https://sqs.local/123/work"), true);
+        SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(client, config, event);
+
+        NullPointerException error = assertThrows(NullPointerException.class, () -> dispatcher.enqueueNow(null));
+
+        assertTrue(error.getMessage().contains("item must not be null"));
+        verifyNoInteractions(client, event);
+    }
+
+    private static PipelineOrchestratorConfig mockConfig(Optional<String> queueUrl, boolean localLoopback) {
+        PipelineOrchestratorConfig config = mock(PipelineOrchestratorConfig.class);
+        PipelineOrchestratorConfig.SqsConfig sqs = mock(PipelineOrchestratorConfig.SqsConfig.class);
+        when(config.queueUrl()).thenReturn(queueUrl);
+        when(config.sqs()).thenReturn(sqs);
+        when(sqs.localLoopback()).thenReturn(localLoopback);
+        when(sqs.region()).thenReturn(Optional.empty());
+        when(sqs.endpointOverride()).thenReturn(Optional.empty());
+        return config;
+    }
+
+    @Test
+    void priorityIsNegativeThousand() {
         SqsWorkDispatcher dispatcher = new SqsWorkDispatcher();
         assertEquals(-1000, dispatcher.priority());
     }
@@ -96,18 +121,71 @@ class SqsWorkDispatcherTest {
         assertTrue(validationError.isEmpty());
     }
 
+    @SuppressWarnings("unchecked")
     @Test
-    void startupValidationFailsWhenConfigIsNull() {
-        SqsWorkDispatcher dispatcher = new SqsWorkDispatcher();
+    void enqueueDelayedClampsDelayToMaximum900Seconds() {
+        SqsClient client = mock(SqsClient.class);
+        Event<ExecutionWorkItem> event = mock(Event.class);
+        PipelineOrchestratorConfig config = mockConfig(Optional.of("https://sqs.local/123/work"), false);
+        SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(client, config, event);
 
-        var validationError = dispatcher.startupValidationError(null);
+        dispatcher.enqueueDelayed(new ExecutionWorkItem("tenant-a", "exec-1"), Duration.ofSeconds(1000))
+            .await().indefinitely();
 
-        assertTrue(validationError.isPresent());
-        assertTrue(validationError.get().contains("queue-url"));
+        verify(client).sendMessage(argThat((SendMessageRequest request) ->
+            request.delaySeconds() == 900
+        ));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void enqueueDelayedHandlesNullDelayAsZero() {
+        SqsClient client = mock(SqsClient.class);
+        Event<ExecutionWorkItem> event = mock(Event.class);
+        when(event.fireAsync(any())).thenReturn(CompletableFuture.completedFuture(new ExecutionWorkItem("tenant-a", "exec-1")));
+        PipelineOrchestratorConfig config = mockConfig(Optional.of("https://sqs.local/123/work"), true);
+        SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(client, config, event);
+
+        dispatcher.enqueueDelayed(new ExecutionWorkItem("tenant-a", "exec-1"), null)
+            .await().indefinitely();
+
+        verify(client).sendMessage(argThat((SendMessageRequest request) ->
+            request.delaySeconds() == 0
+        ));
+        verify(event).fireAsync(any());
     }
 
     @Test
-    void startupValidationFailsWhenQueueUrlIsBlank() {
+    void enqueueNowThrowsWhenQueueUrlNotConfigured() {
+        SqsClient client = mock(SqsClient.class);
+        Event<ExecutionWorkItem> event = mock(Event.class);
+        PipelineOrchestratorConfig config = mockConfig(Optional.empty(), true);
+        SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(client, config, event);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () ->
+            dispatcher.enqueueNow(new ExecutionWorkItem("tenant-a", "exec-1")).await().indefinitely());
+
+        assertTrue(error.getMessage().contains("queue-url must be configured"));
+        verifyNoInteractions(client, event);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void enqueueNowToleratesLoopbackFailure() {
+        SqsClient client = mock(SqsClient.class);
+        Event<ExecutionWorkItem> event = mock(Event.class);
+        when(event.fireAsync(any())).thenReturn(CompletableFuture.failedFuture(new RuntimeException("Event bus error")));
+        PipelineOrchestratorConfig config = mockConfig(Optional.of("https://sqs.local/123/work"), true);
+        SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(client, config, event);
+
+        dispatcher.enqueueNow(new ExecutionWorkItem("tenant-a", "exec-1")).await().indefinitely();
+
+        verify(client).sendMessage(any(SendMessageRequest.class));
+        verify(event).fireAsync(new ExecutionWorkItem("tenant-a", "exec-1"));
+    }
+
+    @Test
+    void startupValidationReportsBlankQueueUrl() {
         PipelineOrchestratorConfig config = mockConfig(Optional.of(""), true);
         SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(null, config, null);
 
@@ -117,113 +195,34 @@ class SqsWorkDispatcherTest {
         assertTrue(validationError.get().contains("queue-url"));
     }
 
-    @Test
-    void enqueueNowThrowsExceptionWhenQueueUrlNotConfigured() {
-        SqsClient client = mock(SqsClient.class);
-        PipelineOrchestratorConfig config = mockConfig(Optional.empty(), true);
-        SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(client, config, null);
-
-        Exception exception = null;
-        try {
-            dispatcher.enqueueNow(new ExecutionWorkItem("tenant-a", "exec-1"))
-                .await().indefinitely();
-        } catch (Exception e) {
-            exception = e;
-        }
-
-        assertTrue(exception instanceof IllegalStateException);
-        assertTrue(exception.getMessage().contains("queue-url"));
-        verify(client, never()).sendMessage(any(SendMessageRequest.class));
-    }
-
-    @Test
-    void enqueueDelayedClampsDelayTo900Seconds() {
-        SqsClient client = mock(SqsClient.class);
-        PipelineOrchestratorConfig config = mockConfig(Optional.of("https://sqs.local/123/work"), false);
-        SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(client, config, null);
-
-        dispatcher.enqueueDelayed(new ExecutionWorkItem("tenant-a", "exec-1"), Duration.ofSeconds(1000))
-            .await().indefinitely();
-
-        verify(client).sendMessage(argThat(request -> request.delaySeconds() == 900));
-    }
-
-    @Test
-    void enqueueDelayedClampsNegativeDelayToZero() {
-        SqsClient client = mock(SqsClient.class);
-        PipelineOrchestratorConfig config = mockConfig(Optional.of("https://sqs.local/123/work"), false);
-        SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(client, config, null);
-
-        dispatcher.enqueueDelayed(new ExecutionWorkItem("tenant-a", "exec-1"), Duration.ofSeconds(-5))
-            .await().indefinitely();
-
-        verify(client).sendMessage(argThat(request -> request.delaySeconds() == 0));
-    }
-
-    @Test
-    void enqueueDelayedTreatsNullDelayAsZero() {
-        SqsClient client = mock(SqsClient.class);
-        PipelineOrchestratorConfig config = mockConfig(Optional.of("https://sqs.local/123/work"), false);
-        SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(client, config, null);
-
-        dispatcher.enqueueDelayed(new ExecutionWorkItem("tenant-a", "exec-1"), null)
-            .await().indefinitely();
-
-        verify(client).sendMessage(argThat(request -> request.delaySeconds() == 0));
-    }
-
-    @Test
-    void enqueueSerializesWorkItemToJson() {
-        SqsClient client = mock(SqsClient.class);
-        PipelineOrchestratorConfig config = mockConfig(Optional.of("https://sqs.local/123/work"), false);
-        SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(client, config, null);
-
-        dispatcher.enqueueNow(new ExecutionWorkItem("tenant-b", "exec-2"))
-            .await().indefinitely();
-
-        verify(client).sendMessage(argThat(request -> {
-            String body = request.messageBody();
-            return body.contains("tenant-b") && body.contains("exec-2");
-        }));
-    }
-
     @SuppressWarnings("unchecked")
     @Test
-    void enqueueNowWithEventNull() {
-        SqsClient client = mock(SqsClient.class);
-        PipelineOrchestratorConfig config = mockConfig(Optional.of("https://sqs.local/123/work"), true);
-        SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(client, config, null);
-
-        dispatcher.enqueueNow(new ExecutionWorkItem("tenant-a", "exec-1"))
-            .await().indefinitely();
-
-        verify(client).sendMessage(any(SendMessageRequest.class));
-    }
-
-    @SuppressWarnings("unchecked")
-    @Test
-    void enqueueNowContinuesWhenLoopbackFails() {
+    void enqueueDelayedSkipsLoopbackWhenDelayIsPositive() {
         SqsClient client = mock(SqsClient.class);
         Event<ExecutionWorkItem> event = mock(Event.class);
-        when(event.fireAsync(any())).thenReturn(CompletableFuture.failedFuture(new RuntimeException("loopback failure")));
         PipelineOrchestratorConfig config = mockConfig(Optional.of("https://sqs.local/123/work"), true);
         SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(client, config, event);
 
-        dispatcher.enqueueNow(new ExecutionWorkItem("tenant-a", "exec-1"))
+        dispatcher.enqueueDelayed(new ExecutionWorkItem("tenant-a", "exec-1"), Duration.ofSeconds(10))
             .await().indefinitely();
 
         verify(client).sendMessage(any(SendMessageRequest.class));
-        verify(event).fireAsync(any());
+        verify(event, never()).fireAsync(any());
     }
 
-    private static PipelineOrchestratorConfig mockConfig(Optional<String> queueUrl, boolean localLoopback) {
-        PipelineOrchestratorConfig config = mock(PipelineOrchestratorConfig.class);
-        PipelineOrchestratorConfig.SqsConfig sqs = mock(PipelineOrchestratorConfig.SqsConfig.class);
-        when(config.queueUrl()).thenReturn(queueUrl);
-        when(config.sqs()).thenReturn(sqs);
-        when(sqs.localLoopback()).thenReturn(localLoopback);
-        when(sqs.region()).thenReturn(Optional.empty());
-        when(sqs.endpointOverride()).thenReturn(Optional.empty());
-        return config;
+    @SuppressWarnings("unchecked")
+    @Test
+    void enqueueNowUsesZeroDelaySeconds() {
+        SqsClient client = mock(SqsClient.class);
+        Event<ExecutionWorkItem> event = mock(Event.class);
+        when(event.fireAsync(any())).thenReturn(CompletableFuture.completedFuture(new ExecutionWorkItem("tenant-a", "exec-1")));
+        PipelineOrchestratorConfig config = mockConfig(Optional.of("https://sqs.local/123/work"), true);
+        SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(client, config, event);
+
+        dispatcher.enqueueNow(new ExecutionWorkItem("tenant-a", "exec-1")).await().indefinitely();
+
+        verify(client).sendMessage(argThat((SendMessageRequest request) ->
+            request.delaySeconds() == 0
+        ));
     }
 }

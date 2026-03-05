@@ -180,7 +180,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         long nowEpochMs
     ) {
         if (finalStatus != ExecutionStatus.FAILED && finalStatus != ExecutionStatus.DLQ) {
-            return Uni.createFrom().item(Optional.empty());
+            return Uni.createFrom().failure(new IllegalArgumentException("Unsupported terminal status: " + finalStatus));
         }
         return blocking(() -> markTerminalFailureBlocking(
             tenantId,
@@ -295,6 +295,9 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         long nowEpochMs,
         long leaseMs
     ) {
+        if (leaseMs <= 0) {
+            throw new IllegalArgumentException("leaseMs must be > 0 for claimLease.");
+        }
         Map<String, String> names = Map.of(
             "#status", STATUS,
             "#nextDue", NEXT_DUE_EPOCH_MS,

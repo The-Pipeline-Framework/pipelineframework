@@ -40,3 +40,10 @@ Queue-async additions:
 8. Queue age/lag exceeds execution SLO budget (critical)
 
 When using New Relic, derive these from `tpf.pipeline.run` spans and `tpf.step.*` metrics.
+
+Suggested starter thresholds:
+
+1. Queue oldest-message age > 2x target execution SLO for 10 minutes (critical).
+2. Retry-saturation ratio > 0.2 for 15 minutes (warning), > 0.4 (critical).
+3. Sweeper recoveries = 0 while due backlog grows for 5 minutes (critical).
+4. Lease/stale conflict rate > 3x 7-day baseline for 10 minutes (warning).

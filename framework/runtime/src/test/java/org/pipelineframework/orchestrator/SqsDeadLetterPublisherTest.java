@@ -126,7 +126,7 @@ class SqsDeadLetterPublisherTest {
                 1234567890000L))
             .await().indefinitely();
 
-        verify(client).sendMessage(argThat(request -> {
+        verify(client).sendMessage(argThat((SendMessageRequest request) -> {
             String body = request.messageBody();
             return body.contains("tenant-b") &&
                    body.contains("exec-2") &&

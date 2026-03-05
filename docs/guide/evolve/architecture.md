@@ -17,6 +17,33 @@ Current GA direction is a queue-driven async control plane with:
 
 This is intentionally not a full event-sourced runtime in the current milestone.
 
+Current durable provider path:
+
+1. state store SPI: `ExecutionStateStore` (`memory`, `dynamo`),
+2. work dispatch SPI: `WorkDispatcher` (`event`, `sqs`),
+3. DLQ SPI: `DeadLetterPublisher` (`log` built-in).
+
+Control-plane component model:
+
+```mermaid
+graph TD
+    A["Async ingress (REST/gRPC/function)"] --> B["ExecutionStateStore create/get"]
+    B --> C["WorkDispatcher enqueue"]
+    C --> D["Worker claimLease (OCC)"]
+    D --> E["Run one transition"]
+    E --> F["Commit transition (version++)"]
+    F --> G{"Terminal?"}
+    G -->|No| C
+    G -->|Yes| H["Status/result APIs"]
+    I["Due sweeper"] --> C
+```
+
+Explicit non-goals in this milestone:
+
+1. no distributed transactions across state commit and external side effects,
+2. no framework-managed saga compensation,
+3. no full event-sourced journal as the execution engine of record.
+
 ## Core Concepts
 
 ### Pipeline

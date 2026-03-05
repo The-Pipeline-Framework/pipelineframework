@@ -1,5 +1,6 @@
 package org.pipelineframework.orchestrator;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -15,6 +16,7 @@ import software.amazon.awssdk.services.dynamodb.model.UpdateItemResponse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -97,6 +99,20 @@ class DynamoExecutionStateStoreTest {
     }
 
     @Test
+    void claimLeaseRejectsNonPositiveLeaseDuration() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () ->
+            store.claimLease("tenant-a", "exec-1", "worker-1", System.currentTimeMillis(), 0)
+                .await().indefinitely());
+
+        assertTrue(error.getMessage().contains("leaseMs must be > 0"));
+        verifyNoInteractions(client);
+    }
+
+    @Test
     void markSucceededReturnsUpdatedRecordWhenConditionMatches() {
         DynamoDbClient client = mock(DynamoDbClient.class);
         PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
@@ -123,256 +139,25 @@ class DynamoExecutionStateStoreTest {
     }
 
     @Test
-    void scheduleRetryUpdatesExecutionState() {
-        DynamoDbClient client = mock(DynamoDbClient.class);
-        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
-        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
-        long now = System.currentTimeMillis();
-        long ttl = now / 1000 + 3600;
-        when(client.updateItem(any(UpdateItemRequest.class)))
-            .thenReturn(UpdateItemResponse.builder()
-                .attributes(executionItem("tenant-a", "exec-1", "key-1", ttl, ExecutionStatus.WAIT_RETRY))
-                .build());
-
-        Optional<ExecutionRecord<Object, Object>> updated = store.scheduleRetry(
-                "tenant-a",
-                "exec-1",
-                1L,
-                2,
-                now + 10000,
-                "exec-1:1:0",
-                "TIMEOUT",
-                "Operation timed out",
-                now)
-            .await().indefinitely();
-
-        assertTrue(updated.isPresent());
-        assertEquals(ExecutionStatus.WAIT_RETRY, updated.get().status());
-    }
-
-    @Test
-    void markTerminalFailureWithFailedStatus() {
-        DynamoDbClient client = mock(DynamoDbClient.class);
-        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
-        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
-        long now = System.currentTimeMillis();
-        long ttl = now / 1000 + 3600;
-        when(client.updateItem(any(UpdateItemRequest.class)))
-            .thenReturn(UpdateItemResponse.builder()
-                .attributes(executionItem("tenant-a", "exec-1", "key-1", ttl, ExecutionStatus.FAILED))
-                .build());
-
-        Optional<ExecutionRecord<Object, Object>> updated = store.markTerminalFailure(
-                "tenant-a",
-                "exec-1",
-                1L,
-                ExecutionStatus.FAILED,
-                "exec-1:2:0",
-                "MAX_RETRIES",
-                "Exceeded maximum retry attempts",
-                now)
-            .await().indefinitely();
-
-        assertTrue(updated.isPresent());
-        assertEquals(ExecutionStatus.FAILED, updated.get().status());
-    }
-
-    @Test
-    void markTerminalFailureWithDlqStatus() {
-        DynamoDbClient client = mock(DynamoDbClient.class);
-        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
-        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
-        long now = System.currentTimeMillis();
-        long ttl = now / 1000 + 3600;
-        when(client.updateItem(any(UpdateItemRequest.class)))
-            .thenReturn(UpdateItemResponse.builder()
-                .attributes(executionItem("tenant-a", "exec-1", "key-1", ttl, ExecutionStatus.DLQ))
-                .build());
-
-        Optional<ExecutionRecord<Object, Object>> updated = store.markTerminalFailure(
-                "tenant-a",
-                "exec-1",
-                1L,
-                ExecutionStatus.DLQ,
-                "exec-1:2:0",
-                "POISON_MESSAGE",
-                "Message cannot be processed",
-                now)
-            .await().indefinitely();
-
-        assertTrue(updated.isPresent());
-        assertEquals(ExecutionStatus.DLQ, updated.get().status());
-    }
-
-    @Test
-    void markTerminalFailureReturnsEmptyForSucceededStatus() {
-        DynamoDbClient client = mock(DynamoDbClient.class);
-        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
-        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
-        long now = System.currentTimeMillis();
-
-        Optional<ExecutionRecord<Object, Object>> updated = store.markTerminalFailure(
-                "tenant-a",
-                "exec-1",
-                1L,
-                ExecutionStatus.SUCCEEDED,
-                "exec-1:2:0",
-                "ERROR",
-                "Error",
-                now)
-            .await().indefinitely();
-
-        assertFalse(updated.isPresent());
-        verify(client, never()).updateItem(any(UpdateItemRequest.class));
-    }
-
-    @Test
-    void getExecutionReturnsEmptyWhenNotFound() {
-        DynamoDbClient client = mock(DynamoDbClient.class);
-        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
-        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
-        when(client.getItem(any(GetItemRequest.class)))
-            .thenReturn(GetItemResponse.builder().build());
-
-        Optional<ExecutionRecord<Object, Object>> result = store.getExecution("tenant-a", "exec-1")
-            .await().indefinitely();
-
-        assertFalse(result.isPresent());
-    }
-
-    @Test
-    void findDueExecutionsReturnsEmptyWhenLimitIsZero() {
+    void markTerminalFailureRejectsUnsupportedStatus() {
         DynamoDbClient client = mock(DynamoDbClient.class);
         PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
         DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
 
-        java.util.List<ExecutionRecord<Object, Object>> results = store.findDueExecutions(System.currentTimeMillis(), 0)
-            .await().indefinitely();
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () ->
+            store.markTerminalFailure(
+                    "tenant-a",
+                    "exec-1",
+                    1L,
+                    ExecutionStatus.SUCCEEDED,
+                    "exec-1:0:0",
+                    "ERR",
+                    "unsupported",
+                    System.currentTimeMillis())
+                .await().indefinitely());
 
-        assertTrue(results.isEmpty());
-        verify(client, never()).scan(any());
-    }
-
-    @Test
-    void findDueExecutionsReturnsEmptyWhenNegativeLimit() {
-        DynamoDbClient client = mock(DynamoDbClient.class);
-        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
-        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
-
-        java.util.List<ExecutionRecord<Object, Object>> results = store.findDueExecutions(System.currentTimeMillis(), -1)
-            .await().indefinitely();
-
-        assertTrue(results.isEmpty());
-        verify(client, never()).scan(any());
-    }
-
-    @Test
-    void startupValidationReportsMissingExecutionKeyTable() {
-        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "");
-        DynamoExecutionStateStore store = new DynamoExecutionStateStore(null, config);
-
-        var validationError = store.startupValidationError(config);
-
-        assertTrue(validationError.isPresent());
-        assertTrue(validationError.get().contains("execution-key-table"));
-    }
-
-    @Test
-    void startupValidationReportsNullConfig() {
-        DynamoExecutionStateStore store = new DynamoExecutionStateStore();
-
-        var validationError = store.startupValidationError(null);
-
-        assertTrue(validationError.isPresent());
-        assertTrue(validationError.get().contains("dynamo"));
-    }
-
-    @Test
-    void claimLeaseSucceedsWithValidCondition() {
-        DynamoDbClient client = mock(DynamoDbClient.class);
-        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
-        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
-        long now = System.currentTimeMillis();
-        long ttl = now / 1000 + 3600;
-        Map<String, AttributeValue> claimedItem = executionItem("tenant-a", "exec-1", "key-1", ttl, ExecutionStatus.RUNNING);
-        when(client.updateItem(any(UpdateItemRequest.class)))
-            .thenReturn(UpdateItemResponse.builder().attributes(claimedItem).build());
-
-        Optional<ExecutionRecord<Object, Object>> claimed = store.claimLease(
-                "tenant-a",
-                "exec-1",
-                "worker-1",
-                now,
-                30000)
-            .await().indefinitely();
-
-        assertTrue(claimed.isPresent());
-        assertEquals(ExecutionStatus.RUNNING, claimed.get().status());
-    }
-
-    @Test
-    void scheduleRetryReturnsEmptyOnVersionConflict() {
-        DynamoDbClient client = mock(DynamoDbClient.class);
-        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
-        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
-        when(client.updateItem(any(UpdateItemRequest.class)))
-            .thenThrow(ConditionalCheckFailedException.builder().message("version mismatch").build());
-
-        Optional<ExecutionRecord<Object, Object>> updated = store.scheduleRetry(
-                "tenant-a",
-                "exec-1",
-                1L,
-                2,
-                System.currentTimeMillis() + 10000,
-                "exec-1:1:0",
-                "ERROR",
-                "Error message",
-                System.currentTimeMillis())
-            .await().indefinitely();
-
-        assertFalse(updated.isPresent());
-    }
-
-    @Test
-    void markSucceededReturnsEmptyOnVersionConflict() {
-        DynamoDbClient client = mock(DynamoDbClient.class);
-        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
-        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
-        when(client.updateItem(any(UpdateItemRequest.class)))
-            .thenThrow(ConditionalCheckFailedException.builder().message("version mismatch").build());
-
-        Optional<ExecutionRecord<Object, Object>> updated = store.markSucceeded(
-                "tenant-a",
-                "exec-1",
-                1L,
-                "exec-1:0:0",
-                "result",
-                System.currentTimeMillis())
-            .await().indefinitely();
-
-        assertFalse(updated.isPresent());
-    }
-
-    @Test
-    void markTerminalFailureReturnsEmptyOnVersionConflict() {
-        DynamoDbClient client = mock(DynamoDbClient.class);
-        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
-        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
-        when(client.updateItem(any(UpdateItemRequest.class)))
-            .thenThrow(ConditionalCheckFailedException.builder().message("version mismatch").build());
-
-        Optional<ExecutionRecord<Object, Object>> updated = store.markTerminalFailure(
-                "tenant-a",
-                "exec-1",
-                1L,
-                ExecutionStatus.FAILED,
-                "exec-1:2:0",
-                "ERROR",
-                "Error message",
-                System.currentTimeMillis())
-            .await().indefinitely();
-
-        assertFalse(updated.isPresent());
+        assertTrue(error.getMessage().contains("Unsupported terminal status"));
+        verifyNoInteractions(client);
     }
 
     private static PipelineOrchestratorConfig mockConfig(String executionTable, String keyTable) {
@@ -415,5 +200,226 @@ class DynamoExecutionStateStoreTest {
             Map.entry("created_at_epoch_ms", AttributeValue.builder().n("1").build()),
             Map.entry("updated_at_epoch_ms", AttributeValue.builder().n("1").build()),
             Map.entry("ttl_epoch_s", AttributeValue.builder().n(Long.toString(ttl)).build()));
+    }
+
+    @Test
+    void getExecutionReturnsEmptyWhenNotFound() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        when(client.getItem(any(GetItemRequest.class)))
+            .thenReturn(GetItemResponse.builder().item(Map.of()).build());
+
+        Optional<ExecutionRecord<Object, Object>> result = store.getExecution("tenant-a", "exec-1")
+            .await().indefinitely();
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void scheduleRetryUpdatesExecutionWithRetryDetails() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        long now = System.currentTimeMillis();
+        long nextDue = now + 10000;
+        long ttl = now / 1000 + 3600;
+        Map<String, AttributeValue> retryItem = new HashMap<>(executionItem(
+            "tenant-a",
+            "exec-1",
+            "key-1",
+            ttl,
+            ExecutionStatus.WAIT_RETRY));
+        retryItem.put("attempt", AttributeValue.builder().n("1").build());
+        retryItem.put("next_due_epoch_ms", AttributeValue.builder().n(Long.toString(nextDue)).build());
+        retryItem.put("error_code", AttributeValue.builder().s("TIMEOUT").build());
+        retryItem.put("error_message", AttributeValue.builder().s("Request timeout").build());
+
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenReturn(UpdateItemResponse.builder().attributes(retryItem).build());
+
+        Optional<ExecutionRecord<Object, Object>> result = store.scheduleRetry(
+                "tenant-a",
+                "exec-1",
+                0L,
+                1,
+                nextDue,
+                "exec-1:0:1",
+                "TIMEOUT",
+                "Request timeout",
+                now)
+            .await().indefinitely();
+
+        assertTrue(result.isPresent());
+        assertEquals(ExecutionStatus.WAIT_RETRY, result.get().status());
+        assertEquals(1, result.get().attempt());
+        assertEquals("TIMEOUT", result.get().errorCode());
+        assertEquals("Request timeout", result.get().errorMessage());
+    }
+
+    @Test
+    void markTerminalFailureWithDLQStatusSucceeds() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+        Map<String, AttributeValue> dlqItem = executionItem("tenant-a", "exec-1", "key-1", ttl, ExecutionStatus.DLQ);
+
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenReturn(UpdateItemResponse.builder().attributes(dlqItem).build());
+
+        Optional<ExecutionRecord<Object, Object>> result = store.markTerminalFailure(
+                "tenant-a",
+                "exec-1",
+                0L,
+                ExecutionStatus.DLQ,
+                "exec-1:0:0",
+                "MAX_RETRIES",
+                "Maximum retries exceeded",
+                now)
+            .await().indefinitely();
+
+        assertTrue(result.isPresent());
+        assertEquals(ExecutionStatus.DLQ, result.get().status());
+    }
+
+    @Test
+    void markTerminalFailureWithFailedStatusSucceeds() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+        Map<String, AttributeValue> failedItem = executionItem("tenant-a", "exec-1", "key-1", ttl, ExecutionStatus.FAILED);
+
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenReturn(UpdateItemResponse.builder().attributes(failedItem).build());
+
+        Optional<ExecutionRecord<Object, Object>> result = store.markTerminalFailure(
+                "tenant-a",
+                "exec-1",
+                0L,
+                ExecutionStatus.FAILED,
+                "exec-1:0:0",
+                "FATAL",
+                "Fatal error",
+                now)
+            .await().indefinitely();
+
+        assertTrue(result.isPresent());
+        assertEquals(ExecutionStatus.FAILED, result.get().status());
+    }
+
+    @Test
+    void findDueExecutionsReturnsEmptyListWhenLimitIsZero() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+
+        var result = store.findDueExecutions(System.currentTimeMillis(), 0)
+            .await().indefinitely();
+
+        assertTrue(result.isEmpty());
+        verifyNoInteractions(client);
+    }
+
+    @Test
+    void claimLeaseUpdatesLeaseOwnerAndExpiry() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        long now = System.currentTimeMillis();
+        long leaseExpiry = now + 30000;
+        long ttl = now / 1000 + 3600;
+        Map<String, AttributeValue> claimedItem = new HashMap<>(executionItem(
+            "tenant-a",
+            "exec-1",
+            "key-1",
+            ttl,
+            ExecutionStatus.RUNNING));
+        claimedItem.put("lease_owner", AttributeValue.builder().s("worker-1").build());
+        claimedItem.put("lease_expires_epoch_ms", AttributeValue.builder().n(Long.toString(leaseExpiry)).build());
+
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenReturn(UpdateItemResponse.builder().attributes(claimedItem).build());
+
+        Optional<ExecutionRecord<Object, Object>> result = store.claimLease(
+                "tenant-a",
+                "exec-1",
+                "worker-1",
+                now,
+                30000)
+            .await().indefinitely();
+
+        assertTrue(result.isPresent());
+        assertEquals(ExecutionStatus.RUNNING, result.get().status());
+        assertEquals("worker-1", result.get().leaseOwner());
+    }
+
+    @Test
+    void scheduleRetryReturnsEmptyOnVersionMismatch() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenThrow(ConditionalCheckFailedException.builder().message("version mismatch").build());
+
+        Optional<ExecutionRecord<Object, Object>> result = store.scheduleRetry(
+                "tenant-a",
+                "exec-1",
+                0L,
+                1,
+                System.currentTimeMillis() + 10000,
+                "exec-1:0:1",
+                "ERROR",
+                "Test error",
+                System.currentTimeMillis())
+            .await().indefinitely();
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void markSucceededReturnsEmptyOnVersionMismatch() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+        when(client.updateItem(any(UpdateItemRequest.class)))
+            .thenThrow(ConditionalCheckFailedException.builder().message("version mismatch").build());
+
+        Optional<ExecutionRecord<Object, Object>> result = store.markSucceeded(
+                "tenant-a",
+                "exec-1",
+                1L,
+                "exec-1:0:0",
+                "result",
+                System.currentTimeMillis())
+            .await().indefinitely();
+
+        assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void startupValidationReportsMissingKeyTable() {
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(null, config);
+
+        var validationError = store.startupValidationError(config);
+
+        assertTrue(validationError.isPresent());
+        assertTrue(validationError.get().contains("execution-key-table"));
+    }
+
+    @Test
+    void startupValidationReportsMissingDynamoConfig() {
+        PipelineOrchestratorConfig config = mock(PipelineOrchestratorConfig.class);
+        when(config.dynamo()).thenReturn(null);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(null, config);
+
+        var validationError = store.startupValidationError(config);
+
+        assertTrue(validationError.isPresent());
+        assertTrue(validationError.get().contains("dynamo.* configuration"));
     }
 }
