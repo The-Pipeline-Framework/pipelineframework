@@ -107,6 +107,7 @@ const mainSidebar = [
         items: [
             {text: 'Orchestrator Runtime Modes', link: '/guide/development/orchestrator-runtime'},
             {text: 'Error Handling & DLQ', link: '/guide/operations/error-handling'},
+            {text: 'Queue-Async Crash Semantics', link: '/guide/operations/error-handling#queue-async-crash-matrix'},
             {text: 'In-flight Probe', link: '/guide/operations/in-flight-probe'},
             {text: 'Operators', link: '/guide/operations/operators'},
             {text: 'Operator Playbook', link: '/guide/operations/operators-playbook'},
@@ -152,6 +153,7 @@ const mainSidebar = [
         collapsed: true,
         items: [
             {text: 'Architecture', link: '/guide/evolve/architecture'},
+            {text: 'Orchestrator Control Plane', link: '/guide/evolve/architecture#orchestrator-control-plane-current'},
             {
                 text: 'Annotation Processor Guide',
                 link: '/guide/evolve/annotation-processor/',

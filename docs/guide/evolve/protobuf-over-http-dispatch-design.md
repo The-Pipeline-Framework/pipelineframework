@@ -22,8 +22,15 @@ For every outbound dispatch, orchestrator must emit:
 Idempotency keys must be deterministic from stable work identity (pipeline + step + business key + lineage index), never random UUIDs.
 
 ## Durable Dispatch State
-Track every outbound item in durable shared storage keyed by:
-- `(executionId, stepId, idempotencyKey)`
+Current baseline in GA code:
+
+1. execution-level durable state is tracked in shared store (`ExecutionStateStore`),
+2. work dispatch is durable through queue dispatcher providers (`WorkDispatcher`),
+3. per-dispatch item journaling is not yet the runtime engine of record.
+
+Future hardening target:
+
+- Track every outbound item in durable shared storage keyed by `(executionId, stepId, idempotencyKey)`.
 
 Required states:
 - `PENDING`
@@ -52,9 +59,9 @@ On restart:
 - Duplicate in-flight sends are tolerated because operator side is dedupe-safe using stable idempotency keys.
 
 ## Planned follow-up implementation work
-- Add a dispatch store SPI for pluggable durability.
+- Add a dispatch store SPI for pluggable per-item durability.
 - Add orchestrator worker reconciliation loop for orphaned `SENT` records.
-- Add dead-letter routing for `FAILED_FINAL` with operator-facing diagnostics.
+- Add durable dead-letter routing for `FAILED_FINAL` with operator-facing diagnostics.
 
 ## Additional slice: dispatch parity across all transports
 The dispatch metadata/state-machine contract must be enforced consistently beyond Protobuf-over-HTTP.

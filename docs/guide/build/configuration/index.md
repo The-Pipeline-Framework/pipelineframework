@@ -201,13 +201,31 @@ Prefix: `pipeline.orchestrator`
 | `pipeline.orchestrator.dispatcher-provider` | string | `event` | `WorkDispatcher` provider selector. |
 | `pipeline.orchestrator.dlq-provider` | string | `log` | `DeadLetterPublisher` provider selector. |
 | `pipeline.orchestrator.queue-url` | string | none | Queue URL for external dispatcher providers. |
+| `pipeline.orchestrator.dynamo.execution-table` | string | `tpf_execution` | DynamoDB table used for execution state rows. |
+| `pipeline.orchestrator.dynamo.execution-key-table` | string | `tpf_execution_key` | DynamoDB table used for submit dedupe keys. |
+| `pipeline.orchestrator.dynamo.region` | string | none | Optional DynamoDB region override. |
+| `pipeline.orchestrator.dynamo.endpoint-override` | string | none | Optional DynamoDB endpoint override (local/dev). |
+| `pipeline.orchestrator.sqs.region` | string | none | Optional SQS region override. |
+| `pipeline.orchestrator.sqs.endpoint-override` | string | none | Optional SQS endpoint override (local/dev). |
+| `pipeline.orchestrator.sqs.local-loopback` | boolean | `true` | Also fire in-process work event after SQS enqueue (dev convenience). |
 | `pipeline.orchestrator.strict-startup` | boolean | `true` | Fail startup if queue mode prerequisites are invalid. |
 
 Queue mode notes:
 
 1. `QUEUE_ASYNC` rejects async streaming output for this milestone.
-2. Keep `strict-startup=true` in production, so invalid provider wiring fails fast.
-3. In-memory providers are for local/dev only; use durable providers for HA.
+2. Keep `strict-startup=true` in production so invalid provider wiring fails fast.
+3. In queue mode, strict startup also requires `pipeline.orchestrator.idempotency-policy` to be explicitly set to a non-default value.
+4. In-memory providers are for local/dev only; use durable providers for HA.
+
+Example durable provider wiring:
+
+```properties
+pipeline.orchestrator.mode=QUEUE_ASYNC
+pipeline.orchestrator.state-provider=dynamo
+pipeline.orchestrator.dispatcher-provider=sqs
+pipeline.orchestrator.queue-url=https://sqs.eu-west-1.amazonaws.com/123456789012/tpf-work
+pipeline.orchestrator.idempotency-policy=CLIENT_KEY_REQUIRED
+```
 
 ### Telemetry
 

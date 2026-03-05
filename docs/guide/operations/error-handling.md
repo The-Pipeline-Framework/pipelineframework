@@ -101,16 +101,24 @@ For `pipeline.orchestrator.mode=QUEUE_ASYNC`, crash behavior is:
 
 | Crash point | Behavior after restart/recovery | Duplicate risk | Required safeguard |
 |---|---|---|---|
-| Before transition state persist | Work is redelivered and re-executed | High | Idempotent operator boundary (`executionId:stepIndex:attempt`) |
-| After persist, before next dispatch | Execution can stall until sweeper re-dispatches | Low | Due-execution sweeper + durable state |
-| During retry scheduling | Retry may be replayed from last durable version | Medium | Persist retry intent before enqueue |
-| Worker dies while lease held | Lease expiry allows takeover | Low | Short leases + conditional lease claim |
+| Before transition state commit | Work is redelivered and re-executed from last durable version | High | Idempotent operator boundary (`executionId:stepIndex:attempt`) |
+| After state commit, before next enqueue | Transition is durable but next dispatch can stall until due sweeper re-dispatches | Low | Due-execution sweeper + durable state |
+| During retry scheduling | Retry can replay from last durable version if scheduling metadata was not committed | Medium | Persist retry intent (`attempt`, `nextDue`) before enqueue |
+| After external side effect, before commit | Side effect may repeat on replay because effect and commit are not one transaction | High | Downstream dedupe keyed by transition identity |
+| Worker dies while lease held | Lease expires and another worker can claim execution | Low | Short lease window + conditional lease claim (OCC) |
 
 Semantics summary:
 
-1. Execution state commit is atomic (conditional write).
-2. External side effects are at-least-once.
-3. Duplicate operator invocation is expected under failure and must be idempotent.
+1. State transition commits are atomic at the execution-row level (conditional writes).
+2. Exactly-once applies to committed state transitions, not external side effects.
+3. Operator invocation and queue dispatch are at-least-once.
+4. Duplicate operator invocation is expected under failure and must be idempotent by contract.
+5. Replay is deterministic for control-plane state (versioned transitions), but not guaranteed for non-idempotent external systems.
+
+Compensation note:
+
+1. Framework-managed saga compensation is not part of this milestone.
+2. Compensation remains application-managed and must be designed to tolerate replay after crash recovery.
 
 ### Retry Mechanisms
 
