@@ -5,6 +5,7 @@ The Pipeline Framework is designed as a modular, extensible system for building 
 ## Related Architecture Topics
 
 - [Annotation Processor Guide](/guide/evolve/annotation-processor/): Deep dive into build-time phases, IR, bindings, and renderers
+- [Queue GA Delivery Map](/guide/evolve/orchestrator-queue-ga-delivery): workstream-to-PR slicing, merge order, and validation gates
 
 ## Orchestrator Control Plane (Current)
 

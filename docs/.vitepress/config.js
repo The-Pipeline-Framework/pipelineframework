@@ -152,6 +152,7 @@ const mainSidebar = [
         collapsed: true,
         items: [
             {text: 'Architecture', link: '/guide/evolve/architecture'},
+            {text: 'Queue GA Delivery Map', link: '/guide/evolve/orchestrator-queue-ga-delivery'},
             {
                 text: 'Annotation Processor Guide',
                 link: '/guide/evolve/annotation-processor/',
