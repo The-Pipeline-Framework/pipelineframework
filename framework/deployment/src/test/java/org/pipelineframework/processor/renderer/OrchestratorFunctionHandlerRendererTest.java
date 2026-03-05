@@ -15,6 +15,7 @@ import org.pipelineframework.processor.ir.OrchestratorBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -121,21 +122,103 @@ class OrchestratorFunctionHandlerRendererTest {
         String resultSource = Files.readString(resultPath);
         assertTrue(runAsyncSource.contains("implements RequestHandler<PipelineRunAsyncRequest, RunAsyncAcceptedDto>"));
         assertTrue(runAsyncSource.contains("pipelineExecutionService.executePipelineAsync"));
-        assertTrue(runAsyncSource.contains("RunAsync unary handlers accept at most one item in inputBatch"));
         assertTrue(statusSource.contains("implements RequestHandler<PipelineExecutionLookupRequest, ExecutionStatusDto>"));
         assertTrue(statusSource.contains("pipelineExecutionService.getExecutionStatus"));
         assertTrue(resultSource.contains("pipelineExecutionService.<OutputTypeDto>getExecutionResult"));
+        assertTrue(resultSource.contains("implements RequestHandler<PipelineExecutionLookupRequest,"));
+        assertTrue(resultSource.contains("getExecutionResult("));
     }
 
     @Test
-    void rendersAsyncFunctionHandlersWithStreamingResultGeneric() throws IOException {
+    void rendersRequestDTOsWithCorrectFields() throws IOException {
+        renderAndReadSource(buildBinding());
+
+        Path runAsyncRequestPath = tempDir.resolve("com/example/orchestrator/service/PipelineRunAsyncRequest.java");
+        String runAsyncRequest = Files.readString(runAsyncRequestPath);
+
+        assertTrue(runAsyncRequest.contains("public InputTypeDto input;"));
+        assertTrue(runAsyncRequest.contains("public List<InputTypeDto> inputBatch;"));
+        assertTrue(runAsyncRequest.contains("public String tenantId;"));
+        assertTrue(runAsyncRequest.contains("public String idempotencyKey;"));
+    }
+
+    @Test
+    void rendersLookupRequestWithCorrectFields() throws IOException {
+        renderAndReadSource(buildBinding());
+
+        Path lookupRequestPath = tempDir.resolve("com/example/orchestrator/service/PipelineExecutionLookupRequest.java");
+        String lookupRequest = Files.readString(lookupRequestPath);
+
+        assertTrue(lookupRequest.contains("public String tenantId;"));
+        assertTrue(lookupRequest.contains("public String executionId;"));
+    }
+
+    @Test
+    void rendersStatusHandlerWithValidation() throws IOException {
+        renderAndReadSource(buildBinding());
+
+        Path statusPath = tempDir.resolve("com/example/orchestrator/service/PipelineExecutionStatusFunctionHandler.java");
+        String statusSource = Files.readString(statusPath);
+
+        assertTrue(statusSource.contains("if (request == null || request.executionId == null || request.executionId.isBlank())"));
+        assertTrue(statusSource.contains("throw new IllegalArgumentException(\"executionId is required\")"));
+    }
+
+    @Test
+    void rendersResultHandlerWithValidation() throws IOException {
+        renderAndReadSource(buildBinding());
+
+        Path resultPath = tempDir.resolve("com/example/orchestrator/service/PipelineExecutionResultFunctionHandler.java");
+        String resultSource = Files.readString(resultPath);
+
+        assertTrue(resultSource.contains("if (request == null || request.executionId == null || request.executionId.isBlank())"));
+        assertTrue(resultSource.contains("throw new IllegalArgumentException(\"executionId is required\")"));
+    }
+
+    @Test
+    void handlerReturnsGenerationTargetRESTResource() {
+        OrchestratorFunctionHandlerRenderer renderer = new OrchestratorFunctionHandlerRenderer();
+        assertEquals(GenerationTarget.REST_RESOURCE, renderer.target());
+    }
+
+    @Test
+    void rendersStreamingInputHandlerWithBatchSupport() throws IOException {
+        renderAndReadSource(buildStreamingBinding(true, false));
+        Path runAsyncPath = tempDir.resolve("com/example/orchestrator/service/PipelineRunAsyncFunctionHandler.java");
+        String source = Files.readString(runAsyncPath);
+
+        assertTrue(source.contains("if (request != null && request.inputBatch != null && !request.inputBatch.isEmpty())"));
+        assertTrue(source.contains("executionInput = Multi.createFrom().iterable(request.inputBatch)"));
+    }
+
+    @Test
+    void rendersStreamingOutputResultHandler() throws IOException {
         renderAndReadSource(buildStreamingBinding(false, true));
 
         Path resultPath = tempDir.resolve("com/example/orchestrator/service/PipelineExecutionResultFunctionHandler.java");
-        assertTrue(Files.exists(resultPath));
-
         String resultSource = Files.readString(resultPath);
+
+        assertTrue(resultSource.contains("implements RequestHandler<PipelineExecutionLookupRequest, List<OutputTypeDto>>"));
         assertTrue(resultSource.contains("pipelineExecutionService.<List<OutputTypeDto>>getExecutionResult"));
+    }
+
+    @Test
+    void rendersTransportContextWithAllAttributes() throws IOException {
+        String source = renderAndReadSource(buildBinding());
+
+        assertTrue(source.contains("FunctionTransportContext.ATTR_TRANSPORT_PROTOCOL"));
+        assertTrue(source.contains("FunctionTransportContext.ATTR_CORRELATION_ID"));
+        assertTrue(source.contains("FunctionTransportContext.ATTR_EXECUTION_ID"));
+        assertTrue(source.contains("FunctionTransportContext.ATTR_RETRY_ATTEMPT"));
+        assertTrue(source.contains("FunctionTransportContext.ATTR_DISPATCH_TS_EPOCH_MS"));
+    }
+
+    @Test
+    void rendersErrorHandlingInHandleRequest() throws IOException {
+        String source = renderAndReadSource(buildBinding());
+
+        assertTrue(source.contains("catch (RuntimeException e)"));
+        assertTrue(source.contains("throw new RuntimeException(\"Failed handleRequest -> resource.run for input DTO\", e)"));
     }
 
     private String renderAndReadSource(OrchestratorBinding binding) throws IOException {

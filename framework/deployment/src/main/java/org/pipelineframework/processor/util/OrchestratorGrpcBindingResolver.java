@@ -156,11 +156,11 @@ public class OrchestratorGrpcBindingResolver {
     }
 
     /**
-     * Locate the RPC method descriptor with the given name in the provided service descriptor.
+     * Finds the RPC method descriptor with the given name in the service descriptor.
      *
      * @param serviceDescriptor the service descriptor to search
      * @param methodName the RPC method name to locate
-     * @param messager optional Messager used to emit a warning if the service exposes additional RPCs not in the allowed set; may be null
+     * @param messager optional Messager to emit a warning if the service exposes RPCs outside the allowed set; may be null
      * @return the matching {@link Descriptors.MethodDescriptor}
      * @throws IllegalStateException if no method with the given name is found or if multiple methods share the same name
      */
@@ -196,15 +196,27 @@ public class OrchestratorGrpcBindingResolver {
         return found;
     }
 
+    /**
+     * Validates that the method's client and server streaming flags match the expected pipeline shape.
+     *
+     * @param methodDescriptor the gRPC method descriptor to validate
+     * @param inputStreaming   true if the pipeline expects client (input) streaming
+     * @param outputStreaming  true if the pipeline expects server (output) streaming
+     * @throws IllegalStateException if the method's clientStreaming or serverStreaming flag differs from the corresponding expected value
+     */
     private void validateStreamingSemantics(
         Descriptors.MethodDescriptor methodDescriptor,
         boolean inputStreaming,
         boolean outputStreaming
     ) {
-        if (methodDescriptor.isClientStreaming() != inputStreaming ||
-            methodDescriptor.isServerStreaming() != outputStreaming) {
+        boolean actualClientStreaming = methodDescriptor.isClientStreaming();
+        boolean actualServerStreaming = methodDescriptor.isServerStreaming();
+        if (actualClientStreaming != inputStreaming || actualServerStreaming != outputStreaming) {
+            String methodIdentity = methodDescriptor.getFullName();
             throw new IllegalStateException(
-                "Orchestrator service streaming semantics do not match expected pipeline shape");
+                "Orchestrator service streaming semantics mismatch for method '" + methodIdentity + "': " +
+                    "clientStreaming expected=" + inputStreaming + " actual=" + actualClientStreaming + ", " +
+                    "serverStreaming expected=" + outputStreaming + " actual=" + actualServerStreaming);
         }
     }
 }
