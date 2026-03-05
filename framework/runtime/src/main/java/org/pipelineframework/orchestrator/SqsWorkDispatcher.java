@@ -5,12 +5,14 @@ import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Supplier;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
+import org.jboss.logging.Logger;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sqs.SqsClient;
@@ -21,6 +23,7 @@ import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
  */
 @ApplicationScoped
 public class SqsWorkDispatcher implements WorkDispatcher {
+    private static final Logger LOG = Logger.getLogger(SqsWorkDispatcher.class);
 
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
@@ -78,14 +81,22 @@ public class SqsWorkDispatcher implements WorkDispatcher {
                 "pipeline.orchestrator.queue-url must be configured when dispatcher-provider=sqs."));
         int delaySeconds = clampDelaySeconds(delay);
         String messageBody = toMessage(item);
-        return blocking(() -> {
+        Uni<Void> sendUni = blocking(() -> {
             sqsClient().sendMessage(SendMessageRequest.builder()
                 .queueUrl(queueUrl)
                 .delaySeconds(delaySeconds)
                 .messageBody(messageBody)
                 .build());
             return null;
-        }).onItem().transformToUni(ignored -> localLoopback(item));
+        }).replaceWithVoid();
+
+        if (!orchestratorConfig.sqs().localLoopback() || executionWorkEvent == null || delaySeconds > 0) {
+            return sendUni;
+        }
+        return sendUni.chain(() -> localLoopback(item)
+            .onFailure().invoke(error -> LOG.debug("Ignoring local loopback failure after SQS send success.", error))
+            .onFailure().recoverWithNull()
+            .replaceWithVoid());
     }
 
     private Uni<Void> localLoopback(ExecutionWorkItem item) {
@@ -126,6 +137,27 @@ public class SqsWorkDispatcher implements WorkDispatcher {
                 client = builder.build();
             }
             return client;
+        }
+    }
+
+    @PreDestroy
+    void closeClient() {
+        SqsClient active = client;
+        if (active == null) {
+            return;
+        }
+        synchronized (this) {
+            active = client;
+            if (active == null) {
+                return;
+            }
+            try {
+                active.close();
+            } catch (Exception e) {
+                LOG.debug("Failed closing SQS client during shutdown.", e);
+            } finally {
+                client = null;
+            }
         }
     }
 

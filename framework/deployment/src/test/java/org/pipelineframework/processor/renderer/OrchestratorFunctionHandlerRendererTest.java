@@ -127,6 +127,17 @@ class OrchestratorFunctionHandlerRendererTest {
         assertTrue(resultSource.contains("pipelineExecutionService.<OutputTypeDto>getExecutionResult"));
     }
 
+    @Test
+    void rendersAsyncFunctionHandlersWithStreamingResultGeneric() throws IOException {
+        renderAndReadSource(buildStreamingBinding(false, true));
+
+        Path resultPath = tempDir.resolve("com/example/orchestrator/service/PipelineExecutionResultFunctionHandler.java");
+        assertTrue(Files.exists(resultPath));
+
+        String resultSource = Files.readString(resultPath);
+        assertTrue(resultSource.contains("pipelineExecutionService.<List<OutputTypeDto>>getExecutionResult"));
+    }
+
     private String renderAndReadSource(OrchestratorBinding binding) throws IOException {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));

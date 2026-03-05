@@ -11,11 +11,13 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
+import org.jboss.logging.Logger;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
@@ -38,6 +40,7 @@ import software.amazon.awssdk.services.dynamodb.model.UpdateItemRequest;
  */
 @ApplicationScoped
 public class DynamoExecutionStateStore implements ExecutionStateStore {
+    private static final Logger LOG = Logger.getLogger(DynamoExecutionStateStore.class);
 
     private static final String TENANT_ID = "tenant_id";
     private static final String EXECUTION_ID = "execution_id";
@@ -196,6 +199,27 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             return Uni.createFrom().item(List.of());
         }
         return blocking(() -> findDueExecutionsBlocking(nowEpochMs, limit));
+    }
+
+    @PreDestroy
+    void closeClient() {
+        DynamoDbClient active = client;
+        if (active == null) {
+            return;
+        }
+        synchronized (this) {
+            active = client;
+            if (active == null) {
+                return;
+            }
+            try {
+                active.close();
+            } catch (Exception e) {
+                LOG.debug("Failed closing DynamoDB client during shutdown.", e);
+            } finally {
+                client = null;
+            }
+        }
     }
 
     private CreateExecutionResult createOrGetExecutionBlocking(ExecutionCreateCommand command) {
@@ -500,27 +524,43 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             ":dlq", avS(ExecutionStatus.DLQ.name()),
             ":nowSec", avN(Instant.ofEpochMilli(nowEpochMs).getEpochSecond()));
 
-        ScanRequest request = ScanRequest.builder()
-            .tableName(executionTable())
-            .filterExpression(
-                "#nextDue <= :now " +
-                    "AND (attribute_not_exists(#leaseOwner) OR #leaseExpires <= :now) " +
-                    "AND #status <> :succeeded AND #status <> :failed AND #status <> :dlq " +
-                    "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
-            .expressionAttributeNames(names)
-            .expressionAttributeValues(values)
-            .limit(Math.max(limit * 3, limit))
-            .build();
-        ScanResponse response = dynamoClient().scan(request);
-        if (response.items() == null || response.items().isEmpty()) {
-            return List.of();
-        }
+        int candidateLimit = Math.max(limit * 3, limit);
         List<ExecutionRecord<Object, Object>> due = new ArrayList<>();
-        for (Map<String, AttributeValue> item : response.items()) {
-            ExecutionRecord<Object, Object> record = toRecord(item);
-            if (!isExpired(record, nowEpochMs)) {
-                due.add(record);
+
+        Map<String, AttributeValue> exclusiveStartKey = null;
+        while (true) {
+            ScanRequest.Builder requestBuilder = ScanRequest.builder()
+                .tableName(executionTable())
+                .filterExpression(
+                    "#nextDue <= :now " +
+                        "AND (attribute_not_exists(#leaseOwner) OR #leaseExpires <= :now) " +
+                        "AND #status <> :succeeded AND #status <> :failed AND #status <> :dlq " +
+                        "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
+                .expressionAttributeNames(names)
+                .expressionAttributeValues(values)
+                .limit(candidateLimit);
+            if (exclusiveStartKey != null && !exclusiveStartKey.isEmpty()) {
+                requestBuilder.exclusiveStartKey(exclusiveStartKey);
             }
+
+            ScanResponse response = dynamoClient().scan(requestBuilder.build());
+            if (response.items() != null) {
+                for (Map<String, AttributeValue> item : response.items()) {
+                    ExecutionRecord<Object, Object> record = toRecord(item);
+                    if (!isExpired(record, nowEpochMs)) {
+                        due.add(record);
+                    }
+                }
+            }
+
+            if (due.size() >= candidateLimit || response.lastEvaluatedKey() == null || response.lastEvaluatedKey().isEmpty()) {
+                break;
+            }
+            exclusiveStartKey = response.lastEvaluatedKey();
+        }
+
+        if (due.isEmpty()) {
+            return List.of();
         }
         due.sort(Comparator.comparingLong(ExecutionRecord::nextDueEpochMs));
         if (due.size() > limit) {
