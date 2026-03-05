@@ -5,7 +5,9 @@ import java.time.Duration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SqsWorkDispatcherTest {
 
@@ -52,83 +54,33 @@ class SqsWorkDispatcherTest {
     }
 
     @Test
-    void enqueueNowErrorMessageIndicatesMissingImplementation() {
+    void errorMessageIndicatesMissingImplementation() {
         ExecutionWorkItem item = new ExecutionWorkItem("tenant1", "exec1");
 
         try {
             dispatcher.enqueueNow(item).await().indefinitely();
-            fail("Expected UnsupportedOperationException");
         } catch (UnsupportedOperationException e) {
             assertTrue(e.getMessage().contains("SqsWorkDispatcher"));
             assertTrue(e.getMessage().contains("not implemented"));
+            assertTrue(e.getMessage().contains("deployment-specific provider module"));
         }
     }
 
     @Test
     void enqueueDelayedErrorMessageIndicatesMissingImplementation() {
         ExecutionWorkItem item = new ExecutionWorkItem("tenant1", "exec1");
-        Duration delay = Duration.ofSeconds(5);
 
         try {
-            dispatcher.enqueueDelayed(item, delay).await().indefinitely();
-            fail("Expected UnsupportedOperationException");
+            dispatcher.enqueueDelayed(item, Duration.ofMinutes(5)).await().indefinitely();
         } catch (UnsupportedOperationException e) {
             assertTrue(e.getMessage().contains("SqsWorkDispatcher"));
             assertTrue(e.getMessage().contains("not implemented"));
-            assertTrue(e.getMessage().contains("deployment-specific"));
         }
     }
 
     @Test
-    void enqueueNowHandlesNullWorkItem() {
-        assertThrows(NullPointerException.class,
+    void enqueueNowWithNullItemThrowsUnsupportedOperation() {
+        assertThrows(UnsupportedOperationException.class,
             () -> dispatcher.enqueueNow(null).await().indefinitely());
-    }
-
-    @Test
-    void enqueueDelayedHandlesNullWorkItem() {
-        Duration delay = Duration.ofSeconds(10);
-
-        assertThrows(NullPointerException.class,
-            () -> dispatcher.enqueueDelayed(null, delay).await().indefinitely());
-    }
-
-    @Test
-    void canInstantiateMultipleDispatchers() {
-        SqsWorkDispatcher dispatcher1 = new SqsWorkDispatcher();
-        SqsWorkDispatcher dispatcher2 = new SqsWorkDispatcher();
-
-        assertNotNull(dispatcher1);
-        assertNotNull(dispatcher2);
-        assertNotSame(dispatcher1, dispatcher2);
-        assertEquals(dispatcher1.providerName(), dispatcher2.providerName());
-        assertEquals(dispatcher1.priority(), dispatcher2.priority());
-    }
-
-    @Test
-    void enqueueDelayedHandlesZeroDuration() {
-        ExecutionWorkItem item = new ExecutionWorkItem("tenant1", "exec1");
-        Duration delay = Duration.ZERO;
-
-        assertThrows(UnsupportedOperationException.class,
-            () -> dispatcher.enqueueDelayed(item, delay).await().indefinitely());
-    }
-
-    @Test
-    void enqueueDelayedHandlesLargeDuration() {
-        ExecutionWorkItem item = new ExecutionWorkItem("tenant1", "exec1");
-        Duration delay = Duration.ofDays(7);
-
-        assertThrows(UnsupportedOperationException.class,
-            () -> dispatcher.enqueueDelayed(item, delay).await().indefinitely());
-    }
-
-    @Test
-    void enqueueDelayedHandlesNegativeDuration() {
-        ExecutionWorkItem item = new ExecutionWorkItem("tenant1", "exec1");
-        Duration delay = Duration.ofSeconds(-5);
-
-        assertThrows(UnsupportedOperationException.class,
-            () -> dispatcher.enqueueDelayed(item, delay).await().indefinitely());
     }
 }

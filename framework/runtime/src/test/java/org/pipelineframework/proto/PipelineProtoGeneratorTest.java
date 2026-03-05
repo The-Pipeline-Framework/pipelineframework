@@ -197,4 +197,158 @@ class PipelineProtoGeneratorTest {
         assertTrue(orchestratorProto.contains(
             "rpc GetExecutionResult (GetExecutionResultRequest) returns (GetExecutionResultResponse);"));
     }
+
+    @Test
+    void handlesEmptyStepsGracefully() throws Exception {
+        String yaml = """
+            appName: "Empty App"
+            basePackage: "com.example.empty"
+            transport: "GRPC"
+            steps: []
+            """;
+        Path configPath = tempDir.resolve("empty-config.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("empty-proto-out");
+
+        PipelineProtoGenerator generator = new PipelineProtoGenerator();
+        generator.generate(tempDir, configPath, outputDir);
+
+        assertTrue(Files.exists(outputDir));
+        assertTrue(Files.list(outputDir).count() == 0);
+    }
+
+    @Test
+    void skipsOrchestratorProtoWhenTransportIsRest() throws Exception {
+        String yaml = """
+            appName: "REST App"
+            basePackage: "com.example.rest"
+            transport: "REST"
+            steps:
+              - name: "Process Data"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "DataInput"
+                inputFields:
+                  - name: "id"
+                    type: "String"
+                    protoType: "string"
+                outputTypeName: "DataOutput"
+                outputFields:
+                  - name: "status"
+                    type: "String"
+                    protoType: "string"
+            """;
+        Path configPath = tempDir.resolve("rest-config.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("rest-proto-out");
+
+        PipelineProtoGenerator generator = new PipelineProtoGenerator();
+        generator.generate(tempDir, configPath, outputDir);
+
+        Path stepProtoPath = outputDir.resolve("process-data-svc.proto");
+        Path orchestratorProtoPath = outputDir.resolve("orchestrator.proto");
+
+        assertTrue(Files.exists(stepProtoPath));
+        assertTrue(!Files.exists(orchestratorProtoPath));
+    }
+
+    @Test
+    void throwsWhenBasePackageIsMissing() throws Exception {
+        String yaml = """
+            appName: "No Package App"
+            transport: "GRPC"
+            steps:
+              - name: "Process"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "In"
+                outputTypeName: "Out"
+            """;
+        Path configPath = tempDir.resolve("no-package-config.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("no-package-proto-out");
+
+        PipelineProtoGenerator generator = new PipelineProtoGenerator();
+        IllegalStateException error = org.junit.jupiter.api.Assertions.assertThrows(
+            IllegalStateException.class,
+            () -> generator.generate(tempDir, configPath, outputDir));
+        assertTrue(error.getMessage().contains("missing basePackage"));
+    }
+
+    @Test
+    void handlesMapAndListFieldTypes() throws Exception {
+        String yaml = """
+            appName: "Collection Types App"
+            basePackage: "com.example.collections"
+            transport: "GRPC"
+            steps:
+              - name: "Process Collections"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "CollectionInput"
+                inputFields:
+                  - name: "tags"
+                    type: "List<String>"
+                    protoType: "string"
+                  - name: "metadata"
+                    type: "Map<String, String>"
+                    protoType: "string"
+                outputTypeName: "CollectionOutput"
+                outputFields:
+                  - name: "result"
+                    type: "String"
+                    protoType: "string"
+            """;
+        Path configPath = tempDir.resolve("collections-config.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("collections-proto-out");
+
+        PipelineProtoGenerator generator = new PipelineProtoGenerator();
+        generator.generate(tempDir, configPath, outputDir);
+
+        Path protoPath = outputDir.resolve("process-collections-svc.proto");
+        assertTrue(Files.exists(protoPath));
+
+        String proto = Files.readString(protoPath);
+        assertTrue(proto.contains("repeated string tags = 1;"));
+        assertTrue(proto.contains("map<string, string> metadata = 2;"));
+    }
+
+    @Test
+    void rendersBeforeStepAspects() throws Exception {
+        String yaml = """
+            appName: "Aspect Test"
+            basePackage: "com.example.aspects"
+            transport: "GRPC"
+            aspects:
+              validation:
+                enabled: true
+                scope: "GLOBAL"
+                position: "BEFORE_STEP"
+                config:
+                  enabledTargets:
+                    - "GRPC_SERVICE"
+            steps:
+              - name: "Process Data"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "DataInput"
+                inputFields:
+                  - name: "value"
+                    type: "String"
+                    protoType: "string"
+                outputTypeName: "DataOutput"
+                outputFields:
+                  - name: "result"
+                    type: "String"
+                    protoType: "string"
+            """;
+        Path configPath = tempDir.resolve("aspects-config.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("aspects-proto-out");
+
+        PipelineProtoGenerator generator = new PipelineProtoGenerator();
+        generator.generate(tempDir, configPath, outputDir);
+
+        Path protoPath = outputDir.resolve("process-data-svc.proto");
+        String proto = Files.readString(protoPath);
+        assertTrue(proto.contains("service ObserveValidationDataInputSideEffectService"));
+        assertTrue(proto.contains("service ObserveValidationDataOutputSideEffectService"));
+    }
 }
