@@ -121,6 +121,7 @@ class OrchestratorFunctionHandlerRendererTest {
         String resultSource = Files.readString(resultPath);
         assertTrue(runAsyncSource.contains("implements RequestHandler<PipelineRunAsyncRequest, RunAsyncAcceptedDto>"));
         assertTrue(runAsyncSource.contains("pipelineExecutionService.executePipelineAsync"));
+        assertTrue(runAsyncSource.contains("RunAsync unary handlers accept at most one item in inputBatch"));
         assertTrue(statusSource.contains("implements RequestHandler<PipelineExecutionLookupRequest, ExecutionStatusDto>"));
         assertTrue(statusSource.contains("pipelineExecutionService.getExecutionStatus"));
         assertTrue(resultSource.contains("pipelineExecutionService.getExecutionResult"));

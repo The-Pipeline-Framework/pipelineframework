@@ -393,7 +393,10 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
                 ClassName.get("io.grpc", "Status"));
         } else {
             method.addCode("""
-                $T asyncInput = request.getInputBatchCount() > 0 ? request.getInputBatch(0) : request.getInput();
+                if (request.getInputBatchCount() > 1) {
+                    return $T.createFrom().failure(new $T($S));
+                }
+                $T asyncInput = request.getInputBatchCount() == 1 ? request.getInputBatch(0) : request.getInput();
                 return pipelineExecutionService.executePipelineAsync(
                         asyncInput,
                         request.getTenantId(),
@@ -409,6 +412,9 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
                     .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
                         System.nanoTime() - startTime));
                 """,
+                uni,
+                IllegalArgumentException.class,
+                "RunAsync unary pipelines accept at most one item in input_batch.",
                 Object.class,
                 binding.outputStreaming(),
                 responseType,
@@ -448,6 +454,12 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
             .returns(ParameterizedTypeName.get(uni, responseType))
             .addParameter(requestType, "request")
             .addStatement("long startTime = System.nanoTime()")
+            .beginControlFlow("if (request.getExecutionId() == null || request.getExecutionId().isBlank())")
+            .addStatement("return $T.createFrom().failure(new $T($S))",
+                uni,
+                IllegalArgumentException.class,
+                "executionId is required")
+            .endControlFlow()
             .addCode("""
                 return pipelineExecutionService.getExecutionStatus(request.getTenantId(), request.getExecutionId())
                     .onItem().transform(status -> $T.newBuilder()
@@ -503,6 +515,12 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
             .returns(ParameterizedTypeName.get(uni, responseType))
             .addParameter(requestType, "request")
             .addStatement("long startTime = System.nanoTime()");
+        method.beginControlFlow("if (request.getExecutionId() == null || request.getExecutionId().isBlank())")
+            .addStatement("return $T.createFrom().failure(new $T($S))",
+                uni,
+                IllegalArgumentException.class,
+                "executionId is required")
+            .endControlFlow();
 
         if (binding.outputStreaming()) {
             TypeName outputListType = ParameterizedTypeName.get(ClassName.get(List.class), outputType);
