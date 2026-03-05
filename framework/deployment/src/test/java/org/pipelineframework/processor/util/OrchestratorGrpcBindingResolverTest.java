@@ -27,10 +27,10 @@ class OrchestratorGrpcBindingResolverTest {
             null);
 
         assertNotNull(binding);
-        assertEquals("OrchestratorService", binding.serviceDescriptor().getName());
-        assertEquals("Run", binding.methodDescriptor().getName());
-        assertFalse(binding.methodDescriptor().isClientStreaming());
-        assertFalse(binding.methodDescriptor().isServerStreaming());
+        assertEquals("OrchestratorService", serviceDescriptor(binding).getName());
+        assertEquals("Run", methodDescriptor(binding).getName());
+        assertFalse(methodDescriptor(binding).isClientStreaming());
+        assertFalse(methodDescriptor(binding).isServerStreaming());
     }
 
     @Test
@@ -48,8 +48,8 @@ class OrchestratorGrpcBindingResolverTest {
             null);
 
         assertNotNull(binding);
-        assertTrue(binding.methodDescriptor().isClientStreaming());
-        assertFalse(binding.methodDescriptor().isServerStreaming());
+        assertTrue(methodDescriptor(binding).isClientStreaming());
+        assertFalse(methodDescriptor(binding).isServerStreaming());
     }
 
     @Test
@@ -67,8 +67,8 @@ class OrchestratorGrpcBindingResolverTest {
             null);
 
         assertNotNull(binding);
-        assertFalse(binding.methodDescriptor().isClientStreaming());
-        assertTrue(binding.methodDescriptor().isServerStreaming());
+        assertFalse(methodDescriptor(binding).isClientStreaming());
+        assertTrue(methodDescriptor(binding).isServerStreaming());
     }
 
     @Test
@@ -86,8 +86,8 @@ class OrchestratorGrpcBindingResolverTest {
             null);
 
         assertNotNull(binding);
-        assertTrue(binding.methodDescriptor().isClientStreaming());
-        assertTrue(binding.methodDescriptor().isServerStreaming());
+        assertTrue(methodDescriptor(binding).isClientStreaming());
+        assertTrue(methodDescriptor(binding).isServerStreaming());
     }
 
     @Test
@@ -105,9 +105,9 @@ class OrchestratorGrpcBindingResolverTest {
             null);
 
         assertNotNull(binding);
-        assertEquals("RunAsync", binding.methodDescriptor().getName());
-        assertFalse(binding.methodDescriptor().isClientStreaming());
-        assertFalse(binding.methodDescriptor().isServerStreaming());
+        assertEquals("RunAsync", methodDescriptor(binding).getName());
+        assertFalse(methodDescriptor(binding).isClientStreaming());
+        assertFalse(methodDescriptor(binding).isServerStreaming());
     }
 
     @Test
@@ -125,7 +125,7 @@ class OrchestratorGrpcBindingResolverTest {
             null);
 
         assertNotNull(binding);
-        assertEquals("GetExecutionStatus", binding.methodDescriptor().getName());
+        assertEquals("GetExecutionStatus", methodDescriptor(binding).getName());
     }
 
     @Test
@@ -143,7 +143,7 @@ class OrchestratorGrpcBindingResolverTest {
             null);
 
         assertNotNull(binding);
-        assertEquals("GetExecutionResult", binding.methodDescriptor().getName());
+        assertEquals("GetExecutionResult", methodDescriptor(binding).getName());
     }
 
     @Test
@@ -196,7 +196,9 @@ class OrchestratorGrpcBindingResolverTest {
                 false,
                 null));
 
-        assertTrue(exception.getMessage().contains("streaming semantics do not match"));
+        assertTrue(exception.getMessage().contains("streaming semantics mismatch"));
+        assertTrue(exception.getMessage().contains("clientStreaming expected=true actual=false"));
+        assertTrue(exception.getMessage().contains("serverStreaming expected=false actual=false"));
     }
 
     @Test
@@ -214,7 +216,7 @@ class OrchestratorGrpcBindingResolverTest {
             null);
 
         assertNotNull(binding);
-        assertEquals("OrchestratorService", binding.serviceDescriptor().getName());
+        assertEquals("OrchestratorService", serviceDescriptor(binding).getName());
     }
 
     @Test
@@ -232,9 +234,9 @@ class OrchestratorGrpcBindingResolverTest {
             null);
 
         assertNotNull(binding);
-        assertEquals("Ingest", binding.methodDescriptor().getName());
-        assertTrue(binding.methodDescriptor().isClientStreaming());
-        assertTrue(binding.methodDescriptor().isServerStreaming());
+        assertEquals("Ingest", methodDescriptor(binding).getName());
+        assertTrue(methodDescriptor(binding).isClientStreaming());
+        assertTrue(methodDescriptor(binding).isServerStreaming());
     }
 
     @Test
@@ -252,9 +254,9 @@ class OrchestratorGrpcBindingResolverTest {
             null);
 
         assertNotNull(binding);
-        assertEquals("Subscribe", binding.methodDescriptor().getName());
-        assertFalse(binding.methodDescriptor().isClientStreaming());
-        assertTrue(binding.methodDescriptor().isServerStreaming());
+        assertEquals("Subscribe", methodDescriptor(binding).getName());
+        assertFalse(methodDescriptor(binding).isClientStreaming());
+        assertTrue(methodDescriptor(binding).isServerStreaming());
     }
 
     private PipelineStepModel buildModel() {
@@ -272,6 +274,14 @@ class OrchestratorGrpcBindingResolverTest {
             false,
             null
         );
+    }
+
+    private static Descriptors.ServiceDescriptor serviceDescriptor(GrpcBinding binding) {
+        return (Descriptors.ServiceDescriptor) binding.serviceDescriptor();
+    }
+
+    private static Descriptors.MethodDescriptor methodDescriptor(GrpcBinding binding) {
+        return (Descriptors.MethodDescriptor) binding.methodDescriptor();
     }
 
     private DescriptorProtos.FileDescriptorSet buildDescriptorSet(

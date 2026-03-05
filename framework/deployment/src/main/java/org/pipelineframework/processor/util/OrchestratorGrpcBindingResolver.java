@@ -209,10 +209,14 @@ public class OrchestratorGrpcBindingResolver {
         boolean inputStreaming,
         boolean outputStreaming
     ) {
-        if (methodDescriptor.isClientStreaming() != inputStreaming ||
-            methodDescriptor.isServerStreaming() != outputStreaming) {
+        boolean actualClientStreaming = methodDescriptor.isClientStreaming();
+        boolean actualServerStreaming = methodDescriptor.isServerStreaming();
+        if (actualClientStreaming != inputStreaming || actualServerStreaming != outputStreaming) {
+            String methodIdentity = methodDescriptor.getFullName();
             throw new IllegalStateException(
-                "Orchestrator service streaming semantics do not match expected pipeline shape");
+                "Orchestrator service streaming semantics mismatch for method '" + methodIdentity + "': " +
+                    "clientStreaming expected=" + inputStreaming + " actual=" + actualClientStreaming + ", " +
+                    "serverStreaming expected=" + outputStreaming + " actual=" + actualServerStreaming);
         }
     }
 }

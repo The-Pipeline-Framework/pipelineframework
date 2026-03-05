@@ -15,6 +15,7 @@ import org.pipelineframework.processor.ir.OrchestratorBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -181,7 +182,9 @@ class OrchestratorFunctionHandlerRendererTest {
 
     @Test
     void rendersStreamingInputHandlerWithBatchSupport() throws IOException {
-        String source = renderAndReadSource(buildStreamingBinding(true, false));
+        renderAndReadSource(buildStreamingBinding(true, false));
+        Path runAsyncPath = tempDir.resolve("com/example/orchestrator/service/PipelineRunAsyncFunctionHandler.java");
+        String source = Files.readString(runAsyncPath);
 
         assertTrue(source.contains("if (request != null && request.inputBatch != null && !request.inputBatch.isEmpty())"));
         assertTrue(source.contains("executionInput = Multi.createFrom().iterable(request.inputBatch)"));

@@ -21,6 +21,7 @@ import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
 import javax.tools.FileObject;
+import javax.tools.JavaFileObject;
 import javax.tools.StandardLocation;
 import java.nio.file.Path;
 import java.util.Set;
@@ -62,13 +63,17 @@ class PipelineGenerationPhaseTest {
                 .thenReturn(mock(javax.lang.model.util.Elements.class));
         javax.annotation.processing.Filer filer = mock(javax.annotation.processing.Filer.class);
         FileObject fileObject = mock(FileObject.class);
+        JavaFileObject sourceFileObject = mock(JavaFileObject.class);
         try {
             when(fileObject.openWriter()).thenReturn(new java.io.StringWriter());
+            when(sourceFileObject.openWriter()).thenReturn(new java.io.StringWriter());
             when(filer.createResource(
                 any(StandardLocation.class), anyString(), anyString(), any(javax.lang.model.element.Element[].class)))
                 .thenReturn(fileObject);
             when(filer.createResource(any(StandardLocation.class), anyString(), anyString()))
                 .thenReturn(fileObject);
+            when(filer.createSourceFile(anyString(), any(javax.lang.model.element.Element[].class)))
+                .thenReturn(sourceFileObject);
         } catch (java.io.IOException e) {
             throw new RuntimeException(e);
         }
@@ -194,9 +199,17 @@ class PipelineGenerationPhaseTest {
             new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
 
         org.pipelineframework.processor.ir.PipelineAspectModel aspect1 =
-            new org.pipelineframework.processor.ir.PipelineAspectModel("Cache", "AFTER_STEP", java.util.Map.of());
+            new org.pipelineframework.processor.ir.PipelineAspectModel(
+                "Cache",
+                org.pipelineframework.processor.ir.AspectScope.GLOBAL,
+                org.pipelineframework.processor.ir.AspectPosition.AFTER_STEP,
+                java.util.Map.of());
         org.pipelineframework.processor.ir.PipelineAspectModel aspect2 =
-            new org.pipelineframework.processor.ir.PipelineAspectModel("Persistence", "AFTER_STEP", java.util.Map.of());
+            new org.pipelineframework.processor.ir.PipelineAspectModel(
+                "Persistence",
+                org.pipelineframework.processor.ir.AspectScope.GLOBAL,
+                org.pipelineframework.processor.ir.AspectPosition.AFTER_STEP,
+                java.util.Map.of());
 
         context.setAspectModels(java.util.List.of(aspect1, aspect2));
 
@@ -277,6 +290,7 @@ class PipelineGenerationPhaseTest {
         org.pipelineframework.processor.PipelineCompilationContext context =
             new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
         context.setOrchestratorGenerated(true);
+        context.setGeneratedSourcesRoot(Path.of("target/generated-sources-test"));
 
         org.pipelineframework.processor.ir.PipelineStepModel model =
             new org.pipelineframework.processor.ir.PipelineStepModel.Builder()
@@ -316,8 +330,25 @@ class PipelineGenerationPhaseTest {
 
         context.setRendererBindings(java.util.Map.of("orchestrator", binding));
         context.setStepModels(java.util.List.of(model));
+        context.setDescriptorSet(buildMinimalOrchestratorDescriptorSet());
 
         assertDoesNotThrow(() -> phase.execute(context));
+    }
+
+    private static DescriptorProtos.FileDescriptorSet buildMinimalOrchestratorDescriptorSet() {
+        DescriptorProtos.FileDescriptorProto proto = DescriptorProtos.FileDescriptorProto.newBuilder()
+            .setName("orchestrator.proto")
+            .setPackage("com.example.grpc")
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("Input"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder().setName("Output"))
+            .addService(DescriptorProtos.ServiceDescriptorProto.newBuilder()
+                .setName("OrchestratorService")
+                .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
+                    .setName("Run")
+                    .setInputType(".com.example.grpc.Input")
+                    .setOutputType(".com.example.grpc.Output")))
+            .build();
+        return DescriptorProtos.FileDescriptorSet.newBuilder().addFile(proto).build();
     }
 
     @Test
