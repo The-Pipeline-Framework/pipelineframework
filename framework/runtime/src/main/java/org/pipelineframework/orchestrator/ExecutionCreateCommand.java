@@ -19,6 +19,7 @@ public record ExecutionCreateCommand(
     long ttlEpochS
 ) {
     public ExecutionCreateCommand {
+        Objects.requireNonNull(tenantId, "ExecutionCreateCommand.tenantId must not be null");
         Objects.requireNonNull(executionKey, "ExecutionCreateCommand.executionKey must not be null");
     }
 }

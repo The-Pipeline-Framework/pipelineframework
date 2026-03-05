@@ -66,6 +66,8 @@ import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.ExecutionCreateCommand;
+import org.pipelineframework.orchestrator.ExecutionInputShape;
+import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.OrchestratorIdempotencyPolicy;
 import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
@@ -374,17 +376,17 @@ public class PipelineExecutionService {
         .plus(Duration.ofDays(Math.max(1, orchestratorConfig.executionTtlDays())))
         .getEpochSecond();
     return resolveExecutionInputPayload(executionInput)
-        .onItem().transformToUni(payload -> {
+        .onItem().transformToUni(snapshot -> {
           String executionKey;
           try {
-            executionKey = resolveExecutionKey(resolvedTenant, payload, idempotencyKey);
+            executionKey = resolveExecutionKey(resolvedTenant, snapshot.payload(), idempotencyKey);
           } catch (IllegalArgumentException e) {
             return Uni.createFrom().failure(new BadRequestException(e.getMessage()));
           }
           ExecutionCreateCommand command = new ExecutionCreateCommand(
               resolvedTenant,
               executionKey,
-              payload,
+              snapshot,
               now,
               ttlEpochS);
           return executionStateStore.createOrGetExecution(command)
@@ -654,14 +656,15 @@ public class PipelineExecutionService {
     return Uni.createFrom().item(input);
   }
 
-  private static Uni<Object> resolveExecutionInputPayload(Object input) {
+  private static Uni<ExecutionInputSnapshot> resolveExecutionInputPayload(Object input) {
     if (input instanceof Uni<?> uni) {
-      return uni.onItem().transform(item -> (Object) item);
+      return uni.onItem().transform(item -> new ExecutionInputSnapshot(ExecutionInputShape.UNI, item));
     }
     if (input instanceof Multi<?> multi) {
-      return multi.collect().asList().onItem().transform(list -> (Object) list);
+      return multi.collect().asList().onItem().transform(list ->
+          new ExecutionInputSnapshot(ExecutionInputShape.MULTI, List.copyOf(list)));
     }
-    return Uni.createFrom().item(input);
+    return Uni.createFrom().item(new ExecutionInputSnapshot(ExecutionInputShape.RAW, input));
   }
 
   private String normalizeTenant(String tenantId) {
@@ -734,9 +737,7 @@ public class PipelineExecutionService {
   }
 
   private Uni<List<?>> runAsyncExecution(Object inputPayload) {
-    Object reactiveInput = inputPayload instanceof List<?> list
-        ? Multi.createFrom().iterable(list)
-        : Uni.createFrom().item(inputPayload);
+    Object reactiveInput = toReplayInput(inputPayload);
     return executePipelineStreaming(reactiveInput)
         .select().first(2)
         .collect().asList()
@@ -747,6 +748,27 @@ public class PipelineExecutionService {
           }
           return Uni.createFrom().item((List<?>) List.copyOf(items));
         });
+  }
+
+  private Object toReplayInput(Object inputPayload) {
+    if (inputPayload instanceof ExecutionInputSnapshot snapshot) {
+      if (snapshot.shape() == ExecutionInputShape.MULTI) {
+        Object payload = snapshot.payload();
+        if (payload == null) {
+          return Multi.createFrom().empty();
+        }
+        if (payload instanceof Iterable<?> iterable) {
+          return Multi.createFrom().iterable(iterable);
+        }
+        return Multi.createFrom().item(payload);
+      }
+      return Uni.createFrom().item(snapshot.payload());
+    }
+    // Backward-compatible replay for records persisted before shape metadata.
+    if (inputPayload instanceof List<?> list) {
+      return Multi.createFrom().iterable(list);
+    }
+    return Uni.createFrom().item(inputPayload);
   }
 
   private Uni<Void> handleExecutionFailure(

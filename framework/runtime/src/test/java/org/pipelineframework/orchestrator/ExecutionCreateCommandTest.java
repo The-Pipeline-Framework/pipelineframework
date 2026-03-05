@@ -106,4 +106,18 @@ class ExecutionCreateCommandTest {
             now,
             ttl));
     }
+
+    @Test
+    void rejectsNullTenantId() {
+        long now = System.currentTimeMillis();
+        long ttl = now / 1000 + 3600;
+
+        NullPointerException failure = assertThrows(NullPointerException.class, () -> new ExecutionCreateCommand(
+            null,
+            "exec-key-7",
+            "payload",
+            now,
+            ttl));
+        assertEquals("ExecutionCreateCommand.tenantId must not be null", failure.getMessage());
+    }
 }

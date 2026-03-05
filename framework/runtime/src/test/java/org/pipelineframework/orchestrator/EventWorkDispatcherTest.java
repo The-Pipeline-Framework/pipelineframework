@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -24,6 +25,7 @@ class EventWorkDispatcherTest {
         dispatcher = new EventWorkDispatcher();
         mockEvent = mock(Event.class);
         dispatcher.setExecutionWorkEvent(mockEvent);
+        when(mockEvent.fireAsync(any())).thenReturn(CompletableFuture.completedFuture(null));
     }
 
     @Test
@@ -50,7 +52,7 @@ class EventWorkDispatcherTest {
         CountDownLatch latch = new CountDownLatch(1);
         when(mockEvent.fireAsync(any())).thenAnswer(invocation -> {
             latch.countDown();
-            return null;
+            return CompletableFuture.completedFuture(null);
         });
 
         ExecutionWorkItem item = new ExecutionWorkItem("tenant2", "exec2");
@@ -87,11 +89,13 @@ class EventWorkDispatcherTest {
         CountDownLatch scheduledLatch = new CountDownLatch(1);
         when(mockEvent.fireAsync(any())).thenAnswer(invocation -> {
             scheduledLatch.countDown();
-            return null;
+            return CompletableFuture.completedFuture(null);
         });
 
         ExecutionWorkItem scheduledItem = new ExecutionWorkItem("tenant-shutdown", "exec-scheduled");
-        dispatcher.enqueueDelayed(scheduledItem, Duration.ofSeconds(5)).await().indefinitely();
+        dispatcher.enqueueDelayed(scheduledItem, Duration.ofSeconds(5)).subscribe().with(ignored -> {
+        }, failure -> {
+        });
 
         dispatcher.shutdown();
 
@@ -120,5 +124,15 @@ class EventWorkDispatcherTest {
 
         assertNotNull(result);
         assertDoesNotThrow(() -> result.await().indefinitely());
+    }
+
+    @Test
+    void enqueueNowPropagatesObserverFailure() {
+        ExecutionWorkItem item = new ExecutionWorkItem("tenant7", "exec7");
+        CompletableFuture<ExecutionWorkItem> failed = new CompletableFuture<>();
+        failed.completeExceptionally(new IllegalStateException("observer failure"));
+        when(mockEvent.fireAsync(item)).thenReturn(failed);
+
+        assertThrows(IllegalStateException.class, () -> dispatcher.enqueueNow(item).await().indefinitely());
     }
 }

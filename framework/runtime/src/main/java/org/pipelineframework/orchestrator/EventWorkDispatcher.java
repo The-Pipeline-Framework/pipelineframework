@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -42,15 +43,33 @@ public class EventWorkDispatcher implements WorkDispatcher {
 
     @Override
     public Uni<Void> enqueueNow(ExecutionWorkItem item) {
-        return Uni.createFrom().voidItem()
-            .invoke(() -> executionWorkEvent.fireAsync(item));
+        return Uni.createFrom()
+            .completionStage(() -> executionWorkEvent.fireAsync(item))
+            .replaceWithVoid();
     }
 
     @Override
     public Uni<Void> enqueueDelayed(ExecutionWorkItem item, Duration delay) {
         long delayMs = Math.max(0L, delay == null ? 0L : delay.toMillis());
-        return Uni.createFrom().voidItem()
-            .invoke(() -> scheduler.schedule(() -> executionWorkEvent.fireAsync(item), delayMs, TimeUnit.MILLISECONDS));
+        CompletableFuture<Void> completion = new CompletableFuture<>();
+        try {
+            scheduler.schedule(() -> {
+                try {
+                    executionWorkEvent.fireAsync(item).whenComplete((ignored, failure) -> {
+                        if (failure != null) {
+                            completion.completeExceptionally(failure);
+                            return;
+                        }
+                        completion.complete(null);
+                    });
+                } catch (Throwable failure) {
+                    completion.completeExceptionally(failure);
+                }
+            }, delayMs, TimeUnit.MILLISECONDS);
+        } catch (RuntimeException failure) {
+            completion.completeExceptionally(failure);
+        }
+        return Uni.createFrom().completionStage(() -> completion);
     }
 
     @PreDestroy
