@@ -15,6 +15,7 @@ import software.amazon.awssdk.services.dynamodb.model.UpdateItemResponse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -97,6 +98,20 @@ class DynamoExecutionStateStoreTest {
     }
 
     @Test
+    void claimLeaseRejectsNonPositiveLeaseDuration() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () ->
+            store.claimLease("tenant-a", "exec-1", "worker-1", System.currentTimeMillis(), 0)
+                .await().indefinitely());
+
+        assertTrue(error.getMessage().contains("leaseMs must be > 0"));
+        verifyNoInteractions(client);
+    }
+
+    @Test
     void markSucceededReturnsUpdatedRecordWhenConditionMatches() {
         DynamoDbClient client = mock(DynamoDbClient.class);
         PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
@@ -120,6 +135,28 @@ class DynamoExecutionStateStoreTest {
         assertTrue(updated.isPresent());
         assertEquals(ExecutionStatus.SUCCEEDED, updated.get().status());
         assertFalse(updated.get().executionId().isBlank());
+    }
+
+    @Test
+    void markTerminalFailureRejectsUnsupportedStatus() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config);
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () ->
+            store.markTerminalFailure(
+                    "tenant-a",
+                    "exec-1",
+                    1L,
+                    ExecutionStatus.SUCCEEDED,
+                    "exec-1:0:0",
+                    "ERR",
+                    "unsupported",
+                    System.currentTimeMillis())
+                .await().indefinitely());
+
+        assertTrue(error.getMessage().contains("Unsupported terminal status"));
+        verifyNoInteractions(client);
     }
 
     private static PipelineOrchestratorConfig mockConfig(String executionTable, String keyTable) {

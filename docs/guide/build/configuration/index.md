@@ -213,7 +213,7 @@ Prefix: `pipeline.orchestrator`
 Queue mode notes:
 
 1. `QUEUE_ASYNC` rejects async streaming output for this milestone.
-2. Keep `strict-startup=true` in production so invalid provider wiring fails fast.
+2. Keep `strict-startup=true` in production, so invalid provider wiring fails fast.
 3. In queue mode, strict startup also requires `pipeline.orchestrator.idempotency-policy` to be explicitly set to a non-default value.
 4. In-memory providers are for local/dev only; use durable providers for HA.
 

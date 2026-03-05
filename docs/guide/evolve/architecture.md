@@ -40,7 +40,7 @@ graph TD
 
 Explicit non-goals in this milestone:
 
-1. no distributed transaction across state commit and external side effects,
+1. no distributed transactions across state commit and external side effects,
 2. no framework-managed saga compensation,
 3. no full event-sourced journal as the execution engine of record.
 

@@ -10,6 +10,7 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -77,6 +78,19 @@ class SqsWorkDispatcherTest {
 
         verify(client).sendMessage(any(SendMessageRequest.class));
         verify(event, never()).fireAsync(any());
+    }
+
+    @Test
+    void enqueueNowRejectsNullItem() {
+        SqsClient client = mock(SqsClient.class);
+        Event<ExecutionWorkItem> event = mock(Event.class);
+        PipelineOrchestratorConfig config = mockConfig(Optional.of("https://sqs.local/123/work"), true);
+        SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(client, config, event);
+
+        NullPointerException error = assertThrows(NullPointerException.class, () -> dispatcher.enqueueNow(null));
+
+        assertTrue(error.getMessage().contains("item must not be null"));
+        verifyNoInteractions(client, event);
     }
 
     private static PipelineOrchestratorConfig mockConfig(Optional<String> queueUrl, boolean localLoopback) {

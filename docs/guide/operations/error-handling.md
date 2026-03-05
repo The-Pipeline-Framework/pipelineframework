@@ -102,7 +102,7 @@ For `pipeline.orchestrator.mode=QUEUE_ASYNC`, crash behavior is:
 | Crash point | Behavior after restart/recovery | Duplicate risk | Required safeguard |
 |---|---|---|---|
 | Before transition state commit | Work is redelivered and re-executed from last durable version | High | Idempotent operator boundary (`executionId:stepIndex:attempt`) |
-| After state commit, before next enqueue | Transition is durable but next dispatch can stall until due sweeper re-dispatches | Low | Due-execution sweeper + durable state |
+| After state commit, before next enqueue | Transition is durable, but next dispatch can stall until due sweeper re-dispatches | Low | Due-execution sweeper + durable state |
 | During retry scheduling | Retry can replay from last durable version if scheduling metadata was not committed | Medium | Persist retry intent (`attempt`, `nextDue`) before enqueue |
 | After external side effect, before commit | Side effect may repeat on replay because effect and commit are not one transaction | High | Downstream dedupe keyed by transition identity |
 | Worker dies while lease held | Lease expires and another worker can claim execution | Low | Short lease window + conditional lease claim (OCC) |

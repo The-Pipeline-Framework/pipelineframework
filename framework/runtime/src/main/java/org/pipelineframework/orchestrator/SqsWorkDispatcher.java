@@ -2,6 +2,7 @@ package org.pipelineframework.orchestrator;
 
 import java.net.URI;
 import java.time.Duration;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Supplier;
@@ -75,6 +76,7 @@ public class SqsWorkDispatcher implements WorkDispatcher {
     }
 
     private Uni<Void> enqueue(ExecutionWorkItem item, Duration delay) {
+        Objects.requireNonNull(item, "SqsWorkDispatcher.enqueue item must not be null");
         String queueUrl = orchestratorConfig.queueUrl()
             .filter(url -> !url.isBlank())
             .orElseThrow(() -> new IllegalStateException(
