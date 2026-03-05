@@ -346,15 +346,15 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
     }
 
     /**
-     * Builds the generated `runAsync` gRPC method for the orchestrator service, wiring pipeline execution,
-     * request/response type transformations, and RPC telemetry.
+     * Build the generated `runAsync` gRPC method that starts an asynchronous pipeline execution,
+     * adapts request/response gRPC types, and records RPC telemetry.
      *
      * @param binding the orchestrator binding that determines input/output streaming behavior and options
      * @param typeResolver resolver used to obtain the gRPC request and response message types for the runAsync binding
-     * @param ctx generation context (used for messaging / environment during type resolution)
+     * @param ctx generation context used for messaging/environment during type resolution
      * @param runAsyncBinding the resolved gRPC binding for the runAsync RPC; when `null` the method returns `null`
-     * @param inputType the resolved pipeline input message type (ClassName)
-     * @param outputType the resolved pipeline output message type (ClassName)
+     * @param inputType the resolved pipeline input gRPC message type
+     * @param outputType the resolved pipeline output gRPC message type
      * @param uni ClassName for the reactive `Uni` container used as the method return wrapper
      * @param multi ClassName for the reactive `Multi` container used for streaming inputs/outputs
      * @return a MethodSpec that implements the `runAsync` RPC, or `null` if `runAsyncBinding` is `null` or the request/response types cannot be resolved
@@ -455,15 +455,15 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
     }
 
     /**
-     * Builds the gRPC `getExecutionStatus` method implementation for the orchestrator service.
+     * Create the MethodSpec implementation for the gRPC `getExecutionStatus` RPC.
      *
-     * <p>The generated method calls the pipeline execution service to obtain execution status,
-     * maps the domain status into the gRPC response message, and records RPC metrics for success
+     * <p>The generated method fetches an execution's status from the pipeline execution service,
+     * converts the domain status into the gRPC response message, and records RPC metrics for success
      * and failure paths.
      *
      * @param statusBinding the resolved gRPC binding describing the `getExecutionStatus` RPC; used to derive request and response message types
-     * @param uni the `Uni` reactive type ClassName used for the method return
-     * @return the constructed MethodSpec for `getExecutionStatus`, or `null` if the binding or its request/response types cannot be resolved
+     * @param uni the `Uni` reactive container ClassName used as the method return type
+     * @return the `MethodSpec` for `getExecutionStatus`, or `null` if the binding or its request/response types cannot be resolved
      */
     private MethodSpec buildExecutionStatusMethod(
         GrpcJavaTypeResolver typeResolver,

@@ -416,14 +416,14 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Create a GenerationContext configured for producing an external adapter for the specified deployment role.
+     * Creates a GenerationContext configured for producing an external adapter for the given deployment role.
      *
      * @param ctx the pipeline compilation context providing the processing environment and generation root
      * @param adapterRole the deployment role that determines the adapter's output directory and target role
-     * @param enabledAspects names of enabled aspects to include in generation (may be empty)
+     * @param enabledAspects set of enabled aspect names (lowercase); may be empty
      * @param cacheKeyGenerator a ClassName for a cache key generator to include, or {@code null} if none
      * @param descriptorSet optional protobuf FileDescriptorSet to include, or {@code null}
-     * @return a GenerationContext initialized with the processing environment, resolved output directory, role, enabled aspects, cache key generator, and descriptor set
+     * @return a GenerationContext configured for external adapter generation for the specified role
      */
     private GenerationContext createExternalAdapterGenerationContext(
             PipelineCompilationContext ctx,
@@ -441,9 +441,13 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Generate orchestrator server and client source artifacts according to the orchestrator binding's transport.
+     * Generate orchestrator server and client source artifacts based on the configured orchestrator binding.
      *
-     * Renders a REST server when transport is REST, a gRPC server when transport is gRPC or unspecified, and skips server generation for LOCAL transport; when platform-function mode applies, also renders native function handlers and records their handler classes in role metadata. Additionally renders a CLI client when {@code generateCli} is true and renders an ingest client when transport is neither REST nor LOCAL. Generation errors are reported to the processing environment messager.
+     * When the binding transport is REST, emits REST server sources and, if platform-function mode applies and the
+     * binding is non-streaming, also emits native function handlers and records their handler classes in role metadata.
+     * When the transport is gRPC or unspecified, emits a gRPC server. Server generation is skipped for LOCAL transport.
+     * Additionally emits a CLI client when {@code generateCli} is true and emits an ingest client when the transport is
+     * neither REST nor LOCAL. Generation I/O failures are reported to the processing environment messager.
      *
      * @param ctx the pipeline compilation context
      * @param descriptorSet protobuf descriptor set used during generation; may be {@code null}

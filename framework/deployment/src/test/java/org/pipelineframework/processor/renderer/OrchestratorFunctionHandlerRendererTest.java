@@ -127,6 +127,95 @@ class OrchestratorFunctionHandlerRendererTest {
         assertTrue(resultSource.contains("getExecutionResult("));
     }
 
+    @Test
+    void rendersRequestDTOsWithCorrectFields() throws IOException {
+        renderAndReadSource(buildBinding());
+
+        Path runAsyncRequestPath = tempDir.resolve("com/example/orchestrator/service/PipelineRunAsyncRequest.java");
+        String runAsyncRequest = Files.readString(runAsyncRequestPath);
+
+        assertTrue(runAsyncRequest.contains("public InputTypeDto input;"));
+        assertTrue(runAsyncRequest.contains("public List<InputTypeDto> inputBatch;"));
+        assertTrue(runAsyncRequest.contains("public String tenantId;"));
+        assertTrue(runAsyncRequest.contains("public String idempotencyKey;"));
+    }
+
+    @Test
+    void rendersLookupRequestWithCorrectFields() throws IOException {
+        renderAndReadSource(buildBinding());
+
+        Path lookupRequestPath = tempDir.resolve("com/example/orchestrator/service/PipelineExecutionLookupRequest.java");
+        String lookupRequest = Files.readString(lookupRequestPath);
+
+        assertTrue(lookupRequest.contains("public String tenantId;"));
+        assertTrue(lookupRequest.contains("public String executionId;"));
+    }
+
+    @Test
+    void rendersStatusHandlerWithValidation() throws IOException {
+        renderAndReadSource(buildBinding());
+
+        Path statusPath = tempDir.resolve("com/example/orchestrator/service/PipelineExecutionStatusFunctionHandler.java");
+        String statusSource = Files.readString(statusPath);
+
+        assertTrue(statusSource.contains("if (request == null || request.executionId == null || request.executionId.isBlank())"));
+        assertTrue(statusSource.contains("throw new IllegalArgumentException(\"executionId is required\")"));
+    }
+
+    @Test
+    void rendersResultHandlerWithValidation() throws IOException {
+        renderAndReadSource(buildBinding());
+
+        Path resultPath = tempDir.resolve("com/example/orchestrator/service/PipelineExecutionResultFunctionHandler.java");
+        String resultSource = Files.readString(resultPath);
+
+        assertTrue(resultSource.contains("if (request == null || request.executionId == null || request.executionId.isBlank())"));
+        assertTrue(resultSource.contains("throw new IllegalArgumentException(\"executionId is required\")"));
+    }
+
+    @Test
+    void handlerReturnsGenerationTargetRESTResource() {
+        OrchestratorFunctionHandlerRenderer renderer = new OrchestratorFunctionHandlerRenderer();
+        assertEquals(GenerationTarget.REST_RESOURCE, renderer.target());
+    }
+
+    @Test
+    void rendersStreamingInputHandlerWithBatchSupport() throws IOException {
+        String source = renderAndReadSource(buildStreamingBinding(true, false));
+
+        assertTrue(source.contains("if (request != null && request.inputBatch != null && !request.inputBatch.isEmpty())"));
+        assertTrue(source.contains("executionInput = Multi.createFrom().iterable(request.inputBatch)"));
+    }
+
+    @Test
+    void rendersStreamingOutputResultHandler() throws IOException {
+        renderAndReadSource(buildStreamingBinding(false, true));
+
+        Path resultPath = tempDir.resolve("com/example/orchestrator/service/PipelineExecutionResultFunctionHandler.java");
+        String resultSource = Files.readString(resultPath);
+
+        assertTrue(resultSource.contains("implements RequestHandler<PipelineExecutionLookupRequest, List<OutputTypeDto>>"));
+    }
+
+    @Test
+    void rendersTransportContextWithAllAttributes() throws IOException {
+        String source = renderAndReadSource(buildBinding());
+
+        assertTrue(source.contains("FunctionTransportContext.ATTR_TRANSPORT_PROTOCOL"));
+        assertTrue(source.contains("FunctionTransportContext.ATTR_CORRELATION_ID"));
+        assertTrue(source.contains("FunctionTransportContext.ATTR_EXECUTION_ID"));
+        assertTrue(source.contains("FunctionTransportContext.ATTR_RETRY_ATTEMPT"));
+        assertTrue(source.contains("FunctionTransportContext.ATTR_DISPATCH_TS_EPOCH_MS"));
+    }
+
+    @Test
+    void rendersErrorHandlingInHandleRequest() throws IOException {
+        String source = renderAndReadSource(buildBinding());
+
+        assertTrue(source.contains("catch (RuntimeException e)"));
+        assertTrue(source.contains("throw new RuntimeException(\"Failed handleRequest -> resource.run for input DTO\", e)"));
+    }
+
     private String renderAndReadSource(OrchestratorBinding binding) throws IOException {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));

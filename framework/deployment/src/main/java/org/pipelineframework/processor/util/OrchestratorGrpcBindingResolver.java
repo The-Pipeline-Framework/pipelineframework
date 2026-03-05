@@ -156,11 +156,11 @@ public class OrchestratorGrpcBindingResolver {
     }
 
     /**
-     * Locate the RPC method descriptor with the given name in the provided service descriptor.
+     * Finds the RPC method descriptor with the given name in the service descriptor.
      *
      * @param serviceDescriptor the service descriptor to search
      * @param methodName the RPC method name to locate
-     * @param messager optional Messager used to emit a warning if the service exposes additional RPCs not in the allowed set; may be null
+     * @param messager optional Messager to emit a warning if the service exposes RPCs outside the allowed set; may be null
      * @return the matching {@link Descriptors.MethodDescriptor}
      * @throws IllegalStateException if no method with the given name is found or if multiple methods share the same name
      */
@@ -197,12 +197,12 @@ public class OrchestratorGrpcBindingResolver {
     }
 
     /**
-     * Ensures a gRPC method's client/server streaming flags match the expected pipeline streaming shape.
+     * Validates that the method's client and server streaming flags match the expected pipeline shape.
      *
-     * @param methodDescriptor the method descriptor whose streaming semantics will be validated
-     * @param inputStreaming   true if the pipeline expects client (input) streaming, false otherwise
-     * @param outputStreaming  true if the pipeline expects server (output) streaming, false otherwise
-     * @throws IllegalStateException if the method's client or server streaming setting does not match the expected values
+     * @param methodDescriptor the gRPC method descriptor to validate
+     * @param inputStreaming   true if the pipeline expects client (input) streaming
+     * @param outputStreaming  true if the pipeline expects server (output) streaming
+     * @throws IllegalStateException if the method's clientStreaming or serverStreaming flag differs from the corresponding expected value
      */
     private void validateStreamingSemantics(
         Descriptors.MethodDescriptor methodDescriptor,

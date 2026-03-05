@@ -84,10 +84,10 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
         ClassName.get("org.pipelineframework.transport.function", "UnaryFunctionTransportBridge");
 
     /**
-     * Resolve fully-qualified orchestrator function handler class name for a base package.
+     * Return the fully-qualified class name of the orchestrator function handler for the given base package.
      *
-     * @param basePackage base package
-     * @return generated handler FQCN
+     * @param basePackage the base Java package used as the root for the generated handler
+     * @return the fully-qualified class name of the generated orchestrator handler
      */
     public static String handlerFqcn(String basePackage) {
         return basePackage + ".orchestrator.service." + HANDLER_CLASS;
