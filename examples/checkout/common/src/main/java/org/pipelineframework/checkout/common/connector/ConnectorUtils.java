@@ -2,6 +2,8 @@ package org.pipelineframework.checkout.common.connector;
 
 import com.google.protobuf.Message;
 import io.smallrye.mutiny.Multi;
+import java.nio.charset.StandardCharsets;
+import java.util.UUID;
 
 /**
  * Shared connector helpers for backpressure and protobuf field extraction.
@@ -55,5 +57,43 @@ public final class ConnectorUtils {
             case STRING, INT, LONG, FLOAT, DOUBLE, BOOLEAN, ENUM -> String.valueOf(value);
             case BYTE_STRING, MESSAGE -> "";
         };
+    }
+
+    public static String deterministicHandoffKey(String namespace, String... components) {
+        StringBuilder seed = new StringBuilder();
+        appendFramed(seed, normalizeOrDefault(namespace, "handoff"));
+        if (components != null) {
+            for (String component : components) {
+                appendFramed(seed, normalizeOrDefault(component, ""));
+            }
+        }
+        UUID id = UUID.nameUUIDFromBytes(seed.toString().getBytes(StandardCharsets.UTF_8));
+        return normalizeOrDefault(namespace, "handoff") + ":" + id;
+    }
+
+    public static String failureSignature(
+        String connector,
+        String phase,
+        String reason,
+        String traceId,
+        String itemId
+    ) {
+        return "connector=" + normalizeOrDefault(connector, "unknown")
+            + ";phase=" + normalizeOrDefault(phase, "unknown")
+            + ";reason=" + normalizeOrDefault(reason, "unspecified")
+            + ";traceId=" + normalizeOrDefault(traceId, "na")
+            + ";itemId=" + normalizeOrDefault(itemId, "na");
+    }
+
+    public static String normalizeOrDefault(String value, String fallback) {
+        if (value == null) {
+            return fallback;
+        }
+        String normalized = value.trim();
+        return normalized.isEmpty() ? fallback : normalized;
+    }
+
+    private static void appendFramed(StringBuilder target, String value) {
+        target.append('#').append(value.length()).append(':').append(value);
     }
 }

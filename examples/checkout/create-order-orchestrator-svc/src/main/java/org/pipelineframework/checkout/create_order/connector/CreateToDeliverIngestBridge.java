@@ -118,7 +118,7 @@ public class CreateToDeliverIngestBridge {
      */
     private OrderDispatchSvc.ReadyOrder toDeliverReadyOrder(Object item) {
         if (item instanceof OrderReadySvc.ReadyOrder readyOrder) {
-            if (isDuplicateOrderId(readyOrder.getOrderId())) {
+            if (isDuplicateHandoff(readyOrder.getOrderId(), readyOrder.getCustomerId(), readyOrder.getReadyAt())) {
                 return null;
             }
             return OrderDispatchSvc.ReadyOrder.newBuilder()
@@ -132,7 +132,7 @@ public class CreateToDeliverIngestBridge {
             String customerId = ConnectorUtils.readField(message, "customer_id");
             String readyAt = ConnectorUtils.readField(message, "ready_at");
             if (!orderId.isBlank() && !customerId.isBlank() && !readyAt.isBlank()) {
-                if (isDuplicateOrderId(orderId)) {
+                if (isDuplicateHandoff(orderId, customerId, readyAt)) {
                     return null;
                 }
                 LOG.debugf(
@@ -145,24 +145,41 @@ public class CreateToDeliverIngestBridge {
                     .build();
             }
             LOG.warnf(
-                "Dropped create->deliver candidate with missing fields orderId='%s' customerId='%s' readyAt='%s' messageType=%s",
-                orderId, customerId, readyAt, message.getClass().getName());
+                "Dropped create->deliver candidate with missing fields signature=%s messageType=%s",
+                ConnectorUtils.failureSignature(
+                    "create-to-deliver",
+                    "mapping",
+                    "missing_required_fields",
+                    "na",
+                    orderId),
+                message.getClass().getName());
             return null;
         }
         LOG.warnf(
-            "Dropped unsupported create->deliver output item type=%s value=%s",
+            "Dropped unsupported create->deliver output item signature=%s type=%s value=%s",
+            ConnectorUtils.failureSignature(
+                "create-to-deliver",
+                "mapping",
+                "unsupported_item_type",
+                "na",
+                "na"),
             item == null ? "null" : item.getClass().getName(),
             item);
         return null;
     }
 
-    private boolean isDuplicateOrderId(String orderId) {
-        if (!idempotencyEnabled || orderId == null || orderId.isBlank()) {
+    private boolean isDuplicateHandoff(String orderId, String customerId, String readyAt) {
+        if (!idempotencyEnabled || orderId == null || orderId.isBlank() || idempotencyGuard == null) {
             return false;
         }
-        boolean firstOccurrence = idempotencyGuard.markIfNew(orderId);
+        String handoffKey = ConnectorUtils.deterministicHandoffKey(
+            "create-to-deliver",
+            orderId,
+            customerId,
+            readyAt);
+        boolean firstOccurrence = idempotencyGuard.markIfNew(handoffKey);
         if (!firstOccurrence) {
-            LOG.debugf("Dropped duplicate create->deliver handoff orderId=%s", orderId);
+            LOG.debugf("Dropped duplicate create->deliver handoff orderId=%s handoffKey=%s", orderId, handoffKey);
         }
         return !firstOccurrence;
     }

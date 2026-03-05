@@ -30,7 +30,7 @@ public class DeliverToNextIngestBridge {
     private final IdempotencyGuard idempotencyGuard;
     private final String backpressureStrategy;
     private final int backpressureBufferCapacity;
-    private final Set<String> inFlightOrderIds = new HashSet<>();
+    private final Set<String> inFlightHandoffKeys = new HashSet<>();
     private final Object inFlightLock = new Object();
 
     private Cancellable forwardingSubscription;
@@ -92,10 +92,16 @@ public class DeliverToNextIngestBridge {
                 OrderDeliveredSvc.DeliveredOrder mapped = toDeliveredOrder(item);
                 return mapped == null ? Multi.createFrom().empty() : Multi.createFrom().item(mapped);
             }).concatenate()
-            .onItem().invoke(order -> markForwarded(order.getOrderId()))
+            .onItem().invoke(this::markForwarded)
             .onFailure().invoke(error -> {
                 clearInFlightReservations();
-                LOG.error("Deliver->next stream failed before forwarding", error);
+                LOG.errorf(error, "Deliver->next stream failed before forwarding signature=%s",
+                    ConnectorUtils.failureSignature(
+                        "deliver-to-next",
+                        "stream",
+                        "downstream_ingest_failure",
+                        "na",
+                        "na"));
             })
             .onFailure().retry().withBackOff(Duration.ofMillis(100), Duration.ofSeconds(1)).indefinitely();
 
@@ -131,7 +137,7 @@ public class DeliverToNextIngestBridge {
      */
     private OrderDeliveredSvc.DeliveredOrder toDeliveredOrder(Object item) {
         if (item instanceof OrderDeliveredSvc.DeliveredOrder delivered) {
-            if (isDuplicateOrInFlight(delivered.getOrderId())) {
+            if (isDuplicateOrInFlight(delivered.getOrderId(), delivered.getDispatchId(), delivered.getDeliveredAt())) {
                 return null;
             }
             return delivered;
@@ -145,7 +151,7 @@ public class DeliverToNextIngestBridge {
             String deliveredAt = ConnectorUtils.readField(message, "delivered_at");
             if (!orderId.isBlank() && !customerId.isBlank() && !readyAt.isBlank()
                 && !dispatchId.isBlank() && !dispatchedAt.isBlank() && !deliveredAt.isBlank()) {
-                if (isDuplicateOrInFlight(orderId)) {
+                if (isDuplicateOrInFlight(orderId, dispatchId, deliveredAt)) {
                     return null;
                 }
                 return OrderDeliveredSvc.DeliveredOrder.newBuilder()
@@ -158,40 +164,54 @@ public class DeliverToNextIngestBridge {
                     .build();
             }
             LOG.debugf(
-                "Dropped Message item due to missing required fields order_id='%s' customer_id='%s' ready_at='%s' dispatch_id='%s' dispatched_at='%s' delivered_at='%s'",
-                orderId, customerId, readyAt, dispatchId, dispatchedAt, deliveredAt);
+                "Dropped Message item due to missing required fields signature=%s",
+                ConnectorUtils.failureSignature(
+                    "deliver-to-next",
+                    "mapping",
+                    "missing_required_fields",
+                    "na",
+                    orderId));
             return null;
         }
         LOG.debugf(
-            "Dropped unsupported deliver->next item type=%s",
+            "Dropped unsupported deliver->next item signature=%s type=%s",
+            ConnectorUtils.failureSignature(
+                "deliver-to-next",
+                "mapping",
+                "unsupported_item_type",
+                "na",
+                "na"),
             item == null ? "null" : item.getClass().getName());
         return null;
     }
 
-    private boolean isDuplicateOrInFlight(String orderId) {
+    private boolean isDuplicateOrInFlight(String orderId, String dispatchId, String deliveredAt) {
         if (!isIdempotencyActive() || orderId == null || orderId.isBlank()) {
             return false;
         }
+        String handoffKey = handoffKey(orderId, dispatchId, deliveredAt);
         // Lock ordering invariant:
-        // Always acquire inFlightLock before touching inFlightOrderIds and idempotencyGuard.
+        // Always acquire inFlightLock before touching inFlightHandoffKeys and idempotencyGuard.
         // markForwarded follows the same order. Preserve this ordering in future changes.
         synchronized (inFlightLock) {
-            if (idempotencyGuard.contains(orderId) || inFlightOrderIds.contains(orderId)) {
-                LOG.debugf("Dropped duplicate deliver->next handoff orderId=%s", orderId);
+            if (idempotencyGuard.contains(handoffKey) || inFlightHandoffKeys.contains(handoffKey)) {
+                LOG.debugf("Dropped duplicate deliver->next handoff orderId=%s handoffKey=%s", orderId, handoffKey);
                 return true;
             }
-            inFlightOrderIds.add(orderId);
+            inFlightHandoffKeys.add(handoffKey);
         }
         return false;
     }
 
-    private void markForwarded(String orderId) {
+    private void markForwarded(OrderDeliveredSvc.DeliveredOrder order) {
+        String orderId = order == null ? null : order.getOrderId();
         if (!isIdempotencyActive() || orderId == null || orderId.isBlank()) {
             return;
         }
+        String handoffKey = handoffKey(orderId, order.getDispatchId(), order.getDeliveredAt());
         synchronized (inFlightLock) {
-            inFlightOrderIds.remove(orderId);
-            idempotencyGuard.markIfNew(orderId);
+            inFlightHandoffKeys.remove(handoffKey);
+            idempotencyGuard.markIfNew(handoffKey);
         }
     }
 
@@ -203,7 +223,15 @@ public class DeliverToNextIngestBridge {
         synchronized (inFlightLock) {
             // Intentionally retain idempotencyGuard state here:
             // this bridge currently enforces at-most-once semantics for forwarded orderIds.
-            inFlightOrderIds.clear();
+            inFlightHandoffKeys.clear();
         }
+    }
+
+    private String handoffKey(String orderId, String dispatchId, String deliveredAt) {
+        return ConnectorUtils.deterministicHandoffKey(
+            "deliver-to-next",
+            orderId,
+            dispatchId,
+            deliveredAt);
     }
 }
