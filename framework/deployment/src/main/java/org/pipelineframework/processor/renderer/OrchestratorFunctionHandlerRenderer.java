@@ -297,6 +297,10 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
             .nextControlFlow("else")
             .beginControlFlow("if (request != null && request.input != null)")
             .addStatement("executionInput = request.input")
+            .nextControlFlow("else if (request != null && request.inputBatch != null && request.inputBatch.size() > 1)")
+            .addStatement("throw new $T($S)",
+                IllegalArgumentException.class,
+                "RunAsync unary handlers accept at most one item in inputBatch")
             .nextControlFlow("else if (request != null && request.inputBatch != null && !request.inputBatch.isEmpty())")
             .addStatement("executionInput = request.inputBatch.get(0)")
             .nextControlFlow("else")

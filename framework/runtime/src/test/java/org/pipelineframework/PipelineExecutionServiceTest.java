@@ -65,6 +65,16 @@ class PipelineExecutionServiceTest {
     }
 
     @Test
+    void executePipelineAsyncRejectsStreamingOutputFlagInQueueMode() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+
+        Uni<?> result = service.executePipelineAsync("input", "tenant-1", "idem-1", true);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> result.await().indefinitely());
+        assertTrue(error.getMessage().contains("does not support streaming pipeline outputs"));
+    }
+
+    @Test
     void getExecutionStatusReturnsRecordStateInQueueMode() throws Exception {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         setField("executionStateStore", executionStateStore);
