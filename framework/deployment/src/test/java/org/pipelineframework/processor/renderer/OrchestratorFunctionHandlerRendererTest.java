@@ -122,6 +122,7 @@ class OrchestratorFunctionHandlerRendererTest {
         String resultSource = Files.readString(resultPath);
         assertTrue(runAsyncSource.contains("implements RequestHandler<PipelineRunAsyncRequest, RunAsyncAcceptedDto>"));
         assertTrue(runAsyncSource.contains("pipelineExecutionService.executePipelineAsync"));
+        assertTrue(runAsyncSource.contains("RunAsync unary handlers accept at most one item in inputBatch"));
         assertTrue(statusSource.contains("implements RequestHandler<PipelineExecutionLookupRequest, ExecutionStatusDto>"));
         assertTrue(statusSource.contains("pipelineExecutionService.getExecutionStatus"));
         assertTrue(resultSource.contains("implements RequestHandler<PipelineExecutionLookupRequest,"));
@@ -261,6 +262,99 @@ class OrchestratorFunctionHandlerRendererTest {
             .firstStepServiceName("ProcessAlphaService")
             .firstStepStreamingShape(StreamingShape.UNARY_UNARY)
             .build();
+    }
+
+    @Test
+    void handlesEmptyInputBatchForUnaryHandlers() throws IOException {
+        renderAndReadSource(buildBinding());
+
+        Path runAsyncPath = tempDir.resolve("com/example/orchestrator/service/PipelineRunAsyncFunctionHandler.java");
+        String runAsyncSource = java.nio.file.Files.readString(runAsyncPath);
+
+        assertTrue(runAsyncSource.contains("request.inputBatch.isEmpty()"));
+        assertTrue(runAsyncSource.contains("executionInput = null"));
+    }
+
+    @Test
+    void handlesMultipleInputBatchItemsForStreamingInputHandlers() throws IOException {
+        renderAndReadSource(buildStreamingBinding(true, false));
+
+        Path runAsyncPath = tempDir.resolve("com/example/orchestrator/service/PipelineRunAsyncFunctionHandler.java");
+        String runAsyncSource = java.nio.file.Files.readString(runAsyncPath);
+
+        assertTrue(runAsyncSource.contains("request.inputBatch != null && !request.inputBatch.isEmpty()"));
+        assertTrue(runAsyncSource.contains("Multi.createFrom().iterable(request.inputBatch)"));
+    }
+
+    @Test
+    void rejectsMultipleInputBatchItemsForUnaryHandlers() throws IOException {
+        renderAndReadSource(buildBinding());
+
+        Path runAsyncPath = tempDir.resolve("com/example/orchestrator/service/PipelineRunAsyncFunctionHandler.java");
+        String runAsyncSource = java.nio.file.Files.readString(runAsyncPath);
+
+        assertTrue(runAsyncSource.contains("RunAsync unary handlers accept at most one item in inputBatch"));
+        assertTrue(runAsyncSource.contains("IllegalArgumentException"));
+    }
+
+    @Test
+    void executionLookupRequestRequiresExecutionId() throws IOException {
+        renderAndReadSource(buildBinding());
+
+        Path statusPath = tempDir.resolve("com/example/orchestrator/service/PipelineExecutionStatusFunctionHandler.java");
+        String statusSource = java.nio.file.Files.readString(statusPath);
+
+        assertTrue(statusSource.contains("request.executionId == null || request.executionId.isBlank()"));
+        assertTrue(statusSource.contains("executionId is required"));
+
+        Path resultPath = tempDir.resolve("com/example/orchestrator/service/PipelineExecutionResultFunctionHandler.java");
+        String resultSource = java.nio.file.Files.readString(resultPath);
+
+        assertTrue(resultSource.contains("request.executionId == null || request.executionId.isBlank()"));
+        assertTrue(resultSource.contains("executionId is required"));
+    }
+
+    @Test
+    void rendersTransportContextWithLambdaAttributes() throws IOException {
+        String source = renderAndReadSource(buildBinding());
+
+        assertTrue(source.contains("FunctionTransportContext.of"));
+        assertTrue(source.contains("context.getAwsRequestId()"));
+        assertTrue(source.contains("context.getFunctionName()"));
+        assertTrue(source.contains("context.getLogStreamName()"));
+        assertTrue(source.contains("ATTR_CORRELATION_ID"));
+        assertTrue(source.contains("ATTR_EXECUTION_ID"));
+        assertTrue(source.contains("ATTR_RETRY_ATTEMPT"));
+        assertTrue(source.contains("ATTR_DISPATCH_TS_EPOCH_MS"));
+    }
+
+    @Test
+    void handlesNullLambdaContext() throws IOException {
+        String source = renderAndReadSource(buildBinding());
+
+        assertTrue(source.contains("context != null ? context.getAwsRequestId() : \"unknown-request\""));
+        assertTrue(source.contains("context != null ? context.getFunctionName() : \"PipelineRunFunctionHandler\""));
+    }
+
+    @Test
+    void generatesRequestDtoClasses() throws IOException {
+        renderAndReadSource(buildBinding());
+
+        Path runAsyncRequestPath = tempDir.resolve("com/example/orchestrator/service/PipelineRunAsyncRequest.java");
+        Path lookupRequestPath = tempDir.resolve("com/example/orchestrator/service/PipelineExecutionLookupRequest.java");
+
+        String runAsyncRequest = java.nio.file.Files.readString(runAsyncRequestPath);
+        String lookupRequest = java.nio.file.Files.readString(lookupRequestPath);
+
+        assertTrue(runAsyncRequest.contains("public class PipelineRunAsyncRequest"));
+        assertTrue(runAsyncRequest.contains("public InputTypeDto input"));
+        assertTrue(runAsyncRequest.contains("public List<InputTypeDto> inputBatch"));
+        assertTrue(runAsyncRequest.contains("public String tenantId"));
+        assertTrue(runAsyncRequest.contains("public String idempotencyKey"));
+
+        assertTrue(lookupRequest.contains("public class PipelineExecutionLookupRequest"));
+        assertTrue(lookupRequest.contains("public String tenantId"));
+        assertTrue(lookupRequest.contains("public String executionId"));
     }
 
     private static final class TestOrchestratorBindingBuilder {

@@ -43,8 +43,10 @@ class OrchestratorGrpcRendererTest {
         assertTrue(source.contains("executePipelineUnary"));
         assertTrue(source.contains("public Uni<RunAsyncResponse> runAsync(RunAsyncRequest request)"));
         assertTrue(source.contains("executePipelineAsync"));
+        assertTrue(source.contains("RunAsync unary pipelines accept at most one item in input_batch."));
         assertTrue(source.contains("public Uni<GetExecutionStatusResponse> getExecutionStatus(GetExecutionStatusRequest request)"));
         assertTrue(source.contains("public Uni<GetExecutionResultResponse> getExecutionResult(GetExecutionResultRequest request)"));
+        assertTrue(source.contains("executionId is required"));
         assertTrue(source.contains("public Multi<OutputType> ingest(Multi<InputType> input)"));
         assertTrue(source.contains("public Multi<OutputType> subscribe("));
         assertTrue(source.contains("pipelineOutputBus"));
