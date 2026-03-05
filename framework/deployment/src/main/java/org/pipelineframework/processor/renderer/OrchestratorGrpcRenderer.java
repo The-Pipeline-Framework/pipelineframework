@@ -331,6 +331,27 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         }
     }
 
+    /**
+     * Builds the generated `runAsync` RPC method for the orchestrator gRPC service.
+     *
+     * <p>The created MethodSpec implements a public `runAsync` RPC that accepts the resolved
+     * request type and produces a response of the resolved response type. The generated method
+     * validates input for non-streaming pipelines (returns a failure if the input batch contains
+     * more than one item), adapts batched or single inputs according to the binding's
+     * inputStreaming flag, invokes the pipeline execution service to start asynchronous execution,
+     * maps the execution acceptance into the response message, and records RPC telemetry on success
+     * and failure.
+     *
+     * @param binding orchestrator binding that indicates whether the pipeline uses input streaming
+     * @param typeResolver resolver used to obtain gRPC parameter and return types for the async binding
+     * @param ctx generation context providing the processing environment and messaging utilities
+     * @param runAsyncBinding resolved async gRPC binding; may be null
+     * @param inputType resolved gRPC input message ClassName
+     * @param outputType resolved gRPC output message ClassName
+     * @param uni ClassName representing `Uni` used for the method return
+     * @param multi ClassName representing `Multi` used for batching inputs when input streaming
+     * @return a MethodSpec for the generated `runAsync` RPC, or `null` if `runAsyncBinding` is null or required types cannot be resolved
+     */
     private MethodSpec buildRunAsyncMethod(
         OrchestratorBinding binding,
         GrpcJavaTypeResolver typeResolver,
@@ -432,6 +453,18 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         return method.build();
     }
 
+    /**
+     * Builds the MethodSpec for the `getExecutionStatus` gRPC RPC.
+     *
+     * Constructs a method that validates the request, invokes the pipeline execution service to
+     * retrieve status, maps the result into the resolved gRPC response type, and records RPC telemetry.
+     *
+     * @param typeResolver resolves request and response gRPC types for the provided binding
+     * @param ctx the generation context used for environment access and messaging
+     * @param statusBinding the gRPC binding describing the status RPC
+     * @param uni the `Uni` ClassName used as the reactive return wrapper
+     * @return the MethodSpec for `getExecutionStatus`, or `null` if the binding or request/response types cannot be resolved
+     */
     private MethodSpec buildExecutionStatusMethod(
         GrpcJavaTypeResolver typeResolver,
         GenerationContext ctx,
@@ -491,6 +524,17 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
             .build();
     }
 
+    /**
+     * Builds the MethodSpec for the gRPC `getExecutionResult` RPC implementation, or returns null if the result binding or its request/response types cannot be resolved.
+     *
+     * @param binding the orchestrator binding configuration used to determine streaming behavior
+     * @param typeResolver resolver for gRPC request/response types
+     * @param ctx generation context providing processing environment and messaging
+     * @param resultBinding the resolved gRPC binding for the execution result RPC
+     * @param outputType the JavaPoet ClassName representing the pipeline output message type
+     * @param uni the JavaPoet ClassName representing the reactive `Uni` type to wrap the response
+     * @return the constructed MethodSpec for `getExecutionResult`, or `null` if not applicable
+     */
     private MethodSpec buildExecutionResultMethod(
         OrchestratorBinding binding,
         GrpcJavaTypeResolver typeResolver,

@@ -246,6 +246,24 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
         renderAsyncHandlers(binding, ctx, inputDto, outputDto, streamingInput, streamingOutput);
     }
 
+    /**
+     * Generates and writes async orchestrator request/handler classes for pipeline execution.
+     *
+     * <p>Produces two request DTOs (RunAsyncRequest, ExecutionLookupRequest) and three RequestHandler
+     * implementations (RunAsyncHandler, ExecutionStatus, ExecutionResult) under
+     * {basePackage}.orchestrator.service, configured according to the provided input/output DTO
+     * types and streaming flags. The generated handlers inject PipelineExecutionService and delegate
+     * to its async execution, status, and result APIs. For non-streaming unary RunAsync requests, a
+     * multi-item inputBatch is rejected with an IllegalArgumentException.
+     *
+     * @param binding descriptor of the orchestrator binding (used to determine package names)
+     * @param ctx generation context that provides the output directory
+     * @param inputDto the ClassName of the input DTO type for generated classes
+     * @param outputDto the ClassName of the output DTO type for generated classes
+     * @param streamingInput whether the orchestrator accepts streaming input (affects request shape and adapters)
+     * @param streamingOutput whether the orchestrator produces streaming output (affects result type and handlers)
+     * @throws IOException if emitting the generated Java files fails
+     */
     private void renderAsyncHandlers(
         OrchestratorBinding binding,
         GenerationContext ctx,
