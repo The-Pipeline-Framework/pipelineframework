@@ -385,6 +385,40 @@ public class PipelineProtoGenerator {
         }
         builder.append("import \"google/protobuf/empty.proto\";\n");
         builder.append('\n');
+        builder.append("message RunAsyncRequest {\n");
+        builder.append("  ").append(first.inputTypeName()).append(" input = 1;\n");
+        builder.append("  repeated ").append(first.inputTypeName()).append(" input_batch = 2;\n");
+        builder.append("  string tenant_id = 3;\n");
+        builder.append("  string idempotency_key = 4;\n");
+        builder.append("}\n\n");
+        builder.append("message RunAsyncResponse {\n");
+        builder.append("  string execution_id = 1;\n");
+        builder.append("  bool duplicate = 2;\n");
+        builder.append("  string status_url = 3;\n");
+        builder.append("  int64 accepted_at_epoch_ms = 4;\n");
+        builder.append("}\n\n");
+        builder.append("message GetExecutionStatusRequest {\n");
+        builder.append("  string tenant_id = 1;\n");
+        builder.append("  string execution_id = 2;\n");
+        builder.append("}\n\n");
+        builder.append("message GetExecutionStatusResponse {\n");
+        builder.append("  string execution_id = 1;\n");
+        builder.append("  string status = 2;\n");
+        builder.append("  int32 current_step_index = 3;\n");
+        builder.append("  int32 attempt = 4;\n");
+        builder.append("  int64 version = 5;\n");
+        builder.append("  int64 next_due_epoch_ms = 6;\n");
+        builder.append("  int64 updated_at_epoch_ms = 7;\n");
+        builder.append("  string error_code = 8;\n");
+        builder.append("  string error_message = 9;\n");
+        builder.append("}\n\n");
+        builder.append("message GetExecutionResultRequest {\n");
+        builder.append("  string tenant_id = 1;\n");
+        builder.append("  string execution_id = 2;\n");
+        builder.append("}\n\n");
+        builder.append("message GetExecutionResultResponse {\n");
+        builder.append("  repeated ").append(last.outputTypeName()).append(" items = 1;\n");
+        builder.append("}\n\n");
         builder.append("service OrchestratorService {\n");
         builder.append("  rpc Run (");
         if (shape.inputStreaming()) {
@@ -402,6 +436,11 @@ public class PipelineProtoGenerator {
             .append(") returns (stream ")
             .append(last.outputTypeName())
             .append(");\n");
+        builder.append("  rpc RunAsync (RunAsyncRequest) returns (RunAsyncResponse);\n");
+        builder.append(
+            "  rpc GetExecutionStatus (GetExecutionStatusRequest) returns (GetExecutionStatusResponse);\n");
+        builder.append(
+            "  rpc GetExecutionResult (GetExecutionResultRequest) returns (GetExecutionResultResponse);\n");
         builder.append("  rpc Subscribe (google.protobuf.Empty) returns (stream ")
             .append(last.outputTypeName())
             .append(");\n");

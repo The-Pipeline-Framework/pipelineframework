@@ -3,6 +3,12 @@
 ## Scope
 This document defines orchestrator-side dispatch changes required to make Protobuf-over-HTTP replay-safe under at-least-once delivery and multi-instance deployments.
 
+Status in current GA track:
+
+1. Contract parity is being aligned across REST, gRPC, Function, and Protobuf-over-HTTP.
+2. Async control-plane semantics are shared across transports (same transition identity and retry model).
+3. Event-sourced dispatch journaling remains a future evolution path, not a GA blocker.
+
 ## Dispatch Metadata Generation
 For every outbound dispatch, orchestrator must emit:
 - `x-tpf-correlation-id`

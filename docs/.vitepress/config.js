@@ -105,6 +105,7 @@ const mainSidebar = [
         text: 'Operate',
         collapsed: true,
         items: [
+            {text: 'Orchestrator Runtime Modes', link: '/guide/development/orchestrator-runtime'},
             {text: 'Error Handling & DLQ', link: '/guide/operations/error-handling'},
             {text: 'In-flight Probe', link: '/guide/operations/in-flight-probe'},
             {text: 'Operators', link: '/guide/operations/operators'},
@@ -189,6 +190,7 @@ const mainSidebar = [
             {text: 'Testing Guidelines', link: '/guide/evolve/testing-guidelines'},
             {text: 'Gotchas & Pitfalls', link: '/guide/evolve/gotchas-pitfalls'},
             {text: 'Proto Descriptor Integration', link: '/guide/evolve/protobuf-integration-descriptor-res'},
+            {text: 'Protobuf-over-HTTP Dispatch Design', link: '/guide/evolve/protobuf-over-http-dispatch-design'},
             {
                 text: 'Aspects',
                 collapsed: true,
