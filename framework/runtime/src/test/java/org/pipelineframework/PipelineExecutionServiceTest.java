@@ -4,6 +4,7 @@ import java.util.Optional;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import jakarta.enterprise.inject.Instance;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,10 +17,14 @@ import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
 import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.ExecutionStatus;
-import org.pipelineframework.orchestrator.OrchestratorMode;
+import org.pipelineframework.orchestrator.EventWorkDispatcher;
+import org.pipelineframework.orchestrator.LoggingDeadLetterPublisher;
 import org.pipelineframework.orchestrator.OrchestratorIdempotencyPolicy;
+import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.WorkDispatcher;
+import org.pipelineframework.orchestrator.DeadLetterPublisher;
+import org.pipelineframework.orchestrator.DynamoExecutionStateStore;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -43,6 +48,15 @@ class PipelineExecutionServiceTest {
 
     @Mock
     private WorkDispatcher workDispatcher;
+
+    @Mock
+    private Instance<ExecutionStateStore> executionStateStores;
+
+    @Mock
+    private Instance<WorkDispatcher> workDispatchers;
+
+    @Mock
+    private Instance<DeadLetterPublisher> deadLetterPublishers;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -72,6 +86,27 @@ class PipelineExecutionServiceTest {
 
         IllegalStateException error = assertThrows(IllegalStateException.class, () -> result.await().indefinitely());
         assertTrue(error.getMessage().contains("does not support streaming pipeline outputs"));
+    }
+
+    @Test
+    void initializeQueueModeFailsFastWhenSelectedProviderReportsStartupError() throws Exception {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.stateProvider()).thenReturn("dynamo");
+        when(orchestratorConfig.dispatcherProvider()).thenReturn("event");
+        when(orchestratorConfig.dlqProvider()).thenReturn("log");
+        when(orchestratorConfig.strictStartup()).thenReturn(true);
+
+        when(executionStateStores.stream()).thenReturn(java.util.stream.Stream.of(new DynamoExecutionStateStore()));
+        when(workDispatchers.stream()).thenReturn(java.util.stream.Stream.of(new EventWorkDispatcher()));
+        when(deadLetterPublishers.stream()).thenReturn(java.util.stream.Stream.of(new LoggingDeadLetterPublisher()));
+        setField("executionStateStores", executionStateStores);
+        setField("workDispatchers", workDispatchers);
+        setField("deadLetterPublishers", deadLetterPublishers);
+
+        IllegalStateException error = assertThrows(
+            IllegalStateException.class,
+            this::invokeInitializeQueueMode);
+        assertTrue(error.getMessage().contains("ExecutionStateStore(dynamo)"));
     }
 
     @Test
@@ -184,5 +219,18 @@ class PipelineExecutionServiceTest {
         var field = PipelineExecutionService.class.getDeclaredField(fieldName);
         field.setAccessible(true);
         field.set(service, value);
+    }
+
+    private void invokeInitializeQueueMode() throws Exception {
+        var method = PipelineExecutionService.class.getDeclaredMethod("initializeQueueMode");
+        method.setAccessible(true);
+        try {
+            method.invoke(service);
+        } catch (java.lang.reflect.InvocationTargetException e) {
+            if (e.getCause() instanceof Exception exception) {
+                throw exception;
+            }
+            throw e;
+        }
     }
 }
