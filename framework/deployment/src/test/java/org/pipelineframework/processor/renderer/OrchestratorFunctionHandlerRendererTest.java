@@ -124,6 +124,7 @@ class OrchestratorFunctionHandlerRendererTest {
         assertTrue(runAsyncSource.contains("pipelineExecutionService.executePipelineAsync"));
         assertTrue(statusSource.contains("implements RequestHandler<PipelineExecutionLookupRequest, ExecutionStatusDto>"));
         assertTrue(statusSource.contains("pipelineExecutionService.getExecutionStatus"));
+        assertTrue(resultSource.contains("pipelineExecutionService.<OutputTypeDto>getExecutionResult"));
         assertTrue(resultSource.contains("implements RequestHandler<PipelineExecutionLookupRequest,"));
         assertTrue(resultSource.contains("getExecutionResult("));
     }
@@ -198,6 +199,7 @@ class OrchestratorFunctionHandlerRendererTest {
         String resultSource = Files.readString(resultPath);
 
         assertTrue(resultSource.contains("implements RequestHandler<PipelineExecutionLookupRequest, List<OutputTypeDto>>"));
+        assertTrue(resultSource.contains("pipelineExecutionService.<List<OutputTypeDto>>getExecutionResult"));
     }
 
     @Test
@@ -217,6 +219,84 @@ class OrchestratorFunctionHandlerRendererTest {
 
         assertTrue(source.contains("catch (RuntimeException e)"));
         assertTrue(source.contains("throw new RuntimeException(\"Failed handleRequest -> resource.run for input DTO\", e)"));
+    }
+
+    @Test
+    void handlerFqcnReturnsCorrectPackageAndClassName() {
+        String fqcn = OrchestratorFunctionHandlerRenderer.handlerFqcn("com.example");
+        assertEquals("com.example.orchestrator.service.PipelineRunFunctionHandler", fqcn);
+    }
+
+    @Test
+    void runAsyncHandlerFqcnReturnsCorrectPackageAndClassName() {
+        String fqcn = OrchestratorFunctionHandlerRenderer.runAsyncHandlerFqcn("com.example");
+        assertEquals("com.example.orchestrator.service.PipelineRunAsyncFunctionHandler", fqcn);
+    }
+
+    @Test
+    void statusHandlerFqcnReturnsCorrectPackageAndClassName() {
+        String fqcn = OrchestratorFunctionHandlerRenderer.statusHandlerFqcn("com.example");
+        assertEquals("com.example.orchestrator.service.PipelineExecutionStatusFunctionHandler", fqcn);
+    }
+
+    @Test
+    void resultHandlerFqcnReturnsCorrectPackageAndClassName() {
+        String fqcn = OrchestratorFunctionHandlerRenderer.resultHandlerFqcn("com.example");
+        assertEquals("com.example.orchestrator.service.PipelineExecutionResultFunctionHandler", fqcn);
+    }
+
+    @Test
+    void rendersUnaryHandlerWithNullContextHandling() throws IOException {
+        String source = renderAndReadSource(buildBinding());
+
+        assertTrue(source.contains("context != null ? context.getAwsRequestId() : \"unknown-request\""));
+        assertTrue(source.contains("context != null ? context.getFunctionName() : \"PipelineRunFunctionHandler\""));
+    }
+
+    @Test
+    void rendersRunAsyncHandlerWithInputValidation() throws IOException {
+        renderAndReadSource(buildBinding());
+        Path runAsyncPath = tempDir.resolve("com/example/orchestrator/service/PipelineRunAsyncFunctionHandler.java");
+        String source = Files.readString(runAsyncPath);
+
+        assertTrue(source.contains("if (request != null && request.inputBatch != null && !request.inputBatch.isEmpty())"));
+        assertTrue(source.contains("else if (request != null && request.input != null)"));
+        assertTrue(source.contains("else"));
+        assertTrue(source.contains("executionInput = null"));
+    }
+
+    @Test
+    void rendersStreamingInputHandlerWithMultiCreation() throws IOException {
+        renderAndReadSource(buildStreamingBinding(true, false));
+        Path runAsyncPath = tempDir.resolve("com/example/orchestrator/service/PipelineRunAsyncFunctionHandler.java");
+        String source = Files.readString(runAsyncPath);
+
+        assertTrue(source.contains("Multi.createFrom().iterable(request.inputBatch)"));
+        assertTrue(source.contains("Multi.createFrom().item(request.input)"));
+        assertTrue(source.contains("Multi.createFrom().empty()"));
+    }
+
+    @Test
+    void rendersGeneratedRoleAnnotation() throws IOException {
+        String source = renderAndReadSource(buildBinding());
+
+        assertTrue(source.contains("@GeneratedRole"));
+        assertTrue(source.contains("GeneratedRole.Role.REST_SERVER"));
+    }
+
+    @Test
+    void rendersNamedAnnotationWithHandlerName() throws IOException {
+        String source = renderAndReadSource(buildBinding());
+
+        assertTrue(source.contains("@Named(\"PipelineRunFunctionHandler\")"));
+    }
+
+    @Test
+    void rendersInvocationModeRoutingAdapter() throws IOException {
+        String source = renderAndReadSource(buildBinding());
+
+        assertTrue(source.contains("InvocationModeRoutingFunctionInvokeAdapter"));
+        assertTrue(source.contains("invokeLocal, invokeRemote"));
     }
 
     private String renderAndReadSource(OrchestratorBinding binding) throws IOException {
