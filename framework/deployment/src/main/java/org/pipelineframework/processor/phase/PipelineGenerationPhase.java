@@ -441,9 +441,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Generate orchestrator server and client source artifacts based on the orchestrator binding's transport.
+     * Generate orchestrator server and client source artifacts according to the orchestrator binding's transport.
      *
-     * Renders a REST orchestrator server when transport is REST, a gRPC pipeline server when transport is gRPC (or unspecified), and skips server generation for LOCAL transport; additionally renders a CLI client when {@code generateCli} is true and renders an ingest client when transport is neither REST nor LOCAL. Errors during generation are reported to the processing environment Messager.
+     * Renders a REST server when transport is REST, a gRPC server when transport is gRPC or unspecified, and skips server generation for LOCAL transport; when platform-function mode applies, also renders native function handlers and records their handler classes in role metadata. Additionally renders a CLI client when {@code generateCli} is true and renders an ingest client when transport is neither REST nor LOCAL. Generation errors are reported to the processing environment messager.
      *
      * @param ctx the pipeline compilation context
      * @param descriptorSet protobuf descriptor set used during generation; may be {@code null}

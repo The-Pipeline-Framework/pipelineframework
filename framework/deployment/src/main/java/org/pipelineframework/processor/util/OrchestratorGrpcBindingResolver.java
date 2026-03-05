@@ -196,6 +196,14 @@ public class OrchestratorGrpcBindingResolver {
         return found;
     }
 
+    /**
+     * Ensures a gRPC method's client/server streaming flags match the expected pipeline streaming shape.
+     *
+     * @param methodDescriptor the method descriptor whose streaming semantics will be validated
+     * @param inputStreaming   true if the pipeline expects client (input) streaming, false otherwise
+     * @param outputStreaming  true if the pipeline expects server (output) streaming, false otherwise
+     * @throws IllegalStateException if the method's client or server streaming setting does not match the expected values
+     */
     private void validateStreamingSemantics(
         Descriptors.MethodDescriptor methodDescriptor,
         boolean inputStreaming,

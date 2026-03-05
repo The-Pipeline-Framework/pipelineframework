@@ -94,30 +94,30 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
     }
 
     /**
-     * Resolve fully-qualified async run function handler class name for a base package.
+     * Resolve the fully-qualified class name of the generated async run handler for the given base package.
      *
-     * @param basePackage base package
-     * @return generated handler FQCN
+     * @param basePackage the base Java package where generated orchestrator classes are placed
+     * @return the fully-qualified class name of the async run handler
      */
     public static String runAsyncHandlerFqcn(String basePackage) {
         return basePackage + ".orchestrator.service." + RUN_ASYNC_HANDLER_CLASS;
     }
 
     /**
-     * Resolve fully-qualified execution status function handler class name for a base package.
+     * Get the fully-qualified class name of the execution status handler for the given base package.
      *
-     * @param basePackage base package
-     * @return generated handler FQCN
+     * @param basePackage the base Java package used for generated classes
+     * @return the fully-qualified class name of the generated status handler
      */
     public static String statusHandlerFqcn(String basePackage) {
         return basePackage + ".orchestrator.service." + STATUS_HANDLER_CLASS;
     }
 
     /**
-     * Resolve fully-qualified execution result function handler class name for a base package.
+     * Builds the fully-qualified class name of the execution result handler for the given base package.
      *
-     * @param basePackage base package
-     * @return generated handler FQCN
+     * @param basePackage the base package to use when composing the FQCN
+     * @return the fully-qualified class name of the result handler
      */
     public static String resultHandlerFqcn(String basePackage) {
         return basePackage + ".orchestrator.service." + RESULT_HANDLER_CLASS;
@@ -246,6 +246,23 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
         renderAsyncHandlers(binding, ctx, inputDto, outputDto, streamingInput, streamingOutput);
     }
 
+    /**
+     * Generates auxiliary asynchronous orchestrator handlers and request DTOs (run-async, status, result)
+     * and writes them to the orchestrator.service package.
+     *
+     * This creates:
+     * - RunAsyncRequest and ExecutionLookupRequest DTOs.
+     * - RunAsyncHandler, StatusHandler, and ResultHandler AWS Lambda RequestHandler implementations
+     *   that delegate to PipelineExecutionService and respect streaming input/output configuration.
+     *
+     * @param binding the orchestrator binding containing base package information used for generated types
+     * @param ctx the generation context providing the output directory for written Java files
+     * @param inputDto the ClassName reference for the pipeline input DTO
+     * @param outputDto the ClassName reference for the pipeline output DTO
+     * @param streamingInput true when the pipeline accepts a streaming (multi) input
+     * @param streamingOutput true when the pipeline produces a streaming (multi) output
+     * @throws IOException if writing the generated Java files to the output directory fails
+     */
     private void renderAsyncHandlers(
         OrchestratorBinding binding,
         GenerationContext ctx,
@@ -404,6 +421,17 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
             .writeTo(ctx.outputDir());
     }
 
+    /**
+     * Selects the appropriate local invoke adapter class for the given input/output streaming configuration.
+     *
+     * @param streamingInput           true if the pipeline input is a stream of records, false if unary
+     * @param streamingOutput          true if the pipeline output is a stream of records, false if unary
+     * @param localInvokeAdapter       adapter to use for unary->unary invocation
+     * @param localOneToManyInvokeAdapter adapter to use when input is unary and output is streaming
+     * @param localManyToOneInvokeAdapter adapter to use when input is streaming and output is unary
+     * @param localManyToManyInvokeAdapter adapter to use when both input and output are streaming
+     * @return                         the ClassName of the adapter appropriate for the specified streaming mode
+     */
     private static ClassName selectInvokeAdapter(
             boolean streamingInput,
             boolean streamingOutput,
