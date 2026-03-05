@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import java.time.Duration;
+import java.util.Optional;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import io.smallrye.mutiny.Uni;
@@ -26,6 +27,11 @@ public class SqsWorkDispatcher implements WorkDispatcher {
     @Override
     public int priority() {
         return -1000;
+    }
+
+    @Override
+    public Optional<String> startupValidationError(PipelineOrchestratorConfig config) {
+        return Optional.of(ERROR);
     }
 
     @Override
