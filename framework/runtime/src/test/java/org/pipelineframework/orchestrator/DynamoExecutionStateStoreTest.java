@@ -1,5 +1,6 @@
 package org.pipelineframework.orchestrator;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -223,7 +224,12 @@ class DynamoExecutionStateStoreTest {
         long now = System.currentTimeMillis();
         long nextDue = now + 10000;
         long ttl = now / 1000 + 3600;
-        Map<String, AttributeValue> retryItem = executionItem("tenant-a", "exec-1", "key-1", ttl, ExecutionStatus.WAIT_RETRY);
+        Map<String, AttributeValue> retryItem = new HashMap<>(executionItem(
+            "tenant-a",
+            "exec-1",
+            "key-1",
+            ttl,
+            ExecutionStatus.WAIT_RETRY));
         retryItem.put("attempt", AttributeValue.builder().n("1").build());
         retryItem.put("next_due_epoch_ms", AttributeValue.builder().n(Long.toString(nextDue)).build());
         retryItem.put("error_code", AttributeValue.builder().s("TIMEOUT").build());
@@ -326,7 +332,12 @@ class DynamoExecutionStateStoreTest {
         long now = System.currentTimeMillis();
         long leaseExpiry = now + 30000;
         long ttl = now / 1000 + 3600;
-        Map<String, AttributeValue> claimedItem = executionItem("tenant-a", "exec-1", "key-1", ttl, ExecutionStatus.RUNNING);
+        Map<String, AttributeValue> claimedItem = new HashMap<>(executionItem(
+            "tenant-a",
+            "exec-1",
+            "key-1",
+            ttl,
+            ExecutionStatus.RUNNING));
         claimedItem.put("lease_owner", AttributeValue.builder().s("worker-1").build());
         claimedItem.put("lease_expires_epoch_ms", AttributeValue.builder().n(Long.toString(leaseExpiry)).build());
 

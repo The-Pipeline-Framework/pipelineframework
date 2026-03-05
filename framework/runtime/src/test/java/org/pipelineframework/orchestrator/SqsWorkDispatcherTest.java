@@ -132,7 +132,7 @@ class SqsWorkDispatcherTest {
         dispatcher.enqueueDelayed(new ExecutionWorkItem("tenant-a", "exec-1"), Duration.ofSeconds(1000))
             .await().indefinitely();
 
-        verify(client).sendMessage(argThat(request ->
+        verify(client).sendMessage(argThat((SendMessageRequest request) ->
             request.delaySeconds() == 900
         ));
     }
@@ -149,7 +149,7 @@ class SqsWorkDispatcherTest {
         dispatcher.enqueueDelayed(new ExecutionWorkItem("tenant-a", "exec-1"), null)
             .await().indefinitely();
 
-        verify(client).sendMessage(argThat(request ->
+        verify(client).sendMessage(argThat((SendMessageRequest request) ->
             request.delaySeconds() == 0
         ));
         verify(event).fireAsync(any());
@@ -221,7 +221,7 @@ class SqsWorkDispatcherTest {
 
         dispatcher.enqueueNow(new ExecutionWorkItem("tenant-a", "exec-1")).await().indefinitely();
 
-        verify(client).sendMessage(argThat(request ->
+        verify(client).sendMessage(argThat((SendMessageRequest request) ->
             request.delaySeconds() == 0
         ));
     }
