@@ -124,7 +124,7 @@ class OrchestratorFunctionHandlerRendererTest {
         assertTrue(runAsyncSource.contains("RunAsync unary handlers accept at most one item in inputBatch"));
         assertTrue(statusSource.contains("implements RequestHandler<PipelineExecutionLookupRequest, ExecutionStatusDto>"));
         assertTrue(statusSource.contains("pipelineExecutionService.getExecutionStatus"));
-        assertTrue(resultSource.contains("pipelineExecutionService.getExecutionResult"));
+        assertTrue(resultSource.contains("pipelineExecutionService.<OutputTypeDto>getExecutionResult"));
     }
 
     private String renderAndReadSource(OrchestratorBinding binding) throws IOException {

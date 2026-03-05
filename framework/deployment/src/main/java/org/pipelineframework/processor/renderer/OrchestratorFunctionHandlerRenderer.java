@@ -359,7 +359,7 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
             .addMethod(statusHandleRequest)
             .build();
 
-        MethodSpec resultHandleRequest = MethodSpec.methodBuilder("handleRequest")
+        MethodSpec.Builder resultHandleRequestBuilder = MethodSpec.methodBuilder("handleRequest")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
             .returns(asyncResultType)
@@ -367,13 +367,21 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
             .addParameter(LAMBDA_CONTEXT, "context")
             .beginControlFlow("if (request == null || request.executionId == null || request.executionId.isBlank())")
             .addStatement("throw new $T($S)", IllegalArgumentException.class, "executionId is required")
-            .endControlFlow()
-            .addStatement(
-                "return pipelineExecutionService.getExecutionResult(request.tenantId, request.executionId, $T.class, $L)"
+            .endControlFlow();
+        if (streamingOutput) {
+            resultHandleRequestBuilder.addStatement(
+                "return pipelineExecutionService.<$T>getExecutionResult(request.tenantId, request.executionId, $T.class, true)"
+                    + ".await().indefinitely()",
+                asyncResultType,
+                outputDto);
+        } else {
+            resultHandleRequestBuilder.addStatement(
+                "return pipelineExecutionService.<$T>getExecutionResult(request.tenantId, request.executionId, $T.class, false)"
                     + ".await().indefinitely()",
                 outputDto,
-                streamingOutput)
-            .build();
+                outputDto);
+        }
+        MethodSpec resultHandleRequest = resultHandleRequestBuilder.build();
 
         TypeSpec resultHandler = TypeSpec.classBuilder(RESULT_HANDLER_CLASS)
             .addModifiers(Modifier.PUBLIC)
