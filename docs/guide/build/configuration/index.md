@@ -181,6 +181,34 @@ Prefix: `pipeline`
 | `pipeline.parallelism`     | string  | `AUTO`  | Parallelism policy: `SEQUENTIAL`, `AUTO`, or `PARALLEL`.    |
 | `pipeline.max-concurrency` | integer | `128`   | Per-step maximum in-flight items when parallel execution is enabled. |
 
+### Orchestrator Queue-Async
+
+Prefix: `pipeline.orchestrator`
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `pipeline.orchestrator.mode` | enum | `SYNC` | Orchestrator mode (`SYNC`, `QUEUE_ASYNC`). |
+| `pipeline.orchestrator.default-tenant` | string | `default` | Fallback tenant when caller omits tenant id. |
+| `pipeline.orchestrator.execution-ttl-days` | int | `7` | Execution state retention in days. |
+| `pipeline.orchestrator.lease-ms` | long | `30000` | Lease duration for claimed executions. |
+| `pipeline.orchestrator.max-retries` | int | `3` | Max execution-level retries before terminal failure. |
+| `pipeline.orchestrator.retry-delay` | duration | `PT10S` | Base retry delay. |
+| `pipeline.orchestrator.retry-multiplier` | double | `2.0` | Retry backoff multiplier. |
+| `pipeline.orchestrator.sweep-interval` | duration | `PT30S` | Interval for due-execution sweep/re-dispatch. |
+| `pipeline.orchestrator.sweep-limit` | int | `100` | Max due executions swept per pass. |
+| `pipeline.orchestrator.idempotency-policy` | enum | `OPTIONAL_CLIENT_KEY` | `OPTIONAL_CLIENT_KEY`, `CLIENT_KEY_REQUIRED`, `SERVER_KEY_ONLY`. |
+| `pipeline.orchestrator.state-provider` | string | `memory` | `ExecutionStateStore` provider selector. |
+| `pipeline.orchestrator.dispatcher-provider` | string | `event` | `WorkDispatcher` provider selector. |
+| `pipeline.orchestrator.dlq-provider` | string | `log` | `DeadLetterPublisher` provider selector. |
+| `pipeline.orchestrator.queue-url` | string | none | Queue URL for external dispatcher providers. |
+| `pipeline.orchestrator.strict-startup` | boolean | `true` | Fail startup if queue mode prerequisites are invalid. |
+
+Queue mode notes:
+
+1. `QUEUE_ASYNC` rejects async streaming output for this milestone.
+2. Keep `strict-startup=true` in production so invalid provider wiring fails fast.
+3. In-memory providers are for local/dev only; use durable providers for HA.
+
 ### Telemetry
 
 Prefix: `pipeline.telemetry`

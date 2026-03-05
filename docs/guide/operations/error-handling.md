@@ -95,6 +95,23 @@ Best practices:
 
 The Pipeline Framework provides comprehensive error handling with multiple recovery strategies.
 
+### Queue-Async Crash Matrix
+
+For `pipeline.orchestrator.mode=QUEUE_ASYNC`, crash behavior is:
+
+| Crash point | Behavior after restart/recovery | Duplicate risk | Required safeguard |
+|---|---|---|---|
+| Before transition state persist | Work is redelivered and re-executed | High | Idempotent operator boundary (`executionId:stepIndex:attempt`) |
+| After persist, before next dispatch | Execution can stall until sweeper re-dispatches | Low | Due-execution sweeper + durable state |
+| During retry scheduling | Retry may be replayed from last durable version | Medium | Persist retry intent before enqueue |
+| Worker dies while lease held | Lease expiry allows takeover | Low | Short leases + conditional lease claim |
+
+Semantics summary:
+
+1. Execution state commit is atomic (conditional write).
+2. External side effects are at-least-once.
+3. Duplicate operator invocation is expected under failure and must be idempotent.
+
 ### Retry Mechanisms
 
 Built-in retry with exponential backoff:

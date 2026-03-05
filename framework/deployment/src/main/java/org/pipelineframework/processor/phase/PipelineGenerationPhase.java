@@ -497,6 +497,15 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     roleMetadataGenerator.recordClassWithRole(
                         OrchestratorFunctionHandlerRenderer.handlerFqcn(binding.basePackage()),
                         role.name());
+                    roleMetadataGenerator.recordClassWithRole(
+                        OrchestratorFunctionHandlerRenderer.runAsyncHandlerFqcn(binding.basePackage()),
+                        role.name());
+                    roleMetadataGenerator.recordClassWithRole(
+                        OrchestratorFunctionHandlerRenderer.statusHandlerFqcn(binding.basePackage()),
+                        role.name());
+                    roleMetadataGenerator.recordClassWithRole(
+                        OrchestratorFunctionHandlerRenderer.resultHandlerFqcn(binding.basePackage()),
+                        role.name());
                 }
             } else if (!local) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.PIPELINE_SERVER;
