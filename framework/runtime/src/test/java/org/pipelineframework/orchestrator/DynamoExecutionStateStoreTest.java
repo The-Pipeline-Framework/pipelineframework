@@ -105,7 +105,7 @@ class DynamoExecutionStateStoreTest {
         long ttl = now / 1000 + 3600;
         when(client.updateItem(any(UpdateItemRequest.class)))
             .thenReturn(UpdateItemResponse.builder()
-                .attributes(executionItem("tenant-a", "exec-1", "key-1", ttl))
+                .attributes(executionItem("tenant-a", "exec-1", "key-1", ttl, ExecutionStatus.SUCCEEDED))
                 .build());
 
         Optional<ExecutionRecord<Object, Object>> updated = store.markSucceeded(
@@ -118,7 +118,7 @@ class DynamoExecutionStateStoreTest {
             .await().indefinitely();
 
         assertTrue(updated.isPresent());
-        assertEquals(ExecutionStatus.QUEUED, updated.get().status());
+        assertEquals(ExecutionStatus.SUCCEEDED, updated.get().status());
         assertFalse(updated.get().executionId().isBlank());
     }
 
@@ -139,11 +139,21 @@ class DynamoExecutionStateStoreTest {
         String executionKey,
         long ttl
     ) {
+        return executionItem(tenantId, executionId, executionKey, ttl, ExecutionStatus.QUEUED);
+    }
+
+    private static Map<String, AttributeValue> executionItem(
+        String tenantId,
+        String executionId,
+        String executionKey,
+        long ttl,
+        ExecutionStatus status
+    ) {
         return Map.ofEntries(
             Map.entry("tenant_id", AttributeValue.builder().s(tenantId).build()),
             Map.entry("execution_id", AttributeValue.builder().s(executionId).build()),
             Map.entry("execution_key", AttributeValue.builder().s(executionKey).build()),
-            Map.entry("status", AttributeValue.builder().s(ExecutionStatus.QUEUED.name()).build()),
+            Map.entry("status", AttributeValue.builder().s(status.name()).build()),
             Map.entry("version", AttributeValue.builder().n("0").build()),
             Map.entry("current_step_index", AttributeValue.builder().n("0").build()),
             Map.entry("attempt", AttributeValue.builder().n("0").build()),

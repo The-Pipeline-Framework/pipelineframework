@@ -68,17 +68,17 @@ public class PipelineProtoGenerator {
         if (config.basePackage() == null || config.basePackage().isBlank()) {
             throw new IllegalStateException("pipeline-config.yaml is missing basePackage");
         }
+        try {
+            Files.createDirectories(resolvedOutput);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to create proto output directory: " + resolvedOutput, e);
+        }
         List<PipelineTemplateStep> steps = config.steps();
         if (steps == null || steps.isEmpty()) {
             return;
         }
 
         List<ResolvedStep> resolvedSteps = normalizeSteps(steps);
-        try {
-            Files.createDirectories(resolvedOutput);
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed to create proto output directory: " + resolvedOutput, e);
-        }
 
         List<AspectDefinition> aspectDefinitions = toAspectDefinitions(config.aspects());
 
@@ -564,7 +564,8 @@ public class PipelineProtoGenerator {
         if (!isListType(type)) {
             return type;
         }
-        return type.substring(5, type.length() - 1).trim();
+        String innerType = type.substring(5, type.length() - 1).trim();
+        return toProtoScalar(innerType, false);
     }
 
     private boolean isMapType(String type) {

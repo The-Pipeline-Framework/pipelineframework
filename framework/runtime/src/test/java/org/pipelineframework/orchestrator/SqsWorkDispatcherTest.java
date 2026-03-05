@@ -2,6 +2,7 @@ package org.pipelineframework.orchestrator;
 
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.time.Duration;
 import jakarta.enterprise.event.Event;
 
 import org.junit.jupiter.api.Test;
@@ -56,6 +57,22 @@ class SqsWorkDispatcherTest {
         SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(client, config, event);
 
         dispatcher.enqueueDelayed(new ExecutionWorkItem("tenant-a", "exec-2"), java.time.Duration.ofSeconds(5))
+            .await().indefinitely();
+
+        verify(client).sendMessage(any(SendMessageRequest.class));
+        verify(event, never()).fireAsync(any());
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void enqueueDelayedSkipsLoopbackWhenEnabled() {
+        SqsClient client = mock(SqsClient.class);
+        Event<ExecutionWorkItem> event = mock(Event.class);
+        when(event.fireAsync(any())).thenReturn(CompletableFuture.completedFuture(new ExecutionWorkItem("tenant-a", "exec-3")));
+        PipelineOrchestratorConfig config = mockConfig(Optional.of("https://sqs.local/123/work"), true);
+        SqsWorkDispatcher dispatcher = new SqsWorkDispatcher(client, config, event);
+
+        dispatcher.enqueueDelayed(new ExecutionWorkItem("tenant-a", "exec-3"), Duration.ofSeconds(5))
             .await().indefinitely();
 
         verify(client).sendMessage(any(SendMessageRequest.class));
