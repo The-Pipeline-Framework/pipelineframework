@@ -38,6 +38,10 @@ class OrchestratorRestResourceRendererTest {
         assertTrue(source.contains("public Uni<OutputTypeDto> run(InputTypeDto input)"));
         assertTrue(source.contains("executePipelineUnary"));
         assertTrue(source.contains("pipelineOutputBus"));
+        assertTrue(source.contains("@Path(\"/run-async\")"));
+        assertTrue(source.contains("executePipelineAsync"));
+        assertTrue(source.contains("@Path(\"/executions/{executionId}\")"));
+        assertTrue(source.contains("@Path(\"/executions/{executionId}/result\")"));
         assertTrue(source.contains("@Path(\"/ingest\")"));
         assertTrue(source.contains("@Path(\"/subscribe\")"));
     }
@@ -60,6 +64,10 @@ class OrchestratorRestResourceRendererTest {
         assertTrue(source.contains("@RestStreamElementType(\"application/json\")"));
         assertTrue(source.contains("public Multi<OutputTypeDto> run(Multi<InputTypeDto> input)"));
         assertTrue(source.contains("executePipelineStreaming"));
+        assertTrue(source.contains("public Uni<RunAsyncAcceptedDto> runAsync(List<InputTypeDto> input"));
+        assertTrue(source.contains("executePipelineAsync(Multi.createFrom().iterable(input)"));
+        assertTrue(source.contains("@Path(\"/executions/{executionId}\")"));
+        assertTrue(source.contains("@Path(\"/executions/{executionId}/result\")"));
         assertTrue(source.contains("@Path(\"/ingest\")"));
         assertTrue(source.contains("@Path(\"/subscribe\")"));
     }

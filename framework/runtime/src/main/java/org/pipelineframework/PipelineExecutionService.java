@@ -18,10 +18,14 @@ package org.pipelineframework;
 
 import java.text.MessageFormat;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -30,10 +34,16 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.ObservesAsync;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.NotFoundException;
 
 import io.grpc.Status;
 import io.smallrye.mutiny.Multi;
@@ -48,6 +58,22 @@ import org.apache.commons.lang3.time.StopWatch;
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.config.pipeline.PipelineOrderResourceLoader;
+import org.pipelineframework.orchestrator.CreateExecutionResult;
+import org.pipelineframework.orchestrator.DeadLetterEnvelope;
+import org.pipelineframework.orchestrator.DeadLetterPublisher;
+import org.pipelineframework.orchestrator.ExecutionRecord;
+import org.pipelineframework.orchestrator.ExecutionStateStore;
+import org.pipelineframework.orchestrator.ExecutionStatus;
+import org.pipelineframework.orchestrator.ExecutionWorkItem;
+import org.pipelineframework.orchestrator.ExecutionCreateCommand;
+import org.pipelineframework.orchestrator.ExecutionInputShape;
+import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
+import org.pipelineframework.orchestrator.OrchestratorIdempotencyPolicy;
+import org.pipelineframework.orchestrator.OrchestratorMode;
+import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.WorkDispatcher;
+import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
+import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 import org.pipelineframework.telemetry.ApmCompatibilityMetrics;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 import org.pipelineframework.telemetry.RetryAmplificationGuard;
@@ -82,9 +108,31 @@ public class PipelineExecutionService {
   @Inject
   protected PipelineTelemetry telemetry;
 
+  /** Queue mode orchestration configuration. */
+  @Inject
+  protected PipelineOrchestratorConfig orchestratorConfig;
+
+  /** Available execution state stores. */
+  @Inject
+  Instance<ExecutionStateStore> executionStateStores;
+
+  /** Available work dispatchers. */
+  @Inject
+  Instance<WorkDispatcher> workDispatchers;
+
+  /** Available dead-letter publishers. */
+  @Inject
+  Instance<DeadLetterPublisher> deadLetterPublishers;
+
   private final ScheduledExecutorService killSwitchExecutor = Executors.newSingleThreadScheduledExecutor(
       runnable -> {
         Thread thread = new Thread(runnable, "tpf-kill-switch");
+        thread.setDaemon(true);
+        return thread;
+      });
+  private final ScheduledExecutorService queueSweepExecutor = Executors.newSingleThreadScheduledExecutor(
+      runnable -> {
+        Thread thread = new Thread(runnable, "tpf-queue-sweeper");
         thread.setDaemon(true);
         return thread;
       });
@@ -94,6 +142,11 @@ public class PipelineExecutionService {
   private volatile CompletableFuture<Boolean> startupHealthFuture = new CompletableFuture<>();
   @Getter
   private volatile String startupHealthError;
+  private volatile ExecutionStateStore executionStateStore;
+  private volatile WorkDispatcher workDispatcher;
+  private volatile DeadLetterPublisher deadLetterPublisher;
+  private volatile ScheduledFuture<?> queueSweepFuture;
+  private final String queueWorkerId = "worker-" + UUID.randomUUID();
 
   /**
    * Startup health check state for dependent services.
@@ -117,6 +170,7 @@ public class PipelineExecutionService {
 
   @PostConstruct
   void runStartupHealthChecks() {
+    initializeQueueMode();
     List<Object> steps;
     try {
       steps = loadPipelineSteps();
@@ -161,9 +215,72 @@ public class PipelineExecutionService {
     });
   }
 
+  private void initializeQueueMode() {
+    if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
+      return;
+    }
+    executionStateStore = selectExecutionStateStore(orchestratorConfig.stateProvider());
+    workDispatcher = selectWorkDispatcher(orchestratorConfig.dispatcherProvider());
+    deadLetterPublisher = selectDeadLetterPublisher(orchestratorConfig.dlqProvider());
+    if (orchestratorConfig.strictStartup()
+        && orchestratorConfig.idempotencyPolicy() == OrchestratorIdempotencyPolicy.OPTIONAL_CLIENT_KEY) {
+      throw new IllegalStateException(
+          "pipeline.orchestrator.idempotency-policy must be explicitly configured for queue mode when strict startup is enabled.");
+    }
+    Duration interval = orchestratorConfig.sweepInterval();
+    long intervalMs = Math.max(1000L, interval == null ? 30000L : interval.toMillis());
+    queueSweepFuture = queueSweepExecutor.scheduleAtFixedRate(
+        this::sweepDueExecutions,
+        intervalMs,
+        intervalMs,
+        TimeUnit.MILLISECONDS);
+    LOG.infof("Queue async mode enabled: stateProvider=%s dispatcherProvider=%s dlqProvider=%s",
+        executionStateStore.providerName(),
+        workDispatcher.providerName(),
+        deadLetterPublisher.providerName());
+  }
+
+  private ExecutionStateStore selectExecutionStateStore(String providerName) {
+    return executionStateStores.stream()
+        .filter(store -> providerMatches(store.providerName(), providerName))
+        .sorted((left, right) -> Integer.compare(right.priority(), left.priority()))
+        .findFirst()
+        .orElseThrow(() -> new IllegalStateException(
+            "No ExecutionStateStore provider found for '" + providerName + "'"));
+  }
+
+  private WorkDispatcher selectWorkDispatcher(String providerName) {
+    return workDispatchers.stream()
+        .filter(dispatcher -> providerMatches(dispatcher.providerName(), providerName))
+        .sorted((left, right) -> Integer.compare(right.priority(), left.priority()))
+        .findFirst()
+        .orElseThrow(() -> new IllegalStateException(
+            "No WorkDispatcher provider found for '" + providerName + "'"));
+  }
+
+  private DeadLetterPublisher selectDeadLetterPublisher(String providerName) {
+    return deadLetterPublishers.stream()
+        .filter(publisher -> providerMatches(publisher.providerName(), providerName))
+        .sorted((left, right) -> Integer.compare(right.priority(), left.priority()))
+        .findFirst()
+        .orElseThrow(() -> new IllegalStateException(
+            "No DeadLetterPublisher provider found for '" + providerName + "'"));
+  }
+
+  private static boolean providerMatches(String availableName, String configuredName) {
+    if (configuredName == null || configuredName.isBlank()) {
+      return true;
+    }
+    return configuredName.equalsIgnoreCase(availableName);
+  }
+
   @PreDestroy
   void shutdownKillSwitchExecutor() {
     killSwitchExecutor.shutdownNow();
+    if (queueSweepFuture != null) {
+      queueSweepFuture.cancel(false);
+    }
+    queueSweepExecutor.shutdownNow();
   }
 
   /**
@@ -212,6 +329,197 @@ public class PipelineExecutionService {
   @SuppressWarnings("unchecked")
   public <T> Uni<T> executePipelineUnary(Object input) {
     return (Uni<T>) executePipelineUnaryInternal(input);
+  }
+
+  /**
+   * Submits an asynchronous orchestrator execution.
+   *
+   * @param input execution input payload
+   * @param tenantId tenant id from caller context
+   * @param idempotencyKey optional caller idempotency key
+   * @return accepted response payload
+   */
+  public Uni<RunAsyncAcceptedDto> executePipelineAsync(Object input, String tenantId, String idempotencyKey) {
+    return executePipelineAsync(input, tenantId, idempotencyKey, false);
+  }
+
+  /**
+   * Submits an asynchronous orchestrator execution.
+   *
+   * @param input execution input payload
+   * @param tenantId tenant id from caller context
+   * @param idempotencyKey optional caller idempotency key
+   * @param outputStreaming whether the pipeline output is streaming
+   * @return accepted response payload
+   */
+  public Uni<RunAsyncAcceptedDto> executePipelineAsync(
+      Object input,
+      String tenantId,
+      String idempotencyKey,
+      boolean outputStreaming) {
+    if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
+      return Uni.createFrom().failure(new IllegalStateException(
+          "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
+    }
+    if (outputStreaming) {
+      return Uni.createFrom().failure(new IllegalStateException(
+          "Async queue mode does not support streaming pipeline outputs yet."));
+    }
+    Object executionInput = normalizeExecutionInput(input);
+    RuntimeException inputFailure = validateInputShape(executionInput);
+    if (inputFailure != null) {
+      return Uni.createFrom().failure(inputFailure);
+    }
+    String resolvedTenant = normalizeTenant(tenantId);
+    long now = System.currentTimeMillis();
+    long ttlEpochS = Instant.ofEpochMilli(now)
+        .plus(Duration.ofDays(Math.max(1, orchestratorConfig.executionTtlDays())))
+        .getEpochSecond();
+    return resolveExecutionInputPayload(executionInput)
+        .onItem().transformToUni(snapshot -> {
+          String executionKey;
+          try {
+            executionKey = resolveExecutionKey(resolvedTenant, snapshot.payload(), idempotencyKey);
+          } catch (IllegalArgumentException e) {
+            return Uni.createFrom().failure(new BadRequestException(e.getMessage()));
+          }
+          ExecutionCreateCommand command = new ExecutionCreateCommand(
+              resolvedTenant,
+              executionKey,
+              snapshot,
+              now,
+              ttlEpochS);
+          return executionStateStore.createOrGetExecution(command)
+              .onItem().transformToUni(created -> {
+                Uni<Void> enqueue = created.duplicate()
+                    ? Uni.createFrom().voidItem()
+                    : workDispatcher.enqueueNow(new ExecutionWorkItem(
+                        created.record().tenantId(),
+                        created.record().executionId()));
+                return enqueue.onItem().transform(ignored -> toRunAccepted(created, now));
+              });
+        });
+  }
+
+  /**
+   * Reads asynchronous execution status.
+   *
+   * @param tenantId tenant id from caller context
+   * @param executionId execution id
+   * @return execution status
+   */
+  public Uni<ExecutionStatusDto> getExecutionStatus(String tenantId, String executionId) {
+    if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
+      return Uni.createFrom().failure(new IllegalStateException(
+          "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
+    }
+    String resolvedTenant = normalizeTenant(tenantId);
+    return executionStateStore.getExecution(resolvedTenant, executionId)
+        .onItem().transform(optional -> optional
+            .map(PipelineExecutionService::toStatusDto)
+            .orElseThrow(() -> new NotFoundException("Execution not found: " + executionId)));
+  }
+
+  /**
+   * Reads asynchronous execution result.
+   *
+   * @param tenantId tenant id from caller context
+   * @param executionId execution id
+   * @param outputType expected output type
+   * @param outputStreaming whether the configured pipeline output is streaming
+   * @param <T> output type
+   * @return execution result payload
+   */
+  @SuppressWarnings("unchecked")
+  public <T> Uni<T> getExecutionResult(String tenantId, String executionId, Class<?> outputType, boolean outputStreaming) {
+    if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
+      return Uni.createFrom().failure(new IllegalStateException(
+          "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
+    }
+    String resolvedTenant = normalizeTenant(tenantId);
+    return executionStateStore.getExecution(resolvedTenant, executionId)
+        .onItem().transform(optional -> optional.orElseThrow(
+            () -> new NotFoundException("Execution not found: " + executionId)))
+        .onItem().transform(record -> {
+          if (record.status() == ExecutionStatus.SUCCEEDED) {
+            if (record.resultPayload() == null) {
+              return null;
+            }
+            if (outputStreaming) {
+              return (T) record.resultPayload();
+            }
+            List<?> items = (List<?>) record.resultPayload();
+            if (items.isEmpty()) {
+              return null;
+            }
+            Object first = items.get(0);
+            if (outputType != null && first != null && !outputType.isInstance(first)) {
+              throw new IllegalStateException("Stored result type mismatch for execution " + executionId);
+            }
+            return (T) first;
+          }
+          if (record.status().terminal()) {
+            throw new IllegalStateException("Execution finished without a successful result: " + record.status());
+          }
+          throw new IllegalStateException("Execution is not complete yet: " + record.status());
+        });
+  }
+
+  /**
+   * Handles queue-dispatched work items when using the local event dispatcher.
+   *
+   * @param workItem execution work item
+   */
+  void onExecutionWork(@ObservesAsync ExecutionWorkItem workItem) {
+    if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC || workItem == null) {
+      return;
+    }
+    processExecutionWorkItem(workItem)
+        .subscribe()
+        .with(
+            ignored -> { },
+            failure -> LOG.errorf(failure, "Failed processing async execution work item %s", workItem));
+  }
+
+  /**
+   * Processes one execution work item and advances lifecycle state.
+   *
+   * @param workItem work item
+   * @return completion signal
+   */
+  public Uni<Void> processExecutionWorkItem(ExecutionWorkItem workItem) {
+    if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
+      return Uni.createFrom().voidItem();
+    }
+    long now = System.currentTimeMillis();
+    return executionStateStore.claimLease(
+            workItem.tenantId(),
+            workItem.executionId(),
+            queueWorkerId,
+            now,
+            orchestratorConfig.leaseMs())
+        .onItem().transformToUni(claimed -> {
+          if (claimed.isEmpty()) {
+            return Uni.createFrom().voidItem();
+          }
+          ExecutionRecord<Object, Object> record = claimed.get();
+          String transitionKey = transitionKey(record.executionId(), record.currentStepIndex(), record.attempt());
+          return runAsyncExecution(record.inputPayload())
+              .onItem().transformToUni(resultPayload -> executionStateStore.markSucceeded(
+                  record.tenantId(),
+                  record.executionId(),
+                  record.version(),
+                  transitionKey,
+                  resultPayload,
+                  System.currentTimeMillis()))
+              .onItem().transformToUni(updated -> {
+                if (updated.isPresent()) {
+                  return Uni.createFrom().voidItem();
+                }
+                return Uni.createFrom().voidItem();
+              })
+              .onFailure().recoverWithUni(failure -> handleExecutionFailure(record, transitionKey, failure));
+        });
   }
 
   /**
@@ -339,6 +647,214 @@ public class PipelineExecutionService {
     return new IllegalArgumentException(MessageFormat.format(
         "Pipeline input must be Uni or Multi, got: {0}",
         input == null ? "null" : input.getClass().getName()));
+  }
+
+  private static Object normalizeExecutionInput(Object input) {
+    if (input instanceof Uni<?> || input instanceof Multi<?>) {
+      return input;
+    }
+    return Uni.createFrom().item(input);
+  }
+
+  private static Uni<ExecutionInputSnapshot> resolveExecutionInputPayload(Object input) {
+    if (input instanceof Uni<?> uni) {
+      return uni.onItem().transform(item -> new ExecutionInputSnapshot(ExecutionInputShape.UNI, item));
+    }
+    if (input instanceof Multi<?> multi) {
+      return multi.collect().asList().onItem().transform(list ->
+          new ExecutionInputSnapshot(ExecutionInputShape.MULTI, List.copyOf(list)));
+    }
+    return Uni.createFrom().item(new ExecutionInputSnapshot(ExecutionInputShape.RAW, input));
+  }
+
+  private String normalizeTenant(String tenantId) {
+    if (tenantId == null || tenantId.isBlank()) {
+      return orchestratorConfig.defaultTenant();
+    }
+    return tenantId.trim();
+  }
+
+  private String resolveExecutionKey(String tenantId, Object input, String clientKey) {
+    OrchestratorIdempotencyPolicy policy = orchestratorConfig.idempotencyPolicy();
+    String normalizedClientKey = normalizeOptional(clientKey);
+    if (policy == OrchestratorIdempotencyPolicy.CLIENT_KEY_REQUIRED) {
+      if (normalizedClientKey == null) {
+        throw new IllegalArgumentException("Idempotency-Key header is required.");
+      }
+      return normalizedClientKey;
+    }
+    if (policy == OrchestratorIdempotencyPolicy.OPTIONAL_CLIENT_KEY && normalizedClientKey != null) {
+      return normalizedClientKey;
+    }
+    return deriveServerExecutionKey(tenantId, input);
+  }
+
+  private static String normalizeOptional(String value) {
+    if (value == null) {
+      return null;
+    }
+    String normalized = value.trim();
+    return normalized.isEmpty() ? null : normalized;
+  }
+
+  private static String deriveServerExecutionKey(String tenantId, Object input) {
+    try {
+      byte[] payloadBytes = org.pipelineframework.config.pipeline.PipelineJson.mapper().writeValueAsBytes(input);
+      MessageDigest digest = MessageDigest.getInstance("SHA-256");
+      digest.update(tenantId.getBytes(StandardCharsets.UTF_8));
+      digest.update((byte) ':');
+      digest.update(payloadBytes);
+      return Base64.getUrlEncoder().withoutPadding().encodeToString(digest.digest());
+    } catch (Exception e) {
+      throw new IllegalStateException("Failed to derive deterministic execution key.", e);
+    }
+  }
+
+  private static RunAsyncAcceptedDto toRunAccepted(CreateExecutionResult created, long nowEpochMs) {
+    String executionId = created.record().executionId();
+    return new RunAsyncAcceptedDto(
+        executionId,
+        created.duplicate(),
+        "/pipeline/executions/" + executionId,
+        nowEpochMs);
+  }
+
+  private static ExecutionStatusDto toStatusDto(ExecutionRecord<Object, Object> record) {
+    return new ExecutionStatusDto(
+        record.executionId(),
+        record.status(),
+        record.currentStepIndex(),
+        record.attempt(),
+        record.version(),
+        record.nextDueEpochMs(),
+        record.updatedAtEpochMs(),
+        record.errorCode(),
+        record.errorMessage());
+  }
+
+  private static String transitionKey(String executionId, int stepIndex, int attempt) {
+    return executionId + ":" + stepIndex + ":" + attempt;
+  }
+
+  private Uni<List<?>> runAsyncExecution(Object inputPayload) {
+    Object reactiveInput = toReplayInput(inputPayload);
+    return executePipelineStreaming(reactiveInput)
+        .select().first(2)
+        .collect().asList()
+        .onItem().transformToUni(items -> {
+          if (items.size() > 1) {
+            return Uni.createFrom().failure(
+                new IllegalStateException("Async queue mode does not support streaming pipeline outputs yet."));
+          }
+          return Uni.createFrom().item((List<?>) List.copyOf(items));
+        });
+  }
+
+  private Object toReplayInput(Object inputPayload) {
+    if (inputPayload instanceof ExecutionInputSnapshot snapshot) {
+      if (snapshot.shape() == ExecutionInputShape.MULTI) {
+        Object payload = snapshot.payload();
+        if (payload == null) {
+          return Multi.createFrom().empty();
+        }
+        if (payload instanceof Iterable<?> iterable) {
+          return Multi.createFrom().iterable(iterable);
+        }
+        return Multi.createFrom().item(payload);
+      }
+      return Uni.createFrom().item(snapshot.payload());
+    }
+    // Backward-compatible replay for records persisted before shape metadata.
+    if (inputPayload instanceof List<?> list) {
+      return Multi.createFrom().iterable(list);
+    }
+    return Uni.createFrom().item(inputPayload);
+  }
+
+  private Uni<Void> handleExecutionFailure(
+      ExecutionRecord<Object, Object> record,
+      String transitionKey,
+      Throwable failure) {
+    long now = System.currentTimeMillis();
+    int nextAttempt = record.attempt() + 1;
+    boolean retryAllowed = nextAttempt <= orchestratorConfig.maxRetries();
+    if (retryAllowed) {
+      long nextDue = now + retryDelayMillis(nextAttempt);
+          return executionStateStore.scheduleRetry(
+                  record.tenantId(),
+                  record.executionId(),
+                  record.version(),
+              nextAttempt,
+              nextDue,
+              transitionKey,
+              failure.getClass().getSimpleName(),
+                  failure.getMessage(),
+                  now)
+              .onItem().transformToUni(updated -> {
+                if (updated.isEmpty()) {
+                  return Uni.createFrom().voidItem();
+                }
+                Duration delay = Duration.ofMillis(Math.max(0L, nextDue - System.currentTimeMillis()));
+                return workDispatcher.enqueueDelayed(
+                    new ExecutionWorkItem(record.tenantId(), record.executionId()),
+                    delay);
+          });
+    }
+
+    return executionStateStore.markTerminalFailure(
+            record.tenantId(),
+            record.executionId(),
+            record.version(),
+            ExecutionStatus.FAILED,
+            transitionKey,
+            failure.getClass().getSimpleName(),
+            failure.getMessage(),
+            now)
+        .onItem().transformToUni(updated -> {
+          if (updated.isEmpty()) {
+            return Uni.createFrom().voidItem();
+          }
+          DeadLetterEnvelope envelope = new DeadLetterEnvelope(
+              record.tenantId(),
+              record.executionId(),
+              transitionKey,
+              failure.getClass().getSimpleName(),
+              failure.getMessage(),
+              now);
+          return deadLetterPublisher.publish(envelope);
+        });
+  }
+
+  private long retryDelayMillis(int nextAttempt) {
+    long base = Math.max(0L, orchestratorConfig.retryDelay().toMillis());
+    double multiplier = Math.max(1.0d, orchestratorConfig.retryMultiplier());
+    double calculated = base * Math.pow(multiplier, Math.max(0, nextAttempt - 1));
+    return Math.min((long) calculated, TimeUnit.MINUTES.toMillis(30));
+  }
+
+  private void sweepDueExecutions() {
+    if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC || executionStateStore == null || workDispatcher == null) {
+      return;
+    }
+    long now = System.currentTimeMillis();
+    executionStateStore.findDueExecutions(now, orchestratorConfig.sweepLimit())
+        .onItem().transformToUni(due -> {
+          if (due.isEmpty()) {
+            return Uni.createFrom().voidItem();
+          }
+          List<Uni<Void>> enqueueOperations = new ArrayList<>(due.size());
+          for (ExecutionRecord<Object, Object> record : due) {
+            enqueueOperations.add(workDispatcher.enqueueNow(new ExecutionWorkItem(record.tenantId(), record.executionId()))
+                .onFailure().transform(failure -> new IllegalStateException(
+                    "Failed to re-dispatch due execution " + record.executionId(),
+                    failure)));
+          }
+          return Uni.join().all(enqueueOperations).andCollectFailures().replaceWithVoid();
+        })
+        .subscribe()
+        .with(
+            ignored -> { },
+            failure -> LOG.errorf(failure, "Failed sweeping due async executions"));
   }
 
   private <T> Multi<T> attachRetryAmplificationGuard(Multi<T> multi) {
