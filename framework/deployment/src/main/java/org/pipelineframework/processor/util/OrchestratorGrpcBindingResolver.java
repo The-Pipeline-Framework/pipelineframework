@@ -15,6 +15,9 @@ import org.pipelineframework.processor.ir.PipelineStepModel;
 public class OrchestratorGrpcBindingResolver {
     private static final Set<String> ALLOWED_METHODS = Set.of(
         OrchestratorRpcConstants.RUN_METHOD,
+        OrchestratorRpcConstants.RUN_ASYNC_METHOD,
+        OrchestratorRpcConstants.GET_EXECUTION_STATUS_METHOD,
+        OrchestratorRpcConstants.GET_EXECUTION_RESULT_METHOD,
         OrchestratorRpcConstants.INGEST_METHOD,
         OrchestratorRpcConstants.SUBSCRIBE_METHOD);
 

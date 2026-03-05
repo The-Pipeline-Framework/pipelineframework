@@ -109,6 +109,17 @@ class PipelineProtoGeneratorTest {
         assertTrue(orchestratorProto.contains("service OrchestratorService"));
         assertTrue(orchestratorProto.contains("rpc Run (FooInput) returns (stream BarOutput);"));
         assertTrue(orchestratorProto.contains("rpc Ingest (stream FooInput) returns (stream BarOutput);"));
+        assertTrue(orchestratorProto.contains("message RunAsyncRequest"));
+        assertTrue(orchestratorProto.contains("message RunAsyncResponse"));
+        assertTrue(orchestratorProto.contains("message GetExecutionStatusRequest"));
+        assertTrue(orchestratorProto.contains("message GetExecutionStatusResponse"));
+        assertTrue(orchestratorProto.contains("message GetExecutionResultRequest"));
+        assertTrue(orchestratorProto.contains("message GetExecutionResultResponse"));
+        assertTrue(orchestratorProto.contains("rpc RunAsync (RunAsyncRequest) returns (RunAsyncResponse);"));
+        assertTrue(orchestratorProto.contains(
+            "rpc GetExecutionStatus (GetExecutionStatusRequest) returns (GetExecutionStatusResponse);"));
+        assertTrue(orchestratorProto.contains(
+            "rpc GetExecutionResult (GetExecutionResultRequest) returns (GetExecutionResultResponse);"));
         assertTrue(orchestratorProto.contains("rpc Subscribe (google.protobuf.Empty) returns (stream BarOutput);"));
     }
 
@@ -180,5 +191,10 @@ class PipelineProtoGeneratorTest {
         assertTrue(orchestratorProto.contains("import \"index-svc.proto\";"));
         assertTrue(orchestratorProto.contains("service OrchestratorService"));
         assertTrue(orchestratorProto.contains("rpc Run (DocInput) returns (IndexAck);"));
+        assertTrue(orchestratorProto.contains("rpc RunAsync (RunAsyncRequest) returns (RunAsyncResponse);"));
+        assertTrue(orchestratorProto.contains(
+            "rpc GetExecutionStatus (GetExecutionStatusRequest) returns (GetExecutionStatusResponse);"));
+        assertTrue(orchestratorProto.contains(
+            "rpc GetExecutionResult (GetExecutionResultRequest) returns (GetExecutionResultResponse);"));
     }
 }

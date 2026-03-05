@@ -6,6 +6,17 @@ The Pipeline Framework is designed as a modular, extensible system for building 
 
 - [Annotation Processor Guide](/guide/evolve/annotation-processor/): Deep dive into build-time phases, IR, bindings, and renderers
 
+## Orchestrator Control Plane (Current)
+
+Current GA direction is a queue-driven async control plane with:
+
+1. transport-native async contracts (REST/gRPC/function),
+2. optimistic concurrency + lease-claim state transitions,
+3. due-execution sweep/re-dispatch recovery,
+4. at-least-once dispatch/operator invocation semantics.
+
+This is intentionally not a full event-sourced runtime in the current milestone.
+
 ## Core Concepts
 
 ### Pipeline

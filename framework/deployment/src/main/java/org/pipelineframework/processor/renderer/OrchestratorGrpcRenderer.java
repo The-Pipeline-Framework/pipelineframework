@@ -1,6 +1,7 @@
 package org.pipelineframework.processor.renderer;
 
 import java.io.IOException;
+import java.util.List;
 import javax.lang.model.element.Modifier;
 
 import com.google.protobuf.DescriptorProtos;
@@ -25,6 +26,11 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
     private static final String GRPC_CLASS = "OrchestratorGrpcService";
     private static final String ORCHESTRATOR_SERVICE = "OrchestratorService";
     private static final String ORCHESTRATOR_METHOD = OrchestratorRpcConstants.RUN_METHOD;
+    private static final String ORCHESTRATOR_RUN_ASYNC_METHOD = OrchestratorRpcConstants.RUN_ASYNC_METHOD;
+    private static final String ORCHESTRATOR_GET_EXECUTION_STATUS_METHOD =
+        OrchestratorRpcConstants.GET_EXECUTION_STATUS_METHOD;
+    private static final String ORCHESTRATOR_GET_EXECUTION_RESULT_METHOD =
+        OrchestratorRpcConstants.GET_EXECUTION_RESULT_METHOD;
     private static final String ORCHESTRATOR_INGEST_METHOD = OrchestratorRpcConstants.INGEST_METHOD;
     private static final String ORCHESTRATOR_SUBSCRIBE_METHOD = OrchestratorRpcConstants.SUBSCRIBE_METHOD;
 
@@ -65,8 +71,8 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         ClassName outputBus = ClassName.get("org.pipelineframework", "PipelineOutputBus");
         ClassName pipelineContextHolder = ClassName.get("org.pipelineframework.context", "PipelineContextHolder");
 
-        OrchestratorGrpcBindingResolver resolver = new OrchestratorGrpcBindingResolver();
-        var grpcBinding = safeResolveBinding(binding, descriptorSet, ctx);
+        var grpcBinding = safeResolveBinding(
+            binding, descriptorSet, ctx, ORCHESTRATOR_METHOD, binding.inputStreaming(), binding.outputStreaming());
         if (grpcBinding == null) {
             return;
         }
@@ -86,6 +92,12 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
                 "Mutiny" + ORCHESTRATOR_SERVICE + "Grpc",
                 ORCHESTRATOR_SERVICE + "ImplBase");
         }
+        var runAsyncBinding = safeResolveBinding(
+            binding, descriptorSet, ctx, ORCHESTRATOR_RUN_ASYNC_METHOD, false, false);
+        var statusBinding = safeResolveBinding(
+            binding, descriptorSet, ctx, ORCHESTRATOR_GET_EXECUTION_STATUS_METHOD, false, false);
+        var resultBinding = safeResolveBinding(
+            binding, descriptorSet, ctx, ORCHESTRATOR_GET_EXECUTION_RESULT_METHOD, false, false);
 
         FieldSpec executionField = FieldSpec.builder(executionService, "pipelineExecutionService", Modifier.PRIVATE)
             .addAnnotation(inject)
@@ -247,7 +259,29 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
                 ClassName.get("io.grpc", "Status"))
             .build();
 
-        TypeSpec service = TypeSpec.classBuilder(GRPC_CLASS)
+        MethodSpec runAsyncMethod = buildRunAsyncMethod(
+            binding,
+            typeResolver,
+            ctx,
+            runAsyncBinding,
+            inputType,
+            outputType,
+            uni,
+            multi);
+        MethodSpec executionStatusMethod = buildExecutionStatusMethod(
+            typeResolver,
+            ctx,
+            statusBinding,
+            uni);
+        MethodSpec executionResultMethod = buildExecutionResultMethod(
+            binding,
+            typeResolver,
+            ctx,
+            resultBinding,
+            outputType,
+            uni);
+
+        TypeSpec.Builder serviceBuilder = TypeSpec.classBuilder(GRPC_CLASS)
             .addModifiers(Modifier.PUBLIC)
             .addAnnotation(grpcServiceAnnotation)
             .superclass(implBase)
@@ -255,8 +289,18 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
             .addField(outputBusField)
             .addMethod(runMethod.build())
             .addMethod(ingestMethod)
-            .addMethod(subscribeMethod)
-            .build();
+            .addMethod(subscribeMethod);
+        if (runAsyncMethod != null) {
+            serviceBuilder.addMethod(runAsyncMethod);
+        }
+        if (executionStatusMethod != null) {
+            serviceBuilder.addMethod(executionStatusMethod);
+        }
+        if (executionResultMethod != null) {
+            serviceBuilder.addMethod(executionResultMethod);
+        }
+
+        TypeSpec service = serviceBuilder.build();
 
         JavaFile.builder(binding.basePackage() + ".orchestrator.service", service)
             .build()
@@ -266,15 +310,18 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
     private org.pipelineframework.processor.ir.GrpcBinding safeResolveBinding(
         OrchestratorBinding binding,
         DescriptorProtos.FileDescriptorSet descriptorSet,
-        GenerationContext ctx
+        GenerationContext ctx,
+        String methodName,
+        boolean inputStreaming,
+        boolean outputStreaming
     ) {
         try {
             return new OrchestratorGrpcBindingResolver().resolve(
                 binding.model(),
                 descriptorSet,
-                ORCHESTRATOR_METHOD,
-                binding.inputStreaming(),
-                binding.outputStreaming(),
+                methodName,
+                inputStreaming,
+                outputStreaming,
                 ctx.processingEnv().getMessager());
         } catch (IllegalStateException e) {
             ctx.processingEnv().getMessager().printMessage(
@@ -282,5 +329,230 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
                 "Skipping orchestrator gRPC generation: " + e.getMessage());
             return null;
         }
+    }
+
+    private MethodSpec buildRunAsyncMethod(
+        OrchestratorBinding binding,
+        GrpcJavaTypeResolver typeResolver,
+        GenerationContext ctx,
+        org.pipelineframework.processor.ir.GrpcBinding runAsyncBinding,
+        ClassName inputType,
+        ClassName outputType,
+        ClassName uni,
+        ClassName multi
+    ) {
+        if (runAsyncBinding == null) {
+            return null;
+        }
+        var asyncTypes = typeResolver.resolve(runAsyncBinding, ctx.processingEnv().getMessager());
+        ClassName requestType = asyncTypes.grpcParameterType();
+        ClassName responseType = asyncTypes.grpcReturnType();
+        if (requestType == null || responseType == null) {
+            return null;
+        }
+        MethodSpec.Builder method = MethodSpec.methodBuilder("runAsync")
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(ParameterizedTypeName.get(uni, responseType))
+            .addParameter(requestType, "request")
+            .addStatement("long startTime = System.nanoTime()");
+
+        if (binding.inputStreaming()) {
+            method.addCode("""
+                $T asyncInput = request.getInputBatchCount() > 0
+                    ? $T.createFrom().iterable(request.getInputBatchList())
+                    : $T.createFrom().item(request.getInput());
+                return pipelineExecutionService.executePipelineAsync(
+                        asyncInput,
+                        request.getTenantId(),
+                        request.getIdempotencyKey(),
+                        $L)
+                    .onItem().transform(accepted -> $T.newBuilder()
+                        .setExecutionId(accepted.executionId())
+                        .setDuplicate(accepted.duplicate())
+                        .setStatusUrl(accepted.statusUrl() == null ? $S : accepted.statusUrl())
+                        .setAcceptedAtEpochMs(accepted.submittedAtEpochMs())
+                        .build())
+                    .onItem().invoke(item -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime))
+                    .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
+                        System.nanoTime() - startTime));
+                """,
+                Object.class,
+                multi,
+                multi,
+                binding.outputStreaming(),
+                responseType,
+                "",
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_RUN_ASYNC_METHOD,
+                ClassName.get("io.grpc", "Status"),
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_RUN_ASYNC_METHOD,
+                ClassName.get("io.grpc", "Status"));
+        } else {
+            method.addCode("""
+                $T asyncInput = request.getInputBatchCount() > 0 ? request.getInputBatch(0) : request.getInput();
+                return pipelineExecutionService.executePipelineAsync(
+                        asyncInput,
+                        request.getTenantId(),
+                        request.getIdempotencyKey(),
+                        $L)
+                    .onItem().transform(accepted -> $T.newBuilder()
+                        .setExecutionId(accepted.executionId())
+                        .setDuplicate(accepted.duplicate())
+                        .setStatusUrl(accepted.statusUrl() == null ? $S : accepted.statusUrl())
+                        .setAcceptedAtEpochMs(accepted.submittedAtEpochMs())
+                        .build())
+                    .onItem().invoke(item -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime))
+                    .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
+                        System.nanoTime() - startTime));
+                """,
+                Object.class,
+                binding.outputStreaming(),
+                responseType,
+                "",
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_RUN_ASYNC_METHOD,
+                ClassName.get("io.grpc", "Status"),
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_RUN_ASYNC_METHOD,
+                ClassName.get("io.grpc", "Status"));
+        }
+
+        return method.build();
+    }
+
+    private MethodSpec buildExecutionStatusMethod(
+        GrpcJavaTypeResolver typeResolver,
+        GenerationContext ctx,
+        org.pipelineframework.processor.ir.GrpcBinding statusBinding,
+        ClassName uni
+    ) {
+        if (statusBinding == null) {
+            return null;
+        }
+        var statusTypes = typeResolver.resolve(statusBinding, ctx.processingEnv().getMessager());
+        ClassName requestType = statusTypes.grpcParameterType();
+        ClassName responseType = statusTypes.grpcReturnType();
+        if (requestType == null || responseType == null) {
+            return null;
+        }
+
+        return MethodSpec.methodBuilder("getExecutionStatus")
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(ParameterizedTypeName.get(uni, responseType))
+            .addParameter(requestType, "request")
+            .addStatement("long startTime = System.nanoTime()")
+            .addCode("""
+                return pipelineExecutionService.getExecutionStatus(request.getTenantId(), request.getExecutionId())
+                    .onItem().transform(status -> $T.newBuilder()
+                        .setExecutionId(status.executionId())
+                        .setStatus(status.status().name())
+                        .setCurrentStepIndex(status.stepIndex())
+                        .setAttempt(status.attempt())
+                        .setVersion(status.version())
+                        .setNextDueEpochMs(status.nextDueAtEpochMs())
+                        .setUpdatedAtEpochMs(status.updatedAtEpochMs())
+                        .setErrorCode(status.errorCode() == null ? $S : status.errorCode())
+                        .setErrorMessage(status.errorMessage() == null ? $S : status.errorMessage())
+                        .build())
+                    .onItem().invoke(item -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime))
+                    .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
+                        System.nanoTime() - startTime));
+                """,
+                responseType,
+                "",
+                "",
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_GET_EXECUTION_STATUS_METHOD,
+                ClassName.get("io.grpc", "Status"),
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_GET_EXECUTION_STATUS_METHOD,
+                ClassName.get("io.grpc", "Status"))
+            .build();
+    }
+
+    private MethodSpec buildExecutionResultMethod(
+        OrchestratorBinding binding,
+        GrpcJavaTypeResolver typeResolver,
+        GenerationContext ctx,
+        org.pipelineframework.processor.ir.GrpcBinding resultBinding,
+        ClassName outputType,
+        ClassName uni
+    ) {
+        if (resultBinding == null) {
+            return null;
+        }
+        var resultTypes = typeResolver.resolve(resultBinding, ctx.processingEnv().getMessager());
+        ClassName requestType = resultTypes.grpcParameterType();
+        ClassName responseType = resultTypes.grpcReturnType();
+        if (requestType == null || responseType == null) {
+            return null;
+        }
+
+        MethodSpec.Builder method = MethodSpec.methodBuilder("getExecutionResult")
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(ParameterizedTypeName.get(uni, responseType))
+            .addParameter(requestType, "request")
+            .addStatement("long startTime = System.nanoTime()");
+
+        if (binding.outputStreaming()) {
+            TypeName outputListType = ParameterizedTypeName.get(ClassName.get(List.class), outputType);
+            method.addCode("""
+                return pipelineExecutionService.<$T>getExecutionResult(
+                        request.getTenantId(), request.getExecutionId(), $T.class, true)
+                    .onItem().transform(items -> $T.newBuilder().addAllItems(items).build())
+                    .onItem().invoke(item -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime))
+                    .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
+                        System.nanoTime() - startTime));
+                """,
+                outputListType,
+                outputType,
+                responseType,
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_GET_EXECUTION_RESULT_METHOD,
+                ClassName.get("io.grpc", "Status"),
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_GET_EXECUTION_RESULT_METHOD,
+                ClassName.get("io.grpc", "Status"));
+        } else {
+            method.addCode("""
+                return pipelineExecutionService.<$T>getExecutionResult(
+                        request.getTenantId(), request.getExecutionId(), $T.class, false)
+                    .onItem().transform(result -> {
+                        $T.Builder builder = $T.newBuilder();
+                        if (result != null) {
+                            builder.addItems(result);
+                        }
+                        return builder.build();
+                    })
+                    .onItem().invoke(item -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime))
+                    .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
+                        System.nanoTime() - startTime));
+                """,
+                outputType,
+                outputType,
+                responseType,
+                responseType,
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_GET_EXECUTION_RESULT_METHOD,
+                ClassName.get("io.grpc", "Status"),
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_GET_EXECUTION_RESULT_METHOD,
+                ClassName.get("io.grpc", "Status"));
+        }
+        return method.build();
     }
 }

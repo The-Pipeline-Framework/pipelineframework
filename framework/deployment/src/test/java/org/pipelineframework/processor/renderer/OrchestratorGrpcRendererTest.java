@@ -39,6 +39,10 @@ class OrchestratorGrpcRendererTest {
         assertTrue(source.contains("extends MutinyOrchestratorServiceGrpc.OrchestratorServiceImplBase"));
         assertTrue(source.contains("public Uni<OutputType> run(InputType input)"));
         assertTrue(source.contains("executePipelineUnary"));
+        assertTrue(source.contains("public Uni<RunAsyncResponse> runAsync(RunAsyncRequest request)"));
+        assertTrue(source.contains("executePipelineAsync"));
+        assertTrue(source.contains("public Uni<GetExecutionStatusResponse> getExecutionStatus(GetExecutionStatusRequest request)"));
+        assertTrue(source.contains("public Uni<GetExecutionResultResponse> getExecutionResult(GetExecutionResultRequest request)"));
         assertTrue(source.contains("public Multi<OutputType> ingest(Multi<InputType> input)"));
         assertTrue(source.contains("public Multi<OutputType> subscribe("));
         assertTrue(source.contains("pipelineOutputBus"));
@@ -61,6 +65,8 @@ class OrchestratorGrpcRendererTest {
 
         assertTrue(source.contains("public Multi<OutputType> run(Multi<InputType> input)"));
         assertTrue(source.contains("executePipelineStreaming"));
+        assertTrue(source.contains("public Uni<RunAsyncResponse> runAsync(RunAsyncRequest request)"));
+        assertTrue(source.contains("executePipelineAsync"));
         assertTrue(source.contains("public Multi<OutputType> ingest(Multi<InputType> input)"));
         assertTrue(source.contains("public Multi<OutputType> subscribe("));
         assertTrue(source.contains("pipelineOutputBus"));
@@ -111,6 +117,43 @@ class OrchestratorGrpcRendererTest {
                 .setName("InputType"))
             .addMessageType(DescriptorProtos.DescriptorProto.newBuilder()
                 .setName("OutputType"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder()
+                .setName("RunAsyncRequest")
+                .addField(DescriptorProtos.FieldDescriptorProto.newBuilder()
+                    .setName("input")
+                    .setNumber(1)
+                    .setType(DescriptorProtos.FieldDescriptorProto.Type.TYPE_MESSAGE)
+                    .setTypeName(".com.example.grpc.InputType"))
+                .addField(DescriptorProtos.FieldDescriptorProto.newBuilder()
+                    .setName("input_batch")
+                    .setNumber(2)
+                    .setLabel(DescriptorProtos.FieldDescriptorProto.Label.LABEL_REPEATED)
+                    .setType(DescriptorProtos.FieldDescriptorProto.Type.TYPE_MESSAGE)
+                    .setTypeName(".com.example.grpc.InputType"))
+                .addField(DescriptorProtos.FieldDescriptorProto.newBuilder()
+                    .setName("tenant_id")
+                    .setNumber(3)
+                    .setType(DescriptorProtos.FieldDescriptorProto.Type.TYPE_STRING))
+                .addField(DescriptorProtos.FieldDescriptorProto.newBuilder()
+                    .setName("idempotency_key")
+                    .setNumber(4)
+                    .setType(DescriptorProtos.FieldDescriptorProto.Type.TYPE_STRING)))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder()
+                .setName("RunAsyncResponse"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder()
+                .setName("GetExecutionStatusRequest"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder()
+                .setName("GetExecutionStatusResponse"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder()
+                .setName("GetExecutionResultRequest"))
+            .addMessageType(DescriptorProtos.DescriptorProto.newBuilder()
+                .setName("GetExecutionResultResponse")
+                .addField(DescriptorProtos.FieldDescriptorProto.newBuilder()
+                    .setName("items")
+                    .setNumber(1)
+                    .setLabel(DescriptorProtos.FieldDescriptorProto.Label.LABEL_REPEATED)
+                    .setType(DescriptorProtos.FieldDescriptorProto.Type.TYPE_MESSAGE)
+                    .setTypeName(".com.example.grpc.OutputType")))
             .addService(DescriptorProtos.ServiceDescriptorProto.newBuilder()
                 .setName("OrchestratorService")
                 .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
@@ -125,6 +168,18 @@ class OrchestratorGrpcRendererTest {
                     .setOutputType(".com.example.grpc.OutputType")
                     .setClientStreaming(true)
                     .setServerStreaming(true))
+                .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
+                    .setName("RunAsync")
+                    .setInputType(".com.example.grpc.RunAsyncRequest")
+                    .setOutputType(".com.example.grpc.RunAsyncResponse"))
+                .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
+                    .setName("GetExecutionStatus")
+                    .setInputType(".com.example.grpc.GetExecutionStatusRequest")
+                    .setOutputType(".com.example.grpc.GetExecutionStatusResponse"))
+                .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
+                    .setName("GetExecutionResult")
+                    .setInputType(".com.example.grpc.GetExecutionResultRequest")
+                    .setOutputType(".com.example.grpc.GetExecutionResultResponse"))
                 .addMethod(DescriptorProtos.MethodDescriptorProto.newBuilder()
                     .setName("Subscribe")
                     .setInputType(".com.example.grpc.InputType")

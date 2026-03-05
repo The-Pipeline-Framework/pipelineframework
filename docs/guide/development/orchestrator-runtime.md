@@ -1,44 +1,65 @@
 # Orchestrator Runtime
 
-The Pipeline Framework generates a single orchestrator runtime that coordinates the pipeline flow. It provisions inputs, invokes step clients, and handles the final outputs.
+The orchestrator runtime coordinates step execution for a pipeline and exposes generated transport entrypoints.
 
-<Callout type="tip" title="Canvas First">
-Configure the orchestrator flow in the Canvas at <a href="https://app.pipelineframework.org" target="_blank">https://app.pipelineframework.org</a>, then customize the generated runtime as needed.
-</Callout>
+## Runtime Modes
 
-## What It Does
+TPF supports two orchestrator runtime modes:
 
-1. Initiates pipeline execution
-2. Provides input data
-3. Coordinates step-to-step flow
-4. Handles final outputs
+1. `SYNC` (default): in-process request/response execution.
+2. `QUEUE_ASYNC`: queue-driven async job execution with durable execution state providers.
+
+Set mode with:
+
+```properties
+pipeline.orchestrator.mode=SYNC
+# or
+pipeline.orchestrator.mode=QUEUE_ASYNC
+```
+
+## Transport Surfaces
+
+Generated orchestrator endpoints are transport-native:
+
+1. REST:
+   - `POST /pipeline/run`
+   - `POST /pipeline/run-async`
+   - `GET /pipeline/executions/{executionId}`
+   - `GET /pipeline/executions/{executionId}/result`
+   - `POST /pipeline/ingest`
+   - `GET /pipeline/subscribe`
+2. gRPC:
+   - `Run`
+   - `RunAsync`
+   - `GetExecutionStatus`
+   - `GetExecutionResult`
+   - `Ingest`
+   - `Subscribe`
+3. Function/Lambda:
+   - `PipelineRunFunctionHandler`
+   - `PipelineRunAsyncFunctionHandler`
+   - `PipelineExecutionStatusFunctionHandler`
+   - `PipelineExecutionResultFunctionHandler`
+
+## Queue-Async Semantics
+
+In `QUEUE_ASYNC` mode:
+
+1. committed execution state transitions are exactly-once (OCC/conditional-write guarded),
+2. dispatch and operator invocation are at-least-once,
+3. duplicate invocation can occur and must be handled with idempotency keys,
+4. streaming outputs are rejected for async execution in this milestone.
 
 ## Generated Structure
 
 ```text
 orchestrator-svc/
-├── pom.xml
-├── src/main/java/
-│   └── com/example/app/orchestrator/
-│       └── OrchestratorApplication.java
-└── src/main/resources/
-    └── application.properties
+├── src/main/java/<base>/orchestrator/service/
+│   ├── PipelineRunResource.java
+│   ├── OrchestratorGrpcService.java
+│   ├── PipelineRunFunctionHandler.java
+│   ├── PipelineRunAsyncFunctionHandler.java
+│   ├── PipelineExecutionStatusFunctionHandler.java
+│   └── PipelineExecutionResultFunctionHandler.java
+└── src/main/resources/application.properties
 ```
-
-The generated `OrchestratorApplication` is annotated with `@PipelineOrchestrator` so the annotation processor
-can generate the server endpoint (REST or gRPC, based on `pipeline-config.yaml`) at compile time.
-
-## Input Options
-
-The generated runtime supports several ways to specify input:
-
-1. **CLI argument**: `-i` / `--input`
-2. **Environment variable**: `PIPELINE_INPUT`
-3. **Quarkus config**: `quarkus.pipeline.input`
-4. **System property**: `-Dquarkus.pipeline.input=/path`
-
-The CLI argument takes precedence, followed by environment variable and config sources.
-
-## Customizing Input
-
-Implement the `getInputMulti()` stub in the generated `OrchestratorApplication` to map inputs to domain types and feed the pipeline.

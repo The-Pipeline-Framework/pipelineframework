@@ -24,6 +24,11 @@ import org.pipelineframework.processor.ir.OrchestratorBinding;
 public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<OrchestratorBinding> {
 
     public static final String HANDLER_CLASS = "PipelineRunFunctionHandler";
+    public static final String RUN_ASYNC_HANDLER_CLASS = "PipelineRunAsyncFunctionHandler";
+    public static final String STATUS_HANDLER_CLASS = "PipelineExecutionStatusFunctionHandler";
+    public static final String RESULT_HANDLER_CLASS = "PipelineExecutionResultFunctionHandler";
+    private static final String RUN_ASYNC_REQUEST_CLASS = "PipelineRunAsyncRequest";
+    private static final String EXECUTION_LOOKUP_REQUEST_CLASS = "PipelineExecutionLookupRequest";
     private static final String API_VERSION = "v1";
     private static final String ORCHESTRATOR_PREFIX = "orchestrator.";
     private static final String UNKNOWN_REQUEST = "unknown-request";
@@ -86,6 +91,36 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
      */
     public static String handlerFqcn(String basePackage) {
         return basePackage + ".orchestrator.service." + HANDLER_CLASS;
+    }
+
+    /**
+     * Resolve fully-qualified async run function handler class name for a base package.
+     *
+     * @param basePackage base package
+     * @return generated handler FQCN
+     */
+    public static String runAsyncHandlerFqcn(String basePackage) {
+        return basePackage + ".orchestrator.service." + RUN_ASYNC_HANDLER_CLASS;
+    }
+
+    /**
+     * Resolve fully-qualified execution status function handler class name for a base package.
+     *
+     * @param basePackage base package
+     * @return generated handler FQCN
+     */
+    public static String statusHandlerFqcn(String basePackage) {
+        return basePackage + ".orchestrator.service." + STATUS_HANDLER_CLASS;
+    }
+
+    /**
+     * Resolve fully-qualified execution result function handler class name for a base package.
+     *
+     * @param basePackage base package
+     * @return generated handler FQCN
+     */
+    public static String resultHandlerFqcn(String basePackage) {
+        return basePackage + ".orchestrator.service." + RESULT_HANDLER_CLASS;
     }
 
     /**
@@ -205,6 +240,166 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
         handler.addMethod(handleRequest);
 
         JavaFile.builder(binding.basePackage() + ".orchestrator.service", handler.build())
+            .build()
+            .writeTo(ctx.outputDir());
+
+        renderAsyncHandlers(binding, ctx, inputDto, outputDto, streamingInput, streamingOutput);
+    }
+
+    private void renderAsyncHandlers(
+        OrchestratorBinding binding,
+        GenerationContext ctx,
+        ClassName inputDto,
+        ClassName outputDto,
+        boolean streamingInput,
+        boolean streamingOutput
+    ) throws IOException {
+        ClassName executionService = ClassName.get("org.pipelineframework", "PipelineExecutionService");
+        ClassName runAsyncAcceptedDto = ClassName.get("org.pipelineframework.orchestrator.dto", "RunAsyncAcceptedDto");
+        ClassName executionStatusDto = ClassName.get("org.pipelineframework.orchestrator.dto", "ExecutionStatusDto");
+        ClassName list = ClassName.get(List.class);
+        TypeName runAsyncRequestType =
+            ClassName.get(binding.basePackage() + ".orchestrator.service", RUN_ASYNC_REQUEST_CLASS);
+        TypeName executionLookupRequestType =
+            ClassName.get(binding.basePackage() + ".orchestrator.service", EXECUTION_LOOKUP_REQUEST_CLASS);
+        TypeName asyncResultType = streamingOutput
+            ? ParameterizedTypeName.get(list, outputDto)
+            : outputDto;
+
+        TypeSpec runAsyncRequest = TypeSpec.classBuilder(RUN_ASYNC_REQUEST_CLASS)
+            .addModifiers(Modifier.PUBLIC)
+            .addField(FieldSpec.builder(inputDto, "input", Modifier.PUBLIC).build())
+            .addField(FieldSpec.builder(ParameterizedTypeName.get(list, inputDto), "inputBatch", Modifier.PUBLIC).build())
+            .addField(FieldSpec.builder(String.class, "tenantId", Modifier.PUBLIC).build())
+            .addField(FieldSpec.builder(String.class, "idempotencyKey", Modifier.PUBLIC).build())
+            .build();
+        TypeSpec executionLookupRequest = TypeSpec.classBuilder(EXECUTION_LOOKUP_REQUEST_CLASS)
+            .addModifiers(Modifier.PUBLIC)
+            .addField(FieldSpec.builder(String.class, "tenantId", Modifier.PUBLIC).build())
+            .addField(FieldSpec.builder(String.class, "executionId", Modifier.PUBLIC).build())
+            .build();
+
+        MethodSpec runAsyncHandleRequest = MethodSpec.methodBuilder("handleRequest")
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(runAsyncAcceptedDto)
+            .addParameter(runAsyncRequestType, "request")
+            .addParameter(LAMBDA_CONTEXT, "context")
+            .addStatement("$T executionInput", Object.class)
+            .beginControlFlow("if ($L)", streamingInput)
+            .beginControlFlow("if (request != null && request.inputBatch != null && !request.inputBatch.isEmpty())")
+            .addStatement("executionInput = $T.createFrom().iterable(request.inputBatch)", MULTI)
+            .nextControlFlow("else if (request != null && request.input != null)")
+            .addStatement("executionInput = $T.createFrom().item(request.input)", MULTI)
+            .nextControlFlow("else")
+            .addStatement("executionInput = $T.createFrom().empty()", MULTI)
+            .endControlFlow()
+            .nextControlFlow("else")
+            .beginControlFlow("if (request != null && request.input != null)")
+            .addStatement("executionInput = request.input")
+            .nextControlFlow("else if (request != null && request.inputBatch != null && !request.inputBatch.isEmpty())")
+            .addStatement("executionInput = request.inputBatch.get(0)")
+            .nextControlFlow("else")
+            .addStatement("executionInput = null")
+            .endControlFlow()
+            .endControlFlow()
+            .addStatement("String tenantId = request == null ? null : request.tenantId")
+            .addStatement("String idempotencyKey = request == null ? null : request.idempotencyKey")
+            .addStatement(
+                "return pipelineExecutionService.executePipelineAsync(executionInput, tenantId, idempotencyKey, $L)"
+                    + ".await().indefinitely()",
+                streamingOutput)
+            .build();
+
+        TypeSpec runAsyncHandler = TypeSpec.classBuilder(RUN_ASYNC_HANDLER_CLASS)
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(APPLICATION_SCOPED)
+            .addAnnotation(AnnotationSpec.builder(NAMED)
+                .addMember("value", "$S", RUN_ASYNC_HANDLER_CLASS)
+                .build())
+            .addAnnotation(AnnotationSpec.builder(GENERATED_ROLE)
+                .addMember("value", "$T.$L", ROLE_ENUM, "REST_SERVER")
+                .build())
+            .addSuperinterface(ParameterizedTypeName.get(REQUEST_HANDLER, runAsyncRequestType, runAsyncAcceptedDto))
+            .addField(FieldSpec.builder(executionService, "pipelineExecutionService", Modifier.PRIVATE)
+                .addAnnotation(INJECT)
+                .build())
+            .addMethod(runAsyncHandleRequest)
+            .build();
+
+        MethodSpec statusHandleRequest = MethodSpec.methodBuilder("handleRequest")
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(executionStatusDto)
+            .addParameter(executionLookupRequestType, "request")
+            .addParameter(LAMBDA_CONTEXT, "context")
+            .beginControlFlow("if (request == null || request.executionId == null || request.executionId.isBlank())")
+            .addStatement("throw new $T($S)", IllegalArgumentException.class, "executionId is required")
+            .endControlFlow()
+            .addStatement("return pipelineExecutionService.getExecutionStatus(request.tenantId, request.executionId).await().indefinitely()")
+            .build();
+
+        TypeSpec statusHandler = TypeSpec.classBuilder(STATUS_HANDLER_CLASS)
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(APPLICATION_SCOPED)
+            .addAnnotation(AnnotationSpec.builder(NAMED)
+                .addMember("value", "$S", STATUS_HANDLER_CLASS)
+                .build())
+            .addAnnotation(AnnotationSpec.builder(GENERATED_ROLE)
+                .addMember("value", "$T.$L", ROLE_ENUM, "REST_SERVER")
+                .build())
+            .addSuperinterface(ParameterizedTypeName.get(REQUEST_HANDLER, executionLookupRequestType, executionStatusDto))
+            .addField(FieldSpec.builder(executionService, "pipelineExecutionService", Modifier.PRIVATE)
+                .addAnnotation(INJECT)
+                .build())
+            .addMethod(statusHandleRequest)
+            .build();
+
+        MethodSpec resultHandleRequest = MethodSpec.methodBuilder("handleRequest")
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(asyncResultType)
+            .addParameter(executionLookupRequestType, "request")
+            .addParameter(LAMBDA_CONTEXT, "context")
+            .beginControlFlow("if (request == null || request.executionId == null || request.executionId.isBlank())")
+            .addStatement("throw new $T($S)", IllegalArgumentException.class, "executionId is required")
+            .endControlFlow()
+            .addStatement(
+                "return pipelineExecutionService.getExecutionResult(request.tenantId, request.executionId, $T.class, $L)"
+                    + ".await().indefinitely()",
+                outputDto,
+                streamingOutput)
+            .build();
+
+        TypeSpec resultHandler = TypeSpec.classBuilder(RESULT_HANDLER_CLASS)
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(APPLICATION_SCOPED)
+            .addAnnotation(AnnotationSpec.builder(NAMED)
+                .addMember("value", "$S", RESULT_HANDLER_CLASS)
+                .build())
+            .addAnnotation(AnnotationSpec.builder(GENERATED_ROLE)
+                .addMember("value", "$T.$L", ROLE_ENUM, "REST_SERVER")
+                .build())
+            .addSuperinterface(ParameterizedTypeName.get(REQUEST_HANDLER, executionLookupRequestType, asyncResultType))
+            .addField(FieldSpec.builder(executionService, "pipelineExecutionService", Modifier.PRIVATE)
+                .addAnnotation(INJECT)
+                .build())
+            .addMethod(resultHandleRequest)
+            .build();
+
+        JavaFile.builder(binding.basePackage() + ".orchestrator.service", runAsyncRequest)
+            .build()
+            .writeTo(ctx.outputDir());
+        JavaFile.builder(binding.basePackage() + ".orchestrator.service", executionLookupRequest)
+            .build()
+            .writeTo(ctx.outputDir());
+        JavaFile.builder(binding.basePackage() + ".orchestrator.service", runAsyncHandler)
+            .build()
+            .writeTo(ctx.outputDir());
+        JavaFile.builder(binding.basePackage() + ".orchestrator.service", statusHandler)
+            .build()
+            .writeTo(ctx.outputDir());
+        JavaFile.builder(binding.basePackage() + ".orchestrator.service", resultHandler)
             .build()
             .writeTo(ctx.outputDir());
     }

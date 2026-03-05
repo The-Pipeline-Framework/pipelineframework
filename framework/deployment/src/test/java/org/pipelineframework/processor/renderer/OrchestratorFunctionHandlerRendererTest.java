@@ -100,6 +100,32 @@ class OrchestratorFunctionHandlerRendererTest {
             () -> "expected FunctionTransportBridge.invokeManyToMany invocation missing. source:\n" + source);
     }
 
+    @Test
+    void rendersAsyncFunctionHandlers() throws IOException {
+        renderAndReadSource(buildBinding());
+
+        Path runAsyncPath = tempDir.resolve("com/example/orchestrator/service/PipelineRunAsyncFunctionHandler.java");
+        Path statusPath = tempDir.resolve("com/example/orchestrator/service/PipelineExecutionStatusFunctionHandler.java");
+        Path resultPath = tempDir.resolve("com/example/orchestrator/service/PipelineExecutionResultFunctionHandler.java");
+        Path runAsyncRequestPath = tempDir.resolve("com/example/orchestrator/service/PipelineRunAsyncRequest.java");
+        Path lookupRequestPath = tempDir.resolve("com/example/orchestrator/service/PipelineExecutionLookupRequest.java");
+
+        assertTrue(Files.exists(runAsyncPath));
+        assertTrue(Files.exists(statusPath));
+        assertTrue(Files.exists(resultPath));
+        assertTrue(Files.exists(runAsyncRequestPath));
+        assertTrue(Files.exists(lookupRequestPath));
+
+        String runAsyncSource = Files.readString(runAsyncPath);
+        String statusSource = Files.readString(statusPath);
+        String resultSource = Files.readString(resultPath);
+        assertTrue(runAsyncSource.contains("implements RequestHandler<PipelineRunAsyncRequest, RunAsyncAcceptedDto>"));
+        assertTrue(runAsyncSource.contains("pipelineExecutionService.executePipelineAsync"));
+        assertTrue(statusSource.contains("implements RequestHandler<PipelineExecutionLookupRequest, ExecutionStatusDto>"));
+        assertTrue(statusSource.contains("pipelineExecutionService.getExecutionStatus"));
+        assertTrue(resultSource.contains("pipelineExecutionService.getExecutionResult"));
+    }
+
     private String renderAndReadSource(OrchestratorBinding binding) throws IOException {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));

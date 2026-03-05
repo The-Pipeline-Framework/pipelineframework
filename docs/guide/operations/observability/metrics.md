@@ -94,6 +94,19 @@ Counter success = registry.counter("payment.processing.success");
 return timer.recordCallable(() -> processPayment(record));
 ```
 
+## Orchestrator Queue-Async Signals
+
+For `QUEUE_ASYNC`, include control-plane metrics in addition to step metrics:
+
+1. lease claim conflicts (OCC contention),
+2. stale commit rejections,
+3. retry scheduling rate and retry-saturation ratio,
+4. due-sweeper recovery count (persisted-before-dispatch gap recovery),
+5. DLQ publish count and backlog depth,
+6. queue depth and worker lag.
+
+Use these to separate dependency outages (high retries, low success) from coordination issues (high stale/lease conflicts).
+
 ## Design Tips
 
 1. Prefer low-cardinality labels

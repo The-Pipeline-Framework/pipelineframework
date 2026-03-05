@@ -84,12 +84,29 @@ FTGo reference command paths:
 
 ## Recovery Playbook
 
+### Queue-Async execution triage (`QUEUE_ASYNC`)
+
+Use this flow when orchestrator async executions stall or fail:
+
+1. Check execution status via transport-native status API (`/executions/{id}` or `GetExecutionStatus`).
+2. Confirm whether status is `WAIT_RETRY`, `FAILED`, or `DLQ`.
+3. Inspect latest retry attempt and error classification.
+4. If execution is due but not progressing, verify sweeper activity and dispatcher health.
+5. Re-drive only after validating idempotency at downstream operator boundaries.
+
 ### Retry exhaustion
 
 1. Identify the failing step and failure type (transient vs non-retryable).
 2. Confirm whether the failure is dependency/systemic or payload/data specific.
 3. If systemic: stabilise dependency first, then replay.
 4. If data-specific: isolate failing payloads and route to DLQ (Dead Letter Queue)/parking investigation.
+
+### DLQ re-drive guidance
+
+1. Treat DLQ payloads as at-least-once replays.
+2. Preserve the original transition identity when replaying.
+3. Re-drive in bounded batches and monitor duplicate suppression metrics/logs.
+4. Do not bulk replay until downstream idempotency controls are validated.
 
 ### Parking growth
 

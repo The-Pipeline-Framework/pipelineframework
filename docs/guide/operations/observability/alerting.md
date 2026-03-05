@@ -32,4 +32,11 @@ Start with:
 3. Buffer queued stays high for 5 minutes (warning)
 4. DLQ growth sustained for 5 minutes (critical)
 
+Queue-async additions:
+
+5. Due-sweeper recoveries stop while due backlog rises (critical)
+6. Lease conflict/stale-commit rate spikes above baseline (warning)
+7. Retry-saturation exceeds threshold (warning/critical by tenant tier)
+8. Queue age/lag exceeds execution SLO budget (critical)
+
 When using New Relic, derive these from `tpf.pipeline.run` spans and `tpf.step.*` metrics.

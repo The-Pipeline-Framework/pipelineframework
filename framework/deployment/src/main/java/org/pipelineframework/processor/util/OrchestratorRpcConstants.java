@@ -12,6 +12,9 @@ public final class OrchestratorRpcConstants {
     }
 
     public static final String RUN_METHOD = "Run";
+    public static final String RUN_ASYNC_METHOD = "RunAsync";
+    public static final String GET_EXECUTION_STATUS_METHOD = "GetExecutionStatus";
+    public static final String GET_EXECUTION_RESULT_METHOD = "GetExecutionResult";
     public static final String INGEST_METHOD = "Ingest";
     public static final String SUBSCRIBE_METHOD = "Subscribe";
 }
