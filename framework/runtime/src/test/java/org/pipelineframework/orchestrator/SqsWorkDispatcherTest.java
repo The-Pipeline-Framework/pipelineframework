@@ -56,26 +56,22 @@ class SqsWorkDispatcherTest {
     @Test
     void errorMessageIndicatesMissingImplementation() {
         ExecutionWorkItem item = new ExecutionWorkItem("tenant1", "exec1");
-
-        try {
-            dispatcher.enqueueNow(item).await().indefinitely();
-        } catch (UnsupportedOperationException e) {
-            assertTrue(e.getMessage().contains("SqsWorkDispatcher"));
-            assertTrue(e.getMessage().contains("not implemented"));
-            assertTrue(e.getMessage().contains("deployment-specific provider module"));
-        }
+        UnsupportedOperationException e = assertThrows(
+            UnsupportedOperationException.class,
+            () -> dispatcher.enqueueNow(item).await().indefinitely());
+        assertTrue(e.getMessage().contains("SqsWorkDispatcher"));
+        assertTrue(e.getMessage().contains("not implemented"));
+        assertTrue(e.getMessage().contains("deployment-specific provider module"));
     }
 
     @Test
     void enqueueDelayedErrorMessageIndicatesMissingImplementation() {
         ExecutionWorkItem item = new ExecutionWorkItem("tenant1", "exec1");
-
-        try {
-            dispatcher.enqueueDelayed(item, Duration.ofMinutes(5)).await().indefinitely();
-        } catch (UnsupportedOperationException e) {
-            assertTrue(e.getMessage().contains("SqsWorkDispatcher"));
-            assertTrue(e.getMessage().contains("not implemented"));
-        }
+        UnsupportedOperationException e = assertThrows(
+            UnsupportedOperationException.class,
+            () -> dispatcher.enqueueDelayed(item, Duration.ofMinutes(5)).await().indefinitely());
+        assertTrue(e.getMessage().contains("SqsWorkDispatcher"));
+        assertTrue(e.getMessage().contains("not implemented"));
     }
 
     @Test
