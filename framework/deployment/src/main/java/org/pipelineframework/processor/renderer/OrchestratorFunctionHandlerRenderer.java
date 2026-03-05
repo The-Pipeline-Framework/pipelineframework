@@ -247,22 +247,27 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
     }
 
     /**
-     * Generates and writes async orchestrator request/handler classes for pipeline execution.
+     * Generates and writes the asynchronous orchestrator request/response DTOs and AWS Lambda
+     * RequestHandler implementations for run-async, execution status, and execution result endpoints.
      *
-     * <p>Produces two request DTOs (RunAsyncRequest, ExecutionLookupRequest) and three RequestHandler
-     * implementations (RunAsyncHandler, ExecutionStatus, ExecutionResult) under
-     * {basePackage}.orchestrator.service, configured according to the provided input/output DTO
-     * types and streaming flags. The generated handlers inject PipelineExecutionService and delegate
-     * to its async execution, status, and result APIs. For non-streaming unary RunAsync requests, a
-     * multi-item inputBatch is rejected with an IllegalArgumentException.
+     * This produces:
+     * - RunAsync and ExecutionLookup request DTO classes.
+     * - RunAsync handler that prepares execution input (respecting streamingInput and streamingOutput),
+     *   invokes PipelineExecutionService.executePipelineAsync, and returns RunAsyncAcceptedDto.
+     * - Status handler that validates executionId and returns ExecutionStatusDto.
+     * - Result handler that validates executionId and returns either a single output DTO or a list
+     *   of output DTOs depending on streamingOutput.
      *
-     * @param binding descriptor of the orchestrator binding (used to determine package names)
-     * @param ctx generation context that provides the output directory
-     * @param inputDto the ClassName of the input DTO type for generated classes
-     * @param outputDto the ClassName of the output DTO type for generated classes
-     * @param streamingInput whether the orchestrator accepts streaming input (affects request shape and adapters)
-     * @param streamingOutput whether the orchestrator produces streaming output (affects result type and handlers)
-     * @throws IOException if emitting the generated Java files fails
+     * The generated RunAsync handler enforces that non-streaming (unary) handlers accept at most one
+     * item in `inputBatch` and will throw IllegalArgumentException at runtime if this is violated.
+     *
+     * @param binding the orchestrator binding providing package and naming context for generated classes
+     * @param ctx the generation context containing the output directory
+     * @param inputDto the ClassName of the input DTO type to reference in generated code
+     * @param outputDto the ClassName of the output DTO type to reference in generated code
+     * @param streamingInput if true, generated handlers treat inputs as streams/collections
+     * @param streamingOutput if true, generated handlers produce streamed/collection results
+     * @throws IOException if writing any generated Java file to the output directory fails
      */
     private void renderAsyncHandlers(
         OrchestratorBinding binding,
