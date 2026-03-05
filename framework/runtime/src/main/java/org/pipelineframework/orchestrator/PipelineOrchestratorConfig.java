@@ -140,6 +140,22 @@ public interface PipelineOrchestratorConfig {
     Optional<String> queueUrl();
 
     /**
+     * DynamoDB provider configuration.
+     *
+     * @return dynamo provider config
+     */
+    @WithName("dynamo")
+    DynamoConfig dynamo();
+
+    /**
+     * SQS provider configuration.
+     *
+     * @return sqs provider config
+     */
+    @WithName("sqs")
+    SqsConfig sqs();
+
+    /**
      * Enables strict startup guards in queue mode.
      *
      * @return true when startup should fail on invalid queue config
@@ -147,4 +163,75 @@ public interface PipelineOrchestratorConfig {
     @WithName("strict-startup")
     @WithDefault("true")
     boolean strictStartup();
+
+    /**
+     * DynamoDB provider settings.
+     */
+    interface DynamoConfig {
+
+        /**
+         * Execution table name.
+         *
+         * @return execution table name
+         */
+        @WithName("execution-table")
+        @WithDefault("tpf_execution")
+        String executionTable();
+
+        /**
+         * Execution key deduplication table name.
+         *
+         * @return execution key table name
+         */
+        @WithName("execution-key-table")
+        @WithDefault("tpf_execution_key")
+        String executionKeyTable();
+
+        /**
+         * Optional region override.
+         *
+         * @return region when configured
+         */
+        @WithName("region")
+        Optional<String> region();
+
+        /**
+         * Optional endpoint override, typically for local development.
+         *
+         * @return endpoint URI when configured
+         */
+        @WithName("endpoint-override")
+        Optional<String> endpointOverride();
+    }
+
+    /**
+     * SQS provider settings.
+     */
+    interface SqsConfig {
+
+        /**
+         * Optional region override.
+         *
+         * @return region when configured
+         */
+        @WithName("region")
+        Optional<String> region();
+
+        /**
+         * Optional endpoint override, typically for local development.
+         *
+         * @return endpoint URI when configured
+         */
+        @WithName("endpoint-override")
+        Optional<String> endpointOverride();
+
+        /**
+         * Enables local in-process dispatch in addition to SQS enqueue.
+         *
+         * @return true to dispatch locally after enqueueing in SQS
+         */
+        @WithName("local-loopback")
+        @WithDefault("true")
+        boolean localLoopback();
+    }
 }
