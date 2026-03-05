@@ -296,30 +296,35 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
             .addField(FieldSpec.builder(String.class, "executionId", Modifier.PUBLIC).build())
             .build();
 
-        MethodSpec runAsyncHandleRequest = MethodSpec.methodBuilder("handleRequest")
+        MethodSpec.Builder runAsyncHandleRequestBuilder = MethodSpec.methodBuilder("handleRequest")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
             .returns(runAsyncAcceptedDto)
             .addParameter(runAsyncRequestType, "request")
             .addParameter(LAMBDA_CONTEXT, "context")
-            .addStatement("$T executionInput", Object.class)
-            .beginControlFlow("if ($L)", streamingInput)
-            .beginControlFlow("if (request != null && request.inputBatch != null && !request.inputBatch.isEmpty())")
-            .addStatement("executionInput = $T.createFrom().iterable(request.inputBatch)", MULTI)
-            .nextControlFlow("else if (request != null && request.input != null)")
-            .addStatement("executionInput = $T.createFrom().item(request.input)", MULTI)
-            .nextControlFlow("else")
-            .addStatement("executionInput = $T.createFrom().empty()", MULTI)
-            .endControlFlow()
-            .nextControlFlow("else")
-            .beginControlFlow("if (request != null && request.input != null)")
-            .addStatement("executionInput = request.input")
-            .nextControlFlow("else if (request != null && request.inputBatch != null && !request.inputBatch.isEmpty())")
-            .addStatement("executionInput = request.inputBatch.get(0)")
-            .nextControlFlow("else")
-            .addStatement("executionInput = null")
-            .endControlFlow()
-            .endControlFlow()
+            .addStatement("$T executionInput", Object.class);
+
+        if (streamingInput) {
+            runAsyncHandleRequestBuilder
+                .beginControlFlow("if (request != null && request.inputBatch != null && !request.inputBatch.isEmpty())")
+                .addStatement("executionInput = $T.createFrom().iterable(request.inputBatch)", MULTI)
+                .nextControlFlow("else if (request != null && request.input != null)")
+                .addStatement("executionInput = $T.createFrom().item(request.input)", MULTI)
+                .nextControlFlow("else")
+                .addStatement("executionInput = $T.createFrom().empty()", MULTI)
+                .endControlFlow();
+        } else {
+            runAsyncHandleRequestBuilder
+                .beginControlFlow("if (request != null && request.input != null)")
+                .addStatement("executionInput = request.input")
+                .nextControlFlow("else if (request != null && request.inputBatch != null && !request.inputBatch.isEmpty())")
+                .addStatement("executionInput = request.inputBatch.get(0)")
+                .nextControlFlow("else")
+                .addStatement("executionInput = null")
+                .endControlFlow();
+        }
+
+        MethodSpec runAsyncHandleRequest = runAsyncHandleRequestBuilder
             .addStatement("String tenantId = request == null ? null : request.tenantId")
             .addStatement("String idempotencyKey = request == null ? null : request.idempotencyKey")
             .addStatement(
@@ -382,8 +387,9 @@ public class OrchestratorFunctionHandlerRenderer implements PipelineRenderer<Orc
             .addStatement("throw new $T($S)", IllegalArgumentException.class, "executionId is required")
             .endControlFlow()
             .addStatement(
-                "return pipelineExecutionService.getExecutionResult(request.tenantId, request.executionId, $T.class, $L)"
+                "return pipelineExecutionService.<$T>getExecutionResult(request.tenantId, request.executionId, $T.class, $L)"
                     + ".await().indefinitely()",
+                asyncResultType,
                 outputDto,
                 streamingOutput)
             .build();

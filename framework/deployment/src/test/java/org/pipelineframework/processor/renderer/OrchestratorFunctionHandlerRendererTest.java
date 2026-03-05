@@ -124,7 +124,7 @@ class OrchestratorFunctionHandlerRendererTest {
         assertTrue(statusSource.contains("implements RequestHandler<PipelineExecutionLookupRequest, ExecutionStatusDto>"));
         assertTrue(statusSource.contains("pipelineExecutionService.getExecutionStatus"));
         assertTrue(resultSource.contains("implements RequestHandler<PipelineExecutionLookupRequest,"));
-        assertTrue(resultSource.contains("pipelineExecutionService.getExecutionResult"));
+        assertTrue(resultSource.contains("getExecutionResult("));
     }
 
     private String renderAndReadSource(OrchestratorBinding binding) throws IOException {
