@@ -186,4 +186,197 @@ class PipelineGenerationPhaseTest {
         assertEquals(Set.of("cache", "audit"), generationContext.enabledAspects());
         assertEquals(org.pipelineframework.processor.ir.DeploymentRole.PIPELINE_SERVER, generationContext.role());
     }
+
+    @Test
+    void computesEnabledAspectsFromContextModels() throws Exception {
+        PipelineGenerationPhase phase = new PipelineGenerationPhase();
+        org.pipelineframework.processor.PipelineCompilationContext context =
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+
+        org.pipelineframework.processor.ir.PipelineAspectModel aspect1 =
+            new org.pipelineframework.processor.ir.PipelineAspectModel.Builder()
+                .name("Persistence")
+                .scope("GLOBAL")
+                .position("AFTER_STEP")
+                .configuration(java.util.Map.of())
+                .build();
+
+        org.pipelineframework.processor.ir.PipelineAspectModel aspect2 =
+            new org.pipelineframework.processor.ir.PipelineAspectModel.Builder()
+                .name("Cache")
+                .scope("GLOBAL")
+                .position("BEFORE_STEP")
+                .configuration(java.util.Map.of())
+                .build();
+
+        context.setAspectModels(java.util.List.of(aspect1, aspect2));
+
+        java.lang.reflect.Method method = PipelineGenerationPhase.class.getDeclaredMethod(
+            "computeEnabledAspects",
+            org.pipelineframework.processor.PipelineCompilationContext.class);
+        method.setAccessible(true);
+
+        @SuppressWarnings("unchecked")
+        Set<String> enabledAspects = (Set<String>) method.invoke(phase, context);
+
+        assertEquals(2, enabledAspects.size());
+        assertTrue(enabledAspects.contains("persistence"));
+        assertTrue(enabledAspects.contains("cache"));
+    }
+
+    @Test
+    void computeEnabledAspectsHandlesEmptyList() throws Exception {
+        PipelineGenerationPhase phase = new PipelineGenerationPhase();
+        org.pipelineframework.processor.PipelineCompilationContext context =
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+
+        context.setAspectModels(java.util.List.of());
+
+        java.lang.reflect.Method method = PipelineGenerationPhase.class.getDeclaredMethod(
+            "computeEnabledAspects",
+            org.pipelineframework.processor.PipelineCompilationContext.class);
+        method.setAccessible(true);
+
+        @SuppressWarnings("unchecked")
+        Set<String> enabledAspects = (Set<String>) method.invoke(phase, context);
+
+        assertNotNull(enabledAspects);
+        assertTrue(enabledAspects.isEmpty());
+    }
+
+    @Test
+    void computeEnabledAspectsHandlesNullAspects() throws Exception {
+        PipelineGenerationPhase phase = new PipelineGenerationPhase();
+        org.pipelineframework.processor.PipelineCompilationContext context =
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+
+        context.setAspectModels(null);
+
+        java.lang.reflect.Method method = PipelineGenerationPhase.class.getDeclaredMethod(
+            "computeEnabledAspects",
+            org.pipelineframework.processor.PipelineCompilationContext.class);
+        method.setAccessible(true);
+
+        @SuppressWarnings("unchecked")
+        Set<String> enabledAspects = (Set<String>) method.invoke(phase, context);
+
+        assertNotNull(enabledAspects);
+        assertTrue(enabledAspects.isEmpty());
+    }
+
+    @Test
+    void generatesOrchestratorArtifactsWhenFlagEnabled() throws Exception {
+        PipelineGenerationPhase phase = new PipelineGenerationPhase();
+        org.pipelineframework.processor.PipelineCompilationContext context =
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+        context.setOrchestratorGenerated(true);
+        context.setTransportMode(org.pipelineframework.processor.TransportMode.GRPC);
+
+        org.pipelineframework.processor.ir.PipelineStepModel model =
+            new org.pipelineframework.processor.ir.PipelineStepModel.Builder()
+                .serviceName("OrchestratorService")
+                .generatedName("OrchestratorService")
+                .servicePackage("com.example.orchestrator.service")
+                .serviceClassName(com.squareup.javapoet.ClassName.get("com.example.orchestrator.service", "OrchestratorService"))
+                .inputMapping(new org.pipelineframework.processor.ir.TypeMapping(
+                    com.squareup.javapoet.ClassName.get("com.example", "Input"), null, false))
+                .outputMapping(new org.pipelineframework.processor.ir.TypeMapping(
+                    com.squareup.javapoet.ClassName.get("com.example", "Output"), null, false))
+                .streamingShape(org.pipelineframework.processor.ir.StreamingShape.UNARY_UNARY)
+                .enabledTargets(java.util.Set.of(org.pipelineframework.processor.ir.GenerationTarget.GRPC_SERVICE))
+                .executionMode(org.pipelineframework.processor.ir.ExecutionMode.DEFAULT)
+                .deploymentRole(org.pipelineframework.processor.ir.DeploymentRole.PIPELINE_SERVER)
+                .sideEffect(false)
+                .cacheKeyGenerator(null)
+                .orderingRequirement(org.pipelineframework.parallelism.OrderingRequirement.RELAXED)
+                .threadSafety(org.pipelineframework.parallelism.ThreadSafety.SAFE)
+                .build();
+
+        org.pipelineframework.processor.ir.OrchestratorBinding binding =
+            new org.pipelineframework.processor.ir.OrchestratorBinding(
+                model,
+                "com.example",
+                "GRPC",
+                "Input",
+                "Output",
+                false,
+                false,
+                "ProcessAlphaService",
+                org.pipelineframework.processor.ir.StreamingShape.UNARY_UNARY,
+                "orchestrator",
+                "Orchestrator CLI",
+                "1.0.0"
+            );
+
+        context.setRendererBindings(java.util.Map.of("orchestrator", binding));
+
+        assertDoesNotThrow(() -> phase.execute(context));
+    }
+
+    @Test
+    void derivesOuterClassNameWithUnderscores() throws Exception {
+        PipelineGenerationPhase phase = new PipelineGenerationPhase();
+        DescriptorProtos.FileDescriptorProto fileProto = DescriptorProtos.FileDescriptorProto.newBuilder()
+            .setName("proto/my_custom_proto.proto")
+            .build();
+        Descriptors.FileDescriptor descriptor = Descriptors.FileDescriptor.buildFrom(
+            fileProto,
+            new Descriptors.FileDescriptor[0]);
+
+        java.lang.reflect.Method method = PipelineGenerationPhase.class.getDeclaredMethod(
+            "deriveOuterClassName",
+            Descriptors.FileDescriptor.class);
+        method.setAccessible(true);
+
+        String outer = (String) method.invoke(phase, descriptor);
+        assertEquals("MyCustomProto", outer);
+    }
+
+    @Test
+    void derivesOuterClassNameWithDashes() throws Exception {
+        PipelineGenerationPhase phase = new PipelineGenerationPhase();
+        DescriptorProtos.FileDescriptorProto fileProto = DescriptorProtos.FileDescriptorProto.newBuilder()
+            .setName("proto/my-service-v2.proto")
+            .build();
+        Descriptors.FileDescriptor descriptor = Descriptors.FileDescriptor.buildFrom(
+            fileProto,
+            new Descriptors.FileDescriptor[0]);
+
+        java.lang.reflect.Method method = PipelineGenerationPhase.class.getDeclaredMethod(
+            "deriveOuterClassName",
+            Descriptors.FileDescriptor.class);
+        method.setAccessible(true);
+
+        String outer = (String) method.invoke(phase, descriptor);
+        assertEquals("MyServiceV2", outer);
+    }
+
+    @Test
+    void resolvesRoleOutputDirForPipelineServer() throws Exception {
+        PipelineGenerationPhase phase = new PipelineGenerationPhase();
+        org.pipelineframework.processor.PipelineCompilationContext context =
+            new org.pipelineframework.processor.PipelineCompilationContext(processingEnv, roundEnv);
+        Path rootPath = Path.of("target/generated-sources");
+        context.setGeneratedSourcesRoot(rootPath);
+
+        java.lang.reflect.Method method = PipelineGenerationPhase.class.getDeclaredMethod(
+            "resolveRoleOutputDir",
+            org.pipelineframework.processor.PipelineCompilationContext.class,
+            org.pipelineframework.processor.ir.DeploymentRole.class);
+        method.setAccessible(true);
+
+        Path resolved = (Path) method.invoke(phase, context, org.pipelineframework.processor.ir.DeploymentRole.PIPELINE_SERVER);
+
+        assertNotNull(resolved);
+        assertTrue(resolved.toString().contains("pipeline-server"));
+    }
+
+    @Test
+    void handlesNullProcessingEnvironmentGracefully() throws Exception {
+        PipelineGenerationPhase phase = new PipelineGenerationPhase();
+        org.pipelineframework.processor.PipelineCompilationContext context =
+            new org.pipelineframework.processor.PipelineCompilationContext(null, roundEnv);
+
+        assertDoesNotThrow(() -> phase.execute(context));
+    }
 }
