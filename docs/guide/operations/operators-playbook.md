@@ -106,11 +106,11 @@ Fast triage checklist:
 1. Identify the failing step and failure type (transient vs non-retryable).
 2. Confirm whether the failure is dependency/systemic or payload/data specific.
 3. If systemic: stabilise dependency first, then replay.
-4. If data-specific: isolate failing payloads and route to DLQ (Dead Letter Queue)/parking investigation.
+4. If data-specific: isolate failing payloads and route to item reject sink or execution DLQ based on scope.
 
-### DLQ re-drive guidance
+### Execution DLQ and Item Reject Re-drive Guidance
 
-1. Treat DLQ payloads as at-least-once replays.
+1. Treat execution DLQ and item reject payloads as at-least-once replays.
 2. Preserve the original transition identity when replaying.
 3. Re-drive in bounded batches and monitor duplicate suppression metrics/logs.
 4. Do not bulk replay until downstream idempotency controls are validated.
@@ -154,5 +154,5 @@ Only include keys that change behaviour materially:
 
 - [Operator Troubleshooting Matrix](/guide/operations/operators-troubleshooting)
 - [Operator Build Troubleshooting](/guide/development/operators-build-troubleshooting)
-- [Error Handling & DLQ](/guide/operations/error-handling)
+- [Error Handling and Recovery](/guide/operations/error-handling)
 - [Observability](/guide/operations/observability/)

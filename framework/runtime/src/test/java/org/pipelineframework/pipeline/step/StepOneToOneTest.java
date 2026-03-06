@@ -18,11 +18,14 @@ package org.pipelineframework.pipeline.step;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.helpers.test.AssertSubscriber;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.step.StepOneToOne;
 
 class StepOneToOneTest {
@@ -41,6 +44,35 @@ class StepOneToOneTest {
         @Override
         public void initialiseWithConfig(org.pipelineframework.config.StepConfig config) {
             // Use the config provided
+        }
+    }
+
+    static class FailingRecoverStep implements StepOneToOne<String, String> {
+        private final AtomicBoolean rejectCalled = new AtomicBoolean(false);
+
+        @Override
+        public Uni<String> applyOneToOne(String input) {
+            return Uni.createFrom().failure(new RuntimeException("boom"));
+        }
+
+        @Override
+        public Uni<String> rejectItem(Uni<String> failedItem, Throwable cause) {
+            rejectCalled.set(true);
+            return Uni.createFrom().item("recovered");
+        }
+
+        @Override
+        public StepConfig effectiveConfig() {
+            return new StepConfig().recoverOnFailure(true).retryLimit(1);
+        }
+
+        @Override
+        public void initialiseWithConfig(org.pipelineframework.config.StepConfig config) {
+            // no-op
+        }
+
+        boolean rejectCalled() {
+            return rejectCalled.get();
         }
     }
 
@@ -70,5 +102,15 @@ class StepOneToOneTest {
         AssertSubscriber<String> subscriber = result.subscribe().withSubscriber(AssertSubscriber.create(2));
         subscriber.awaitItems(2, Duration.ofSeconds(5));
         subscriber.assertItems("Processed: item1", "Processed: item2");
+    }
+
+    @Test
+    void recoverOnFailureRoutesToRejectSinkAndContinues() {
+        FailingRecoverStep step = new FailingRecoverStep();
+
+        String result = step.apply(Uni.createFrom().item("x")).await().indefinitely();
+
+        assertEquals("recovered", result);
+        assertTrue(step.rejectCalled());
     }
 }

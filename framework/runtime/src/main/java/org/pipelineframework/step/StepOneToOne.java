@@ -32,7 +32,7 @@ import org.pipelineframework.telemetry.PipelineTelemetry;
  * @param <I> the type of input item
  * @param <O> the type of output item
  */
-public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, DeadLetterQueue<I, O> {
+public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, ItemRejectable<I, O> {
 
   /**
    * Apply the step to a single input and produce a single output.
@@ -43,10 +43,10 @@ public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, DeadLe
   Uni<O> applyOneToOne(I in);
 
   /**
-   * Orchestrates the asynchronous one-to-one transformation of an emitted input item, performing input null checks, applying retries, and routing failures to a dead letter queue when configured.
+   * Orchestrates the asynchronous one-to-one transformation of an emitted input item, performing input null checks, applying retries, and routing failures to the configured item reject sink when recovery is enabled.
    *
    * @param input the {@code Uni} that emits the input item to be transformed
-   * @return the {@code Uni} that emits the transformed output item on success, or fails with the final error; if {@code recoverOnFailure()} is true a dead-lettered {@code Uni} may be returned instead of a propagated failure
+   * @return the {@code Uni} that emits the transformed output item on success, or fails with the final error; if {@code recoverOnFailure()} is true a rejected {@code Uni} may be returned instead of a propagated failure
    */
   @Override
   default Uni<O> apply(Uni<I> input) {
@@ -56,7 +56,7 @@ public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, DeadLe
     if (input == null) {
       Throwable t = new NullPointerException("Input Uni is null");
       return recoverOnFailure()
-          ? deadLetter(Uni.createFrom().failure(t), t)
+          ? rejectItem(Uni.createFrom().failure(t), t)
           : Uni.createFrom().failure(t);
     }
 
@@ -99,7 +99,7 @@ public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, DeadLe
                   failure.toString());
 
               if (recoverOnFailure()) {
-                return deadLetter(input, failure);
+                return rejectItem(input, failure);
               } else {
                 return Uni.createFrom().failure(failure);
               }

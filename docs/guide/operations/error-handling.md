@@ -1,105 +1,104 @@
-# Concurrency, Error Handling, and DLQ
+# Error Handling and Recovery
 
-This guide explains the advanced features of The Pipeline Framework including concurrency control, error handling mechanisms, dead letter queue (DLQ) support, and immutable architecture patterns.
+This guide describes how TPF handles failures at two different levels:
 
-## Concurrency Control
+1. step-level item recovery (item reject sink), and
+2. orchestrator execution-level terminal failures (execution DLQ).
 
-The Pipeline Framework provides sophisticated concurrency controls to optimize performance while maintaining resource efficiency.
+## Failure Channels
 
-### Reactive Processing
+| Channel | Scope | Trigger | Default provider | Durable provider |
+|---|---|---|---|---|
+| Item Reject Sink | individual failed item/stream in a step with `recoverOnFailure=true` | step retries exhausted or non-retryable failure | `log` | `sqs` |
+| Execution DLQ | whole async execution in `QUEUE_ASYNC` mode | execution reaches terminal failure path | `log` | `sqs` |
 
-The framework leverages Mutiny's reactive processing model for high-throughput, efficient concurrency:
+Use Item Reject Sink for selective recover-and-continue behaviour.
+Use execution DLQ for terminal orchestration failures.
 
-```java
-@PipelineStep(
-    inputType = PaymentRecord.class,
-    outputType = PaymentStatus.class,
-    stepType = StepOneToOne.class,
-    inboundMapper = PaymentRecordInboundMapper.class,
-    outboundMapper = PaymentStatusOutboundMapper.class
-)
-@ApplicationScoped
-public class ProcessPaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
+## Step-Level Recovery: Item Reject Sink
 
-    @Override
-    public Uni<PaymentStatus> process(PaymentRecord paymentRecord) {
-        // This will run reactively using Mutiny's event/worker thread model
-        return processPaymentWithExternalService(paymentRecord);
-    }
+When `recoverOnFailure=true`, step runtime routes failures to the Item Reject Sink and continues according to step semantics.
 
-    private Uni<PaymentStatus> processPaymentWithExternalService(PaymentRecord record) {
-        // Reactive processing is ideal for I/O-bound operations like HTTP calls
-        return webClient.post("/process-payment")
-            .sendJson(record)
-            .onItem().transform(response -> {
-                // Processing response reactively
-                return convertResponseToPaymentStatus(response, record);
-            });
-    }
-}
-```
+- `StepOneToOne` / `StepSideEffect`: failed item is rejected and flow continues with the step's reject output.
+- `StepManyToOne`: failed stream is rejected via stream metadata and flow continues with reject output.
+- `StepOneToMany` / `StepManyToMany`: expose the same reject API and can use the same sink contract.
 
-### Concurrency Limits
+### Step API
 
-Control the maximum number of concurrent operations through backpressure and buffer settings:
+Legacy step-level `deadLetter(...)` / `deadLetterStream(...)` has been replaced with:
 
-```properties
-# application.properties
-pipeline.defaults.backpressure-buffer-capacity=128
-pipeline.defaults.backpressure-strategy=BUFFER
-```
+- `rejectItem(...)`
+- `rejectStream(...)`
 
-### Backpressure Handling
-
-The framework automatically handles backpressure through reactive streams with configurable strategies. You can override backpressure per step at runtime:
-
-```properties
-# application.properties
-pipeline.step."com.example.ProcessPaymentService".backpressure-strategy=DROP
-pipeline.step."com.example.ProcessPaymentService".backpressure-buffer-capacity=256
-```
-
-The available overflow strategies are:
-
-- **BUFFER** (default): Buffers items when the downstream consumer cannot keep up (using `onOverflow().buffer(capacity)`)
-- **DROP**: Drops items when the downstream consumer cannot keep up (using `onOverflow().drop()`)
-
-Programmatic configuration is also possible:
+Example override:
 
 ```java
 @Override
-public Uni<PaymentStatus> process(PaymentRecord paymentRecord) {
-    return externalService.process(paymentRecord)
-        .onFailure().retry().withBackOff(Duration.ofMillis(100), Duration.ofSeconds(5))
-        .atMost(3);
+public Uni<PaymentStatus> rejectItem(Uni<PaymentRecord> failedItem, Throwable cause) {
+    return failedItem
+        .onItem().invoke(item -> LOG.warnf("Rejected item id=%s cause=%s", item.id(), cause.getMessage()))
+        .onItem().transform(_ignored -> PaymentStatus.rejected());
 }
-
-// The framework automatically applies the configured backpressure strategy
-// based on runtime configuration.
 ```
 
-### Relationship Between Concurrency and Buffer
+### Reject Envelope
 
-Concurrency and buffer settings work together to control flow:
+By default, reject envelopes are metadata-only and include:
 
-- **Concurrency** limits the number of simultaneous operations that can be processed
-- **Buffer** controls how many items are queued when downstream operations are slower than upstream production
+1. execution/correlation/idempotency metadata when present,
+2. step identity,
+3. retry/attempt information,
+4. error class/message,
+5. timestamp,
+6. deterministic fingerprint.
 
-Best practices:
-- Set concurrency based on system resources and external service limits
-- Set buffer capacity based on expected load spikes and acceptable memory usage
-- Monitor system performance to balance between throughput and resource utilization
-- Prefer non-blocking I/O and offload truly blocking work to worker threads (for example, Vert.x `executeBlocking`)
+Payload capture is opt-in (`pipeline.item-reject.include-payload=true`).
 
-## Error Handling
+### Item Reject Sink Configuration
 
-The Pipeline Framework provides comprehensive error handling with multiple recovery strategies.
+Prefix: `pipeline.item-reject`
 
-### Queue-Async Crash Matrix
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `pipeline.item-reject.provider` | string | `log` | Sink provider selector (`log`, `memory`, `sqs`). |
+| `pipeline.item-reject.strict-startup` | boolean | `true` | Fail startup on invalid selected sink provider configuration. |
+| `pipeline.item-reject.include-payload` | boolean | `false` | Include rejected payload in envelope. |
+| `pipeline.item-reject.memory-capacity` | int | `512` | Ring buffer capacity when `provider=memory`. |
+| `pipeline.item-reject.publish-failure-policy` | enum | `CONTINUE` | `CONTINUE` or `FAIL_PIPELINE` when sink publish fails. |
+| `pipeline.item-reject.sqs.queue-url` | string | none | Queue URL when `provider=sqs`. |
+| `pipeline.item-reject.sqs.region` | string | none | Optional AWS region override for SQS sink. |
+| `pipeline.item-reject.sqs.endpoint-override` | string | none | Optional endpoint override (local/dev). |
 
-For `pipeline.orchestrator.mode=QUEUE_ASYNC`, crash behavior is:
+Production guard:
 
-| Crash point | Behavior after restart/recovery | Duplicate risk | Required safeguard |
+1. if effective step recovery is enabled (`recoverOnFailure=true`),
+2. and selected sink is non-durable (`log` or `memory`),
+3. startup fails in production launch mode.
+
+In non-production, non-durable sinks are allowed with warning logs.
+
+## Execution-Level DLQ (Queue-Async)
+
+Execution DLQ is unchanged and still uses orchestrator SPI:
+
+- `DeadLetterPublisher`
+- `DeadLetterEnvelope`
+
+This applies only to terminal execution failures in `pipeline.orchestrator.mode=QUEUE_ASYNC`.
+
+### Execution DLQ Configuration
+
+```properties
+pipeline.orchestrator.mode=QUEUE_ASYNC
+pipeline.orchestrator.dlq-provider=sqs
+pipeline.orchestrator.dlq-url=https://sqs.eu-west-1.amazonaws.com/123456789012/tpf-dlq
+```
+
+## Queue-Async Crash Matrix
+
+For `QUEUE_ASYNC`, crash behaviour remains:
+
+| Crash point | Behaviour after restart/recovery | Duplicate risk | Required safeguard |
 |---|---|---|---|
 | Before transition state commit | Work is redelivered and re-executed from last durable version | High | Idempotent operator boundary (`executionId:stepIndex:attempt`) |
 | After state commit, before next enqueue | Transition is durable, but next dispatch can stall until due sweeper re-dispatches | Low | Due-execution sweeper + durable state |
@@ -109,431 +108,29 @@ For `pipeline.orchestrator.mode=QUEUE_ASYNC`, crash behavior is:
 
 Semantics summary:
 
-1. State transition commits are atomic at the execution-row level (conditional writes).
-2. Exactly-once applies to committed state transitions, not external side effects.
-3. Operator invocation and queue dispatch are at-least-once.
-4. Duplicate operator invocation is expected under failure and must be idempotent by contract.
-5. Replay is deterministic for control-plane state (versioned transitions), but not guaranteed for non-idempotent external systems.
+1. committed execution state transitions are exactly-once,
+2. operator invocation and dispatch are at-least-once,
+3. replay is deterministic for control-plane state, not for non-idempotent external systems.
 
-Compensation note:
+## Retry and Idempotency
 
-1. Framework-managed saga compensation is not part of this milestone.
-2. Compensation remains application-managed and must be designed to tolerate replay after crash recovery.
-
-### Retry Mechanisms
-
-Built-in retry with exponential backoff:
+Recommended defaults:
 
 ```properties
-# application.properties
 pipeline.defaults.retry-limit=5
 pipeline.defaults.retry-wait-ms=1000
 pipeline.defaults.max-backoff=30000
 pipeline.defaults.jitter=true
 ```
 
-Programmatic retry configuration:
+Use `NonRetryableException` to fail fast for non-transient failures.
 
-```java
-@Override
-public Uni<PaymentStatus> process(PaymentRecord paymentRecord) {
-    return processPayment(paymentRecord)
-        .onFailure().retry()
-        .withBackOff(Duration.ofSeconds(1), Duration.ofSeconds(30))
-        .withJitter(0.5)  // 50% jitter
-        .atMost(5);       // Maximum 5 retries
-}
+For at-least-once boundaries (queue delivery, operator invocation, re-drive), enforce idempotency using stable transition identity (`executionId:stepIndex:attempt`) in downstream systems.
 
-private Uni<PaymentStatus> processPayment(PaymentRecord record) {
-    return externalPaymentService.process(record)
-        .onFailure(PaymentServiceException.class)
-        .retry().withBackOff(Duration.ofMillis(500))
-        .atMost(3);
-}
-```
+## Operations Runbook
 
-### Retry Filtering
-
-The framework skips retries for:
-
-- `NullPointerException`
-- `NonRetryableException` (or any failure with one in its cause chain)
-- `CachePolicyViolation` from the runner when `pipeline.cache.policy=require-cache` and the cache plugin reports a miss
-
-Use `NonRetryableException` to mark failures that should fail fast:
-
-```java
-throw new NonRetryableException("Invalid payload");
-```
-
-The persistence plugin applies this automatically:
-
-- Duplicate key errors (SQLState `23505`) follow `pipeline.persistence.duplicate-key` (`fail`, `ignore`, `upsert`).
-- Non-transient database errors are wrapped in `NonRetryableException`.
-- Transient connectivity errors are retried according to the step configuration.
-
-### Protobuf-over-HTTP Failure Envelope
-
-For unary Protobuf-over-HTTP paths, terminal failures are encoded as `google.rpc.Status` and mapped automatically by TPF runtime exception mappers.
-Codes not explicitly mapped by runtime `ProtobufHttpStatusMapper` default to `500`.
-
-- `INVALID_ARGUMENT` -> `400`
-- `FAILED_PRECONDITION` -> `412`
-- `NOT_FOUND` -> `404`
-- `ALREADY_EXISTS` -> `409`
-- `UNAUTHENTICATED` -> `401`
-- `PERMISSION_DENIED` -> `403`
-- `DEADLINE_EXCEEDED` -> `504`
-- `UNAVAILABLE` -> `503`
-- `INTERNAL` -> `500`
-
-Operationally relevant metadata is propagated with canonical headers:
-
-- `x-tpf-correlation-id`: immutable business-flow correlation id across retries/replays.
-- `x-tpf-execution-id`: orchestrator execution instance id for the active run.
-- `x-tpf-idempotency-key`: stable deduplication token for at-least-once dispatch.
-- `x-tpf-retry-attempt`: 0-based retry/redelivery attempt counter.
-- `x-tpf-deadline-epoch-ms`: absolute UTC deadline as Unix epoch milliseconds.
-- `x-tpf-dispatch-ts-epoch-ms`: UTC dispatch timestamp as Unix epoch milliseconds.
-- `x-tpf-parent-item-id` (optional): lineage parent item id for split/merge tracing.
-
-Use these fields to correlate retries, duplicate deliveries, and deadline-expired failures across transport boundaries.
-
-Example response headers:
-
-```http
-x-tpf-correlation-id: 2ad0f2d0-8f8f-4f6c-9b54-650df36b58aa
-x-tpf-execution-id: 6f5bf8fd-10a5-4e30-8f79-b757ad7f6ad2
-x-tpf-idempotency-key: checkout:deliver:order-123:0
-x-tpf-retry-attempt: 1
-x-tpf-deadline-epoch-ms: 1762432335123
-x-tpf-dispatch-ts-epoch-ms: 1762432329123
-x-tpf-parent-item-id: order-123:split-1
-```
-
-### Circuit Breaker Pattern
-
-Implement circuit breaker for external service calls:
-
-```java
-@Inject
-CircuitBreaker circuitBreaker;
-
-@Override
-public Uni<PaymentStatus> process(PaymentRecord paymentRecord) {
-    return circuitBreaker.execute(
-        () -> processPayment(paymentRecord),
-        // Fallback method when circuit is open
-        error -> handleCircuitBreakerFallback(paymentRecord, error)
-    );
-}
-
-private Uni<PaymentStatus> handleCircuitBreakerFallback(PaymentRecord record, Throwable error) {
-    LOG.warn("Circuit breaker triggered for payment: {}", record.getId(), error);
-    
-    // Return a default/fallback response
-    return Uni.createFrom().item(
-        PaymentStatus.builder()
-            .paymentRecord(record)
-            .status("CIRCUIT_BREAKER")
-            .message("Service temporarily unavailable")
-            .build()
-    );
-}
-```
-
-### Error Classification
-
-Differentiate between recoverable and unrecoverable errors:
-
-```java
-@Override
-public Uni<PaymentStatus> process(PaymentRecord paymentRecord) {
-    return processPayment(paymentRecord)
-        .onFailure().recoverWithUni(error -> {
-            if (isRecoverableError(error)) {
-                return handleRecoverableError(paymentRecord, error);
-            } else {
-                return handleUnrecoverableError(paymentRecord, error);
-            }
-        });
-}
-
-private boolean isRecoverableError(Throwable error) {
-    return error instanceof TimeoutException || 
-           error instanceof NetworkException ||
-           error instanceof ServiceUnavailableException;
-}
-
-private Uni<PaymentStatus> handleRecoverableError(PaymentRecord record, Throwable error) {
-    LOG.warn("Recoverable error processing payment: {}", record.getId(), error);
-    
-    // Retry or send to DLQ
-    if (shouldRetry(record)) {
-        return Uni.createFrom().failure(error); // Will trigger retry
-    } else {
-        return deadLetter(record, error); // Send to DLQ
-    }
-}
-
-private Uni<PaymentStatus> handleUnrecoverableError(PaymentRecord record, Throwable error) {
-    LOG.error("Unrecoverable error processing payment: {}", record.getId(), error);
-    
-    // Send directly to DLQ
-    return deadLetter(record, error);
-}
-```
-
-## Dead Letter Queue (DLQ)
-
-The DLQ mechanism captures failed items for later inspection and reprocessing.
-
-### DLQ Configuration
-
-DLQ/recovery is configured at runtime, not via @PipelineStep. Use StepConfig or application.properties (see Configuration Reference below) for the exact settings.
-
-### Persistence Dependencies
-
-If you plan to persist DLQ items, include the necessary persistence dependencies in your `pom.xml`:
-
-```xml
-<dependency>
-    <groupId>io.quarkus</groupId>
-    <artifactId>quarkus-reactive-pg-client</artifactId>
-</dependency>
-<dependency>
-    <groupId>io.quarkus</groupId>
-    <artifactId>quarkus-hibernate-reactive-panache</artifactId>
-</dependency>
-```
-
-If you do not need persistence functionality, you can omit these dependencies.
-
-### Custom DLQ Implementation
-
-Implement custom DLQ handling:
-
-> **Note:** The following example references `DeadLetterEntry`, `DeadLetterRepository`, and persistence helpers as placeholders. Define these types in your application (or swap in your persistence layer) to match your storage choice.
-
-```java
-@Override
-public Uni<PaymentStatus> deadLetter(PaymentRecord paymentRecord, Throwable error) {
-    LOG.warn("Sending failed payment record to dead letter queue: {}", paymentRecord.getId(), error);
-    
-    // Send to DLQ (database, message queue, file system, etc.)
-    return persistToDeadLetterQueue(paymentRecord, error)
-        .onItem().transform(v -> createDlqStatus(paymentRecord))
-        .onFailure().recoverWithUni(failure -> {
-            LOG.error("Failed to persist to DLQ", failure);
-            // Fallback to error status
-            return Uni.createFrom().item(createErrorStatus(paymentRecord, failure));
-        });
-}
-
-private Uni<Void> persistToDeadLetterQueue(PaymentRecord record, Throwable error) {
-    DeadLetterEntry entry = DeadLetterEntry.builder()
-        .itemId(record.getId())
-        .itemType("PaymentRecord")
-        .errorMessage(error.getMessage())
-        .errorStackTrace(getStackTraceAsString(error))
-        .timestamp(Instant.now())
-        .build();
-    
-    // Persist to database or message queue
-    return deadLetterRepository.save(entry);
-}
-
-private PaymentStatus createDlqStatus(PaymentRecord record) {
-    return PaymentStatus.builder()
-        .paymentRecord(record)
-        .status("DLQ")
-        .message("Moved to dead letter queue after failed processing")
-        .build();
-}
-
-private PaymentStatus createErrorStatus(PaymentRecord record, Throwable error) {
-    return PaymentStatus.builder()
-        .paymentRecord(record)
-        .status("ERROR")
-        .message("Failed to process and unable to persist to DLQ: " + error.getMessage())
-        .build();
-}
-```
-
-### DLQ Monitoring
-
-Monitor DLQ for failed items:
-
-```java
-@ApplicationScoped
-public class DeadLetterQueueMonitor {
-    
-    @Inject
-    DeadLetterRepository deadLetterRepository;
-    
-    @Scheduled(every = "5m")  // Check every 5 minutes
-    public void checkDeadLetterQueue() {
-        deadLetterRepository.findUnprocessedEntries()
-            .onItem().transformToMulti(entries -> Multi.createFrom().iterable(entries))
-            .subscribe().with(this::processDeadLetterEntry);
-    }
-    
-    private void processDeadLetterEntry(DeadLetterEntry entry) {
-        LOG.info("Processing DLQ entry: {}", entry.getItemId());
-        
-        // Attempt reprocessing or notify administrators
-        attemptReprocessing(entry)
-            .onItem().invoke(success -> {
-                if (success) {
-                    // Mark as processed
-                    deadLetterRepository.markAsProcessed(entry.getId());
-                }
-            })
-            .subscribe().with(
-                _ -> LOG.info("DLQ entry processed: {}", entry.getItemId()),
-                error -> LOG.error("Error processing DLQ entry: {}", entry.getItemId(), error)
-            );
-    }
-    
-    private Uni<Boolean> attemptReprocessing(DeadLetterEntry entry) {
-        // Logic to reprocess the failed item
-        return Uni.createFrom().item(true);
-    }
-}
-```
-
-## Advanced Error Handling Patterns
-
-### Error Context Preservation
-
-Preserve error context for better debugging:
-
-```java
-@Override
-public Uni<PaymentStatus> process(PaymentRecord paymentRecord) {
-    MDC.put("paymentId", paymentRecord.getId().toString());
-    MDC.put("customerId", paymentRecord.getCustomerId());
-    
-    return processPayment(paymentRecord)
-        .onItem().invoke(result -> {
-            LOG.info("Payment processed successfully: {}", result.getStatus());
-        })
-        .onFailure().invoke(error -> {
-            LOG.error("Payment processing failed", error);
-        })
-        .eventually(() -> {
-            MDC.clear();
-            return Uni.createFrom().voidItem();
-        });
-}
-```
-
-### Error Enrichment
-
-Add contextual information to errors:
-
-```java
-private Uni<PaymentStatus> processPayment(PaymentRecord record) {
-    return externalService.process(record)
-        .onFailure().transform(error -> {
-            // Enrich error with contextual information
-            return new PaymentProcessingException(
-                "Failed to process payment for customer: " + record.getCustomerId(),
-                error,
-                record.getId(),
-                record.getCustomerId()
-            );
-        });
-}
-```
-
-### Graceful Degradation
-
-Implement graceful degradation for partial failures:
-
-```java
-@Override
-public Uni<PaymentStatus> process(PaymentRecord paymentRecord) {
-    return processPrimaryService(paymentRecord)
-        .onFailure().recoverWithUni(error -> {
-            LOG.warn("Primary service failed, falling back to secondary", error);
-            return processSecondaryService(paymentRecord);
-        })
-        .onFailure().recoverWithUni(error -> {
-            LOG.warn("Both services failed, using cached data", error);
-            return processCachedData(paymentRecord);
-        });
-}
-```
-
-## Configuration Reference
-
-### Global Configuration
-
-```properties
-# application.properties
-# Retry configuration
-pipeline.defaults.retry-limit=3
-pipeline.defaults.retry-wait-ms=500
-pipeline.defaults.max-backoff=30000
-pipeline.defaults.jitter=true
-
-# Error handling
-pipeline.defaults.recover-on-failure=true
-```
-
-### Profile-Specific Configuration
-
-```properties
-# application-dev.properties
-pipeline.defaults.retry-limit=1
-pipeline.defaults.retry-wait-ms=100
-
-# application-prod.properties
-pipeline.defaults.retry-limit=5
-pipeline.defaults.retry-wait-ms=1000
-pipeline.defaults.max-backoff=60000
-```
-
-### Per-Step Overrides
-
-Override retry settings for a single step:
-
-```properties
-pipeline.step."com.example.ProcessPaymentService".retry-limit=10
-pipeline.step."com.example.ProcessPaymentService".retry-wait-ms=2000
-```
-
-Note: DLQ configuration is not exposed via built-in `pipeline.*` properties. Configure DLQ behavior in your `deadLetter(...)` implementation or via application-specific configuration wiring.
-
-## Best Practices
-
-### Concurrency
-
-1. **Offload Blocking I/O**: Use worker-thread offloading for blocking operations
-2. **Set Appropriate Limits**: Don't overwhelm external systems
-3. **Monitor Resource Usage**: Watch for bottlenecks and adjust accordingly
-4. **Consider Batch Processing**: For high-volume scenarios
-
-### Error Handling
-
-1. **Classify Errors**: Differentiate recoverable from unrecoverable errors
-2. **Implement Timeouts**: Prevent indefinite hanging operations
-3. **Use Circuit Breakers**: Protect against cascading failures
-4. **Log Meaningfully**: Include context and stack traces
-
-### DLQ Management
-
-1. **Regular Monitoring**: Check DLQ for failed items regularly
-2. **Automated Retries**: Implement automated retry mechanisms
-3. **Alerting**: Notify on DLQ accumulation
-4. **Root Cause Analysis**: Investigate and resolve recurring issues
-
-### Performance
-
-1. **Profile Regularly**: Monitor performance under load
-2. **Optimize Hot Paths**: Focus on frequently executed code
-3. **Use Efficient Mappers**: Optimize data conversion operations
-4. **Cache Strategically**: Cache expensive operations when appropriate
-
-The Pipeline Framework's concurrency, error handling, and DLQ features provide a robust foundation for building resilient, high-performance pipeline applications that can gracefully handle failures and scale efficiently.
+1. Check whether the failure belongs to Item Reject Sink (step-level selective reject) or execution DLQ (terminal execution).
+2. For Item Reject Sink on `sqs`, inspect reject queue depth and message fingerprint patterns.
+3. For execution DLQ, triage terminal cause (`FAILED` vs `DLQ`) and replay only after validating downstream idempotency.
+4. If due executions stall, verify sweeper activity and dispatcher health.
+5. Re-drive in bounded batches, monitor duplicate suppression and retry saturation.

@@ -29,7 +29,7 @@ import org.pipelineframework.telemetry.PipelineTelemetry;
  * @param <I> the input type
  * @param <O> the output type
  */
-public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, DeadLetterQueue<I, O> {
+public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, ItemRejectable<I, O> {
 
     /** Logger for StepManyToOne operations. */
     Logger LOG = Logger.getLogger(StepManyToOne.class);
@@ -39,12 +39,12 @@ public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, Dead
      *
      * <p>The method applies the configured backpressure strategy to the provided input stream,
      * applies retry semantics on failures (excluding NullPointerException), and — if configured —
-     * recovers failed processing by delegating the collected stream to the dead-letter handler.
+     * recovers failed processing by delegating the collected stream to the item reject sink.
      *
      * @param input the stream of inputs to be processed
      * @return a Uni that emits the step's single output; if retries are exhausted the Uni will
      *         either fail with the original error or, if recovery is enabled, emit the value
-     *         produced by the dead-letter handling (which may be null)
+     *         produced by the item reject handling (which may be null)
      */
     @Override
     default Uni<O> apply(Multi<I> input) {
@@ -66,7 +66,6 @@ public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, Dead
         }
 
         final Multi<I> finalInput = backpressuredInput;
-
         return applyReduce(finalInput)
             .onItem().invoke(resultValue -> {
                 if (LOG.isDebugEnabled()) {
@@ -88,7 +87,7 @@ public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, Dead
                             this.getClass().getSimpleName(), error.getMessage());
                     }
 
-                    return deadLetterStream(finalInput, error);
+                    return rejectStream(finalInput, error);
                 } else {
                     return Uni.createFrom().failure(error);
                 }
@@ -104,52 +103,4 @@ public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, Dead
      */
     Uni<O> applyReduce(Multi<I> input);
 
-    /**
-     * Handle a failed stream by sending it to a dead letter queue or similar mechanism reactively.
-     *
-     * @param input The input stream that failed to process
-     * @param error The error that occurred
-     * @return The result of dead letter handling as a Uni (can be null)
-     */
-    default Uni<O> deadLetterStream(Multi<I> input, Throwable error) {
-        // Perform a single pass to collect a sample and count the total items
-        final int maxSampleSize = 5; // Only keep a few sample items to avoid memory issues
-
-        // Cache the items and count to handle both successful and failed streams
-        // If the input stream fails, we'll still return a successful result with zero count
-        return input
-            .collect().in(
-                // Supplier: Initialize the collection state with empty list and zero count
-                () -> new java.util.AbstractMap.SimpleEntry<>(new java.util.ArrayList<I>(), 0L),
-                // Accumulator: Add item to sample list if under maxSampleSize, increment count
-                (state, item) -> {
-                    java.util.List<I> sampleList = state.getKey();
-                    Long count = state.getValue();
-
-                    if (sampleList.size() < maxSampleSize) {
-                        sampleList.add(item);
-                    }
-                    state.setValue(count + 1);
-                }
-            )
-            // If collecting the stream fails, recover with an empty state (no items, count 0)
-            .onFailure().recoverWithItem(throwable -> {
-                LOG.debug("Stream failed during dead letter collection, returning empty state", throwable);
-                return new java.util.AbstractMap.SimpleEntry<>(new java.util.ArrayList<>(), 0L);
-            })
-            .onItem().transformToUni(state -> {
-                java.util.List<I> sampleList = state.getKey();
-                Long count = state.getValue();
-
-                String sampleInfo;
-                if (!sampleList.isEmpty()) {
-                    sampleInfo = String.format("first %d of %d items",
-                        Math.min(sampleList.size(), maxSampleSize), count);
-                } else {
-                    sampleInfo = String.format("%d items", count);
-                }
-                LOG.errorf("DLQ drop for stream with %s: %s", sampleInfo, error.getMessage());
-                return Uni.createFrom().nullItem();
-            });
-    }
 }

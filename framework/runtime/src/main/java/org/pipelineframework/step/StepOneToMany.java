@@ -29,7 +29,7 @@ import org.pipelineframework.telemetry.BackpressureBufferMetrics;
  * @param <I> the input type
  * @param <O> the output type
  */
-public interface StepOneToMany<I, O> extends OneToMany<I, O>, Configurable, DeadLetterQueue<I, O> {
+public interface StepOneToMany<I, O> extends OneToMany<I, O>, Configurable, ItemRejectable<I, O> {
     /**
      * Apply the step to a single input and produce multiple outputs.
      *

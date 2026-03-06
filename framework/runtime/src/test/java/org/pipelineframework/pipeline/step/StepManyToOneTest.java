@@ -19,7 +19,9 @@ package org.pipelineframework.pipeline.step;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.config.StepConfig;
 import org.pipelineframework.step.StepManyToOne;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -44,6 +46,35 @@ class StepManyToOneTest {
         @Override
         public void initialiseWithConfig(org.pipelineframework.config.StepConfig config) {
             // Use the config provided
+        }
+    }
+
+    static class FailingRecoverStep implements StepManyToOne<String, String> {
+        private final AtomicBoolean rejectCalled = new AtomicBoolean(false);
+
+        @Override
+        public Uni<String> applyReduce(Multi<String> input) {
+            return Uni.createFrom().failure(new RuntimeException("stream boom"));
+        }
+
+        @Override
+        public StepConfig effectiveConfig() {
+            return new StepConfig().recoverOnFailure(true).retryLimit(1);
+        }
+
+        @Override
+        public void initialiseWithConfig(StepConfig config) {
+            // no-op
+        }
+
+        @Override
+        public Uni<String> rejectStream(Multi<String> input, Throwable cause) {
+            rejectCalled.set(true);
+            return Uni.createFrom().item("recovered-stream");
+        }
+
+        boolean rejectCalled() {
+            return rejectCalled.get();
         }
     }
 
@@ -124,15 +155,15 @@ class StepManyToOneTest {
                         "payment_1_for_csv_file_X, payment_2_for_csv_file_X, payment_3_for_csv_file_X"));
     }
 
-    // Tests for deadLetterStream functionality
+    // Tests for rejectStream functionality
     @Test
-    void testDeadLetterStreamWithEmptyStream() {
+    void testRejectStreamWithEmptyStream() {
         // Given
         TestStep step = new TestStep();
         Multi<String> emptyStream = Multi.createFrom().empty();
 
         // When
-        Uni<Void> result = step.deadLetterStream(emptyStream, new RuntimeException("Test error"))
+        Uni<Void> result = step.rejectStream(emptyStream, new RuntimeException("Test error"))
                 .replaceWithVoid();
 
         // Then
@@ -145,13 +176,13 @@ class StepManyToOneTest {
     }
 
     @Test
-    void testDeadLetterStreamWithSingleItem() {
+    void testRejectStreamWithSingleItem() {
         // Given
         TestStep step = new TestStep();
         Multi<String> singleItemStream = Multi.createFrom().item("single");
 
         // When
-        Uni<Void> result = step.deadLetterStream(singleItemStream, new RuntimeException("Test error"))
+        Uni<Void> result = step.rejectStream(singleItemStream, new RuntimeException("Test error"))
                 .replaceWithVoid();
 
         // Then
@@ -164,14 +195,14 @@ class StepManyToOneTest {
     }
 
     @Test
-    void testDeadLetterStreamWithMultipleItems() {
+    void testRejectStreamWithMultipleItems() {
         // Given
         TestStep step = new TestStep();
         java.util.List<String> items = java.util.List.of("item1", "item2", "item3");
         Multi<String> multiStream = Multi.createFrom().iterable(items);
 
         // When
-        Uni<Void> result = step.deadLetterStream(multiStream, new RuntimeException("Test error"))
+        Uni<Void> result = step.rejectStream(multiStream, new RuntimeException("Test error"))
                 .replaceWithVoid();
 
         // Then
@@ -184,14 +215,14 @@ class StepManyToOneTest {
     }
 
     @Test
-    void testDeadLetterStreamWithMoreItemsThanSampleSize() {
+    void testRejectStreamWithMoreItemsThanSampleSize() {
         // Given
         TestStep step = new TestStep();
         Multi<String> multiStream = Multi.createFrom()
                 .items("item1", "item2", "item3", "item4", "item5", "item6", "item7");
 
         // When
-        Uni<Void> result = step.deadLetterStream(multiStream, new RuntimeException("Test error"))
+        Uni<Void> result = step.rejectStream(multiStream, new RuntimeException("Test error"))
                 .replaceWithVoid();
 
         // Then
@@ -204,14 +235,14 @@ class StepManyToOneTest {
     }
 
     @Test
-    void testDeadLetterStreamWithErrorInStream() {
+    void testRejectStreamWithErrorInStream() {
         // Given
         TestStep step = new TestStep();
         RuntimeException streamError = new RuntimeException("Stream error");
         Multi<String> errorStream = Multi.createFrom().failure(streamError);
 
         // When
-        Uni<Void> result = step.deadLetterStream(errorStream, new RuntimeException("Processing error"))
+        Uni<Void> result = step.rejectStream(errorStream, new RuntimeException("Processing error"))
                 .replaceWithVoid();
 
         // Then
@@ -221,5 +252,15 @@ class StepManyToOneTest {
         subscriber.awaitItem();
 
         assertNull(subscriber.getItem());
+    }
+
+    @Test
+    void recoverOnFailureRoutesToRejectStreamAndContinues() {
+        FailingRecoverStep step = new FailingRecoverStep();
+
+        String result = step.apply(Multi.createFrom().items("a", "b")).await().indefinitely();
+
+        assertEquals("recovered-stream", result);
+        assertTrue(step.rejectCalled());
     }
 }

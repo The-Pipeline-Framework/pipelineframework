@@ -61,18 +61,18 @@ class StepTest {
     }
 
     @Test
-    void testDeadLetterMethod() {
+    void testRejectItemMethod() {
         // Given
         TestStep step = new TestStep();
 
         // When
-        var result = step.deadLetter(
+        var result = step.rejectItem(
                 io.smallrye.mutiny.Uni.createFrom().item("testItem"),
                 new RuntimeException("test error"));
 
         // Then
         assertNotNull(result);
-        // The deadLetter method should complete successfully
+        // The rejectItem method should complete successfully
         result.await().indefinitely();
     }
 

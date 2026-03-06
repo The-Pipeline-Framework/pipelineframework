@@ -98,5 +98,5 @@ class ProcessPaymentServiceTest {
 
 1. Keep step logic focused on a single responsibility.
 2. Prefer non-blocking I/O and reactive composition.
-3. Map errors to domain responses or DLQ flows.
+3. Map errors to domain responses, Item Reject Sink flows (`rejectItem` / `rejectStream`), or execution DLQ where appropriate.
 4. Validate input early and consistently.

@@ -21,7 +21,7 @@ import java.util.concurrent.CompletableFuture;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.pipelineframework.step.Configurable;
-import org.pipelineframework.step.DeadLetterQueue;
+import org.pipelineframework.step.ItemRejectable;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 import org.pipelineframework.step.functional.OneToOne;
 
@@ -37,7 +37,7 @@ import org.pipelineframework.step.functional.OneToOne;
  * @param <I> the input type
  * @param <O> the output type
  */
-public interface StepOneToOneCompletableFuture<I, O> extends OneToOne<I, O>, Configurable, DeadLetterQueue<I, O> {
+public interface StepOneToOneCompletableFuture<I, O> extends OneToOne<I, O>, Configurable, ItemRejectable<I, O> {
     /**
  * Process the given input and produce an output asynchronously.
  *
@@ -48,7 +48,7 @@ CompletableFuture<O> applyAsync(I in);
 
     /**
      * Adapts a Mutiny Uni input into the CompletableFuture-based processing defined by {@link #applyAsync(Object)},
-     * applies retry/backoff/jitter policies, and performs optional dead-letter recovery and logging.
+     * applies retry/backoff/jitter policies, and performs optional item reject recovery and logging.
      *
      * <p>Behaviour summary:
      * - For each item emitted by {@code inputUni} the method delegates processing to {@link #applyAsync(Object)}.
@@ -56,7 +56,7 @@ CompletableFuture<O> applyAsync(I in);
      *   {@link NullPointerException} is excluded from retries.
      * - After exhausting retries an informational log entry is emitted identifying the step and retry limit.
      * - On success a debug log records the processed item; if recovery is enabled via {@link #recoverOnFailure()}
-     *   a failed item is routed to the dead-letter queue via {@link #deadLetter(Uni, Throwable)} and a debug
+     *   a failed item is routed to the item reject sink via {@link #rejectItem(Uni, Throwable)} and a debug
      *   log records the failure, otherwise the failure is propagated.
      *
      * @param inputUni the Uni that emits input items to be processed
@@ -105,7 +105,7 @@ CompletableFuture<O> applyAsync(I in);
                                 this.getClass().getSimpleName(), inputUni, retryLimit(), err
                         );
                     }
-                    return deadLetter(inputUni, err);
+                    return rejectItem(inputUni, err);
                 } else {
                     return Uni.createFrom().failure(err);
                 }

@@ -166,25 +166,25 @@ public class TestSteps {
         @Override
         public Uni<String> applyOneToOne(String input) {
             // Return the input wrapped in a Uni that fails - this way the input is preserved
-            // for potential recovery by the deadLetter method
+            // for potential recovery by the rejectItem method
             return Uni.createFrom()
                     .failure(new RuntimeException("Intentional failure for testing"));
         }
 
         /**
-         * Handle a failed input by logging a dead-letter event and returning the original item.
+         * Handle a failed input by logging a item-reject event and returning the original item.
          *
          * @param failedItem a Uni that produces the item that failed processing
          * @param cause the throwable that caused the failure
          * @return a Uni that emits the original input value
          */
         @Override
-        public Uni<String> deadLetter(Uni<String> failedItem, Throwable cause) {
+        public Uni<String> rejectItem(Uni<String> failedItem, Throwable cause) {
             return failedItem
                     .onItem()
                     .invoke(
                             item -> LOG.infof(
-                                    "Dead letter handled for item: %s, cause: %s",
+                                    "Item reject handled for item: %s, cause: %s",
                                     item, cause.getMessage()));
         }
 
@@ -245,7 +245,7 @@ public class TestSteps {
         }
 
         /**
-         * Record manual configuration values for retry behaviour and dead-letter recovery.
+         * Record manual configuration values for retry behaviour and item-reject recovery.
          *
          * <p>
          * Sets the step into a manual-configured state and stores the provided retry limit and
@@ -255,7 +255,7 @@ public class TestSteps {
          * @param retryLimit the manual retry limit to apply
          * @param retryWait the manual duration to wait between retries
          * @param recoverOnFailure whether failed items should be recovered instead of
-         *        dead-lettered; ignored if the constructor previously fixed this behaviour
+         *        item-rejected; ignored if the constructor previously fixed this behaviour
          */
         private void setManualConfig(
                 int retryLimit, java.time.Duration retryWait, boolean recoverOnFailure) {

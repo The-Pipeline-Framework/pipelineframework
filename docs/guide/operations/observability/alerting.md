@@ -30,7 +30,7 @@ Start with:
 1. Run failure rate > 1% over 1 day (warning)
 2. Item avg latency > 2x baseline for 10 minutes (warning)
 3. Buffer queued stays high for 5 minutes (warning)
-4. DLQ growth sustained for 5 minutes (critical)
+4. Execution DLQ or item reject sink backlog growth sustained for 5 minutes (critical)
 
 Queue-async additions:
 

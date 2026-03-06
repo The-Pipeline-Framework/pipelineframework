@@ -28,7 +28,7 @@ import org.pipelineframework.telemetry.PipelineTelemetry;
  * @param <I> the input type
  * @param <O> the output type
  */
-public interface StepManyToMany<I, O> extends Configurable, ManyToMany<I, O>, DeadLetterQueue<I, O> {
+public interface StepManyToMany<I, O> extends Configurable, ManyToMany<I, O>, ItemRejectable<I, O> {
     /**
      * Apply the step to transform a stream of inputs to a stream of outputs.
      *
