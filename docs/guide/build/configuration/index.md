@@ -200,6 +200,7 @@ Prefix: `pipeline.orchestrator`
 | `pipeline.orchestrator.state-provider` | string | `memory` | `ExecutionStateStore` provider selector. |
 | `pipeline.orchestrator.dispatcher-provider` | string | `event` | `WorkDispatcher` provider selector. |
 | `pipeline.orchestrator.dlq-provider` | string | `log` | `DeadLetterPublisher` provider selector. |
+| `pipeline.orchestrator.dlq-url` | string | none | Durable DLQ queue URL when `dlq-provider=sqs`. |
 | `pipeline.orchestrator.queue-url` | string | none | Queue URL for external dispatcher providers. |
 | `pipeline.orchestrator.dynamo.execution-table` | string | `tpf_execution` | DynamoDB table used for execution state rows. |
 | `pipeline.orchestrator.dynamo.execution-key-table` | string | `tpf_execution_key` | DynamoDB table used for submit dedupe keys. |
@@ -216,6 +217,7 @@ Queue mode notes:
 2. Keep `strict-startup=true` in production, so invalid provider wiring fails fast.
 3. In queue mode, strict startup also requires `pipeline.orchestrator.idempotency-policy` to be explicitly set to a non-default value.
 4. In-memory providers are for local/dev only; use durable providers for HA.
+5. For durable dead-letter handling, set both `pipeline.orchestrator.dlq-provider=sqs` and `pipeline.orchestrator.dlq-url`.
 
 Example durable provider wiring:
 
@@ -223,7 +225,9 @@ Example durable provider wiring:
 pipeline.orchestrator.mode=QUEUE_ASYNC
 pipeline.orchestrator.state-provider=dynamo
 pipeline.orchestrator.dispatcher-provider=sqs
+pipeline.orchestrator.dlq-provider=sqs
 pipeline.orchestrator.queue-url=https://sqs.eu-west-1.amazonaws.com/123456789012/tpf-work
+pipeline.orchestrator.dlq-url=https://sqs.eu-west-1.amazonaws.com/123456789012/tpf-dlq
 pipeline.orchestrator.idempotency-policy=CLIENT_KEY_REQUIRED
 ```
 
