@@ -56,7 +56,7 @@ Runtime provider choices:
 
 1. `ExecutionStateStore`: `memory` (dev), `dynamo` (durable).
 2. `WorkDispatcher`: `event` (in-process), `sqs` (durable queue).
-3. `DeadLetterPublisher`: `log` (built-in fallback).
+3. `DeadLetterPublisher`: `log` (built-in fallback), `sqs` (durable DLQ).
 
 Execution lifecycle (one transition per worker claim):
 
@@ -77,6 +77,27 @@ Recovery points:
 3. worker death while leased: lease expiry allows takeover.
 
 These guarantees are deterministic for orchestrator state, not for external side effects; downstream step boundaries must accept at-least-once invocation.
+
+## Queue-Async HA Baseline
+
+Use this as a minimum production baseline for queue-driven HA:
+
+```properties
+pipeline.orchestrator.mode=QUEUE_ASYNC
+pipeline.orchestrator.state-provider=dynamo
+pipeline.orchestrator.dispatcher-provider=sqs
+pipeline.orchestrator.dlq-provider=sqs
+pipeline.orchestrator.queue-url=https://sqs.eu-west-1.amazonaws.com/123456789012/tpf-work
+pipeline.orchestrator.dlq-url=https://sqs.eu-west-1.amazonaws.com/123456789012/tpf-dlq
+pipeline.orchestrator.idempotency-policy=CLIENT_KEY_REQUIRED
+pipeline.orchestrator.strict-startup=true
+```
+
+Operational expectations for this baseline:
+
+1. state transitions remain OCC-guarded and lease-claimed,
+2. queue delivery and operator invocation remain at-least-once,
+3. terminal dead-letter events are durable, not process-local log-only.
 
 ## Generated Structure
 
