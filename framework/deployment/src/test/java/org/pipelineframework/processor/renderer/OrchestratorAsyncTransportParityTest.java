@@ -3,6 +3,7 @@ package org.pipelineframework.processor.renderer;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 
 import com.google.protobuf.DescriptorProtos;
@@ -28,8 +29,9 @@ class OrchestratorAsyncTransportParityTest {
     @Test
     void rendersNativeAsyncSurfaceAcrossRestGrpcAndFunction() throws IOException {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        Messager messager = mock(Messager.class);
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
-        when(processingEnv.getMessager()).thenReturn(null);
+        when(processingEnv.getMessager()).thenReturn(messager);
 
         OrchestratorBinding restBinding = buildBinding("REST", false, false);
         OrchestratorRestResourceRenderer restRenderer = new OrchestratorRestResourceRenderer();
@@ -78,8 +80,9 @@ class OrchestratorAsyncTransportParityTest {
     @Test
     void rendersStreamingAsyncResultContractAcrossGrpcAndFunction() throws IOException {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        Messager messager = mock(Messager.class);
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
-        when(processingEnv.getMessager()).thenReturn(null);
+        when(processingEnv.getMessager()).thenReturn(messager);
 
         OrchestratorBinding grpcBinding = buildBinding("GRPC", false, true);
         new OrchestratorGrpcRenderer().render(grpcBinding, new GenerationContext(

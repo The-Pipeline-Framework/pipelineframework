@@ -27,6 +27,7 @@ public class SqsDeadLetterPublisher implements DeadLetterPublisher {
     PipelineOrchestratorConfig orchestratorConfig;
 
     private volatile SqsClient client;
+    private volatile boolean shuttingDown;
 
     /**
      * Default constructor for CDI.
@@ -75,12 +76,9 @@ public class SqsDeadLetterPublisher implements DeadLetterPublisher {
 
     @PreDestroy
     void closeClient() {
-        SqsClient active = client;
-        if (active == null) {
-            return;
-        }
         synchronized (this) {
-            active = client;
+            shuttingDown = true;
+            SqsClient active = client;
             if (active == null) {
                 return;
             }
@@ -95,11 +93,17 @@ public class SqsDeadLetterPublisher implements DeadLetterPublisher {
     }
 
     private SqsClient sqsClient() {
+        if (shuttingDown) {
+            throw new IllegalStateException("SqsDeadLetterPublisher is shutting down.");
+        }
         SqsClient active = client;
         if (active != null) {
             return active;
         }
         synchronized (this) {
+            if (shuttingDown) {
+                throw new IllegalStateException("SqsDeadLetterPublisher is shutting down.");
+            }
             if (client == null) {
                 var builder = SqsClient.builder();
                 orchestratorConfig.sqs().region()
@@ -123,6 +127,6 @@ public class SqsDeadLetterPublisher implements DeadLetterPublisher {
     }
 
     private static <T> Uni<T> blocking(Supplier<T> supplier) {
-        return Uni.createFrom().item(supplier).runSubscriptionOn(Infrastructure.getDefaultExecutor());
+        return Uni.createFrom().item(supplier).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
     }
 }

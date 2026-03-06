@@ -3,6 +3,8 @@ package org.pipelineframework.processor.renderer;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.annotation.processing.ProcessingEnvironment;
 
 import com.google.protobuf.DescriptorProtos;
@@ -364,7 +366,12 @@ class OrchestratorGrpcRendererTest {
         Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
         String source = Files.readString(generatedSource);
 
-        int startTimeOccurrences = source.split("long startTime = System.nanoTime\\(\\)", -1).length - 1;
+        Pattern startTimePattern = Pattern.compile(Pattern.quote("long startTime = System.nanoTime()"));
+        Matcher matcher = startTimePattern.matcher(source);
+        int startTimeOccurrences = 0;
+        while (matcher.find()) {
+            startTimeOccurrences++;
+        }
         assertTrue(startTimeOccurrences >= 5, "Expected at least 5 methods tracking startTime");
     }
 

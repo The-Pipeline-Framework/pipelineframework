@@ -7,6 +7,7 @@ import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
@@ -92,8 +93,7 @@ class SqsDeadLetterPublisherTest {
         PipelineOrchestratorConfig config = mockConfig(Optional.empty());
         SqsDeadLetterPublisher publisher = new SqsDeadLetterPublisher(client, config);
 
-        Exception exception = null;
-        try {
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
             publisher.publish(new DeadLetterEnvelope(
                     "tenant-a",
                     "exec-1",
@@ -101,12 +101,8 @@ class SqsDeadLetterPublisherTest {
                     "ERROR",
                     "message",
                     System.currentTimeMillis()))
-                .await().indefinitely();
-        } catch (Exception e) {
-            exception = e;
-        }
+                .await().indefinitely());
 
-        assertTrue(exception instanceof IllegalStateException);
         assertTrue(exception.getMessage().contains("dlq-url"));
         verify(client, never()).sendMessage(any(SendMessageRequest.class));
     }

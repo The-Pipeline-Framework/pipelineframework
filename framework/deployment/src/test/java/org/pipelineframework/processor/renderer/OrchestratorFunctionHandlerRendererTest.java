@@ -190,6 +190,9 @@ class OrchestratorFunctionHandlerRendererTest {
 
         assertTrue(source.contains("if (request != null && request.inputBatch != null && !request.inputBatch.isEmpty())"));
         assertTrue(source.contains("executionInput = Multi.createFrom().iterable(request.inputBatch)"));
+        assertTrue(source.contains("else if (request != null && request.input != null)"));
+        assertTrue(source.contains("Multi.createFrom().item(request.input)"));
+        assertTrue(source.contains("Multi.createFrom().empty()"));
     }
 
     @Test
@@ -244,19 +247,6 @@ class OrchestratorFunctionHandlerRendererTest {
     void resultHandlerFqcnReturnsCorrectPath() {
         String fqcn = OrchestratorFunctionHandlerRenderer.resultHandlerFqcn("com.example");
         assertEquals("com.example.orchestrator.service.PipelineExecutionResultFunctionHandler", fqcn);
-    }
-
-    @Test
-    void rendersRunAsyncHandlerWithStreamingInputBatchHandling() throws IOException {
-        renderAndReadSource(buildStreamingBinding(true, false));
-        Path runAsyncPath = tempDir.resolve("com/example/orchestrator/service/PipelineRunAsyncFunctionHandler.java");
-        String source = Files.readString(runAsyncPath);
-
-        assertTrue(source.contains("if (request != null && request.inputBatch != null && !request.inputBatch.isEmpty())"));
-        assertTrue(source.contains("Multi.createFrom().iterable(request.inputBatch)"));
-        assertTrue(source.contains("else if (request != null && request.input != null)"));
-        assertTrue(source.contains("Multi.createFrom().item(request.input)"));
-        assertTrue(source.contains("Multi.createFrom().empty()"));
     }
 
     @Test

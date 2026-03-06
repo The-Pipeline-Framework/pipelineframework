@@ -22,7 +22,9 @@ import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -115,9 +117,9 @@ class QueueAsyncFailureMatrixTest {
         ArgumentCaptor<DeadLetterEnvelope> envelopeCaptor = ArgumentCaptor.forClass(DeadLetterEnvelope.class);
         verify(deadLetterPublisher).publish(envelopeCaptor.capture());
         DeadLetterEnvelope envelope = envelopeCaptor.getValue();
-        org.junit.jupiter.api.Assertions.assertEquals("tenant-a", envelope.tenantId());
-        org.junit.jupiter.api.Assertions.assertEquals("exec-3", envelope.executionId());
-        org.junit.jupiter.api.Assertions.assertEquals("exec-3:0:0", envelope.transitionKey());
+        assertEquals("tenant-a", envelope.tenantId());
+        assertEquals("exec-3", envelope.executionId());
+        assertEquals("exec-3:0:0", envelope.transitionKey());
     }
 
     @Test
@@ -145,7 +147,11 @@ class QueueAsyncFailureMatrixTest {
 
         invokeSweepDueExecutions();
 
-        verify(workDispatcher, timeout(500).times(2)).enqueueNow(any());
+        ArgumentCaptor<ExecutionWorkItem> itemCaptor = ArgumentCaptor.forClass(ExecutionWorkItem.class);
+        verify(workDispatcher, timeout(500).times(2)).enqueueNow(itemCaptor.capture());
+        List<ExecutionWorkItem> items = itemCaptor.getAllValues();
+        assertTrue(items.stream().anyMatch(item -> "tenant-a".equals(item.tenantId()) && "exec-5".equals(item.executionId())));
+        assertTrue(items.stream().anyMatch(item -> "tenant-b".equals(item.tenantId()) && "exec-6".equals(item.executionId())));
     }
 
     private void configureRetryDefaults() {
@@ -167,7 +173,7 @@ class QueueAsyncFailureMatrixTest {
         method.setAccessible(true);
         @SuppressWarnings("unchecked")
         Uni<Void> result = (Uni<Void>) method.invoke(service, record, transitionKey, failure);
-        result.await().indefinitely();
+        result.await().atMost(Duration.ofSeconds(3));
     }
 
     private void invokeSweepDueExecutions() throws Exception {
