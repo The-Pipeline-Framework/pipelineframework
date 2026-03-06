@@ -21,6 +21,12 @@ steps:
       - name: "deliveredAt"
         type: "Instant"
         protoType: "string"
+      - name: "amount"
+        type: "BigDecimal"
+        protoType: "string"
+      - name: "currency"
+        type: "String"
+        protoType: "string"
     outputTypeName: "PaymentCaptured"
     outputFields:
       - name: "orderId"

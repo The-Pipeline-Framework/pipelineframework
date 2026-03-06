@@ -137,7 +137,26 @@ public class DeliverToNextIngestBridge {
      */
     private OrderDeliveredSvc.DeliveredOrder toDeliveredOrder(Object item) {
         if (item instanceof OrderDeliveredSvc.DeliveredOrder delivered) {
-            if (isDuplicateOrInFlight(delivered.getOrderId(), delivered.getDispatchId(), delivered.getDeliveredAt())) {
+            String orderId = delivered.getOrderId();
+            if (!hasRequiredDeliveredFields(
+                orderId,
+                delivered.getCustomerId(),
+                delivered.getReadyAt(),
+                delivered.getDispatchId(),
+                delivered.getDispatchedAt(),
+                delivered.getDeliveredAt()
+            )) {
+                LOG.debugf(
+                    "Dropped DeliveredOrder item due to missing required fields signature=%s",
+                    ConnectorUtils.failureSignature(
+                        "deliver-to-next",
+                        "mapping",
+                        "missing_required_fields",
+                        "na",
+                        orderId));
+                return null;
+            }
+            if (isDuplicateOrInFlight(orderId, delivered.getDispatchId(), delivered.getDeliveredAt())) {
                 return null;
             }
             return delivered;
@@ -233,5 +252,15 @@ public class DeliverToNextIngestBridge {
             orderId,
             dispatchId,
             deliveredAt);
+    }
+
+    private boolean hasRequiredDeliveredFields(String orderId, String customerId, String readyAt,
+                                               String dispatchId, String dispatchedAt, String deliveredAt) {
+        return !(orderId == null || orderId.isBlank()
+            || customerId == null || customerId.isBlank()
+            || readyAt == null || readyAt.isBlank()
+            || dispatchId == null || dispatchId.isBlank()
+            || dispatchedAt == null || dispatchedAt.isBlank()
+            || deliveredAt == null || deliveredAt.isBlank());
     }
 }
