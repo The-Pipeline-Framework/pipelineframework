@@ -132,17 +132,17 @@ public interface PipelineOrchestratorConfig {
     String dlqProvider();
 
     /**
-     * Optional queue URL for external dispatcher providers.
+     * External queue URL used by dispatcher providers, if configured.
      *
-     * @return queue url when configured
+     * @return an Optional containing the configured queue URL, or empty if not set
      */
     @WithName("queue-url")
     Optional<String> queueUrl();
 
     /**
-     * Optional dead-letter queue URL for durable DLQ providers.
+     * Dead-letter queue URL for durable dead-letter queue (DLQ) providers.
      *
-     * @return dead-letter queue url when configured
+     * @return the configured dead-letter queue URL, or empty if not configured
      */
     @WithName("dlq-url")
     Optional<String> dlqUrl();
