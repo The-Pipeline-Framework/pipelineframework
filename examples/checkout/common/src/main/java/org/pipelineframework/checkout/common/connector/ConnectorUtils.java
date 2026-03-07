@@ -33,6 +33,12 @@ public final class ConnectorUtils {
         };
     }
 
+    /**
+     * Normalizes a backpressure strategy string and returns one of the recognized strategy tokens.
+     *
+     * @param strategy the input strategy string (may be null or blank)
+     * @return `"BUFFER"` or `"DROP"`; returns `"BUFFER"` when the input is null, blank, or not recognized
+     */
     public static String normalizeBackpressureStrategy(String strategy) {
         if (strategy == null || strategy.isBlank()) {
             return BACKPRESSURE_BUFFER;
@@ -116,10 +122,10 @@ public final class ConnectorUtils {
     }
 
     /**
-     * Return the trimmed input string, or the provided fallback when the input is null or empty after trimming.
+     * Normalize a string by trimming whitespace and using a fallback when the result is empty or the input is null.
      *
      * @param value    the string to normalize; may be null
-     * @param fallback the value to return if {@code value} is null or contains only whitespace after trimming
+     * @param fallback the value to return if {@code value} is null or empty after trimming
      * @return the trimmed {@code value} when it contains non-whitespace characters, otherwise {@code fallback}
      */
     public static String normalizeOrDefault(String value, String fallback) {

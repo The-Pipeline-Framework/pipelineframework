@@ -39,12 +39,12 @@ public class DeliverToNextIngestBridge {
      * Create a bridge that forwards delivered orders from the pipeline output to the next ingest step when enabled.
      *
      * @param outputBus the pipeline output bus to consume delivered-order events from
-     * @param forwardClient the client used to forward delivered orders onward
-     * @param enabled configuration flag; `true` enables forwarding, `false` disables it
-     * @param idempotencyEnabled whether duplicate order ids should be filtered before forwarding
-     * @param idempotencyMaxKeys max in-memory keys retained for duplicate filtering
-     * @param backpressureStrategy overflow strategy for connector handoff (`BUFFER` or `DROP`)
-     * @param backpressureBufferCapacity overflow buffer capacity when strategy is `BUFFER`
+     * @param forwardClient client used to forward delivered orders to the next ingest step
+     * @param enabled whether forwarding is enabled
+     * @param idempotencyEnabled whether idempotency filtering of duplicates is enabled
+     * @param idempotencyMaxKeys maximum number of in-memory keys retained for idempotency filtering
+     * @param backpressureStrategy strategy to apply when the connector handoff overflows (e.g., BUFFER or DROP)
+     * @param backpressureBufferCapacity buffer capacity used when the backpressure strategy is BUFFER
      */
     public DeliverToNextIngestBridge(
         PipelineOutputBus outputBus,
@@ -70,13 +70,13 @@ public class DeliverToNextIngestBridge {
     }
 
     /**
-     * Start the forwarding bridge that relays delivered orders to the next ingest stage when forwarding is enabled.
+     * Start the forwarding bridge that forwards delivered orders to the next ingest stage when enabled.
      *
-     * Creates a stream from the pipeline output, maps and filters items into DeliveredOrder instances, applies
-     * backpressure and idempotency reservation, retries on failures with exponential backoff, forwards the stream
-     * via the forward client, and stores the resulting subscription for later cancellation.
+     * If forwarding is disabled the method returns without action. When enabled, it subscribes to the pipeline output,
+     * converts stream items to DeliveredOrder instances, begins forwarding them via the configured forward client,
+     * and stores the resulting subscription for later cancellation.
      *
-     * @param ignored the startup event observed (unused)
+     * @param ignored the observed startup event (unused)
      */
     void onStartup(@Observes StartupEvent ignored) {
         if (!enabled) {
@@ -236,14 +236,14 @@ public class DeliverToNextIngestBridge {
     }
 
     /**
-     * Record that an order's handoff key has been forwarded and clear its in-flight reservation.
+     * Mark a delivered order's handoff key as forwarded and clear any in-flight reservation.
      *
-     * If idempotency is active and the order has a non-blank orderId, computes the handoff key
-     * from the order's orderId, dispatchId, and deliveredAt, removes that key from the in-flight
-     * reservations, and marks the key as seen in the idempotency guard.
+     * If idempotency is active and the order contains a non-blank orderId, this removes the
+     * corresponding handoff key from the in-flight reservations and records the key in the
+     * idempotency guard so the order is considered seen; otherwise the method is a no-op.
      *
-     * @param order the delivered order whose handoff key should be marked forwarded; if `null`
-     *              or the orderId is missing/blank the method has no effect
+     * @param order the delivered order to mark forwarded; if `null` or the order's `orderId` is blank,
+     *              the method has no effect
      */
     private void markForwarded(OrderDeliveredSvc.DeliveredOrder order) {
         String orderId = order == null ? null : order.getOrderId();
@@ -257,6 +257,11 @@ public class DeliverToNextIngestBridge {
         }
     }
 
+    /**
+     * Indicates whether idempotency checks are active.
+     *
+     * @return `true` if idempotency is enabled and an IdempotencyGuard is available, `false` otherwise.
+     */
     private boolean isIdempotencyActive() {
         return idempotencyEnabled && idempotencyGuard != null;
     }
@@ -292,15 +297,15 @@ public class DeliverToNextIngestBridge {
     }
 
     /**
-     * Checks that all required delivered-order fields are present and contain non-blank text.
+     * Determine whether all required delivered-order fields contain non-blank text.
      *
-     * @param orderId     the order identifier
-     * @param customerId  the customer identifier
-     * @param readyAt     the ready timestamp/value
-     * @param dispatchId  the dispatch identifier
+     * @param orderId      the order identifier
+     * @param customerId   the customer identifier
+     * @param readyAt      the ready timestamp/value
+     * @param dispatchId   the dispatch identifier
      * @param dispatchedAt the dispatched timestamp/value
-     * @param deliveredAt the delivered timestamp/value
-     * @return            `true` if all parameters are non-null and not blank, `false` otherwise
+     * @param deliveredAt  the delivered timestamp/value
+     * @return             true if all parameters are non-null and contain non-blank text, false otherwise
      */
     private boolean hasRequiredDeliveredFields(String orderId, String customerId, String readyAt,
                                                String dispatchId, String dispatchedAt, String deliveredAt) {
