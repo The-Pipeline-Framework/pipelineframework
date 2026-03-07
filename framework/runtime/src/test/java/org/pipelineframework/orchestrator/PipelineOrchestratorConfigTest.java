@@ -9,6 +9,7 @@ import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -36,6 +37,7 @@ class PipelineOrchestratorConfigTest {
         assertEquals("log", config.dlqProvider());
         assertTrue(config.strictStartup());
         assertFalse(config.queueUrl().isPresent());
+        assertFalse(config.dlqUrl().isPresent());
     }
 
     @Test
@@ -164,6 +166,17 @@ class PipelineOrchestratorConfigTest {
         Optional<String> queueUrl = config.queueUrl();
         assertTrue(queueUrl.isPresent());
         assertEquals("https://sqs.us-east-1.amazonaws.com/123456789012/my-queue", queueUrl.get());
+    }
+
+    @Test
+    void configReadsDlqUrlFromProperties() {
+        PipelineOrchestratorConfig config = buildConfig(Map.of(
+            "pipeline.orchestrator.dlq-url", "https://sqs.us-east-1.amazonaws.com/123456789012/my-dlq"
+        ));
+
+        Optional<String> dlqUrl = config.dlqUrl();
+        assertTrue(dlqUrl.isPresent());
+        assertEquals("https://sqs.us-east-1.amazonaws.com/123456789012/my-dlq", dlqUrl.get());
     }
 
     @Test
@@ -375,6 +388,11 @@ class PipelineOrchestratorConfigTest {
             @Override
             public Map<String, String> getProperties() {
                 return properties;
+            }
+
+            @Override
+            public Set<String> getPropertyNames() {
+                return properties.keySet();
             }
 
             @Override

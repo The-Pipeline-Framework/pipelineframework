@@ -114,11 +114,11 @@ public final class ConnectorUtils {
         String traceId,
         String itemId
     ) {
-        return "connector=" + normalizeOrDefault(connector, "unknown")
-            + ";phase=" + normalizeOrDefault(phase, "unknown")
-            + ";reason=" + normalizeOrDefault(reason, "unspecified")
-            + ";traceId=" + normalizeOrDefault(traceId, "na")
-            + ";itemId=" + normalizeOrDefault(itemId, "na");
+        return "connector=" + sanitizeForSignature(normalizeOrDefault(connector, "unknown"))
+            + ";phase=" + sanitizeForSignature(normalizeOrDefault(phase, "unknown"))
+            + ";reason=" + sanitizeForSignature(normalizeOrDefault(reason, "unspecified"))
+            + ";traceId=" + sanitizeForSignature(normalizeOrDefault(traceId, "na"))
+            + ";itemId=" + sanitizeForSignature(normalizeOrDefault(itemId, "na"));
     }
 
     /**
@@ -145,5 +145,14 @@ public final class ConnectorUtils {
      */
     private static void appendFramed(StringBuilder target, String value) {
         target.append('#').append(value.length()).append(':').append(value);
+    }
+
+    private static String sanitizeForSignature(String value) {
+        return value
+            .replace("\\", "\\\\")
+            .replace(";", "\\;")
+            .replace("=", "\\=")
+            .replace("\r", "\\r")
+            .replace("\n", "\\n");
     }
 }

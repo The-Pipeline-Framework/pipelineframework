@@ -27,6 +27,7 @@ public class DeliverToNextIngestBridge {
     private final DeliveredOrderForwardClient forwardClient;
     private final boolean enabled;
     private final boolean idempotencyEnabled;
+    private final int idempotencyMaxKeys;
     private final IdempotencyGuard idempotencyGuard;
     private final String backpressureStrategy;
     private final int backpressureBufferCapacity;
@@ -64,6 +65,7 @@ public class DeliverToNextIngestBridge {
         this.enabled = enabled;
         this.idempotencyEnabled = idempotencyEnabled;
         int normalizedIdempotencyMaxKeys = idempotencyMaxKeys > 0 ? idempotencyMaxKeys : 10000;
+        this.idempotencyMaxKeys = normalizedIdempotencyMaxKeys;
         this.idempotencyGuard = idempotencyEnabled ? new IdempotencyGuard(normalizedIdempotencyMaxKeys) : null;
         this.backpressureStrategy = ConnectorUtils.normalizeBackpressureStrategy(backpressureStrategy);
         this.backpressureBufferCapacity = backpressureBufferCapacity > 0 ? backpressureBufferCapacity : 256;
@@ -92,7 +94,6 @@ public class DeliverToNextIngestBridge {
                 OrderDeliveredSvc.DeliveredOrder mapped = toDeliveredOrder(item);
                 return mapped == null ? Multi.createFrom().empty() : Multi.createFrom().item(mapped);
             }).concatenate()
-            .onItem().invoke(this::markForwarded)
             .onFailure().invoke(error -> {
                 clearInFlightReservations();
                 LOG.errorf(error, "Deliver->next stream failed before forwarding signature=%s",
@@ -105,7 +106,19 @@ public class DeliverToNextIngestBridge {
             })
             .onFailure().retry().withBackOff(Duration.ofMillis(100), Duration.ofSeconds(1)).indefinitely();
 
-        forwardingSubscription = forwardClient.forward(deliveredStream);
+        forwardingSubscription = forwardClient.forward(
+            deliveredStream,
+            this::markForwarded,
+            failure -> {
+                clearInFlightReservations();
+                LOG.errorf(failure, "Deliver->next forwarding failed signature=%s",
+                    ConnectorUtils.failureSignature(
+                        "deliver-to-next",
+                        "forward",
+                        "downstream_ingest_failure",
+                        "na",
+                        "na"));
+            });
         LOG.infof("Deliver->next forwarding bridge started using client %s", forwardClient.getClass().getName());
     }
 
@@ -315,5 +328,17 @@ public class DeliverToNextIngestBridge {
             || dispatchId == null || dispatchId.isBlank()
             || dispatchedAt == null || dispatchedAt.isBlank()
             || deliveredAt == null || deliveredAt.isBlank());
+    }
+
+    int getIdempotencyMaxKeys() {
+        return idempotencyMaxKeys;
+    }
+
+    String getBackpressureStrategy() {
+        return backpressureStrategy;
+    }
+
+    int getBackpressureBufferCapacity() {
+        return backpressureBufferCapacity;
     }
 }

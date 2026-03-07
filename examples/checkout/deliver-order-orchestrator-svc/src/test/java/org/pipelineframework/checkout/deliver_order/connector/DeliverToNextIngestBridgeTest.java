@@ -13,9 +13,9 @@ import org.pipelineframework.checkout.deliverorder.grpc.OrderDeliveredSvc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -36,7 +36,7 @@ class DeliverToNextIngestBridgeTest {
         outputBus = new PipelineOutputBus();
         forwardClient = mock(DeliveredOrderForwardClient.class);
         mockCancellable = mock(Cancellable.class);
-        when(forwardClient.forward(any())).thenReturn(mockCancellable);
+        when(forwardClient.forward(any(), any(), any())).thenReturn(mockCancellable);
     }
 
     @Test
@@ -55,21 +55,21 @@ class DeliverToNextIngestBridgeTest {
     void constructorNormalizesInvalidIdempotencyMaxKeys() {
         DeliverToNextIngestBridge bridge = new DeliverToNextIngestBridge(
             outputBus, forwardClient, true, true, -1, "BUFFER", 256);
-        assertNotNull(bridge);
+        assertEquals(10000, bridge.getIdempotencyMaxKeys());
     }
 
     @Test
     void constructorNormalizesInvalidBackpressureStrategy() {
         DeliverToNextIngestBridge bridge = new DeliverToNextIngestBridge(
             outputBus, forwardClient, true, true, 1000, "INVALID", 256);
-        assertNotNull(bridge);
+        assertEquals("BUFFER", bridge.getBackpressureStrategy());
     }
 
     @Test
     void constructorNormalizesInvalidBackpressureBufferCapacity() {
         DeliverToNextIngestBridge bridge = new DeliverToNextIngestBridge(
             outputBus, forwardClient, true, true, 1000, "BUFFER", -1);
-        assertNotNull(bridge);
+        assertEquals(256, bridge.getBackpressureBufferCapacity());
     }
 
     @Test
@@ -79,7 +79,7 @@ class DeliverToNextIngestBridgeTest {
 
         bridge.onStartup(mock(StartupEvent.class));
 
-        verify(forwardClient, never()).forward(any());
+        verify(forwardClient, never()).forward(any(), any(), any());
     }
 
     @Test
@@ -89,7 +89,7 @@ class DeliverToNextIngestBridgeTest {
 
         bridge.onStartup(mock(StartupEvent.class));
 
-        verify(forwardClient, times(1)).forward(any());
+        verify(forwardClient, times(1)).forward(any(), any(), any());
     }
 
     @Test
@@ -136,6 +136,7 @@ class DeliverToNextIngestBridgeTest {
 
         outputBus.publish(deliveredOrder);
 
+        awaitUntil(() -> forwardedOrders.size() == 1, "Expected one forwarded delivered order");
         assertEquals(1, forwardedOrders.size());
         assertEquals("order-1", forwardedOrders.get(0).getOrderId());
         assertEquals("dispatch-1", forwardedOrders.get(0).getDispatchId());
@@ -165,6 +166,7 @@ class DeliverToNextIngestBridgeTest {
             outputBus.publish(deliveredOrder);
         }
 
+        awaitUntil(() -> forwardedOrders.size() == 5, "Expected five forwarded delivered orders");
         assertEquals(5, forwardedOrders.size());
     }
 
@@ -261,6 +263,7 @@ class DeliverToNextIngestBridgeTest {
 
         outputBus.publish(mockMessage);
 
+        awaitUntil(() -> forwardedOrders.size() == 1, "Expected mapped protobuf message to be forwarded");
         assertEquals(1, forwardedOrders.size());
         assertEquals("order-1", forwardedOrders.get(0).getOrderId());
         assertEquals("dispatch-1", forwardedOrders.get(0).getDispatchId());
@@ -333,6 +336,7 @@ class DeliverToNextIngestBridgeTest {
         outputBus.publish(deliveredOrder);
         outputBus.publish(deliveredOrder);
 
+        awaitUntil(() -> forwardedOrders.size() == 1, "Expected duplicate filtering to forward exactly one item");
         assertEquals(1, forwardedOrders.size(), "Duplicate orders should be filtered");
     }
 
@@ -361,6 +365,7 @@ class DeliverToNextIngestBridgeTest {
         outputBus.publish(deliveredOrder);
         outputBus.publish(deliveredOrder);
 
+        awaitUntil(() -> forwardedOrders.size() == 3, "Expected all duplicates to be forwarded when idempotency is disabled");
         assertEquals(3, forwardedOrders.size(), "All items should be forwarded when idempotency is disabled");
     }
 
@@ -394,6 +399,7 @@ class DeliverToNextIngestBridgeTest {
             .setDeliveredAt("2026-03-07T11:05:00Z")
             .build());
 
+        awaitUntil(() -> forwardedOrders.size() == 2, "Expected two distinct delivered orders");
         assertEquals(2, forwardedOrders.size());
     }
 
@@ -420,31 +426,59 @@ class DeliverToNextIngestBridgeTest {
                 .build());
         }
 
+        awaitUntil(() -> forwardedCount.get() == 5, "Expected forwarded count to reach five");
         assertEquals(5, forwardedCount.get());
     }
 
     @Test
     void bridgeClearsInFlightReservationsOnFailure() {
-        DeliveredOrderForwardClient failingClient = stream -> {
-            stream.subscribe().with(
-                item -> { },
-                failure -> { }
-            );
-            return mock(Cancellable.class);
+        AtomicInteger attempts = new AtomicInteger(0);
+        AtomicInteger acked = new AtomicInteger(0);
+        DeliveredOrderForwardClient failingClient = new DeliveredOrderForwardClient() {
+            @Override
+            public Cancellable forward(Multi<OrderDeliveredSvc.DeliveredOrder> deliveredOrderStream) {
+                return forward(deliveredOrderStream, item -> {
+                }, failure -> {
+                });
+            }
+
+            @Override
+            public Cancellable forward(
+                Multi<OrderDeliveredSvc.DeliveredOrder> stream,
+                java.util.function.Consumer<OrderDeliveredSvc.DeliveredOrder> onForwarded,
+                java.util.function.Consumer<Throwable> onForwardFailure
+            ) {
+                return stream.subscribe().with(item -> {
+                    if (attempts.getAndIncrement() == 0) {
+                        onForwardFailure.accept(new IllegalStateException("forced-forward-failure"));
+                        return;
+                    }
+                    acked.incrementAndGet();
+                    onForwarded.accept(item);
+                }, onForwardFailure::accept);
+            }
         };
 
         DeliverToNextIngestBridge bridge = new DeliverToNextIngestBridge(
             outputBus, failingClient, true, true, 1000, "BUFFER", 256);
         bridge.onStartup(mock(StartupEvent.class));
 
-        outputBus.publish(OrderDeliveredSvc.DeliveredOrder.newBuilder()
+        OrderDeliveredSvc.DeliveredOrder deliveredOrder = OrderDeliveredSvc.DeliveredOrder.newBuilder()
             .setOrderId("order-1")
             .setCustomerId("customer-1")
             .setReadyAt("2026-03-07T10:00:00Z")
             .setDispatchId("dispatch-1")
             .setDispatchedAt("2026-03-07T10:30:00Z")
             .setDeliveredAt("2026-03-07T11:00:00Z")
-            .build());
+            .build();
+
+        outputBus.publish(deliveredOrder);
+        outputBus.publish(deliveredOrder);
+
+        awaitUntil(() -> attempts.get() == 2, "Expected two processing attempts");
+        awaitUntil(() -> acked.get() == 1, "Expected second publish to be acknowledged");
+        assertEquals(2, attempts.get());
+        assertEquals(1, acked.get(), "Second publish should be accepted after in-flight reservations are cleared");
     }
 
     private Message createMockDeliveredMessage(String orderId, String customerId, String readyAt,
@@ -483,5 +517,20 @@ class DeliverToNextIngestBridgeTest {
         when(field.isMapField()).thenReturn(false);
         when(field.getJavaType()).thenReturn(Descriptors.FieldDescriptor.JavaType.STRING);
         return field;
+    }
+
+    private static void awaitUntil(BooleanSupplier condition, String message) {
+        for (int i = 0; i < 50; i++) {
+            if (condition.getAsBoolean()) {
+                return;
+            }
+            try {
+                Thread.sleep(10L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        assertTrue(condition.getAsBoolean(), message);
     }
 }

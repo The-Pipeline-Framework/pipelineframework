@@ -6,6 +6,7 @@ import jakarta.annotation.PostConstruct;
 import io.quarkus.arc.DefaultBean;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.subscription.Cancellable;
+import java.util.function.Consumer;
 import org.jboss.logging.Logger;
 import org.pipelineframework.checkout.deliverorder.grpc.OrderDeliveredSvc;
 
@@ -36,5 +37,19 @@ public class NoopDeliveredOrderForwardClient implements DeliveredOrderForwardCli
         return deliveredOrderStream.subscribe().with(item -> {
         }, failure -> LOG.warn("Noop delivered-order forward stream failed", failure),
             () -> LOG.info("Noop delivered-order forward stream completed"));
+    }
+
+    @Override
+    public Cancellable forward(
+        Multi<OrderDeliveredSvc.DeliveredOrder> deliveredOrderStream,
+        Consumer<OrderDeliveredSvc.DeliveredOrder> onForwarded,
+        Consumer<Throwable> onForwardFailure
+    ) {
+        return deliveredOrderStream.subscribe().with(item -> {
+            onForwarded.accept(item);
+        }, failure -> {
+            onForwardFailure.accept(failure);
+            LOG.warn("Noop delivered-order forward stream failed", failure);
+        }, () -> LOG.info("Noop delivered-order forward stream completed"));
     }
 }
