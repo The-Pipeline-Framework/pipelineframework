@@ -70,11 +70,11 @@ public class DeliverToNextIngestBridge {
     }
 
     /**
-     * Starts the deliver-to-next-ingest forwarding bridge on application startup when configured enabled.
+     * Start the forwarding bridge that relays delivered orders to the next ingest stage when forwarding is enabled.
      *
-     * Sets up a stream from the output bus, converts and filters delivered-order items, applies a retry
-     * policy on failures, forwards the resulting stream via the forward client, and stores the resulting
-     * subscription for later cancellation.
+     * Creates a stream from the pipeline output, maps and filters items into DeliveredOrder instances, applies
+     * backpressure and idempotency reservation, retries on failures with exponential backoff, forwards the stream
+     * via the forward client, and stores the resulting subscription for later cancellation.
      *
      * @param ignored the startup event observed (unused)
      */
@@ -127,13 +127,16 @@ public class DeliverToNextIngestBridge {
     }
 
     /**
-     * Converts an input item to an OrderDeliveredSvc.DeliveredOrder when possible.
+     * Produces an OrderDeliveredSvc.DeliveredOrder from an input item when possible.
      *
-     * If the input is already a DeliveredOrder it is returned as-is. If the input is a protobuf
-     * Message and all required fields (order_id, customer_id, ready_at, dispatch_id, dispatched_at,
-     * delivered_at) are present and non-blank, a new DeliveredOrder is constructed and returned.
+     * If the item is already a DeliveredOrder it is validated and returned. If the item is a protobuf
+     * Message the required fields order_id, customer_id, ready_at, dispatch_id, dispatched_at, and
+     * delivered_at are extracted and used to build a DeliveredOrder. Converts only when all required
+     * fields are present and the order is not considered a duplicate or already in-flight.
      *
-     * @return the converted OrderDeliveredSvc.DeliveredOrder, or `null` if the item is unsupported or required fields are missing
+     * @param item the input object to convert (may be a DeliveredOrder or a protobuf Message)
+     * @return the converted OrderDeliveredSvc.DeliveredOrder, or null if the item is unsupported,
+     *         required fields are missing, or the order is duplicate/in-flight
      */
     private OrderDeliveredSvc.DeliveredOrder toDeliveredOrder(Object item) {
         if (item instanceof OrderDeliveredSvc.DeliveredOrder delivered) {
@@ -204,6 +207,16 @@ public class DeliverToNextIngestBridge {
         return null;
     }
 
+    /**
+     * Checks whether a delivered order is a duplicate or already being forwarded, and reserves a handoff key when not.
+     *
+     * <p>If idempotency is inactive or `orderId` is blank, the method returns `false` and does not reserve anything.
+     *
+     * @param orderId   the order identifier used as primary idempotency input
+     * @param dispatchId the dispatch identifier included in the handoff key
+     * @param deliveredAt the delivery timestamp included in the handoff key
+     * @return `true` if the derived handoff key has already been seen or is currently reserved (duplicate or in-flight), `false` otherwise
+     */
     private boolean isDuplicateOrInFlight(String orderId, String dispatchId, String deliveredAt) {
         if (!isIdempotencyActive() || orderId == null || orderId.isBlank()) {
             return false;
@@ -222,6 +235,16 @@ public class DeliverToNextIngestBridge {
         return false;
     }
 
+    /**
+     * Record that an order's handoff key has been forwarded and clear its in-flight reservation.
+     *
+     * If idempotency is active and the order has a non-blank orderId, computes the handoff key
+     * from the order's orderId, dispatchId, and deliveredAt, removes that key from the in-flight
+     * reservations, and marks the key as seen in the idempotency guard.
+     *
+     * @param order the delivered order whose handoff key should be marked forwarded; if `null`
+     *              or the orderId is missing/blank the method has no effect
+     */
     private void markForwarded(OrderDeliveredSvc.DeliveredOrder order) {
         String orderId = order == null ? null : order.getOrderId();
         if (!isIdempotencyActive() || orderId == null || orderId.isBlank()) {
@@ -238,6 +261,12 @@ public class DeliverToNextIngestBridge {
         return idempotencyEnabled && idempotencyGuard != null;
     }
 
+    /**
+     * Releases all current in-flight handoff reservations so those items may be retried or reprocessed.
+     *
+     * <p>Idempotency guard state is intentionally preserved so keys already recorded as forwarded remain treated as delivered.
+     * This method synchronizes on {@code inFlightLock} while clearing {@code inFlightHandoffKeys}.
+     */
     private void clearInFlightReservations() {
         synchronized (inFlightLock) {
             // Intentionally retain idempotencyGuard state here:
@@ -246,6 +275,14 @@ public class DeliverToNextIngestBridge {
         }
     }
 
+    /**
+     * Create a deterministic handoff key used for idempotency and in-flight tracking.
+     *
+     * @param orderId    the order identifier to include in the key
+     * @param dispatchId the dispatch identifier to include in the key
+     * @param deliveredAt the delivery timestamp to include in the key
+     * @return a deterministic string key derived from the provided identifiers and the "deliver-to-next" context
+     */
     private String handoffKey(String orderId, String dispatchId, String deliveredAt) {
         return ConnectorUtils.deterministicHandoffKey(
             "deliver-to-next",
@@ -254,6 +291,17 @@ public class DeliverToNextIngestBridge {
             deliveredAt);
     }
 
+    /**
+     * Checks that all required delivered-order fields are present and contain non-blank text.
+     *
+     * @param orderId     the order identifier
+     * @param customerId  the customer identifier
+     * @param readyAt     the ready timestamp/value
+     * @param dispatchId  the dispatch identifier
+     * @param dispatchedAt the dispatched timestamp/value
+     * @param deliveredAt the delivered timestamp/value
+     * @return            `true` if all parameters are non-null and not blank, `false` otherwise
+     */
     private boolean hasRequiredDeliveredFields(String orderId, String customerId, String readyAt,
                                                String dispatchId, String dispatchedAt, String deliveredAt) {
         return !(orderId == null || orderId.isBlank()

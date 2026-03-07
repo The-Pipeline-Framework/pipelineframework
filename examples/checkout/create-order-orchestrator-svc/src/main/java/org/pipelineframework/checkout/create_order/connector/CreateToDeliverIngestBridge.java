@@ -182,6 +182,16 @@ public class CreateToDeliverIngestBridge {
         return null;
     }
 
+    /**
+     * Determines whether a create->deliver handoff for the specified order has already been seen.
+     *
+     * The check is performed only when idempotency is enabled; otherwise this always returns `false`.
+     *
+     * @param orderId    the order identifier used in the handoff key
+     * @param customerId the customer identifier used in the handoff key
+     * @param readyAt    the ready timestamp used in the handoff key
+     * @return           `true` if the handoff has been observed before (duplicate) and should be dropped, `false` otherwise
+     */
     private boolean isDuplicateHandoff(String orderId, String customerId, String readyAt) {
         if (!idempotencyEnabled || orderId == null || orderId.isBlank() || idempotencyGuard == null) {
             return false;
