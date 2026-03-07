@@ -9,6 +9,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import org.jboss.logging.Logger;
 import org.pipelineframework.checkout.deliver_order.connector.DeliveredOrderForwardClient;
 import org.pipelineframework.checkout.deliverorder.grpc.OrderDeliveredSvc;
@@ -87,5 +88,33 @@ public class LocalDeliveredOrderForwardClient implements DeliveredOrderForwardCl
             })
             .subscribe().with(item -> {
             }, failure -> LOG.warnf("Local delivered-order forward stream failed: %s", failure.getMessage()));
+    }
+
+    @Override
+    public Cancellable forward(
+        Multi<OrderDeliveredSvc.DeliveredOrder> deliveredOrderStream,
+        Consumer<OrderDeliveredSvc.DeliveredOrder> onForwarded,
+        Consumer<Throwable> onForwardFailure
+    ) {
+        LOG.info("Using local delivered-order forward client");
+        return deliveredOrderStream
+            .onItem().invoke(item -> {
+                if (FAIL_FORWARD.get()) {
+                    FORWARD_FAILURES.incrementAndGet();
+                    IllegalStateException failure = new IllegalStateException(
+                        "Forced forward failure for order " + item.getOrderId());
+                    onForwardFailure.accept(failure);
+                    LOG.warnf("Forced forward failure for order %s", item.getOrderId());
+                    return;
+                }
+                FORWARDED.offer(item);
+                onForwarded.accept(item);
+                LOG.infof("Captured delivered order %s", item.getOrderId());
+            })
+            .subscribe().with(item -> {
+            }, failure -> {
+                onForwardFailure.accept(failure);
+                LOG.warnf("Local delivered-order forward stream failed: %s", failure.getMessage());
+            });
     }
 }
