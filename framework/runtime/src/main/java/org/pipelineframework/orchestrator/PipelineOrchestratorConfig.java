@@ -140,6 +140,14 @@ public interface PipelineOrchestratorConfig {
     Optional<String> queueUrl();
 
     /**
+     * Optional dead-letter queue URL for durable DLQ providers.
+     *
+     * @return dead-letter queue url when configured
+     */
+    @WithName("dlq-url")
+    Optional<String> dlqUrl();
+
+    /**
      * DynamoDB provider configuration.
      *
      * @return dynamo provider config

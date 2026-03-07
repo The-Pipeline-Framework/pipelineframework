@@ -3,6 +3,8 @@ package org.pipelineframework.processor.renderer;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.annotation.processing.ProcessingEnvironment;
 
 import com.google.protobuf.DescriptorProtos;
@@ -216,6 +218,161 @@ class OrchestratorGrpcRendererTest {
     void rendererReturnsGrpcServiceGenerationTarget() {
         OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
         assertEquals(GenerationTarget.GRPC_SERVICE, renderer.target());
+    }
+
+    @Test
+    void rendersRunAsyncWithUnaryInputBatchValidation() throws IOException {
+        OrchestratorBinding binding = buildBinding(false, false);
+        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(false, false);
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
+        when(processingEnv.getMessager()).thenReturn(null);
+
+        OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
+        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            java.util.Set.of(), null, descriptorSet));
+
+        Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
+        String source = Files.readString(generatedSource);
+
+        assertTrue(source.contains("if (request.getInputBatchCount() > 1)"));
+        assertTrue(source.contains("RunAsync unary pipelines accept at most one item in input_batch"));
+    }
+
+    @Test
+    void rendersExecutionStatusWithValidation() throws IOException {
+        OrchestratorBinding binding = buildBinding(false, false);
+        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(false, false);
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
+        when(processingEnv.getMessager()).thenReturn(null);
+
+        OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
+        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            java.util.Set.of(), null, descriptorSet));
+
+        Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
+        String source = Files.readString(generatedSource);
+
+        assertTrue(source.contains("if (request.getExecutionId() == null || request.getExecutionId().isBlank())"));
+        assertTrue(source.contains("executionId is required"));
+    }
+
+    @Test
+    void rendersOneToManyStreamingWithUni() throws IOException {
+        OrchestratorBinding binding = buildBinding(false, true);
+        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(false, true);
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
+        when(processingEnv.getMessager()).thenReturn(null);
+
+        OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
+        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            java.util.Set.of(), null, descriptorSet));
+
+        Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
+        String source = Files.readString(generatedSource);
+
+        assertTrue(source.contains("executePipelineStreaming(Uni.createFrom().item(input))"));
+    }
+
+    @Test
+    void rendersManyToOneStreamingWithCollect() throws IOException {
+        OrchestratorBinding binding = buildBinding(true, false);
+        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(true, false);
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
+        when(processingEnv.getMessager()).thenReturn(null);
+
+        OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
+        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            java.util.Set.of(), null, descriptorSet));
+
+        Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
+        String source = Files.readString(generatedSource);
+
+        assertTrue(source.contains("public Uni<OutputType> run(Multi<InputType> input)"));
+        assertTrue(source.contains("executePipelineUnary"));
+    }
+
+    @Test
+    void rendersIngestAlwaysStreaming() throws IOException {
+        OrchestratorBinding binding = buildBinding(false, false);
+        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(false, false);
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
+        when(processingEnv.getMessager()).thenReturn(null);
+
+        OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
+        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            java.util.Set.of(), null, descriptorSet));
+
+        Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
+        String source = Files.readString(generatedSource);
+
+        assertTrue(source.contains("public Multi<OutputType> ingest(Multi<InputType> input)"));
+        assertTrue(source.contains("executePipelineStreaming(input)"));
+    }
+
+    @Test
+    void rendersSubscribeWithEmptyParameter() throws IOException {
+        OrchestratorBinding binding = buildBinding(false, false);
+        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(false, false);
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
+        when(processingEnv.getMessager()).thenReturn(null);
+
+        OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
+        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            java.util.Set.of(), null, descriptorSet));
+
+        Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
+        String source = Files.readString(generatedSource);
+
+        assertTrue(source.contains("public Multi<OutputType> subscribe(Empty request)"));
+        assertTrue(source.contains("pipelineOutputBus.stream(OutputType.class)"));
+    }
+
+    @Test
+    void rendersUnaryStreamingWithUniCreate() throws IOException {
+        OrchestratorBinding binding = buildBinding(false, false);
+        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(false, false);
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
+        when(processingEnv.getMessager()).thenReturn(null);
+
+        OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
+        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            java.util.Set.of(), null, descriptorSet));
+
+        Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
+        String source = Files.readString(generatedSource);
+
+        assertTrue(source.contains("executePipelineUnary(Uni.createFrom().item(input))"));
+    }
+
+    @Test
+    void rendersAllMethodsWithStartTimeTracking() throws IOException {
+        OrchestratorBinding binding = buildBinding(false, false);
+        DescriptorProtos.FileDescriptorSet descriptorSet = buildDescriptorSet(false, false);
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
+        when(processingEnv.getMessager()).thenReturn(null);
+
+        OrchestratorGrpcRenderer renderer = new OrchestratorGrpcRenderer();
+        renderer.render(binding, new GenerationContext(processingEnv, tempDir, DeploymentRole.PIPELINE_SERVER,
+            java.util.Set.of(), null, descriptorSet));
+
+        Path generatedSource = tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java");
+        String source = Files.readString(generatedSource);
+
+        Pattern startTimePattern = Pattern.compile(Pattern.quote("long startTime = System.nanoTime()"));
+        Matcher matcher = startTimePattern.matcher(source);
+        int startTimeOccurrences = 0;
+        while (matcher.find()) {
+            startTimeOccurrences++;
+        }
+        assertTrue(startTimeOccurrences >= 5, "Expected at least 5 methods tracking startTime");
     }
 
     private OrchestratorBinding buildBinding(boolean inputStreaming, boolean outputStreaming) {
