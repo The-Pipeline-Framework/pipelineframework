@@ -118,13 +118,28 @@ public class CreateToDeliverIngestBridge {
      */
     private OrderDispatchSvc.ReadyOrder toDeliverReadyOrder(Object item) {
         if (item instanceof OrderReadySvc.ReadyOrder readyOrder) {
-            if (isDuplicateHandoff(readyOrder.getOrderId(), readyOrder.getCustomerId(), readyOrder.getReadyAt())) {
+            String orderId = readyOrder.getOrderId();
+            String customerId = readyOrder.getCustomerId();
+            String readyAt = readyOrder.getReadyAt();
+            if (orderId.isBlank() || customerId.isBlank() || readyAt.isBlank()) {
+                LOG.warnf(
+                    "Dropped create->deliver candidate with missing fields signature=%s messageType=%s",
+                    ConnectorUtils.failureSignature(
+                        "create-to-deliver",
+                        "mapping",
+                        "missing_required_fields",
+                        "na",
+                        orderId),
+                    readyOrder.getClass().getName());
+                return null;
+            }
+            if (isDuplicateHandoff(orderId, customerId, readyAt)) {
                 return null;
             }
             return OrderDispatchSvc.ReadyOrder.newBuilder()
-                .setOrderId(readyOrder.getOrderId())
-                .setCustomerId(readyOrder.getCustomerId())
-                .setReadyAt(readyOrder.getReadyAt())
+                .setOrderId(orderId)
+                .setCustomerId(customerId)
+                .setReadyAt(readyAt)
                 .build();
         }
         if (item instanceof Message message) {
@@ -156,18 +171,27 @@ public class CreateToDeliverIngestBridge {
             return null;
         }
         LOG.warnf(
-            "Dropped unsupported create->deliver output item signature=%s type=%s value=%s",
+            "Dropped unsupported create->deliver output item signature=%s type=%s",
             ConnectorUtils.failureSignature(
                 "create-to-deliver",
                 "mapping",
                 "unsupported_item_type",
                 "na",
                 "na"),
-            item == null ? "null" : item.getClass().getName(),
-            item);
+            item == null ? "null" : item.getClass().getName());
         return null;
     }
 
+    /**
+     * Determines whether a create->deliver handoff for the specified order has already been seen.
+     *
+     * The check is performed only when idempotency is enabled; otherwise this always returns `false`.
+     *
+     * @param orderId    the order identifier used in the handoff key
+     * @param customerId the customer identifier used in the handoff key
+     * @param readyAt    the ready timestamp used in the handoff key
+     * @return           `true` if the handoff has been observed before (duplicate) and should be dropped, `false` otherwise
+     */
     private boolean isDuplicateHandoff(String orderId, String customerId, String readyAt) {
         if (!idempotencyEnabled || orderId == null || orderId.isBlank() || idempotencyGuard == null) {
             return false;

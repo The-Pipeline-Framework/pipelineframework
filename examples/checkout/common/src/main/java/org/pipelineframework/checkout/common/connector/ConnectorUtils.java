@@ -33,6 +33,12 @@ public final class ConnectorUtils {
         };
     }
 
+    /**
+     * Normalizes a backpressure strategy string and returns one of the recognized strategy tokens.
+     *
+     * @param strategy the input strategy string (may be null or blank)
+     * @return `"BUFFER"` or `"DROP"`; returns `"BUFFER"` when the input is null, blank, or not recognized
+     */
     public static String normalizeBackpressureStrategy(String strategy) {
         if (strategy == null || strategy.isBlank()) {
             return BACKPRESSURE_BUFFER;
@@ -44,6 +50,14 @@ public final class ConnectorUtils {
         return normalized;
     }
 
+    /**
+     * Read a non-repeated, non-map scalar field from a protobuf Message and return its string representation.
+     *
+     * @param message   the protobuf Message to read the field from
+     * @param fieldName the field name as defined in the message descriptor
+     * @return the field's value converted to a String; returns an empty string if the field is not found,
+     *         is repeated or a map, or if the field's type is BYTE_STRING or MESSAGE
+     */
     public static String readField(Message message, String fieldName) {
         var field = message.getDescriptorForType().findFieldByName(fieldName);
         if (field == null) {
@@ -59,6 +73,16 @@ public final class ConnectorUtils {
         };
     }
 
+    /**
+     * Generate a deterministic handoff key for a namespace and optional components.
+     *
+     * The result is the normalized namespace, a colon, and a UUID deterministically
+     * derived from the namespace and the provided components.
+     *
+     * @param namespace  the namespace to use as the key prefix; if null or blank, "handoff" is used
+     * @param components optional components that contribute to the UUID seed; each null or blank component is treated as an empty string
+     * @return a string in the form "<namespace>:<uuid>" where the UUID is name-based and derived from the normalized namespace and components
+     */
     public static String deterministicHandoffKey(String namespace, String... components) {
         StringBuilder seed = new StringBuilder();
         appendFramed(seed, normalizeOrDefault(namespace, "handoff"));
@@ -71,6 +95,18 @@ public final class ConnectorUtils {
         return normalizeOrDefault(namespace, "handoff") + ":" + id;
     }
 
+    /**
+     * Constructs a standardized semicolon-delimited failure signature from connector context fields.
+     *
+     * Null or empty inputs are replaced with sensible defaults before formatting.
+     *
+     * @param connector name of the connector; defaults to "unknown" when null or empty
+     * @param phase processing phase where the failure occurred; defaults to "unknown" when null or empty
+     * @param reason human-readable reason for the failure; defaults to "unspecified" when null or empty
+     * @param traceId tracing identifier for correlating logs/requests; defaults to "na" when null or empty
+     * @param itemId identifier of the affected item; defaults to "na" when null or empty
+     * @return a string in the form "connector=...;phase=...;reason=...;traceId=...;itemId=..." with defaults applied
+     */
     public static String failureSignature(
         String connector,
         String phase,
@@ -85,6 +121,13 @@ public final class ConnectorUtils {
             + ";itemId=" + normalizeOrDefault(itemId, "na");
     }
 
+    /**
+     * Normalize a string by trimming whitespace and using a fallback when the result is empty or the input is null.
+     *
+     * @param value    the string to normalize; may be null
+     * @param fallback the value to return if {@code value} is null or empty after trimming
+     * @return the trimmed {@code value} when it contains non-whitespace characters, otherwise {@code fallback}
+     */
     public static String normalizeOrDefault(String value, String fallback) {
         if (value == null) {
             return fallback;
@@ -93,6 +136,13 @@ public final class ConnectorUtils {
         return normalized.isEmpty() ? fallback : normalized;
     }
 
+    /**
+     * Appends a framed representation of a string to the given StringBuilder using the format
+     * "#<length>:<value>".
+     *
+     * @param target the StringBuilder to append into
+     * @param value  the string whose framed form will be appended
+     */
     private static void appendFramed(StringBuilder target, String value) {
         target.append('#').append(value.length()).append(':').append(value);
     }

@@ -134,9 +134,7 @@ class CheckoutCanonicalFlowContractTest {
             if (!Files.exists(explicitCandidate)) {
                 throw new AssertionError("workspace.root/WORKSPACE_ROOT is set but file was not found: " + explicitCandidate);
             }
-            if (Files.exists(explicitCandidate)) {
-                return explicitCandidate;
-            }
+            return explicitCandidate;
         }
 
         var classpathResource = CheckoutCanonicalFlowContractTest.class.getClassLoader().getResource(relativePath);

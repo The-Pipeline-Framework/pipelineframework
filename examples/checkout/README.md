@@ -41,7 +41,7 @@ The canonical chain config extends this lane with additional bounded contexts (c
 
 ## Config files
 
-- `config/create-order-pipeline.yaml`
+- `create-order-orchestrator-svc/pipeline.yaml`
 - `deliver-order-orchestrator-svc/pipeline.yaml`
 
 ## Current module scaffold
