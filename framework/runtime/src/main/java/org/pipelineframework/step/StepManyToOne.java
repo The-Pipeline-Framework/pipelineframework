@@ -16,6 +16,10 @@
 
 package org.pipelineframework.step;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
+
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
@@ -65,7 +69,18 @@ public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, Item
             backpressuredInput = BackpressureBufferMetrics.buffer(backpressuredInput, this.getClass(), 128);
         }
 
-        final Multi<I> finalInput = backpressuredInput;
+        final int maxSampleSize = 5;
+        final ArrayList<I> sample = new ArrayList<>();
+        final AtomicLong totalCount = new AtomicLong();
+        final Multi<I> finalInput = backpressuredInput.onItem().invoke(item -> {
+            totalCount.incrementAndGet();
+            synchronized (sample) {
+                if (sample.size() < maxSampleSize) {
+                    sample.add(item);
+                }
+            }
+        });
+
         return applyReduce(finalInput)
             .onItem().invoke(resultValue -> {
                 if (LOG.isDebugEnabled()) {
@@ -86,8 +101,11 @@ public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, Item
                         LOG.debugf("Reactive Step %s: failed to process stream: %s",
                             this.getClass().getSimpleName(), error.getMessage());
                     }
-
-                    return rejectStream(finalInput, error);
+                    List<I> snapshot;
+                    synchronized (sample) {
+                        snapshot = List.copyOf(sample);
+                    }
+                    return rejectStream(snapshot, totalCount.get(), error);
                 } else {
                     return Uni.createFrom().failure(error);
                 }

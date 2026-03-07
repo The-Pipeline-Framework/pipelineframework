@@ -84,11 +84,13 @@ public class InMemoryItemRejectSink implements ItemRejectSink {
     public Uni<Void> publish(ItemRejectEnvelope envelope) {
         return Uni.createFrom().voidItem().invoke(() -> {
             int capacity = Math.max(1, itemRejectConfig.memoryCapacity());
+            int retained;
             synchronized (lock) {
                 while (ring.size() >= capacity) {
                     ring.removeFirst();
                 }
                 ring.addLast(envelope);
+                retained = ring.size();
             }
             ItemRejectMetrics.record(providerName(), envelope);
             LOG.warnf(
@@ -96,7 +98,7 @@ public class InMemoryItemRejectSink implements ItemRejectSink {
                 envelope.stepClass(),
                 envelope.rejectScope(),
                 envelope.itemFingerprint(),
-                currentSize(),
+                retained,
                 capacity);
         });
     }
@@ -112,14 +114,4 @@ public class InMemoryItemRejectSink implements ItemRejectSink {
         }
     }
 
-    /**
-     * Get the current number of envelopes stored in the in-memory ring buffer.
-     *
-     * @return the number of envelopes currently stored in the ring buffer
-     */
-    private int currentSize() {
-        synchronized (lock) {
-            return ring.size();
-        }
-    }
 }

@@ -56,7 +56,7 @@ public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, ItemRe
     if (input == null) {
       Throwable t = new NullPointerException("Input Uni is null");
       return recoverOnFailure()
-          ? rejectItem(Uni.createFrom().failure(t), t)
+          ? rejectItem(null, t)
           : Uni.createFrom().failure(t);
     }
 
@@ -68,41 +68,45 @@ public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, ItemRe
 
         // Step 2: Transform the item using gRPC call
         .onItem()
-        .transformToUni(this::applyOneToOne)
+        .transformToUni(item -> {
+            Uni<O> execution;
+            try {
+              execution = applyOneToOne(item);
+            } catch (Throwable thrown) {
+              execution = Uni.createFrom().failure(thrown);
+            }
+            return execution
+            // Step 3: Apply retry policy for transient failures
+            .onFailure(this::shouldRetry)
+            .invoke(t -> PipelineTelemetry.recordRetry(this.getClass()))
+            .onFailure(this::shouldRetry)
+            .retry()
+            .withBackOff(retryWait(), maxBackoff())
+            .withJitter(jitter() ? 0.5 : 0.0)
+            .atMost(retryLimit())
 
-        // Step 3: Apply retry policy for transient failures
-        .onFailure(this::shouldRetry)
-        .invoke(t -> PipelineTelemetry.recordRetry(this.getClass()))
-        .onFailure(this::shouldRetry)
-        .retry()
-        .withBackOff(retryWait(), maxBackoff())
-        .withJitter(jitter() ? 0.5 : 0.0)
-        .atMost(retryLimit())
+            // Step 4: Unified error handling after retries exhausted
+            .onItemOrFailure()
+            .transformToUni(
+                (out, failure) -> {
+                  if (failure == null) {
+                    if (LOG.isDebugEnabled()) {
+                      LOG.debugf("Step %s processed item: %s", this.getClass().getSimpleName(), out);
+                    }
+                    return Uni.createFrom().item(out);
+                  }
 
-        // Step 4: Unified error handling after retries exhausted
-        .onItemOrFailure()
-        .transformToUni(
-            (item, failure) -> {
-              if (failure == null) {
-                if (LOG.isDebugEnabled()) {
-                  LOG.debugf("Step %s processed item: %s", this.getClass().getSimpleName(), item);
-                }
+                  LOG.infof(
+                      "Step %s failed after %s retries: %s",
+                      this.getClass().getSimpleName(),
+                      retryLimit(),
+                      failure.toString());
 
-                return Uni.createFrom().item(item);
-              }
-
-              // At this point, retries exhausted
-              LOG.infof(
-                  "Step %s failed after %s retries: %s",
-                  this.getClass().getSimpleName(),
-                  retryLimit(),
-                  failure.toString());
-
-              if (recoverOnFailure()) {
-                return rejectItem(input, failure);
-              } else {
-                return Uni.createFrom().failure(failure);
-              }
-            });
+                  if (recoverOnFailure()) {
+                    return rejectItem(item, failure);
+                  }
+                  return Uni.createFrom().failure(failure);
+                });
+          });
   }
 }

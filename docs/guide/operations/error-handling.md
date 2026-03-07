@@ -34,10 +34,9 @@ Example override:
 
 ```java
 @Override
-public Uni<PaymentStatus> rejectItem(Uni<PaymentRecord> failedItem, Throwable cause) {
-    return failedItem
-        .onItem().invoke(item -> LOG.warnf("Rejected item id=%s cause=%s", item.id(), cause.getMessage()))
-        .onItem().transform(_ignored -> PaymentStatus.rejected());
+public Uni<PaymentStatus> rejectItem(PaymentRecord failedItem, Throwable cause) {
+    LOG.warnf("Rejected item id=%s cause=%s", failedItem.id(), cause.getMessage());
+    return Uni.createFrom().item(PaymentStatus.rejected());
 }
 ```
 
@@ -72,7 +71,7 @@ Prefix: `pipeline.item-reject`
 Production guard:
 
 1. if effective step recovery is enabled (`recoverOnFailure=true`),
-2. and selected sink is non-durable (`log` or `memory`),
+2. and the selected sink is non-durable (`log` or `memory`),
 3. startup fails in production launch mode.
 
 In non-production, non-durable sinks are allowed with warning logs.

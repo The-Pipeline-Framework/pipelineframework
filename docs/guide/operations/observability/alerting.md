@@ -30,14 +30,15 @@ Start with:
 1. Run failure rate > 1% over 1 day (warning)
 2. Item avg latency > 2x baseline for 10 minutes (warning)
 3. Buffer queued stays high for 5 minutes (warning)
-4. Execution DLQ or item reject sink backlog growth sustained for 5 minutes (critical)
+4. Execution DLQ backlog growth sustained for 5 minutes (critical)
+5. Item reject sink backlog growth sustained for 5 minutes (critical)
 
 Queue-async additions:
 
-5. Due-sweeper recoveries stop while due backlog rises (critical)
-6. Lease conflict/stale-commit rate spikes above baseline (warning)
-7. Retry-saturation exceeds threshold (warning/critical by tenant tier)
-8. Queue age/lag exceeds execution SLO budget (critical)
+6. Due-sweeper recoveries stop while due backlog rises (critical)
+7. Lease conflict/stale-commit rate spikes above baseline (warning)
+8. Retry-saturation exceeds threshold (warning/critical by tenant tier)
+9. Queue age/lag exceeds execution SLO budget (critical)
 
 When using New Relic, derive these from `tpf.pipeline.run` spans and `tpf.step.*` metrics.
 

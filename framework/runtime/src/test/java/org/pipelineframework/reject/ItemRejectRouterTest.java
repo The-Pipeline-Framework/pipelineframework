@@ -167,8 +167,8 @@ class ItemRejectRouterTest {
         router.publishItemReject(String.class, "x", new RuntimeException("boom"), 0, 1)
             .await().indefinitely();
 
-        assertTrue(highPriority.lastEnvelope != null);
-        assertTrue(lowPriority.lastEnvelope == null);
+        assertNotNull(highPriority.lastEnvelope);
+        assertNull(lowPriority.lastEnvelope);
     }
 
     @SuppressWarnings("unchecked")

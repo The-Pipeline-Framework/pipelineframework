@@ -162,7 +162,7 @@ public class ItemRejectRouter {
             error,
             retriesObserved,
             retryLimit);
-        return publishEnvelope(envelope).replaceWith((O) null);
+        return publishEnvelope(envelope).chain(() -> Uni.createFrom().nullItem());
     }
 
     /**
@@ -199,7 +199,7 @@ public class ItemRejectRouter {
             error,
             retriesObserved,
             retryLimit);
-        return publishEnvelope(envelope).replaceWith((O) null);
+        return publishEnvelope(envelope).chain(() -> Uni.createFrom().nullItem());
     }
 
     /**

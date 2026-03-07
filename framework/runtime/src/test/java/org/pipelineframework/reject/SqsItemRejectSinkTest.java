@@ -1,5 +1,6 @@
 package org.pipelineframework.reject;
 
+import java.time.Duration;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
@@ -47,7 +48,7 @@ class SqsItemRejectSinkTest {
         ItemRejectConfig config = mockConfig(Optional.of("https://sqs.local/123/reject"));
         SqsItemRejectSink sink = new SqsItemRejectSink(client, config);
 
-        sink.publish(sampleEnvelope()).await().indefinitely();
+        sink.publish(sampleEnvelope()).await().atMost(Duration.ofSeconds(5));
 
         verify(client).sendMessage(any(SendMessageRequest.class));
     }
@@ -58,7 +59,7 @@ class SqsItemRejectSinkTest {
         ItemRejectConfig config = mockConfig(Optional.of("https://sqs.local/123/reject"));
         SqsItemRejectSink sink = new SqsItemRejectSink(client, config);
 
-        sink.publish(sampleEnvelope()).await().indefinitely();
+        sink.publish(sampleEnvelope()).await().atMost(Duration.ofSeconds(5));
 
         verify(client).sendMessage(argThat((SendMessageRequest request) -> {
             String body = request.messageBody();
@@ -76,10 +77,21 @@ class SqsItemRejectSinkTest {
         SqsItemRejectSink sink = new SqsItemRejectSink(client, config);
 
         IllegalStateException error = assertThrows(IllegalStateException.class,
-            () -> sink.publish(sampleEnvelope()).await().indefinitely());
+            () -> sink.publish(sampleEnvelope()).await().atMost(Duration.ofSeconds(5)));
 
         assertTrue(error.getMessage().contains("queue-url"));
         verify(client, never()).sendMessage(any(SendMessageRequest.class));
+    }
+
+    @Test
+    void startupValidationRejectsFifoQueueUrl() {
+        ItemRejectConfig config = mockConfig(Optional.of("https://sqs.local/123/reject.fifo"));
+        SqsItemRejectSink sink = new SqsItemRejectSink(null, config);
+
+        var validationError = sink.startupValidationError(config);
+
+        assertTrue(validationError.isPresent());
+        assertTrue(validationError.get().contains("FIFO"));
     }
 
     private static ItemRejectEnvelope sampleEnvelope() {

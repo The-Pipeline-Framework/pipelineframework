@@ -67,7 +67,7 @@ class StepTest {
 
         // When
         var result = step.rejectItem(
-                io.smallrye.mutiny.Uni.createFrom().item("testItem"),
+                "testItem",
                 new RuntimeException("test error"));
 
         // Then

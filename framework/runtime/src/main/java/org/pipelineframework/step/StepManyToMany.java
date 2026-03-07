@@ -16,6 +16,10 @@
 
 package org.pipelineframework.step;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
+
 import io.smallrye.mutiny.Multi;
 import org.jboss.logging.Logger;
 import org.pipelineframework.step.functional.ManyToMany;
@@ -49,16 +53,31 @@ public interface StepManyToMany<I, O> extends Configurable, ManyToMany<I, O>, It
     @Override
     default Multi<O> apply(Multi<I> input) {
         final Logger LOG = Logger.getLogger(this.getClass());
+        final int maxSampleSize = 5;
+        final ArrayList<I> sample = new ArrayList<>();
+        final AtomicLong totalCount = new AtomicLong();
+        Multi<I> trackedInput = input.onItem().invoke(item -> {
+            totalCount.incrementAndGet();
+            synchronized (sample) {
+                if (sample.size() < maxSampleSize) {
+                    sample.add(item);
+                }
+            }
+        });
 
         // Apply the transformation
-        Multi<O> output = applyTransform(input);
+        Multi<O> output = applyTransform(trackedInput);
 
         // Apply overflow strategy
-        if ("buffer".equalsIgnoreCase(backpressureStrategy())) {
+        String strategy = backpressureStrategy();
+        if ("buffer".equalsIgnoreCase(strategy)) {
             output = BackpressureBufferMetrics.buffer(output, this.getClass(), backpressureBufferCapacity());
-        } else if ("drop".equalsIgnoreCase(backpressureStrategy())) {
+        } else if ("drop".equalsIgnoreCase(strategy)) {
             output = output.onOverflow().drop();
+        } else if (strategy == null || strategy.isBlank() || "default".equalsIgnoreCase(strategy)) {
+            output = BackpressureBufferMetrics.buffer(output, this.getClass(), 128);
         } else {
+            LOG.warnf("Unknown backpressure strategy '%s', falling back to buffer(128)", strategy);
             // default behavior - buffer with default capacity
             output = BackpressureBufferMetrics.buffer(output, this.getClass(), 128);
         }
@@ -86,6 +105,17 @@ public interface StepManyToMany<I, O> extends Configurable, ManyToMany<I, O>, It
                 retryLimit(),
                 t.getMessage()
             );
+        })
+        .onFailure().recoverWithMulti(error -> {
+            if (recoverOnFailure()) {
+                List<I> snapshot;
+                synchronized (sample) {
+                    snapshot = List.copyOf(sample);
+                }
+                return rejectStream(snapshot, totalCount.get(), error)
+                    .onItem().transformToMulti(ignored -> Multi.createFrom().empty());
+            }
+            return Multi.createFrom().failure(error);
         });
     }
 }

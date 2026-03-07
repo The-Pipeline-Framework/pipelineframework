@@ -104,6 +104,11 @@ public class SqsItemRejectSink implements ItemRejectSink {
         if (config == null || config.sqs().queueUrl().isEmpty() || config.sqs().queueUrl().get().isBlank()) {
             return Optional.of("pipeline.item-reject.sqs.queue-url must be configured when provider=sqs.");
         }
+        String queueUrl = config.sqs().queueUrl().get();
+        if (queueUrl.endsWith(".fifo")) {
+            return Optional.of(
+                "pipeline.item-reject.sqs.queue-url currently does not support FIFO queues for provider=sqs.");
+        }
         return Optional.empty();
     }
 

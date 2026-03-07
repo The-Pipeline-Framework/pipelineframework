@@ -16,6 +16,8 @@
 
 package org.pipelineframework.step;
 
+import java.util.List;
+
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
@@ -73,22 +75,28 @@ public interface StepOneToMany<I, O> extends OneToMany<I, O>, Configurable, Item
                     );
                 }
                 return o;
+            })
+            .onFailure(this::shouldRetry)
+            .invoke(t -> PipelineTelemetry.recordRetry(this.getClass()))
+            .onFailure(this::shouldRetry)
+            .retry()
+            .withBackOff(retryWait(), maxBackoff())
+            .withJitter(jitter() ? 0.5 : 0.0)
+            .atMost(retryLimit())
+            .onFailure().recoverWithMulti(t -> {
+                LOG.infof(
+                    "Step %s completed all retries (%s attempts) with failure: %s",
+                    this.getClass().getSimpleName(),
+                    retryLimit(),
+                    t.getMessage()
+                );
+                if (recoverOnFailure()) {
+                    List<I> sample = item == null ? List.of() : List.of(item);
+                    return rejectStream(sample, item == null ? 0L : 1L, t)
+                        .onItem().transformToMulti(ignored -> Multi.createFrom().empty());
+                }
+                return Multi.createFrom().failure(t);
             });
-        })
-        .onFailure(this::shouldRetry)
-        .invoke(t -> PipelineTelemetry.recordRetry(this.getClass()))
-        .onFailure(this::shouldRetry)
-        .retry()
-        .withBackOff(retryWait(), maxBackoff())
-        .withJitter(jitter() ? 0.5 : 0.0)
-        .atMost(retryLimit())
-        .onFailure().invoke(t -> {
-            LOG.infof(
-                "Step %s completed all retries (%s attempts) with failure: %s",
-                this.getClass().getSimpleName(),
-                retryLimit(),
-                t.getMessage()
-            );
         });
     }
 }

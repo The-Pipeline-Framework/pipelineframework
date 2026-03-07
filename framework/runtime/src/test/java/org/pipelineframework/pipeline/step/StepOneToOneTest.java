@@ -56,7 +56,7 @@ class StepOneToOneTest {
         }
 
         @Override
-        public Uni<String> rejectItem(Uni<String> failedItem, Throwable cause) {
+        public Uni<String> rejectItem(String failedItem, Throwable cause) {
             rejectCalled.set(true);
             return Uni.createFrom().item("recovered");
         }

@@ -68,7 +68,13 @@ class StepManyToOneTest {
         }
 
         @Override
-        public Uni<String> rejectStream(Multi<String> input, Throwable cause) {
+        public Uni<String> rejectStream(
+            java.util.List<String> sampleItems,
+            long totalItemCount,
+            Throwable cause,
+            Integer retriesObserved,
+            Integer retryLimit
+        ) {
             rejectCalled.set(true);
             return Uni.createFrom().item("recovered-stream");
         }
@@ -160,10 +166,10 @@ class StepManyToOneTest {
     void testRejectStreamWithEmptyStream() {
         // Given
         TestStep step = new TestStep();
-        Multi<String> emptyStream = Multi.createFrom().empty();
+        java.util.List<String> emptyStream = java.util.List.of();
 
         // When
-        Uni<Void> result = step.rejectStream(emptyStream, new RuntimeException("Test error"))
+        Uni<Void> result = step.rejectStream(emptyStream, 0L, new RuntimeException("Test error"))
                 .replaceWithVoid();
 
         // Then
@@ -179,10 +185,10 @@ class StepManyToOneTest {
     void testRejectStreamWithSingleItem() {
         // Given
         TestStep step = new TestStep();
-        Multi<String> singleItemStream = Multi.createFrom().item("single");
+        java.util.List<String> singleItemStream = java.util.List.of("single");
 
         // When
-        Uni<Void> result = step.rejectStream(singleItemStream, new RuntimeException("Test error"))
+        Uni<Void> result = step.rejectStream(singleItemStream, 1L, new RuntimeException("Test error"))
                 .replaceWithVoid();
 
         // Then
@@ -198,11 +204,10 @@ class StepManyToOneTest {
     void testRejectStreamWithMultipleItems() {
         // Given
         TestStep step = new TestStep();
-        java.util.List<String> items = java.util.List.of("item1", "item2", "item3");
-        Multi<String> multiStream = Multi.createFrom().iterable(items);
+        java.util.List<String> multiStream = java.util.List.of("item1", "item2", "item3");
 
         // When
-        Uni<Void> result = step.rejectStream(multiStream, new RuntimeException("Test error"))
+        Uni<Void> result = step.rejectStream(multiStream, 3L, new RuntimeException("Test error"))
                 .replaceWithVoid();
 
         // Then
@@ -218,11 +223,11 @@ class StepManyToOneTest {
     void testRejectStreamWithMoreItemsThanSampleSize() {
         // Given
         TestStep step = new TestStep();
-        Multi<String> multiStream = Multi.createFrom()
-                .items("item1", "item2", "item3", "item4", "item5", "item6", "item7");
+        java.util.List<String> multiStream = java.util.List.of(
+            "item1", "item2", "item3", "item4", "item5", "item6", "item7");
 
         // When
-        Uni<Void> result = step.rejectStream(multiStream, new RuntimeException("Test error"))
+        Uni<Void> result = step.rejectStream(multiStream, 7L, new RuntimeException("Test error"))
                 .replaceWithVoid();
 
         // Then
@@ -238,11 +243,8 @@ class StepManyToOneTest {
     void testRejectStreamWithErrorInStream() {
         // Given
         TestStep step = new TestStep();
-        RuntimeException streamError = new RuntimeException("Stream error");
-        Multi<String> errorStream = Multi.createFrom().failure(streamError);
-
         // When
-        Uni<Void> result = step.rejectStream(errorStream, new RuntimeException("Processing error"))
+        Uni<Void> result = step.rejectStream(java.util.List.of(), 0L, new RuntimeException("Processing error"))
                 .replaceWithVoid();
 
         // Then

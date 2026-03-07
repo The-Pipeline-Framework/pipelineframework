@@ -35,12 +35,15 @@ public interface ItemRejectSink {
     }
 
     /**
-     * Determines the selection priority of this sink when multiple sinks are available.
+     * Provider priority used when multiple sinks are available.
+     * Higher numeric values have higher precedence and are selected over lower values.
+     * The default is intentionally low so sinks that do not override priority do not
+     * unintentionally supersede built-in providers.
      *
      * @return an integer priority where higher values indicate higher precedence
      */
     default int priority() {
-        return 0;
+        return -500;
     }
 
     /**
@@ -67,10 +70,10 @@ public interface ItemRejectSink {
     }
 
     /**
- * Publish a single reject envelope.
- *
- * @param envelope the reject envelope to publish
- * @return a Uni that completes when the envelope has been published; emits no item
- */
+     * Publish a single reject envelope.
+     *
+     * @param envelope the reject envelope to publish
+     * @return a Uni that completes when the envelope has been published; emits no item
+     */
     Uni<Void> publish(ItemRejectEnvelope envelope);
 }

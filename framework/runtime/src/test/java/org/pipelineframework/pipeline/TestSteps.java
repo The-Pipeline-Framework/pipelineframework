@@ -180,18 +180,17 @@ public class TestSteps {
         /**
          * Log an item-reject event for a failed input and emit the original item.
          *
-         * @param failedItem a Uni that produces the input value which failed processing
+         * @param failedItem the item that failed processing
          * @param cause the throwable that caused the failure
          * @return the original input value
          */
         @Override
-        public Uni<String> rejectItem(Uni<String> failedItem, Throwable cause) {
-            return failedItem
-                    .onItem()
-                    .invoke(
-                            item -> LOG.infof(
-                                    "Item reject handled for item: %s, cause: %s",
-                                    item, cause.getMessage()));
+        public Uni<String> rejectItem(String failedItem, Throwable cause) {
+            return Uni.createFrom()
+                .item(failedItem)
+                .invoke(item -> LOG.infof(
+                    "Item reject handled for item: %s, cause: %s",
+                    item, cause.getMessage()));
         }
 
         /**
