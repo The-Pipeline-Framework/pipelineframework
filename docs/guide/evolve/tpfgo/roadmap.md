@@ -14,6 +14,13 @@ For broader context, see:
 - We treat failures as **operational** errors; business unhappy paths are modeled as explicit pipelines.
 - We assume a **single tech stack** and a single leadership/business, so "autonomy for its own sake" is not a goal.
 
+## Closure Scope Boundary (v2.1)
+
+- TPFGo closure is **HA-decoupled** for this cycle.
+- Merge-blocking scope is SYNC-path business/workflow correctness plus transport-contract parity.
+- Queue/HA delivery (`QUEUE_ASYNC`, durable providers) is a separate epic and tracked as a compatibility dependency.
+- `Protobuf-over-HTTP` parity is enforced as canonical metadata/semantic parity in this cycle (not streaming-shape parity).
+
 ## Working Model (current stance)
 
 - **Pipeline = checkpoint**: a pipeline produces a stable, valid state. No status fields, no updates, no rollbacks.
@@ -140,7 +147,7 @@ Status legend: TODO, IN_PROGRESS, DONE
 ### Merge-blocking items
 
 1) **Connector idempotency and dedup policy closure**  
-Status: TODO  
+Status: IN_PROGRESS  
 Done means:
 - Default duplicate-handling policy is documented and versioned.
 - Retry key derivation contract is explicit and deterministic.
@@ -154,25 +161,25 @@ Done means:
 - Failure signatures under pressure are observable and documented.
 
 3) **Cross-pipeline handoff contract build-time enforcement**  
-Status: TODO  
+Status: IN_PROGRESS  
 Done means:
 - Output-to-input contract checks fail fast at build time for incompatible handoffs.
 - Diagnostics include pipeline/step context and expected vs actual contract details.
 - Coverage includes version drift and mapper/payload mismatch cases.
 
 4) **Canonical full FTGo flow implemented end-to-end**  
-Status: TODO  
+Status: IN_PROGRESS  
 Done means:
 - Full checkout -> validation -> restaurant acceptance -> preparation -> dispatch -> delivery -> payment flow exists in TPF.
 - Explicit failure/compensation pipelines are implemented for terminal failure checkpoints.
 - End-to-end test validates business correctness and deterministic lineage continuity.
 
-5) **Transport/platform parity gate (REST, gRPC, FUNCTION)**  
+5) **Transport/platform parity gate (REST, gRPC, FUNCTION + Protobuf-over-HTTP semantic row)**  
 Status: TODO  
 Done means:
 - Equivalent supported-shape behavior is validated across all required paths.
 - Unsupported shapes fail with explicit, consistent diagnostics.
-- Parity matrix tests are green and required in CI.
+- Parity matrix tests are green and required in CI, including the semantic parity row for Protobuf-over-HTTP.
 
 6) **Partial-progress and recovery behavior closure**  
 Status: TODO  
@@ -189,9 +196,10 @@ Done means:
 - No planned-but-unimplemented capability is documented as available.
 
 8) **Single merge-blocking CI gate for epic acceptance**  
-Status: TODO  
+Status: IN_PROGRESS  
 Done means:
 - CI includes framework verify + canonical FTGo E2E + parity matrix.
+- CI gate is wired through `CI — TPFGo Closure Gate (SYNC)` workflow.
 - Gate is required for merges affecting FTGo-critical modules.
 - Failure output is actionable for on-call and contributors.
 
