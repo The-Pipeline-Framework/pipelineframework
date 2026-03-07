@@ -31,44 +31,44 @@ import io.smallrye.config.WithName;
 public interface ItemRejectConfig {
 
     /**
-     * Item reject sink provider selector.
+     * Selects which item reject sink provider to use.
      *
-     * @return provider name
+     * @return the provider name (for example "log")
      */
     @WithDefault("log")
     String provider();
 
     /**
-     * Enables strict startup checks for the selected sink provider.
+     * Controls whether the application fails startup when the selected sink provider is misconfigured.
      *
-     * @return true to fail startup on invalid sink provider configuration
+     * @return true if startup should fail when the selected sink provider configuration is invalid, false otherwise.
      */
     @WithName("strict-startup")
     @WithDefault("true")
     boolean strictStartup();
 
     /**
-     * Includes rejected payload in the envelope when true.
+     * Controls whether the rejected item's payload is included in the reject envelope.
      *
-     * @return true when payload capture is enabled
+     * @return true if the rejected payload is included in the envelope, false otherwise.
      */
     @WithName("include-payload")
     @WithDefault("false")
     boolean includePayload();
 
     /**
-     * Maximum in-memory retained rejects for the memory provider.
+     * Maximum number of reject envelopes retained in memory by the memory provider.
      *
-     * @return in-memory ring buffer capacity
+     * @return the in-memory ring buffer capacity (maximum retained rejects)
      */
     @WithName("memory-capacity")
     @WithDefault("512")
     int memoryCapacity();
 
     /**
-     * Behaviour when reject publication fails.
+     * Determines behavior when publishing a rejected item fails.
      *
-     * @return publish failure policy
+     * @return the policy that controls what happens if reject publication fails
      */
     @WithName("publish-failure-policy")
     @WithDefault("CONTINUE")
@@ -87,25 +87,25 @@ public interface ItemRejectConfig {
     interface SqsConfig {
 
         /**
-         * Queue URL used to publish reject envelopes.
+         * SQS queue URL used to publish reject envelopes.
          *
-         * @return queue URL when configured
+         * @return an Optional containing the configured SQS queue URL, or empty if none is configured
          */
         @WithName("queue-url")
         Optional<String> queueUrl();
 
         /**
-         * Optional AWS region override.
+         * AWS region override to use when publishing to SQS.
          *
-         * @return region when configured
+         * @return an Optional containing the region if configured, otherwise an empty Optional
          */
         @WithName("region")
         Optional<String> region();
 
         /**
-         * Optional endpoint override, usually for local testing.
+         * Endpoint override for the SQS provider, typically used for local testing or custom endpoints.
          *
-         * @return endpoint override when configured
+         * @return the configured endpoint override, if present
          */
         @WithName("endpoint-override")
         Optional<String> endpointOverride();

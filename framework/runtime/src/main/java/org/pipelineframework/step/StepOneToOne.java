@@ -35,18 +35,18 @@ import org.pipelineframework.telemetry.PipelineTelemetry;
 public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, ItemRejectable<I, O> {
 
   /**
-   * Apply the step to a single input and produce a single output.
-   *
-   * @param in the input element to process
-   * @return a Uni that emits the transformed output element
-   */
+ * Applies the step to an input item and produces the corresponding output item.
+ *
+ * @param in the input item to process
+ * @return the transformed output item; may emit a failure to indicate processing error
+ */
   Uni<O> applyOneToOne(I in);
 
   /**
-   * Orchestrates the asynchronous one-to-one transformation of an emitted input item, performing input null checks, applying retries, and routing failures to the configured item reject sink when recovery is enabled.
+   * Orchestrates an asynchronous one-to-one transformation of an emitted input item, applying input validation, a retry policy for transient failures, and optional routing of failures to the configured item reject sink.
    *
    * @param input the {@code Uni} that emits the input item to be transformed
-   * @return the {@code Uni} that emits the transformed output item on success, or fails with the final error; if {@code recoverOnFailure()} is true a rejected {@code Uni} may be returned instead of a propagated failure
+   * @return the {@code Uni} that emits the transformed output item on success; if recovery is disabled the returned {@code Uni} fails with the final error, otherwise a rejected {@code Uni} may be returned when recovery is enabled
    */
   @Override
   default Uni<O> apply(Uni<I> input) {

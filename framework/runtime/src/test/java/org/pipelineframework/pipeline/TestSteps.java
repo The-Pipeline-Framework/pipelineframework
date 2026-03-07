@@ -163,6 +163,12 @@ public class TestSteps {
             this.manualRecoverOnFailureSet = true; // Mark that constructor explicitly set this value
         }
 
+        /**
+         * Produces a failed Uni for the given input to simulate a processing failure so the item can be handled by rejectItem.
+         *
+         * @param input the original item; preserved for downstream reject handling
+         * @return a `Uni` that fails with a `RuntimeException`, allowing recovery logic to observe the original input
+         */
         @Override
         public Uni<String> applyOneToOne(String input) {
             // Return the input wrapped in a Uni that fails - this way the input is preserved
@@ -172,11 +178,11 @@ public class TestSteps {
         }
 
         /**
-         * Handle a failed input by logging a item-reject event and returning the original item.
+         * Log an item-reject event for a failed input and emit the original item.
          *
-         * @param failedItem a Uni that produces the item that failed processing
+         * @param failedItem a Uni that produces the input value which failed processing
          * @param cause the throwable that caused the failure
-         * @return a Uni that emits the original input value
+         * @return the original input value
          */
         @Override
         public Uni<String> rejectItem(Uni<String> failedItem, Throwable cause) {
@@ -189,19 +195,13 @@ public class TestSteps {
         }
 
         /**
-         * Initialise the step with the provided step configuration, preserving any first-seen
-         * non-default values as manual overrides.
+         * Initialize the step's configuration, preserving the first-seen non-default values as manual overrides.
          *
-         * <p>
-         * If this is the first time the step receives a non-default configuration, the method
-         * records the incoming retryLimit, retryWait and recoverOnFailure as manual configuration.
-         * Once manual configuration is present, subsequent initialisation calls apply the recorded
-         * retryLimit, retryWait and recoverOnFailure to the incoming config before delegating to
-         * the superclass.
-         *
-         * <p>
-         * The recoverOnFailure value provided by the step's constructor (if set) takes
-         * precedence over a value from the incoming config when deciding what to record or apply.
+         * <p>If this is the first non-default configuration seen by the step, the method records the
+         * incoming `retryLimit`, `retryWait`, and `recoverOnFailure` (subject to constructor precedence)
+         * as manual configuration. Once manual configuration is recorded, subsequent calls apply the
+         * recorded `retryLimit`, `retryWait`, and `recoverOnFailure` to the provided config before
+         * delegating to the superclass initializer.
          *
          * @param config the step configuration to apply; may be null
          */
@@ -245,17 +245,15 @@ public class TestSteps {
         }
 
         /**
-         * Record manual configuration values for retry behaviour and item-reject recovery.
+         * Store manual retry configuration and optional recover-on-failure preference for the step.
          *
-         * <p>
-         * Sets the step into a manual-configured state and stores the provided retry limit and
-         * retry wait duration. The recoverOnFailure flag is stored only if it was not explicitly
-         * set by the constructor.
+         * If the constructor did not explicitly set the recover-on-failure policy, the supplied
+         * `recoverOnFailure` value is recorded; otherwise the constructor-provided policy remains in effect.
          *
          * @param retryLimit the manual retry limit to apply
          * @param retryWait the manual duration to wait between retries
-         * @param recoverOnFailure whether failed items should be recovered instead of
-         *        item-rejected; ignored if the constructor previously fixed this behaviour
+         * @param recoverOnFailure whether failed items should be recovered instead of being item-rejected;
+         *        ignored if the constructor previously fixed this behavior
          */
         private void setManualConfig(
                 int retryLimit, java.time.Duration retryWait, boolean recoverOnFailure) {

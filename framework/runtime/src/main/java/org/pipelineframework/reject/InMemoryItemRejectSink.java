@@ -39,16 +39,32 @@ public class InMemoryItemRejectSink implements ItemRejectSink {
     private final Object lock = new Object();
     private final ArrayDeque<ItemRejectEnvelope> ring = new ArrayDeque<>();
 
+    /**
+     * Identifies this sink implementation as the in-memory provider.
+     *
+     * @return the provider name "memory"
+     */
     @Override
     public String providerName() {
         return "memory";
     }
 
+    /**
+     * Indicates this sink's selection priority among available providers.
+     *
+     * @return `-200` indicating a lower priority relative to providers with higher values.
+     */
     @Override
     public int priority() {
         return -200;
     }
 
+    /**
+     * Validates configuration required for the in-memory reject sink.
+     *
+     * @param config the item-reject configuration to validate
+     * @return an Optional containing an error message if `config` is null or `memoryCapacity()` is less than or equal to zero, or `Optional.empty()` when the configuration is valid
+     */
     @Override
     public Optional<String> startupValidationError(ItemRejectConfig config) {
         if (config == null || config.memoryCapacity() <= 0) {
@@ -57,6 +73,13 @@ public class InMemoryItemRejectSink implements ItemRejectSink {
         return Optional.empty();
     }
 
+    /**
+     * Stores the given reject envelope in the bounded in-memory sink, evicting oldest entries when the configured
+     * capacity is reached, and records metrics for the stored envelope.
+     *
+     * @param envelope the item reject envelope to store
+     * @return an empty result whose completion indicates the envelope has been added to the in-memory buffer and metrics recorded
+     */
     @Override
     public Uni<Void> publish(ItemRejectEnvelope envelope) {
         return Uni.createFrom().voidItem().invoke(() -> {
@@ -79,9 +102,9 @@ public class InMemoryItemRejectSink implements ItemRejectSink {
     }
 
     /**
-     * Returns a snapshot of current in-memory rejects.
+     * Create an immutable snapshot of the current in-memory reject envelopes.
      *
-     * @return immutable snapshot
+     * @return an immutable List of ItemRejectEnvelope containing the sink's current contents in insertion order (oldest first)
      */
     public List<ItemRejectEnvelope> snapshot() {
         synchronized (lock) {
@@ -89,6 +112,11 @@ public class InMemoryItemRejectSink implements ItemRejectSink {
         }
     }
 
+    /**
+     * Get the current number of envelopes stored in the in-memory ring buffer.
+     *
+     * @return the number of envelopes currently stored in the ring buffer
+     */
     private int currentSize() {
         synchronized (lock) {
             return ring.size();

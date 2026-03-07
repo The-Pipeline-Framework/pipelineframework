@@ -29,16 +29,33 @@ public class LoggingItemRejectSink implements ItemRejectSink {
 
     private static final Logger LOG = Logger.getLogger(LoggingItemRejectSink.class);
 
+    /**
+     * Get the provider name for this item reject sink.
+     *
+     * @return the provider name "log"
+     */
     @Override
     public String providerName() {
         return "log";
     }
 
+    /**
+     * Priority value that orders this sink relative to other sinks.
+     *
+     * @return the priority for this sink; lower numbers indicate lower precedence in ordering
+     */
     @Override
     public int priority() {
         return -100;
     }
 
+    /**
+     * Publish an item rejection by recording metrics and logging detailed rejection information.
+     *
+     * @param envelope the rejection envelope containing scope, step, execution, correlation, fingerprint,
+     *                 retry information, and the original error details
+     * @return an empty result representing no value
+     */
     @Override
     public Uni<Void> publish(ItemRejectEnvelope envelope) {
         return Uni.createFrom().voidItem().invoke(() -> {

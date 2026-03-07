@@ -37,14 +37,21 @@ public final class ItemRejectMetrics {
         .setUnit("items")
         .build();
 
+    /**
+     * Prevents instantiation of this utility class.
+     */
     private ItemRejectMetrics() {
     }
 
     /**
-     * Records one reject publication attempt.
+     * Record a single item-reject publication in the reject metrics counter.
      *
-     * @param provider sink provider
-     * @param envelope reject envelope
+     * Increments the reject counter and attaches attributes for the sink provider (uses
+     * "unknown" if `provider` is null), the step class, the reject scope, and the error class
+     * from the provided envelope.
+     *
+     * @param provider the sink provider name (may be null)
+     * @param envelope the reject envelope containing stepClass, rejectScope, and errorClass; if null no metric is recorded
      */
     public static void record(String provider, ItemRejectEnvelope envelope) {
         if (envelope == null) {

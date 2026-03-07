@@ -51,26 +51,54 @@ public class SqsItemRejectSink implements ItemRejectSink {
     public SqsItemRejectSink() {
     }
 
+    /**
+     * Package-private constructor for supplying a pre-built SQS client and item-reject configuration,
+     * primarily used for dependency injection and testing.
+     *
+     * @param client the SqsClient to use for sending messages; may be null to allow lazy initialization
+     * @param itemRejectConfig configuration containing SQS settings for item rejection
+     */
     SqsItemRejectSink(SqsClient client, ItemRejectConfig itemRejectConfig) {
         this.client = client;
         this.itemRejectConfig = itemRejectConfig;
     }
 
+    /**
+     * Identifies the sink provider used by this implementation.
+     *
+     * @return the provider name "sqs"
+     */
     @Override
     public String providerName() {
         return "sqs";
     }
 
+    /**
+     * The provider's selection priority used to order sinks when multiple providers exist.
+     *
+     * @return the priority value; -1000 indicates a low selection priority among providers
+     */
     @Override
     public int priority() {
         return -1000;
     }
 
+    /**
+     * Indicates that this sink is durable and intended to persist item-reject events for delivery.
+     *
+     * @return `true` if the sink is durable, `false` otherwise
+     */
     @Override
     public boolean durable() {
         return true;
     }
 
+    /**
+     * Validates that the SQS queue URL is configured in the provided item-reject configuration.
+     *
+     * @param config the item-reject configuration to validate; if `null` it is treated as missing configuration
+     * @return an `Optional` containing an error message if the SQS queue URL is missing or blank, otherwise an empty `Optional`
+     */
     @Override
     public Optional<String> startupValidationError(ItemRejectConfig config) {
         if (config == null || config.sqs().queueUrl().isEmpty() || config.sqs().queueUrl().get().isBlank()) {
@@ -79,6 +107,14 @@ public class SqsItemRejectSink implements ItemRejectSink {
         return Optional.empty();
     }
 
+    /**
+     * Sends the given item-reject envelope to the configured SQS queue and records publish metrics.
+     *
+     * @param envelope the item rejection envelope to serialize and send
+     * @return a Uni containing no value that completes when the send operation finishes
+     * @throws IllegalStateException if the SQS queue URL is not configured, if the sink is shutting down,
+     *                               or if the envelope cannot be serialized to JSON
+     */
     @Override
     public Uni<Void> publish(ItemRejectEnvelope envelope) {
         String queueUrl = itemRejectConfig.sqs().queueUrl()
@@ -95,6 +131,15 @@ public class SqsItemRejectSink implements ItemRejectSink {
         }).replaceWithVoid().invoke(() -> ItemRejectMetrics.record(providerName(), envelope));
     }
 
+    /**
+     * Shut down the SQS client and mark this sink as shutting down.
+     *
+     * This method is synchronized, idempotent, and safe to call multiple times. It sets the
+     * internal shutdown flag, attempts to close the active SqsClient, suppresses and logs any
+     * exception at debug level, and clears the client reference.
+     *
+     * Called during container shutdown to release resources.
+     */
     @PreDestroy
     void closeClient() {
         synchronized (this) {
@@ -113,6 +158,15 @@ public class SqsItemRejectSink implements ItemRejectSink {
         }
     }
 
+    /**
+     * Lazily initializes (if necessary) and returns the SqsClient used to send messages.
+     *
+     * The client is created once and cached; when building, the configured region and
+     * endpointOverride are applied if present and non-blank.
+     *
+     * @return the initialized SqsClient instance
+     * @throws IllegalStateException if the sink is shutting down when called
+     */
     private SqsClient sqsClient() {
         if (shuttingDown) {
             throw new IllegalStateException("SqsItemRejectSink is shutting down.");
@@ -139,6 +193,13 @@ public class SqsItemRejectSink implements ItemRejectSink {
         }
     }
 
+    /**
+     * Serialize an ItemRejectEnvelope to its JSON string representation.
+     *
+     * @param envelope the envelope to serialize
+     * @return the JSON string representation of the envelope
+     * @throws IllegalStateException if serialization fails (wraps the original cause)
+     */
     private static String toMessage(ItemRejectEnvelope envelope) {
         try {
             return PipelineJson.mapper().writeValueAsString(envelope);
@@ -147,6 +208,13 @@ public class SqsItemRejectSink implements ItemRejectSink {
         }
     }
 
+    /**
+     * Execute a blocking supplier on the Mutiny default worker pool and produce its result.
+     *
+     * @param <T> the type of the supplier result
+     * @param supplier the blocking computation to run on the worker pool
+     * @return the value produced by the supplier, emitted by the returned Uni
+     */
     private static <T> Uni<T> blocking(Supplier<T> supplier) {
         return Uni.createFrom().item(supplier).runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
     }

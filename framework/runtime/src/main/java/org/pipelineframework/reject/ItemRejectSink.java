@@ -26,51 +26,51 @@ import io.smallrye.mutiny.Uni;
 public interface ItemRejectSink {
 
     /**
-     * Provider name used for configuration-based selection.
+     * Identifies the provider name used to select this sink via configuration.
      *
-     * @return provider name
+     * @return the provider name used for configuration selection
      */
     default String providerName() {
         return "log";
     }
 
     /**
-     * Provider priority used when multiple sinks are available.
-     * Higher numeric values have higher precedence and are selected over lower values.
+     * Determines the selection priority of this sink when multiple sinks are available.
      *
-     * @return provider priority
+     * @return an integer priority where higher values indicate higher precedence
      */
     default int priority() {
         return 0;
     }
 
     /**
-     * Whether this sink is durable enough for production reject recovery paths.
+     * Indicates whether the sink is durable enough for production reject recovery paths.
      *
-     * @return true when sink is durable
+     * @return `true` if the sink is durable and suitable for production reject recovery paths, `false` otherwise
      */
     default boolean durable() {
         return false;
     }
 
     /**
-     * Validates provider readiness for startup.
+     * Validate whether the provider is ready to operate at startup.
      *
-     * <p>Return a non-empty value when the provider is selected but cannot safely operate
-     * with the current runtime configuration.</p>
+     * <p>When the provider is selected but cannot safely operate with the given runtime
+     * configuration, return a non-empty Optional containing a user-facing validation error
+     * message; return an empty Optional when no startup error is detected.</p>
      *
-     * @param config reject sink configuration
-     * @return optional startup validation error
+     * @param config the reject sink configuration to validate
+     * @return an Optional with a startup validation error message if validation fails, empty otherwise
      */
     default Optional<String> startupValidationError(ItemRejectConfig config) {
         return Optional.empty();
     }
 
     /**
-     * Publishes one reject envelope.
-     *
-     * @param envelope reject envelope
-     * @return completion signal
-     */
+ * Publish a single reject envelope.
+ *
+ * @param envelope the reject envelope to publish
+ * @return a Uni that completes when the envelope has been published; emits no item
+ */
     Uni<Void> publish(ItemRejectEnvelope envelope);
 }

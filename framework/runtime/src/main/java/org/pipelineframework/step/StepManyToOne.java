@@ -37,13 +37,13 @@ public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, Item
     /**
      * Apply the step to a stream of inputs and produce a single aggregated output.
      *
-     * <p>The method applies the configured backpressure strategy to the provided input stream,
-     * applies retry semantics on failures (excluding NullPointerException), and — if configured —
-     * recovers failed processing by delegating the collected stream to the item reject sink.
+     * <p>The method applies the configured backpressure strategy to the input stream, applies the
+     * step's reduction, enforces the step's retry policy on failures, and when configured delegates
+     * failed processing to the item reject sink for recovery.
      *
      * @param input the stream of inputs to be processed
-     * @return a Uni that emits the step's single output; if retries are exhausted the Uni will
-     *         either fail with the original error or, if recovery is enabled, emit the value
+     * @return the single aggregated output produced by the step; if retries are exhausted the step
+     *         either fails with the original error or, if recovery is enabled, yields the value
      *         produced by the item reject handling (which may be null)
      */
     @Override
@@ -95,12 +95,14 @@ public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, Item
     }
 
     /**
-     * Apply the reduction operation to a stream of inputs, producing a single output.
-     * This method would typically be implemented by gRPC client adapters.
-     *
-     * @param input The stream of inputs as a Multi
-     * @return The single output as a Uni
-     */
+ * Produce a single aggregated result by reducing the provided stream of inputs.
+ *
+ * Implementations should consume the provided stream and produce one final output value;
+ * the input may already have had backpressure handling applied by the caller.
+ *
+ * @param input the stream of input items to be reduced
+ * @return the aggregated output produced from the input stream
+ */
     Uni<O> applyReduce(Multi<I> input);
 
 }

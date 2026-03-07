@@ -67,6 +67,14 @@ public class ItemRejectRouter {
     public ItemRejectRouter() {
     }
 
+    /**
+     * Constructs an ItemRejectRouter with the given configuration, available sinks, and optional launch-mode override.
+     *
+     * @param itemRejectConfig configuration that controls reject publishing behaviour
+     * @param pipelineStepConfig pipeline step configuration used to determine recover-on-failure settings
+     * @param itemRejectSinks provider collection of available ItemRejectSink implementations
+     * @param launchModeOverride optional launch mode to use instead of the runtime default (may be null)
+     */
     ItemRejectRouter(
         ItemRejectConfig itemRejectConfig,
         PipelineStepConfig pipelineStepConfig,
@@ -79,10 +87,28 @@ public class ItemRejectRouter {
         this.launchModeOverride = launchModeOverride;
     }
 
+    /**
+     * Observes application startup and initializes the item reject router.
+     *
+     * @param event the startup event that triggers initialization
+     */
     void onStart(@Observes StartupEvent event) {
         initialize();
     }
 
+    /**
+     * Initialize and select the configured ItemRejectSink, validate its startup compatibility with
+     * configuration, enforce recover-on-failure durability constraints, and set the active sink.
+     *
+     * <p>If the selected sink reports a startup validation error and strict startup is enabled,
+     * initialization will fail. If recover-on-failure is configured but the selected sink is not
+     * durable, initialization will fail when running in production mode; otherwise a warning is logged.
+     * On success, the selected sink is stored for subsequent use.
+     *
+     * @throws IllegalStateException if a startup validation error occurs and strict startup is enabled,
+     *                               or if recover-on-failure is enabled with a non-durable sink while
+     *                               running in production mode
+     */
     void initialize() {
         ItemRejectSink selected = selectSink(itemRejectConfig.provider());
         selected.startupValidationError(itemRejectConfig).ifPresent(message -> {
@@ -111,15 +137,15 @@ public class ItemRejectRouter {
     }
 
     /**
-     * Publishes one rejected item.
+     * Publish metadata for a single rejected item to the configured item-reject sink.
      *
-     * @param stepClass step class
-     * @param item rejected item
-     * @param error failure cause
-     * @param retriesObserved retries observed before final failure
-     * @param retryLimit configured retry limit
+     * @param stepClass the processing step class where the rejection occurred (may be null)
+     * @param item the rejected item payload
+     * @param error the failure that caused the rejection
+     * @param retriesObserved number of retry attempts observed before the final failure (may be null)
+     * @param retryLimit configured retry limit for the step (may be null)
      * @param <O> step output type
-     * @return completion as null item of output type
+     * @return `null` of the step's output type on successful completion
      */
     public <O> Uni<O> publishItemReject(
         Class<?> stepClass,
@@ -140,16 +166,19 @@ public class ItemRejectRouter {
     }
 
     /**
-     * Publishes one rejected stream summary.
+     * Publish a rejection summary for a failed stream.
      *
-     * @param stepClass step class
-     * @param sampleItems sample items collected from the stream
-     * @param totalItemCount total items seen in the stream
-     * @param error failure cause
-     * @param retriesObserved retries observed before final failure
-     * @param retryLimit configured retry limit
+     * Builds and publishes an ItemRejectEnvelope that contains a sample of items and the total
+     * item count for the stream, along with error and retry metadata.
+     *
+     * @param stepClass the step's implementation class (may be null)
+     * @param sampleItems a sample of items from the failed stream; may be null, treated as an empty list
+     * @param totalItemCount total number of items seen in the stream; negative values are treated as zero
+     * @param error the failure cause (may be null)
+     * @param retriesObserved number of retries observed before final failure; may be null
+     * @param retryLimit configured retry limit; may be null
      * @param <O> step output type
-     * @return completion as null item of output type
+     * @return `null` cast to the step's output type when publishing completes
      */
     public <O> Uni<O> publishStreamReject(
         Class<?> stepClass,
@@ -173,6 +202,12 @@ public class ItemRejectRouter {
         return publishEnvelope(envelope).replaceWith((O) null);
     }
 
+    /**
+     * Publishes an ItemRejectEnvelope through the selected sink while applying the configured failure policy.
+     *
+     * @param envelope the item reject envelope to publish
+     * @return `void` on successful publication; if the configured failure policy is `CONTINUE`, publish failures are logged and the returned completion succeeds normally, otherwise (policy `FAIL_PIPELINE`) publish failures are propagated. 
+     */
     private Uni<Void> publishEnvelope(ItemRejectEnvelope envelope) {
         ItemRejectSink selected = ensureSinkInitialized();
         Uni<Void> publish = selected.publish(envelope);
@@ -190,6 +225,18 @@ public class ItemRejectRouter {
             .replaceWithVoid();
     }
 
+    /**
+     * Build an ItemRejectEnvelope containing transport and pipeline context, step metadata, retry information, error details, timestamp, fingerprint, and optional payload/item count.
+     *
+     * @param stepClass       the step's class; used to record step class name and simple name (may be null)
+     * @param scope           rejection scope, typically "ITEM" or "STREAM"
+     * @param payloadSource   original object used for payload and fingerprint calculation; payload may be omitted depending on configuration
+     * @param itemCount       total number of items for stream rejects; ignored for item-level rejects
+     * @param error           the failure that caused the reject; if null, a placeholder error is recorded
+     * @param retriesObserved number of retries already observed (may be null)
+     * @param retryLimit      configured retry limit (may be null)
+     * @return an ItemRejectEnvelope populated with transport identifiers, pipeline replay mode, step information, scope, retry metrics, error class and message, event timestamp, fingerprint, optional item count (for streams), and optional payload
+     */
     private ItemRejectEnvelope buildEnvelope(
         Class<?> stepClass,
         String scope,
@@ -234,6 +281,13 @@ public class ItemRejectRouter {
             payload);
     }
 
+    /**
+     * Ensure the configured ItemRejectSink is initialized and return it.
+     *
+     * Initializes the sink lazily in a thread-safe manner if it has not been set.
+     *
+     * @return the initialized ItemRejectSink instance
+     */
     private ItemRejectSink ensureSinkInitialized() {
         ItemRejectSink selected = sink;
         if (selected != null) {
@@ -247,6 +301,13 @@ public class ItemRejectRouter {
         }
     }
 
+    /**
+     * Selects the ItemRejectSink implementation that matches the configured provider name and has the highest priority.
+     *
+     * @param providerName configured provider name; if null or blank, any available provider is considered a match
+     * @return the matching ItemRejectSink with the highest priority
+     * @throws IllegalStateException if no matching ItemRejectSink provider is found
+     */
     private ItemRejectSink selectSink(String providerName) {
         return itemRejectSinks.stream()
             .filter(provider -> providerMatches(provider.providerName(), providerName))
@@ -256,6 +317,14 @@ public class ItemRejectRouter {
                 "No ItemRejectSink provider found for '" + providerName + "'."));
     }
 
+    /**
+     * Determines whether recover-on-failure is enabled for the pipeline.
+     *
+     * Checks the global defaults first; if not enabled there, returns `true` when any step override
+     * explicitly enables recover-on-failure.
+     *
+     * @return `true` if defaults.enable recover-on-failure or any step override sets recover-on-failure to `true`, `false` otherwise
+     */
     private boolean recoverOnFailureConfigured() {
         if (pipelineStepConfig == null) {
             return false;
@@ -272,10 +341,21 @@ public class ItemRejectRouter {
             .anyMatch(stepConfig -> Boolean.TRUE.equals(stepConfig.recoverOnFailure()));
     }
 
+    /**
+     * Indicates whether the application is running in production (normal) launch mode.
+     *
+     * @return true if the resolved launch mode is {@link io.quarkus.runtime.LaunchMode#NORMAL}, false otherwise.
+     */
     private boolean isProductionLaunchMode() {
         return launchMode() == LaunchMode.NORMAL;
     }
 
+    /**
+     * Resolve the effective launch mode for this router.
+     *
+     * @return the configured launch mode override if present; otherwise the current runtime launch mode,
+     *         or `LaunchMode.NORMAL` if the runtime mode cannot be determined
+     */
     private LaunchMode launchMode() {
         if (launchModeOverride != null) {
             return launchModeOverride;
@@ -287,6 +367,13 @@ public class ItemRejectRouter {
         }
     }
 
+    /**
+     * Determines whether a provider's name matches the configured provider filter.
+     *
+     * @param availableName  the provider name available from a sink implementation
+     * @param configuredName the configured provider name filter; if null or blank, treated as a wildcard that matches any provider
+     * @return `true` if `configuredName` is null/blank or equals `availableName` ignoring case, `false` otherwise
+     */
     private static boolean providerMatches(String availableName, String configuredName) {
         if (configuredName == null || configuredName.isBlank()) {
             return true;
@@ -294,6 +381,16 @@ public class ItemRejectRouter {
         return configuredName.equalsIgnoreCase(availableName);
     }
 
+    /**
+     * Produces a stable fingerprint for the given payload.
+     *
+     * Attempts to serialize the payload to JSON and returns the SHA-256 digest as a hex string.
+     * If JSON serialization fails, computes the SHA-256 digest of payload.toString() in UTF-8.
+     * If digest computation fails, returns the hexadecimal representation of payload.hashCode().
+     *
+     * @param payload the object to fingerprint (may be null)
+     * @return a hex string representing the payload fingerprint
+     */
     private static String fingerprint(Object payload) {
         try {
             byte[] bytes = PipelineJson.mapper().writeValueAsBytes(payload);
