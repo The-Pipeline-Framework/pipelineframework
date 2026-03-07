@@ -16,6 +16,10 @@
 
 package org.pipelineframework.step;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
+
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
@@ -29,7 +33,7 @@ import org.pipelineframework.telemetry.PipelineTelemetry;
  * @param <I> the input type
  * @param <O> the output type
  */
-public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, DeadLetterQueue<I, O> {
+public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, ItemRejectable<I, O> {
 
     /** Logger for StepManyToOne operations. */
     Logger LOG = Logger.getLogger(StepManyToOne.class);
@@ -37,14 +41,14 @@ public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, Dead
     /**
      * Apply the step to a stream of inputs and produce a single aggregated output.
      *
-     * <p>The method applies the configured backpressure strategy to the provided input stream,
-     * applies retry semantics on failures (excluding NullPointerException), and — if configured —
-     * recovers failed processing by delegating the collected stream to the dead-letter handler.
+     * <p>The method applies the configured backpressure strategy to the input stream, applies the
+     * step's reduction, enforces the step's retry policy on failures, and when configured delegates
+     * failed processing to the item reject sink for recovery.
      *
      * @param input the stream of inputs to be processed
-     * @return a Uni that emits the step's single output; if retries are exhausted the Uni will
-     *         either fail with the original error or, if recovery is enabled, emit the value
-     *         produced by the dead-letter handling (which may be null)
+     * @return the single aggregated output produced by the step; if retries are exhausted the step
+     *         either fails with the original error or, if recovery is enabled, yields the value
+     *         produced by the item reject handling (which may be null)
      */
     @Override
     default Uni<O> apply(Multi<I> input) {
@@ -65,7 +69,17 @@ public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, Dead
             backpressuredInput = BackpressureBufferMetrics.buffer(backpressuredInput, this.getClass(), 128);
         }
 
-        final Multi<I> finalInput = backpressuredInput;
+        final int maxSampleSize = 5;
+        final ArrayList<I> sample = new ArrayList<>();
+        final AtomicLong totalCount = new AtomicLong();
+        final Multi<I> finalInput = backpressuredInput.onItem().invoke(item -> {
+            totalCount.incrementAndGet();
+            synchronized (sample) {
+                if (sample.size() < maxSampleSize) {
+                    sample.add(item);
+                }
+            }
+        });
 
         return applyReduce(finalInput)
             .onItem().invoke(resultValue -> {
@@ -87,8 +101,11 @@ public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, Dead
                         LOG.debugf("Reactive Step %s: failed to process stream: %s",
                             this.getClass().getSimpleName(), error.getMessage());
                     }
-
-                    return deadLetterStream(finalInput, error);
+                    List<I> snapshot;
+                    synchronized (sample) {
+                        snapshot = List.copyOf(sample);
+                    }
+                    return rejectStream(snapshot, totalCount.get(), error);
                 } else {
                     return Uni.createFrom().failure(error);
                 }
@@ -96,60 +113,14 @@ public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, Dead
     }
 
     /**
-     * Apply the reduction operation to a stream of inputs, producing a single output.
-     * This method would typically be implemented by gRPC client adapters.
-     *
-     * @param input The stream of inputs as a Multi
-     * @return The single output as a Uni
-     */
+ * Produce a single aggregated result by reducing the provided stream of inputs.
+ *
+ * Implementations should consume the provided stream and produce one final output value;
+ * the input may already have had backpressure handling applied by the caller.
+ *
+ * @param input the stream of input items to be reduced
+ * @return the aggregated output produced from the input stream
+ */
     Uni<O> applyReduce(Multi<I> input);
 
-    /**
-     * Handle a failed stream by sending it to a dead letter queue or similar mechanism reactively.
-     *
-     * @param input The input stream that failed to process
-     * @param error The error that occurred
-     * @return The result of dead letter handling as a Uni (can be null)
-     */
-    default Uni<O> deadLetterStream(Multi<I> input, Throwable error) {
-        // Perform a single pass to collect a sample and count the total items
-        final int maxSampleSize = 5; // Only keep a few sample items to avoid memory issues
-
-        // Cache the items and count to handle both successful and failed streams
-        // If the input stream fails, we'll still return a successful result with zero count
-        return input
-            .collect().in(
-                // Supplier: Initialize the collection state with empty list and zero count
-                () -> new java.util.AbstractMap.SimpleEntry<>(new java.util.ArrayList<I>(), 0L),
-                // Accumulator: Add item to sample list if under maxSampleSize, increment count
-                (state, item) -> {
-                    java.util.List<I> sampleList = state.getKey();
-                    Long count = state.getValue();
-
-                    if (sampleList.size() < maxSampleSize) {
-                        sampleList.add(item);
-                    }
-                    state.setValue(count + 1);
-                }
-            )
-            // If collecting the stream fails, recover with an empty state (no items, count 0)
-            .onFailure().recoverWithItem(throwable -> {
-                LOG.debug("Stream failed during dead letter collection, returning empty state", throwable);
-                return new java.util.AbstractMap.SimpleEntry<>(new java.util.ArrayList<>(), 0L);
-            })
-            .onItem().transformToUni(state -> {
-                java.util.List<I> sampleList = state.getKey();
-                Long count = state.getValue();
-
-                String sampleInfo;
-                if (!sampleList.isEmpty()) {
-                    sampleInfo = String.format("first %d of %d items",
-                        Math.min(sampleList.size(), maxSampleSize), count);
-                } else {
-                    sampleInfo = String.format("%d items", count);
-                }
-                LOG.errorf("DLQ drop for stream with %s: %s", sampleInfo, error.getMessage());
-                return Uni.createFrom().nullItem();
-            });
-    }
 }

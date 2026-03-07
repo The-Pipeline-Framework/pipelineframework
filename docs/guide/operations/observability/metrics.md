@@ -103,8 +103,9 @@ Treat these as required operational signals for GA readiness:
 2. stale commit rejections,
 3. retry scheduling rate and retry-saturation ratio,
 4. due-sweeper recovery count (persisted-before-dispatch gap recovery),
-5. DLQ publish count and backlog depth,
-6. queue depth and worker lag.
+5. execution DLQ publish count and backlog depth,
+6. item reject sink publish count and backlog depth,
+7. queue depth and worker lag.
 
 Use these to separate dependency outages (high retries, low success) from coordination issues (high stale/lease conflicts).
 
@@ -113,6 +114,10 @@ Implementation note:
 1. TPF core already emits step/pipeline telemetry.
 2. Control-plane metrics may be emitted by provider integration or surrounding platform telemetry (queue, datastore, worker runtime).
 3. Keep metric names stable per environment even if data comes from different backends.
+
+Step-level reject signal:
+
+- `tpf.step.reject.total` (counter): rejected step items published to item reject sinks.
 
 ## Design Tips
 

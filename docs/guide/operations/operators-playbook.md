@@ -106,14 +106,21 @@ Fast triage checklist:
 1. Identify the failing step and failure type (transient vs non-retryable).
 2. Confirm whether the failure is dependency/systemic or payload/data specific.
 3. If systemic: stabilise dependency first, then replay.
-4. If data-specific: isolate failing payloads and route to DLQ (Dead Letter Queue)/parking investigation.
+4. If data-specific: isolate failing payloads and route to item reject sink for single-item/data-level failures, or to execution DLQ for job/task-level or systemic execution failures.
 
-### DLQ re-drive guidance
+### Execution DLQ Re-drive Guidance
 
-1. Treat DLQ payloads as at-least-once replays.
-2. Preserve the original transition identity when replaying.
-3. Re-drive in bounded batches and monitor duplicate suppression metrics/logs.
-4. Do not bulk replay until downstream idempotency controls are validated.
+1. Treat execution DLQ entries as at-least-once replays of full execution transitions.
+2. Preserve the original transition identity (`executionId:stepIndex:attempt`) when replaying.
+3. Re-drive in bounded execution batches and keep ordering by execution context when required by downstream side effects.
+4. Validate downstream idempotency controls before bulk replay and monitor duplicate-suppression and stale-commit metrics during replay.
+
+### Item Reject Re-drive Guidance
+
+1. Treat item reject entries as at-least-once replays of item-level processing failures.
+2. Preserve the originating execution and step identity; attach transition identity when available.
+3. Re-drive with smaller batch sizes than execution DLQ replays, because payload skew and poison records are more common at item level.
+4. Validate item-level dedupe/idempotency controls before replay and monitor item reject throughput, duplicate suppression, and repeated-fingerprint rates.
 
 Recommended transition identity:
 
@@ -154,5 +161,5 @@ Only include keys that change behaviour materially:
 
 - [Operator Troubleshooting Matrix](/guide/operations/operators-troubleshooting)
 - [Operator Build Troubleshooting](/guide/development/operators-build-troubleshooting)
-- [Error Handling & DLQ](/guide/operations/error-handling)
+- [Error Handling and Recovery](/guide/operations/error-handling)
 - [Observability](/guide/operations/observability/)

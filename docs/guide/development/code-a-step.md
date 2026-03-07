@@ -74,6 +74,15 @@ return processPayment(paymentRecord)
     .onFailure().recoverWithUni(error -> Uni.createFrom().item(createErrorStatus(paymentRecord, error)));
 ```
 
+Use Item Reject Sink flows for per-item recoverable failures that should be audited and handled later:
+
+```java
+return processBatch(batchItem)
+    .onFailure().recoverWithUni(error ->
+        rejectItem(batchItem, error)
+            .replaceWith(createSkippedStatus(batchItem)));
+```
+
 ## 5) Test in Isolation
 
 ```java
@@ -98,5 +107,5 @@ class ProcessPaymentServiceTest {
 
 1. Keep step logic focused on a single responsibility.
 2. Prefer non-blocking I/O and reactive composition.
-3. Map errors to domain responses or DLQ flows.
+3. Choose failure handling by intent: use domain responses for expected business outcomes (for example validation/state conflicts), use Item Reject Sink (`rejectItem` / `rejectStream`) for per-item recoverable processing failures that must be tracked for downstream handling, and use execution DLQ for systemic or unrecoverable pipeline/execution failures.
 4. Validate input early and consistently.
