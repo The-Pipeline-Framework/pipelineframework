@@ -27,9 +27,6 @@ steps:
       - name: "kitchenTicketId"
         type: "UUID"
         protoType: "string"
-      - name: "lineageDigest"
-        type: "String"
-        protoType: "string"
     outputTypeName: "DeliveryAssigned"
     outputFields:
       - name: "orderId"

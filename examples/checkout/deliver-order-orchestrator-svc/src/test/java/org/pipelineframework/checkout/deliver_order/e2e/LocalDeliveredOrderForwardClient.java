@@ -5,6 +5,7 @@ import io.smallrye.mutiny.subscription.Cancellable;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Alternative;
+import java.util.Objects;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -96,6 +97,8 @@ public class LocalDeliveredOrderForwardClient implements DeliveredOrderForwardCl
         Consumer<OrderDeliveredSvc.DeliveredOrder> onForwarded,
         Consumer<Throwable> onForwardFailure
     ) {
+        Objects.requireNonNull(onForwarded, "onForwarded must not be null");
+        Objects.requireNonNull(onForwardFailure, "onForwardFailure must not be null");
         LOG.info("Using local delivered-order forward client");
         return deliveredOrderStream
             .onItem().invoke(item -> {

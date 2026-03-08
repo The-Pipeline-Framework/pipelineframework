@@ -26,6 +26,13 @@
         </dependency>
         <dependency>
             <groupId>org.pipelineframework.checkout</groupId>
+            <artifactId>common</artifactId>
+            <version>${project.version}</version>
+            <classifier>tests</classifier>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.pipelineframework.checkout</groupId>
             <artifactId>deliver-order-orchestrator-svc</artifactId>
             <version>${project.version}</version>
         </dependency>

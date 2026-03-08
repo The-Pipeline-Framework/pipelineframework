@@ -3,6 +3,9 @@ package org.pipelineframework.orchestrator;
 import io.smallrye.config.SmallRyeConfig;
 import io.smallrye.config.SmallRyeConfigBuilder;
 import org.eclipse.microprofile.config.spi.ConfigSource;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.api.Test;
 
 import java.time.Duration;
@@ -10,6 +13,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -40,152 +45,15 @@ class PipelineOrchestratorConfigTest {
         assertFalse(config.dlqUrl().isPresent());
     }
 
-    @Test
-    void configReadsOrchestratorModeFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.mode", "QUEUE_ASYNC"
-        ));
-
-        assertEquals(OrchestratorMode.QUEUE_ASYNC, config.mode());
-    }
-
-    @Test
-    void configReadsDefaultTenantFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.default-tenant", "custom-tenant"
-        ));
-
-        assertEquals("custom-tenant", config.defaultTenant());
-    }
-
-    @Test
-    void configReadsExecutionTtlDaysFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.execution-ttl-days", "14"
-        ));
-
-        assertEquals(14, config.executionTtlDays());
-    }
-
-    @Test
-    void configReadsLeaseMsFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.lease-ms", "60000"
-        ));
-
-        assertEquals(60000L, config.leaseMs());
-    }
-
-    @Test
-    void configReadsMaxRetriesFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.max-retries", "5"
-        ));
-
-        assertEquals(5, config.maxRetries());
-    }
-
-    @Test
-    void configReadsRetryDelayFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.retry-delay", "PT15S"
-        ));
-
-        assertEquals(Duration.ofSeconds(15), config.retryDelay());
-    }
-
-    @Test
-    void configReadsRetryMultiplierFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.retry-multiplier", "3.0"
-        ));
-
-        assertEquals(3.0, config.retryMultiplier());
-    }
-
-    @Test
-    void configReadsSweepIntervalFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.sweep-interval", "PT1M"
-        ));
-
-        assertEquals(Duration.ofMinutes(1), config.sweepInterval());
-    }
-
-    @Test
-    void configReadsSweepLimitFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.sweep-limit", "200"
-        ));
-
-        assertEquals(200, config.sweepLimit());
-    }
-
-    @Test
-    void configReadsIdempotencyPolicyFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.idempotency-policy", "CLIENT_KEY_REQUIRED"
-        ));
-
-        assertEquals(OrchestratorIdempotencyPolicy.CLIENT_KEY_REQUIRED, config.idempotencyPolicy());
-    }
-
-    @Test
-    void configReadsStateProviderFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.state-provider", "dynamo"
-        ));
-
-        assertEquals("dynamo", config.stateProvider());
-    }
-
-    @Test
-    void configReadsDispatcherProviderFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.dispatcher-provider", "sqs"
-        ));
-
-        assertEquals("sqs", config.dispatcherProvider());
-    }
-
-    @Test
-    void configReadsDlqProviderFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.dlq-provider", "sqs"
-        ));
-
-        assertEquals("sqs", config.dlqProvider());
-    }
-
-    @Test
-    void configReadsQueueUrlFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.queue-url", "https://sqs.us-east-1.amazonaws.com/123456789012/my-queue"
-        ));
-
-        Optional<String> queueUrl = config.queueUrl();
-        assertTrue(queueUrl.isPresent());
-        assertEquals("https://sqs.us-east-1.amazonaws.com/123456789012/my-queue", queueUrl.get());
-    }
-
-    @Test
-    void configReadsDlqUrlFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.dlq-url", "https://sqs.us-east-1.amazonaws.com/123456789012/my-dlq"
-        ));
-
-        Optional<String> dlqUrl = config.dlqUrl();
-        assertTrue(dlqUrl.isPresent());
-        assertEquals("https://sqs.us-east-1.amazonaws.com/123456789012/my-dlq", dlqUrl.get());
-    }
-
-    @Test
-    void configReadsStrictStartupFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.strict-startup", "false"
-        ));
-
-        assertFalse(config.strictStartup());
+    @ParameterizedTest(name = "{index} => {0}={1}")
+    @MethodSource("singlePropertyOverrides")
+    void configReadsSinglePropertyOverride(
+        String propertyKey,
+        String propertyValue,
+        Consumer<PipelineOrchestratorConfig> assertion
+    ) {
+        PipelineOrchestratorConfig config = buildConfig(Map.of(propertyKey, propertyValue));
+        assertion.accept(config);
     }
 
     @Test
@@ -200,45 +68,6 @@ class PipelineOrchestratorConfigTest {
         assertFalse(dynamoConfig.endpointOverride().isPresent());
     }
 
-    @Test
-    void dynamoConfigReadsExecutionTableFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.dynamo.execution-table", "custom_execution"
-        ));
-
-        assertEquals("custom_execution", config.dynamo().executionTable());
-    }
-
-    @Test
-    void dynamoConfigReadsExecutionKeyTableFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.dynamo.execution-key-table", "custom_execution_key"
-        ));
-
-        assertEquals("custom_execution_key", config.dynamo().executionKeyTable());
-    }
-
-    @Test
-    void dynamoConfigReadsRegionFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.dynamo.region", "us-west-2"
-        ));
-
-        Optional<String> region = config.dynamo().region();
-        assertTrue(region.isPresent());
-        assertEquals("us-west-2", region.get());
-    }
-
-    @Test
-    void dynamoConfigReadsEndpointOverrideFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.dynamo.endpoint-override", "http://localhost:8000"
-        ));
-
-        Optional<String> endpoint = config.dynamo().endpointOverride();
-        assertTrue(endpoint.isPresent());
-        assertEquals("http://localhost:8000", endpoint.get());
-    }
 
     @Test
     void sqsConfigUsesDefaultValues() {
@@ -251,35 +80,142 @@ class PipelineOrchestratorConfigTest {
         assertTrue(sqsConfig.localLoopback());
     }
 
-    @Test
-    void sqsConfigReadsRegionFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.sqs.region", "eu-west-1"
-        ));
-
-        Optional<String> region = config.sqs().region();
-        assertTrue(region.isPresent());
-        assertEquals("eu-west-1", region.get());
-    }
-
-    @Test
-    void sqsConfigReadsEndpointOverrideFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.sqs.endpoint-override", "http://localhost:9324"
-        ));
-
-        Optional<String> endpoint = config.sqs().endpointOverride();
-        assertTrue(endpoint.isPresent());
-        assertEquals("http://localhost:9324", endpoint.get());
-    }
-
-    @Test
-    void sqsConfigReadsLocalLoopbackFromProperties() {
-        PipelineOrchestratorConfig config = buildConfig(Map.of(
-            "pipeline.orchestrator.sqs.local-loopback", "false"
-        ));
-
-        assertFalse(config.sqs().localLoopback());
+    private static Stream<Arguments> singlePropertyOverrides() {
+        return Stream.of(
+            Arguments.of(
+                "pipeline.orchestrator.mode",
+                "QUEUE_ASYNC",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals(OrchestratorMode.QUEUE_ASYNC, config.mode())),
+            Arguments.of(
+                "pipeline.orchestrator.default-tenant",
+                "custom-tenant",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals("custom-tenant", config.defaultTenant())),
+            Arguments.of(
+                "pipeline.orchestrator.execution-ttl-days",
+                "14",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals(14, config.executionTtlDays())),
+            Arguments.of(
+                "pipeline.orchestrator.lease-ms",
+                "60000",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals(60000L, config.leaseMs())),
+            Arguments.of(
+                "pipeline.orchestrator.max-retries",
+                "5",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals(5, config.maxRetries())),
+            Arguments.of(
+                "pipeline.orchestrator.retry-delay",
+                "PT15S",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals(Duration.ofSeconds(15), config.retryDelay())),
+            Arguments.of(
+                "pipeline.orchestrator.retry-multiplier",
+                "3.0",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals(3.0, config.retryMultiplier())),
+            Arguments.of(
+                "pipeline.orchestrator.sweep-interval",
+                "PT1M",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals(Duration.ofMinutes(1), config.sweepInterval())),
+            Arguments.of(
+                "pipeline.orchestrator.sweep-limit",
+                "200",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals(200, config.sweepLimit())),
+            Arguments.of(
+                "pipeline.orchestrator.idempotency-policy",
+                "CLIENT_KEY_REQUIRED",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals(OrchestratorIdempotencyPolicy.CLIENT_KEY_REQUIRED, config.idempotencyPolicy())),
+            Arguments.of(
+                "pipeline.orchestrator.state-provider",
+                "dynamo",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals("dynamo", config.stateProvider())),
+            Arguments.of(
+                "pipeline.orchestrator.dispatcher-provider",
+                "sqs",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals("sqs", config.dispatcherProvider())),
+            Arguments.of(
+                "pipeline.orchestrator.dlq-provider",
+                "sqs",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals("sqs", config.dlqProvider())),
+            Arguments.of(
+                "pipeline.orchestrator.queue-url",
+                "https://sqs.us-east-1.amazonaws.com/123456789012/my-queue",
+                (Consumer<PipelineOrchestratorConfig>) config -> {
+                    Optional<String> queueUrl = config.queueUrl();
+                    assertTrue(queueUrl.isPresent());
+                    assertEquals("https://sqs.us-east-1.amazonaws.com/123456789012/my-queue", queueUrl.get());
+                }),
+            Arguments.of(
+                "pipeline.orchestrator.dlq-url",
+                "https://sqs.us-east-1.amazonaws.com/123456789012/my-dlq",
+                (Consumer<PipelineOrchestratorConfig>) config -> {
+                    Optional<String> dlqUrl = config.dlqUrl();
+                    assertTrue(dlqUrl.isPresent());
+                    assertEquals("https://sqs.us-east-1.amazonaws.com/123456789012/my-dlq", dlqUrl.get());
+                }),
+            Arguments.of(
+                "pipeline.orchestrator.strict-startup",
+                "false",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertFalse(config.strictStartup())),
+            Arguments.of(
+                "pipeline.orchestrator.dynamo.execution-table",
+                "custom_execution",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals("custom_execution", config.dynamo().executionTable())),
+            Arguments.of(
+                "pipeline.orchestrator.dynamo.execution-key-table",
+                "custom_execution_key",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertEquals("custom_execution_key", config.dynamo().executionKeyTable())),
+            Arguments.of(
+                "pipeline.orchestrator.dynamo.region",
+                "us-west-2",
+                (Consumer<PipelineOrchestratorConfig>) config -> {
+                    Optional<String> region = config.dynamo().region();
+                    assertTrue(region.isPresent());
+                    assertEquals("us-west-2", region.get());
+                }),
+            Arguments.of(
+                "pipeline.orchestrator.dynamo.endpoint-override",
+                "http://localhost:8000",
+                (Consumer<PipelineOrchestratorConfig>) config -> {
+                    Optional<String> endpoint = config.dynamo().endpointOverride();
+                    assertTrue(endpoint.isPresent());
+                    assertEquals("http://localhost:8000", endpoint.get());
+                }),
+            Arguments.of(
+                "pipeline.orchestrator.sqs.region",
+                "eu-west-1",
+                (Consumer<PipelineOrchestratorConfig>) config -> {
+                    Optional<String> region = config.sqs().region();
+                    assertTrue(region.isPresent());
+                    assertEquals("eu-west-1", region.get());
+                }),
+            Arguments.of(
+                "pipeline.orchestrator.sqs.endpoint-override",
+                "http://localhost:9324",
+                (Consumer<PipelineOrchestratorConfig>) config -> {
+                    Optional<String> endpoint = config.sqs().endpointOverride();
+                    assertTrue(endpoint.isPresent());
+                    assertEquals("http://localhost:9324", endpoint.get());
+                }),
+            Arguments.of(
+                "pipeline.orchestrator.sqs.local-loopback",
+                "false",
+                (Consumer<PipelineOrchestratorConfig>) config ->
+                    assertFalse(config.sqs().localLoopback()))
+        );
     }
 
     @Test

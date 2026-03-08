@@ -13,7 +13,6 @@ import org.pipelineframework.checkout.deliverorder.grpc.OrderDeliveredSvc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -24,6 +23,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.pipelineframework.checkout.common.connector.TestAwaitUtils.awaitUntil;
 
 class DeliverToNextIngestBridgeTest {
 
@@ -519,18 +519,4 @@ class DeliverToNextIngestBridgeTest {
         return field;
     }
 
-    private static void awaitUntil(BooleanSupplier condition, String message) {
-        for (int i = 0; i < 50; i++) {
-            if (condition.getAsBoolean()) {
-                return;
-            }
-            try {
-                Thread.sleep(10L);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            }
-        }
-        assertTrue(condition.getAsBoolean(), message);
-    }
 }

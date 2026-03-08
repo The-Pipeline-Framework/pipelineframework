@@ -184,8 +184,7 @@ public class DeliverToNextIngestBridge {
             String dispatchId = ConnectorUtils.readField(message, "dispatch_id");
             String dispatchedAt = ConnectorUtils.readField(message, "dispatched_at");
             String deliveredAt = ConnectorUtils.readField(message, "delivered_at");
-            if (!orderId.isBlank() && !customerId.isBlank() && !readyAt.isBlank()
-                && !dispatchId.isBlank() && !dispatchedAt.isBlank() && !deliveredAt.isBlank()) {
+            if (hasRequiredDeliveredFields(orderId, customerId, readyAt, dispatchId, dispatchedAt, deliveredAt)) {
                 if (isDuplicateOrInFlight(orderId, dispatchId, deliveredAt)) {
                     return null;
                 }
