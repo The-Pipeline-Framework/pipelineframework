@@ -154,6 +154,38 @@ public class ItemRejectRouter {
         Integer retriesObserved,
         Integer retryLimit
     ) {
+        return publishItemReject(
+            stepClass,
+            item,
+            error,
+            retriesObserved,
+            retryLimit,
+            TransportDispatchMetadataHolder.get(),
+            PipelineContextHolder.get());
+    }
+
+    /**
+     * Publish metadata for a single rejected item using explicitly provided transport/context metadata.
+     *
+     * @param stepClass the processing step class where the rejection occurred (may be null)
+     * @param item the rejected item payload
+     * @param error the failure that caused the rejection
+     * @param retriesObserved number of retry attempts observed before the final failure (may be null)
+     * @param retryLimit configured retry limit for the step (may be null)
+     * @param transport captured dispatch metadata (preferred over thread-local lookup; may be null)
+     * @param context captured pipeline context (preferred over thread-local lookup; may be null)
+     * @param <O> step output type
+     * @return `null` of the step's output type on successful completion
+     */
+    public <O> Uni<O> publishItemReject(
+        Class<?> stepClass,
+        Object item,
+        Throwable error,
+        Integer retriesObserved,
+        Integer retryLimit,
+        TransportDispatchMetadata transport,
+        PipelineContext context
+    ) {
         ItemRejectEnvelope envelope = buildEnvelope(
             stepClass,
             SCOPE_ITEM,
@@ -161,7 +193,9 @@ public class ItemRejectRouter {
             1L,
             error,
             retriesObserved,
-            retryLimit);
+            retryLimit,
+            transport,
+            context);
         return publishEnvelope(envelope).chain(() -> Uni.createFrom().nullItem());
     }
 
@@ -188,6 +222,41 @@ public class ItemRejectRouter {
         Integer retriesObserved,
         Integer retryLimit
     ) {
+        return publishStreamReject(
+            stepClass,
+            sampleItems,
+            totalItemCount,
+            error,
+            retriesObserved,
+            retryLimit,
+            TransportDispatchMetadataHolder.get(),
+            PipelineContextHolder.get());
+    }
+
+    /**
+     * Publish a rejection summary for a failed stream using explicitly provided transport/context metadata.
+     *
+     * @param stepClass the step's implementation class (may be null)
+     * @param sampleItems a sample of items from the failed stream; may be null, treated as an empty list
+     * @param totalItemCount total number of items seen in the stream; negative values are treated as zero
+     * @param error the failure cause (may be null)
+     * @param retriesObserved number of retries observed before final failure; may be null
+     * @param retryLimit configured retry limit; may be null
+     * @param transport captured dispatch metadata (preferred over thread-local lookup; may be null)
+     * @param context captured pipeline context (preferred over thread-local lookup; may be null)
+     * @param <O> step output type
+     * @return `null` cast to the step's output type when publishing completes
+     */
+    public <O> Uni<O> publishStreamReject(
+        Class<?> stepClass,
+        List<?> sampleItems,
+        long totalItemCount,
+        Throwable error,
+        Integer retriesObserved,
+        Integer retryLimit,
+        TransportDispatchMetadata transport,
+        PipelineContext context
+    ) {
         Object payload = Map.of(
             "sample", sampleItems == null ? List.of() : List.copyOf(sampleItems),
             "totalCount", Math.max(0L, totalItemCount));
@@ -198,7 +267,9 @@ public class ItemRejectRouter {
             Math.max(0L, totalItemCount),
             error,
             retriesObserved,
-            retryLimit);
+            retryLimit,
+            transport,
+            context);
         return publishEnvelope(envelope).chain(() -> Uni.createFrom().nullItem());
     }
 
@@ -244,10 +315,17 @@ public class ItemRejectRouter {
         Long itemCount,
         Throwable error,
         Integer retriesObserved,
-        Integer retryLimit
+        Integer retryLimit,
+        TransportDispatchMetadata providedTransport,
+        PipelineContext providedContext
     ) {
-        TransportDispatchMetadata transport = TransportDispatchMetadataHolder.get();
-        PipelineContext context = PipelineContextHolder.get();
+        // Prefer metadata captured upstream before reactive thread hops; fallback to thread-local lookup.
+        TransportDispatchMetadata transport = providedTransport == null
+            ? TransportDispatchMetadataHolder.get()
+            : providedTransport;
+        PipelineContext context = providedContext == null
+            ? PipelineContextHolder.get()
+            : providedContext;
 
         Throwable normalizedError = error == null
             ? new IllegalStateException("Unknown reject failure")

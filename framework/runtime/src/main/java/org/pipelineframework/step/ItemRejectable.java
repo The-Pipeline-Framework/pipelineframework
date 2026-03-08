@@ -25,6 +25,10 @@ import jakarta.enterprise.inject.CreationException;
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.inject.spi.CDI;
 import org.jboss.logging.Logger;
+import org.pipelineframework.context.PipelineContext;
+import org.pipelineframework.context.PipelineContextHolder;
+import org.pipelineframework.context.TransportDispatchMetadata;
+import org.pipelineframework.context.TransportDispatchMetadataHolder;
 import org.pipelineframework.reject.ItemRejectRouter;
 
 /**
@@ -59,8 +63,18 @@ public interface ItemRejectable<I, O> {
      */
     default Uni<O> rejectItem(I failedItem, Throwable cause, Integer retriesObserved, Integer retryLimit) {
         Throwable normalizedCause = cause == null ? new IllegalStateException("Unknown reject failure") : cause;
+        // Capture context before reactive thread hops; thread-local holders may be empty later in async chains.
+        TransportDispatchMetadata transport = TransportDispatchMetadataHolder.get();
+        PipelineContext context = PipelineContextHolder.get();
         return resolveRouter()
-            .map(router -> router.<O>publishItemReject(this.getClass(), failedItem, normalizedCause, retriesObserved, retryLimit))
+            .map(router -> router.<O>publishItemReject(
+                this.getClass(),
+                failedItem,
+                normalizedCause,
+                retriesObserved,
+                retryLimit,
+                transport,
+                context))
             .orElseGet(() -> localFallbackReject(normalizedCause));
     }
 
@@ -95,6 +109,9 @@ public interface ItemRejectable<I, O> {
     ) {
         List<I> safeSample = sampleItems == null ? List.of() : List.copyOf(sampleItems);
         Throwable normalizedCause = cause == null ? new IllegalStateException("Unknown reject failure") : cause;
+        // Capture context before reactive thread hops; thread-local holders may be empty later in async chains.
+        TransportDispatchMetadata transport = TransportDispatchMetadataHolder.get();
+        PipelineContext context = PipelineContextHolder.get();
         return resolveRouter()
             .map(router -> router.<O>publishStreamReject(
                 this.getClass(),
@@ -102,7 +119,9 @@ public interface ItemRejectable<I, O> {
                 Math.max(0L, totalItemCount),
                 normalizedCause,
                 retriesObserved,
-                retryLimit))
+                retryLimit,
+                transport,
+                context))
             .orElseGet(() -> localFallbackReject(normalizedCause));
     }
 
