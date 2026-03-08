@@ -12,6 +12,8 @@ import org.pipelineframework.checkout.deliverorder.grpc.OrderDeliveredSvc;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -192,7 +194,7 @@ class DeliverToNextIngestBridgeTest {
             .build();
         outputBus.publish(deliveredOrder);
 
-        assertTrue(forwardedOrders.isEmpty());
+        assertNoForwardsObserved(forwardedOrders, "Expected invalid delivered order to be dropped");
     }
 
     @Test
@@ -217,7 +219,7 @@ class DeliverToNextIngestBridgeTest {
             .build();
         outputBus.publish(deliveredOrder);
 
-        assertTrue(forwardedOrders.isEmpty());
+        assertNoForwardsObserved(forwardedOrders, "Expected invalid delivered order to be dropped");
     }
 
     @Test
@@ -242,7 +244,7 @@ class DeliverToNextIngestBridgeTest {
             .build();
         outputBus.publish(deliveredOrder);
 
-        assertTrue(forwardedOrders.isEmpty());
+        assertNoForwardsObserved(forwardedOrders, "Expected invalid delivered order to be dropped");
     }
 
     @Test
@@ -289,7 +291,7 @@ class DeliverToNextIngestBridgeTest {
 
         outputBus.publish(mockMessage);
 
-        assertTrue(forwardedOrders.isEmpty());
+        assertNoForwardsObserved(forwardedOrders, "Expected invalid protobuf message to be dropped");
     }
 
     @Test
@@ -308,15 +310,44 @@ class DeliverToNextIngestBridgeTest {
         outputBus.publish(123);
         outputBus.publish(new Object());
 
-        assertTrue(forwardedOrders.isEmpty());
+        assertNoForwardsObserved(forwardedOrders, "Expected unsupported item types to be dropped");
     }
 
     @Test
     void bridgeFiltersDuplicatesWhenIdempotencyEnabled() {
         List<OrderDeliveredSvc.DeliveredOrder> forwardedOrders = new ArrayList<>();
-        DeliveredOrderForwardClient capturingClient = stream -> {
-            stream.subscribe().with(forwardedOrders::add);
-            return mock(Cancellable.class);
+        CountDownLatch ackLatch = new CountDownLatch(1);
+        AtomicInteger forwardedAttempts = new AtomicInteger(0);
+        DeliveredOrderForwardClient capturingClient = new DeliveredOrderForwardClient() {
+            @Override
+            public Cancellable forward(Multi<OrderDeliveredSvc.DeliveredOrder> deliveredOrderStream) {
+                return forward(deliveredOrderStream, item -> {
+                }, failure -> {
+                });
+            }
+
+            @Override
+            public Cancellable forward(
+                Multi<OrderDeliveredSvc.DeliveredOrder> deliveredOrderStream,
+                java.util.function.Consumer<OrderDeliveredSvc.DeliveredOrder> onForwarded,
+                java.util.function.Consumer<Throwable> onForwardFailure
+            ) {
+                return deliveredOrderStream.subscribe().with(item -> {
+                    forwardedOrders.add(item);
+                    forwardedAttempts.incrementAndGet();
+                    try {
+                        if (!ackLatch.await(500, TimeUnit.MILLISECONDS)) {
+                            onForwardFailure.accept(new IllegalStateException("ack timeout"));
+                            return;
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        onForwardFailure.accept(e);
+                        return;
+                    }
+                    onForwarded.accept(item);
+                }, onForwardFailure::accept);
+            }
         };
 
         DeliverToNextIngestBridge bridge = new DeliverToNextIngestBridge(
@@ -336,8 +367,11 @@ class DeliverToNextIngestBridgeTest {
         outputBus.publish(deliveredOrder);
         outputBus.publish(deliveredOrder);
 
-        awaitUntil(() -> forwardedOrders.size() == 1, "Expected duplicate filtering to forward exactly one item");
-        assertEquals(1, forwardedOrders.size(), "Duplicate orders should be filtered");
+        awaitUntil(() -> forwardedAttempts.get() == 1, "Expected only first publish to be forwarded while ACK is pending");
+        assertEquals(1, forwardedOrders.size(), "Duplicates should be dropped while first handoff is still in-flight");
+        ackLatch.countDown();
+        outputBus.publish(deliveredOrder);
+        assertNoAdditionalForwards(forwardedOrders, 1, "Duplicate orders should remain filtered after ACK");
     }
 
     @Test
@@ -406,16 +440,27 @@ class DeliverToNextIngestBridgeTest {
     @Test
     void bridgeAppliesBackpressureBufferStrategy() {
         AtomicInteger forwardedCount = new AtomicInteger(0);
-        DeliveredOrderForwardClient countingClient = stream -> {
-            stream.subscribe().with(item -> forwardedCount.incrementAndGet());
+        DeliveredOrderForwardClient slowClient = stream -> {
+            stream
+                .onItem().invoke(item -> {
+                    forwardedCount.incrementAndGet();
+                    try {
+                        Thread.sleep(15L);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException("Interrupted while simulating slow consumer", e);
+                    }
+                })
+                .subscribe().with(item -> {
+                });
             return mock(Cancellable.class);
         };
 
         DeliverToNextIngestBridge bridge = new DeliverToNextIngestBridge(
-            outputBus, countingClient, true, false, 1000, "BUFFER", 10);
+            outputBus, slowClient, true, false, 1000, "BUFFER", 2);
         bridge.onStartup(mock(StartupEvent.class));
 
-        for (int i = 1; i <= 5; i++) {
+        for (int i = 1; i <= 25; i++) {
             outputBus.publish(OrderDeliveredSvc.DeliveredOrder.newBuilder()
                 .setOrderId("order-" + i)
                 .setCustomerId("customer-" + i)
@@ -426,8 +471,8 @@ class DeliverToNextIngestBridgeTest {
                 .build());
         }
 
-        awaitUntil(() -> forwardedCount.get() == 5, "Expected forwarded count to reach five");
-        assertEquals(5, forwardedCount.get());
+        awaitUntil(() -> forwardedCount.get() == 25, "Expected forwarded count to reach published size");
+        assertEquals(25, forwardedCount.get());
     }
 
     @Test
@@ -517,6 +562,27 @@ class DeliverToNextIngestBridgeTest {
         when(field.isMapField()).thenReturn(false);
         when(field.getJavaType()).thenReturn(Descriptors.FieldDescriptor.JavaType.STRING);
         return field;
+    }
+
+    private static void assertNoForwardsObserved(List<OrderDeliveredSvc.DeliveredOrder> forwardedOrders, String message) {
+        assertNoAdditionalForwards(forwardedOrders, 0, message);
+    }
+
+    private static void assertNoAdditionalForwards(List<OrderDeliveredSvc.DeliveredOrder> forwardedOrders,
+                                                   int expectedSize,
+                                                   String message) {
+        for (int i = 0; i < 20; i++) {
+            if (forwardedOrders.size() != expectedSize) {
+                break;
+            }
+            try {
+                Thread.sleep(10L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new AssertionError("Interrupted while observing forwarded-orders window", e);
+            }
+        }
+        assertEquals(expectedSize, forwardedOrders.size(), message);
     }
 
 }

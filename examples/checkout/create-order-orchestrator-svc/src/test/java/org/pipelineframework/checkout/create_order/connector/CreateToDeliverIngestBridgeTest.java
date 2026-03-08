@@ -176,8 +176,11 @@ class CreateToDeliverIngestBridgeTest {
             .setReadyAt("2026-03-07T10:00:00Z")
             .build();
         outputBus.publish(readyOrder);
+        outputBus.publish(validReadyOrder("order-valid-1", "customer-valid-1", "2026-03-07T10:10:00Z"));
 
-        assertTrue(forwardedOrders.isEmpty());
+        awaitUntil(() -> forwardedOrders.size() == 1, "Expected one forwarded valid ready order");
+        assertEquals(1, forwardedOrders.size());
+        assertEquals("order-valid-1", forwardedOrders.get(0).getOrderId());
     }
 
     @Test
@@ -198,8 +201,11 @@ class CreateToDeliverIngestBridgeTest {
             .setReadyAt("2026-03-07T10:00:00Z")
             .build();
         outputBus.publish(readyOrder);
+        outputBus.publish(validReadyOrder("order-valid-2", "customer-valid-2", "2026-03-07T10:11:00Z"));
 
-        assertTrue(forwardedOrders.isEmpty());
+        awaitUntil(() -> forwardedOrders.size() == 1, "Expected one forwarded valid ready order");
+        assertEquals(1, forwardedOrders.size());
+        assertEquals("order-valid-2", forwardedOrders.get(0).getOrderId());
     }
 
     @Test
@@ -220,8 +226,11 @@ class CreateToDeliverIngestBridgeTest {
             .setReadyAt("")
             .build();
         outputBus.publish(readyOrder);
+        outputBus.publish(validReadyOrder("order-valid-3", "customer-valid-3", "2026-03-07T10:12:00Z"));
 
-        assertTrue(forwardedOrders.isEmpty());
+        awaitUntil(() -> forwardedOrders.size() == 1, "Expected one forwarded valid ready order");
+        assertEquals(1, forwardedOrders.size());
+        assertEquals("order-valid-3", forwardedOrders.get(0).getOrderId());
     }
 
     @Test
@@ -295,8 +304,11 @@ class CreateToDeliverIngestBridgeTest {
         outputBus.publish("unsupported-string");
         outputBus.publish(123);
         outputBus.publish(new Object());
+        outputBus.publish(validReadyOrder("order-valid-4", "customer-valid-4", "2026-03-07T10:13:00Z"));
 
-        assertTrue(forwardedOrders.isEmpty());
+        awaitUntil(() -> forwardedOrders.size() == 1, "Expected unsupported items to be dropped");
+        assertEquals(1, forwardedOrders.size());
+        assertEquals("order-valid-4", forwardedOrders.get(0).getOrderId());
     }
 
     @Test
@@ -465,6 +477,14 @@ class CreateToDeliverIngestBridgeTest {
         when(field.isMapField()).thenReturn(false);
         when(field.getJavaType()).thenReturn(Descriptors.FieldDescriptor.JavaType.STRING);
         return field;
+    }
+
+    private OrderReadySvc.ReadyOrder validReadyOrder(String orderId, String customerId, String readyAt) {
+        return OrderReadySvc.ReadyOrder.newBuilder()
+            .setOrderId(orderId)
+            .setCustomerId(customerId)
+            .setReadyAt(readyAt)
+            .build();
     }
 
 }

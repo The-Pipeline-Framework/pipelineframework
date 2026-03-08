@@ -2,6 +2,7 @@ package org.pipelineframework.checkout.common.connector;
 
 import java.util.function.BooleanSupplier;
 
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public final class TestAwaitUtils {
@@ -18,7 +19,7 @@ public final class TestAwaitUtils {
                 Thread.sleep(10L);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                break;
+                fail("Interrupted while waiting for condition: " + message, e);
             }
         }
         assertTrue(condition.getAsBoolean(), message);

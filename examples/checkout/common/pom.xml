@@ -42,6 +42,7 @@
                 <version>3.4.2</version>
                 <executions>
                     <execution>
+                        <phase>test-compile</phase>
                         <goals>
                             <goal>test-jar</goal>
                         </goals>
