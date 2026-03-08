@@ -30,15 +30,18 @@ Legacy step-level `deadLetter(...)` / `deadLetterStream(...)` has been replaced 
 - `rejectItem(...)`
 - `rejectStream(...)`
 
-Example override:
+Example flow that emits a reject envelope and still returns step-specific status:
 
 ```java
-@Override
-public Uni<PaymentStatus> rejectItem(PaymentRecord failedItem, Throwable cause) {
-    LOG.warnf("Rejected item id=%s cause=%s", failedItem.id(), cause.getMessage());
-    return Uni.createFrom().item(PaymentStatus.rejected());
+public Uni<PaymentStatus> processPayment(PaymentRecord paymentRecord) {
+    return process(paymentRecord)
+        .onFailure().recoverWithUni(error ->
+            rejectItem(paymentRecord, error)
+                .replaceWith(PaymentStatus.rejected()));
 }
 ```
+
+If you override `rejectItem(...)`, delegate to `super.rejectItem(...)` so sink publication still happens.
 
 ### Reject Envelope
 

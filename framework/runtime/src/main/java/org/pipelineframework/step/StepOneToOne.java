@@ -16,6 +16,8 @@
 
 package org.pipelineframework.step;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.pipelineframework.step.functional.OneToOne;
@@ -51,6 +53,7 @@ public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, ItemRe
   @Override
   default Uni<O> apply(Uni<I> input) {
     final Logger LOG = Logger.getLogger(this.getClass());
+    final AtomicReference<I> failedItem = new AtomicReference<>();
 
     // Sanity check: input Uni itself is null
     if (input == null) {
@@ -66,47 +69,40 @@ public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, ItemRe
         .ifNull()
         .failWith(() -> new NullPointerException("Input item is null"))
 
+        .onItem().invoke(failedItem::set)
         // Step 2: Transform the item using gRPC call
         .onItem()
         .transformToUni(item -> {
-            Uni<O> execution;
-            try {
-              execution = applyOneToOne(item);
-            } catch (Throwable thrown) {
-              execution = Uni.createFrom().failure(thrown);
-            }
-            return execution
-            // Step 3: Apply retry policy for transient failures
-            .onFailure(this::shouldRetry)
-            .invoke(t -> PipelineTelemetry.recordRetry(this.getClass()))
-            .onFailure(this::shouldRetry)
-            .retry()
-            .withBackOff(retryWait(), maxBackoff())
-            .withJitter(jitter() ? 0.5 : 0.0)
-            .atMost(retryLimit())
-
-            // Step 4: Unified error handling after retries exhausted
-            .onItemOrFailure()
-            .transformToUni(
-                (out, failure) -> {
-                  if (failure == null) {
-                    if (LOG.isDebugEnabled()) {
-                      LOG.debugf("Step %s processed item: %s", this.getClass().getSimpleName(), out);
-                    }
-                    return Uni.createFrom().item(out);
-                  }
-
-                  LOG.infof(
-                      "Step %s failed after %s retries: %s",
-                      this.getClass().getSimpleName(),
-                      retryLimit(),
-                      failure.toString());
-
-                  if (recoverOnFailure()) {
-                    return rejectItem(item, failure);
-                  }
-                  return Uni.createFrom().failure(failure);
-                });
-          });
+          try {
+            return applyOneToOne(item);
+          } catch (Throwable thrown) {
+            return Uni.createFrom().failure(thrown);
+          }
+        })
+        // Step 3: Apply retry policy for transient failures
+        .onFailure(this::shouldRetry)
+        .invoke(t -> PipelineTelemetry.recordRetry(this.getClass()))
+        .onFailure(this::shouldRetry)
+        .retry()
+        .withBackOff(retryWait(), maxBackoff())
+        .withJitter(jitter() ? 0.5 : 0.0)
+        .atMost(retryLimit())
+        .onItem().invoke(out -> {
+          if (LOG.isDebugEnabled()) {
+            LOG.debugf("Step %s processed item: %s", this.getClass().getSimpleName(), out);
+          }
+        })
+        // Step 4: Unified error handling after retries exhausted
+        .onFailure().recoverWithUni(failure -> {
+          LOG.infof(
+              "Step %s failed after %s retries: %s",
+              this.getClass().getSimpleName(),
+              retryLimit(),
+              failure.toString());
+          if (recoverOnFailure()) {
+            return rejectItem(failedItem.get(), failure);
+          }
+          return Uni.createFrom().failure(failure);
+        });
   }
 }

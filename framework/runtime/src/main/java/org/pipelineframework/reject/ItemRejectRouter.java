@@ -362,7 +362,10 @@ public class ItemRejectRouter {
         }
         try {
             return LaunchMode.current();
-        } catch (Exception ignored) {
+        } catch (IllegalStateException expected) {
+            return LaunchMode.NORMAL;
+        } catch (RuntimeException unexpected) {
+            LOG.warn("Unable to resolve runtime launch mode. Defaulting to NORMAL.", unexpected);
             return LaunchMode.NORMAL;
         }
     }

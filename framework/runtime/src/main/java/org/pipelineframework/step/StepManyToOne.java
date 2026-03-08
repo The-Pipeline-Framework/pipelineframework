@@ -19,6 +19,7 @@ package org.pipelineframework.step;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
@@ -69,25 +70,37 @@ public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, Item
             backpressuredInput = BackpressureBufferMetrics.buffer(backpressuredInput, this.getClass(), 128);
         }
 
+        final Multi<I> configuredInput = backpressuredInput;
         final int maxSampleSize = 5;
-        final ArrayList<I> sample = new ArrayList<>();
-        final AtomicLong totalCount = new AtomicLong();
-        final Multi<I> finalInput = backpressuredInput.onItem().invoke(item -> {
-            totalCount.incrementAndGet();
-            synchronized (sample) {
-                if (sample.size() < maxSampleSize) {
-                    sample.add(item);
-                }
-            }
-        });
+        final AtomicReference<List<I>> lastAttemptSample = new AtomicReference<>(List.of());
+        final AtomicLong lastAttemptTotal = new AtomicLong(0L);
 
-        return applyReduce(finalInput)
-            .onItem().invoke(resultValue -> {
-                if (LOG.isDebugEnabled()) {
-                    LOG.debugf("Reactive Step %s processed stream into output: %s",
-                        this.getClass().getSimpleName(), resultValue);
+        return Uni.createFrom().deferred(() -> {
+            final ArrayList<I> attemptSample = new ArrayList<>();
+            final AtomicLong attemptTotal = new AtomicLong();
+            final Multi<I> finalInput = configuredInput.onItem().invoke(item -> {
+                attemptTotal.incrementAndGet();
+                synchronized (attemptSample) {
+                    if (attemptSample.size() < maxSampleSize) {
+                        attemptSample.add(item);
+                    }
                 }
-            })
+            });
+
+            return applyReduce(finalInput)
+                .onItem().invoke(resultValue -> {
+                    if (LOG.isDebugEnabled()) {
+                        LOG.debugf("Reactive Step %s processed stream into output: %s",
+                            this.getClass().getSimpleName(), resultValue);
+                    }
+                })
+                .onTermination().invoke(() -> {
+                    synchronized (attemptSample) {
+                        lastAttemptSample.set(List.copyOf(attemptSample));
+                    }
+                    lastAttemptTotal.set(attemptTotal.get());
+                });
+        })
             .onFailure(this::shouldRetry)
             .invoke(t -> PipelineTelemetry.recordRetry(this.getClass()))
             .onFailure(this::shouldRetry)
@@ -101,11 +114,7 @@ public interface StepManyToOne<I, O> extends Configurable, ManyToOne<I, O>, Item
                         LOG.debugf("Reactive Step %s: failed to process stream: %s",
                             this.getClass().getSimpleName(), error.getMessage());
                     }
-                    List<I> snapshot;
-                    synchronized (sample) {
-                        snapshot = List.copyOf(sample);
-                    }
-                    return rejectStream(snapshot, totalCount.get(), error);
+                    return rejectStream(lastAttemptSample.get(), lastAttemptTotal.get(), error);
                 } else {
                     return Uni.createFrom().failure(error);
                 }

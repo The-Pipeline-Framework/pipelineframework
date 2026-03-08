@@ -30,8 +30,8 @@ Start with:
 1. Run failure rate > 1% over 1 day (warning)
 2. Item avg latency > 2x baseline for 10 minutes (warning)
 3. Buffer queued stays high for 5 minutes (warning)
-4. Execution DLQ backlog growth sustained for 5 minutes (critical)
-5. Item reject sink backlog growth sustained for 5 minutes (critical)
+4. Execution DLQ backlog growth sustained for 5 minutes (critical, provider queue-depth metric)
+5. Item reject sink backlog growth sustained for 5 minutes (critical, provider queue-depth metric; in-memory sink uses retained-size logs instead of a backlog gauge)
 
 Queue-async additions:
 
@@ -40,7 +40,7 @@ Queue-async additions:
 8. Retry-saturation exceeds threshold (warning/critical by tenant tier)
 9. Queue age/lag exceeds execution SLO budget (critical)
 
-When using New Relic, derive these from `tpf.pipeline.run` spans and `tpf.step.*` metrics.
+When using New Relic, derive these from `tpf.pipeline.run` spans, `tpf.step.*` metrics (for example `tpf.step.reject.total`), and provider-native queue-depth metrics for DLQ/reject backlog.
 
 Suggested starter thresholds:
 

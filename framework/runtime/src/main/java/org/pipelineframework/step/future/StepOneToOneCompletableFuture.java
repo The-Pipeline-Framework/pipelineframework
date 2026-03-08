@@ -17,6 +17,7 @@
 package org.pipelineframework.step.future;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
@@ -65,52 +66,51 @@ CompletableFuture<O> applyAsync(I in);
     @Override
     default Uni<O> apply(Uni<I> inputUni) {
         final Logger LOG = Logger.getLogger(this.getClass());
+        final AtomicReference<I> failedItem = new AtomicReference<>();
 
         return inputUni
+            .onItem().invoke(failedItem::set)
             .onItem().transformToUni(input -> {
-                Uni<O> execution;
                 try {
-                    CompletableFuture<O> future = applyAsync(input);
-                    execution = Uni.createFrom().completionStage(future);
+                    return Uni.createFrom().completionStage(applyAsync(input));
                 } catch (Throwable thrown) {
-                    execution = Uni.createFrom().failure(thrown);
+                    return Uni.createFrom().failure(thrown);
                 }
-                return execution
-                // retry / backoff / jitter
-                .onFailure(this::shouldRetry)
-                .invoke(t -> PipelineTelemetry.recordRetry(this.getClass()))
-                .onFailure(this::shouldRetry)
-                .retry()
-                .withBackOff(retryWait(), maxBackoff())
-                .withJitter(jitter() ? 0.5 : 0.0)
-                .atMost(retryLimit())
-                .onFailure().invoke(t -> {
-                    LOG.infof(
-                        "Step %s completed all retries (%s attempts) with failure: %s",
-                        this.getClass().getSimpleName(),
-                        retryLimit(),
-                        t.getMessage()
-                    );
-                })
-                // debug logging
-                .onItem().invoke(i -> {
+            })
+            // retry / backoff / jitter
+            .onFailure(this::shouldRetry)
+            .invoke(t -> PipelineTelemetry.recordRetry(this.getClass()))
+            .onFailure(this::shouldRetry)
+            .retry()
+            .withBackOff(retryWait(), maxBackoff())
+            .withJitter(jitter() ? 0.5 : 0.0)
+            .atMost(retryLimit())
+            .onFailure().invoke(t -> {
+                LOG.infof(
+                    "Step %s completed all retries (%s attempts) with failure: %s",
+                    this.getClass().getSimpleName(),
+                    retryLimit(),
+                    t.getMessage()
+                );
+            })
+            // debug logging
+            .onItem().invoke(i -> {
+                if (LOG.isDebugEnabled()) {
+                    LOG.debugf("Step %s processed item: %s", this.getClass().getSimpleName(), i);
+                }
+            })
+            // recover by rejecting the item if needed
+            .onFailure().recoverWithUni(err -> {
+                if (recoverOnFailure()) {
                     if (LOG.isDebugEnabled()) {
-                        LOG.debugf("Step %s processed item: %s", this.getClass().getSimpleName(), i);
+                        LOG.debugf(
+                            "Step %s: failed item=%s after %s retries: %s",
+                            this.getClass().getSimpleName(), failedItem.get(), retryLimit(), err
+                        );
                     }
-                })
-                // recover by rejecting the item if needed
-                .onFailure().recoverWithUni(err -> {
-                    if (recoverOnFailure()) {
-                        if (LOG.isDebugEnabled()) {
-                            LOG.debugf(
-                                "Step %s: failed item=%s after %s retries: %s",
-                                this.getClass().getSimpleName(), input, retryLimit(), err
-                            );
-                        }
-                        return rejectItem(input, err);
-                    }
-                    return Uni.createFrom().failure(err);
-                });
+                    return rejectItem(failedItem.get(), err);
+                }
+                return Uni.createFrom().failure(err);
             })
             .onTermination().invoke(() -> {
                 // optional termination handler
