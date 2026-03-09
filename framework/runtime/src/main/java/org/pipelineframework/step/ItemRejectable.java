@@ -149,7 +149,7 @@ public interface ItemRejectable<I, O> {
         } catch (ContextNotActiveException | CreationException creationFailure) {
             LOG.warnf(creationFailure, "Item reject sink unavailable because ItemRejectRouter is not active.");
             return Optional.empty();
-        } catch (RuntimeException | Error creationFailure) {
+        } catch (RuntimeException creationFailure) {
             LOG.warnf(creationFailure, "Failed to create ItemRejectRouter for item reject handling.");
             return Optional.empty();
         }

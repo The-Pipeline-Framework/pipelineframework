@@ -281,7 +281,7 @@ public class ItemRejectRouter {
      */
     private Uni<Void> publishEnvelope(ItemRejectEnvelope envelope) {
         ItemRejectSink selected = ensureSinkInitialized();
-        Uni<Void> publish = selected.publish(envelope);
+        Uni<Void> publish = Uni.createFrom().deferred(() -> selected.publish(envelope));
         if (itemRejectConfig.publishFailurePolicy() == ItemRejectFailurePolicy.FAIL_PIPELINE) {
             return publish;
         }
