@@ -63,6 +63,7 @@
         <mapstruct.version>1.6.3</mapstruct.version>
         <enablePreview>true</enablePreview>
         <quarkus.platform.version>3.31.3</quarkus.platform.version>
+        <quarkus.amazon.services.bom.version>3.14.1</quarkus.amazon.services.bom.version>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <version.jandex>3.5.0</version.jandex>
@@ -84,6 +85,13 @@
                 <groupId>io.quarkus.platform</groupId>
                 <artifactId>quarkus-bom</artifactId>
                 <version>${quarkus.platform.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>io.quarkiverse.amazonservices</groupId>
+                <artifactId>quarkus-amazon-services-bom</artifactId>
+                <version>${quarkus.amazon.services.bom.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

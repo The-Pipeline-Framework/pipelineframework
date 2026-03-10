@@ -16,6 +16,8 @@
 
 package org.pipelineframework.step;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.pipelineframework.step.functional.OneToOne;
@@ -32,31 +34,32 @@ import org.pipelineframework.telemetry.PipelineTelemetry;
  * @param <I> the type of input item
  * @param <O> the type of output item
  */
-public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, DeadLetterQueue<I, O> {
+public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, ItemRejectable<I, O> {
 
   /**
-   * Apply the step to a single input and produce a single output.
-   *
-   * @param in the input element to process
-   * @return a Uni that emits the transformed output element
-   */
+ * Applies the step to an input item and produces the corresponding output item.
+ *
+ * @param in the input item to process
+ * @return the transformed output item; may emit a failure to indicate processing error
+ */
   Uni<O> applyOneToOne(I in);
 
   /**
-   * Orchestrates the asynchronous one-to-one transformation of an emitted input item, performing input null checks, applying retries, and routing failures to a dead letter queue when configured.
+   * Orchestrates an asynchronous one-to-one transformation of an emitted input item, applying input validation, a retry policy for transient failures, and optional routing of failures to the configured item reject sink.
    *
    * @param input the {@code Uni} that emits the input item to be transformed
-   * @return the {@code Uni} that emits the transformed output item on success, or fails with the final error; if {@code recoverOnFailure()} is true a dead-lettered {@code Uni} may be returned instead of a propagated failure
+   * @return the {@code Uni} that emits the transformed output item on success; if recovery is disabled the returned {@code Uni} fails with the final error, otherwise a rejected {@code Uni} may be returned when recovery is enabled
    */
   @Override
   default Uni<O> apply(Uni<I> input) {
     final Logger LOG = Logger.getLogger(this.getClass());
+    final AtomicReference<I> failedItem = new AtomicReference<>();
 
     // Sanity check: input Uni itself is null
     if (input == null) {
       Throwable t = new NullPointerException("Input Uni is null");
       return recoverOnFailure()
-          ? deadLetter(Uni.createFrom().failure(t), t)
+          ? rejectItem(null, t)
           : Uni.createFrom().failure(t);
     }
 
@@ -66,10 +69,16 @@ public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, DeadLe
         .ifNull()
         .failWith(() -> new NullPointerException("Input item is null"))
 
+        .onItem().invoke(failedItem::set)
         // Step 2: Transform the item using gRPC call
         .onItem()
-        .transformToUni(this::applyOneToOne)
-
+        .transformToUni(item -> {
+          try {
+            return applyOneToOne(item);
+          } catch (Throwable thrown) {
+            return Uni.createFrom().failure(thrown);
+          }
+        })
         // Step 3: Apply retry policy for transient failures
         .onFailure(this::shouldRetry)
         .invoke(t -> PipelineTelemetry.recordRetry(this.getClass()))
@@ -78,31 +87,22 @@ public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, DeadLe
         .withBackOff(retryWait(), maxBackoff())
         .withJitter(jitter() ? 0.5 : 0.0)
         .atMost(retryLimit())
-
+        .onItem().invoke(out -> {
+          if (LOG.isDebugEnabled()) {
+            LOG.debugf("Step %s processed item: %s", this.getClass().getSimpleName(), out);
+          }
+        })
         // Step 4: Unified error handling after retries exhausted
-        .onItemOrFailure()
-        .transformToUni(
-            (item, failure) -> {
-              if (failure == null) {
-                if (LOG.isDebugEnabled()) {
-                  LOG.debugf("Step %s processed item: %s", this.getClass().getSimpleName(), item);
-                }
-
-                return Uni.createFrom().item(item);
-              }
-
-              // At this point, retries exhausted
-              LOG.infof(
-                  "Step %s failed after %s retries: %s",
-                  this.getClass().getSimpleName(),
-                  retryLimit(),
-                  failure.toString());
-
-              if (recoverOnFailure()) {
-                return deadLetter(input, failure);
-              } else {
-                return Uni.createFrom().failure(failure);
-              }
-            });
+        .onFailure().recoverWithUni(failure -> {
+          LOG.infof(
+              "Step %s failed after %s retries: %s",
+              this.getClass().getSimpleName(),
+              retryLimit(),
+              failure.toString());
+          if (recoverOnFailure()) {
+            return rejectItem(failedItem.get(), failure);
+          }
+          return Uni.createFrom().failure(failure);
+        });
   }
 }

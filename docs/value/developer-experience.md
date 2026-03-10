@@ -21,6 +21,12 @@
 When teams already have stable Java compute libraries, operators let them plug those methods directly into pipeline flow from `pipeline.yaml`.
 This shortens delivery time and avoids duplicate implementations.
 
+## Business Rejections Without Workflow Collapse
+
+Not every failed item is a platform error. TPF lets step authors model per-item rejection as an expected business path using Item Reject Sink.
+Teams can reject specific records, continue processing the rest of the workload, and keep a durable audit/re-drive trail.
+This avoids custom side channels and keeps recovery logic explicit in step code.
+
 ## Jump to Guides
 
 <div class="value-links">
@@ -28,6 +34,7 @@ This shortens delivery time and avoids duplicate implementations.
 - [Quick Start](/guide/getting-started/)
 - [Canvas Guide](/guide/getting-started/canvas-guide)
 - [Operators](/guide/build/operators)
+- [Item Reject Sink](/guide/development/item-reject-sink)
 - [Mappers and DTOs](/guide/development/mappers-and-dtos)
 - [Testing with Testcontainers](/guide/development/testing)
 

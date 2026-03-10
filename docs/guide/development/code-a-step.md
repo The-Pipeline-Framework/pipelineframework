@@ -38,7 +38,8 @@ public class ProcessPaymentService implements ReactiveService<PaymentRecord, Pay
 
 ## 3) Add Mappers
 
-Create MapStruct mappers that convert between gRPC, DTO, and domain types.
+Create pair-based MapStruct mappers using TPF's `Mapper<Domain, External>` interface.
+Use one mapper per boundary.
 
 Note: The Java type names you choose in your pipeline YAML (or the web UI) drive the DTO/domain fields and the generated proto mappings. See [Data Types](/guide/evolve/data-types) for the full list and defaults.
 
@@ -48,19 +49,13 @@ Note: The Java type names you choose in your pipeline YAML (or the web UI) drive
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN
 )
-public interface PaymentRecordMapper extends Mapper<PaymentGrpc, PaymentDto, PaymentRecord> {
+public interface PaymentRecordMapper extends Mapper<PaymentRecord, PaymentRecordDto> {
 
     @Override
-    PaymentDto toDto(PaymentRecord domain);
+    PaymentRecord fromExternal(PaymentRecordDto dto);
 
     @Override
-    PaymentRecord fromDto(PaymentDto dto);
-
-    @Override
-    PaymentGrpc toGrpc(PaymentDto dto);
-
-    @Override
-    PaymentDto fromGrpc(PaymentGrpc grpc);
+    PaymentRecordDto toExternal(PaymentRecord domain);
 }
 ```
 
@@ -73,6 +68,19 @@ return processPayment(paymentRecord)
     .onItem().transform(result -> createPaymentStatus(paymentRecord, result))
     .onFailure().recoverWithUni(error -> Uni.createFrom().item(createErrorStatus(paymentRecord, error)));
 ```
+
+Use Item Reject Sink flows for per-item recoverable failures that should be audited and handled later:
+
+```java
+return processBatch(batchItem)
+    .onFailure().recoverWithUni(error ->
+        rejectItem(batchItem, error)
+            .replaceWith(createSkippedStatus(batchItem)));
+```
+
+`rejectItem(...)` and `rejectStream(...)` are for expected per-item business rejections
+that must be tracked and re-driven without failing the full execution.
+See [Item Reject Sink](/guide/development/item-reject-sink) for the canonical model and wiring.
 
 ## 5) Test in Isolation
 
@@ -98,5 +106,5 @@ class ProcessPaymentServiceTest {
 
 1. Keep step logic focused on a single responsibility.
 2. Prefer non-blocking I/O and reactive composition.
-3. Map errors to domain responses or DLQ flows.
+3. Choose failure handling by intent: use domain responses for expected business outcomes (for example validation/state conflicts), use Item Reject Sink (`rejectItem` / `rejectStream`) for per-item recoverable processing failures that must be tracked for downstream handling, and use execution DLQ for systemic or unrecoverable pipeline/execution failures.
 4. Validate input early and consistently.
