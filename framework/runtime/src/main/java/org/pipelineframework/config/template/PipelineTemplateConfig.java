@@ -16,6 +16,8 @@
 
 package org.pipelineframework.config.template;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -43,7 +45,8 @@ public record PipelineTemplateConfig(
 ) {
     public PipelineTemplateConfig {
         messages = messages == null ? Map.of() : Map.copyOf(messages);
-        steps = steps == null ? List.of() : List.copyOf(steps);
+        // Preserve null step placeholders so downstream phases/tests can explicitly skip them.
+        steps = steps == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(steps));
         aspects = aspects == null ? Map.of() : Map.copyOf(aspects);
     }
 
