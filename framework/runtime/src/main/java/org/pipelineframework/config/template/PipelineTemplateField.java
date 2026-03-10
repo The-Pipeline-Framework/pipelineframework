@@ -16,16 +16,124 @@
 
 package org.pipelineframework.config.template;
 
+import java.util.Objects;
+
 /**
- * Field metadata from the pipeline template configuration.
+ * Normalized field metadata from the pipeline template configuration.
  *
- * @param name the field name
- * @param type the Java type name
- * @param protoType the protobuf type name
+ * @param number stable field number for v2 messages; null for legacy v1 fields
+ * @param name field name
+ * @param type authored type token (legacy Java type for v1, semantic type or message ref for v2)
+ * @param canonicalType normalized semantic kind used by the compiler
+ * @param messageRef referenced message name when canonicalType is {@code message}
+ * @param javaType resolved Java binding type
+ * @param protoType resolved protobuf field type without repeated/optional modifiers
+ * @param keyType authored key type for map fields
+ * @param valueType authored value type for map fields
+ * @param optional whether the field is optional
+ * @param repeated whether the field is repeated
+ * @param deprecated whether the field is deprecated
+ * @param since version metadata for field introduction
+ * @param deprecatedSince version metadata for field deprecation
+ * @param comment optional field comment
+ * @param overrides optional override metadata
  */
 public record PipelineTemplateField(
+    Integer number,
     String name,
     String type,
-    String protoType
+    String canonicalType,
+    String messageRef,
+    String javaType,
+    String protoType,
+    String keyType,
+    String valueType,
+    boolean optional,
+    boolean repeated,
+    boolean deprecated,
+    String since,
+    String deprecatedSince,
+    String comment,
+    PipelineTemplateFieldOverrides overrides
 ) {
+    public PipelineTemplateField {
+        name = normalize(name);
+        type = normalize(type);
+        canonicalType = normalize(canonicalType);
+        messageRef = normalize(messageRef);
+        javaType = normalize(javaType);
+        protoType = normalize(protoType);
+        keyType = normalize(keyType);
+        valueType = normalize(valueType);
+        since = normalize(since);
+        deprecatedSince = normalize(deprecatedSince);
+        comment = normalize(comment);
+    }
+
+    /**
+     * Backward-compatible constructor retained for legacy tests and callers that still model v1 fields.
+     *
+     * @param name field name
+     * @param type authored/legacy type token
+     * @param protoType authored/legacy protobuf field type
+     */
+    public PipelineTemplateField(String name, String type, String protoType) {
+        this(null, name, type, null, null, null, protoType, null, null, false, false, false, null, null, null, null);
+    }
+
+    public boolean isMap() {
+        return "map".equals(canonicalType);
+    }
+
+    public boolean isMessageReference() {
+        return "message".equals(canonicalType) && messageRef != null;
+    }
+
+    public boolean hasStableNumber() {
+        return number != null && number > 0;
+    }
+
+    private static String normalize(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    public PipelineTemplateField withBindings(String resolvedJavaType, String resolvedProtoType) {
+        return new PipelineTemplateField(
+            number,
+            name,
+            type,
+            canonicalType,
+            messageRef,
+            resolvedJavaType,
+            resolvedProtoType,
+            keyType,
+            valueType,
+            optional,
+            repeated,
+            deprecated,
+            since,
+            deprecatedSince,
+            comment,
+            overrides);
+    }
+
+    public PipelineTemplateField withCanonicalType(String resolvedCanonicalType, String resolvedMessageRef) {
+        return new PipelineTemplateField(
+            number,
+            name,
+            type,
+            Objects.requireNonNullElse(resolvedCanonicalType, canonicalType),
+            resolvedMessageRef,
+            javaType,
+            protoType,
+            keyType,
+            valueType,
+            optional,
+            repeated,
+            deprecated,
+            since,
+            deprecatedSince,
+            comment,
+            overrides);
+    }
 }

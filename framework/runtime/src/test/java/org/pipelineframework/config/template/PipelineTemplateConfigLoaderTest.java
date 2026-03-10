@@ -140,4 +140,83 @@ class PipelineTemplateConfigLoaderTest {
         assertEquals(PipelinePlatform.COMPUTE, config.platform());
         assertEquals("REST", config.transport());
     }
+
+    @Test
+    void loadsV2MessagesAndResolvesStepContracts() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "GRPC"
+            messages:
+              Money:
+                fields:
+                  - number: 1
+                    name: "amount"
+                    type: "decimal"
+                  - number: 2
+                    name: "currency"
+                    type: "currency"
+              ChargeRequest:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+                  - number: 2
+                    name: "money"
+                    type: "Money"
+                reserved:
+                  numbers: [4, 5]
+                  names: ["discount"]
+              ChargeResult:
+                fields:
+                  - number: 1
+                    name: "paymentId"
+                    type: "uuid"
+                    optional: true
+                  - number: 2
+                    name: "auditTrail"
+                    type: "string"
+                    repeated: true
+                    deprecated: true
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ChargeRequest"
+                outputTypeName: "ChargeResult"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2.yaml");
+        Files.writeString(configPath, yaml);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+
+        assertEquals(2, config.version());
+        assertTrue(config.messages().containsKey("Money"));
+        assertTrue(config.messages().containsKey("ChargeRequest"));
+        assertEquals(1, config.steps().size());
+        PipelineTemplateStep step = config.steps().getFirst();
+        assertEquals("ChargeRequest", step.inputTypeName());
+        assertEquals("ChargeResult", step.outputTypeName());
+        assertEquals(2, step.inputFields().size());
+        assertEquals(2, step.outputFields().size());
+
+        PipelineTemplateField moneyField = step.inputFields().get(1);
+        assertEquals("message", moneyField.canonicalType());
+        assertEquals("Money", moneyField.messageRef());
+        assertEquals("Money", moneyField.protoType());
+
+        PipelineTemplateField resultField = step.outputFields().getFirst();
+        assertTrue(resultField.optional());
+        assertEquals("uuid", resultField.canonicalType());
+        assertEquals("string", resultField.protoType());
+
+        PipelineTemplateField repeatedField = step.outputFields().get(1);
+        assertTrue(repeatedField.repeated());
+        assertTrue(repeatedField.deprecated());
+        assertEquals("List<String>", repeatedField.javaType());
+
+        PipelineTemplateMessage requestMessage = config.messages().get("ChargeRequest");
+        assertEquals(List.of(4, 5), requestMessage.reserved().numbers());
+        assertEquals(List.of("discount"), requestMessage.reserved().names());
+    }
 }

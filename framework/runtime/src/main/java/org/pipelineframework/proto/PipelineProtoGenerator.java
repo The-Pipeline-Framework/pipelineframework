@@ -19,11 +19,24 @@ package org.pipelineframework.proto;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Optional;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.pipelineframework.config.CardinalitySemantics;
+import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
-import org.pipelineframework.config.template.*;
+import org.pipelineframework.config.template.PipelineIdlCompatibilityChecker;
+import org.pipelineframework.config.template.PipelineIdlSnapshot;
+import org.pipelineframework.config.template.PipelineTemplateAspect;
+import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
+import org.pipelineframework.config.template.PipelineTemplateField;
+import org.pipelineframework.config.template.PipelineTemplateMessage;
+import org.pipelineframework.config.template.PipelineTemplateStep;
 
 /**
  * Generates protobuf definitions from the pipeline template configuration.
@@ -31,6 +44,9 @@ import org.pipelineframework.config.template.*;
 public class PipelineProtoGenerator {
 
     private static final String ORCHESTRATOR_PROTO = "orchestrator.proto";
+    private static final String TYPES_PROTO = "pipeline-types.proto";
+    private static final String IDL_SNAPSHOT_PROPERTY = "tpf.idl.compat.baseline";
+    private static final String IDL_SNAPSHOT_ENV = "TPF_IDL_COMPAT_BASELINE";
 
     /**
      * Creates a new PipelineProtoGenerator.
@@ -73,39 +89,69 @@ public class PipelineProtoGenerator {
         } catch (IOException e) {
             throw new IllegalStateException("Failed to create proto output directory: " + resolvedOutput, e);
         }
+
+        writeIdlSnapshot(resolvedModuleDir, config);
+
         List<PipelineTemplateStep> steps = config.steps();
         if (steps == null || steps.isEmpty()) {
             return;
         }
 
+        boolean v2 = config.version() >= 2;
         List<ResolvedStep> resolvedSteps = normalizeSteps(steps);
-
         List<AspectDefinition> aspectDefinitions = toAspectDefinitions(config.aspects());
+
+        if (v2) {
+            Path typesProtoPath = resolvedOutput.resolve(TYPES_PROTO);
+            writeProto(typesProtoPath, renderTypesProto(config.basePackage(), config.messages()));
+        }
 
         for (int i = 0; i < resolvedSteps.size(); i++) {
             ResolvedStep step = resolvedSteps.get(i);
             ResolvedStep previous = i > 0 ? resolvedSteps.get(i - 1) : null;
-            String content = renderStepProto(config.basePackage(), step, previous, i == 0, aspectDefinitions);
+            String content = renderStepProto(config.basePackage(), step, previous, i == 0, aspectDefinitions, v2);
             Path protoPath = resolvedOutput.resolve(step.serviceName() + ".proto");
             writeProto(protoPath, content);
-            System.out.println("[PipelineProtoGenerator] wrote " + protoPath.toAbsolutePath());
-            if (!Files.isRegularFile(protoPath)) {
-                System.out.println("[PipelineProtoGenerator] warning: expected proto file missing at " +
-                    protoPath.toAbsolutePath());
-            }
         }
 
         String transport = config.transport();
         if (transport == null || transport.isBlank() || "GRPC".equalsIgnoreCase(transport)) {
-            String content = renderOrchestratorProto(config.basePackage(), resolvedSteps);
+            String content = renderOrchestratorProto(config.basePackage(), resolvedSteps, v2);
             Path protoPath = resolvedOutput.resolve(ORCHESTRATOR_PROTO);
             writeProto(protoPath, content);
-            System.out.println("[PipelineProtoGenerator] wrote " + protoPath.toAbsolutePath());
-            if (!Files.isRegularFile(protoPath)) {
-                System.out.println("[PipelineProtoGenerator] warning: expected proto file missing at " +
-                    protoPath.toAbsolutePath());
-            }
         }
+    }
+
+    private void writeIdlSnapshot(Path moduleDir, PipelineTemplateConfig config) {
+        PipelineIdlSnapshot snapshot = PipelineIdlSnapshot.from(config);
+        Path outputPath = moduleDir.resolve("target")
+            .resolve("generated-resources")
+            .resolve("META-INF")
+            .resolve("pipeline")
+            .resolve("idl.json");
+        try {
+            Files.createDirectories(outputPath.getParent());
+            ObjectMapper mapper = PipelineJson.mapper().findAndRegisterModules();
+            mapper.writerWithDefaultPrettyPrinter().writeValue(outputPath.toFile(), snapshot);
+            String baseline = resolveCompatibilityBaseline();
+            if (baseline != null && !baseline.isBlank()) {
+                PipelineIdlSnapshot baselineSnapshot = mapper.readValue(Path.of(baseline).toFile(), PipelineIdlSnapshot.class);
+                List<String> errors = new PipelineIdlCompatibilityChecker().compare(baselineSnapshot, snapshot);
+                if (!errors.isEmpty()) {
+                    throw new IllegalStateException("IDL compatibility check failed:\n - " + String.join("\n - ", errors));
+                }
+            }
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to write IDL snapshot", e);
+        }
+    }
+
+    private String resolveCompatibilityBaseline() {
+        String value = System.getProperty(IDL_SNAPSHOT_PROPERTY);
+        if (value == null || value.isBlank()) {
+            value = System.getenv(IDL_SNAPSHOT_ENV);
+        }
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     private Path resolveConfigPath(Path moduleDir, Path configPath) {
@@ -160,36 +206,34 @@ public class PipelineProtoGenerator {
         if (fields == null || fields.isEmpty()) {
             return List.of();
         }
-        List<PipelineTemplateField> copy = new ArrayList<>();
-        for (PipelineTemplateField field : fields) {
-            if (field != null) {
-                copy.add(new PipelineTemplateField(field.name(), field.type(), field.protoType()));
-            }
-        }
-        return copy;
+        return List.copyOf(fields);
     }
 
-    /**
-     * Builds the complete .proto file content for a single pipeline step.
-     *
-     * The generated content includes the proto syntax declaration, package and
-     * java_package options, an import of the previous step's proto when
-     * appropriate, the input message for the first step, the output message,
-     * the step service, and any aspect-related services.
-     *
-     * @param basePackage the protobuf package and base Java package to use
-     * @param step the resolved step to render
-     * @param previous the previously resolved step whose proto may be imported; may be null
-     * @param firstStep true if this step is the first in the pipeline (causes input message rendering)
-     * @param aspects optional list of aspect definitions used to render aspect services
-     * @return the textual content of the .proto file for the given step
-     */
+    private String renderTypesProto(String basePackage, Map<String, PipelineTemplateMessage> messages) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("syntax = \"proto3\";\n\n");
+        builder.append("package ").append(basePackage).append(";\n\n");
+        builder.append("option java_package = \"")
+            .append(basePackage)
+            .append(".grpc\";\n\n");
+        boolean first = true;
+        for (PipelineTemplateMessage message : messages.values()) {
+            if (!first) {
+                builder.append('\n');
+            }
+            renderMessage(builder, message);
+            first = false;
+        }
+        return builder.toString();
+    }
+
     private String renderStepProto(
         String basePackage,
         ResolvedStep step,
         ResolvedStep previous,
         boolean firstStep,
-        List<AspectDefinition> aspects
+        List<AspectDefinition> aspects,
+        boolean v2
     ) {
         StringBuilder builder = new StringBuilder();
         builder.append("syntax = \"proto3\";\n\n");
@@ -198,34 +242,64 @@ public class PipelineProtoGenerator {
             .append(basePackage)
             .append(".grpc\";\n\n");
 
-        if (!firstStep && previous != null) {
+        if (v2) {
+            builder.append("import \"").append(TYPES_PROTO).append("\";\n\n");
+        } else if (!firstStep && previous != null) {
             builder.append("import \"")
                 .append(previous.serviceName())
                 .append(".proto\";\n\n");
         }
 
-        if (firstStep) {
-            renderMessage(builder, step.inputTypeName(), step.inputFields(), 1);
+        if (!v2 && firstStep) {
+            renderLegacyMessage(builder, step.inputTypeName(), step.inputFields(), 1);
             builder.append('\n');
         }
 
-        int outputStartNumber = 1;
-        List<PipelineTemplateField> inputFields = step.inputFields();
-        if (inputFields != null && !inputFields.isEmpty()) {
-            outputStartNumber = inputFields.size() + 1;
+        if (!v2) {
+            int outputStartNumber = 1;
+            List<PipelineTemplateField> inputFields = step.inputFields();
+            if (inputFields != null && !inputFields.isEmpty()) {
+                outputStartNumber = inputFields.size() + 1;
+            }
+            renderLegacyMessage(builder, step.outputTypeName(), step.outputFields(), outputStartNumber);
+            builder.append('\n');
         }
-        renderMessage(builder, step.outputTypeName(), step.outputFields(), outputStartNumber);
-        builder.append('\n');
 
         renderService(builder, step, previous, firstStep);
         builder.append('\n');
-
         renderAspectServices(builder, step, firstStep, aspects);
-
         return builder.toString();
     }
 
-    private void renderMessage(
+    private void renderMessage(StringBuilder builder, PipelineTemplateMessage message) {
+        builder.append("message ").append(message.name()).append(" {\n");
+        if (!message.reserved().numbers().isEmpty()) {
+            builder.append("  reserved ");
+            for (int i = 0; i < message.reserved().numbers().size(); i++) {
+                if (i > 0) {
+                    builder.append(", ");
+                }
+                builder.append(message.reserved().numbers().get(i));
+            }
+            builder.append(";\n");
+        }
+        if (!message.reserved().names().isEmpty()) {
+            builder.append("  reserved ");
+            for (int i = 0; i < message.reserved().names().size(); i++) {
+                if (i > 0) {
+                    builder.append(", ");
+                }
+                builder.append('"').append(message.reserved().names().get(i)).append('"');
+            }
+            builder.append(";\n");
+        }
+        for (PipelineTemplateField field : message.fields()) {
+            renderFieldLine(builder, field);
+        }
+        builder.append("}\n");
+    }
+
+    private void renderLegacyMessage(
         StringBuilder builder,
         String typeName,
         List<PipelineTemplateField> fields,
@@ -238,7 +312,7 @@ public class PipelineProtoGenerator {
                 if (field == null || field.name() == null || field.name().isBlank()) {
                     continue;
                 }
-                String fieldType = renderFieldType(field);
+                String fieldType = renderLegacyFieldType(field);
                 int number = startNumber + index;
                 builder.append("  ").append(fieldType).append(' ')
                     .append(field.name()).append(" = ")
@@ -249,16 +323,36 @@ public class PipelineProtoGenerator {
         builder.append("}\n");
     }
 
-    private String renderFieldType(PipelineTemplateField field) {
-        String javaType = field.type();
-        if (isListType(javaType)) {
-            return "repeated " + listInnerType(javaType);
+    private void renderFieldLine(StringBuilder builder, PipelineTemplateField field) {
+        if (field.comment() != null && !field.comment().isBlank()) {
+            builder.append("  // ").append(field.comment()).append('\n');
         }
-        if (isMapType(javaType)) {
-            return "map<" + mapKeyType(javaType) + ", " + mapValueType(javaType) + ">";
+        builder.append("  ");
+        if (field.repeated()) {
+            builder.append("repeated ");
+        } else if (field.optional() && supportsOptionalLabel(field)) {
+            builder.append("optional ");
         }
-        String protoType = field.protoType();
-        return protoType == null || protoType.isBlank() ? "string" : protoType;
+        builder.append(field.protoType())
+            .append(' ')
+            .append(field.name())
+            .append(" = ")
+            .append(field.number());
+        if (field.deprecated()) {
+            builder.append(" [deprecated = true]");
+        }
+        builder.append(";\n");
+    }
+
+    private boolean supportsOptionalLabel(PipelineTemplateField field) {
+        return !field.isMap() && !field.isMessageReference();
+    }
+
+    private String renderLegacyFieldType(PipelineTemplateField field) {
+        if (field.repeated()) {
+            return "repeated " + field.protoType();
+        }
+        return field.protoType() == null || field.protoType().isBlank() ? "string" : field.protoType();
     }
 
     private void renderService(
@@ -354,14 +448,7 @@ public class PipelineProtoGenerator {
         builder.append("}\n");
     }
 
-    /**
-     * Builds the Orchestrator service protobuf content for the given pipeline steps.
-     *
-     * @param basePackage the base Java package to use in the generated proto's java_package option
-     * @param steps the resolved pipeline steps in execution order; if null or empty no content is generated
-     * @return the text content of the orchestrator .proto file, or an empty string when {@code steps} is null or empty
-     */
-    private String renderOrchestratorProto(String basePackage, List<ResolvedStep> steps) {
+    private String renderOrchestratorProto(String basePackage, List<ResolvedStep> steps, boolean v2) {
         if (steps == null || steps.isEmpty()) {
             return "";
         }
@@ -375,13 +462,17 @@ public class PipelineProtoGenerator {
         builder.append("option java_package = \"")
             .append(basePackage)
             .append(".grpc\";\n\n");
-        builder.append("import \"")
-            .append(first.serviceName())
-            .append(".proto\";\n");
-        if (!first.serviceName().equals(last.serviceName())) {
+        if (v2) {
+            builder.append("import \"").append(TYPES_PROTO).append("\";\n");
+        } else {
             builder.append("import \"")
-                .append(last.serviceName())
+                .append(first.serviceName())
                 .append(".proto\";\n");
+            if (!first.serviceName().equals(last.serviceName())) {
+                builder.append("import \"")
+                    .append(last.serviceName())
+                    .append(".proto\";\n");
+            }
         }
         builder.append("import \"google/protobuf/empty.proto\";\n");
         builder.append('\n');
@@ -437,10 +528,8 @@ public class PipelineProtoGenerator {
             .append(last.outputTypeName())
             .append(");\n");
         builder.append("  rpc RunAsync (RunAsyncRequest) returns (RunAsyncResponse);\n");
-        builder.append(
-            "  rpc GetExecutionStatus (GetExecutionStatusRequest) returns (GetExecutionStatusResponse);\n");
-        builder.append(
-            "  rpc GetExecutionResult (GetExecutionResultRequest) returns (GetExecutionResultResponse);\n");
+        builder.append("  rpc GetExecutionStatus (GetExecutionStatusRequest) returns (GetExecutionStatusResponse);\n");
+        builder.append("  rpc GetExecutionResult (GetExecutionResultRequest) returns (GetExecutionResultResponse);\n");
         builder.append("  rpc Subscribe (google.protobuf.Empty) returns (stream ")
             .append(last.outputTypeName())
             .append(");\n");
@@ -556,63 +645,6 @@ public class PipelineProtoGenerator {
         return name;
     }
 
-    private boolean isListType(String type) {
-        return type != null && type.startsWith("List<") && type.endsWith(">");
-    }
-
-    private String listInnerType(String type) {
-        if (!isListType(type)) {
-            return type;
-        }
-        String innerType = type.substring(5, type.length() - 1).trim();
-        return toProtoScalar(innerType, false);
-    }
-
-    private boolean isMapType(String type) {
-        if (type == null || !type.startsWith("Map<") || !type.endsWith(">")) {
-            return false;
-        }
-        String innerContent = type.substring(4, type.length() - 1);
-        return innerContent.contains(",");
-    }
-
-    private String mapKeyType(String type) {
-        if (!isMapType(type)) {
-            return "string";
-        }
-        String innerContent = type.substring(4, type.length() - 1);
-        String[] parts = innerContent.split(",");
-        String keyType = parts.length > 0 ? parts[0].trim() : "string";
-        return toProtoScalar(keyType, true);
-    }
-
-    private String mapValueType(String type) {
-        if (!isMapType(type)) {
-            return "string";
-        }
-        String innerContent = type.substring(4, type.length() - 1);
-        String[] parts = innerContent.split(",");
-        String valueType = parts.length > 1 ? parts[1].trim() : "string";
-        return toProtoScalar(valueType, false);
-    }
-
-    private String toProtoScalar(String javaType, boolean keyType) {
-        if (javaType == null || javaType.isBlank()) {
-            return "string";
-        }
-        return switch (javaType) {
-            case "String", "UUID", "BigDecimal", "Currency", "Path", "LocalDateTime", "LocalDate", "OffsetDateTime",
-                "ZonedDateTime", "Instant", "Duration", "Period", "URI", "URL", "File", "BigInteger" -> "string";
-            case "Integer", "AtomicInteger" -> "int32";
-            case "Long", "AtomicLong" -> "int64";
-            case "Double" -> "double";
-            case "Float" -> "float";
-            case "Boolean" -> "bool";
-            case "List<String>" -> "string";
-            default -> keyType ? "string" : javaType;
-        };
-    }
-
     private String observeServiceName(String aspectName, String typeName) {
         if (aspectName == null || aspectName.isBlank() || typeName == null || typeName.isBlank()) {
             return "";
@@ -679,11 +711,6 @@ public class PipelineProtoGenerator {
             return new Arguments(moduleDir, configPath, outputDir);
         }
 
-        /**
-         * Prints the command-line usage instructions for PipelineProtoGenerator to standard output.
-         *
-         * The message describes supported flags: --module-dir, --config, and --output-dir.
-         */
         static void printUsage() {
             System.out.println("Usage: PipelineProtoGenerator [--module-dir DIR] [--config PATH] [--output-dir DIR]");
         }

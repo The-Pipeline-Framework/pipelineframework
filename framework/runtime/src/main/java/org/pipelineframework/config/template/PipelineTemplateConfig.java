@@ -22,21 +22,31 @@ import java.util.Map;
 /**
  * Full pipeline template configuration loaded from the pipeline template YAML file.
  *
- * @param appName the application name
- * @param basePackage the base Java package
- * @param transport the global transport (GRPC, REST, or LOCAL)
- * @param platform the runtime/deployment platform mode
- * @param steps the pipeline steps defined in the template
- * @param aspects the aspect configurations keyed by aspect name
+ * @param version template config schema version
+ * @param appName application name
+ * @param basePackage base Java package
+ * @param transport global transport
+ * @param platform runtime/deployment platform mode
+ * @param messages top-level named messages
+ * @param steps pipeline steps
+ * @param aspects aspect configurations keyed by aspect name
  */
 public record PipelineTemplateConfig(
+    int version,
     String appName,
     String basePackage,
     String transport,
     PipelinePlatform platform,
+    Map<String, PipelineTemplateMessage> messages,
     List<PipelineTemplateStep> steps,
     Map<String, PipelineTemplateAspect> aspects
 ) {
+    public PipelineTemplateConfig {
+        messages = messages == null ? Map.of() : Map.copyOf(messages);
+        steps = steps == null ? List.of() : List.copyOf(steps);
+        aspects = aspects == null ? Map.of() : Map.copyOf(aspects);
+    }
+
     /**
      * Backward-compatible constructor used by existing code paths.
      *
@@ -53,6 +63,17 @@ public record PipelineTemplateConfig(
         List<PipelineTemplateStep> steps,
         Map<String, PipelineTemplateAspect> aspects
     ) {
-        this(appName, basePackage, transport, PipelinePlatform.COMPUTE, steps, aspects);
+        this(1, appName, basePackage, transport, PipelinePlatform.COMPUTE, Map.of(), steps, aspects);
+    }
+
+    public PipelineTemplateConfig(
+        String appName,
+        String basePackage,
+        String transport,
+        PipelinePlatform platform,
+        List<PipelineTemplateStep> steps,
+        Map<String, PipelineTemplateAspect> aspects
+    ) {
+        this(1, appName, basePackage, transport, platform, Map.of(), steps, aspects);
     }
 }
