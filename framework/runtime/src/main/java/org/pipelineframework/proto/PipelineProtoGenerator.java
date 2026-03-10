@@ -67,11 +67,17 @@ public class PipelineProtoGenerator {
     }
 
     /**
-     * Generate proto definitions from the pipeline template configuration.
+     * Generates protobuf definitions from the pipeline template configuration.
      *
-     * @param moduleDir the module directory
-     * @param configPath the pipeline template config path, or null to locate automatically
-     * @param outputDir the output directory, or null to use the default
+     * This method locates and loads the pipeline configuration, creates the target
+     * output directory if necessary, writes an IDL snapshot, and emits per-step
+     * proto files plus the orchestrator and (when version &gt;= 2) a shared types
+     * proto into the output directory.
+     *
+     * @param moduleDir  the module directory used to resolve the configuration and default output; may be null to use the current working directory
+     * @param configPath an explicit path to the pipeline template config, or null to locate the config automatically starting from moduleDir
+     * @param outputDir  the directory to write generated .proto files to, or null to use the default target/generated-sources/proto under moduleDir
+     * @throws IllegalStateException if the configuration is invalid or missing required values (for example missing basePackage), if the config cannot be located, if output directories cannot be created, or if IDL compatibility checks fail
      */
     public void generate(Path moduleDir, Path configPath, Path outputDir) {
         Path resolvedModuleDir = moduleDir == null ? Path.of("") : moduleDir;
@@ -123,6 +129,15 @@ public class PipelineProtoGenerator {
         }
     }
 
+    /**
+     * Write an IDL snapshot derived from the provided pipeline config into
+     * moduleDir/target/generated-resources/META-INF/pipeline/idl.json and,
+     * if a baseline is configured, validate the new snapshot against that baseline.
+     *
+     * @param moduleDir base project directory used to locate the generated-resources target path
+     * @param config pipeline template configuration used to produce the IDL snapshot
+     * @throws IllegalStateException if writing the snapshot fails or if IDL compatibility validation detects breaking changes
+     */
     private void writeIdlSnapshot(Path moduleDir, PipelineTemplateConfig config) {
         PipelineIdlSnapshot snapshot = PipelineIdlSnapshot.from(config);
         Path outputPath = moduleDir.resolve("target")
@@ -146,6 +161,11 @@ public class PipelineProtoGenerator {
         }
     }
 
+    /**
+     * Locate the IDL compatibility baseline from system property or environment variable.
+     *
+     * @return the baseline string trimmed, or {@code null} if not set or blank
+     */
     private String resolveCompatibilityBaseline() {
         String value = System.getProperty(IDL_SNAPSHOT_PROPERTY);
         if (value == null || value.isBlank()) {
@@ -154,6 +174,14 @@ public class PipelineProtoGenerator {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
+    /**
+     * Resolve the pipeline template configuration path by returning the provided path or locating a config under the module directory.
+     *
+     * @param moduleDir the root directory to search for a pipeline template config when {@code configPath} is null
+     * @param configPath an explicit path to the pipeline template config; if non-null this value is returned
+     * @return the resolved path to the pipeline template configuration
+     * @throws IllegalStateException if {@code configPath} is null and no pipeline template config can be located under {@code moduleDir}
+     */
     private Path resolveConfigPath(Path moduleDir, Path configPath) {
         if (configPath != null) {
             return configPath;
@@ -202,6 +230,12 @@ public class PipelineProtoGenerator {
         return resolved;
     }
 
+    /**
+     * Return an immutable shallow copy of the provided field list, or an empty list when no fields are provided.
+     *
+     * @param fields the list of fields to copy; may be null
+     * @return an unmodifiable list containing the same `PipelineTemplateField` elements as the input, or an empty list if `fields` is null or empty
+     */
     private List<PipelineTemplateField> copyFields(List<PipelineTemplateField> fields) {
         if (fields == null || fields.isEmpty()) {
             return List.of();
@@ -209,6 +243,16 @@ public class PipelineProtoGenerator {
         return List.copyOf(fields);
     }
 
+    /**
+     * Produce the text content of a protobuf file that declares all provided message types
+     * under the specified base package.
+     *
+     * @param basePackage the protobuf package and Java package base to use for the generated file
+     * @param messages a map of message identifiers to PipelineTemplateMessage instances; each value
+     *                 is rendered as a protobuf `message` (map keys are not used for rendering)
+     * @return the complete .proto file content containing syntax, package, java_package options and
+     *         the rendered message definitions
+     */
     private String renderTypesProto(String basePackage, Map<String, PipelineTemplateMessage> messages) {
         StringBuilder builder = new StringBuilder();
         builder.append("syntax = \"proto3\";\n\n");
@@ -227,6 +271,17 @@ public class PipelineProtoGenerator {
         return builder.toString();
     }
 
+    /**
+     * Builds the .proto file content for a single pipeline step.
+     *
+     * @param basePackage the protobuf package and Java package base to use in the generated proto
+     * @param step the resolved step to render (contains names, types, fields, and cardinality)
+     * @param previous the resolved previous step, or {@code null} if there is none
+     * @param firstStep {@code true} when rendering the pipeline's first step (affects legacy input rendering)
+     * @param aspects list of aspect definitions whose services should be rendered alongside the step
+     * @param v2 {@code true} to render the step using the v2/types-based proto layout; {@code false} to use legacy imports/messages
+     * @return the complete proto file content for the given step as a String
+     */
     private String renderStepProto(
         String basePackage,
         ResolvedStep step,
@@ -271,6 +326,15 @@ public class PipelineProtoGenerator {
         return builder.toString();
     }
 
+    /**
+     * Appends a protobuf `message` definition for the given PipelineTemplateMessage to the provided StringBuilder.
+     *
+     * The generated block includes the message declaration, any reserved numeric ranges and reserved names,
+     * all field lines produced by renderFieldLine(...), and a closing brace.
+     *
+     * @param builder destination StringBuilder to which the message definition is appended
+     * @param message source PipelineTemplateMessage containing the message name, reserved entries, and fields
+     */
     private void renderMessage(StringBuilder builder, PipelineTemplateMessage message) {
         builder.append("message ").append(message.name()).append(" {\n");
         if (!message.reserved().numbers().isEmpty()) {
@@ -299,6 +363,14 @@ public class PipelineProtoGenerator {
         builder.append("}\n");
     }
 
+    /**
+     * Appends a legacy-style protobuf message definition for the given type to the provided builder.
+     *
+     * @param builder the StringBuilder to append the message definition to
+     * @param typeName the protobuf message name
+     * @param fields the list of fields to render; null, null entries, or fields with null/blank names are skipped
+     * @param startNumber the field number to assign to the first rendered field; subsequent fields are numbered sequentially
+     */
     private void renderLegacyMessage(
         StringBuilder builder,
         String typeName,
@@ -323,6 +395,16 @@ public class PipelineProtoGenerator {
         builder.append("}\n");
     }
 
+    /**
+     * Appends a single protobuf field declaration (and an optional preceding comment) to the provided builder.
+     *
+     * The rendered line includes the field type, name, number, and an optional deprecated option.
+     * If the field is marked repeated, the `repeated` label is emitted; otherwise, if the field is marked optional
+     * and optional labels are supported for that field, the `optional` label is emitted.
+     *
+     * @param builder the StringBuilder to append the field comment and declaration to
+     * @param field the field definition containing comment, labels (repeated/optional), type, name, number, and deprecation flag
+     */
     private void renderFieldLine(StringBuilder builder, PipelineTemplateField field) {
         if (field.comment() != null && !field.comment().isBlank()) {
             builder.append("  // ").append(field.comment()).append('\n');
@@ -344,10 +426,22 @@ public class PipelineProtoGenerator {
         builder.append(";\n");
     }
 
+    /**
+     * Determine whether the protobuf `optional` label is allowed for the given field.
+     *
+     * @param field the field to evaluate
+     * @return `true` if the field supports the `optional` label (it is neither a map nor a message reference), `false` otherwise
+     */
     private boolean supportsOptionalLabel(PipelineTemplateField field) {
         return !field.isMap() && !field.isMessageReference();
     }
 
+    /**
+     * Compute the legacy protobuf field type declaration for a PipelineTemplateField.
+     *
+     * @param field the template field to render the legacy protobuf type for
+     * @return the protobuf type string, prefixed with "repeated " if the field is repeated; `"string"` if the field's protoType is null or blank, otherwise the field's protoType
+     */
     private String renderLegacyFieldType(PipelineTemplateField field) {
         if (field.repeated()) {
             return "repeated " + field.protoType();
@@ -355,6 +449,20 @@ public class PipelineProtoGenerator {
         return field.protoType() == null || field.protoType().isBlank() ? "string" : field.protoType();
     }
 
+    /**
+     * Appends a protobuf service definition for the given pipeline step to the provided builder.
+     *
+     * The generated service is named "Process{ServiceNameFormatted}Service" and defines a single
+     * RPC `remoteProcess` whose streaming modifiers are chosen based on the step's cardinality:
+     * ONE_TO_MANY => unary input, streaming output;
+     * MANY_TO_MANY => streaming input, streaming output;
+     * MANY_TO_ONE => streaming input, unary output;
+     * otherwise => unary input, unary output.
+     *
+     * @param step the resolved step to render the service for
+     * @param previous the resolved previous step, or {@code null} if none; used to determine the input type when this is not the first step
+     * @param firstStep whether {@code step} is the pipeline's first step (affects input type selection)
+     */
     private void renderService(
         StringBuilder builder,
         ResolvedStep step,
@@ -436,6 +544,13 @@ public class PipelineProtoGenerator {
         }
     }
 
+    /**
+     * Appends a protobuf service definition for an aspect that observes a given message type.
+     *
+     * @param builder  the StringBuilder to append the service definition to
+     * @param aspect   the aspect definition whose name is used to derive the service name
+     * @param typeName the protobuf message type name used as the rpc input and output
+     */
     private void renderAspectService(StringBuilder builder, AspectDefinition aspect, String typeName) {
         builder.append("service ")
             .append(observeServiceName(aspect.name(), typeName))
@@ -448,6 +563,19 @@ public class PipelineProtoGenerator {
         builder.append("}\n");
     }
 
+    /**
+     * Generate the orchestrator .proto file content for a pipeline.
+     *
+     * When `v2` is true the generated proto imports the centralized types proto; otherwise it imports
+     * the first and (if different) last step protos. The proto includes request/response messages for
+     * run, async run, execution status/result and a OrchestratorService with RPCs whose streaming
+     * modifiers reflect the pipeline's input/output streaming shape.
+     *
+     * @param basePackage the protobuf package and Java package base for generated types
+     * @param steps the pipeline steps already normalized into ResolvedStep objects
+     * @param v2 if true, import and reference the shared types proto instead of per-step protos
+     * @return the complete orchestrator .proto file content as a String
+     */
     private String renderOrchestratorProto(String basePackage, List<ResolvedStep> steps, boolean v2) {
         if (steps == null || steps.isEmpty()) {
             return "";
@@ -635,6 +763,13 @@ public class PipelineProtoGenerator {
         return builder.toString();
     }
 
+    /**
+     * Removes a leading "Process " prefix from the provided name.
+     *
+     * @param name the input name to normalize; may be null
+     * @return the input name with the leading "Process " prefix removed (case-sensitive),
+     *         the original name if the prefix is not present, or an empty string if {@code name} is null
+     */
     private String stripProcessPrefix(String name) {
         if (name == null) {
             return "";
@@ -645,6 +780,13 @@ public class PipelineProtoGenerator {
         return name;
     }
 
+    /**
+     * Builds the observe service name for an aspect and message type.
+     *
+     * @param aspectName the aspect's name (may contain non-alphanumeric separators); trimmed and converted to PascalCase
+     * @param typeName   the message/type name to append; trimmed before use
+     * @return the constructed service name in the form `Observe{AspectPascal}{TypeName}SideEffectService`, or an empty string if either argument is null or blank
+     */
     private String observeServiceName(String aspectName, String typeName) {
         if (aspectName == null || aspectName.isBlank() || typeName == null || typeName.isBlank()) {
             return "";
@@ -683,6 +825,18 @@ public class PipelineProtoGenerator {
     }
 
     private record Arguments(Path moduleDir, Path configPath, Path outputDir) {
+        /**
+         * Parse command-line options and produce an Arguments instance with the resolved paths.
+         *
+         * Recognized options:
+         * - --module-dir <path> or --module-dir=<path>
+         * - --config <path> or --config=<path>
+         * - --output-dir <path> or --output-dir=<path>
+         * - --help or -h (prints usage and exits)
+         *
+         * @param args the raw CLI arguments (may be null)
+         * @return an Arguments object with moduleDir, configPath, and outputDir set from the parsed options (any unset value will be null)
+         */
         static Arguments parse(String[] args) {
             Path moduleDir = null;
             Path configPath = null;
@@ -711,6 +865,11 @@ public class PipelineProtoGenerator {
             return new Arguments(moduleDir, configPath, outputDir);
         }
 
+        /**
+         * Display the command-line usage instructions for PipelineProtoGenerator.
+         *
+         * Writes a single-line usage message to standard output describing the accepted options: --module-dir, --config, and --output-dir.
+         */
         static void printUsage() {
             System.out.println("Usage: PipelineProtoGenerator [--module-dir DIR] [--config PATH] [--output-dir DIR]");
         }

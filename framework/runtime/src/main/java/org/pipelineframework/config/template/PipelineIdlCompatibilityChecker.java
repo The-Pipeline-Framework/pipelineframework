@@ -27,11 +27,13 @@ import java.util.Map;
 public final class PipelineIdlCompatibilityChecker {
 
     /**
-     * Compare the current snapshot against a baseline and return all compatibility violations.
+     * Determine compatibility violations between a baseline and a current IDL snapshot.
      *
-     * @param baseline baseline snapshot
-     * @param current current snapshot
-     * @return compatibility errors; empty when compatible
+     * <p>Compares steps and messages and returns human-readable error messages describing any incompatibilities.
+     *
+     * @param baseline baseline snapshot to compare against
+     * @param current current snapshot under test
+     * @return a list of compatibility error messages; empty if there are no violations
      */
     public List<String> compare(PipelineIdlSnapshot baseline, PipelineIdlSnapshot current) {
         List<String> errors = new ArrayList<>();
@@ -40,6 +42,17 @@ public final class PipelineIdlCompatibilityChecker {
         return errors;
     }
 
+    /**
+     * Compare step definitions between a baseline and current snapshot and record compatibility violations.
+     *
+     * For each baseline step, verifies the step exists in the current snapshot and that its input and output
+     * message type names are unchanged; appends human-readable error messages to {@code errors} for any
+     * missing steps or changed input/output message types.
+     *
+     * @param baselineSteps the list of step snapshots from the baseline snapshot
+     * @param currentSteps the list of step snapshots from the current snapshot
+     * @param errors a mutable list that will be appended with human-readable compatibility violation messages
+     */
     private void compareSteps(
         List<PipelineIdlSnapshot.StepSnapshot> baselineSteps,
         List<PipelineIdlSnapshot.StepSnapshot> currentSteps,
@@ -66,6 +79,13 @@ public final class PipelineIdlCompatibilityChecker {
         }
     }
 
+    /**
+     * Compares message definitions from a baseline snapshot against a current snapshot and records any compatibility violations.
+     *
+     * @param baselineMessages map of message name to baseline message snapshot
+     * @param currentMessages  map of message name to current message snapshot
+     * @param errors            list to which human-readable compatibility error messages will be appended
+     */
     private void compareMessages(
         Map<String, PipelineIdlSnapshot.MessageSnapshot> baselineMessages,
         Map<String, PipelineIdlSnapshot.MessageSnapshot> currentMessages,
@@ -83,6 +103,20 @@ public final class PipelineIdlCompatibilityChecker {
         }
     }
 
+    /**
+     * Compare a message definition from the baseline to the current snapshot and record compatibility violations.
+     *
+     * Performs these checks and appends human-readable error messages to {@code errors}:
+     * - Current fields that reuse baseline reserved field numbers or names.
+     * - Baseline fields removed in the current message without reserving both their number and name.
+     * - Field-level incompatibilities between matching fields (delegated to {@code compareField}).
+     * - Current reserved numbers or names that are also used by active fields.
+     *
+     * @param messageName     the name of the message being compared
+     * @param baselineMessage the message snapshot from the baseline
+     * @param currentMessage  the message snapshot from the current snapshot
+     * @param errors          a mutable list that will be populated with compatibility error messages
+     */
     private void compareMessage(
         String messageName,
         PipelineIdlSnapshot.MessageSnapshot baselineMessage,
@@ -130,6 +164,14 @@ public final class PipelineIdlCompatibilityChecker {
         }
     }
 
+    /**
+     * Compares the properties of a single baseline field against its current counterpart and records any compatibility violations.
+     *
+     * @param messageName     the name of the message containing the field
+     * @param baselineField   the field snapshot from the baseline snapshot
+     * @param currentField    the corresponding field snapshot from the current snapshot
+     * @param errors          mutable list to which human-readable error messages will be appended for any detected incompatibilities
+     */
     private void compareField(
         String messageName,
         PipelineIdlSnapshot.FieldSnapshot baselineField,
@@ -160,6 +202,11 @@ public final class PipelineIdlCompatibilityChecker {
         }
     }
 
+    /**
+     * Compare two objects for equality using null-safe semantics.
+     *
+     * @return `true` if both objects are null or `left.equals(right)`, `false` otherwise.
+     */
     private boolean safeEquals(Object left, Object right) {
         if (left == null) {
             return right == null;

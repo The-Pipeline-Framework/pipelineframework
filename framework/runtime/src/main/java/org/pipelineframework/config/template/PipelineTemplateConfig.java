@@ -51,13 +51,7 @@ public record PipelineTemplateConfig(
     }
 
     /**
-     * Backward-compatible constructor used by existing code paths.
-     *
-     * @param appName app name
-     * @param basePackage base package
-     * @param transport transport
-     * @param steps steps
-     * @param aspects aspects
+     * Constructs a PipelineTemplateConfig for existing call sites, supplying defaults for new fields (version = 1, platform = PipelinePlatform.COMPUTE, empty messages).
      */
     public PipelineTemplateConfig(
         String appName,
@@ -69,6 +63,16 @@ public record PipelineTemplateConfig(
         this(1, appName, basePackage, transport, PipelinePlatform.COMPUTE, Map.of(), steps, aspects);
     }
 
+    /**
+     * Create a pipeline template configuration preset to version 1 with no messages.
+     *
+     * @param appName     the application name for the generated pipeline artifacts
+     * @param basePackage the root package name for generated code
+     * @param transport   the transport identifier to use for the pipeline
+     * @param platform    the target pipeline platform
+     * @param steps       the ordered list of template steps; may contain null placeholders to indicate skipped positions
+     * @param aspects     a map of aspect identifiers to their template definitions
+     */
     public PipelineTemplateConfig(
         String appName,
         String basePackage,

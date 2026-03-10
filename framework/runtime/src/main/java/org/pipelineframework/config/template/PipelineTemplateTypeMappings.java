@@ -82,13 +82,28 @@ final class PipelineTemplateTypeMappings {
         Map.entry("path", "string"));
     private static final Set<String> MAP_KEY_CANONICAL_TYPES = Set.of("string", "bool", "int32", "int64");
 
+    /**
+     * Prevents instantiation of this utility class which only contains static helpers.
+     */
     private PipelineTemplateTypeMappings() {
     }
 
+    /**
+     * Determine whether a string corresponds to a supported builtin type name.
+     *
+     * @param value the string to test; may be null
+     * @return `true` if `value`, after trimming and case-insensitive comparison, matches a supported builtin type name, `false` otherwise
+     */
     static boolean isBuiltinType(String value) {
         return value != null && BUILTIN_TYPES.contains(value.trim().toLowerCase(Locale.ROOT));
     }
 
+    /**
+     * Determines whether a string is a message reference token.
+     *
+     * @param value the string to test
+     * @return `true` if `value` is non-blank, begins with an uppercase character, and does not contain `<`, `false` otherwise
+     */
     static boolean isMessageReferenceToken(String value) {
         if (value == null || value.isBlank()) {
             return false;
@@ -97,14 +112,36 @@ final class PipelineTemplateTypeMappings {
         return Character.isUpperCase(trimmed.charAt(0)) && !trimmed.contains("<");
     }
 
+    /**
+     * Checks whether a string represents a legacy List<T> type declaration.
+     *
+     * @param value the string to test for legacy List<T> syntax (may be null)
+     * @return `true` if the input is non-null and starts with "List<" and ends with ">", `false` otherwise
+     */
     static boolean isLegacyListType(String value) {
         return value != null && value.startsWith("List<") && value.endsWith(">");
     }
 
+    /**
+     * Determines whether a string represents a legacy Java Map<K,V> type declaration.
+     *
+     * @param value the type string to check (may be null)
+     * @return `true` if the string has the form "Map<...,...>" (starts with "Map<", ends with ">", and contains a comma), `false` otherwise
+     */
     static boolean isLegacyMapType(String value) {
         return value != null && value.startsWith("Map<") && value.endsWith(">") && value.contains(",");
     }
 
+    /**
+     * Determine the canonical type name for a V2 authored field type.
+     *
+     * <p>Maps a non-blank authored type to a canonical representation: built-in types are returned
+     * in lowercase, message reference tokens are mapped to "message", and blank or unrecognized
+     * types map to {@code null}.
+     *
+     * @param authoredType the authored type string (may be null or blank)
+     * @return the canonical type ("message" or a lowercase builtin) or {@code null} if none applies
+     */
     static String canonicalTypeForV2(String authoredType) {
         if (authoredType == null || authoredType.isBlank()) {
             return null;
@@ -119,6 +156,15 @@ final class PipelineTemplateTypeMappings {
         return null;
     }
 
+    /**
+     * Resolve the Java type name for a canonical template type.
+     *
+     * @param canonicalType the canonical type name (e.g., "map", "message", or a builtin canonical)
+     * @param messageRef the message type name to use for "message" canonical types or as a fallback
+     * @param keyType the declared key token for map types (used to derive the map's key Java type)
+     * @param valueType the declared value token for map types (used to derive the map's value Java type)
+     * @param repeated if true, wrap the resolved type in a List (e.g., List&lt;T&gt;)
+     * @return the resolved Java type name; for maps returns a parameterized Map&lt;Key, Value&gt;, for message returns the messageRef, otherwise a mapped builtin Java type, and if `repeated` is true the result is wrapped as List&lt;...&gt;
     static String javaTypeForCanonical(String canonicalType, String messageRef, String keyType, String valueType, boolean repeated) {
         String resolved;
         if ("map".equals(canonicalType)) {
@@ -137,6 +183,15 @@ final class PipelineTemplateTypeMappings {
         return resolved;
     }
 
+    /**
+     * Resolve the Protobuf type string for a canonical field type.
+     *
+     * @param canonicalType the canonical type name (e.g., "map", "message", or a builtin canonical)
+     * @param messageRef the Protobuf message type name to use when canonicalType is "message"
+     * @param keyType the declared key token for map types (used to derive the key scalar)
+     * @param valueType the declared value token for map types (used to derive the value scalar)
+     * @return `map<keyProto, valueProto>` for canonicalType "map", the `messageRef` for canonicalType "message", or the Protobuf scalar type for other canonical types; defaults to `string` if no mapping exists
+     */
     static String protoTypeForCanonical(String canonicalType, String messageRef, String keyType, String valueType) {
         if ("map".equals(canonicalType)) {
             return "map<" + protoScalarForToken(keyType, true) + ", " + protoScalarForToken(valueType, false) + ">";
@@ -147,6 +202,14 @@ final class PipelineTemplateTypeMappings {
         return PROTO_TYPES.getOrDefault(canonicalType, "string");
     }
 
+    /**
+     * Validate and normalize a v2 pipeline template field, producing a canonical field representation.
+     *
+     * @param field the v2 field to validate and normalize
+     * @param knownMessages optional list of allowed message names; if non-null, message references must be present in this list
+     * @return a new PipelineTemplateField populated with canonical type, resolved Java type, resolved Protobuf type (possibly overridden), and preserved metadata
+     * @throws IllegalStateException if the field's type is unknown, the message reference is unknown, a map field lacks or has invalid key/value types, a map key uses a disallowed kind (float/bytes or not one of string/bool/int32/int64), the field lacks a stable positive number, a map is marked repeated, or a protobuf override is unsafe
+     */
     static PipelineTemplateField normalizeV2Field(PipelineTemplateField field, List<String> knownMessages) {
         String canonicalType = canonicalTypeForV2(field.type());
         if (canonicalType == null) {
@@ -208,6 +271,21 @@ final class PipelineTemplateTypeMappings {
             field.overrides());
     }
 
+    /**
+     * Normalize a legacy-declared PipelineTemplateField into the canonical internal representation.
+     *
+     * <p>Handles legacy Java-style type declarations (e.g., "List<T>", "Map<K,V>", primitive or boxed
+     * types, and message type names) and returns a new field with canonicalType, javaType, protoType,
+     * messageRef, keyType/valueType, and repeated flag populated according to the legacy declaration.
+     *
+     * @param field the legacy-declared field to normalize; its declared type and optional protoType
+     *              override are used to derive the normalized values
+     * @return a new PipelineTemplateField with normalized type information:
+     *         - list declarations produce a repeated field with the inner canonical type and proto scalar
+     *         - map declarations produce a canonical "map" field with keyType/valueType and a map proto type
+     *         - message-like types set messageRef and default the protoType to the message name when unset
+     *         - builtin/primitive types are mapped to their canonical, Java, and proto equivalents with sensible defaults
+     */
     static PipelineTemplateField normalizeLegacyField(PipelineTemplateField field) {
         String declaredType = field.type();
         String canonicalType;
@@ -287,6 +365,17 @@ final class PipelineTemplateTypeMappings {
             null);
     }
 
+    /**
+     * Validates and returns the protobuf encoding for the field, applying a safe override if present.
+     *
+     * If the field has no proto encoding override, the provided default is returned. If an override is present,
+     * it must exactly match the default; otherwise an IllegalStateException is thrown.
+     *
+     * @param field the template field to inspect for a proto encoding override
+     * @param defaultProto the default protobuf encoding to use when no override is provided
+     * @return the effective protobuf encoding (either the default or the validated override)
+     * @throws IllegalStateException if the field provides an override that differs from the default
+     */
     private static String resolveSafeProtoOverride(PipelineTemplateField field, String defaultProto) {
         PipelineTemplateFieldOverrides overrides = field.overrides();
         if (overrides == null || overrides.proto() == null || overrides.proto().encoding() == null
@@ -302,6 +391,20 @@ final class PipelineTemplateTypeMappings {
         return override;
     }
 
+    /**
+     * Map a legacy Java type token to the canonical builtin type name used by the template system.
+     *
+     * <p>Null or blank inputs are treated as {@code "string"}.
+     *
+     * @param javaType the simple Java type token (for example {@code "String"}, {@code "Integer"},
+     *                 or a message reference like {@code "MyMessage"})
+     * @return the canonical type name such as {@code "string"}, {@code "bool"}, {@code "int32"},
+     *         {@code "int64"}, {@code "float32"}, {@code "float64"}, {@code "decimal"},
+     *         {@code "uuid"}, {@code "datetime"}, {@code "timestamp"}, {@code "date"},
+     *         {@code "duration"}, {@code "currency"}, {@code "uri"}, {@code "path"},
+     *         {@code "bytes"}, or {@code "message"} when the token appears to be a message reference;
+     *         defaults to {@code "string"} when the token is unrecognized.
+     */
     private static String canonicalForLegacySimple(String javaType) {
         if (javaType == null || javaType.isBlank()) {
             return "string";
@@ -327,6 +430,13 @@ final class PipelineTemplateTypeMappings {
         };
     }
 
+    /**
+     * Resolve a legacy type token to the Java type name used in generated or runtime code.
+     *
+     * @param token a legacy type token (for example `"String"`, `"Integer"`, or a message reference like `"MyMessage"`)
+     * @param keyType true if the token is being used as a map key (map keys that reference messages become `String`)
+     * @return the Java type name for the given token; for message tokens returns `String` when used as a map key, otherwise returns the token itself
+     */
     private static String javaTypeForSimpleToken(String token, boolean keyType) {
         String canonical = canonicalForLegacySimple(token);
         if ("message".equals(canonical)) {
@@ -335,6 +445,13 @@ final class PipelineTemplateTypeMappings {
         return JAVA_TYPES.getOrDefault(canonical, "String");
     }
 
+    /**
+     * Maps a legacy Java-type token to the corresponding Protobuf scalar type name for use in proto fields.
+     *
+     * @param token   a legacy Java type token or a message reference identifier
+     * @param keyType true if the resulting scalar is intended for a protobuf map key
+     * @return the Protobuf scalar type name (for example "int32", "string"); defaults to "string" when unknown or when a message token is used as a map key
+     */
     private static String protoScalarForToken(String token, boolean keyType) {
         String canonical = canonicalForLegacySimple(token);
         if ("message".equals(canonical)) {
@@ -343,10 +460,23 @@ final class PipelineTemplateTypeMappings {
         return PROTO_TYPES.getOrDefault(canonical, "string");
     }
 
+    /**
+     * Extracts the inner type token from a legacy List<T> declaration.
+     *
+     * @param type the legacy list declaration in the form "List<InnerType>"
+     * @return the trimmed inner type token (the text between '<' and '>')
+     */
     private static String listInnerType(String type) {
         return type.substring(5, type.length() - 1).trim();
     }
 
+    /**
+     * Extracts the key and value type tokens from a legacy Map<K,V> declaration string.
+     *
+     * @param type the legacy Map declaration (for example "Map<String, Integer>"); must start with "Map<" and end with ">"
+     * @return a list of two strings: the first element is the key type token and the second element is the value type token;
+     *         if a part is missing it defaults to "String"
+     */
     private static List<String> mapParts(String type) {
         String inner = type.substring(4, type.length() - 1);
         String[] parts = inner.split(",");

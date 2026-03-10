@@ -81,22 +81,50 @@ public record PipelineTemplateField(
         this(null, name, type, null, null, null, protoType, null, null, false, false, false, null, null, null, null);
     }
 
+    /**
+     * Indicates whether the field represents a map type.
+     *
+     * @return {@code true} if the field's canonical type is {@code "map"}, {@code false} otherwise.
+     */
     public boolean isMap() {
         return "map".equals(canonicalType);
     }
 
+    /**
+     * Determines if this field is a reference to another message.
+     *
+     * @return `true` if the field's canonical type is "message" and a message reference name is present, `false` otherwise.
+     */
     public boolean isMessageReference() {
         return "message".equals(canonicalType) && messageRef != null;
     }
 
+    /**
+     * Determines whether this field has a stable numeric identifier used by v2 messages.
+     *
+     * @return {@code true} if the field's number is non-null and greater than 0, {@code false} otherwise.
+     */
     public boolean hasStableNumber() {
         return number != null && number > 0;
     }
 
+    /**
+     * Normalize a string by trimming surrounding whitespace and treating null or blank inputs as absent.
+     *
+     * @param value the input string, possibly null or containing only whitespace
+     * @return the trimmed string, or {@code null} if the input was null or blank
+     */
     private static String normalize(String value) {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
+    /**
+     * Create a copy of this field with resolved Java and protobuf type bindings.
+     *
+     * @param resolvedJavaType the resolved Java binding type to assign
+     * @param resolvedProtoType the resolved protobuf field type (without modifiers) to assign
+     * @return a new PipelineTemplateField with `javaType` and `protoType` set to the provided values and all other components copied from this instance
+     */
     public PipelineTemplateField withBindings(String resolvedJavaType, String resolvedProtoType) {
         return new PipelineTemplateField(
             number,
@@ -117,6 +145,13 @@ public record PipelineTemplateField(
             overrides);
     }
 
+    /**
+     * Create a copy of this field with updated canonical type information.
+     *
+     * @param resolvedCanonicalType the resolved canonical type to use; if `null` the existing `canonicalType` is preserved
+     * @param resolvedMessageRef the resolved message reference to set (may be `null`)
+     * @return a new PipelineTemplateField with the updated `canonicalType` and `messageRef`, preserving all other components
+     */
     public PipelineTemplateField withCanonicalType(String resolvedCanonicalType, String resolvedMessageRef) {
         return new PipelineTemplateField(
             number,

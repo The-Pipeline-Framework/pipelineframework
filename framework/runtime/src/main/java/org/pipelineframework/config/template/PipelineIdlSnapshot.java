@@ -42,6 +42,16 @@ public record PipelineIdlSnapshot(
         steps = steps == null ? List.of() : List.copyOf(steps);
     }
 
+    /**
+     * Create a normalized PipelineIdlSnapshot from a PipelineTemplateConfig.
+     *
+     * <p>The returned snapshot contains the config's version, app name, base package, a map of
+     * MessageSnapshot objects (constructed from config.messages() when present or derived from legacy
+     * step definitions), and a list of StepSnapshot objects built from config.steps().
+     *
+     * @param config the pipeline template configuration to convert into a snapshot
+     * @return a PipelineIdlSnapshot containing normalized messages and steps extracted from the config
+     */
     public static PipelineIdlSnapshot from(PipelineTemplateConfig config) {
         Map<String, MessageSnapshot> messages = new LinkedHashMap<>();
         if (config.messages() != null && !config.messages().isEmpty()) {
@@ -58,6 +68,15 @@ public record PipelineIdlSnapshot(
         return new PipelineIdlSnapshot(config.version(), config.appName(), config.basePackage(), messages, steps);
     }
 
+    /**
+     * Populate the provided messages map with MessageSnapshot entries derived from legacy step definitions.
+     *
+     * For each step, adds message snapshots for the step's input and output type names when those types
+     * have field definitions; existing entries are preserved.
+     *
+     * @param messages the map to populate or update with message name -> MessageSnapshot entries
+     * @param steps the list of pipeline template steps to inspect for input/output message definitions
+     */
     private static void collectLegacyMessages(
         Map<String, MessageSnapshot> messages,
         List<PipelineTemplateStep> steps
@@ -68,6 +87,15 @@ public record PipelineIdlSnapshot(
         }
     }
 
+    /**
+     * Adds a legacy message snapshot to the provided messages map when a valid name and fields are present.
+     *
+     * If a snapshot for the given message name already exists, the method does nothing.
+     *
+     * @param messages    the map to populate with the constructed MessageSnapshot
+     * @param messageName the name of the message to add; ignored if null or blank
+     * @param fields      the legacy fields used to build the message; ignored if null or empty
+     */
     private static void putLegacyMessage(
         Map<String, MessageSnapshot> messages,
         String messageName,
@@ -94,6 +122,13 @@ public record PipelineIdlSnapshot(
         messages.putIfAbsent(messageName, new MessageSnapshot(messageName, snapshotFields, List.of(), List.of()));
     }
 
+    /**
+     * Convert a PipelineTemplateMessage into a MessageSnapshot.
+     *
+     * @param message the template message to convert
+     * @return a MessageSnapshot containing the message name, its fields, reserved numbers, and reserved names
+     * @throws IllegalStateException if any field in the template message does not have a number
+     */
     private static MessageSnapshot toMessageSnapshot(PipelineTemplateMessage message) {
         List<FieldSnapshot> fields = new ArrayList<>();
         for (PipelineTemplateField field : message.fields()) {
