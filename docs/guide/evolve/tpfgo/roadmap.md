@@ -136,7 +136,9 @@ This roadmap started before the recent implementation stack. The following FTGo-
 - **2026-03-03 (reference lane depth milestone)**:
   - Search fan-out/fan-in reference lane was expanded with richer aggregation depth and additional reliability/lineage assertions.
 - **Current state**:
-  - Core lineage baseline is implemented for current supported runtime paths; remaining work is primarily connector/pipeline-to-pipeline policy closure and full FTGo end-to-end parity expansion.
+  - Canonical checkout contracts now cover the full 01->08 chain with strict handoff validation (including negative mismatch fixtures).
+  - SYNC full-chain canonical execution proof is implemented via deterministic thin services and merge/replay lineage assertions.
+  - TPFGo SYNC gate workflow runs framework verify + canonical checkout E2E + parity tests + docs build.
 
 ## TPFGo Closure Board (Epic Termination Criteria)
 
@@ -147,61 +149,72 @@ Status legend: TODO, IN_PROGRESS, DONE
 ### Merge-blocking items
 
 1) **Connector idempotency and dedup policy closure**  
-Status: IN_PROGRESS  
+Status: DONE  
 Done means:
 - Default duplicate-handling policy is documented and versioned.
 - Retry key derivation contract is explicit and deterministic.
 - Unit/integration tests cover duplicate/replay scenarios at connector boundaries.
 
 2) **Connector backpressure and buffering policy closure**  
-Status: TODO  
+Status: DONE  
 Done means:
 - End-to-end demand signaling model is documented.
 - Buffer capacity/overflow behavior is explicit and tested.
 - Failure signatures under pressure are observable and documented.
 
 3) **Cross-pipeline handoff contract build-time enforcement**  
-Status: IN_PROGRESS  
+Status: DONE  
 Done means:
 - Output-to-input contract checks fail fast at build time for incompatible handoffs.
 - Diagnostics include pipeline/step context and expected vs actual contract details.
 - Coverage includes version drift and mapper/payload mismatch cases.
 
 4) **Canonical full FTGo flow implemented end-to-end**  
-Status: IN_PROGRESS  
+Status: DONE  
 Done means:
 - Full checkout -> validation -> restaurant acceptance -> preparation -> dispatch -> delivery -> payment flow exists in TPF.
 - Explicit failure/compensation pipelines are implemented for terminal failure checkpoints.
 - End-to-end test validates business correctness and deterministic lineage continuity.
 
 5) **Transport/platform parity gate (REST, gRPC, FUNCTION + Protobuf-over-HTTP semantic row)**  
-Status: TODO  
+Status: DONE  
 Done means:
 - Equivalent supported-shape behavior is validated across all required paths.
 - Unsupported shapes fail with explicit, consistent diagnostics.
 - Parity matrix tests are green and required in CI, including the semantic parity row for Protobuf-over-HTTP.
 
 6) **Partial-progress and recovery behavior closure**  
-Status: TODO  
+Status: DONE  
 Done means:
 - Partial-progress scenarios are explicitly classified and tested.
 - Replay/remediation workflow is codified and verifiable.
 - Parking/retry exhaustion behavior is operationally diagnosable.
 
 7) **Docs/runbooks aligned to shipped behavior**  
-Status: IN_PROGRESS  
+Status: DONE  
 Done means:
 - Build/development/operations/evolve docs agree on current capabilities.
 - Troubleshooting guidance maps concrete failure signatures to actions.
 - No planned-but-unimplemented capability is documented as available.
 
 8) **Single merge-blocking CI gate for epic acceptance**  
-Status: IN_PROGRESS  
+Status: DONE  
 Done means:
 - CI includes framework verify + canonical FTGo E2E + parity matrix.
-- CI gate is wired through `CI — TPFGo Closure Gate (SYNC)` workflow.
+- CI gate is wired through `CI — TPFGo SYNC Gate` workflow.
 - Gate is required for merges affecting FTGo-critical modules.
 - Failure output is actionable for on-call and contributors.
+
+## Status Snapshot (2026-03-10, branch `codex/tpfgo-final-pr2-gates-docs`)
+
+Evidence used for the DONE statuses above:
+
+- `./mvnw -f framework/pom.xml verify`
+- `./mvnw -f examples/checkout/pom.xml -pl common,create-order-orchestrator-svc,deliver-order-orchestrator-svc -am -Dtest=CanonicalFtgoSyncFlowTest,CreateToDeliverBridgeE2ETest,CreateToDeliverGrpcBridgeE2ETest,DeliverForwardBridgeE2ETest -Dsurefire.failIfNoSpecifiedTests=false test`
+- `./scripts/ci/bootstrap-local-repo-prereqs.sh framework`
+- `./mvnw -f framework/pom.xml -pl deployment -Dtest=OrchestratorRestResourceRendererTest,OrchestratorGrpcRendererTest,OrchestratorFunctionHandlerRendererTest test`
+- `./mvnw -f framework/pom.xml -pl runtime -Dtest=FunctionTransportBridgeTest,UnaryFunctionTransportBridgeTest,FunctionTransportAdaptersTest,HttpRemoteFunctionInvokeAdapterTest,RestExceptionMapperTest,ProtobufHttpStatusMapperTest,ObserverTapContractValidatorTest,CheckoutCanonicalFlowContractTest,CheckoutCanonicalFlowContractNegativeTest test`
+- `npm --prefix docs ci && npm --prefix docs run build`
 
 ### Execution rule
 

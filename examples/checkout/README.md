@@ -37,7 +37,7 @@ This lane is the executable FTGo progression starter and CI gate for connector s
 - strict idempotency/dedup at connector boundaries,
 - gRPC ingest handoff correctness.
 
-The canonical chain config extends this lane with additional bounded contexts (consumer validation, restaurant acceptance, kitchen fan-out/fan-in, dispatch, delivery, payment, and explicit failure/compensation pipeline contracts).
+The canonical chain config extends this lane with additional bounded contexts (consumer validation, restaurant acceptance, kitchen fan-out/fan-in, dispatch, delivery, payment, and explicit failure/compensation pipeline contracts). Full SYNC-path canonical execution proof is covered by `CanonicalFtgoSyncFlowTest`.
 
 ## Config files
 
@@ -59,11 +59,11 @@ The canonical chain config extends this lane with additional bounded contexts (c
 These modules are intentionally not yet wired into the root project `pom.xml`.
 Build them explicitly from `examples/checkout` while the reference implementation is evolving.
 
-## Next implementation steps
+## Current implementation focus
 
-1. Keep executable chain and canonical chain contracts in sync as services are added.
-2. Add parity E2E for REST, gRPC, and FUNCTION/LAMBDA execution paths.
-3. Add observer/tap runtime assertions on checkpoint vs mid-step outputs.
+1. Keep executable chain and canonical chain contracts in sync as additional lane services are added.
+2. Keep parity and diagnostics suites green for REST, gRPC, FUNCTION, and Protobuf-over-HTTP semantic mapping.
+3. Keep observer/tap validation diagnostics explicit (required = fail-fast, optional = warn/skip).
 
 ## Testing
 
@@ -87,7 +87,7 @@ CI also runs this lane via reusable workflow:
 
 - `.github/workflows/e2e-checkout-ftgo-smoke.yml`
 
-The create-order bridge lane remains part of the FTGo clone target and is tracked for follow-up once generated orchestrator-client MANY_TO_ONE shape compatibility is aligned.
+The create-order and deliver-order bridge lanes are both active and validated in CI through local and embedded gRPC tests.
 
 ## Notes
 

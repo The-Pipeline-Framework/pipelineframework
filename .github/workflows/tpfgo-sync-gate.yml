@@ -1,4 +1,4 @@
-name: CI — TPFGo Closure Gate (SYNC)
+name: CI — TPFGo SYNC Gate
 
 on:
   pull_request:
@@ -9,7 +9,7 @@ on:
       - "examples/checkout/**"
       - "docs/**"
       - "scripts/ci/**"
-      - ".github/workflows/tpfgo-closure-gate.yml"
+      - ".github/workflows/tpfgo-sync-gate.yml"
   workflow_dispatch:
 
 concurrency:
@@ -64,9 +64,9 @@ jobs:
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" -f examples/checkout/pom.xml \
-            -pl create-order-orchestrator-svc,deliver-order-orchestrator-svc \
+            -pl common,create-order-orchestrator-svc,deliver-order-orchestrator-svc \
             -am \
-            -Dtest=CreateToDeliverBridgeE2ETest,CreateToDeliverGrpcBridgeE2ETest,DeliverForwardBridgeE2ETest \
+            -Dtest=CanonicalFtgoSyncFlowTest,CreateToDeliverBridgeE2ETest,CreateToDeliverGrpcBridgeE2ETest,DeliverForwardBridgeE2ETest \
             -Dsurefire.failIfNoSpecifiedTests=false \
             test
 
@@ -110,7 +110,7 @@ jobs:
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" -f framework/pom.xml \
             -pl runtime \
-            -Dtest=FunctionTransportBridgeTest,UnaryFunctionTransportBridgeTest,FunctionTransportAdaptersTest,HttpRemoteFunctionInvokeAdapterTest,RestExceptionMapperTest,ProtobufHttpStatusMapperTest \
+            -Dtest=FunctionTransportBridgeTest,UnaryFunctionTransportBridgeTest,FunctionTransportAdaptersTest,HttpRemoteFunctionInvokeAdapterTest,RestExceptionMapperTest,ProtobufHttpStatusMapperTest,ObserverTapContractValidatorTest,CheckoutCanonicalFlowContractTest,CheckoutCanonicalFlowContractNegativeTest \
             test
 
   docs-build:

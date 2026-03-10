@@ -1,6 +1,6 @@
 # Observer and Tap Contract (Diagnostics-First)
 
-This cycle closes observer/tap scope at **contract, diagnostics, and tests** level only.
+Current scope covers observer/tap behavior at **contract, diagnostics, and tests** level only.
 It does not ship a full runtime observer/tap execution engine.
 
 ## Contract terms
@@ -24,18 +24,18 @@ Recommended diagnostic payload fields:
 - supported policy set,
 - expected vs actual output shape.
 
-## Policy behavior in this cycle
+## Policy behavior in current scope
 
 - **Required observer/tap**: configuration error if unsupported.
 - **Optional observer/tap**: explicit warning and skip behavior.
 - No implicit fallback that silently changes delivery guarantees.
 
-## Test scope for this cycle
+## Test scope for current implementation
 
 - Contract-level validation and diagnostics tests.
-- No merge blocker on full runtime tap fan-out execution in this cycle.
+- No merge blocker on full runtime tap fan-out execution in current scope.
 
-## Out of scope in this cycle
+## Out of scope for current implementation
 
 - Dedicated runtime delivery semantics for observer/tap streams.
 - Backpressure and durability SLA guarantees beyond existing checkpoint pipelines.

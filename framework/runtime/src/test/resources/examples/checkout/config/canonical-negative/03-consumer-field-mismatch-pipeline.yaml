@@ -1,0 +1,19 @@
+appName: "Canonical Negative Consumer Field Mismatch"
+basePackage: "org.pipelineframework.checkout.canonical.negative.consumer.field"
+transport: "GRPC"
+steps:
+  - name: "Consumer Entry Field Mismatch"
+    cardinality: "ONE_TO_ONE"
+    inputTypeName: "OrderPending"
+    inputFields:
+      - name: "orderId"
+        type: "UUID"
+        protoType: "string"
+      - name: "restaurantId"
+        type: "UUID"
+        protoType: "string"
+    outputTypeName: "OrderReady"
+    outputFields:
+      - name: "orderId"
+        type: "UUID"
+        protoType: "string"
