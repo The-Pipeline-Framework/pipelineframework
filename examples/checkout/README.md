@@ -65,9 +65,9 @@ Build them explicitly from `examples/checkout` while the reference implementatio
 
 ## Current implementation focus
 
-1. Keep executable chain and canonical chain contracts in sync as additional lane services are added.
-2. Keep parity and diagnostics suites green for REST, gRPC, FUNCTION, and Protobuf-over-HTTP semantic mapping.
-3. Keep observer/tap validation diagnostics explicit (required = fail-fast, optional = warn/skip).
+1. Ensure executable chain and canonical chain contracts remain in sync as additional lane services are added.
+2. Maintain parity and diagnostics suites for REST, gRPC, FUNCTION, and Protobuf-over-HTTP semantic mapping.
+3. Make observer/tap validation diagnostics explicit (required = fail-fast, optional = warn/skip).
 
 ## Testing
 

@@ -57,8 +57,8 @@ class ObserverTapContractValidatorTest {
 
         assertTrue(ex.getMessage().contains("pipeline=checkout"));
         assertTrue(ex.getMessage().contains("step=Dispatch Assign Courier"));
-        assertTrue(ex.getMessage().contains("requestedPolicy=REQUIRED"));
-        assertTrue(ex.getMessage().contains("requested=mid-step-tap"));
+        assertTrue(ex.getMessage().contains("policy=REQUIRED"));
+        assertTrue(ex.getMessage().contains("requestedToken=mid-step-tap"));
         assertTrue(ex.getMessage().contains("supported=[checkpoint-observer]"));
     }
 
@@ -77,7 +77,7 @@ class ObserverTapContractValidatorTest {
         assertEquals(1, warnings.size());
         assertTrue(warnings.get(0).contains("pipeline=checkout"));
         assertTrue(warnings.get(0).contains("step=Dispatch Assign Courier"));
-        assertTrue(warnings.get(0).contains("requestedPolicy=OPTIONAL"));
+        assertTrue(warnings.get(0).contains("policy=OPTIONAL"));
     }
 
     @Test
@@ -91,7 +91,7 @@ class ObserverTapContractValidatorTest {
             message -> {
             }));
 
-        assertTrue(ex.getMessage().contains("requested=unknown"));
+        assertTrue(ex.getMessage().contains("requestedToken=unknown"));
     }
 
     @Test
@@ -107,5 +107,55 @@ class ObserverTapContractValidatorTest {
 
         assertFalse(accepted);
         assertEquals(1, warnings.size());
+    }
+
+    @Test
+    void rejectsRequiredWhenSupportedSetEmpty() {
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> ObserverTapContractValidator.validate(
+            "checkout",
+            "Dispatch Assign Courier",
+            ObserverTapContractValidator.Policy.REQUIRED,
+            "checkpoint-observer",
+            Set.of(),
+            message -> {
+            }));
+
+        assertTrue(ex.getMessage().contains("pipeline=checkout"));
+        assertTrue(ex.getMessage().contains("step=Dispatch Assign Courier"));
+        assertTrue(ex.getMessage().contains("policy=REQUIRED"));
+        assertTrue(ex.getMessage().contains("requestedToken=checkpoint-observer"));
+        assertTrue(ex.getMessage().contains("supported=[]"));
+    }
+
+    @Test
+    void rejectsNullPipelineName() {
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> ObserverTapContractValidator.validate(
+            null,
+            "Dispatch Assign Courier",
+            ObserverTapContractValidator.Policy.REQUIRED,
+            "mid-step-tap",
+            Set.of("checkpoint-observer"),
+            message -> {
+            }));
+
+        assertTrue(ex.getMessage().contains("pipeline=unknown"));
+        assertTrue(ex.getMessage().contains("step=Dispatch Assign Courier"));
+        assertTrue(ex.getMessage().contains("policy=REQUIRED"));
+    }
+
+    @Test
+    void rejectsBlankStepName() {
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> ObserverTapContractValidator.validate(
+            "checkout",
+            " ",
+            ObserverTapContractValidator.Policy.REQUIRED,
+            "mid-step-tap",
+            Set.of("checkpoint-observer"),
+            message -> {
+            }));
+
+        assertTrue(ex.getMessage().contains("pipeline=checkout"));
+        assertTrue(ex.getMessage().contains("step=unknown"));
+        assertTrue(ex.getMessage().contains("policy=REQUIRED"));
     }
 }

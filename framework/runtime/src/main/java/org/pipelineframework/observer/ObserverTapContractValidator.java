@@ -74,8 +74,8 @@ public final class ObserverTapContractValidator {
         String diagnostic = "observer/tap contract unsupported:"
             + " pipeline=" + normalize(pipelineName)
             + "; step=" + normalize(stepName)
-            + "; requestedPolicy=" + policy
-            + "; requested=" + normalizedRequested
+            + "; policy=" + policy
+            + "; requestedToken=" + normalizedRequested
             + "; supported=" + normalizedSupported;
 
         if (policy == Policy.REQUIRED) {
