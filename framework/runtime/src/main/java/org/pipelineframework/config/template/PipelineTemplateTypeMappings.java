@@ -212,6 +212,9 @@ final class PipelineTemplateTypeMappings {
      * @throws IllegalStateException if the field's type is unknown, the message reference is unknown, a map field lacks or has invalid key/value types, a map key uses a disallowed kind (float/bytes or not one of string/bool/int32/int64), the field lacks a stable positive number, a map is marked repeated, or a protobuf override is unsafe
      */
     static PipelineTemplateField normalizeV2Field(PipelineTemplateField field, List<String> knownMessages) {
+        if (field.name() == null || field.name().isBlank()) {
+            throw new IllegalStateException("Field name must not be blank for v2 type '" + field.type() + "'");
+        }
         String canonicalType = canonicalTypeForV2(field.type());
         if (canonicalType == null) {
             throw new IllegalStateException("Unknown v2 field type '" + field.type() + "' for field '" + field.name() + "'");
@@ -250,6 +253,12 @@ final class PipelineTemplateTypeMappings {
             if ("map".equals(valueCanonicalType)) {
                 throw new IllegalStateException(
                     "Map field '" + field.name() + "' cannot use map as valueType");
+            }
+            if ("message".equals(valueCanonicalType)
+                && knownMessages != null
+                && !knownMessages.contains(field.valueType())) {
+                throw new IllegalStateException(
+                    "Map field '" + field.name() + "' references unknown message valueType '" + field.valueType() + "'");
             }
         }
         if (!field.hasStableNumber()) {

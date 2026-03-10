@@ -2,6 +2,7 @@ package org.pipelineframework.processor.phase;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -111,7 +112,7 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
      */
     private Set<GenerationTarget> resolveTargetsForModel(PipelineStepModel model, TransportMode transportMode) {
         if (model.remoteExecution() != null && model.remoteExecution().isRemote()) {
-            Set<GenerationTarget> targets = new java.util.LinkedHashSet<>(resolveTargetsForRole(model.deploymentRole(), transportMode));
+            Set<GenerationTarget> targets = new LinkedHashSet<>(resolveTargetsForRole(model.deploymentRole(), transportMode));
             targets.add(GenerationTarget.REMOTE_OPERATOR_ADAPTER);
             return Set.copyOf(targets);
         }

@@ -268,6 +268,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .generatedName(serviceName)
             .servicePackage(servicePackage)
             .serviceClassName(generatedAdapterType)
+            // Remote steps carry the same contract type on both sides of TypeMapping inputMapping/outputMapping.
+            // Unlike createDelegatedStepModel, domain vs. gRPC/external types are not split here because the
+            // protobuf contract is resolved later from descriptors and the remote adapter uses that directly.
             .inputMapping(new TypeMapping(stepDef.inputType(), null, false, stepDef.inputType()))
             .outputMapping(new TypeMapping(stepDef.outputType(), null, false, stepDef.outputType()))
             .streamingShape(StreamingShape.UNARY_UNARY)

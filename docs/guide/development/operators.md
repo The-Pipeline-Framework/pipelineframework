@@ -84,7 +84,7 @@ When application domain types differ from operator I/O types, mapper coverage is
 - gRPC flow requires descriptor + mapper-compatible bindings.
 - Mapper fallback policies are configuration-driven; implicit conversion is not enabled by default.
 
-Remote v2 operators use the step contract directly. The generated adapter still uses the normal mapper model to bridge domain types to generated protobuf message types, but it does not resolve a Java operator implementation and it does not use the FUNCTION remote adapter’s `BytesValue` + JSON contract.
+Remote v2 operators use the step contract directly. The generated adapter still uses the normal mapper model to bridge domain types to generated protobuf message types. It does not resolve a Java operator implementation, and it does not use the FUNCTION remote adapter’s `BytesValue` + JSON contract.
 
 ## Remote Operator Constraints
 

@@ -198,12 +198,16 @@ public final class RemoteOperatorAdapterRenderer implements PipelineRenderer<Grp
         if (model.outboundDomainType() == null || model.inboundDomainType() == null) {
             throw new IllegalStateException("Remote operator adapter requires domain input and output types");
         }
+        if (model.remoteExecution() == null || model.remoteExecution().operatorId() == null) {
+            throw new IllegalStateException("Remote operator adapter requires a non-null remote execution operatorId");
+        }
+        Integer timeoutMs = model.remoteExecution().timeoutMs();
 
         builder.addStatement("$T request = requestMapper.toExternal(input)", protoInputType)
             .addStatement("return remoteOperatorClient.invoke(resolveTargetUrl(), $S, request.toByteArray(), $L)"
                     + ".map(bytes -> responseMapper.fromExternal(decodeResponse(bytes)))",
                 model.remoteExecution().operatorId(),
-                model.remoteExecution().timeoutMs() == null ? "null" : model.remoteExecution().timeoutMs().toString());
+                timeoutMs == null ? "null" : timeoutMs.toString());
         return builder.build();
     }
 }

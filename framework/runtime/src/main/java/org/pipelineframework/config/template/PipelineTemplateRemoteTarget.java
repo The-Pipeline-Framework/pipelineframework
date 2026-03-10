@@ -29,6 +29,9 @@ public record PipelineTemplateRemoteTarget(
     public PipelineTemplateRemoteTarget {
         url = normalize(url);
         urlConfigKey = normalize(urlConfigKey);
+        if (url == null && urlConfigKey == null) {
+            throw new IllegalArgumentException("PipelineTemplateRemoteTarget requires either url or urlConfigKey");
+        }
     }
 
     private static String normalize(String value) {

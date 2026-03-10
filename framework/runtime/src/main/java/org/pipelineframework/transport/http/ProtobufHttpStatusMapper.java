@@ -131,6 +131,7 @@ public final class ProtobufHttpStatusMapper {
                 FAILED_PRECONDITION,
                 NOT_FOUND,
                 ALREADY_EXISTS,
+                CANCELLED,
                 UNAUTHENTICATED,
                 PERMISSION_DENIED,
                 OUT_OF_RANGE,

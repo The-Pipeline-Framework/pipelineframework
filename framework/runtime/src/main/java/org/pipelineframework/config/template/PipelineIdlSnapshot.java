@@ -17,6 +17,7 @@
 package org.pipelineframework.config.template;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -38,7 +39,7 @@ public record PipelineIdlSnapshot(
     List<StepSnapshot> steps
 ) {
     public PipelineIdlSnapshot {
-        messages = messages == null ? Map.of() : Map.copyOf(messages);
+        messages = messages == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(messages));
         steps = steps == null ? List.of() : List.copyOf(steps);
     }
 
@@ -90,7 +91,7 @@ public record PipelineIdlSnapshot(
     /**
      * Adds a legacy message snapshot to the provided messages map when a valid name and fields are present.
      *
-     * If a snapshot for the given message name already exists, the method does nothing.
+     * If a snapshot for the given message name already exists, the method verifies that the shape matches.
      *
      * @param messages    the map to populate with the constructed MessageSnapshot
      * @param messageName the name of the message to add; ignored if null or blank
@@ -119,7 +120,15 @@ public record PipelineIdlSnapshot(
                 field.deprecated(),
                 field.protoType()));
         }
-        messages.putIfAbsent(messageName, new MessageSnapshot(messageName, snapshotFields, List.of(), List.of()));
+        MessageSnapshot candidate = new MessageSnapshot(messageName, snapshotFields, List.of(), List.of());
+        MessageSnapshot existing = messages.get(messageName);
+        if (existing != null) {
+            if (!existing.equals(candidate)) {
+                throw new IllegalStateException("Conflicting legacy message shape for '" + messageName + "'");
+            }
+            return;
+        }
+        messages.put(messageName, candidate);
     }
 
     /**

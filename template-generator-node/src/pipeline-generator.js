@@ -188,8 +188,16 @@ class PipelineGenerator {
             throw new Error(`Missing message definition for '${typeName}'`);
         }
         if (topLevel && Array.isArray(inlineFields)) {
-            const topLevelNormalized = topLevel.map((field) => this.toScaffoldField(field));
-            const inlineNormalized = inlineFields.map((field) => this.toScaffoldField(field));
+            const sortFields = (fields) => [...fields].sort((left, right) => {
+                const leftNumber = Number.isFinite(left.number) ? left.number : Number.MAX_SAFE_INTEGER;
+                const rightNumber = Number.isFinite(right.number) ? right.number : Number.MAX_SAFE_INTEGER;
+                if (leftNumber !== rightNumber) {
+                    return leftNumber - rightNumber;
+                }
+                return String(left.name || '').localeCompare(String(right.name || ''));
+            });
+            const topLevelNormalized = sortFields(topLevel.map((field) => this.toScaffoldField(field)));
+            const inlineNormalized = sortFields(inlineFields.map((field) => this.toScaffoldField(field)));
             if (JSON.stringify(topLevelNormalized) !== JSON.stringify(inlineNormalized)) {
                 throw new Error(`Conflicting inline vs top-level field definitions for '${typeName}'`);
             }

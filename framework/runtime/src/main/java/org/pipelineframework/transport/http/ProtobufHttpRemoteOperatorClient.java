@@ -145,11 +145,12 @@ public class ProtobufHttpRemoteOperatorClient {
             return metadata;
         }
         String seed = UUID.nameUUIDFromBytes(requestBody).toString();
+        String invocationId = UUID.randomUUID().toString();
         long now = Instant.now().toEpochMilli();
         return new TransportDispatchMetadata(
             "remote-" + seed,
             "remote-" + seed,
-            operatorId + ":" + seed,
+            operatorId + ":" + seed + ":" + invocationId,
             0,
             null,
             now,
@@ -208,8 +209,12 @@ public class ProtobufHttpRemoteOperatorClient {
         if (responseBody.length() > 512) {
             responseBody = responseBody.substring(0, 512) + "...";
         }
-        return new IllegalStateException(
-            "Remote operator '" + operatorId + "' failed with HTTP " + response.statusCode()
-                + " at " + targetUrl + " (" + responseBody + ")");
+        String message = "Remote operator '" + operatorId + "' failed with HTTP " + response.statusCode()
+            + " at " + targetUrl + " (" + responseBody + ")";
+        int statusCode = response.statusCode();
+        if (statusCode >= 400 && statusCode < 500 && statusCode != 408 && statusCode != 429) {
+            return new NonRetryableException(message);
+        }
+        return new IllegalStateException(message);
     }
 }

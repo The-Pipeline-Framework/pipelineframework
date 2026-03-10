@@ -400,7 +400,14 @@ public class StepDefinitionParser {
             parseOptionalPositiveInteger(executionMap.get("timeoutMs"), stepName, "execution.timeoutMs"),
             target);
         validateRemoteExecution(stepName, execution);
-        return execution.isRemote() ? execution : null;
+        if (!execution.isRemote()) {
+            String message = "Skipping step '" + stepName
+                + "': execution block is present but execution.mode must be REMOTE";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            throw new IllegalArgumentException(message);
+        }
+        return execution;
     }
 
     private PipelineTemplateRemoteTarget parseRemoteTarget(Object targetObj) {
@@ -415,8 +422,15 @@ public class StepDefinitionParser {
     }
 
     private void validateRemoteExecution(String stepName, PipelineTemplateStepExecution execution) {
-        if (execution == null || !execution.isRemote()) {
+        if (execution == null) {
             return;
+        }
+        if (!execution.isRemote()) {
+            String message = "Skipping step '" + stepName
+                + "': invalid execution.mode '" + execution.mode() + "'; expected REMOTE";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            throw new IllegalArgumentException(message);
         }
         if (isBlank(execution.operatorId())) {
             String message = "Skipping step '" + stepName + "': remote execution requires execution.operatorId";
@@ -475,11 +489,7 @@ public class StepDefinitionParser {
         if (rawVersion instanceof Number number) {
             return number.intValue();
         }
-        try {
-            return Integer.parseInt(String.valueOf(rawVersion).trim());
-        } catch (NumberFormatException ex) {
-            return 1;
-        }
+        throw new IllegalArgumentException("Invalid template version: '" + rawVersion + "'");
     }
 
     private String deriveLegacyServiceClassName(String basePackage, String stepName) {

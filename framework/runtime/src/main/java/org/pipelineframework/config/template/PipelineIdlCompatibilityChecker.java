@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Checks whether a current normalized IDL snapshot remains compatible with a baseline snapshot.
@@ -68,11 +69,11 @@ public final class PipelineIdlCompatibilityChecker {
                 errors.add("Missing step in current IDL: " + baselineStep.name());
                 continue;
             }
-            if (!safeEquals(baselineStep.inputTypeName(), currentStep.inputTypeName())) {
+            if (!Objects.equals(baselineStep.inputTypeName(), currentStep.inputTypeName())) {
                 errors.add("Step '" + baselineStep.name() + "' changed input message from '"
                     + baselineStep.inputTypeName() + "' to '" + currentStep.inputTypeName() + "'");
             }
-            if (!safeEquals(baselineStep.outputTypeName(), currentStep.outputTypeName())) {
+            if (!Objects.equals(baselineStep.outputTypeName(), currentStep.outputTypeName())) {
                 errors.add("Step '" + baselineStep.name() + "' changed output message from '"
                     + baselineStep.outputTypeName() + "' to '" + currentStep.outputTypeName() + "'");
             }
@@ -178,20 +179,20 @@ public final class PipelineIdlCompatibilityChecker {
         PipelineIdlSnapshot.FieldSnapshot currentField,
         List<String> errors
     ) {
-        if (!safeEquals(baselineField.name(), currentField.name())) {
+        if (!Objects.equals(baselineField.name(), currentField.name())) {
             errors.add("Message '" + messageName + "' changed field name at number " + baselineField.number()
                 + " from '" + baselineField.name() + "' to '" + currentField.name() + "'");
         }
-        if (!safeEquals(baselineField.canonicalType(), currentField.canonicalType())) {
+        if (!Objects.equals(baselineField.canonicalType(), currentField.canonicalType())) {
             errors.add("Message '" + messageName + "' changed canonical type for field '" + baselineField.name()
                 + "' from '" + baselineField.canonicalType() + "' to '" + currentField.canonicalType() + "'");
         }
-        if (!safeEquals(baselineField.messageRef(), currentField.messageRef())) {
+        if (!Objects.equals(baselineField.messageRef(), currentField.messageRef())) {
             errors.add("Message '" + messageName + "' changed message reference for field '" + baselineField.name()
                 + "' from '" + baselineField.messageRef() + "' to '" + currentField.messageRef() + "'");
         }
-        if (!safeEquals(baselineField.keyType(), currentField.keyType())
-            || !safeEquals(baselineField.valueType(), currentField.valueType())) {
+        if (!Objects.equals(baselineField.keyType(), currentField.keyType())
+            || !Objects.equals(baselineField.valueType(), currentField.valueType())) {
             errors.add("Message '" + messageName + "' changed map structure for field '" + baselineField.name() + "'");
         }
         if (baselineField.repeated() != currentField.repeated()) {
@@ -204,15 +205,4 @@ public final class PipelineIdlCompatibilityChecker {
         }
     }
 
-    /**
-     * Compare two objects for equality using null-safe semantics.
-     *
-     * @return `true` if both objects are null or `left.equals(right)`, `false` otherwise.
-     */
-    private boolean safeEquals(Object left, Object right) {
-        if (left == null) {
-            return right == null;
-        }
-        return left.equals(right);
-    }
 }

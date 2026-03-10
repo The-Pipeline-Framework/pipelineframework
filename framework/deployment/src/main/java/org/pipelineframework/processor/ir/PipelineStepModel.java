@@ -500,6 +500,12 @@ public record PipelineStepModel(
             return this;
         }
 
+        /**
+         * Sets the remote execution configuration for this step model.
+         *
+         * @param remoteExecution remote execution metadata describing how the step is invoked remotely
+         * @return this {@link PipelineStepModel.Builder} for chaining
+         */
         public Builder remoteExecution(PipelineTemplateStepExecution remoteExecution) {
             this.remoteExecution = remoteExecution;
             return this;
