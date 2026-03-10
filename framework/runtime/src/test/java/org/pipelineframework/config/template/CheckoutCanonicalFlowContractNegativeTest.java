@@ -57,6 +57,8 @@ class CheckoutCanonicalFlowContractNegativeTest {
         assertTrue(ex.getMessage().contains("Producer Terminal"));
         assertTrue(ex.getMessage().contains("Consumer Entry Field Mismatch"));
         assertTrue(ex.getMessage().contains("field names expected="));
+        assertTrue(ex.getMessage().contains("customerId"));
+        assertTrue(ex.getMessage().contains("restaurantId"));
     }
 
     private PipelineTemplateConfig load(String path) {
@@ -116,17 +118,23 @@ class CheckoutCanonicalFlowContractNegativeTest {
     }
 
     private Path resolveFromWorkspaceRoot(String relativePath) {
-        String workspaceRoot = System.getProperty("workspace.root");
-        if (workspaceRoot == null || workspaceRoot.isBlank()) {
-            workspaceRoot = System.getenv("WORKSPACE_ROOT");
-        }
-        if (workspaceRoot != null && !workspaceRoot.isBlank()) {
-            Path explicitRoot = Path.of(workspaceRoot).normalize();
+        String explicitWorkspaceRoot = System.getProperty("workspace.root");
+        if (explicitWorkspaceRoot != null && !explicitWorkspaceRoot.isBlank()) {
+            Path explicitRoot = Path.of(explicitWorkspaceRoot).normalize();
             Path explicitCandidate = explicitRoot.resolve(relativePath).normalize();
             if (!Files.exists(explicitCandidate)) {
-                throw new AssertionError("workspace.root/WORKSPACE_ROOT is set but file was not found: " + explicitCandidate);
+                throw new AssertionError("workspace.root is set but file was not found: " + explicitCandidate);
             }
             return explicitCandidate;
+        }
+
+        String envWorkspaceRoot = System.getenv("WORKSPACE_ROOT");
+        if (envWorkspaceRoot != null && !envWorkspaceRoot.isBlank()) {
+            Path envRoot = Path.of(envWorkspaceRoot).normalize();
+            Path envCandidate = envRoot.resolve(relativePath).normalize();
+            if (Files.exists(envCandidate)) {
+                return envCandidate;
+            }
         }
 
         var classpathResource = CheckoutCanonicalFlowContractNegativeTest.class.getClassLoader().getResource(relativePath);

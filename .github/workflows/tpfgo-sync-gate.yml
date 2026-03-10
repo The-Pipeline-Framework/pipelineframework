@@ -79,6 +79,19 @@ jobs:
           find examples/checkout -path "*/target/surefire-reports/*.txt" -print -exec tail -n 200 {} \;
           find examples/checkout -path "*/target/failsafe-reports/*.txt" -print -exec tail -n 200 {} \;
 
+      - name: Upload reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkout-reports
+          path: |
+            examples/checkout/**/target/surefire-reports/*.txt
+            examples/checkout/**/target/surefire-reports/*.xml
+            examples/checkout/**/target/failsafe-reports/*.txt
+            examples/checkout/**/target/failsafe-reports/*.xml
+          retention-days: 7
+          if-no-files-found: warn
+
   transport-parity-matrix:
     name: Transport Parity Matrix (REST/gRPC/FUNCTION + protobuf-over-http semantic)
     runs-on: ubuntu-latest

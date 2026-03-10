@@ -24,7 +24,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CanonicalFtgoSyncFlowTest {
@@ -88,7 +87,9 @@ class CanonicalFtgoSyncFlowTest {
         assertEquals(reducedForward.itemId(), reducedReverse.itemId());
         assertEquals(reducedForward.idempotencyKey(), reducedReverse.idempotencyKey());
         assertEquals(reducedForward.payload().lineageDigest(), reducedReverse.payload().lineageDigest());
-        assertNotNull(reducedForward.meta().get("previousItemIds"));
+        assertEquals(
+            reducedForward.meta().get("previousItemIds"),
+            reducedReverse.meta().get("previousItemIds"));
 
         DeliveryAssigned assigned = dispatchAssign(reducedForward.payload());
         OrderDelivered delivered = deliveryExecute(assigned);
@@ -164,9 +165,10 @@ class CanonicalFtgoSyncFlowTest {
             "bad;reason=line\nbreak",
             "trace=abc",
             "item\\123");
-        assertTrue(signature.contains("reason=bad\\;reason\\=line\\nbreak"));
-        assertTrue(signature.contains("traceId=trace\\=abc"));
-        assertTrue(signature.contains("itemId=item\\\\123"));
+        String expectedSignature =
+            "connector=delivery->payment;phase=forward;reason=bad\\;reason\\=line\\nbreak;"
+                + "traceId=trace\\=abc;itemId=item\\\\123";
+        assertEquals(expectedSignature, signature);
     }
 
     private ValidatedOrderRequest checkoutValidate(PlaceOrderRequest request) {

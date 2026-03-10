@@ -79,4 +79,33 @@ class ObserverTapContractValidatorTest {
         assertTrue(warnings.get(0).contains("step=Dispatch Assign Courier"));
         assertTrue(warnings.get(0).contains("requestedPolicy=OPTIONAL"));
     }
+
+    @Test
+    void rejectsBlankRequestedPolicyForRequired() {
+        IllegalStateException ex = assertThrows(IllegalStateException.class, () -> ObserverTapContractValidator.validate(
+            "checkout",
+            "Dispatch Assign Courier",
+            ObserverTapContractValidator.Policy.REQUIRED,
+            "   ",
+            Set.of("checkpoint-observer", "unknown"),
+            message -> {
+            }));
+
+        assertTrue(ex.getMessage().contains("requested=unknown"));
+    }
+
+    @Test
+    void ignoresBlankSupportedPolicyTokens() {
+        List<String> warnings = new ArrayList<>();
+        boolean accepted = ObserverTapContractValidator.validate(
+            "checkout",
+            "Dispatch Assign Courier",
+            ObserverTapContractValidator.Policy.OPTIONAL,
+            "unknown",
+            Set.of("checkpoint-observer", " ", "\t"),
+            warnings::add);
+
+        assertFalse(accepted);
+        assertEquals(1, warnings.size());
+    }
 }

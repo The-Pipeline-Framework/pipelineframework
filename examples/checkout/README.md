@@ -39,6 +39,10 @@ This lane is the executable FTGo progression starter and CI gate for connector s
 
 The canonical chain config extends this lane with additional bounded contexts (consumer validation, restaurant acceptance, kitchen fan-out/fan-in, dispatch, delivery, payment, and explicit failure/compensation pipeline contracts). Full SYNC-path canonical execution proof is covered by `CanonicalFtgoSyncFlowTest`.
 
+Run that sync-path canonical proof test directly:
+
+`./mvnw -f examples/checkout/pom.xml -pl common -am -Dtest=CanonicalFtgoSyncFlowTest -Dsurefire.failIfNoSpecifiedTests=false test`
+
 ## Config files
 
 - `create-order-orchestrator-svc/pipeline.yaml`
@@ -87,7 +91,7 @@ CI also runs this lane via reusable workflow:
 
 - `.github/workflows/e2e-checkout-ftgo-smoke.yml`
 
-The create-order and deliver-order bridge lanes are both active and validated in CI through local and embedded gRPC tests.
+The create-order and deliver-order bridge lanes are both active and validated in CI through local tests; embedded gRPC coverage is provided by `CreateToDeliverGrpcBridgeE2ETest` on the create-order lane.
 
 ## Notes
 

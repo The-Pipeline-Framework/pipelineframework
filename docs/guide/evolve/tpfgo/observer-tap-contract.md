@@ -10,11 +10,11 @@ It does not ship a full runtime observer/tap execution engine.
 
 ## Required diagnostics
 
-Any observer/tap request must fail fast with explicit diagnostics when:
+Current validator behavior fails fast with explicit diagnostics when:
 
-1. a checkpoint observer is attached to a non-checkpoint output,
-2. a required tap is configured for a shape not supported by the current runtime,
-3. an observer/tap contract refers to an unresolved step/output contract.
+1. a **required** observer/tap policy token is not in the supported policy token set,
+2. a requested policy token is missing/blank (treated as unsupported),
+3. supported policy token configuration includes missing/blank entries (ignored by normalization).
 
 Recommended diagnostic payload fields:
 
@@ -22,7 +22,7 @@ Recommended diagnostic payload fields:
 - step name,
 - requested observer/tap policy,
 - supported policy set,
-- expected vs actual output shape.
+- requested policy token and support decision.
 
 ## Policy behavior in current scope
 
@@ -39,3 +39,6 @@ Recommended diagnostic payload fields:
 
 - Dedicated runtime delivery semantics for observer/tap streams.
 - Backpressure and durability SLA guarantees beyond existing checkpoint pipelines.
+- Checkpoint/non-checkpoint attachment validation.
+- Unresolved-step resolution diagnostics.
+- Expected-vs-actual output shape diagnostics.

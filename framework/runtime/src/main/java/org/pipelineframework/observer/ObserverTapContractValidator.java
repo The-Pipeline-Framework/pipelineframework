@@ -59,14 +59,15 @@ public final class ObserverTapContractValidator {
         Consumer<String> warningSink
     ) {
         Objects.requireNonNull(policy, "policy must not be null");
-        String normalizedRequested = normalize(requestedPolicy);
+        boolean hasRequestedPolicy = requestedPolicy != null && !requestedPolicy.isBlank();
+        String normalizedRequested = hasRequestedPolicy ? normalize(requestedPolicy) : "unknown";
         Set<String> normalizedSupported = Objects.requireNonNull(supportedPolicies, "supportedPolicies must not be null")
             .stream()
-            .filter(Objects::nonNull)
+            .filter(policyToken -> policyToken != null && !policyToken.isBlank())
             .map(ObserverTapContractValidator::normalize)
             .collect(Collectors.toUnmodifiableSet());
 
-        if (normalizedSupported.contains(normalizedRequested)) {
+        if (hasRequestedPolicy && normalizedSupported.contains(normalizedRequested)) {
             return true;
         }
 
