@@ -19,6 +19,7 @@ import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
@@ -857,6 +858,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         synchronized (this) {
             if (client == null) {
                 var builder = DynamoDbClient.builder();
+                builder.httpClientBuilder(UrlConnectionHttpClient.builder());
                 orchestratorConfig.dynamo().region()
                     .filter(region -> !region.isBlank())
                     .ifPresent(region -> builder.region(Region.of(region)));
