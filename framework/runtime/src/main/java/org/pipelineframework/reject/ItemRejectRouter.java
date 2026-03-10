@@ -473,10 +473,12 @@ public class ItemRejectRouter {
                 .getOptionalValue("quarkus.profile", String.class)
                 .orElseGet(() -> System.getenv("QUARKUS_PROFILE"));
         } catch (IllegalStateException expected) {
-            return System.getenv("QUARKUS_PROFILE");
+            String sysProp = System.getProperty("quarkus.profile");
+            return sysProp != null ? sysProp : System.getenv("QUARKUS_PROFILE");
         } catch (RuntimeException unexpected) {
             LOG.warn("Unable to resolve active Quarkus profile. Falling back to environment.", unexpected);
-            return System.getenv("QUARKUS_PROFILE");
+            String sysProp = System.getProperty("quarkus.profile");
+            return sysProp != null ? sysProp : System.getenv("QUARKUS_PROFILE");
         }
     }
 
