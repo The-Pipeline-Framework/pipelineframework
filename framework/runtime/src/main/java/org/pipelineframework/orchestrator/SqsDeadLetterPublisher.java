@@ -71,6 +71,13 @@ public class SqsDeadLetterPublisher implements DeadLetterPublisher {
                 .queueUrl(queueUrl)
                 .messageBody(messageBody)
                 .build());
+            try {
+                DeadLetterMetrics.record(providerName(), envelope);
+            } catch (RuntimeException metricFailure) {
+                LOG.warnf(metricFailure,
+                    "DeadLetterMetrics recording failed for execution=%s. Continuing after successful DLQ publish.",
+                    envelope.executionId());
+            }
             return null;
         }).replaceWithVoid();
     }

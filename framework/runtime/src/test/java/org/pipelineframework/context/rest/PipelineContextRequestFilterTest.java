@@ -17,6 +17,8 @@
 package org.pipelineframework.context.rest;
 
 import jakarta.ws.rs.container.ContainerRequestContext;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -29,6 +31,7 @@ import org.pipelineframework.context.TransportDispatchMetadataHolder;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.when;
 
 class PipelineContextRequestFilterTest {
@@ -118,16 +121,17 @@ class PipelineContextRequestFilterTest {
     @Test
     void parsesNumericHeaders() {
         PipelineContextRequestFilter filter = new PipelineContextRequestFilter();
+        long now = System.currentTimeMillis();
         ContainerRequestContext context = createMockContext(
             null, null, null,
-            null, null, null, "0", "0", "0", null);
+            null, null, null, "0", Long.toString(now + 60_000L), Long.toString(now), null);
 
         filter.filter(context);
 
         TransportDispatchMetadata metadata = TransportDispatchMetadataHolder.get();
         assertEquals(0, metadata.retryAttempt());
-        assertEquals(0L, metadata.deadlineEpochMs());
-        assertEquals(0L, metadata.dispatchTsEpochMs());
+        assertEquals(now + 60_000L, metadata.deadlineEpochMs());
+        assertEquals(now, metadata.dispatchTsEpochMs());
     }
 
     @Test
@@ -149,9 +153,13 @@ class PipelineContextRequestFilterTest {
     @Test
     void storesBothPipelineContextAndTransportMetadata() {
         PipelineContextRequestFilter filter = new PipelineContextRequestFilter();
+        long now = System.currentTimeMillis();
         ContainerRequestContext context = createMockContext(
             "v3", "false", "require-cache",
-            "corr-999", "exec-888", "idem-777", "5", "1700000000000", "1699999999999", "parent-xyz");
+            "corr-999", "exec-888", "idem-777", "5",
+            Long.toString(now + 300_000L),
+            Long.toString(now),
+            "parent-xyz");
 
         filter.filter(context);
 
@@ -163,6 +171,21 @@ class PipelineContextRequestFilterTest {
         assertNotNull(metadata);
         assertEquals("corr-999", metadata.correlationId());
         assertEquals(5, metadata.retryAttempt());
+    }
+
+    @Test
+    void rejectsExpiredDeadlineBeforeExecution() {
+        PipelineContextRequestFilter filter = new PipelineContextRequestFilter();
+        ContainerRequestContext context = createMockContext(
+            null, null, null,
+            "corr-1", "exec-1", "idem-1", "0",
+            Long.toString(System.currentTimeMillis() - 1_000L),
+            "1699999999999", null);
+
+        StatusRuntimeException ex = assertThrows(StatusRuntimeException.class, () -> filter.filter(context));
+        assertEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus().getCode());
+        assertNull(PipelineContextHolder.get());
+        assertNull(TransportDispatchMetadataHolder.get());
     }
 
     private ContainerRequestContext createMockContext(

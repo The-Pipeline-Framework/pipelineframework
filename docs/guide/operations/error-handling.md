@@ -29,6 +29,22 @@ pipeline.orchestrator.dlq-url=https://sqs.eu-west-1.amazonaws.com/123456789012/t
 Execution DLQ applies to terminal execution failures only.
 It does not replace item-level rejection flows.
 
+## Execution DLQ Envelope (Terminal Metadata)
+
+Execution DLQ entries include standardized metadata for cross-transport triage:
+
+- execution fields: `tenantId`, `executionId`, `executionKey`, `transitionKey`
+- correlation/resource fields: `correlationId`, `resourceType`, `resourceName`
+- runtime identity fields: `transport`, `platform`, `terminalStatus`, `createdAtEpochMs`
+- failure fields: `terminalReason`, `errorCode`, `errorMessage`, `retryable`, `retriesObserved`
+
+Terminal reason mapping:
+
+| `terminalReason` | Meaning | First action |
+|---|---|---|
+| `retry_exhausted` | retryable failure class reached terminal state after exhausting retry budget (includes zero-retry configurations (`maxRetries = 0`)) | Stabilise dependency/path, then re-drive bounded batches |
+| `non_retryable` | non-retryable failure class (for example `NonRetryableException`) | Correct payload/contract issue before replay |
+
 ## Queue-Async Crash Matrix
 
 | Crash point | Behaviour after restart/recovery | Duplicate risk | Required safeguard |

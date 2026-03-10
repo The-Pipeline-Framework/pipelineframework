@@ -18,6 +18,7 @@ package org.pipelineframework.rest;
 
 import com.google.rpc.Code;
 import com.google.rpc.Status;
+import io.grpc.StatusRuntimeException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
@@ -233,6 +234,20 @@ class RestExceptionMapperTest {
         Response response = mapper.handleException(ex, null);
 
         assertEquals(500, response.getStatus());
+    }
+
+    @Test
+    void mapsDeadlineExceededToGatewayTimeoutInJsonMode() {
+        RestExceptionMapper mapper = new RestExceptionMapper();
+        HttpHeaders headers = createNonProtobufHeaders();
+        StatusRuntimeException ex = io.grpc.Status.DEADLINE_EXCEEDED
+            .withDescription("request deadline exceeded")
+            .asRuntimeException();
+
+        Response response = mapper.handleException(ex, headers);
+
+        assertEquals(504, response.getStatus());
+        assertEquals("Deadline exceeded", response.getEntity());
     }
 
     private HttpHeaders createProtobufHeaders() {

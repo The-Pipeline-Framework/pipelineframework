@@ -19,6 +19,8 @@ package org.pipelineframework.transport.function;
 import java.time.Duration;
 import java.util.List;
 
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,6 +66,31 @@ class FunctionTransportBridgeTest {
                 "v1"),
             unarySinkAdapter());
         assertEquals(5, result);
+    }
+
+    @Test
+    void rejectsExpiredDeadlineBeforeInvocation() {
+        FunctionTransportContext expired = FunctionTransportContext.of(
+            "req-deadline",
+            "search-handler",
+            "invoke-step",
+            java.util.Map.of(
+                FunctionTransportContext.ATTR_DEADLINE_EPOCH_MS,
+                Long.toString(System.currentTimeMillis() - 1_000L)));
+
+        StatusRuntimeException ex = assertThrows(
+            StatusRuntimeException.class,
+            () -> FunctionTransportBridge.invokeOneToOne(
+                "hello",
+                expired,
+                createUnarySourceAdapter("search.raw-document", "v1"),
+                new LocalUnaryFunctionInvokeAdapter<>(
+                    payload -> Uni.createFrom().item(payload.length()),
+                    "search.out",
+                    "v1"),
+                unarySinkAdapter()));
+
+        assertEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus().getCode());
     }
 
     @Test

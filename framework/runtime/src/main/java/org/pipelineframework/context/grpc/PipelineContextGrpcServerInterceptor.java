@@ -22,6 +22,7 @@ import io.grpc.*;
 import io.quarkus.arc.Unremovable;
 import io.quarkus.grpc.GlobalInterceptor;
 import org.pipelineframework.cache.CacheStatus;
+import org.pipelineframework.context.DispatchDeadlineValidator;
 import org.pipelineframework.context.PipelineCacheStatusHolder;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHeaders;
@@ -91,7 +92,6 @@ public class PipelineContextGrpcServerInterceptor implements ServerInterceptor {
             headers.get(VERSION_HEADER),
             headers.get(REPLAY_HEADER),
             headers.get(CACHE_POLICY_HEADER));
-        PipelineContextHolder.set(context);
         TransportDispatchMetadata transportDispatchMetadata = TransportDispatchMetadata.fromHeaders(
             headers.get(CORRELATION_ID_HEADER),
             headers.get(EXECUTION_ID_HEADER),
@@ -100,6 +100,17 @@ public class PipelineContextGrpcServerInterceptor implements ServerInterceptor {
             headers.get(DEADLINE_EPOCH_MS_HEADER),
             headers.get(DISPATCH_TS_EPOCH_MS_HEADER),
             headers.get(PARENT_ITEM_ID_HEADER));
+
+        try {
+            DispatchDeadlineValidator.ensureNotExpired(transportDispatchMetadata.deadlineEpochMs(), "grpc-server");
+        } catch (StatusRuntimeException deadlineExceeded) {
+            call.close(deadlineExceeded.getStatus(),
+                deadlineExceeded.getTrailers() == null ? new Metadata() : deadlineExceeded.getTrailers());
+            return new ServerCall.Listener<>() {
+            };
+        }
+
+        PipelineContextHolder.set(context);
         TransportDispatchMetadataHolder.set(transportDispatchMetadata);
 
         ServerCall<ReqT, RespT> wrappedCall = new ForwardingServerCall.SimpleForwardingServerCall<>(call) {
