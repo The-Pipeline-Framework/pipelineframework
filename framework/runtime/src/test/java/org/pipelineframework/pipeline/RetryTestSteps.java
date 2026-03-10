@@ -49,19 +49,18 @@ public class RetryTestSteps {
         private boolean manualRecoverOnFailure = false;
 
         /**
-         * Log the dead-letter event and recover the original input.
+         * Log the item-reject event and recover the original input.
          *
-         * @param failedItem a Uni containing the item that failed processing
+         * @param failedItem the item that failed processing
          * @param cause the exception that caused the failure
-         * @return the original input string contained in {@code failedItem}
+         * @return the original input string
          */
         @Override
-        public Uni<String> deadLetter(Uni<String> failedItem, Throwable cause) {
+        public Uni<String> rejectItem(String failedItem, Throwable cause) {
             LOG.infof(
-                    "AsyncFailedNTimesStep dead letter: %s due to %s",
+                    "AsyncFailedNTimesStep item reject: %s due to %s",
                     failedItem, cause.getMessage());
-            // For recovery, return the original input value from the Uni
-            return failedItem.onItem().transform(item -> item);
+            return Uni.createFrom().item(failedItem);
         }
 
         /**

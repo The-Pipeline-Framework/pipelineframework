@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2023-2025 Mariano Barcia
+ * Copyright (c) 2023-2026 Mariano Barcia
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,19 +14,18 @@
  * limitations under the License.
  */
 
-package org.pipelineframework.step;
-
+package org.pipelineframework.reject;
 
 /**
- * Interface for side effect pipeline steps that perform operations with side effects
- * but pass the original input item downstream unchanged.
- * 
- * <p>This interface represents a 1 -> side-effect (async) transformation where an input item
- * triggers an asynchronous side effect operation, but the original item continues down
- * the pipeline unchanged.</p>
- * 
- * @param <I> the type of input item
+ * Policy used when publishing to the item reject sink fails.
  */
-public interface StepSideEffect<I> extends Configurable, StepOneToOne<I, I> {
-
+public enum ItemRejectFailurePolicy {
+    /**
+     * Continue pipeline execution even when reject publication fails.
+     */
+    CONTINUE,
+    /**
+     * Propagate publication failure and fail pipeline execution.
+     */
+    FAIL_PIPELINE
 }
