@@ -42,7 +42,7 @@ Terminal reason mapping:
 
 | `terminalReason` | Meaning | First action |
 |---|---|---|
-| `retry_exhausted` | retryable failure class kept failing until retry budget was exhausted | Stabilise dependency/path, then re-drive bounded batches |
+| `retry_exhausted` | retryable failure class reached terminal state after exhausting retry budget (includes zero-retry configurations (`maxRetries = 0`)) | Stabilise dependency/path, then re-drive bounded batches |
 | `non_retryable` | non-retryable failure class (for example `NonRetryableException`) | Correct payload/contract issue before replay |
 
 ## Queue-Async Crash Matrix

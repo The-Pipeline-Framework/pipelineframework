@@ -796,7 +796,9 @@ public class PipelineExecutionService {
       Throwable failure) {
     long now = System.currentTimeMillis();
     int nextAttempt = record.attempt() + 1;
-    boolean retryableFailure = isRetryableFailure(failure);
+    FailureClassification classification = classifyFailure(failure);
+    Throwable classifiedFailure = classification.classifiedThrowable();
+    boolean retryableFailure = classification.retryable();
     boolean retryAllowed = nextAttempt <= orchestratorConfig.maxRetries();
     if (retryAllowed && retryableFailure) {
       long nextDue = now + retryDelayMillis(nextAttempt);
@@ -807,8 +809,8 @@ public class PipelineExecutionService {
               nextAttempt,
               nextDue,
               transitionKey,
-              failure.getClass().getSimpleName(),
-                  failure.getMessage(),
+              classifiedFailure.getClass().getSimpleName(),
+                  classifiedFailure.getMessage(),
                   now)
               .onItem().transformToUni(updated -> {
                 if (updated.isEmpty()) {
@@ -827,8 +829,8 @@ public class PipelineExecutionService {
             record.version(),
             ExecutionStatus.FAILED,
             transitionKey,
-            failure.getClass().getSimpleName(),
-            failure.getMessage(),
+            classifiedFailure.getClass().getSimpleName(),
+            classifiedFailure.getMessage(),
             now)
         .onItem().transformToUni(updated -> {
           if (updated.isEmpty()) {
@@ -849,8 +851,8 @@ public class PipelineExecutionService {
               .platform(resolvePlatform(platformMetadata))
               .terminalStatus(ExecutionStatus.FAILED.name())
               .terminalReason(retryableFailure ? "retry_exhausted" : "non_retryable")
-              .errorCode(failure.getClass().getSimpleName())
-              .errorMessage(failure.getMessage())
+              .errorCode(classifiedFailure.getClass().getSimpleName())
+              .errorMessage(classifiedFailure.getMessage())
               .retryable(retryableFailure)
               .retriesObserved(record.attempt())
               .createdAtEpochMs(now)
@@ -875,14 +877,19 @@ public class PipelineExecutionService {
     return candidate.trim().toUpperCase(Locale.ROOT);
   }
 
-  private static boolean isRetryableFailure(Throwable failure) {
+  private static FailureClassification classifyFailure(Throwable failure) {
     if (failure == null) {
-      return false;
+      Throwable classified = new IllegalStateException("Unknown failure");
+      return new FailureClassification(false, classified);
     }
-    return !containsThrowable(failure, NonRetryableException.class);
+    Throwable nonRetryable = findThrowable(failure, NonRetryableException.class);
+    if (nonRetryable != null) {
+      return new FailureClassification(false, nonRetryable);
+    }
+    return new FailureClassification(true, failure);
   }
 
-  private static boolean containsThrowable(Throwable failure, Class<? extends Throwable> targetType) {
+  private static Throwable findThrowable(Throwable failure, Class<? extends Throwable> targetType) {
     java.util.ArrayDeque<Throwable> queue = new java.util.ArrayDeque<>();
     java.util.Set<Throwable> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
     queue.add(failure);
@@ -892,7 +899,7 @@ public class PipelineExecutionService {
         continue;
       }
       if (targetType.isInstance(current)) {
-        return true;
+        return current;
       }
       Throwable cause = current.getCause();
       if (cause != null && cause != current) {
@@ -904,7 +911,10 @@ public class PipelineExecutionService {
         }
       }
     }
-    return false;
+    return null;
+  }
+
+  private record FailureClassification(boolean retryable, Throwable classifiedThrowable) {
   }
 
   private long retryDelayMillis(int nextAttempt) {

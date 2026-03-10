@@ -193,6 +193,39 @@ class QueueAsyncFailureMatrixTest {
     }
 
     @Test
+    void wrappedNonRetryableFailureUsesClassifiedThrowableMetadata() throws Exception {
+        when(orchestratorConfig.maxRetries()).thenReturn(3);
+        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-11", 4L, 0);
+        when(executionStateStore.markTerminalFailure(
+            anyString(), anyString(), anyLong(), any(), anyString(), anyString(), anyString(), anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(record)));
+        when(deadLetterPublisher.publish(any())).thenReturn(Uni.createFrom().voidItem());
+
+        RuntimeException wrapped = new RuntimeException("wrapper", new NonRetryableException("inner-non-retryable"));
+        assertDoesNotThrow(() -> invokeHandleExecutionFailure(record, "exec-11:0:0", wrapped));
+
+        verify(executionStateStore, never()).scheduleRetry(
+            anyString(), anyString(), anyLong(), anyInt(), anyLong(), anyString(), anyString(), anyString(), anyLong());
+        verify(executionStateStore).markTerminalFailure(
+            eq("tenant-a"),
+            eq("exec-11"),
+            eq(4L),
+            eq(ExecutionStatus.FAILED),
+            eq("exec-11:0:0"),
+            eq("NonRetryableException"),
+            eq("inner-non-retryable"),
+            anyLong());
+
+        ArgumentCaptor<DeadLetterEnvelope> envelopeCaptor = ArgumentCaptor.forClass(DeadLetterEnvelope.class);
+        verify(deadLetterPublisher).publish(envelopeCaptor.capture());
+        DeadLetterEnvelope envelope = envelopeCaptor.getValue();
+        assertEquals("NonRetryableException", envelope.errorCode());
+        assertEquals("inner-non-retryable", envelope.errorMessage());
+        assertFalse(envelope.retryable());
+        assertEquals("non_retryable", envelope.terminalReason());
+    }
+
+    @Test
     void sweepRedispatchesPersistedDueExecutions() throws Exception {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         when(orchestratorConfig.sweepLimit()).thenReturn(100);

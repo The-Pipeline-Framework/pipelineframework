@@ -42,6 +42,13 @@ class DispatchDeadlineValidatorTest {
     }
 
     @Test
+    void acceptsFutureDeadlineFromOptional() {
+        assertDoesNotThrow(() -> DispatchDeadlineValidator.ensureNotExpired(
+            Optional.of(System.currentTimeMillis() + 60_000L),
+            "unit"));
+    }
+
+    @Test
     void rejectsExpiredDeadline() {
         StatusRuntimeException ex = assertThrows(StatusRuntimeException.class,
             () -> DispatchDeadlineValidator.ensureNotExpired(System.currentTimeMillis() - 1_000L, "unit"));

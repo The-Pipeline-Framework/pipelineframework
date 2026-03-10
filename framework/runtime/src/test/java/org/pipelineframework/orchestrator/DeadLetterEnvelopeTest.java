@@ -7,6 +7,14 @@ import static org.junit.jupiter.api.Assertions.*;
 class DeadLetterEnvelopeTest {
 
     @Test
+    void buildThrowsWhenRequiredMissing() {
+        assertThrows(NullPointerException.class, () ->
+            DeadLetterEnvelope.builder()
+                .executionId("x")
+                .build());
+    }
+
+    @Test
     void createsEnvelopeWithAllFields() {
         long timestamp = System.currentTimeMillis();
         DeadLetterEnvelope envelope = DeadLetterEnvelope.builder()
@@ -121,5 +129,64 @@ class DeadLetterEnvelopeTest {
             .build();
 
         assertEquals("exec4:2:5", envelope.transitionKey());
+    }
+
+    @Test
+    void retriesObservedEdgeValues() {
+        DeadLetterEnvelope zeroRetries = DeadLetterEnvelope.builder()
+            .tenantId("tenant5")
+            .executionId("exec5")
+            .transitionKey("transition5")
+            .errorCode("Error")
+            .retriesObserved(0)
+            .createdAtEpochMs(1L)
+            .build();
+        assertEquals(0, zeroRetries.retriesObserved());
+
+        assertThrows(IllegalArgumentException.class, () ->
+            DeadLetterEnvelope.builder()
+                .tenantId("tenant5")
+                .executionId("exec5")
+                .transitionKey("transition5")
+                .errorCode("Error")
+                .retriesObserved(-1)
+                .createdAtEpochMs(1L)
+                .build());
+
+        int largeRetries = Integer.MAX_VALUE;
+        DeadLetterEnvelope largeRetryEnvelope = DeadLetterEnvelope.builder()
+            .tenantId("tenant5")
+            .executionId("exec5")
+            .transitionKey("transition5")
+            .errorCode("Error")
+            .retriesObserved(largeRetries)
+            .createdAtEpochMs(1L)
+            .build();
+        assertEquals(largeRetries, largeRetryEnvelope.retriesObserved());
+    }
+
+    @Test
+    void emptyVsNullErrorMessage() {
+        DeadLetterEnvelope emptyErrorMessage = DeadLetterEnvelope.builder()
+            .tenantId("tenant6")
+            .executionId("exec6")
+            .transitionKey("transition6")
+            .errorCode("Error")
+            .errorMessage("")
+            .retriesObserved(0)
+            .createdAtEpochMs(1L)
+            .build();
+        assertEquals("", emptyErrorMessage.errorMessage());
+
+        DeadLetterEnvelope nullErrorMessage = DeadLetterEnvelope.builder()
+            .tenantId("tenant6")
+            .executionId("exec6")
+            .transitionKey("transition6")
+            .errorCode("Error")
+            .errorMessage(null)
+            .retriesObserved(0)
+            .createdAtEpochMs(1L)
+            .build();
+        assertNull(nullErrorMessage.errorMessage());
     }
 }
