@@ -1,0 +1,150 @@
+name: CI — TPFGo SYNC Gate
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "framework/**"
+      - "examples/checkout/**"
+      - "docs/**"
+      - "scripts/ci/**"
+      - ".github/workflows/tpfgo-sync-gate.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MAVEN_OPTS: -Xmx2g -Xms512m
+  MAVEN_ARGS_BUILD: -B -T 1 -V -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
+
+jobs:
+  framework-verify:
+    name: Framework Verify
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Configure Maven
+        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
+
+      - name: Verify framework
+        run: ./mvnw $MAVEN_ARGS -f framework/pom.xml verify
+
+  checkout-canonical-sync:
+    name: Checkout Canonical E2E (SYNC)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Configure Maven
+        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
+
+      - name: Build framework and foundational plugins
+        run: ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
+
+      - name: Run canonical checkout SYNC tests
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f examples/checkout/pom.xml \
+            -pl common,create-order-orchestrator-svc,deliver-order-orchestrator-svc \
+            -am \
+            -Dtest=CanonicalFtgoSyncFlowTest,CreateToDeliverBridgeE2ETest,CreateToDeliverGrpcBridgeE2ETest,DeliverForwardBridgeE2ETest \
+            -Dsurefire.failIfNoSpecifiedTests=false \
+            test
+
+      - name: Dump reports on failure
+        if: failure()
+        run: |
+          find examples/checkout -path "*/target/surefire-reports/*.txt" -print -exec tail -n 200 {} \;
+          find examples/checkout -path "*/target/failsafe-reports/*.txt" -print -exec tail -n 200 {} \;
+
+      - name: Upload reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkout-reports
+          path: |
+            examples/checkout/**/target/surefire-reports/*.txt
+            examples/checkout/**/target/surefire-reports/*.xml
+            examples/checkout/**/target/failsafe-reports/*.txt
+            examples/checkout/**/target/failsafe-reports/*.xml
+          retention-days: 7
+          if-no-files-found: warn
+
+  transport-parity-matrix:
+    name: Transport Parity Matrix (REST/gRPC/FUNCTION + protobuf-over-http semantic)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Configure Maven
+        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
+
+      - name: Build framework and foundational plugins
+        run: ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
+
+      - name: Run renderer parity tests (REST/gRPC/FUNCTION)
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f framework/pom.xml \
+            -pl deployment \
+            -Dtest=OrchestratorRestResourceRendererTest,OrchestratorGrpcRendererTest,OrchestratorFunctionHandlerRendererTest \
+            test
+
+      - name: Run runtime parity tests (FUNCTION + semantic protobuf-over-http row)
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f framework/pom.xml \
+            -pl runtime \
+            -Dtest=FunctionTransportBridgeTest,UnaryFunctionTransportBridgeTest,FunctionTransportAdaptersTest,HttpRemoteFunctionInvokeAdapterTest,RestExceptionMapperTest,ProtobufHttpStatusMapperTest,ObserverTapContractValidatorTest,CheckoutCanonicalFlowContractTest,CheckoutCanonicalFlowContractNegativeTest \
+            test
+
+  docs-build:
+    name: Docs Build and Links
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Build docs
+        run: |
+          npm --prefix docs ci
+          npm --prefix docs run build

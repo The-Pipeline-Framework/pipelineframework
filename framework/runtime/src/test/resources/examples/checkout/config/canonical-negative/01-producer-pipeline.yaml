@@ -1,0 +1,19 @@
+appName: "Canonical Negative Producer"
+basePackage: "org.pipelineframework.checkout.canonical.negative.producer"
+transport: "GRPC"
+steps:
+  - name: "Producer Terminal"
+    cardinality: "ONE_TO_ONE"
+    inputTypeName: "ValidatedOrderRequest"
+    inputFields:
+      - name: "requestId"
+        type: "UUID"
+        protoType: "string"
+    outputTypeName: "OrderPending"
+    outputFields:
+      - name: "orderId"
+        type: "UUID"
+        protoType: "string"
+      - name: "customerId"
+        type: "UUID"
+        protoType: "string"

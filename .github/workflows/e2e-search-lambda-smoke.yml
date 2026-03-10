@@ -45,7 +45,7 @@ jobs:
       - name: Extract framework artifacts
         run: |
           mkdir -p ~/.m2/repository
-          tar -xzf /tmp/m2-artifacts/${{ inputs.artifact_name }}.tar.gz -C ~/.m2/repository
+          tar -xzf "/tmp/m2-artifacts/${{ inputs.artifact_name }}.tar.gz" -C ~/.m2/repository
 
       - name: Build search Lambda topology prerequisites
         run: ./examples/search/build-lambda.sh -DskipTests -Dquarkus.container-image.build=false

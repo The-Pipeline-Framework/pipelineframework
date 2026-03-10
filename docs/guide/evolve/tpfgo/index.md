@@ -2,6 +2,10 @@
 
 This guide is a lightweight index for a "TPFGo" reference implementation in TPF, a TPF-centric interpretation focused on checkpoint pipelines, immutable state progression, and workflow semantics.
 
+Current completion scope:
+- TPFGo completion scope is SYNC-path business/workflow and transport-contract scope.
+- Queue/HA delivery (`QUEUE_ASYNC`, durable providers) is tracked in a separate epic and is not a TPFGo merge blocker.
+
 ## Reading order (recommended)
 
 1) **TPF and DDD Alignment**
@@ -15,6 +19,10 @@ This guide is a lightweight index for a "TPFGo" reference implementation in TPF,
 3) **Roadmap (Pessimist's Notebook)**
    - [Roadmap: Checkpoint Pipelines vs FTGO](/guide/evolve/tpfgo/roadmap)
    - Risks, open questions, and practical next steps.
+
+4) **Observer/Tap Contract (Diagnostics-First)**
+   - [Observer and Tap Contract](/guide/evolve/tpfgo/observer-tap-contract)
+   - Contract scope, expected diagnostics, and test-only guardrails for the current scope.
 
 ## What this reference is aiming for
 
