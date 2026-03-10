@@ -56,18 +56,6 @@
         <tag>v26.2.2</tag>
     </scm>
 
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>io.quarkus.platform</groupId>
-                <artifactId>quarkus-bom</artifactId>
-                <version>3.31.3</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
-
     <dependencies>
         <!-- Add dependency on the main pipeline-framework-extension module -->
         <dependency>
