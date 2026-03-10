@@ -18,6 +18,7 @@ package org.pipelineframework.config.template;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -32,6 +33,8 @@ import java.util.logging.Logger;
 import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 /**
  * Loads the pipeline template configuration used by the template generator.
@@ -112,7 +115,8 @@ public class PipelineTemplateConfigLoader {
      * @throws IllegalStateException if the file cannot be read or opened
      */
     private Object loadYaml(Path configPath) {
-        Yaml yaml = new Yaml();
+        LoaderOptions loaderOptions = new LoaderOptions();
+        Yaml yaml = new Yaml(new SafeConstructor(loaderOptions));
         try (Reader reader = Files.newBufferedReader(configPath)) {
             return yaml.load(reader);
         } catch (IOException e) {
@@ -128,7 +132,7 @@ public class PipelineTemplateConfigLoader {
         if (!(rawVersion instanceof Number number)) {
             throw new IllegalStateException("Template version must be numeric, got '" + rawVersion + "'");
         }
-        return number.intValue();
+        return strictIntegerValue(number, "version");
     }
 
     /**
@@ -258,6 +262,9 @@ public class PipelineTemplateConfigLoader {
         if (typeName == null || typeName.isBlank() || inlineFields == null || inlineFields.isEmpty()) {
             return;
         }
+        if (PipelineTemplateTypeMappings.isBuiltinType(typeName)) {
+            throw new IllegalStateException("Message name '" + typeName + "' conflicts with a built-in semantic type");
+        }
         PipelineTemplateMessage existing = messages.get(typeName);
         if (existing == null) {
             messages.put(typeName, new PipelineTemplateMessage(typeName, inlineFields, new PipelineTemplateReserved(List.of(), List.of())));
@@ -348,7 +355,17 @@ public class PipelineTemplateConfigLoader {
         String direction
     ) {
         if (typeName == null || typeName.isBlank()) {
-            return inlineFields == null ? List.of() : List.copyOf(inlineFields);
+            if (inlineFields == null || inlineFields.isEmpty()) {
+                return List.of();
+            }
+            List<PipelineTemplateField> normalizedInline = new ArrayList<>();
+            List<String> knownMessages = List.copyOf(messages.keySet());
+            for (PipelineTemplateField field : inlineFields) {
+                normalizedInline.add(PipelineTemplateTypeMappings.normalizeV2Field(field, knownMessages));
+            }
+            validateReserved(stepName + " anonymous " + direction + " contract", normalizedInline,
+                new PipelineTemplateReserved(List.of(), List.of()));
+            return List.copyOf(normalizedInline);
         }
         PipelineTemplateMessage message = messages.get(typeName);
         if (message == null) {
@@ -599,7 +616,7 @@ public class PipelineTemplateConfigLoader {
         if (numbersObj instanceof Iterable<?> numberList) {
             for (Object numberObj : numberList) {
                 if (numberObj instanceof Number number) {
-                    numbers.add(number.intValue());
+                    numbers.add(strictIntegerValue(number, "reserved.numbers"));
                 } else if (numberObj != null) {
                     String text = numberObj.toString().trim();
                     try {
@@ -796,7 +813,7 @@ public class PipelineTemplateConfigLoader {
             return null;
         }
         if (value instanceof Number number) {
-            return number.intValue();
+            return strictIntegerValue(number, key);
         }
         String text = value.toString();
         if (text == null || text.isBlank()) {
@@ -807,6 +824,20 @@ public class PipelineTemplateConfigLoader {
         } catch (NumberFormatException ex) {
             throw new IllegalArgumentException(
                 "Invalid integer value '" + text + "' for key '" + key + "'", ex);
+        }
+    }
+
+    private int strictIntegerValue(Number number, String context) {
+        try {
+            BigDecimal decimal = new BigDecimal(number.toString());
+            if (decimal.stripTrailingZeros().scale() > 0) {
+                throw new IllegalStateException(
+                    "Invalid integer value '" + number + "' for " + context + ": fractional values are not allowed");
+            }
+            return decimal.intValueExact();
+        } catch (ArithmeticException | NumberFormatException ex) {
+            throw new IllegalStateException(
+                "Invalid integer value '" + number + "' for " + context, ex);
         }
     }
 

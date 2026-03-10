@@ -454,7 +454,9 @@ class StepDefinitionParserTest {
 
     @Test
     void rejectsRemoteExecutionWhenMixedWithLocalServiceFields() throws IOException {
-        List<StepDefinition> steps = parse("""
+        List<String> diagnostics = new ArrayList<>();
+        Path file = tempDir.resolve("pipeline.yaml");
+        Files.writeString(file, """
             version: 2
             appName: "Test"
             basePackage: "com.example"
@@ -471,8 +473,13 @@ class StepDefinitionParserTest {
                   target:
                     url: "https://example.com/operators/charge-card"
             """);
+        List<StepDefinition> steps = new StepDefinitionParser((kind, message) ->
+            diagnostics.add(kind + ":" + message)).parseStepDefinitions(file);
 
         assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()));
+        assertTrue(errorSummary.contains("mutually exclusive"));
     }
 
     @Test
@@ -500,8 +507,9 @@ class StepDefinitionParserTest {
     @Test
     void rejectsInvalidTemplateVersionValue() throws Exception {
         Path file = tempDir.resolve("pipeline.yaml");
+        List<String> diagnostics = new ArrayList<>();
         Files.writeString(file, """
-            version: "2"
+            version: "two"
             appName: "Test"
             basePackage: "com.example"
             steps: []
@@ -509,13 +517,19 @@ class StepDefinitionParserTest {
 
         IllegalArgumentException ex = assertThrows(
             IllegalArgumentException.class,
-            () -> new StepDefinitionParser().parseStepDefinitions(file));
+            () -> new StepDefinitionParser((kind, message) ->
+                diagnostics.add(kind + ":" + message)).parseStepDefinitions(file));
         assertTrue(ex.getMessage().contains("Invalid template version"));
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()));
+        assertTrue(errorSummary.contains("Invalid template version"));
     }
 
     @Test
     void rejectsExecutionBlockWhenModeIsNotRemote() throws IOException {
-        List<StepDefinition> steps = parse("""
+        List<String> diagnostics = new ArrayList<>();
+        Path file = tempDir.resolve("pipeline.yaml");
+        Files.writeString(file, """
             version: 2
             appName: "Test"
             basePackage: "com.example"
@@ -527,8 +541,13 @@ class StepDefinitionParserTest {
                 execution:
                   mode: "LOCAL"
             """);
+        List<StepDefinition> steps = new StepDefinitionParser((kind, message) ->
+            diagnostics.add(kind + ":" + message)).parseStepDefinitions(file);
 
         assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()));
+        assertTrue(errorSummary.contains("expected REMOTE"));
     }
 
     private List<StepDefinition> parse(String yaml) throws IOException {

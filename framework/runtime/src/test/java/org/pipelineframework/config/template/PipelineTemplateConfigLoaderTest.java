@@ -461,4 +461,113 @@ class PipelineTemplateConfigLoaderTest {
             () -> new PipelineTemplateConfigLoader().load(configPath));
         assertTrue(ex.getMessage().contains("unsupported valueType"));
     }
+
+    @Test
+    void normalizesAnonymousInlineV2Contracts() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "GRPC"
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputFields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+                outputFields:
+                  - number: 1
+                    name: "paymentId"
+                    type: "uuid"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-anonymous-inline.yaml");
+        Files.writeString(configPath, yaml);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+        PipelineTemplateStep step = config.steps().getFirst();
+
+        assertEquals("uuid", step.inputFields().getFirst().canonicalType());
+        assertEquals("UUID", step.inputFields().getFirst().javaType());
+        assertEquals("string", step.inputFields().getFirst().protoType());
+        assertEquals("uuid", step.outputFields().getFirst().canonicalType());
+    }
+
+    @Test
+    void rejectsInlineMessageNamesThatShadowBuiltInTypes() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "GRPC"
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "uuid"
+                inputFields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+                outputTypeName: "ChargeResult"
+                outputFields:
+                  - number: 1
+                    name: "paymentId"
+                    type: "uuid"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-inline-builtin-name.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+        assertTrue(ex.getMessage().contains("conflicts with a built-in semantic type"));
+    }
+
+    @Test
+    void rejectsFractionalTemplateVersion() throws Exception {
+        String yaml = """
+            version: 2.5
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "GRPC"
+            steps: []
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-fractional-version.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+        assertTrue(ex.getMessage().contains("fractional values are not allowed"));
+    }
+
+    @Test
+    void rejectsFractionalFieldAndReservedNumbers() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "GRPC"
+            messages:
+              ChargeRequest:
+                fields:
+                  - number: 1.2
+                    name: "orderId"
+                    type: "uuid"
+                reserved:
+                  numbers: [4.2]
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ChargeRequest"
+                outputTypeName: "ChargeRequest"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-fractional-field-values.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+        assertTrue(ex.getMessage().contains("fractional values are not allowed"));
+    }
 }

@@ -489,7 +489,9 @@ public class StepDefinitionParser {
         if (rawVersion instanceof Number number) {
             return number.intValue();
         }
-        throw new IllegalArgumentException("Invalid template version: '" + rawVersion + "'");
+        String message = "Invalid template version: '" + rawVersion + "'";
+        report(Diagnostic.Kind.ERROR, message);
+        throw new IllegalArgumentException(message);
     }
 
     private String deriveLegacyServiceClassName(String basePackage, String stepName) {
