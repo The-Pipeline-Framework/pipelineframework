@@ -28,16 +28,16 @@ flowchart LR
 
 For v2 remote operators, TPF is the HTTP client and the operator endpoint is the server. Operationally, the main additional concerns are:
 
-- startup config correctness: `execution.target.urlConfigKey` must resolve before the application starts serving traffic,
-- timeout budgeting: the outbound client timeout is computed from the smaller of `execution.timeoutMs` and the propagated deadline,
-- duplicate safety: retries and duplicate dispatch can occur, so the remote operator must treat `x-tpf-idempotency-key` as the stable deduplication key,
-- deterministic failures: non-retryable failures should be returned as `google.rpc.Status` with stable codes and messages.
+- Startup config correctness: `execution.target.urlConfigKey` must resolve before the application starts serving traffic.
+- Timeout budgeting: the outbound client timeout is computed from the smaller of `execution.timeoutMs` and the propagated deadline.
+- Duplicate safety: retries and duplicate dispatch can occur, so the remote operator must treat `x-tpf-idempotency-key` as the stable deduplication key.
+- Deterministic failures: non-retryable failures should be returned as `google.rpc.Status` with stable codes and messages.
 
 Watch for:
-- startup failures complaining about unresolved remote target URLs,
-- rising deadline-exceeded failures before send,
-- repeated retryable status envelopes from the same `operatorId`,
-- side effects that are not deduplicated under repeated `x-tpf-idempotency-key` values.
+- startup failures complaining about unresolved remote target URLs
+- rising deadline-exceeded failures before send
+- repeated retryable status envelopes from the same `operatorId`
+- side effects that occur multiple times for the same `x-tpf-idempotency-key` value
 
 ## Related
 

@@ -144,6 +144,31 @@
           },
           "then": {
             "required": ["keyType", "valueType"]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": ["keyType"]
+                },
+                {
+                  "required": ["valueType"]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "not": {
+            "properties": {
+              "optional": {
+                "const": true
+              },
+              "repeated": {
+                "const": true
+              }
+            },
+            "required": ["optional", "repeated"]
           }
         }
       ],
@@ -208,6 +233,7 @@
     },
     "v2Execution": {
       "type": "object",
+      "required": ["mode"],
       "properties": {
         "mode": {
           "type": "string",
@@ -241,6 +267,34 @@
           },
           "then": {
             "required": ["operatorId", "protocol", "target"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "enum": ["LOCAL", "local"]
+              }
+            },
+            "required": ["mode"]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": ["operatorId"]
+                },
+                {
+                  "required": ["protocol"]
+                },
+                {
+                  "required": ["target"]
+                },
+                {
+                  "required": ["timeoutMs"]
+                }
+              ]
+            }
           }
         }
       ],
@@ -276,10 +330,12 @@
           }
         },
         "batchSize": {
-          "type": "integer"
+          "type": "integer",
+          "minimum": 1
         },
         "batchTimeoutMs": {
-          "type": "integer"
+          "type": "integer",
+          "minimum": 0
         },
         "parallel": {
           "type": "boolean"
@@ -319,10 +375,12 @@
           }
         },
         "batchSize": {
-          "type": "integer"
+          "type": "integer",
+          "minimum": 1
         },
         "batchTimeoutMs": {
-          "type": "integer"
+          "type": "integer",
+          "minimum": 0
         },
         "parallel": {
           "type": "boolean"
@@ -446,6 +504,55 @@
       "additionalProperties": false
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "version": {
+            "const": 2
+          }
+        },
+        "required": ["version"]
+      },
+      "then": {
+        "properties": {
+          "steps": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/v2TemplateStep"
+                },
+                {
+                  "$ref": "#/$defs/delegatedOrInternalStep"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "required": ["messages"]
+        },
+        "properties": {
+          "steps": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/legacyTemplateStep"
+                },
+                {
+                  "$ref": "#/$defs/delegatedOrInternalStep"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
   "properties": {
     "version": {
       "type": "integer",

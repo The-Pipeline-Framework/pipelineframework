@@ -74,7 +74,7 @@ public class PipelineTemplateConfigLoader {
             throw new IllegalStateException("Pipeline template config root is not a map");
         }
 
-        int version = readInt(rootMap, "version", 1);
+        int version = readVersion(rootMap);
         String appName = readString(rootMap, "appName");
         String basePackage = readString(rootMap, "basePackage");
         String transport = normalizeTransport(readString(rootMap, "transport"));
@@ -118,6 +118,17 @@ public class PipelineTemplateConfigLoader {
         } catch (IOException e) {
             throw new IllegalStateException("Failed to read pipeline template config: " + configPath, e);
         }
+    }
+
+    private int readVersion(Map<?, ?> rootMap) {
+        Object rawVersion = rootMap.get("version");
+        if (rawVersion == null) {
+            return 1;
+        }
+        if (!(rawVersion instanceof Number number)) {
+            throw new IllegalStateException("Template version must be numeric, got '" + rawVersion + "'");
+        }
+        return number.intValue();
     }
 
     /**
@@ -435,8 +446,13 @@ public class PipelineTemplateConfigLoader {
     }
 
     private void validateExecution(PipelineTemplateStepExecution execution, String stepName) {
-        if (execution == null || !execution.isRemote()) {
+        if (execution == null) {
             return;
+        }
+        if (!execution.isRemote()) {
+            throw new IllegalStateException(
+                "Step '" + stepName + "' execution block is only supported for REMOTE mode, got '"
+                    + execution.mode() + "'");
         }
         if (execution.operatorId() == null) {
             throw new IllegalStateException("Step '" + stepName + "' remote execution requires execution.operatorId");

@@ -195,6 +195,75 @@ steps: []
     expect(() => generator.toScaffoldConfig(config)).toThrow('Conflicting inline vs top-level field definitions');
   });
 
+  test('toScaffoldConfig accepts equivalent inline and top-level fields in different orders', () => {
+    const generator = new PipelineGenerator();
+    const config = {
+      version: 2,
+      appName: 'TestApp',
+      basePackage: 'com.example.test',
+      transport: 'GRPC',
+      runtimeLayout: 'MODULAR',
+      messages: {
+        ChargeRequest: {
+          fields: [
+            { number: 2, name: 'amount', type: 'decimal' },
+            { number: 1, name: 'orderId', type: 'uuid' }
+          ]
+        },
+        ChargeResult: {
+          fields: [{ number: 1, name: 'paymentId', type: 'uuid' }]
+        }
+      },
+      steps: [
+        {
+          name: 'Charge Card',
+          cardinality: 'ONE_TO_ONE',
+          inputTypeName: 'ChargeRequest',
+          inputFields: [
+            { number: 1, name: 'orderId', type: 'uuid' },
+            { number: 2, name: 'amount', type: 'decimal' }
+          ],
+          outputTypeName: 'ChargeResult'
+        }
+      ]
+    };
+
+    expect(() => generator.toScaffoldConfig(config)).not.toThrow();
+  });
+
+  test('loadConfig rejects LOCAL execution with remote-only fields', () => {
+    const generator = new PipelineGenerator();
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pipeline-generator-'));
+    const configPath = path.join(tempDir, 'local-execution-config.yaml');
+    fs.writeFileSync(configPath, `version: 2
+appName: TestApp
+basePackage: com.example.test
+transport: REST
+runtimeLayout: MODULAR
+messages:
+  ChargeRequest:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+  ChargeResult:
+    fields:
+      - number: 1
+        name: paymentId
+        type: uuid
+steps:
+  - name: Charge Card
+    cardinality: ONE_TO_ONE
+    inputTypeName: ChargeRequest
+    outputTypeName: ChargeResult
+    execution:
+      mode: LOCAL
+      operatorId: charge-card
+`);
+
+    expect(() => generator.loadConfig(configPath)).toThrow('Configuration validation failed');
+  });
+
   test('toScaffoldField preserves message references for repeated and map fields', () => {
     const generator = new PipelineGenerator();
 

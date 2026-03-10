@@ -345,6 +345,59 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
+    void rejectsNonNumericTemplateVersion() throws Exception {
+        String yaml = """
+            version: "2"
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "REST"
+            steps: []
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-invalid-version.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+        assertTrue(ex.getMessage().contains("Template version must be numeric"));
+    }
+
+    @Test
+    void rejectsLocalExecutionBlockOnV2Step() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "REST"
+            messages:
+              ChargeRequest:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+              ChargeResult:
+                fields:
+                  - number: 1
+                    name: "paymentId"
+                    type: "uuid"
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ChargeRequest"
+                outputTypeName: "ChargeResult"
+                execution:
+                  mode: "LOCAL"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-local-execution.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+        assertTrue(ex.getMessage().contains("REMOTE mode"));
+    }
+
+    @Test
     void rejectsDuplicateFieldNumbersAndNamesWithinMessage() throws Exception {
         String yaml = """
             version: 2

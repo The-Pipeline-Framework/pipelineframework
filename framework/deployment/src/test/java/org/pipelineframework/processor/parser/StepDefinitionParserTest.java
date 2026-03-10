@@ -497,6 +497,40 @@ class StepDefinitionParserTest {
         assertTrue(steps.isEmpty());
     }
 
+    @Test
+    void rejectsInvalidTemplateVersionValue() throws Exception {
+        Path file = tempDir.resolve("pipeline.yaml");
+        Files.writeString(file, """
+            version: "2"
+            appName: "Test"
+            basePackage: "com.example"
+            steps: []
+            """);
+
+        IllegalArgumentException ex = assertThrows(
+            IllegalArgumentException.class,
+            () -> new StepDefinitionParser().parseStepDefinitions(file));
+        assertTrue(ex.getMessage().contains("Invalid template version"));
+    }
+
+    @Test
+    void rejectsExecutionBlockWhenModeIsNotRemote() throws IOException {
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "charge-card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "com.example.contract.ChargeRequest"
+                outputTypeName: "com.example.contract.ChargeResult"
+                execution:
+                  mode: "LOCAL"
+            """);
+
+        assertTrue(steps.isEmpty());
+    }
+
     private List<StepDefinition> parse(String yaml) throws IOException {
         Path file = tempDir.resolve("pipeline.yaml");
         Files.writeString(file, yaml);
