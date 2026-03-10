@@ -17,6 +17,8 @@
 package org.pipelineframework.csv.orchestrator.service;
 
 import java.io.IOException;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -32,6 +34,7 @@ import java.sql.SQLException;
 import java.time.Duration;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
@@ -232,7 +235,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                             .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
                             .withLogConsumer(containerLog("input-csv-file-processing-svc"))
                             .waitingFor(
-                                    Wait.forHttps("/q/health")
+                                    Wait.forHttps("/q/health/live")
                                             .forPort(8444)
                                             .allowInsecure()
                                             .withStartupTimeout(Duration.ofSeconds(60)));
@@ -244,7 +247,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
      * Lazily creates and returns a Testcontainers GenericContainer configured for the payments-processing service.
      *
      * The container is attached to the shared test network, exposes port 8445, mounts the service keystore
-     * into the container, sets the Quarkus profile to "test", and waits for an HTTPS health endpoint at /q/health.
+     * into the container, sets the Quarkus profile to "test", and waits for an HTTPS liveness endpoint at
+     * /q/health/live.
      *
      * @return the initialized or previously created GenericContainer for the payments-processing service
      */
@@ -264,7 +268,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                             .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
                             .withLogConsumer(containerLog("payments-processing-svc"))
                             .waitingFor(
-                                    Wait.forHttps("/q/health")
+                                    Wait.forHttps("/q/health/live")
                                             .forPort(8445)
                                             .allowInsecure()
                                             .withStartupTimeout(Duration.ofSeconds(60)));
@@ -276,7 +280,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
      * Create and configure the payment status service Testcontainers GenericContainer for the test network.
      *
      * The container is lazily initialized and configured with network settings, a mounted server keystore,
-     * exposed HTTPS port 8446, the `test` Quarkus profile, and a health check against `/q/health`.
+     * exposed HTTPS port 8446, the `test` Quarkus profile, and a liveness check against
+     * `/q/health/live`.
      *
      * @return the configured GenericContainer instance for the payment status service
      */
@@ -295,7 +300,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                             .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
                             .withLogConsumer(containerLog("payment-status-svc"))
                             .waitingFor(
-                                    Wait.forHttps("/q/health")
+                                    Wait.forHttps("/q/health/live")
                                             .forPort(8446)
                                             .allowInsecure()
                                             .withStartupTimeout(Duration.ofSeconds(60)));
@@ -334,7 +339,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                             .withEnv("SERVER_KEYSTORE_PATH", CONTAINER_KEYSTORE_PATH)
                             .withLogConsumer(containerLog("output-csv-file-processing-svc"))
                             .waitingFor(
-                                    Wait.forHttps("/q/health")
+                                    Wait.forHttps("/q/health/live")
                                             .forPort(8447)
                                             .allowInsecure()
                                             .withStartupTimeout(Duration.ofSeconds(60)));
@@ -488,6 +493,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         // Clean up any existing test files
         cleanTestOutputDirectory(dir);
+        resetDatabasePersistence();
 
         // Create test CSV files as the shell script does
         createTestCsvFiles();
@@ -509,6 +515,47 @@ abstract class AbstractCsvPaymentsEndToEnd {
         LOG.info("End-to-end processing test completed successfully!");
     }
 
+    @Test
+    void pipelineContinuesWhenMalformedCsvIsRejected() throws Exception {
+        LOG.info("Running malformed-input reject-and-continue end-to-end test");
+
+        Path dir = Paths.get(TEST_E2E_DIR);
+        Files.createDirectories(dir);
+        cleanTestOutputDirectory(dir);
+        resetDatabasePersistence();
+
+        createValidAndMalformedCsvFiles();
+
+        String inputPath = MONOLITH_LAYOUT ? TEST_E2E_DIR : TEST_E2E_TARGET_DIR;
+        String inputDirJson = "{ \"path\": \"" + inputPath + "\" }";
+        ProcessRunResult runResult = orchestratorTriggerRun(
+            inputDirJson,
+            Map.of(
+                "PIPELINE_DEFAULTS_RECOVER_ON_FAILURE", "true",
+                "PIPELINE_DEFAULTS_RETRY_LIMIT", "1",
+                "PIPELINE_DEFAULTS_RETRY_WAIT_MS", "10",
+                "PIPELINE_ITEM_REJECT_PROVIDER", "memory"));
+
+        waitForPipelineComplete();
+
+        Set<String> expectedRecipients = Set.of("Valid Recipient One", "Valid Recipient Two");
+        verifyOutputFilesForRecipients(TEST_E2E_DIR, expectedRecipients, "Malformed Recipient", 2);
+        verifyDatabasePersistenceForRecipients(expectedRecipients, "Malformed Recipient", 2);
+
+        assertTrue(
+            runResult.output().contains("Item reject stored in memory sink"),
+            "Expected in-memory item reject sink evidence in orchestrator logs.");
+        assertTrue(
+            runResult.output().contains("ProcessCsvPaymentsInputGrpcClientStep")
+                || runResult.output().contains("ProcessCsvPaymentsInputService"),
+            "Expected reject logs to reference ProcessCsvPaymentsInput step metadata.");
+        assertTrue(
+            runResult.output().contains("scope=STREAM"),
+            "Expected stream-scope reject log entry for malformed CSV input.");
+
+        LOG.info("Malformed-input reject-and-continue end-to-end test completed successfully!");
+    }
+
     /**
      * Start the orchestrator JAR in a separate JVM configured to use the test services and process CSV files from the given input directory.
      *
@@ -516,7 +563,11 @@ abstract class AbstractCsvPaymentsEndToEnd {
      * @throws Exception if the process cannot be started, times out, or exits with a non-zero exit code
      */
     @SuppressWarnings("SameParameterValue")
-    private void orchestratorTriggerRun(String inputDir) throws Exception {
+    private ProcessRunResult orchestratorTriggerRun(String inputDir) throws Exception {
+        return orchestratorTriggerRun(inputDir, Map.of());
+    }
+
+    private ProcessRunResult orchestratorTriggerRun(String inputDir, Map<String, String> envOverrides) throws Exception {
         LOG.infof("Triggering Orchestrator with input dir: %s", inputDir);
 
         String jarPath =
@@ -559,9 +610,29 @@ abstract class AbstractCsvPaymentsEndToEnd {
         } else {
             configureModularEnv(pb);
         }
+        pb.environment().putAll(envOverrides);
 
-        pb.inheritIO();
+        pb.redirectErrorStream(true);
         Process p = pb.start();
+        StringBuilder processOutput = new StringBuilder();
+        Thread outputDrainer =
+            new Thread(
+                () -> {
+                    try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            processOutput.append(line).append(System.lineSeparator());
+                            LOG.infof("[orchestrator] %s", line);
+                        }
+                    } catch (IOException e) {
+                        LOG.warnf(e, "Failed reading orchestrator process output.");
+                    }
+                },
+                "orchestrator-output-drainer");
+        outputDrainer.setDaemon(true);
+        outputDrainer.start();
+
         boolean completed = p.waitFor(ORCHESTRATOR_WAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         if (!completed) {
             try {
@@ -577,10 +648,17 @@ abstract class AbstractCsvPaymentsEndToEnd {
             fail(
                     "Orchestrator process timed out after "
                             + ORCHESTRATOR_WAIT_TIMEOUT_SECONDS
-                            + "s");
+                            + "s. Output tail:\n"
+                            + tailLines(processOutput.toString(), 120));
         }
+        outputDrainer.join(TimeUnit.SECONDS.toMillis(5));
         int exitCode = p.exitValue();
-        assertEquals(0, exitCode, "Orchestrator exited with non-zero code");
+        String output = processOutput.toString();
+        assertEquals(
+            0,
+            exitCode,
+            "Orchestrator exited with non-zero code. Output tail:\n" + tailLines(output, 200));
+        return new ProcessRunResult(exitCode, output);
     }
 
     /**
@@ -669,18 +747,18 @@ abstract class AbstractCsvPaymentsEndToEnd {
             .put(
                 "CLIENT_TRUSTSTORE_PATH",
                 DEV_CERTS_DIR.resolve("orchestrator-svc/client-truststore.jks").toString());
-        putGrpcClient(pb, "PROCESS_FOLDER", inputService.getHost(), String.valueOf(inputService.getMappedPort(8444)));
-        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", inputService.getHost(), String.valueOf(inputService.getMappedPort(8444)));
-        putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", paymentsService.getHost(), String.valueOf(paymentsService.getMappedPort(8445)));
-        putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", paymentsService.getHost(), String.valueOf(paymentsService.getMappedPort(8445)));
-        putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)));
-        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_OUTPUT_FILE", outputService.getHost(), String.valueOf(outputService.getMappedPort(8447)));
-        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)));
-        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)));
-        putGrpcClient(pb, "OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)));
-        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)));
-        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)));
-        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)));
+        putGrpcClient(pb, "PROCESS_FOLDER", inputService.getHost(), String.valueOf(inputService.getMappedPort(8444)), "/q/health/live");
+        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_INPUT", inputService.getHost(), String.valueOf(inputService.getMappedPort(8444)), "/q/health/live");
+        putGrpcClient(pb, "PROCESS_SEND_PAYMENT_RECORD", paymentsService.getHost(), String.valueOf(paymentsService.getMappedPort(8445)), "/q/health/live");
+        putGrpcClient(pb, "PROCESS_ACK_PAYMENT_SENT", paymentsService.getHost(), String.valueOf(paymentsService.getMappedPort(8445)), "/q/health/live");
+        putGrpcClient(pb, "PROCESS_PAYMENT_STATUS", statusService.getHost(), String.valueOf(statusService.getMappedPort(8446)), "/q/health/live");
+        putGrpcClient(pb, "PROCESS_CSV_PAYMENTS_OUTPUT_FILE", outputService.getHost(), String.valueOf(outputService.getMappedPort(8447)), "/q/health/live");
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_INPUT_FILE_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_RECORD_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_ACK_PAYMENT_SENT_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_STATUS_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_CSV_PAYMENTS_OUTPUT_FILE_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
+        putGrpcClient(pb, "OBSERVE_PERSISTENCE_PAYMENT_OUTPUT_SIDE_EFFECT", persistence.getHost(), String.valueOf(persistence.getMappedPort(8448)), "/q/health/live");
     }
 
     /**
@@ -731,6 +809,12 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static void putGrpcClient(ProcessBuilder pb, String clientName, String host, String port) {
         pb.environment().put("QUARKUS_GRPC_CLIENTS_" + clientName + "_HOST", host);
         pb.environment().put("QUARKUS_GRPC_CLIENTS_" + clientName + "_PORT", port);
+    }
+
+    private static void putGrpcClient(
+            ProcessBuilder pb, String clientName, String host, String port, String healthPath) {
+        putGrpcClient(pb, clientName, host, port);
+        pb.environment().put("QUARKUS_GRPC_CLIENTS_" + clientName + "_HEALTH_PATH", healthPath);
     }
 
     /**
@@ -841,6 +925,34 @@ abstract class AbstractCsvPaymentsEndToEnd {
             files.filter(path -> path.toString().endsWith(".csv"))
                     .forEach(path -> LOG.infof("- %s", path));
         }
+    }
+
+    private void createValidAndMalformedCsvFiles() throws IOException {
+        LOG.info("Creating mixed valid/malformed CSV files...");
+
+        Path validFile = Paths.get(TEST_E2E_DIR, "payments_valid.csv");
+        Files.write(
+            validFile,
+            """
+            ID,Recipient,Amount,Currency
+            1,Valid Recipient One,125.00,USD
+            2,Valid Recipient Two,275.50,EUR
+            """
+                .getBytes(StandardCharsets.UTF_8));
+
+        Path malformedFile = Paths.get(TEST_E2E_DIR, "payments_malformed.csv");
+        Files.write(
+            malformedFile,
+            """
+            ID,Recipient,Amount,Currency
+            9,Malformed Recipient,"BROKEN,USD
+            """
+                .getBytes(StandardCharsets.UTF_8));
+
+        ensureWritable(validFile);
+        ensureWritable(malformedFile);
+
+        LOG.infof("Created reject-scenario files: %s, %s", validFile, malformedFile);
     }
 
     /**
@@ -1042,6 +1154,58 @@ abstract class AbstractCsvPaymentsEndToEnd {
         LOG.info("All expected records found in output files");
     }
 
+    private void verifyOutputFilesForRecipients(
+        String testOutputTargetDir,
+        Set<String> expectedRecipients,
+        String unexpectedRecipient,
+        long expectedTotalRecords
+    ) throws IOException {
+        LOG.info("Verifying output files for reject scenario...");
+
+        List<Path> outputFiles;
+        try (var files = Files.list(Paths.get(testOutputTargetDir))) {
+            outputFiles = files.filter(path -> path.toString().endsWith(".out")).toList();
+        }
+        assertFalse(outputFiles.isEmpty(), "Output files should be generated");
+
+        long totalRecords = outputFiles.stream()
+            .mapToLong(path -> {
+                try {
+                    List<String> lines = Files.readAllLines(path);
+                    return Math.max(0, lines.size() - 1);
+                } catch (IOException e) {
+                    LOG.warnf(e, "Failed to read file: %s", path);
+                    return 0L;
+                }
+            })
+            .sum();
+
+        assertEquals(
+            expectedTotalRecords,
+            totalRecords,
+            String.format("Expected %d records across output files, but found %d", expectedTotalRecords, totalRecords));
+
+        String combinedOutput = outputFiles.stream()
+            .map(path -> {
+                try {
+                    return Files.readString(path);
+                } catch (IOException e) {
+                    LOG.warnf(e, "Failed reading output file: %s", path);
+                    return "";
+                }
+            })
+            .reduce("", String::concat);
+
+        for (String recipient : expectedRecipients) {
+            assertTrue(
+                combinedOutput.contains(recipient),
+                "Expected recipient not found in output files: " + recipient);
+        }
+        assertFalse(
+            combinedOutput.contains(unexpectedRecipient),
+            "Malformed recipient should not be written to output files: " + unexpectedRecipient);
+    }
+
     /**
      * Verify that the expected payment records were persisted to the test PostgreSQL database.
      *
@@ -1092,6 +1256,65 @@ abstract class AbstractCsvPaymentsEndToEnd {
             LOG.info("Database verification completed successfully");
         }
     }
+
+    private void verifyDatabasePersistenceForRecipients(
+        Set<String> expectedRecipients,
+        String unexpectedRecipient,
+        int expectedRecordCount
+    ) throws Exception {
+        LOG.info("Verifying database persistence for reject scenario...");
+
+        PostgreSQLContainer<?> postgres = getPostgresContainer();
+        String jdbcUrl = postgres.getJdbcUrl();
+        String username = postgres.getUsername();
+        String password = postgres.getPassword();
+
+        try (Connection connection = DriverManager.getConnection(jdbcUrl, username, password)) {
+            String countQuery = "SELECT COUNT(*) FROM paymentrecord";
+            try (PreparedStatement stmt = connection.prepareStatement(countQuery);
+                ResultSet rs = stmt.executeQuery()) {
+                assertTrue(rs.next(), "Record count query should return a row");
+                int recordCount = rs.getInt(1);
+                assertEquals(
+                    expectedRecordCount,
+                    recordCount,
+                    String.format("Expected %d records in paymentrecord, but found %d", expectedRecordCount, recordCount));
+            }
+
+            for (String recipient : expectedRecipients) {
+                assertTrue(recipientExists(connection, recipient), "Expected recipient missing in DB: " + recipient);
+            }
+            assertFalse(
+                recipientExists(connection, unexpectedRecipient),
+                "Malformed recipient should not be persisted: " + unexpectedRecipient);
+        }
+    }
+
+    private boolean recipientExists(Connection connection, String recipient) throws SQLException {
+        String query = "SELECT COUNT(*) FROM paymentrecord WHERE recipient = ?";
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+            stmt.setString(1, recipient);
+            try (ResultSet rs = stmt.executeQuery()) {
+                return rs.next() && rs.getInt(1) > 0;
+            }
+        }
+    }
+
+    private void resetDatabasePersistence() throws Exception {
+        PostgreSQLContainer<?> postgres = getPostgresContainer();
+        String jdbcUrl = postgres.getJdbcUrl();
+        String username = postgres.getUsername();
+        String password = postgres.getPassword();
+
+        try (Connection connection = DriverManager.getConnection(jdbcUrl, username, password);
+            PreparedStatement truncate = connection.prepareStatement("TRUNCATE TABLE paymentrecord CASCADE")) {
+            truncate.execute();
+        } catch (SQLException e) {
+            LOG.warnf(e, "Failed truncating paymentrecord; continuing with current persistence state.");
+        }
+    }
+
+    private record ProcessRunResult(int exitCode, String output) {}
 
     /**
      * Verifies that a payment record exists for each expected recipient in the database.

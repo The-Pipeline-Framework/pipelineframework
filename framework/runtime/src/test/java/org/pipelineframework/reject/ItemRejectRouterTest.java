@@ -33,18 +33,29 @@ class ItemRejectRouterTest {
 
     @Test
     void productionStartupFailsWhenRecoverOnFailureEnabledAndSinkIsNonDurable() {
-        ItemRejectConfig config = mockBaseConfig(false, ItemRejectFailurePolicy.CONTINUE, true, "log");
-        PipelineStepConfig stepConfig = mockStepConfig(true);
-        ItemRejectSink logSink = new CapturingSink("log", -100, false, false);
+        String previousProfile = System.getProperty("quarkus.profile");
+        try {
+            System.setProperty("quarkus.profile", "prod");
 
-        ItemRejectRouter router = new ItemRejectRouter(
-            config,
-            stepConfig,
-            mockSinks(logSink),
-            LaunchMode.NORMAL);
+            ItemRejectConfig config = mockBaseConfig(false, ItemRejectFailurePolicy.CONTINUE, true, "log");
+            PipelineStepConfig stepConfig = mockStepConfig(true);
+            ItemRejectSink logSink = new CapturingSink("log", -100, false, false);
 
-        IllegalStateException error = assertThrows(IllegalStateException.class, router::initialize);
-        assertTrue(error.getMessage().contains("non-durable"));
+            ItemRejectRouter router = new ItemRejectRouter(
+                config,
+                stepConfig,
+                mockSinks(logSink),
+                LaunchMode.NORMAL);
+
+            IllegalStateException error = assertThrows(IllegalStateException.class, router::initialize);
+            assertTrue(error.getMessage().contains("non-durable"));
+        } finally {
+            if (previousProfile == null) {
+                System.clearProperty("quarkus.profile");
+            } else {
+                System.setProperty("quarkus.profile", previousProfile);
+            }
+        }
     }
 
     @Test

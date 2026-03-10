@@ -21,6 +21,7 @@ import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -31,6 +32,7 @@ import jakarta.inject.Inject;
 import io.quarkus.runtime.LaunchMode;
 import io.quarkus.runtime.StartupEvent;
 import io.smallrye.mutiny.Uni;
+import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.PipelineStepConfig;
 import org.pipelineframework.config.pipeline.PipelineJson;
@@ -420,12 +422,24 @@ public class ItemRejectRouter {
     }
 
     /**
-     * Indicates whether the application is running in production (normal) launch mode.
+     * Indicates whether the application is running in production mode.
      *
-     * @return true if the resolved launch mode is {@link io.quarkus.runtime.LaunchMode#NORMAL}, false otherwise.
+     * <p>Packaged E2E runs can execute with {@code LaunchMode.NORMAL} while setting {@code quarkus.profile=test}.
+     * In that case this method treats the runtime as non-production so local/dev reject sinks remain usable.
+     *
+     * @return true when launch mode is production and active profile is not {@code dev}/{@code test}, false otherwise.
      */
     private boolean isProductionLaunchMode() {
-        return launchMode() == LaunchMode.NORMAL;
+        LaunchMode mode = launchMode();
+        if (!mode.isProduction()) {
+            return false;
+        }
+        String activeProfile = resolveActiveProfile();
+        if (activeProfile == null || activeProfile.isBlank()) {
+            return true;
+        }
+        String normalized = activeProfile.trim().toLowerCase(Locale.ROOT);
+        return !("dev".equals(normalized) || "test".equals(normalized));
     }
 
     /**
@@ -445,6 +459,24 @@ public class ItemRejectRouter {
         } catch (RuntimeException unexpected) {
             LOG.warn("Unable to resolve runtime launch mode. Defaulting to NORMAL.", unexpected);
             return LaunchMode.NORMAL;
+        }
+    }
+
+    /**
+     * Resolve the active Quarkus profile, preferring configuration and falling back to the environment variable.
+     *
+     * @return the configured profile name, or null if none can be resolved
+     */
+    private String resolveActiveProfile() {
+        try {
+            return ConfigProvider.getConfig()
+                .getOptionalValue("quarkus.profile", String.class)
+                .orElseGet(() -> System.getenv("QUARKUS_PROFILE"));
+        } catch (IllegalStateException expected) {
+            return System.getenv("QUARKUS_PROFILE");
+        } catch (RuntimeException unexpected) {
+            LOG.warn("Unable to resolve active Quarkus profile. Falling back to environment.", unexpected);
+            return System.getenv("QUARKUS_PROFILE");
         }
     }
 
