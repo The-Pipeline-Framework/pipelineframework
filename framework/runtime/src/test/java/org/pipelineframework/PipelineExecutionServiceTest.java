@@ -1,37 +1,17 @@
 package org.pipelineframework;
 
-import java.util.Optional;
-
-import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
-import jakarta.enterprise.inject.Instance;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.pipelineframework.orchestrator.CreateExecutionResult;
-import org.pipelineframework.orchestrator.ExecutionInputShape;
-import org.pipelineframework.orchestrator.ExecutionInputSnapshot;
-import org.pipelineframework.orchestrator.ExecutionRecord;
-import org.pipelineframework.orchestrator.ExecutionStateStore;
-import org.pipelineframework.orchestrator.ExecutionStatus;
-import org.pipelineframework.orchestrator.EventWorkDispatcher;
-import org.pipelineframework.orchestrator.LoggingDeadLetterPublisher;
-import org.pipelineframework.orchestrator.OrchestratorIdempotencyPolicy;
-import org.pipelineframework.orchestrator.OrchestratorMode;
-import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
-import org.pipelineframework.orchestrator.WorkDispatcher;
-import org.pipelineframework.orchestrator.DeadLetterPublisher;
-import org.pipelineframework.orchestrator.DynamoExecutionStateStore;
+import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
+import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -41,27 +21,12 @@ class PipelineExecutionServiceTest {
     private PipelineExecutionService service;
 
     @Mock
-    private PipelineOrchestratorConfig orchestratorConfig;
-
-    @Mock
-    private ExecutionStateStore executionStateStore;
-
-    @Mock
-    private WorkDispatcher workDispatcher;
-
-    @Mock
-    private Instance<ExecutionStateStore> executionStateStores;
-
-    @Mock
-    private Instance<WorkDispatcher> workDispatchers;
-
-    @Mock
-    private Instance<DeadLetterPublisher> deadLetterPublishers;
+    private QueueAsyncCoordinator queueAsyncCoordinator;
 
     @BeforeEach
-    void setUp() throws Exception {
+    void setUp() {
         service = new PipelineExecutionService();
-        setField("orchestratorConfig", orchestratorConfig);
+        service.queueAsyncCoordinator = queueAsyncCoordinator;
     }
 
     @Test
@@ -70,167 +35,51 @@ class PipelineExecutionServiceTest {
     }
 
     @Test
-    void executePipelineAsyncRequiresQueueMode() {
-        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.SYNC);
+    void executePipelineAsyncDefaultsToUnaryOutputMode() {
+        RunAsyncAcceptedDto expected = new RunAsyncAcceptedDto("exec-1", false, "/pipeline/executions/exec-1", 1L);
+        when(queueAsyncCoordinator.executePipelineAsync("input", "tenant-1", "idem-1", false))
+            .thenReturn(Uni.createFrom().item(expected));
 
-        Uni<?> result = service.executePipelineAsync("input", "tenant-1", "idem-1");
+        RunAsyncAcceptedDto actual = service.executePipelineAsync("input", "tenant-1", "idem-1")
+            .await().indefinitely();
 
-        assertThrows(IllegalStateException.class, () -> result.await().indefinitely());
+        assertEquals(expected.executionId(), actual.executionId());
+        verify(queueAsyncCoordinator).executePipelineAsync("input", "tenant-1", "idem-1", false);
     }
 
     @Test
-    void executePipelineAsyncRejectsStreamingOutputFlagInQueueMode() {
-        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+    void executePipelineAsyncPassesOutputStreamingFlag() {
+        RunAsyncAcceptedDto expected = new RunAsyncAcceptedDto("exec-2", false, "/pipeline/executions/exec-2", 2L);
+        when(queueAsyncCoordinator.executePipelineAsync("input", "tenant-1", "idem-1", true))
+            .thenReturn(Uni.createFrom().item(expected));
 
-        Uni<?> result = service.executePipelineAsync("input", "tenant-1", "idem-1", true);
+        RunAsyncAcceptedDto actual = service.executePipelineAsync("input", "tenant-1", "idem-1", true)
+            .await().indefinitely();
 
-        IllegalStateException error = assertThrows(IllegalStateException.class, () -> result.await().indefinitely());
-        assertTrue(error.getMessage().contains("does not support streaming pipeline outputs"));
+        assertEquals(expected.executionId(), actual.executionId());
+        verify(queueAsyncCoordinator).executePipelineAsync("input", "tenant-1", "idem-1", true);
     }
 
     @Test
-    void initializeQueueModeFailsFastWhenSelectedProviderReportsStartupError() throws Exception {
-        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-        when(orchestratorConfig.stateProvider()).thenReturn("dynamo");
-        when(orchestratorConfig.dispatcherProvider()).thenReturn("event");
-        when(orchestratorConfig.dlqProvider()).thenReturn("log");
-        when(orchestratorConfig.strictStartup()).thenReturn(true);
+    void getExecutionStatusDelegatesToCoordinator() {
+        ExecutionStatusDto expected = new ExecutionStatusDto("exec-3", null, 0, 0, 1L, 0L, 0L, null, null);
+        when(queueAsyncCoordinator.getExecutionStatus("tenant-1", "exec-3"))
+            .thenReturn(Uni.createFrom().item(expected));
 
-        when(executionStateStores.stream()).thenReturn(java.util.stream.Stream.of(new DynamoExecutionStateStore()));
-        when(workDispatchers.stream()).thenReturn(java.util.stream.Stream.of(new EventWorkDispatcher()));
-        when(deadLetterPublishers.stream()).thenReturn(java.util.stream.Stream.of(new LoggingDeadLetterPublisher()));
-        setField("executionStateStores", executionStateStores);
-        setField("workDispatchers", workDispatchers);
-        setField("deadLetterPublishers", deadLetterPublishers);
+        ExecutionStatusDto actual = service.getExecutionStatus("tenant-1", "exec-3").await().indefinitely();
 
-        IllegalStateException error = assertThrows(
-            IllegalStateException.class,
-            this::invokeInitializeQueueMode);
-        assertTrue(error.getMessage().contains("ExecutionStateStore(dynamo)"));
+        assertEquals("exec-3", actual.executionId());
+        verify(queueAsyncCoordinator).getExecutionStatus("tenant-1", "exec-3");
     }
 
     @Test
-    void getExecutionStatusReturnsRecordStateInQueueMode() throws Exception {
-        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-        setField("executionStateStore", executionStateStore);
-        ExecutionRecord<Object, Object> record = new ExecutionRecord<>(
-            "tenant-1",
-            "exec-1",
-            "key-1",
-            ExecutionStatus.RUNNING,
-            1L,
-            0,
-            0,
-            null,
-            0L,
-            0L,
-            null,
-            "input",
-            null,
-            null,
-            null,
-            1L,
-            1L,
-            99999999L);
-        when(executionStateStore.getExecution("tenant-1", "exec-1"))
-            .thenReturn(Uni.createFrom().item(Optional.of(record)));
+    void processExecutionWorkItemDelegatesToCoordinator() {
+        ExecutionWorkItem item = new ExecutionWorkItem("tenant-1", "exec-4");
+        when(queueAsyncCoordinator.processExecutionWorkItem(eq(item), org.mockito.ArgumentMatchers.any()))
+            .thenReturn(Uni.createFrom().voidItem());
 
-        ExecutionStatusDto dto = service.getExecutionStatus("tenant-1", "exec-1").await().indefinitely();
+        service.processExecutionWorkItem(item).await().indefinitely();
 
-        assertNotNull(dto);
-        assertEquals("exec-1", dto.executionId());
-        assertEquals(ExecutionStatus.RUNNING, dto.status());
-        verify(executionStateStore).getExecution("tenant-1", "exec-1");
-    }
-
-    @Test
-    void executePipelineAsyncPersistsUniInputShapeForPlainArrayPayload() throws Exception {
-        configureQueueModeDefaults();
-        setField("executionStateStore", executionStateStore);
-        setField("workDispatcher", workDispatcher);
-        when(executionStateStore.createOrGetExecution(any()))
-            .thenReturn(Uni.createFrom().item(new CreateExecutionResult(
-                createRecord("tenant-1", "exec-uni", "key-uni"),
-                true)));
-
-        service.executePipelineAsync(java.util.List.of("a", "b"), "tenant-1", null).await().indefinitely();
-
-        ArgumentCaptor<org.pipelineframework.orchestrator.ExecutionCreateCommand> captor =
-            ArgumentCaptor.forClass(org.pipelineframework.orchestrator.ExecutionCreateCommand.class);
-        verify(executionStateStore).createOrGetExecution(captor.capture());
-        Object persisted = captor.getValue().inputPayload();
-        assertTrue(persisted instanceof ExecutionInputSnapshot);
-        ExecutionInputSnapshot snapshot = (ExecutionInputSnapshot) persisted;
-        assertEquals(ExecutionInputShape.UNI, snapshot.shape());
-        assertEquals(java.util.List.of("a", "b"), snapshot.payload());
-    }
-
-    @Test
-    void executePipelineAsyncPersistsMultiInputShapeForStreamingPayload() throws Exception {
-        configureQueueModeDefaults();
-        setField("executionStateStore", executionStateStore);
-        setField("workDispatcher", workDispatcher);
-        when(executionStateStore.createOrGetExecution(any()))
-            .thenReturn(Uni.createFrom().item(new CreateExecutionResult(
-                createRecord("tenant-1", "exec-multi", "key-multi"),
-                true)));
-
-        service.executePipelineAsync(Multi.createFrom().items("x", "y"), "tenant-1", null).await().indefinitely();
-
-        ArgumentCaptor<org.pipelineframework.orchestrator.ExecutionCreateCommand> captor =
-            ArgumentCaptor.forClass(org.pipelineframework.orchestrator.ExecutionCreateCommand.class);
-        verify(executionStateStore).createOrGetExecution(captor.capture());
-        Object persisted = captor.getValue().inputPayload();
-        assertTrue(persisted instanceof ExecutionInputSnapshot);
-        ExecutionInputSnapshot snapshot = (ExecutionInputSnapshot) persisted;
-        assertEquals(ExecutionInputShape.MULTI, snapshot.shape());
-        assertEquals(java.util.List.of("x", "y"), snapshot.payload());
-    }
-
-    private void configureQueueModeDefaults() {
-        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-        when(orchestratorConfig.executionTtlDays()).thenReturn(7);
-        when(orchestratorConfig.idempotencyPolicy()).thenReturn(OrchestratorIdempotencyPolicy.OPTIONAL_CLIENT_KEY);
-    }
-
-    private ExecutionRecord<Object, Object> createRecord(String tenantId, String executionId, String executionKey) {
-        return new ExecutionRecord<>(
-            tenantId,
-            executionId,
-            executionKey,
-            ExecutionStatus.QUEUED,
-            0L,
-            0,
-            0,
-            null,
-            0L,
-            0L,
-            null,
-            null,
-            null,
-            null,
-            null,
-            1L,
-            1L,
-            99999999L);
-    }
-
-    private void setField(String fieldName, Object value) throws Exception {
-        var field = PipelineExecutionService.class.getDeclaredField(fieldName);
-        field.setAccessible(true);
-        field.set(service, value);
-    }
-
-    private void invokeInitializeQueueMode() throws Exception {
-        var method = PipelineExecutionService.class.getDeclaredMethod("initializeQueueMode");
-        method.setAccessible(true);
-        try {
-            method.invoke(service);
-        } catch (java.lang.reflect.InvocationTargetException e) {
-            if (e.getCause() instanceof Exception exception) {
-                throw exception;
-            }
-            throw e;
-        }
+        verify(queueAsyncCoordinator).processExecutionWorkItem(eq(item), org.mockito.ArgumentMatchers.any());
     }
 }
