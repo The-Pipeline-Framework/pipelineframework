@@ -3,6 +3,7 @@ package org.pipelineframework.context.grpc;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.grpc.*;
+import org.mockito.ArgumentCaptor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -11,6 +12,7 @@ import org.pipelineframework.context.PipelineCacheStatusHolder;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHeaders;
 import org.pipelineframework.context.PipelineContextHolder;
+import org.pipelineframework.context.TransportDispatchMetadataHolder;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -29,12 +31,14 @@ class PipelineContextGrpcServerInterceptorTest {
         handler = mock(ServerCallHandler.class);
         when(handler.startCall(any(), any())).thenReturn(mock(ServerCall.Listener.class));
         PipelineContextHolder.clear();
+        TransportDispatchMetadataHolder.clear();
         PipelineCacheStatusHolder.clear();
     }
 
     @AfterEach
     void tearDown() {
         PipelineContextHolder.clear();
+        TransportDispatchMetadataHolder.clear();
         PipelineCacheStatusHolder.clear();
     }
 
@@ -122,5 +126,22 @@ class PipelineContextGrpcServerInterceptorTest {
         listener.onCancel();
 
         assertNull(PipelineContextHolder.get());
+    }
+
+    @Test
+    void shortCircuitsExpiredDeadlineBeforeHandlerInvocation() {
+        Metadata headers = new Metadata();
+        headers.put(Metadata.Key.of(PipelineContextHeaders.TPF_DEADLINE_EPOCH_MS, Metadata.ASCII_STRING_MARSHALLER),
+            Long.toString(System.currentTimeMillis() - 1_000L));
+
+        ServerCall.Listener<String> listener = interceptor.interceptCall(serverCall, headers, handler);
+
+        assertNotNull(listener);
+        ArgumentCaptor<Status> statusCaptor = ArgumentCaptor.forClass(Status.class);
+        verify(serverCall).close(statusCaptor.capture(), any(Metadata.class));
+        verify(handler, never()).startCall(any(), any());
+        assertEquals(Status.Code.DEADLINE_EXCEEDED, statusCaptor.getValue().getCode());
+        assertNull(PipelineContextHolder.get());
+        assertNull(TransportDispatchMetadataHolder.get());
     }
 }

@@ -21,9 +21,11 @@ import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.WorkDispatcher;
+import org.pipelineframework.step.NonRetryableException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -119,7 +121,13 @@ class QueueAsyncFailureMatrixTest {
         DeadLetterEnvelope envelope = envelopeCaptor.getValue();
         assertEquals("tenant-a", envelope.tenantId());
         assertEquals("exec-3", envelope.executionId());
+        assertEquals("exec-3-key", envelope.executionKey());
+        assertEquals("exec-3-key", envelope.correlationId());
         assertEquals("exec-3:0:0", envelope.transitionKey());
+        assertEquals("FAILED", envelope.terminalStatus());
+        assertEquals("retry_exhausted", envelope.terminalReason());
+        assertTrue(envelope.retryable());
+        assertEquals(0, envelope.retriesObserved());
     }
 
     @Test
@@ -133,6 +141,88 @@ class QueueAsyncFailureMatrixTest {
         assertDoesNotThrow(() -> invokeHandleExecutionFailure(record, "exec-4:0:0", new IllegalStateException("stale")));
 
         verify(deadLetterPublisher, never()).publish(any());
+    }
+
+    @Test
+    void terminalPathClassifiesNonRetryableFailure() throws Exception {
+        when(orchestratorConfig.maxRetries()).thenReturn(0);
+        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-9", 3L, 0);
+        when(executionStateStore.markTerminalFailure(
+            anyString(), anyString(), anyLong(), any(), anyString(), anyString(), anyString(), anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(record)));
+        when(deadLetterPublisher.publish(any())).thenReturn(Uni.createFrom().voidItem());
+
+        assertDoesNotThrow(() -> invokeHandleExecutionFailure(
+            record,
+            "exec-9:0:0",
+            new NonRetryableException("bad payload")));
+
+        ArgumentCaptor<DeadLetterEnvelope> envelopeCaptor = ArgumentCaptor.forClass(DeadLetterEnvelope.class);
+        verify(deadLetterPublisher).publish(envelopeCaptor.capture());
+        DeadLetterEnvelope envelope = envelopeCaptor.getValue();
+        assertEquals("non_retryable", envelope.terminalReason());
+        assertFalse(envelope.retryable());
+        assertEquals("NonRetryableException", envelope.errorCode());
+    }
+
+    @Test
+    void nonRetryableFailureSkipsScheduleRetryEvenWhenBudgetRemains() throws Exception {
+        when(orchestratorConfig.maxRetries()).thenReturn(3);
+        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-10", 3L, 0);
+        when(executionStateStore.markTerminalFailure(
+            anyString(), anyString(), anyLong(), any(), anyString(), anyString(), anyString(), anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(record)));
+        when(deadLetterPublisher.publish(any())).thenReturn(Uni.createFrom().voidItem());
+
+        assertDoesNotThrow(() -> invokeHandleExecutionFailure(
+            record,
+            "exec-10:0:0",
+            new NonRetryableException("bad payload")));
+
+        verify(executionStateStore, never()).scheduleRetry(
+            anyString(), anyString(), anyLong(), anyInt(), anyLong(), anyString(), anyString(), anyString(), anyLong());
+        verify(executionStateStore).markTerminalFailure(
+            eq("tenant-a"),
+            eq("exec-10"),
+            eq(3L),
+            eq(ExecutionStatus.FAILED),
+            eq("exec-10:0:0"),
+            eq("NonRetryableException"),
+            eq("bad payload"),
+            anyLong());
+    }
+
+    @Test
+    void wrappedNonRetryableFailureUsesClassifiedThrowableMetadata() throws Exception {
+        when(orchestratorConfig.maxRetries()).thenReturn(3);
+        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-11", 4L, 0);
+        when(executionStateStore.markTerminalFailure(
+            anyString(), anyString(), anyLong(), any(), anyString(), anyString(), anyString(), anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(record)));
+        when(deadLetterPublisher.publish(any())).thenReturn(Uni.createFrom().voidItem());
+
+        RuntimeException wrapped = new RuntimeException("wrapper", new NonRetryableException("inner-non-retryable"));
+        assertDoesNotThrow(() -> invokeHandleExecutionFailure(record, "exec-11:0:0", wrapped));
+
+        verify(executionStateStore, never()).scheduleRetry(
+            anyString(), anyString(), anyLong(), anyInt(), anyLong(), anyString(), anyString(), anyString(), anyLong());
+        verify(executionStateStore).markTerminalFailure(
+            eq("tenant-a"),
+            eq("exec-11"),
+            eq(4L),
+            eq(ExecutionStatus.FAILED),
+            eq("exec-11:0:0"),
+            eq("NonRetryableException"),
+            eq("inner-non-retryable"),
+            anyLong());
+
+        ArgumentCaptor<DeadLetterEnvelope> envelopeCaptor = ArgumentCaptor.forClass(DeadLetterEnvelope.class);
+        verify(deadLetterPublisher).publish(envelopeCaptor.capture());
+        DeadLetterEnvelope envelope = envelopeCaptor.getValue();
+        assertEquals("NonRetryableException", envelope.errorCode());
+        assertEquals("inner-non-retryable", envelope.errorMessage());
+        assertFalse(envelope.retryable());
+        assertEquals("non_retryable", envelope.terminalReason());
     }
 
     @Test

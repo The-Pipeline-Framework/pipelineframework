@@ -26,10 +26,20 @@ public class LoggingDeadLetterPublisher implements DeadLetterPublisher {
     @Override
     public Uni<Void> publish(DeadLetterEnvelope envelope) {
         return Uni.createFrom().voidItem().invoke(() ->
-            LOG.errorf("Execution moved to DLQ: tenant=%s execution=%s transition=%s error=%s",
+            {
+                DeadLetterMetrics.record(providerName(), envelope);
+                LOG.errorf(
+                    "Execution moved to DLQ: tenant=%s execution=%s transition=%s status=%s reason=%s error=%s retryable=%s retriesObserved=%d transport=%s platform=%s",
                 envelope.tenantId(),
                 envelope.executionId(),
                 envelope.transitionKey(),
-                envelope.errorMessage()));
+                envelope.terminalStatus(),
+                envelope.terminalReason(),
+                envelope.errorMessage(),
+                envelope.retryable(),
+                envelope.retriesObserved(),
+                envelope.transport(),
+                envelope.platform());
+            });
     }
 }

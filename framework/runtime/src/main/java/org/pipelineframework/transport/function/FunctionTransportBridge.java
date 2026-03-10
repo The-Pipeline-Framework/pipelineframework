@@ -22,6 +22,7 @@ import java.util.Objects;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import org.pipelineframework.context.DispatchDeadlineValidator;
 
 /**
  * Executes function transport flows for unary and streaming cardinalities.
@@ -295,6 +296,7 @@ public final class FunctionTransportBridge {
         Objects.requireNonNull(sourceAdapter, "sourceAdapter must not be null");
         Objects.requireNonNull(invokeAdapter, "invokeAdapter must not be null");
         Objects.requireNonNull(sinkAdapter, "sinkAdapter must not be null");
+        DispatchDeadlineValidator.ensureNotExpired(context.deadlineEpochMs(), "function-transport");
     }
 
     private static void validateTimeout(Duration timeout) {

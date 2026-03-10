@@ -126,7 +126,7 @@ jobs:
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" -f framework/pom.xml \
             -pl runtime \
-            -Dtest=FunctionTransportBridgeTest,UnaryFunctionTransportBridgeTest,FunctionTransportAdaptersTest,HttpRemoteFunctionInvokeAdapterTest,RestExceptionMapperTest,ProtobufHttpStatusMapperTest,ObserverTapContractValidatorTest,CheckoutCanonicalFlowContractTest,CheckoutCanonicalFlowContractNegativeTest \
+            -Dtest=FunctionTransportBridgeTest,UnaryFunctionTransportBridgeTest,FunctionTransportAdaptersTest,InvocationModeRoutingParityTest,HttpRemoteFunctionInvokeAdapterTest,RestExceptionMapperTest,ProtobufHttpStatusMapperTest,TransportDispatchMetadataTest,PipelineContextRequestFilterTest,PipelineContextGrpcServerInterceptorTest,DispatchDeadlineValidatorTest,TransportDeadlineParityContractTest,ObserverTapContractValidatorTest,CheckoutCanonicalFlowContractTest,CheckoutCanonicalFlowContractNegativeTest \
             test
 
   docs-build:

@@ -36,6 +36,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.Locale;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -58,6 +59,7 @@ import org.apache.commons.lang3.time.StopWatch;
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.config.pipeline.PipelineOrderResourceLoader;
+import org.pipelineframework.config.pipeline.PipelinePlatformResourceLoader;
 import org.pipelineframework.orchestrator.CreateExecutionResult;
 import org.pipelineframework.orchestrator.DeadLetterEnvelope;
 import org.pipelineframework.orchestrator.DeadLetterPublisher;
@@ -74,6 +76,7 @@ import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
+import org.pipelineframework.step.NonRetryableException;
 import org.pipelineframework.telemetry.ApmCompatibilityMetrics;
 import org.pipelineframework.telemetry.PipelineTelemetry;
 import org.pipelineframework.telemetry.RetryAmplificationGuard;
@@ -793,8 +796,11 @@ public class PipelineExecutionService {
       Throwable failure) {
     long now = System.currentTimeMillis();
     int nextAttempt = record.attempt() + 1;
+    FailureClassification classification = classifyFailure(failure);
+    Throwable classifiedFailure = classification.classifiedThrowable();
+    boolean retryableFailure = classification.retryable();
     boolean retryAllowed = nextAttempt <= orchestratorConfig.maxRetries();
-    if (retryAllowed) {
+    if (retryAllowed && retryableFailure) {
       long nextDue = now + retryDelayMillis(nextAttempt);
           return executionStateStore.scheduleRetry(
                   record.tenantId(),
@@ -803,8 +809,8 @@ public class PipelineExecutionService {
               nextAttempt,
               nextDue,
               transitionKey,
-              failure.getClass().getSimpleName(),
-                  failure.getMessage(),
+              classifiedFailure.getClass().getSimpleName(),
+                  classifiedFailure.getMessage(),
                   now)
               .onItem().transformToUni(updated -> {
                 if (updated.isEmpty()) {
@@ -823,22 +829,87 @@ public class PipelineExecutionService {
             record.version(),
             ExecutionStatus.FAILED,
             transitionKey,
-            failure.getClass().getSimpleName(),
-            failure.getMessage(),
+            classifiedFailure.getClass().getSimpleName(),
+            classifiedFailure.getMessage(),
             now)
         .onItem().transformToUni(updated -> {
           if (updated.isEmpty()) {
             return Uni.createFrom().voidItem();
           }
-          DeadLetterEnvelope envelope = new DeadLetterEnvelope(
-              record.tenantId(),
-              record.executionId(),
-              transitionKey,
-              failure.getClass().getSimpleName(),
-              failure.getMessage(),
-              now);
+          PipelinePlatformResourceLoader.PlatformMetadata platformMetadata = PipelinePlatformResourceLoader
+              .loadPlatform()
+              .orElse(null);
+          DeadLetterEnvelope envelope = DeadLetterEnvelope.builder()
+              .tenantId(record.tenantId())
+              .executionId(record.executionId())
+              .executionKey(record.executionKey())
+              .correlationId(record.executionKey())
+              .transitionKey(transitionKey)
+              .resourceType("tpf.orchestrator.execution")
+              .resourceName(ORCHESTRATOR_SERVICE + "/" + ORCHESTRATOR_METHOD)
+              .transport(resolveTransport(platformMetadata))
+              .platform(resolvePlatform(platformMetadata))
+              .terminalStatus(ExecutionStatus.FAILED.name())
+              .terminalReason(retryableFailure ? "retry_exhausted" : "non_retryable")
+              .errorCode(classifiedFailure.getClass().getSimpleName())
+              .errorMessage(classifiedFailure.getMessage())
+              .retryable(retryableFailure)
+              .retriesObserved(record.attempt())
+              .createdAtEpochMs(now)
+              .build();
           return deadLetterPublisher.publish(envelope);
         });
+  }
+
+  private static String resolveTransport(PipelinePlatformResourceLoader.PlatformMetadata metadata) {
+    String candidate = metadata == null ? System.getProperty("pipeline.transport") : metadata.transport();
+    if (candidate == null || candidate.isBlank()) {
+      return "UNKNOWN";
+    }
+    return candidate.trim().toUpperCase(Locale.ROOT);
+  }
+
+  private static String resolvePlatform(PipelinePlatformResourceLoader.PlatformMetadata metadata) {
+    String candidate = metadata == null ? System.getProperty("pipeline.platform") : metadata.platform();
+    if (candidate == null || candidate.isBlank()) {
+      return "UNKNOWN";
+    }
+    return candidate.trim().toUpperCase(Locale.ROOT);
+  }
+
+  private static FailureClassification classifyFailure(Throwable failure) {
+    if (failure == null) {
+      Throwable classified = new IllegalStateException("Unknown failure");
+      return new FailureClassification(false, classified);
+    }
+    Throwable nonRetryable = findThrowable(failure, NonRetryableException.class);
+    if (nonRetryable != null) {
+      return new FailureClassification(false, nonRetryable);
+    }
+    return new FailureClassification(true, failure);
+  }
+
+  private static Throwable findThrowable(Throwable failure, Class<? extends Throwable> targetType) {
+    java.util.ArrayDeque<Throwable> queue = new java.util.ArrayDeque<>();
+    java.util.Set<Throwable> seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+    queue.add(failure);
+    while (!queue.isEmpty()) {
+      Throwable current = queue.removeFirst();
+      if (!seen.add(current)) {
+        continue;
+      }
+      if (targetType.isInstance(current)) {
+        return current;
+      }
+      Throwable cause = current.getCause();
+      if (cause != null && cause != current) {
+        queue.add(cause);
+      }
+    }
+    return null;
+  }
+
+  private record FailureClassification(boolean retryable, Throwable classifiedThrowable) {
   }
 
   private long retryDelayMillis(int nextAttempt) {
