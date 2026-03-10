@@ -189,4 +189,26 @@ class DeadLetterEnvelopeTest {
             .build();
         assertNull(nullErrorMessage.errorMessage());
     }
+
+    @Test
+    void deprecatedConstructorValidatesRequiredFields() {
+        assertThrows(NullPointerException.class, () ->
+            new DeadLetterEnvelope(
+                null,
+                "exec",
+                "exec-key",
+                "corr",
+                "transition",
+                "resource",
+                "resourceName",
+                "REST",
+                "COMPUTE",
+                "FAILED",
+                "retry_exhausted",
+                "Error",
+                "msg",
+                true,
+                0,
+                1L));
+    }
 }

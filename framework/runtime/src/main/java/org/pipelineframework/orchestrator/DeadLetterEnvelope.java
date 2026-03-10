@@ -46,6 +46,10 @@ public record DeadLetterEnvelope(
      */
     @Deprecated(forRemoval = false, since = "26.2.5")
     public DeadLetterEnvelope {
+        Objects.requireNonNull(tenantId, "tenantId must not be null");
+        Objects.requireNonNull(executionId, "executionId must not be null");
+        Objects.requireNonNull(transitionKey, "transitionKey must not be null");
+        Objects.requireNonNull(errorCode, "errorCode must not be null");
         if (retriesObserved < 0) {
             throw new IllegalArgumentException("retriesObserved must be >= 0");
         }

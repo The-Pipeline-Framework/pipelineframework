@@ -905,11 +905,6 @@ public class PipelineExecutionService {
       if (cause != null && cause != current) {
         queue.add(cause);
       }
-      for (Throwable suppressed : current.getSuppressed()) {
-        if (suppressed != null) {
-          queue.add(suppressed);
-        }
-      }
     }
     return null;
   }
