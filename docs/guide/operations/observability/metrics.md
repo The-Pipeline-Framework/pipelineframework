@@ -30,6 +30,22 @@ Pair metrics with Grafana dashboards that show:
 3. Error rate by step
 4. Pipeline end-to-end latency
 
+## Execution Channels and Signals
+
+Queue-async operations involve three distinct channels that should be monitored separately:
+
+| Channel | What it means | Core signals |
+|---|---|---|
+| Worker/dispatcher control plane | orchestration coordination and progress | queue depth, worker lag, lease conflicts, stale commits, sweeper recoveries |
+| Execution DLQ | terminal execution failures | DLQ publish count, provider queue depth, oldest message age |
+| Item Reject Sink | item-level recover-and-continue business rejects | `tpf.step.reject.total`, provider queue depth (when durable), reject fingerprint concentration |
+
+Operational interpretation:
+
+1. High worker lag or stale/lease contention points to orchestration pressure or dependency latency.
+2. Execution DLQ growth points to systemic execution failures that require execution-level triage.
+3. Item reject growth often indicates data-quality/business-rule drift and should route to business remediation and selective re-drive.
+
 ## LGTM Metrics Pipeline
 
 LGTM Dev Services ship an OTLP collector and Prometheus. Grafana's built-in dashboards read
@@ -118,6 +134,13 @@ Implementation note:
 Step-level reject signal:
 
 - `tpf.step.reject.total` (counter): rejected step items published to item reject sinks.
+
+Backlog signal note:
+
+1. TPF emits `tpf.step.reject.total` for reject throughput.
+2. Backlog depth is provider-native:
+3. use SQS queue depth/age for durable sinks (`provider=sqs`),
+4. use retained-size logs/metrics for in-memory sink (`provider=memory`).
 
 ## Design Tips
 

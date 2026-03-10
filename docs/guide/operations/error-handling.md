@@ -1,94 +1,24 @@
 # Error Handling and Recovery
 
-This guide describes how TPF handles failures at two different levels:
+This guide is for operations triage and recovery.
+It focuses on runtime failure channels and queue-async crash behavior.
 
-1. step-level item recovery (item reject sink), and
-2. orchestrator execution-level terminal failures (execution DLQ).
+Step-level Item Reject Sink is intentionally a business processing path, not an execution failure.
+Developer implementation guidance lives in [Item Reject Sink](/guide/development/item-reject-sink).
 
-## Failure Channels
+## Failure Channels (Operational View)
 
-| Channel | Scope | Trigger | Default provider | Durable provider |
-|---|---|---|---|---|
-| Item Reject Sink | individual failed item/stream in a step with `recoverOnFailure=true` | step retries exhausted or non-retryable failure | `log` | `sqs` |
-| Execution DLQ | whole async execution in `QUEUE_ASYNC` mode | execution reaches terminal failure path | `log` | `sqs` |
-
-Use Item Reject Sink for selective recover-and-continue behaviour.
-Use execution DLQ for terminal orchestration failures.
-
-## Step-Level Recovery: Item Reject Sink
-
-When `recoverOnFailure=true`, step runtime routes failures to the Item Reject Sink and continues according to step semantics.
-
-- `StepOneToOne` / `StepSideEffect`: failed item is rejected and flow continues with the step's reject output.
-- `StepManyToOne`: failed stream is rejected via stream metadata and flow continues with reject output.
-- `StepOneToMany` / `StepManyToMany`: expose the same reject API and can use the same sink contract.
-
-### Step API
-
-Legacy step-level `deadLetter(...)` / `deadLetterStream(...)` has been replaced with:
-
-- `rejectItem(...)`
-- `rejectStream(...)`
-
-Example flow that emits a reject envelope and still returns step-specific status:
-
-```java
-public Uni<PaymentStatus> processPayment(PaymentRecord paymentRecord) {
-    return process(paymentRecord)
-        .onFailure().recoverWithUni(error ->
-            rejectItem(paymentRecord, error)
-                .replaceWith(PaymentStatus.rejected()));
-}
-```
-
-If you override `rejectItem(...)`, delegate to `super.rejectItem(...)` so sink publication still happens.
-
-### Reject Envelope
-
-By default, reject envelopes are metadata-only and include:
-
-1. execution/correlation/idempotency metadata when present,
-2. step identity,
-3. retry/attempt information,
-4. error class/message,
-5. timestamp,
-6. deterministic fingerprint.
-
-Payload capture is opt-in (`pipeline.item-reject.include-payload=true`).
-
-### Item Reject Sink Configuration
-
-Prefix: `pipeline.item-reject`
-
-| Property | Type | Default | Description |
+| Channel | Scope | Trigger | Primary operational signal |
 |---|---|---|---|
-| `pipeline.item-reject.provider` | string | `log` | Sink provider selector (`log`, `memory`, `sqs`). |
-| `pipeline.item-reject.strict-startup` | boolean | `true` | Fail startup on invalid selected sink provider configuration. |
-| `pipeline.item-reject.include-payload` | boolean | `false` | Include rejected payload in envelope. |
-| `pipeline.item-reject.memory-capacity` | int | `512` | Ring buffer capacity when `provider=memory`. |
-| `pipeline.item-reject.publish-failure-policy` | enum | `CONTINUE` | `CONTINUE` or `FAIL_PIPELINE` when sink publish fails. |
-| `pipeline.item-reject.sqs.queue-url` | string | none | Queue URL when `provider=sqs`. |
-| `pipeline.item-reject.sqs.region` | string | none | Optional AWS region override for SQS sink. |
-| `pipeline.item-reject.sqs.endpoint-override` | string | none | Optional endpoint override (local/dev). |
+| Item Reject Sink | individual items/streams | step-level recover-and-continue path | reject sink throughput/backlog trends |
+| Execution DLQ | full async execution | terminal orchestration failure | execution DLQ backlog growth |
 
-Production guard:
+Triage rule:
 
-1. if effective step recovery is enabled (`recoverOnFailure=true`),
-2. and the selected sink is non-durable (`log` or `memory`),
-3. startup fails in production launch mode.
+1. Rising item rejects with stable execution success usually indicates data quality or business-rule drift.
+2. Rising execution DLQ indicates control-plane, dependency, or systemic execution failure.
 
-In non-production, non-durable sinks are allowed with warning logs.
-
-## Execution-Level DLQ (Queue-Async)
-
-Execution DLQ is unchanged and still uses orchestrator SPI:
-
-- `DeadLetterPublisher`
-- `DeadLetterEnvelope`
-
-This applies only to terminal execution failures in `pipeline.orchestrator.mode=QUEUE_ASYNC`.
-
-### Execution DLQ Configuration
+## Execution DLQ Configuration (Queue-Async)
 
 ```properties
 pipeline.orchestrator.mode=QUEUE_ASYNC
@@ -96,9 +26,10 @@ pipeline.orchestrator.dlq-provider=sqs
 pipeline.orchestrator.dlq-url=https://sqs.eu-west-1.amazonaws.com/123456789012/tpf-dlq
 ```
 
-## Queue-Async Crash Matrix
+Execution DLQ applies to terminal execution failures only.
+It does not replace item-level rejection flows.
 
-For `QUEUE_ASYNC`, crash behaviour remains:
+## Queue-Async Crash Matrix
 
 | Crash point | Behaviour after restart/recovery | Duplicate risk | Required safeguard |
 |---|---|---|---|
@@ -114,9 +45,7 @@ Semantics summary:
 2. operator invocation and dispatch are at-least-once,
 3. replay is deterministic for control-plane state, not for non-idempotent external systems.
 
-## Retry and Idempotency
-
-Recommended defaults:
+## Retry and Idempotency Defaults
 
 ```properties
 pipeline.defaults.retry-limit=5
@@ -127,12 +56,13 @@ pipeline.defaults.jitter=true
 
 Use `NonRetryableException` to fail fast for non-transient failures.
 
-For at-least-once boundaries (queue delivery, operator invocation, re-drive), enforce idempotency using stable transition identity (`executionId:stepIndex:attempt`) in downstream systems.
+For at-least-once boundaries (queue delivery, operator invocation, re-drive), enforce idempotency with stable transition identity (`executionId:stepIndex:attempt`).
 
 ## Operations Runbook
 
-1. Check whether the failure belongs to Item Reject Sink (step-level selective reject) or execution DLQ (terminal execution).
-2. For Item Reject Sink on `sqs`, inspect reject queue depth and message fingerprint patterns.
-3. For execution DLQ, triage terminal cause (`FAILED` vs `DLQ`) and replay only after validating downstream idempotency.
-4. If due executions stall, verify sweeper activity and dispatcher health.
-5. Re-drive in bounded batches, monitor duplicate suppression and retry saturation.
+1. Classify incident scope first: item reject trend vs execution DLQ growth.
+2. For item reject incidents, check fingerprint concentration and dominant error classes; route to business-data remediation and selective re-drive.
+3. Treat item reject re-drive as application-owned: default reject envelopes are metadata-only, so replay payload reconstruction is not provided by framework runtime.
+4. For execution DLQ incidents, triage terminal execution causes (`FAILED` vs `DLQ`) and validate idempotency before replay.
+5. If due executions stall, verify sweeper health and dispatcher lag.
+6. Re-drive in bounded batches and monitor duplicate suppression plus retry saturation.

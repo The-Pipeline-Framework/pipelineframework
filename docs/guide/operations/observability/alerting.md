@@ -48,3 +48,61 @@ Suggested starter thresholds:
 2. Retry-saturation ratio > 0.2 for 15 minutes (warning), > 0.4 (critical).
 3. Sweeper recoveries = 0 while due backlog grows for 5 minutes (critical).
 4. Lease/stale conflict rate > 3x 7-day baseline for 10 minutes (warning).
+
+## What Alerts Mean Operationally
+
+Use channel-specific interpretation so incidents route to the right team.
+
+### Execution DLQ Backlog Growth (Critical)
+
+Operational meaning:
+
+1. Terminal execution failures are accumulating faster than triage/re-drive.
+2. Queue-async control plane may be healthy, but execution outcomes are failing systemically.
+
+Business meaning:
+
+1. End-to-end workflows are not completing.
+2. Customer-visible outcomes can be delayed, missing, or inconsistent until replay.
+
+Immediate operator actions:
+
+1. Identify dominant terminal causes (`FAILED` vs `DLQ`) and affected contracts/steps.
+2. Validate downstream idempotency before any bulk re-drive.
+3. Re-drive in bounded batches and watch duplicate suppression and retry saturation.
+
+### Item Reject Sink Backlog Growth (Critical)
+
+Operational meaning:
+
+1. Recover-and-continue paths are active, but rejected items are not being drained.
+2. Step execution may still be healthy while reject-handling capacity is insufficient.
+
+Business meaning:
+
+1. Main workflows can complete, but rejected records accumulate unresolved business exceptions.
+2. SLA risk is often on data completeness/quality rather than total platform availability.
+
+Immediate operator actions:
+
+1. Segment by reject fingerprint/error class to isolate top failure cohorts.
+2. Coordinate data/business remediation for dominant reject reasons.
+3. Re-drive only corrected cohorts and track repeat-reject ratio.
+
+### Worker Lag / Queue Age Breach (Critical)
+
+Operational meaning:
+
+1. Dispatch and processing are behind incoming workload or dependency latency budget.
+2. Recovery paths (retry/sweeper) may amplify lag if left unchecked.
+
+Business meaning:
+
+1. End-user latency and completion-time SLOs are at risk.
+2. Time-sensitive workflows may miss windows even without outright failure.
+
+Immediate operator actions:
+
+1. Check dependency latency/error spikes and retry amplification signals.
+2. Scale workers or reduce ingest pressure temporarily.
+3. Verify sweeper activity and lease conflict levels during catch-up.

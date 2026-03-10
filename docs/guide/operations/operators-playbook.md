@@ -122,6 +122,19 @@ Fast triage checklist:
 3. Re-drive with smaller batch sizes than execution DLQ replays, because payload skew and poison records are more common at item level.
 4. Validate item-level dedupe/idempotency controls before replay and monitor item reject throughput, duplicate suppression, and repeated-fingerprint rates.
 
+Current boundary:
+
+1. TPF does not provide a built-in generic re-drive consumer that reads item-reject SQS messages and re-submits directly to orchestrator async endpoints.
+2. Default reject envelopes are metadata-only (`pipeline.item-reject.include-payload=false`), so queue entries are often insufficient to reconstruct full replay input.
+3. Item reject re-drive is application-owned by design and should follow domain-specific replay procedures.
+
+Example (CSV payments style):
+
+1. Export rejected records from sink evidence and source systems.
+2. Build an ad-hoc CSV containing corrected rows.
+3. Place the file in the pipeline input folder.
+4. Let the normal ingestion path process that file as a controlled re-drive batch.
+
 Recommended transition identity:
 
 1. `executionId:stepIndex:attempt`
