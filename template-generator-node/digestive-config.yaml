@@ -5,37 +5,83 @@ basePackage: com.example.digestive
 messages:
   FoodItem:
     fields:
-      - { number: 1, name: id, type: uuid }
-      - { number: 2, name: name, type: string }
-      - { number: 3, name: massGrams, type: float64 }
-      - { number: 4, name: composition, type: string, repeated: true }
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: name
+        type: string
+      - number: 3
+        name: massGrams
+        type: float64
+      - number: 4
+        name: composition
+        type: string
+        repeated: true
   Bolus:
     fields:
-      - { number: 1, name: id, type: uuid }
-      - { number: 2, name: contents, type: string, repeated: true }
-      - { number: 3, name: chewedMass, type: float64 }
-      - { number: 4, name: salivaEnzymes, type: string, repeated: true }
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: contents
+        type: string
+        repeated: true
+      - number: 3
+        name: chewedMass
+        type: float64
+      - number: 4
+        name: salivaEnzymes
+        type: string
+        repeated: true
   Chyme:
     fields:
-      - { number: 1, name: id, type: uuid }
-      - { number: 2, name: nutrientMix, type: string, repeated: true }
-      - { number: 3, name: acidLevel, type: float64 }
-      - { number: 4, name: liquidity, type: float64 }
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: nutrientMix
+        type: string
+        repeated: true
+      - number: 3
+        name: acidLevel
+        type: float64
+      - number: 4
+        name: liquidity
+        type: float64
   Nutrients:
     fields:
-      - { number: 1, name: name, type: string }
-      - { number: 2, name: amountMg, type: float64 }
-      - { number: 3, name: absorptionRate, type: float64 }
+      - number: 1
+        name: name
+        type: string
+      - number: 2
+        name: amountMg
+        type: float64
+      - number: 3
+        name: absorptionRate
+        type: float64
   Residue:
     fields:
-      - { number: 1, name: id, type: uuid }
-      - { number: 2, name: dryMatter, type: float64 }
-      - { number: 3, name: remainingFiber, type: float64 }
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: dryMatter
+        type: float64
+      - number: 3
+        name: remainingFiber
+        type: float64
   WasteProduct:
     fields:
-      - { number: 1, name: id, type: uuid }
-      - { number: 2, name: massGrams, type: float64 }
-      - { number: 3, name: emoji, type: string }
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: massGrams
+        type: float64
+      - number: 3
+        name: emoji
+        type: string
 
 steps:
   - name: MouthStage

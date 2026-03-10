@@ -21,6 +21,7 @@ import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -29,10 +30,10 @@ class PipelineIdlCompatibilityCheckerTest {
     @Test
     void additiveFieldIsCompatible() {
         PipelineIdlSnapshot baseline = snapshot(List.of(
-            field(1, "paymentId", "uuid", null, false, false)));
+            field(1, "paymentId", "uuid", null, null, null, false, false)));
         PipelineIdlSnapshot current = snapshot(List.of(
-            field(1, "paymentId", "uuid", null, false, false),
-            field(2, "status", "string", null, false, false)));
+            field(1, "paymentId", "uuid", null, null, null, false, false),
+            field(2, "status", "string", null, null, null, false, false)));
 
         List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
 
@@ -42,7 +43,7 @@ class PipelineIdlCompatibilityCheckerTest {
     @Test
     void removedFieldRequiresReservedNumberAndName() {
         PipelineIdlSnapshot baseline = snapshot(List.of(
-            field(1, "paymentId", "uuid", null, false, false)));
+            field(1, "paymentId", "uuid", null, null, null, false, false)));
         PipelineIdlSnapshot current = new PipelineIdlSnapshot(
             2,
             "App",
@@ -62,8 +63,88 @@ class PipelineIdlCompatibilityCheckerTest {
         assertTrue(errors.getFirst().contains("without reserving both its number and name"));
     }
 
-    private PipelineIdlSnapshot snapshot(List<PipelineIdlSnapshot.FieldSnapshot> fields) {
-        return new PipelineIdlSnapshot(
+    @Test
+    void changingStepInputMessageIsIncompatible() {
+        PipelineIdlSnapshot baseline = snapshotWith(
+            Map.of(
+                "ChargeRequest",
+                message("ChargeRequest", List.of(field(1, "orderId", "uuid", null, null, null, false, false)), List.of(), List.of()),
+                "ChargeResult",
+                message("ChargeResult", List.of(field(1, "paymentId", "uuid", null, null, null, false, false)), List.of(), List.of())),
+            List.of(new PipelineIdlSnapshot.StepSnapshot("Charge Card", "ChargeRequest", "ChargeResult")));
+        PipelineIdlSnapshot current = snapshotWith(
+            baseline.messages(),
+            List.of(new PipelineIdlSnapshot.StepSnapshot("Charge Card", "AltChargeRequest", "ChargeResult")));
+
+        List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
+
+        assertEquals(1, errors.size());
+        assertTrue(errors.getFirst().contains("changed input message"));
+    }
+
+    @Test
+    void changingCanonicalTypeIsIncompatible() {
+        PipelineIdlSnapshot baseline = snapshot(List.of(
+            field(1, "paymentId", "uuid", null, null, null, false, false)));
+        PipelineIdlSnapshot current = snapshot(List.of(
+            field(1, "paymentId", "string", null, null, null, false, false)));
+
+        List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
+
+        assertTrue(errors.stream().anyMatch(msg -> msg.contains("changed canonical type")));
+    }
+
+    @Test
+    void changingMessageReferenceIsIncompatible() {
+        PipelineIdlSnapshot baseline = snapshot(List.of(
+            field(1, "customer", "message", "CustomerRef", null, null, false, false)));
+        PipelineIdlSnapshot current = snapshot(List.of(
+            field(1, "customer", "message", "AltCustomerRef", null, null, false, false)));
+
+        List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
+
+        assertTrue(errors.stream().anyMatch(msg -> msg.contains("changed message reference")));
+    }
+
+    @Test
+    void changingMapStructureIsIncompatible() {
+        PipelineIdlSnapshot baseline = snapshot(List.of(
+            field(1, "metadata", "map", null, "string", "string", false, false)));
+        PipelineIdlSnapshot current = snapshot(List.of(
+            field(1, "metadata", "map", null, "string", "int64", false, false)));
+
+        List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
+
+        assertTrue(errors.stream().anyMatch(msg -> msg.contains("changed map structure")));
+    }
+
+    @Test
+    void changingRepeatedStructureIsIncompatible() {
+        PipelineIdlSnapshot baseline = snapshot(List.of(
+            field(1, "auditTrail", "string", null, null, null, false, false)));
+        PipelineIdlSnapshot current = snapshot(List.of(
+            field(1, "auditTrail", "string", null, null, null, false, true)));
+
+        List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
+
+        assertTrue(errors.stream().anyMatch(msg -> msg.contains("changed repeated structure")));
+    }
+
+    @Test
+    void changingOptionalityIsIncompatible() {
+        PipelineIdlSnapshot baseline = snapshot(List.of(
+            field(1, "paymentId", "uuid", null, null, null, false, false)));
+        PipelineIdlSnapshot current = snapshot(List.of(
+            field(1, "paymentId", "uuid", null, null, null, true, false)));
+
+        List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
+
+        assertTrue(errors.stream().anyMatch(msg -> msg.contains("changed optionality")));
+    }
+
+    @Test
+    void reusingReservedNumberAndNameIsIncompatible() {
+        PipelineIdlSnapshot baseline = new PipelineIdlSnapshot(
             2,
             "App",
             "com.example",
@@ -71,10 +152,58 @@ class PipelineIdlCompatibilityCheckerTest {
                 "ChargeResult",
                 new PipelineIdlSnapshot.MessageSnapshot(
                     "ChargeResult",
-                    fields,
+                    List.of(field(1, "paymentId", "uuid", null, null, null, false, false)),
+                    List.of(3),
+                    List.of("legacyCode"))),
+            List.of(new PipelineIdlSnapshot.StepSnapshot("Charge Card", "ChargeRequest", "ChargeResult")));
+        PipelineIdlSnapshot current = new PipelineIdlSnapshot(
+            2,
+            "App",
+            "com.example",
+            Map.of(
+                "ChargeResult",
+                new PipelineIdlSnapshot.MessageSnapshot(
+                    "ChargeResult",
+                    List.of(
+                        field(1, "paymentId", "uuid", null, null, null, false, false),
+                        field(3, "legacyCode", "string", null, null, null, false, false)),
                     List.of(),
                     List.of())),
             List.of(new PipelineIdlSnapshot.StepSnapshot("Charge Card", "ChargeRequest", "ChargeResult")));
+
+        List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
+
+        assertTrue(errors.stream().anyMatch(msg -> msg.contains("reused reserved field number")));
+        assertTrue(errors.stream().anyMatch(msg -> msg.contains("reused reserved field name")));
+    }
+
+    private PipelineIdlSnapshot snapshot(List<PipelineIdlSnapshot.FieldSnapshot> fields) {
+        return snapshotWith(
+            Map.of(
+                "ChargeResult",
+                message("ChargeResult", fields, List.of(), List.of())),
+            List.of(new PipelineIdlSnapshot.StepSnapshot("Charge Card", "ChargeRequest", "ChargeResult")));
+    }
+
+    private PipelineIdlSnapshot snapshotWith(
+        Map<String, PipelineIdlSnapshot.MessageSnapshot> messages,
+        List<PipelineIdlSnapshot.StepSnapshot> steps
+    ) {
+        return new PipelineIdlSnapshot(
+            2,
+            "App",
+            "com.example",
+            messages,
+            steps);
+    }
+
+    private PipelineIdlSnapshot.MessageSnapshot message(
+        String name,
+        List<PipelineIdlSnapshot.FieldSnapshot> fields,
+        List<Integer> reservedNumbers,
+        List<String> reservedNames
+    ) {
+        return new PipelineIdlSnapshot.MessageSnapshot(name, fields, reservedNumbers, reservedNames);
     }
 
     private PipelineIdlSnapshot.FieldSnapshot field(
@@ -82,6 +211,8 @@ class PipelineIdlCompatibilityCheckerTest {
         String name,
         String canonicalType,
         String messageRef,
+        String keyType,
+        String valueType,
         boolean optional,
         boolean repeated
     ) {
@@ -90,8 +221,8 @@ class PipelineIdlCompatibilityCheckerTest {
             name,
             canonicalType,
             messageRef,
-            null,
-            null,
+            keyType,
+            valueType,
             optional,
             repeated,
             false,

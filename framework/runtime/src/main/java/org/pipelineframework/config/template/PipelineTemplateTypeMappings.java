@@ -80,6 +80,7 @@ final class PipelineTemplateTypeMappings {
         Map.entry("currency", "string"),
         Map.entry("uri", "string"),
         Map.entry("path", "string"));
+    private static final Set<String> MAP_KEY_CANONICAL_TYPES = Set.of("string", "bool", "int32", "int64");
 
     private PipelineTemplateTypeMappings() {
     }
@@ -160,6 +161,23 @@ final class PipelineTemplateTypeMappings {
         }
         if ("map".equals(canonicalType) && isMessageReferenceToken(field.keyType())) {
             throw new IllegalStateException("Map field '" + field.name() + "' cannot use a message type as keyType");
+        }
+        if ("map".equals(canonicalType)) {
+            String keyCanonicalType = canonicalTypeForV2(field.keyType());
+            if (keyCanonicalType == null || "message".equals(keyCanonicalType)) {
+                throw new IllegalStateException(
+                    "Map field '" + field.name() + "' declares unsupported keyType '" + field.keyType() + "'");
+            }
+            if ("float32".equals(keyCanonicalType) || "float64".equals(keyCanonicalType) || "bytes".equals(keyCanonicalType)) {
+                throw new IllegalStateException(
+                    "Map field '" + field.name() + "' keyType '" + field.keyType()
+                        + "' is not allowed; protobuf map keys cannot be float or bytes");
+            }
+            if (!MAP_KEY_CANONICAL_TYPES.contains(keyCanonicalType)) {
+                throw new IllegalStateException(
+                    "Map field '" + field.name() + "' keyType '" + field.keyType()
+                        + "' is not one of the allowed protobuf map key kinds: string, bool, int32, int64");
+            }
         }
         if (!field.hasStableNumber()) {
             throw new IllegalStateException("Field '" + field.name() + "' must declare a positive number in version 2");

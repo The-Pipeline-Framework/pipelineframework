@@ -97,8 +97,12 @@ public record PipelineIdlSnapshot(
     private static MessageSnapshot toMessageSnapshot(PipelineTemplateMessage message) {
         List<FieldSnapshot> fields = new ArrayList<>();
         for (PipelineTemplateField field : message.fields()) {
+            if (field.number() == null) {
+                throw new IllegalStateException(
+                    "Message '" + message.name() + "' field '" + field.name() + "' is missing required field number");
+            }
             fields.add(new FieldSnapshot(
-                field.number() == null ? 0 : field.number(),
+                field.number(),
                 field.name(),
                 field.canonicalType(),
                 field.messageRef(),

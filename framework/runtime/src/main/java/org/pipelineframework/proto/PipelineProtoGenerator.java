@@ -47,6 +47,7 @@ public class PipelineProtoGenerator {
     private static final String TYPES_PROTO = "pipeline-types.proto";
     private static final String IDL_SNAPSHOT_PROPERTY = "tpf.idl.compat.baseline";
     private static final String IDL_SNAPSHOT_ENV = "TPF_IDL_COMPAT_BASELINE";
+    private static final ObjectMapper IDL_MAPPER = PipelineJson.mapper().findAndRegisterModules();
 
     /**
      * Creates a new PipelineProtoGenerator.
@@ -131,11 +132,10 @@ public class PipelineProtoGenerator {
             .resolve("idl.json");
         try {
             Files.createDirectories(outputPath.getParent());
-            ObjectMapper mapper = PipelineJson.mapper().findAndRegisterModules();
-            mapper.writerWithDefaultPrettyPrinter().writeValue(outputPath.toFile(), snapshot);
+            IDL_MAPPER.writerWithDefaultPrettyPrinter().writeValue(outputPath.toFile(), snapshot);
             String baseline = resolveCompatibilityBaseline();
             if (baseline != null && !baseline.isBlank()) {
-                PipelineIdlSnapshot baselineSnapshot = mapper.readValue(Path.of(baseline).toFile(), PipelineIdlSnapshot.class);
+                PipelineIdlSnapshot baselineSnapshot = IDL_MAPPER.readValue(Path.of(baseline).toFile(), PipelineIdlSnapshot.class);
                 List<String> errors = new PipelineIdlCompatibilityChecker().compare(baselineSnapshot, snapshot);
                 if (!errors.isEmpty()) {
                     throw new IllegalStateException("IDL compatibility check failed:\n - " + String.join("\n - ", errors));

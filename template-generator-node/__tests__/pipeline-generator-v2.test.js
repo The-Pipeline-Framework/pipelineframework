@@ -21,9 +21,19 @@ const YAML = require('js-yaml');
 const PipelineGenerator = require('../src/pipeline-generator');
 
 describe('PipelineGenerator v2', () => {
+  let tempDir;
+
+  afterEach(() => {
+    if (tempDir) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      tempDir = null;
+    }
+  });
+
   test('generateSampleConfig emits v2 semantic messages', async () => {
     const generator = new PipelineGenerator();
-    const outputPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'pipeline-generator-')), 'sample.yaml');
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pipeline-generator-'));
+    const outputPath = path.join(tempDir, 'sample.yaml');
 
     await generator.generateSampleConfig(outputPath);
 

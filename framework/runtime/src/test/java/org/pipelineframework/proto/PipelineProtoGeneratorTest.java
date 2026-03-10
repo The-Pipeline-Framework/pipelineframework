@@ -21,9 +21,9 @@ import java.nio.file.Path;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junitpioneer.jupiter.ClearSystemProperty;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PipelineProtoGeneratorTest {
 
@@ -528,6 +528,7 @@ class PipelineProtoGeneratorTest {
     }
 
     @Test
+    @ClearSystemProperty(key = "tpf.idl.compat.baseline")
     void failsCompatibilityCheckWhenFieldNumberIsReusedWithoutReserve() throws Exception {
         String baselineJson = """
             {
@@ -611,20 +612,11 @@ class PipelineProtoGeneratorTest {
         Files.writeString(configPath, yaml);
         Path outputDir = tempDir.resolve("proto-v2-compat-out");
 
-        String originalBaseline = System.getProperty("tpf.idl.compat.baseline");
         System.setProperty("tpf.idl.compat.baseline", baselinePath.toString());
-        try {
-            IllegalStateException ex = assertThrows(
-                IllegalStateException.class,
-                () -> new PipelineProtoGenerator().generate(tempDir, configPath, outputDir));
-            assertTrue(ex.getMessage().contains("IDL compatibility check failed"));
-            assertTrue(ex.getMessage().contains("changed field name at number 1"));
-        } finally {
-            if (originalBaseline == null) {
-                System.clearProperty("tpf.idl.compat.baseline");
-            } else {
-                System.setProperty("tpf.idl.compat.baseline", originalBaseline);
-            }
-        }
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineProtoGenerator().generate(tempDir, configPath, outputDir));
+        assertTrue(ex.getMessage().contains("IDL compatibility check failed"));
+        assertTrue(ex.getMessage().contains("changed field name at number 1"));
     }
 }

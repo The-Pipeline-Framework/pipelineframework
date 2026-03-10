@@ -203,6 +203,10 @@ class PipelineGenerator {
         }
         const javaType = this.semanticTypeToJavaType(authoredType);
         const protoType = this.semanticTypeToProtoType(authoredType);
+        // After the map/message-reference branches (including isMessageReferenceType),
+        // optional semantic fields still use the semanticTypeToJavaType result directly.
+        // This avoids forcing Optional<T> import/converter changes across existing templates;
+        // mapper/runtime layers handle presence semantics from field metadata.
         if (field.repeated) {
             return {
                 ...field,

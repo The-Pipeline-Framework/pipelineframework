@@ -196,7 +196,16 @@ public class PipelineTemplateConfigLoader {
         if (typeName == null || typeName.isBlank() || inlineFields == null || inlineFields.isEmpty()) {
             return;
         }
-        messages.putIfAbsent(typeName, new PipelineTemplateMessage(typeName, inlineFields, new PipelineTemplateReserved(List.of(), List.of())));
+        PipelineTemplateMessage existing = messages.get(typeName);
+        if (existing == null) {
+            messages.put(typeName, new PipelineTemplateMessage(typeName, inlineFields, new PipelineTemplateReserved(List.of(), List.of())));
+            return;
+        }
+        if (!existing.fields().equals(inlineFields)) {
+            throw new IllegalStateException(
+                "Inline message '" + typeName + "' conflicts with existing definition. Existing fields: "
+                    + summarizeFields(existing.fields()) + "; inline fields: " + summarizeFields(inlineFields));
+        }
     }
 
     private Map<String, PipelineTemplateMessage> normalizeMessages(Map<String, PipelineTemplateMessage> rawMessages) {
@@ -372,7 +381,13 @@ public class PipelineTemplateConfigLoader {
                 if (numberObj instanceof Number number) {
                     numbers.add(number.intValue());
                 } else if (numberObj != null) {
-                    numbers.add(Integer.parseInt(numberObj.toString().trim()));
+                    String text = numberObj.toString().trim();
+                    try {
+                        numbers.add(Integer.parseInt(text));
+                    } catch (NumberFormatException ex) {
+                        throw new IllegalArgumentException(
+                            "Invalid reserved number value '" + text + "' in reserved.numbers", ex);
+                    }
                 }
             }
         }
@@ -497,7 +512,20 @@ public class PipelineTemplateConfigLoader {
         if (text == null || text.isBlank()) {
             return null;
         }
-        return Integer.parseInt(text.trim());
+        try {
+            return Integer.parseInt(text.trim());
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(
+                "Invalid integer value '" + text + "' for key '" + key + "'", ex);
+        }
+    }
+
+    private String summarizeFields(List<PipelineTemplateField> fields) {
+        List<String> summary = new ArrayList<>();
+        for (PipelineTemplateField field : fields) {
+            summary.add(field.name() + ":" + field.type());
+        }
+        return summary.toString();
     }
 
     private boolean readBoolean(Map<?, ?> map, String key, boolean defaultValue) {

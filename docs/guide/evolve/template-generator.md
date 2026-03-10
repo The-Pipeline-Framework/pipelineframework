@@ -16,7 +16,7 @@ The template generator creates a complete Maven multi-module pipeline project fr
 - the orchestrator module
 - runtime config and test scaffolding
 
-The generator now emits **IDL v2** configs by default.
+The generator emits **IDL v2** sample configs by default (`generateSampleConfig`), while user-provided configs loaded via `loadConfig` are treated as v1 when `version` is not explicitly set.
 
 ## Schema Reference
 
