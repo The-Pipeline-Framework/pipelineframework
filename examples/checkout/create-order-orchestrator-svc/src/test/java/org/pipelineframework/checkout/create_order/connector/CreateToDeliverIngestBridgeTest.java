@@ -21,12 +21,12 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.pipelineframework.checkout.common.connector.TestAwaitUtils.awaitUntil;
 
 class CreateToDeliverIngestBridgeTest {
 
@@ -126,6 +126,7 @@ class CreateToDeliverIngestBridgeTest {
 
         outputBus.publish(readyOrder);
 
+        awaitUntil(() -> forwardedOrders.size() == 1, "Expected one forwarded ready order");
         assertEquals(1, forwardedOrders.size());
         assertEquals("order-1", forwardedOrders.get(0).getOrderId());
         assertEquals("customer-1", forwardedOrders.get(0).getCustomerId());
@@ -153,6 +154,7 @@ class CreateToDeliverIngestBridgeTest {
             outputBus.publish(readyOrder);
         }
 
+        awaitUntil(() -> forwardedOrders.size() == 5, "Expected five forwarded ready orders");
         assertEquals(5, forwardedOrders.size());
     }
 
@@ -174,8 +176,11 @@ class CreateToDeliverIngestBridgeTest {
             .setReadyAt("2026-03-07T10:00:00Z")
             .build();
         outputBus.publish(readyOrder);
+        outputBus.publish(validReadyOrder("order-valid-1", "customer-valid-1", "2026-03-07T10:10:00Z"));
 
-        assertTrue(forwardedOrders.isEmpty());
+        awaitUntil(() -> forwardedOrders.size() == 1, "Expected one forwarded valid ready order");
+        assertEquals(1, forwardedOrders.size());
+        assertEquals("order-valid-1", forwardedOrders.get(0).getOrderId());
     }
 
     @Test
@@ -196,8 +201,11 @@ class CreateToDeliverIngestBridgeTest {
             .setReadyAt("2026-03-07T10:00:00Z")
             .build();
         outputBus.publish(readyOrder);
+        outputBus.publish(validReadyOrder("order-valid-2", "customer-valid-2", "2026-03-07T10:11:00Z"));
 
-        assertTrue(forwardedOrders.isEmpty());
+        awaitUntil(() -> forwardedOrders.size() == 1, "Expected one forwarded valid ready order");
+        assertEquals(1, forwardedOrders.size());
+        assertEquals("order-valid-2", forwardedOrders.get(0).getOrderId());
     }
 
     @Test
@@ -218,8 +226,11 @@ class CreateToDeliverIngestBridgeTest {
             .setReadyAt("")
             .build();
         outputBus.publish(readyOrder);
+        outputBus.publish(validReadyOrder("order-valid-3", "customer-valid-3", "2026-03-07T10:12:00Z"));
 
-        assertTrue(forwardedOrders.isEmpty());
+        awaitUntil(() -> forwardedOrders.size() == 1, "Expected one forwarded valid ready order");
+        assertEquals(1, forwardedOrders.size());
+        assertEquals("order-valid-3", forwardedOrders.get(0).getOrderId());
     }
 
     @Test
@@ -236,9 +247,9 @@ class CreateToDeliverIngestBridgeTest {
 
         Message mockMessage = mock(Message.class);
         Descriptors.Descriptor descriptor = mock(Descriptors.Descriptor.class);
-        Descriptors.FieldDescriptor orderIdField = createMockStringField("order_id", "order-1");
-        Descriptors.FieldDescriptor customerIdField = createMockStringField("customer_id", "customer-1");
-        Descriptors.FieldDescriptor readyAtField = createMockStringField("ready_at", "2026-03-07T10:00:00Z");
+        Descriptors.FieldDescriptor orderIdField = createMockStringField();
+        Descriptors.FieldDescriptor customerIdField = createMockStringField();
+        Descriptors.FieldDescriptor readyAtField = createMockStringField();
 
         when(mockMessage.getDescriptorForType()).thenReturn(descriptor);
         when(descriptor.findFieldByName("order_id")).thenReturn(orderIdField);
@@ -250,6 +261,7 @@ class CreateToDeliverIngestBridgeTest {
 
         outputBus.publish(mockMessage);
 
+        awaitUntil(() -> forwardedOrders.size() == 1, "Expected mapped protobuf message to be forwarded");
         assertEquals(1, forwardedOrders.size());
         assertEquals("order-1", forwardedOrders.get(0).getOrderId());
     }
@@ -292,8 +304,11 @@ class CreateToDeliverIngestBridgeTest {
         outputBus.publish("unsupported-string");
         outputBus.publish(123);
         outputBus.publish(new Object());
+        outputBus.publish(validReadyOrder("order-valid-4", "customer-valid-4", "2026-03-07T10:13:00Z"));
 
-        assertTrue(forwardedOrders.isEmpty());
+        awaitUntil(() -> forwardedOrders.size() == 1, "Expected unsupported items to be dropped");
+        assertEquals(1, forwardedOrders.size());
+        assertEquals("order-valid-4", forwardedOrders.get(0).getOrderId());
     }
 
     @Test
@@ -318,6 +333,7 @@ class CreateToDeliverIngestBridgeTest {
         outputBus.publish(readyOrder);
         outputBus.publish(readyOrder);
 
+        awaitUntil(() -> forwardedOrders.size() == 1, "Expected duplicate filtering to forward exactly one item");
         assertEquals(1, forwardedOrders.size(), "Duplicate orders should be filtered");
     }
 
@@ -343,6 +359,7 @@ class CreateToDeliverIngestBridgeTest {
         outputBus.publish(readyOrder);
         outputBus.publish(readyOrder);
 
+        awaitUntil(() -> forwardedOrders.size() == 3, "Expected all duplicates to be forwarded when idempotency is disabled");
         assertEquals(3, forwardedOrders.size(), "All items should be forwarded when idempotency is disabled");
     }
 
@@ -370,6 +387,63 @@ class CreateToDeliverIngestBridgeTest {
             .setReadyAt("2026-03-07T10:01:00Z")
             .build());
 
+        awaitUntil(() -> forwardedOrders.size() == 2, "Expected two distinct ready orders");
+        assertEquals(2, forwardedOrders.size());
+    }
+
+    @Test
+    void bridgeTreatsSameOrderIdWithDifferentCustomerAsDistinctHandoffs() {
+        List<OrderDispatchSvc.ReadyOrder> forwardedOrders = new ArrayList<>();
+        DeliverOrderIngestClient capturingClient = stream -> {
+            stream.subscribe().with(forwardedOrders::add);
+            return mock(Cancellable.class);
+        };
+
+        CreateToDeliverIngestBridge bridge = new CreateToDeliverIngestBridge(
+            outputBus, capturingClient, true, 1000, "BUFFER", 256);
+        bridge.onStartup(mock(StartupEvent.class));
+
+        outputBus.publish(OrderReadySvc.ReadyOrder.newBuilder()
+            .setOrderId("order-1")
+            .setCustomerId("customer-1")
+            .setReadyAt("2026-03-07T10:00:00Z")
+            .build());
+
+        outputBus.publish(OrderReadySvc.ReadyOrder.newBuilder()
+            .setOrderId("order-1")
+            .setCustomerId("customer-2")
+            .setReadyAt("2026-03-07T10:00:00Z")
+            .build());
+
+        awaitUntil(() -> forwardedOrders.size() == 2, "Expected distinct handoffs for same orderId with different customerId");
+        assertEquals(2, forwardedOrders.size());
+    }
+
+    @Test
+    void bridgeTreatsSameOrderAndCustomerWithDifferentReadyAtAsDistinctHandoffs() {
+        List<OrderDispatchSvc.ReadyOrder> forwardedOrders = new ArrayList<>();
+        DeliverOrderIngestClient capturingClient = stream -> {
+            stream.subscribe().with(forwardedOrders::add);
+            return mock(Cancellable.class);
+        };
+
+        CreateToDeliverIngestBridge bridge = new CreateToDeliverIngestBridge(
+            outputBus, capturingClient, true, 1000, "BUFFER", 256);
+        bridge.onStartup(mock(StartupEvent.class));
+
+        outputBus.publish(OrderReadySvc.ReadyOrder.newBuilder()
+            .setOrderId("order-1")
+            .setCustomerId("customer-1")
+            .setReadyAt("2026-03-07T10:00:00Z")
+            .build());
+
+        outputBus.publish(OrderReadySvc.ReadyOrder.newBuilder()
+            .setOrderId("order-1")
+            .setCustomerId("customer-1")
+            .setReadyAt("2026-03-07T10:01:00Z")
+            .build());
+
+        awaitUntil(() -> forwardedOrders.size() == 2, "Expected distinct handoffs for same order/customer with different readyAt");
         assertEquals(2, forwardedOrders.size());
     }
 
@@ -385,7 +459,7 @@ class CreateToDeliverIngestBridgeTest {
             outputBus, countingClient, false, 1000, "BUFFER", 10);
         bridge.onStartup(mock(StartupEvent.class));
 
-        for (int i = 1; i <= 5; i++) {
+        for (int i = 1; i <= 25; i++) {
             outputBus.publish(OrderReadySvc.ReadyOrder.newBuilder()
                 .setOrderId("order-" + i)
                 .setCustomerId("customer-" + i)
@@ -393,14 +467,24 @@ class CreateToDeliverIngestBridgeTest {
                 .build());
         }
 
-        assertEquals(5, forwardedCount.get());
+        awaitUntil(() -> forwardedCount.get() == 25, "Expected forwarded count to reach published size");
+        assertEquals(25, forwardedCount.get());
     }
 
-    private Descriptors.FieldDescriptor createMockStringField(String fieldName, String value) {
+    private Descriptors.FieldDescriptor createMockStringField() {
         Descriptors.FieldDescriptor field = mock(Descriptors.FieldDescriptor.class);
         when(field.isRepeated()).thenReturn(false);
         when(field.isMapField()).thenReturn(false);
         when(field.getJavaType()).thenReturn(Descriptors.FieldDescriptor.JavaType.STRING);
         return field;
     }
+
+    private OrderReadySvc.ReadyOrder validReadyOrder(String orderId, String customerId, String readyAt) {
+        return OrderReadySvc.ReadyOrder.newBuilder()
+            .setOrderId(orderId)
+            .setCustomerId(customerId)
+            .setReadyAt(readyAt)
+            .build();
+    }
+
 }

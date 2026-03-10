@@ -25,6 +25,13 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.pipelineframework.checkout</groupId>
+            <artifactId>common</artifactId>
+            <version>${project.version}</version>
+            <classifier>tests</classifier>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>org.pipelineframework</groupId>
             <artifactId>pipelineframework</artifactId>
             <version>${project.version}</version>
@@ -40,6 +47,11 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit5-mockito</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

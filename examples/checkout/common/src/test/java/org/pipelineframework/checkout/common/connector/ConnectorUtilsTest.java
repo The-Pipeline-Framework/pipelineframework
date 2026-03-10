@@ -297,4 +297,20 @@ class ConnectorUtilsTest {
         assertTrue(signature.contains("traceId=trace4"));
         assertTrue(signature.contains("itemId=item5"));
     }
+
+    @Test
+    void failureSignatureEscapesControlAndDelimiterCharacters() {
+        String signature = ConnectorUtils.failureSignature(
+            "con;n=1",
+            "ph\rase",
+            "rea\nson",
+            "trace\\id",
+            "item;id");
+
+        assertTrue(signature.contains("connector=con\\;n\\=1"));
+        assertTrue(signature.contains("phase=ph\\rase"));
+        assertTrue(signature.contains("reason=rea\\nson"));
+        assertTrue(signature.contains("traceId=trace\\\\id"));
+        assertTrue(signature.contains("itemId=item\\;id"));
+    }
 }
