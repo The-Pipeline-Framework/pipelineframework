@@ -84,6 +84,11 @@ class OrchestratorAsyncTransportParityTest {
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
         when(processingEnv.getMessager()).thenReturn(messager);
 
+        OrchestratorBinding restBinding = buildBinding("REST", false, true);
+        new OrchestratorRestResourceRenderer().render(restBinding, new GenerationContext(
+            processingEnv, tempDir, DeploymentRole.REST_SERVER, java.util.Set.of(), null, null));
+        String restSource = Files.readString(tempDir.resolve("com/example/orchestrator/service/PipelineRunResource.java"));
+
         OrchestratorBinding grpcBinding = buildBinding("GRPC", false, true);
         new OrchestratorGrpcRenderer().render(grpcBinding, new GenerationContext(
             processingEnv,
@@ -97,11 +102,32 @@ class OrchestratorAsyncTransportParityTest {
         OrchestratorBinding functionBinding = buildBinding("REST", false, true);
         new OrchestratorFunctionHandlerRenderer().render(functionBinding, new GenerationContext(
             processingEnv, tempDir, DeploymentRole.REST_SERVER, java.util.Set.of(), null, null));
+        String functionRunAsync = Files.readString(
+            tempDir.resolve("com/example/orchestrator/service/PipelineRunAsyncFunctionHandler.java"));
         String functionResult = Files.readString(
             tempDir.resolve("com/example/orchestrator/service/PipelineExecutionResultFunctionHandler.java"));
 
-        assertTrue(grpcSource.contains("pipelineExecutionService.<List<OutputType>>getExecutionResult"));
-        assertTrue(functionResult.contains("pipelineExecutionService.<List<OutputTypeDto>>getExecutionResult"));
+        assertTrue(
+            restSource.contains("executePipelineAsync(input, tenantId, idempotencyKey, true)"),
+            "restSource missing streaming async flag propagation in runAsync");
+        assertTrue(
+            grpcSource.contains("RunAsync unary pipelines accept at most one item in input_batch."),
+            "grpcSource missing unary runAsync batch validation diagnostic");
+        assertTrue(
+            grpcSource.contains("request.getIdempotencyKey("),
+            "grpcSource missing idempotency-key propagation in runAsync");
+        assertTrue(
+            grpcSource.contains("pipelineExecutionService.<List<OutputType>>getExecutionResult"),
+            "grpcSource missing list-based async result retrieval for streaming outputs");
+        assertTrue(
+            functionRunAsync.contains("RunAsync unary handlers accept at most one item in inputBatch"),
+            "functionRunAsync missing unary runAsync batch validation diagnostic");
+        assertTrue(
+            functionRunAsync.contains("pipelineExecutionService.executePipelineAsync(executionInput, tenantId, idempotencyKey, true)"),
+            "functionRunAsync missing streaming async flag propagation");
+        assertTrue(
+            functionResult.contains("pipelineExecutionService.<List<OutputTypeDto>>getExecutionResult"),
+            "functionResult missing list-based async result retrieval for streaming outputs");
     }
 
     private OrchestratorBinding buildBinding(String transport, boolean inputStreaming, boolean outputStreaming) {

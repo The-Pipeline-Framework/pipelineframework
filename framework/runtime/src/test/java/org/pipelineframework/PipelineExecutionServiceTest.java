@@ -18,20 +18,26 @@ import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.EventWorkDispatcher;
+import org.pipelineframework.orchestrator.InMemoryExecutionStateStore;
 import org.pipelineframework.orchestrator.LoggingDeadLetterPublisher;
 import org.pipelineframework.orchestrator.OrchestratorIdempotencyPolicy;
 import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
+import org.pipelineframework.orchestrator.SqsDeadLetterPublisher;
+import org.pipelineframework.orchestrator.SqsWorkDispatcher;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.DeadLetterPublisher;
 import org.pipelineframework.orchestrator.DynamoExecutionStateStore;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
+import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -110,6 +116,51 @@ class PipelineExecutionServiceTest {
     }
 
     @Test
+    void initializeQueueModeFailsFastWhenStrictStartupAndIdempotencyPolicyIsNotExplicit() throws Exception {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.stateProvider()).thenReturn("memory");
+        when(orchestratorConfig.dispatcherProvider()).thenReturn("event");
+        when(orchestratorConfig.dlqProvider()).thenReturn("log");
+        when(orchestratorConfig.strictStartup()).thenReturn(true);
+        when(orchestratorConfig.idempotencyPolicy()).thenReturn(OrchestratorIdempotencyPolicy.OPTIONAL_CLIENT_KEY);
+
+        when(executionStateStores.stream()).thenReturn(java.util.stream.Stream.of(new InMemoryExecutionStateStore()));
+        when(workDispatchers.stream()).thenReturn(java.util.stream.Stream.of(new EventWorkDispatcher()));
+        when(deadLetterPublishers.stream()).thenReturn(java.util.stream.Stream.of(new LoggingDeadLetterPublisher()));
+        setField("executionStateStores", executionStateStores);
+        setField("workDispatchers", workDispatchers);
+        setField("deadLetterPublishers", deadLetterPublishers);
+
+        IllegalStateException error = assertThrows(
+            IllegalStateException.class,
+            this::invokeInitializeQueueMode);
+        assertTrue(error.getMessage().contains("idempotency-policy must be explicitly configured"));
+    }
+
+    @Test
+    void initializeQueueModeAggregatesProviderDiagnosticsWhenStrictStartupIsEnabled() throws Exception {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.stateProvider()).thenReturn("dynamo");
+        when(orchestratorConfig.dispatcherProvider()).thenReturn("sqs");
+        when(orchestratorConfig.dlqProvider()).thenReturn("sqs");
+        when(orchestratorConfig.strictStartup()).thenReturn(true);
+
+        when(executionStateStores.stream()).thenReturn(java.util.stream.Stream.of(new DynamoExecutionStateStore()));
+        when(workDispatchers.stream()).thenReturn(java.util.stream.Stream.of(new SqsWorkDispatcher()));
+        when(deadLetterPublishers.stream()).thenReturn(java.util.stream.Stream.of(new SqsDeadLetterPublisher()));
+        setField("executionStateStores", executionStateStores);
+        setField("workDispatchers", workDispatchers);
+        setField("deadLetterPublishers", deadLetterPublishers);
+
+        IllegalStateException error = assertThrows(
+            IllegalStateException.class,
+            this::invokeInitializeQueueMode);
+        assertTrue(error.getMessage().contains("ExecutionStateStore(dynamo)"));
+        assertTrue(error.getMessage().contains("WorkDispatcher(sqs)"));
+        assertTrue(error.getMessage().contains("DeadLetterPublisher(sqs)"));
+    }
+
+    @Test
     void getExecutionStatusReturnsRecordStateInQueueMode() throws Exception {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         setField("executionStateStore", executionStateStore);
@@ -185,6 +236,149 @@ class PipelineExecutionServiceTest {
         ExecutionInputSnapshot snapshot = (ExecutionInputSnapshot) persisted;
         assertEquals(ExecutionInputShape.MULTI, snapshot.shape());
         assertEquals(java.util.List.of("x", "y"), snapshot.payload());
+    }
+
+    @Test
+    void executePipelineAsyncReturnsDeterministicDuplicateResponseAndSkipsSecondEnqueue() throws Exception {
+        configureQueueModeDefaults();
+        setField("executionStateStore", executionStateStore);
+        setField("workDispatcher", workDispatcher);
+        ExecutionRecord<Object, Object> record = createRecord("tenant-1", "exec-duplicate", "key-duplicate");
+
+        when(executionStateStore.createOrGetExecution(any()))
+            .thenReturn(Uni.createFrom().item(new CreateExecutionResult(record, false)))
+            .thenReturn(Uni.createFrom().item(new CreateExecutionResult(record, true)));
+        when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
+
+        RunAsyncAcceptedDto first = service.executePipelineAsync("input", "tenant-1", "idem-dup")
+            .await().indefinitely();
+        RunAsyncAcceptedDto second = service.executePipelineAsync("input", "tenant-1", "idem-dup")
+            .await().indefinitely();
+
+        assertFalse(first.duplicate());
+        assertTrue(second.duplicate());
+        assertEquals(first.executionId(), second.executionId());
+        verify(workDispatcher, times(1)).enqueueNow(any());
+    }
+
+    @Test
+    void executePipelineAsyncWithServerKeyOnlyDeduplicatesWithoutClientKey() throws Exception {
+        configureQueueModeDefaults();
+        when(orchestratorConfig.idempotencyPolicy()).thenReturn(OrchestratorIdempotencyPolicy.SERVER_KEY_ONLY);
+        setField("executionStateStore", executionStateStore);
+        setField("workDispatcher", workDispatcher);
+        ExecutionRecord<Object, Object> record = createRecord("tenant-1", "exec-server-key", "key-server-key");
+
+        when(executionStateStore.createOrGetExecution(any()))
+            .thenReturn(Uni.createFrom().item(new CreateExecutionResult(record, false)))
+            .thenReturn(Uni.createFrom().item(new CreateExecutionResult(record, true)));
+        when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
+
+        RunAsyncAcceptedDto first = service.executePipelineAsync("input", "tenant-1", null)
+            .await().indefinitely();
+        RunAsyncAcceptedDto second = service.executePipelineAsync("input", "tenant-1", null)
+            .await().indefinitely();
+
+        assertFalse(first.duplicate());
+        assertTrue(second.duplicate());
+        assertEquals(first.executionId(), second.executionId());
+        verify(workDispatcher, times(1)).enqueueNow(any());
+    }
+
+    @Test
+    void getExecutionResultReturnsUnaryPayloadWhenSucceeded() throws Exception {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        setField("executionStateStore", executionStateStore);
+        ExecutionRecord<Object, Object> record = new ExecutionRecord<>(
+            "tenant-1",
+            "exec-succeeded",
+            "key-succeeded",
+            ExecutionStatus.SUCCEEDED,
+            2L,
+            0,
+            0,
+            null,
+            0L,
+            0L,
+            null,
+            "input",
+            java.util.List.of("payload-ok"),
+            null,
+            null,
+            1L,
+            2L,
+            99999999L);
+        when(executionStateStore.getExecution("tenant-1", "exec-succeeded"))
+            .thenReturn(Uni.createFrom().item(Optional.of(record)));
+
+        String payload = service.<String>getExecutionResult("tenant-1", "exec-succeeded", String.class, false)
+            .await().indefinitely();
+
+        assertEquals("payload-ok", payload);
+    }
+
+    @Test
+    void getExecutionResultFailsWhenExecutionIsNotComplete() throws Exception {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        setField("executionStateStore", executionStateStore);
+        ExecutionRecord<Object, Object> record = new ExecutionRecord<>(
+            "tenant-1",
+            "exec-running",
+            "key-running",
+            ExecutionStatus.RUNNING,
+            1L,
+            0,
+            0,
+            null,
+            0L,
+            0L,
+            null,
+            "input",
+            null,
+            null,
+            null,
+            1L,
+            1L,
+            99999999L);
+        when(executionStateStore.getExecution("tenant-1", "exec-running"))
+            .thenReturn(Uni.createFrom().item(Optional.of(record)));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () ->
+            service.getExecutionResult("tenant-1", "exec-running", String.class, false)
+                .await().indefinitely());
+        assertTrue(error.getMessage().contains("not complete yet"));
+    }
+
+    @Test
+    void getExecutionResultFailsWhenExecutionReachedTerminalFailure() throws Exception {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        setField("executionStateStore", executionStateStore);
+        ExecutionRecord<Object, Object> record = new ExecutionRecord<>(
+            "tenant-1",
+            "exec-failed",
+            "key-failed",
+            ExecutionStatus.FAILED,
+            2L,
+            0,
+            1,
+            null,
+            0L,
+            0L,
+            "exec-failed:0:1",
+            "input",
+            null,
+            "IllegalStateException",
+            "failure",
+            1L,
+            2L,
+            99999999L);
+        when(executionStateStore.getExecution("tenant-1", "exec-failed"))
+            .thenReturn(Uni.createFrom().item(Optional.of(record)));
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () ->
+            service.getExecutionResult("tenant-1", "exec-failed", String.class, false)
+                .await().indefinitely());
+        assertTrue(error.getMessage().contains("finished without a successful result"));
     }
 
     private void configureQueueModeDefaults() {

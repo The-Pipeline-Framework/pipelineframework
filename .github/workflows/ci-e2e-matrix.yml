@@ -12,6 +12,7 @@ on:
       - ".github/workflows/e2e-csv-monolith.yml"
       - ".github/workflows/e2e-csv-pipeline-runtime.yml"
       - ".github/workflows/e2e-checkout-ftgo-smoke.yml"
+      - ".github/workflows/e2e-checkout-ftgo-queue-async-smoke.yml"
       - ".github/workflows/e2e-search-lambda-smoke.yml"
   workflow_dispatch:
 
@@ -97,6 +98,14 @@ jobs:
     name: Checkout FTGo Smoke
     needs: build-framework
     uses: ./.github/workflows/e2e-checkout-ftgo-smoke.yml
+    with:
+      artifact_name: framework-m2-cache
+    secrets: inherit
+
+  e2e-checkout-ftgo-queue-async:
+    name: Checkout FTGo QUEUE_ASYNC Smoke
+    needs: build-framework
+    uses: ./.github/workflows/e2e-checkout-ftgo-queue-async-smoke.yml
     with:
       artifact_name: framework-m2-cache
     secrets: inherit

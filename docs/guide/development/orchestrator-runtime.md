@@ -17,6 +17,14 @@ pipeline.orchestrator.mode=SYNC
 pipeline.orchestrator.mode=QUEUE_ASYNC
 ```
 
+Practical defaults and guardrails:
+
+1. `SYNC` remains the default runtime mode and baseline configuration.
+2. `QUEUE_ASYNC` is opt-in and should be enabled only with explicit provider and idempotency settings.
+3. Current async shape limitations apply: `run-async` rejects streaming outputs.
+4. `server-derived idempotency keys` require JSON-serializable payloads.
+5. gRPC protobuf payloads should use `CLIENT_KEY_REQUIRED`.
+
 ## Transport Surfaces
 
 Generated orchestrator endpoints are transport-native:
