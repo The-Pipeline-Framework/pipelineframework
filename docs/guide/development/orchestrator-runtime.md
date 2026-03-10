@@ -58,6 +58,11 @@ Runtime provider choices:
 2. `WorkDispatcher`: `event` (in-process), `sqs` (durable queue).
 3. `DeadLetterPublisher`: `log` (built-in fallback), `sqs` (durable DLQ).
 
+Failure channel split:
+
+1. Execution-level terminal failures use orchestrator DLQ (`DeadLetterPublisher`).
+2. Step-level recover-and-continue failures use Item Reject Sink (`pipeline.item-reject.*`, `rejectItem` / `rejectStream`).
+
 Execution lifecycle (one transition per worker claim):
 
 ```text

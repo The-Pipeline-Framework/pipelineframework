@@ -89,6 +89,7 @@ const mainSidebar = [
         items: [
             {text: '@PipelineStep Annotation', link: '/guide/development/pipeline-step'},
             {text: 'Code a Step', link: '/guide/development/code-a-step'},
+            {text: 'Item Reject Sink', link: '/guide/development/item-reject-sink'},
             {text: 'Operators', link: '/guide/development/operators'},
             {text: 'Operator Build Troubleshooting', link: '/guide/development/operators-build-troubleshooting'},
             {text: 'Extending Operator Libraries', link: '/guide/development/extension/operator-libraries'},
@@ -115,9 +116,9 @@ const mainSidebar = [
             {text: 'AWS Lambda SnapStart', link: '/guide/operations/aws-lambda-snapstart'},
             {
                 text: 'Observability',
-                link: '/guide/operations/observability/',
-                collapsed: true,
+                collapsed: false,
                 items: [
+                    {text: 'Overview', link: '/guide/operations/observability/'},
                     {text: 'Metrics', link: '/guide/operations/observability/metrics'},
                     {text: 'Tracing', link: '/guide/operations/observability/tracing'},
                     {text: 'Logging', link: '/guide/operations/observability/logging'},

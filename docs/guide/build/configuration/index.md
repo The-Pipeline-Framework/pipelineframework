@@ -231,6 +231,37 @@ pipeline.orchestrator.dlq-url=https://sqs.eu-west-1.amazonaws.com/123456789012/t
 pipeline.orchestrator.idempotency-policy=CLIENT_KEY_REQUIRED
 ```
 
+### Item Reject Sink
+
+Prefix: `pipeline.item-reject`
+
+| Property | Type | Default | Description |
+|---|---|---|---|
+| `pipeline.item-reject.provider` | string | `log` | Step-level reject sink provider selector (`log`, `memory`, `sqs`). |
+| `pipeline.item-reject.strict-startup` | boolean | `true` | Fail startup when selected sink provider wiring is invalid. |
+| `pipeline.item-reject.include-payload` | boolean | `false` | Include rejected payload in sink envelope. |
+| `pipeline.item-reject.memory-capacity` | int | `512` | Bounded ring size for the `memory` provider. |
+| `pipeline.item-reject.publish-failure-policy` | enum | `CONTINUE` | Sink publish failure behavior (`CONTINUE`, `FAIL_PIPELINE`). |
+| `pipeline.item-reject.sqs.queue-url` | string | none | SQS queue URL when `provider=sqs`. |
+| `pipeline.item-reject.sqs.region` | string | none | Optional SQS region override. |
+| `pipeline.item-reject.sqs.endpoint-override` | string | none | Optional SQS endpoint override (local/dev). |
+
+Operational notes:
+
+1. Item reject sink is step-level recover-and-continue behaviour (`recoverOnFailure=true`).
+2. In production launch mode, startup fails when recovery is enabled and a non-durable sink (`log`/`memory`) is selected.
+3. In non-production modes, non-durable sinks are allowed with warning logs.
+4. Keep `include-payload=false` unless payload capture is explicitly required for triage.
+
+Example durable step-level reject sink:
+
+```properties
+pipeline.item-reject.provider=sqs
+pipeline.item-reject.sqs.queue-url=https://sqs.eu-west-1.amazonaws.com/123456789012/tpf-item-reject
+pipeline.item-reject.include-payload=false
+pipeline.item-reject.publish-failure-policy=CONTINUE
+```
+
 ### Telemetry
 
 Prefix: `pipeline.telemetry`
