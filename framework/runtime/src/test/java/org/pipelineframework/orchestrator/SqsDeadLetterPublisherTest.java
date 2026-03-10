@@ -41,9 +41,19 @@ class SqsDeadLetterPublisherTest {
         publisher.publish(new DeadLetterEnvelope(
                 "tenant-a",
                 "exec-1",
+                "tenant-a:exec-1:key",
+                "corr-1",
                 "exec-1:1:0",
+                "tpf.orchestrator.execution",
+                "OrchestratorService/Run",
+                "REST",
+                "FUNCTION",
+                "FAILED",
+                "retry_exhausted",
                 "DOWNSTREAM_TIMEOUT",
                 "timeout",
+                true,
+                1,
                 System.currentTimeMillis()))
             .await().indefinitely();
 
@@ -97,9 +107,19 @@ class SqsDeadLetterPublisherTest {
             publisher.publish(new DeadLetterEnvelope(
                     "tenant-a",
                     "exec-1",
+                    "tenant-a:exec-1:key",
+                    "corr-1",
                     "exec-1:1:0",
+                    "tpf.orchestrator.execution",
+                    "OrchestratorService/Run",
+                    "REST",
+                    "FUNCTION",
+                    "FAILED",
+                    "retry_exhausted",
                     "ERROR",
                     "message",
+                    true,
+                    0,
                     System.currentTimeMillis()))
                 .await().indefinitely());
 
@@ -116,9 +136,19 @@ class SqsDeadLetterPublisherTest {
         publisher.publish(new DeadLetterEnvelope(
                 "tenant-b",
                 "exec-2",
+                "tenant-b:exec-2:key",
+                "corr-2",
                 "exec-2:3:0",
+                "tpf.orchestrator.execution",
+                "OrchestratorService/Run",
+                "GRPC",
+                "COMPUTE",
+                "FAILED",
+                "non_retryable",
                 "MAX_RETRIES",
                 "Failed after 3 attempts",
+                false,
+                3,
                 1234567890000L))
             .await().indefinitely();
 
@@ -127,6 +157,9 @@ class SqsDeadLetterPublisherTest {
             return body.contains("tenant-b") &&
                    body.contains("exec-2") &&
                    body.contains("exec-2:3:0") &&
+                   body.contains("\"transport\":\"GRPC\"") &&
+                   body.contains("\"terminalReason\":\"non_retryable\"") &&
+                   body.contains("\"retryable\":false") &&
                    body.contains("MAX_RETRIES") &&
                    body.contains("Failed after 3 attempts");
         }));

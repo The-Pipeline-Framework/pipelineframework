@@ -66,6 +66,7 @@ public class SqsDeadLetterPublisher implements DeadLetterPublisher {
             .orElseThrow(() -> new IllegalStateException(
                 "pipeline.orchestrator.dlq-url must be configured when dlq-provider=sqs."));
         String messageBody = toMessage(envelope);
+        DeadLetterMetrics.record(providerName(), envelope);
         return blocking(() -> {
             sqsClient().sendMessage(SendMessageRequest.builder()
                 .queueUrl(queueUrl)

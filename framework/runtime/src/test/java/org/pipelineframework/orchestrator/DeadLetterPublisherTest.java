@@ -66,9 +66,19 @@ class DeadLetterPublisherTest {
         DeadLetterEnvelope envelope = new DeadLetterEnvelope(
             "tenant1",
             "exec1",
+            "tenant1:exec1:key",
+            "corr-1",
             "key1",
+            "tpf.orchestrator.execution",
+            "OrchestratorService/Run",
+            "REST",
+            "FUNCTION",
+            "FAILED",
+            "retry_exhausted",
             "TestError",
             "test message",
+            true,
+            2,
             System.currentTimeMillis());
 
         Uni<Void> result = publisher.publish(envelope);

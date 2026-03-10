@@ -21,9 +21,11 @@ import org.pipelineframework.orchestrator.ExecutionWorkItem;
 import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.WorkDispatcher;
+import org.pipelineframework.step.NonRetryableException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -119,7 +121,13 @@ class QueueAsyncFailureMatrixTest {
         DeadLetterEnvelope envelope = envelopeCaptor.getValue();
         assertEquals("tenant-a", envelope.tenantId());
         assertEquals("exec-3", envelope.executionId());
+        assertEquals("exec-3-key", envelope.executionKey());
+        assertEquals("exec-3-key", envelope.correlationId());
         assertEquals("exec-3:0:0", envelope.transitionKey());
+        assertEquals("FAILED", envelope.terminalStatus());
+        assertEquals("retry_exhausted", envelope.terminalReason());
+        assertTrue(envelope.retryable());
+        assertEquals(0, envelope.retriesObserved());
     }
 
     @Test
@@ -133,6 +141,28 @@ class QueueAsyncFailureMatrixTest {
         assertDoesNotThrow(() -> invokeHandleExecutionFailure(record, "exec-4:0:0", new IllegalStateException("stale")));
 
         verify(deadLetterPublisher, never()).publish(any());
+    }
+
+    @Test
+    void terminalPathClassifiesNonRetryableFailure() throws Exception {
+        when(orchestratorConfig.maxRetries()).thenReturn(0);
+        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-9", 3L, 0);
+        when(executionStateStore.markTerminalFailure(
+            anyString(), anyString(), anyLong(), any(), anyString(), anyString(), anyString(), anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(record)));
+        when(deadLetterPublisher.publish(any())).thenReturn(Uni.createFrom().voidItem());
+
+        assertDoesNotThrow(() -> invokeHandleExecutionFailure(
+            record,
+            "exec-9:0:0",
+            new NonRetryableException("bad payload")));
+
+        ArgumentCaptor<DeadLetterEnvelope> envelopeCaptor = ArgumentCaptor.forClass(DeadLetterEnvelope.class);
+        verify(deadLetterPublisher).publish(envelopeCaptor.capture());
+        DeadLetterEnvelope envelope = envelopeCaptor.getValue();
+        assertEquals("non_retryable", envelope.terminalReason());
+        assertFalse(envelope.retryable());
+        assertEquals("NonRetryableException", envelope.errorCode());
     }
 
     @Test

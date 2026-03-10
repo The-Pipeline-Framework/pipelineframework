@@ -22,6 +22,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 
 import com.google.rpc.Status;
+import io.grpc.StatusRuntimeException;
 import org.jboss.logging.Logger;
 import org.jboss.resteasy.reactive.server.ServerExceptionMapper;
 import org.pipelineframework.cache.CacheMissException;
@@ -87,6 +88,13 @@ public class RestExceptionMapper {
                     .build();
             }
             Throwable rootCause = rootCause(ex);
+            if (rootCause instanceof StatusRuntimeException statusRuntimeException
+                && statusRuntimeException.getStatus().getCode() == io.grpc.Status.Code.DEADLINE_EXCEEDED) {
+                LOG.warn("Request exceeded absolute dispatch deadline", ex);
+                return Response.status(Response.Status.GATEWAY_TIMEOUT)
+                    .entity("Deadline exceeded")
+                    .build();
+            }
             if (rootCause instanceof IllegalArgumentException) {
                 LOG.warn("Invalid request", ex);
                 return Response.status(Response.Status.BAD_REQUEST)
