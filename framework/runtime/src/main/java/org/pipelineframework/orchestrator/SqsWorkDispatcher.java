@@ -15,6 +15,7 @@ import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.pipeline.PipelineJson;
+import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.SendMessageRequest;
@@ -130,6 +131,7 @@ public class SqsWorkDispatcher implements WorkDispatcher {
         synchronized (this) {
             if (client == null) {
                 var builder = SqsClient.builder();
+                builder.httpClientBuilder(UrlConnectionHttpClient.builder());
                 orchestratorConfig.sqs().region()
                     .filter(region -> !region.isBlank())
                     .ifPresent(region -> builder.region(Region.of(region)));
