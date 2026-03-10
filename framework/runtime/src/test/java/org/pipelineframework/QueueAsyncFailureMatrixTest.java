@@ -166,6 +166,33 @@ class QueueAsyncFailureMatrixTest {
     }
 
     @Test
+    void nonRetryableFailureSkipsScheduleRetryEvenWhenBudgetRemains() throws Exception {
+        when(orchestratorConfig.maxRetries()).thenReturn(3);
+        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-10", 3L, 0);
+        when(executionStateStore.markTerminalFailure(
+            anyString(), anyString(), anyLong(), any(), anyString(), anyString(), anyString(), anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(record)));
+        when(deadLetterPublisher.publish(any())).thenReturn(Uni.createFrom().voidItem());
+
+        assertDoesNotThrow(() -> invokeHandleExecutionFailure(
+            record,
+            "exec-10:0:0",
+            new NonRetryableException("bad payload")));
+
+        verify(executionStateStore, never()).scheduleRetry(
+            anyString(), anyString(), anyLong(), anyInt(), anyLong(), anyString(), anyString(), anyString(), anyLong());
+        verify(executionStateStore).markTerminalFailure(
+            eq("tenant-a"),
+            eq("exec-10"),
+            eq(3L),
+            eq(ExecutionStatus.FAILED),
+            eq("exec-10:0:0"),
+            eq("NonRetryableException"),
+            eq("bad payload"),
+            anyLong());
+    }
+
+    @Test
     void sweepRedispatchesPersistedDueExecutions() throws Exception {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         when(orchestratorConfig.sweepLimit()).thenReturn(100);

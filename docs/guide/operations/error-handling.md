@@ -35,7 +35,7 @@ Execution DLQ entries include standardized metadata for cross-transport triage:
 
 - execution fields: `tenantId`, `executionId`, `executionKey`, `transitionKey`
 - correlation/resource fields: `correlationId`, `resourceType`, `resourceName`
-- runtime identity fields: `transport`, `platform`, `terminalStatus`
+- runtime identity fields: `transport`, `platform`, `terminalStatus`, `createdAtEpochMs`
 - failure fields: `terminalReason`, `errorCode`, `errorMessage`, `retryable`, `retriesObserved`
 
 Terminal reason mapping:

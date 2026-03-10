@@ -796,8 +796,9 @@ public class PipelineExecutionService {
       Throwable failure) {
     long now = System.currentTimeMillis();
     int nextAttempt = record.attempt() + 1;
+    boolean retryableFailure = isRetryableFailure(failure);
     boolean retryAllowed = nextAttempt <= orchestratorConfig.maxRetries();
-    if (retryAllowed) {
+    if (retryAllowed && retryableFailure) {
       long nextDue = now + retryDelayMillis(nextAttempt);
           return executionStateStore.scheduleRetry(
                   record.tenantId(),
@@ -833,27 +834,27 @@ public class PipelineExecutionService {
           if (updated.isEmpty()) {
             return Uni.createFrom().voidItem();
           }
-          boolean retryableFailure = isRetryableFailure(failure);
           PipelinePlatformResourceLoader.PlatformMetadata platformMetadata = PipelinePlatformResourceLoader
               .loadPlatform()
               .orElse(null);
-          DeadLetterEnvelope envelope = new DeadLetterEnvelope(
-              record.tenantId(),
-              record.executionId(),
-              record.executionKey(),
-              record.executionKey(),
-              transitionKey,
-              "tpf.orchestrator.execution",
-              ORCHESTRATOR_SERVICE + "/" + ORCHESTRATOR_METHOD,
-              resolveTransport(platformMetadata),
-              resolvePlatform(platformMetadata),
-              ExecutionStatus.FAILED.name(),
-              retryableFailure ? "retry_exhausted" : "non_retryable",
-              failure.getClass().getSimpleName(),
-              failure.getMessage(),
-              retryableFailure,
-              record.attempt(),
-              now);
+          DeadLetterEnvelope envelope = DeadLetterEnvelope.builder()
+              .tenantId(record.tenantId())
+              .executionId(record.executionId())
+              .executionKey(record.executionKey())
+              .correlationId(record.executionKey())
+              .transitionKey(transitionKey)
+              .resourceType("tpf.orchestrator.execution")
+              .resourceName(ORCHESTRATOR_SERVICE + "/" + ORCHESTRATOR_METHOD)
+              .transport(resolveTransport(platformMetadata))
+              .platform(resolvePlatform(platformMetadata))
+              .terminalStatus(ExecutionStatus.FAILED.name())
+              .terminalReason(retryableFailure ? "retry_exhausted" : "non_retryable")
+              .errorCode(failure.getClass().getSimpleName())
+              .errorMessage(failure.getMessage())
+              .retryable(retryableFailure)
+              .retriesObserved(record.attempt())
+              .createdAtEpochMs(now)
+              .build();
           return deadLetterPublisher.publish(envelope);
         });
   }

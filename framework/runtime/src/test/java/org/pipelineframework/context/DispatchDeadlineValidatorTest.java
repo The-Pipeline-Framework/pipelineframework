@@ -47,4 +47,12 @@ class DispatchDeadlineValidatorTest {
             () -> DispatchDeadlineValidator.ensureNotExpired(System.currentTimeMillis() - 1_000L, "unit"));
         assertEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus().getCode());
     }
+
+    @Test
+    void rejectsDeadlineAtExactCurrentTime() {
+        long now = System.currentTimeMillis();
+        StatusRuntimeException ex = assertThrows(StatusRuntimeException.class,
+            () -> DispatchDeadlineValidator.ensureNotExpired(now, "unit"));
+        assertEquals(Status.Code.DEADLINE_EXCEEDED, ex.getStatus().getCode());
+    }
 }

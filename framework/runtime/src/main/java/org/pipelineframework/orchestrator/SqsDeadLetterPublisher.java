@@ -66,8 +66,14 @@ public class SqsDeadLetterPublisher implements DeadLetterPublisher {
             .orElseThrow(() -> new IllegalStateException(
                 "pipeline.orchestrator.dlq-url must be configured when dlq-provider=sqs."));
         String messageBody = toMessage(envelope);
-        DeadLetterMetrics.record(providerName(), envelope);
         return blocking(() -> {
+            try {
+                DeadLetterMetrics.record(providerName(), envelope);
+            } catch (RuntimeException metricFailure) {
+                LOG.warnf(metricFailure,
+                    "DeadLetterMetrics recording failed for execution=%s. Continuing with DLQ publish.",
+                    envelope.executionId());
+            }
             sqsClient().sendMessage(SendMessageRequest.builder()
                 .queueUrl(queueUrl)
                 .messageBody(messageBody)

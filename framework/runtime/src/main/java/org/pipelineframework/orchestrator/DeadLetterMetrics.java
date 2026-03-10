@@ -19,11 +19,7 @@ public final class DeadLetterMetrics {
     private static final AttributeKey<Boolean> RETRYABLE = AttributeKey.booleanKey("tpf.error.retryable");
     private static final AttributeKey<String> RESOURCE_TYPE = AttributeKey.stringKey("tpf.resource.type");
 
-    private static final LongCounter DLQ_PUBLISH_COUNTER = GlobalOpenTelemetry.getMeter("org.pipelineframework")
-        .counterBuilder("tpf.execution.dlq.publish.total")
-        .setDescription("Total terminal execution failures published to dead-letter destinations")
-        .setUnit("events")
-        .build();
+    private static volatile LongCounter dlqPublishCounter;
 
     private DeadLetterMetrics() {
     }
@@ -38,6 +34,7 @@ public final class DeadLetterMetrics {
         if (envelope == null) {
             return;
         }
+        ensureInitialized();
         Attributes attributes = Attributes.builder()
             .put(PROVIDER, normalize(provider))
             .put(TRANSPORT, normalize(envelope.transport()))
@@ -48,7 +45,23 @@ public final class DeadLetterMetrics {
             .put(RETRYABLE, envelope.retryable())
             .put(RESOURCE_TYPE, normalize(envelope.resourceType()))
             .build();
-        DLQ_PUBLISH_COUNTER.add(1, attributes);
+        dlqPublishCounter.add(1, attributes);
+    }
+
+    private static void ensureInitialized() {
+        if (dlqPublishCounter != null) {
+            return;
+        }
+        synchronized (DeadLetterMetrics.class) {
+            if (dlqPublishCounter != null) {
+                return;
+            }
+            dlqPublishCounter = GlobalOpenTelemetry.getMeter("org.pipelineframework")
+                .counterBuilder("tpf.execution.dlq.publish.total")
+                .setDescription("Total terminal execution failures published to dead-letter destinations")
+                .setUnit("events")
+                .build();
+        }
     }
 
     private static String normalize(String value) {

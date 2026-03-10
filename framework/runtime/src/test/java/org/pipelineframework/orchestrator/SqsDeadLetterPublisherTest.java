@@ -38,23 +38,24 @@ class SqsDeadLetterPublisherTest {
         PipelineOrchestratorConfig config = mockConfig(Optional.of("https://sqs.local/123/dlq"));
         SqsDeadLetterPublisher publisher = new SqsDeadLetterPublisher(client, config);
 
-        publisher.publish(new DeadLetterEnvelope(
-                "tenant-a",
-                "exec-1",
-                "tenant-a:exec-1:key",
-                "corr-1",
-                "exec-1:1:0",
-                "tpf.orchestrator.execution",
-                "OrchestratorService/Run",
-                "REST",
-                "FUNCTION",
-                "FAILED",
-                "retry_exhausted",
-                "DOWNSTREAM_TIMEOUT",
-                "timeout",
-                true,
-                1,
-                System.currentTimeMillis()))
+        publisher.publish(DeadLetterEnvelope.builder()
+                .tenantId("tenant-a")
+                .executionId("exec-1")
+                .executionKey("tenant-a:exec-1:key")
+                .correlationId("corr-1")
+                .transitionKey("exec-1:1:0")
+                .resourceType("tpf.orchestrator.execution")
+                .resourceName("OrchestratorService/Run")
+                .transport("REST")
+                .platform("FUNCTION")
+                .terminalStatus("FAILED")
+                .terminalReason("retry_exhausted")
+                .errorCode("DOWNSTREAM_TIMEOUT")
+                .errorMessage("timeout")
+                .retryable(true)
+                .retriesObserved(1)
+                .createdAtEpochMs(System.currentTimeMillis())
+                .build())
             .await().indefinitely();
 
         verify(client).sendMessage(any(SendMessageRequest.class));
@@ -104,23 +105,24 @@ class SqsDeadLetterPublisherTest {
         SqsDeadLetterPublisher publisher = new SqsDeadLetterPublisher(client, config);
 
         IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
-            publisher.publish(new DeadLetterEnvelope(
-                    "tenant-a",
-                    "exec-1",
-                    "tenant-a:exec-1:key",
-                    "corr-1",
-                    "exec-1:1:0",
-                    "tpf.orchestrator.execution",
-                    "OrchestratorService/Run",
-                    "REST",
-                    "FUNCTION",
-                    "FAILED",
-                    "retry_exhausted",
-                    "ERROR",
-                    "message",
-                    true,
-                    0,
-                    System.currentTimeMillis()))
+            publisher.publish(DeadLetterEnvelope.builder()
+                    .tenantId("tenant-a")
+                    .executionId("exec-1")
+                    .executionKey("tenant-a:exec-1:key")
+                    .correlationId("corr-1")
+                    .transitionKey("exec-1:1:0")
+                    .resourceType("tpf.orchestrator.execution")
+                    .resourceName("OrchestratorService/Run")
+                    .transport("REST")
+                    .platform("FUNCTION")
+                    .terminalStatus("FAILED")
+                    .terminalReason("retry_exhausted")
+                    .errorCode("ERROR")
+                    .errorMessage("message")
+                    .retryable(true)
+                    .retriesObserved(0)
+                    .createdAtEpochMs(System.currentTimeMillis())
+                    .build())
                 .await().indefinitely());
 
         assertTrue(exception.getMessage().contains("dlq-url"));
@@ -133,23 +135,24 @@ class SqsDeadLetterPublisherTest {
         PipelineOrchestratorConfig config = mockConfig(Optional.of("https://sqs.local/123/dlq"));
         SqsDeadLetterPublisher publisher = new SqsDeadLetterPublisher(client, config);
 
-        publisher.publish(new DeadLetterEnvelope(
-                "tenant-b",
-                "exec-2",
-                "tenant-b:exec-2:key",
-                "corr-2",
-                "exec-2:3:0",
-                "tpf.orchestrator.execution",
-                "OrchestratorService/Run",
-                "GRPC",
-                "COMPUTE",
-                "FAILED",
-                "non_retryable",
-                "MAX_RETRIES",
-                "Failed after 3 attempts",
-                false,
-                3,
-                1234567890000L))
+        publisher.publish(DeadLetterEnvelope.builder()
+                .tenantId("tenant-b")
+                .executionId("exec-2")
+                .executionKey("tenant-b:exec-2:key")
+                .correlationId("corr-2")
+                .transitionKey("exec-2:3:0")
+                .resourceType("tpf.orchestrator.execution")
+                .resourceName("OrchestratorService/Run")
+                .transport("GRPC")
+                .platform("COMPUTE")
+                .terminalStatus("FAILED")
+                .terminalReason("non_retryable")
+                .errorCode("MAX_RETRIES")
+                .errorMessage("Failed after 3 attempts")
+                .retryable(false)
+                .retriesObserved(3)
+                .createdAtEpochMs(1234567890000L)
+                .build())
             .await().indefinitely();
 
         verify(client).sendMessage(argThat((SendMessageRequest request) -> {

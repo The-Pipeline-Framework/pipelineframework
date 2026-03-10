@@ -63,23 +63,24 @@ class DeadLetterPublisherTest {
     @Test
     void publishMethodMustBeImplemented() {
         DeadLetterPublisher publisher = new TestPublisher();
-        DeadLetterEnvelope envelope = new DeadLetterEnvelope(
-            "tenant1",
-            "exec1",
-            "tenant1:exec1:key",
-            "corr-1",
-            "key1",
-            "tpf.orchestrator.execution",
-            "OrchestratorService/Run",
-            "REST",
-            "FUNCTION",
-            "FAILED",
-            "retry_exhausted",
-            "TestError",
-            "test message",
-            true,
-            2,
-            System.currentTimeMillis());
+        DeadLetterEnvelope envelope = DeadLetterEnvelope.builder()
+            .tenantId("tenant1")
+            .executionId("exec1")
+            .executionKey("tenant1:exec1:key")
+            .correlationId("corr-1")
+            .transitionKey("key1")
+            .resourceType("tpf.orchestrator.execution")
+            .resourceName("OrchestratorService/Run")
+            .transport("REST")
+            .platform("FUNCTION")
+            .terminalStatus("FAILED")
+            .terminalReason("retry_exhausted")
+            .errorCode("TestError")
+            .errorMessage("test message")
+            .retryable(true)
+            .retriesObserved(2)
+            .createdAtEpochMs(System.currentTimeMillis())
+            .build();
 
         Uni<Void> result = publisher.publish(envelope);
         assertDoesNotThrow(() -> result.await().indefinitely());

@@ -1,5 +1,7 @@
 package org.pipelineframework.orchestrator;
 
+import java.util.Objects;
+
 /**
  * Terminal failure payload for dead-letter publishing.
  *
@@ -38,4 +40,149 @@ public record DeadLetterEnvelope(
     int retriesObserved,
     long createdAtEpochMs
 ) {
+
+    /**
+     * Deprecated positional constructor kept for binary/source compatibility while callers migrate to {@link Builder}.
+     */
+    @Deprecated(forRemoval = false, since = "26.2.5")
+    public DeadLetterEnvelope {
+    }
+
+    /**
+     * Creates a fluent builder for safer envelope construction.
+     *
+     * @return dead-letter envelope builder
+     */
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    /**
+     * Fluent builder for {@link DeadLetterEnvelope}.
+     */
+    public static final class Builder {
+        private String tenantId;
+        private String executionId;
+        private String executionKey;
+        private String correlationId;
+        private String transitionKey;
+        private String resourceType;
+        private String resourceName;
+        private String transport;
+        private String platform;
+        private String terminalStatus;
+        private String terminalReason;
+        private String errorCode;
+        private String errorMessage;
+        private boolean retryable;
+        private int retriesObserved;
+        private long createdAtEpochMs;
+
+        private Builder() {
+        }
+
+        public Builder tenantId(String tenantId) {
+            this.tenantId = tenantId;
+            return this;
+        }
+
+        public Builder executionId(String executionId) {
+            this.executionId = executionId;
+            return this;
+        }
+
+        public Builder executionKey(String executionKey) {
+            this.executionKey = executionKey;
+            return this;
+        }
+
+        public Builder correlationId(String correlationId) {
+            this.correlationId = correlationId;
+            return this;
+        }
+
+        public Builder transitionKey(String transitionKey) {
+            this.transitionKey = transitionKey;
+            return this;
+        }
+
+        public Builder resourceType(String resourceType) {
+            this.resourceType = resourceType;
+            return this;
+        }
+
+        public Builder resourceName(String resourceName) {
+            this.resourceName = resourceName;
+            return this;
+        }
+
+        public Builder transport(String transport) {
+            this.transport = transport;
+            return this;
+        }
+
+        public Builder platform(String platform) {
+            this.platform = platform;
+            return this;
+        }
+
+        public Builder terminalStatus(String terminalStatus) {
+            this.terminalStatus = terminalStatus;
+            return this;
+        }
+
+        public Builder terminalReason(String terminalReason) {
+            this.terminalReason = terminalReason;
+            return this;
+        }
+
+        public Builder errorCode(String errorCode) {
+            this.errorCode = errorCode;
+            return this;
+        }
+
+        public Builder errorMessage(String errorMessage) {
+            this.errorMessage = errorMessage;
+            return this;
+        }
+
+        public Builder retryable(boolean retryable) {
+            this.retryable = retryable;
+            return this;
+        }
+
+        public Builder retriesObserved(int retriesObserved) {
+            this.retriesObserved = retriesObserved;
+            return this;
+        }
+
+        public Builder createdAtEpochMs(long createdAtEpochMs) {
+            this.createdAtEpochMs = createdAtEpochMs;
+            return this;
+        }
+
+        public DeadLetterEnvelope build() {
+            Objects.requireNonNull(tenantId, "tenantId must not be null");
+            Objects.requireNonNull(executionId, "executionId must not be null");
+            Objects.requireNonNull(transitionKey, "transitionKey must not be null");
+            Objects.requireNonNull(errorCode, "errorCode must not be null");
+            return new DeadLetterEnvelope(
+                tenantId,
+                executionId,
+                executionKey,
+                correlationId,
+                transitionKey,
+                resourceType,
+                resourceName,
+                transport,
+                platform,
+                terminalStatus,
+                terminalReason,
+                errorCode,
+                errorMessage,
+                retryable,
+                retriesObserved,
+                createdAtEpochMs);
+        }
+    }
 }
