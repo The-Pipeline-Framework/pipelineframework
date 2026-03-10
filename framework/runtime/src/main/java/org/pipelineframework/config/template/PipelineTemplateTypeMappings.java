@@ -165,10 +165,11 @@ final class PipelineTemplateTypeMappings {
      * @param valueType the declared value token for map types (used to derive the map's value Java type)
      * @param repeated if true, wrap the resolved type in a List (e.g., List&lt;T&gt;)
      * @return the resolved Java type name; for maps returns a parameterized Map&lt;Key, Value&gt;, for message returns the messageRef, otherwise a mapped builtin Java type, and if `repeated` is true the result is wrapped as List&lt;...&gt;
+     */
     static String javaTypeForCanonical(String canonicalType, String messageRef, String keyType, String valueType, boolean repeated) {
         String resolved;
         if ("map".equals(canonicalType)) {
-            resolved = "Map<" + javaTypeForSimpleToken(keyType, false) + ", " + javaTypeForSimpleToken(valueType, false) + ">";
+            resolved = "Map<" + javaTypeForTokenV2(keyType) + ", " + javaTypeForTokenV2(valueType) + ">";
         } else if ("message".equals(canonicalType)) {
             resolved = messageRef;
         } else {
@@ -194,7 +195,7 @@ final class PipelineTemplateTypeMappings {
      */
     static String protoTypeForCanonical(String canonicalType, String messageRef, String keyType, String valueType) {
         if ("map".equals(canonicalType)) {
-            return "map<" + protoScalarForToken(keyType, true) + ", " + protoScalarForToken(valueType, false) + ">";
+            return "map<" + protoScalarForTokenV2(keyType, true) + ", " + protoScalarForTokenV2(valueType, false) + ">";
         }
         if ("message".equals(canonicalType)) {
             return messageRef;
@@ -240,6 +241,15 @@ final class PipelineTemplateTypeMappings {
                 throw new IllegalStateException(
                     "Map field '" + field.name() + "' keyType '" + field.keyType()
                         + "' is not one of the allowed protobuf map key kinds: string, bool, int32, int64");
+            }
+            String valueCanonicalType = canonicalTypeForV2(field.valueType());
+            if (valueCanonicalType == null) {
+                throw new IllegalStateException(
+                    "Map field '" + field.name() + "' declares unsupported valueType '" + field.valueType() + "'");
+            }
+            if ("map".equals(valueCanonicalType)) {
+                throw new IllegalStateException(
+                    "Map field '" + field.name() + "' cannot use map as valueType");
             }
         }
         if (!field.hasStableNumber()) {
@@ -458,6 +468,25 @@ final class PipelineTemplateTypeMappings {
             return keyType ? "string" : token;
         }
         return PROTO_TYPES.getOrDefault(canonical, "string");
+    }
+
+    private static String javaTypeForTokenV2(String token) {
+        String canonical = canonicalTypeForV2(token);
+        if (canonical == null || "message".equals(canonical)) {
+            return token;
+        }
+        return JAVA_TYPES.getOrDefault(canonical, token);
+    }
+
+    private static String protoScalarForTokenV2(String token, boolean keyType) {
+        String canonical = canonicalTypeForV2(token);
+        if (canonical == null) {
+            return keyType ? "string" : token;
+        }
+        if ("message".equals(canonical)) {
+            return keyType ? "string" : token;
+        }
+        return PROTO_TYPES.getOrDefault(canonical, keyType ? "string" : token);
     }
 
     /**

@@ -290,6 +290,7 @@ class ModelExtractionPhaseTest {
             StepKind.INTERNAL,
             ClassName.get("org.pipelineframework.csv.service", "ProcessAckPaymentSentService"),
             null,
+            null,
             MapperFallbackMode.NONE,
             ClassName.get("org.pipelineframework.csv.common.domain", "AckPaymentSent"),
             ClassName.get("org.pipelineframework.csv.common.domain", "PaymentStatus"),

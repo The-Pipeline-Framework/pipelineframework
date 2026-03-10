@@ -19,6 +19,7 @@ package org.pipelineframework.processor.ir;
 import java.util.Objects;
 import javax.annotation.Nullable;
 import com.squareup.javapoet.ClassName;
+import org.pipelineframework.config.template.PipelineTemplateStepExecution;
 
 /**
  * Represents a step definition parsed from YAML configuration.
@@ -27,6 +28,7 @@ import com.squareup.javapoet.ClassName;
  * @param name The name of the step
  * @param kind The kind of step (INTERNAL or DELEGATED)
  * @param executionClass The class that provides the execution implementation
+ * @param remoteExecution remote execution metadata for REMOTE steps
  * @param externalMapper The operator mapper class for mapping between domain and operator types (nullable)
  * @param mapperFallback mapper fallback strategy when no mapper matches (never null)
  * @param inputType The input type for the step
@@ -36,20 +38,38 @@ import com.squareup.javapoet.ClassName;
 public record StepDefinition(
         String name,
         StepKind kind,
-        ClassName executionClass,
+        @Nullable ClassName executionClass,
+        @Nullable PipelineTemplateStepExecution remoteExecution,
         @Nullable ClassName externalMapper,
         MapperFallbackMode mapperFallback,
         @Nullable ClassName inputType,
         @Nullable ClassName outputType,
         @Nullable StreamingShape streamingShapeHint
 ) {
+    public StepDefinition(
+        String name,
+        StepKind kind,
+        @Nullable ClassName executionClass,
+        @Nullable ClassName externalMapper,
+        MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType,
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint
+    ) {
+        this(name, kind, executionClass, null, externalMapper, mapperFallback, inputType, outputType, streamingShapeHint);
+    }
+
     public StepDefinition {
         Objects.requireNonNull(name, "Name cannot be null");
         if (name.isBlank()) {
             throw new IllegalArgumentException("Name cannot be blank");
         }
         Objects.requireNonNull(kind, "Kind cannot be null");
-        Objects.requireNonNull(executionClass, "Execution class cannot be null");
+        if (kind == StepKind.REMOTE) {
+            Objects.requireNonNull(remoteExecution, "Remote execution cannot be null for REMOTE steps");
+        } else {
+            Objects.requireNonNull(executionClass, "Execution class cannot be null");
+        }
         mapperFallback = mapperFallback == null ? MapperFallbackMode.NONE : mapperFallback;
     }
 }

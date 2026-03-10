@@ -1,6 +1,9 @@
 # Operators
 
-Operators let you compose pipelines directly from existing Java methods declared in `pipeline.yaml`.
+Operators let you compose pipelines from either:
+
+- local Java methods resolved at build time, or
+- remote v2 contract steps executed over Protobuf-over-HTTP.
 
 ## End-to-End Shape
 
@@ -26,6 +29,46 @@ Rules:
 - Exactly one `::` separator.
 - Class and method segments must be non-blank.
 - Method must resolve uniquely in the indexed class hierarchy.
+
+## Remote Operator Syntax (IDL v2)
+
+Use a template-style v2 step with an `execution` block when the operator lives outside the current Java build, for example in a Python Lambda or another HTTP service.
+
+```yaml
+version: 2
+
+messages:
+  ChargeRequest:
+    fields:
+      - number: 1
+        name: "orderId"
+        type: "uuid"
+  ChargeResult:
+    fields:
+      - number: 1
+        name: "paymentId"
+        type: "uuid"
+
+steps:
+  - name: "Charge Card"
+    cardinality: "ONE_TO_ONE"
+    inputTypeName: "ChargeRequest"
+    outputTypeName: "ChargeResult"
+    execution:
+      mode: "REMOTE"
+      operatorId: "charge-card"
+      protocol: "PROTOBUF_HTTP_V1"
+      timeoutMs: 3000
+      target:
+        urlConfigKey: "tpf.remote-operators.charge-card.url"
+```
+
+Rules:
+- Remote execution is available only in `version: 2`.
+- Only unary `ONE_TO_ONE` remote execution is supported in this slice.
+- Exactly one of `execution.target.url` or `execution.target.urlConfigKey` must be set.
+- `execution.target.urlConfigKey` resolves at runtime startup, not at compile time.
+- `pipeline.transport` and the remote operator protocol are orthogonal. TPF can expose the pipeline over REST, gRPC, or local transport while invoking the remote operator over Protobuf-over-HTTP.
 
 ## Working Example
 
@@ -64,6 +107,13 @@ Validation fails fast in the following cases:
 
 Simple concrete parameterised returns such as `List<Foo>` and `Map<String, Foo>` are supported.
 
+For remote v2 operators, build-time validation is contract-only:
+- input/output messages must resolve from the v2 message table,
+- the step must be unary,
+- the protocol must be `PROTOBUF_HTTP_V1`,
+- the remote target must be configured correctly,
+- no local Java operator resolution or remote endpoint introspection is attempted.
+
 ## Current Invocation Scope
 
 Generated invokers currently support unary execution:
@@ -81,6 +131,7 @@ Operator category does not select transport.
 - Mapper-compatible bindings mean generated protobuf/service bindings must match delegated/operator routing conventions (field/service naming).
 - This ensures RPC requests map to the intended operator implementation.
 - `NON_REACTIVE` and `REACTIVE` categories follow the same transport prerequisites.
+- Remote operators keep the same separation: the pipeline transport controls how callers reach TPF, while the remote step `execution.protocol` controls how TPF reaches the operator.
 
 ## Related
 

@@ -298,13 +298,19 @@ public class PipelineTemplateConfigLoader {
         for (PipelineTemplateStep step : steps) {
             List<PipelineTemplateField> inputFields = resolveStepFields(step.inputTypeName(), step.inputFields(), messages, step.name(), "input");
             List<PipelineTemplateField> outputFields = resolveStepFields(step.outputTypeName(), step.outputFields(), messages, step.name(), "output");
+            if (step.execution() != null && step.execution().isRemote()
+                && !"ONE_TO_ONE".equalsIgnoreCase(step.cardinality())) {
+                throw new IllegalStateException(
+                    "Step '" + step.name() + "' remote execution currently supports only cardinality ONE_TO_ONE");
+            }
             resolved.add(new PipelineTemplateStep(
                 step.name(),
                 step.cardinality(),
                 step.inputTypeName(),
                 inputFields,
                 step.outputTypeName(),
-                outputFields));
+                outputFields,
+                step.execution()));
         }
         return resolved;
     }
@@ -381,15 +387,77 @@ public class PipelineTemplateConfigLoader {
             String outputType = readString(stepMap, "outputTypeName");
             List<PipelineTemplateField> inputFields = readFields(stepMap.get("inputFields"), version);
             List<PipelineTemplateField> outputFields = readFields(stepMap.get("outputFields"), version);
+            PipelineTemplateStepExecution execution = readExecution(stepMap.get("execution"), version, name);
             stepInfos.add(new PipelineTemplateStep(
                 name,
                 cardinality,
                 inputType,
                 inputFields,
                 outputType,
-                outputFields));
+                outputFields,
+                execution));
         }
         return stepInfos;
+    }
+
+    private PipelineTemplateStepExecution readExecution(Object executionObj, int version, String stepName) {
+        if (executionObj == null) {
+            return null;
+        }
+        if (version < 2) {
+            throw new IllegalStateException(
+                "Step '" + stepName + "' declares execution metadata, but execution blocks require version: 2");
+        }
+        if (!(executionObj instanceof Map<?, ?> executionMap)) {
+            throw new IllegalStateException("Step '" + stepName + "' execution block must be a map");
+        }
+
+        PipelineTemplateStepExecution execution = new PipelineTemplateStepExecution(
+            readString(executionMap, "mode"),
+            readString(executionMap, "operatorId"),
+            readString(executionMap, "protocol"),
+            readIntegerObject(executionMap, "timeoutMs"),
+            readRemoteTarget(executionMap.get("target"), stepName));
+        validateExecution(execution, stepName);
+        return execution;
+    }
+
+    private PipelineTemplateRemoteTarget readRemoteTarget(Object targetObj, String stepName) {
+        if (targetObj == null) {
+            return null;
+        }
+        if (!(targetObj instanceof Map<?, ?> targetMap)) {
+            throw new IllegalStateException("Step '" + stepName + "' target block must be a map");
+        }
+        return new PipelineTemplateRemoteTarget(
+            readString(targetMap, "url"),
+            readString(targetMap, "urlConfigKey"));
+    }
+
+    private void validateExecution(PipelineTemplateStepExecution execution, String stepName) {
+        if (execution == null || !execution.isRemote()) {
+            return;
+        }
+        if (execution.operatorId() == null) {
+            throw new IllegalStateException("Step '" + stepName + "' remote execution requires execution.operatorId");
+        }
+        if (!"PROTOBUF_HTTP_V1".equalsIgnoreCase(execution.protocol())) {
+            throw new IllegalStateException(
+                "Step '" + stepName + "' remote execution requires execution.protocol=PROTOBUF_HTTP_V1");
+        }
+        PipelineTemplateRemoteTarget target = execution.target();
+        if (target == null) {
+            throw new IllegalStateException("Step '" + stepName + "' remote execution requires execution.target");
+        }
+        boolean hasLiteralUrl = target.url() != null;
+        boolean hasConfigKey = target.urlConfigKey() != null;
+        if (hasLiteralUrl == hasConfigKey) {
+            throw new IllegalStateException(
+                "Step '" + stepName + "' remote execution requires exactly one of execution.target.url or execution.target.urlConfigKey");
+        }
+        if (execution.timeoutMs() != null && execution.timeoutMs() <= 0) {
+            throw new IllegalStateException("Step '" + stepName + "' execution.timeoutMs must be > 0");
+        }
     }
 
     /**
@@ -555,6 +623,18 @@ public class PipelineTemplateConfigLoader {
         List<PipelineTemplateField> fields,
         PipelineTemplateReserved reserved
     ) {
+        Set<Integer> fieldNumbers = new LinkedHashSet<>();
+        Set<String> fieldNames = new LinkedHashSet<>();
+        for (PipelineTemplateField field : fields) {
+            if (field.number() != null && !fieldNumbers.add(field.number())) {
+                throw new IllegalStateException(
+                    "Duplicate field number " + field.number() + " in message '" + messageName + "'");
+            }
+            if (field.name() != null && !field.name().isBlank() && !fieldNames.add(field.name())) {
+                throw new IllegalStateException(
+                    "Duplicate field name '" + field.name() + "' in message '" + messageName + "'");
+            }
+        }
         Set<Integer> numbers = new LinkedHashSet<>();
         for (Integer number : reserved.numbers()) {
             if (number == null || number <= 0) {

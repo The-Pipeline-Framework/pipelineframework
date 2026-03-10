@@ -197,6 +197,8 @@ public final class PipelineIdlCompatibilityChecker {
         if (baselineField.repeated() != currentField.repeated()) {
             errors.add("Message '" + messageName + "' changed repeated structure for field '" + baselineField.name() + "'");
         }
+        // Optionality changes are treated as breaking so the normalized contract stays conservative
+        // across protobuf, generated bindings, and transport-specific presence semantics.
         if (baselineField.optional() != currentField.optional()) {
             errors.add("Message '" + messageName + "' changed optionality for field '" + baselineField.name() + "'");
         }

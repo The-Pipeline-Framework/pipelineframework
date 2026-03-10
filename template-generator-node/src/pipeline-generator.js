@@ -124,7 +124,14 @@ class PipelineGenerator {
     loadConfig(configPath) {
         const yamlStr = fs.readFileSync(configPath, 'utf8');
         const config = YAML.load(yamlStr);
-        config.version = Number.isInteger(config.version) ? config.version : 1;
+        if (!config || typeof config !== 'object' || Array.isArray(config)) {
+            throw new Error('Configuration root must be a YAML object');
+        }
+        if (config.version === undefined) {
+            config.version = 1;
+        } else if (!Number.isInteger(config.version)) {
+            throw new Error(`Configuration version must be an integer, got '${config.version}'`);
+        }
 
         // Normalize casing for JSON schema validation.
         if (typeof config.runtimeLayout === 'string') {
@@ -177,6 +184,16 @@ class PipelineGenerator {
         const topLevel = typeName && messages[typeName] && Array.isArray(messages[typeName].fields)
             ? messages[typeName].fields
             : null;
+        if (typeName && !topLevel) {
+            throw new Error(`Missing message definition for '${typeName}'`);
+        }
+        if (topLevel && Array.isArray(inlineFields)) {
+            const topLevelNormalized = topLevel.map((field) => this.toScaffoldField(field));
+            const inlineNormalized = inlineFields.map((field) => this.toScaffoldField(field));
+            if (JSON.stringify(topLevelNormalized) !== JSON.stringify(inlineNormalized)) {
+                throw new Error(`Conflicting inline vs top-level field definitions for '${typeName}'`);
+            }
+        }
         const sourceFields = topLevel || inlineFields || [];
         return sourceFields.map((field) => this.toScaffoldField(field));
     }
@@ -184,10 +201,18 @@ class PipelineGenerator {
     toScaffoldField(field) {
         const authoredType = field.type;
         if (authoredType === 'map') {
-            const keyJava = this.semanticTypeToJavaType(field.keyType);
-            const valueJava = this.semanticTypeToJavaType(field.valueType);
-            const keyProto = this.semanticTypeToProtoType(field.keyType);
-            const valueProto = this.semanticTypeToProtoType(field.valueType);
+            const keyJava = this.isMessageReferenceType(field.keyType)
+                ? field.keyType
+                : this.semanticTypeToJavaType(field.keyType);
+            const valueJava = this.isMessageReferenceType(field.valueType)
+                ? field.valueType
+                : this.semanticTypeToJavaType(field.valueType);
+            const keyProto = this.isMessageReferenceType(field.keyType)
+                ? field.keyType
+                : this.semanticTypeToProtoType(field.keyType);
+            const valueProto = this.isMessageReferenceType(field.valueType)
+                ? field.valueType
+                : this.semanticTypeToProtoType(field.valueType);
             return {
                 ...field,
                 type: `Map<${keyJava}, ${valueJava}>`,
@@ -195,6 +220,13 @@ class PipelineGenerator {
             };
         }
         if (this.isMessageReferenceType(authoredType)) {
+            if (field.repeated) {
+                return {
+                    ...field,
+                    type: `List<${authoredType}>`,
+                    protoType: authoredType
+                };
+            }
             return {
                 ...field,
                 type: authoredType,
@@ -208,10 +240,12 @@ class PipelineGenerator {
         // This avoids forcing Optional<T> import/converter changes across existing templates;
         // mapper/runtime layers handle presence semantics from field metadata.
         if (field.repeated) {
+            const repeatedJavaType = this.isMessageReferenceType(authoredType) ? authoredType : javaType;
+            const repeatedProtoType = this.isMessageReferenceType(authoredType) ? authoredType : protoType;
             return {
                 ...field,
-                type: `List<${javaType}>`,
-                protoType
+                type: `List<${repeatedJavaType}>`,
+                protoType: repeatedProtoType
             };
         }
         return {

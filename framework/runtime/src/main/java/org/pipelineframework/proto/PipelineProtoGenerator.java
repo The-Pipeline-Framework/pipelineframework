@@ -18,6 +18,7 @@ package org.pipelineframework.proto;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -150,7 +151,7 @@ public class PipelineProtoGenerator {
             IDL_MAPPER.writerWithDefaultPrettyPrinter().writeValue(outputPath.toFile(), snapshot);
             String baseline = resolveCompatibilityBaseline();
             if (baseline != null && !baseline.isBlank()) {
-                PipelineIdlSnapshot baselineSnapshot = IDL_MAPPER.readValue(Path.of(baseline).toFile(), PipelineIdlSnapshot.class);
+                PipelineIdlSnapshot baselineSnapshot = readBaselineSnapshot(baseline);
                 List<String> errors = new PipelineIdlCompatibilityChecker().compare(baselineSnapshot, snapshot);
                 if (!errors.isEmpty()) {
                     throw new IllegalStateException("IDL compatibility check failed:\n - " + String.join("\n - ", errors));
@@ -158,6 +159,14 @@ public class PipelineProtoGenerator {
             }
         } catch (IOException e) {
             throw new IllegalStateException("Failed to write IDL snapshot", e);
+        }
+    }
+
+    private PipelineIdlSnapshot readBaselineSnapshot(String baseline) {
+        try {
+            return IDL_MAPPER.readValue(Path.of(baseline).toFile(), PipelineIdlSnapshot.class);
+        } catch (InvalidPathException | IOException | SecurityException e) {
+            throw new IllegalStateException("Invalid IDL compatibility baseline path '" + baseline + "'", e);
         }
     }
 
@@ -407,7 +416,12 @@ public class PipelineProtoGenerator {
      */
     private void renderFieldLine(StringBuilder builder, PipelineTemplateField field) {
         if (field.comment() != null && !field.comment().isBlank()) {
-            builder.append("  // ").append(field.comment()).append('\n');
+            for (String rawLine : field.comment().split("\\R")) {
+                String line = rawLine == null ? null : rawLine.trim();
+                if (line != null && !line.isEmpty()) {
+                    builder.append("  // ").append(line).append('\n');
+                }
+            }
         }
         builder.append("  ");
         if (field.repeated()) {

@@ -184,6 +184,68 @@
       "required": ["fields"],
       "additionalProperties": false
     },
+    "v2RemoteTarget": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "urlConfigKey": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["url"]
+        },
+        {
+          "required": ["urlConfigKey"]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "v2Execution": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["LOCAL", "REMOTE", "local", "remote"]
+        },
+        "operatorId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "protocol": {
+          "type": "string",
+          "enum": ["PROTOBUF_HTTP_V1", "protobuf_http_v1"]
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "target": {
+          "$ref": "#/$defs/v2RemoteTarget"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "enum": ["REMOTE", "remote"]
+              }
+            },
+            "required": ["mode"]
+          },
+          "then": {
+            "required": ["operatorId", "protocol", "target"]
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
     "legacyTemplateStep": {
       "type": "object",
       "additionalProperties": false,
@@ -264,8 +326,36 @@
         },
         "parallel": {
           "type": "boolean"
+        },
+        "execution": {
+          "$ref": "#/$defs/v2Execution"
         }
       },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "execution": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "enum": ["REMOTE", "remote"]
+                  }
+                },
+                "required": ["mode"]
+              }
+            },
+            "required": ["execution"]
+          },
+          "then": {
+            "properties": {
+              "cardinality": {
+                "enum": ["ONE_TO_ONE"]
+              }
+            }
+          }
+        }
+      ],
       "required": ["name", "cardinality", "inputTypeName", "outputTypeName"]
     },
     "delegatedOrInternalStep": {

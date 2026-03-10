@@ -30,5 +30,10 @@ public enum StepKind {
      * A delegated step where the execution is provided by an operator service
      * that is not annotated with @PipelineStep.
      */
-    DELEGATED
+    DELEGATED,
+
+    /**
+     * A remote operator step resolved from v2 template execution metadata.
+     */
+    REMOTE
 }

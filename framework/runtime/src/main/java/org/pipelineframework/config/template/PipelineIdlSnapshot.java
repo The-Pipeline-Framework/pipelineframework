@@ -161,6 +161,11 @@ public record PipelineIdlSnapshot(
         List<Integer> reservedNumbers,
         List<String> reservedNames
     ) {
+        public MessageSnapshot {
+            fields = fields == null ? List.of() : List.copyOf(fields);
+            reservedNumbers = reservedNumbers == null ? List.of() : List.copyOf(reservedNumbers);
+            reservedNames = reservedNames == null ? List.of() : List.copyOf(reservedNames);
+        }
     }
 
     public record FieldSnapshot(

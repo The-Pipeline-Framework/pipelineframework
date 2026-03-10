@@ -110,6 +110,11 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
      * @return a set of GenerationTarget values applicable to the given step model
      */
     private Set<GenerationTarget> resolveTargetsForModel(PipelineStepModel model, TransportMode transportMode) {
+        if (model.remoteExecution() != null && model.remoteExecution().isRemote()) {
+            Set<GenerationTarget> targets = new java.util.LinkedHashSet<>(resolveTargetsForRole(model.deploymentRole(), transportMode));
+            targets.add(GenerationTarget.REMOTE_OPERATOR_ADAPTER);
+            return Set.copyOf(targets);
+        }
         if (model.delegateService() != null) {
             // Delegated steps only resolve local client target here.
             // External adapter generation is bound later in PipelineBindingConstructionPhase.

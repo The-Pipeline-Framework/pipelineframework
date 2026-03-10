@@ -109,6 +109,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         RestClientStepRenderer restClientRenderer = new RestClientStepRenderer();
         RestResourceRenderer restRenderer = new RestResourceRenderer();
         RestFunctionHandlerRenderer restFunctionHandlerRenderer = new RestFunctionHandlerRenderer();
+        RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer = new RemoteOperatorAdapterRenderer();
         OrchestratorGrpcRenderer orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
         OrchestratorRestResourceRenderer orchestratorRestRenderer = new OrchestratorRestResourceRenderer();
         OrchestratorFunctionHandlerRenderer orchestratorFunctionHandlerRenderer =
@@ -222,7 +223,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 localClientRenderer,
                 restClientRenderer,
                 restRenderer,
-                restFunctionHandlerRenderer);
+                restFunctionHandlerRenderer,
+                remoteOperatorAdapterRenderer);
         }
 
         if (ctx.isTransportModeGrpc() && descriptorSet != null) {
@@ -378,7 +380,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             org.pipelineframework.processor.renderer.LocalClientStepRenderer localClientRenderer,
             RestClientStepRenderer restClientRenderer,
             RestResourceRenderer restRenderer,
-            RestFunctionHandlerRenderer restFunctionHandlerRenderer) throws IOException {
+            RestFunctionHandlerRenderer restFunctionHandlerRenderer,
+            RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer) throws IOException {
         stepArtifactGenerationService.generateArtifactsForModel(
             ctx,
             model,
@@ -395,7 +398,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             localClientRenderer,
             restClientRenderer,
             restRenderer,
-            restFunctionHandlerRenderer);
+            restFunctionHandlerRenderer,
+            remoteOperatorAdapterRenderer);
     }
 
     /**

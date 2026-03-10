@@ -126,6 +126,16 @@ Common semantic types:
 - `bytes`
 - `map`
 
+Map fields use `keyType` and `valueType` to define the entry contract:
+
+```yaml
+- number: 4
+  name: metadata
+  type: map
+  keyType: string
+  valueType: string
+```
+
 PascalCase type tokens are treated as named message references.
 
 ## Advanced Overrides
