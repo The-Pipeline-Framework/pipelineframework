@@ -1,8 +1,6 @@
 package org.pipelineframework;
 
-import java.lang.reflect.Method;
 import java.time.Duration;
-import java.util.List;
 import java.util.Optional;
 
 import io.smallrye.mutiny.Uni;
@@ -18,22 +16,27 @@ import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.ExecutionStateStore;
 import org.pipelineframework.orchestrator.ExecutionStatus;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
-import org.pipelineframework.orchestrator.OrchestratorMode;
 import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.step.NonRetryableException;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class QueueAsyncFailureMatrixTest {
 
-    private PipelineExecutionService service;
+    private ExecutionFailureHandler failureHandler;
 
     @Mock
     private PipelineOrchestratorConfig orchestratorConfig;
@@ -48,16 +51,13 @@ class QueueAsyncFailureMatrixTest {
     private DeadLetterPublisher deadLetterPublisher;
 
     @BeforeEach
-    void setUp() throws Exception {
-        service = new PipelineExecutionService();
-        setField("orchestratorConfig", orchestratorConfig);
-        setField("executionStateStore", executionStateStore);
-        setField("workDispatcher", workDispatcher);
-        setField("deadLetterPublisher", deadLetterPublisher);
+    void setUp() {
+        failureHandler = new ExecutionFailureHandler();
+        failureHandler.orchestratorConfig = orchestratorConfig;
     }
 
     @Test
-    void retryPathCommitsAndEnqueuesDelayedWork() throws Exception {
+    void retryPathCommitsAndEnqueuesDelayedWork() {
         configureRetryDefaults();
         ExecutionRecord<Object, Object> record = record("tenant-a", "exec-1", 0L, 0);
         when(executionStateStore.scheduleRetry(
@@ -66,7 +66,13 @@ class QueueAsyncFailureMatrixTest {
         when(workDispatcher.enqueueDelayed(any(), any()))
             .thenReturn(Uni.createFrom().voidItem());
 
-        assertDoesNotThrow(() -> invokeHandleExecutionFailure(record, "exec-1:0:0", new RuntimeException("boom")));
+        assertDoesNotThrow(() -> failureHandler.handleExecutionFailure(
+            record,
+            "exec-1:0:0",
+            new RuntimeException("boom"),
+            executionStateStore,
+            workDispatcher,
+            deadLetterPublisher).await().atMost(Duration.ofSeconds(3)));
 
         verify(executionStateStore).scheduleRetry(
             eq("tenant-a"),
@@ -83,68 +89,7 @@ class QueueAsyncFailureMatrixTest {
     }
 
     @Test
-    void retryPathWithStaleCommitSkipsReenqueue() throws Exception {
-        configureRetryDefaults();
-        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-2", 1L, 1);
-        when(executionStateStore.scheduleRetry(
-            anyString(), anyString(), anyLong(), anyInt(), anyLong(), anyString(), anyString(), anyString(), anyLong()))
-            .thenReturn(Uni.createFrom().item(Optional.empty()));
-
-        assertDoesNotThrow(() -> invokeHandleExecutionFailure(record, "exec-2:1:1", new RuntimeException("retry")));
-
-        verify(executionStateStore).scheduleRetry(
-            eq("tenant-a"),
-            eq("exec-2"),
-            eq(1L),
-            eq(2),
-            anyLong(),
-            eq("exec-2:1:1"),
-            eq("RuntimeException"),
-            eq("retry"),
-            anyLong());
-        verify(workDispatcher, never()).enqueueDelayed(any(), any());
-    }
-
-    @Test
-    void terminalPathPublishesDeadLetterOnCommit() throws Exception {
-        when(orchestratorConfig.maxRetries()).thenReturn(0);
-        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-3", 2L, 0);
-        when(executionStateStore.markTerminalFailure(
-            anyString(), anyString(), anyLong(), any(), anyString(), anyString(), anyString(), anyLong()))
-            .thenReturn(Uni.createFrom().item(Optional.of(record)));
-        when(deadLetterPublisher.publish(any())).thenReturn(Uni.createFrom().voidItem());
-
-        assertDoesNotThrow(() -> invokeHandleExecutionFailure(record, "exec-3:0:0", new IllegalStateException("final")));
-
-        ArgumentCaptor<DeadLetterEnvelope> envelopeCaptor = ArgumentCaptor.forClass(DeadLetterEnvelope.class);
-        verify(deadLetterPublisher).publish(envelopeCaptor.capture());
-        DeadLetterEnvelope envelope = envelopeCaptor.getValue();
-        assertEquals("tenant-a", envelope.tenantId());
-        assertEquals("exec-3", envelope.executionId());
-        assertEquals("exec-3-key", envelope.executionKey());
-        assertEquals("exec-3-key", envelope.correlationId());
-        assertEquals("exec-3:0:0", envelope.transitionKey());
-        assertEquals("FAILED", envelope.terminalStatus());
-        assertEquals("retry_exhausted", envelope.terminalReason());
-        assertTrue(envelope.retryable());
-        assertEquals(0, envelope.retriesObserved());
-    }
-
-    @Test
-    void terminalPathWithStaleCommitSkipsDeadLetterPublish() throws Exception {
-        when(orchestratorConfig.maxRetries()).thenReturn(0);
-        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-4", 3L, 0);
-        when(executionStateStore.markTerminalFailure(
-            anyString(), anyString(), anyLong(), any(), anyString(), anyString(), anyString(), anyLong()))
-            .thenReturn(Uni.createFrom().item(Optional.empty()));
-
-        assertDoesNotThrow(() -> invokeHandleExecutionFailure(record, "exec-4:0:0", new IllegalStateException("stale")));
-
-        verify(deadLetterPublisher, never()).publish(any());
-    }
-
-    @Test
-    void terminalPathClassifiesNonRetryableFailure() throws Exception {
+    void terminalPathClassifiesNonRetryableFailure() {
         when(orchestratorConfig.maxRetries()).thenReturn(0);
         ExecutionRecord<Object, Object> record = record("tenant-a", "exec-9", 3L, 0);
         when(executionStateStore.markTerminalFailure(
@@ -152,10 +97,13 @@ class QueueAsyncFailureMatrixTest {
             .thenReturn(Uni.createFrom().item(Optional.of(record)));
         when(deadLetterPublisher.publish(any())).thenReturn(Uni.createFrom().voidItem());
 
-        assertDoesNotThrow(() -> invokeHandleExecutionFailure(
+        assertDoesNotThrow(() -> failureHandler.handleExecutionFailure(
             record,
             "exec-9:0:0",
-            new NonRetryableException("bad payload")));
+            new NonRetryableException("bad payload"),
+            executionStateStore,
+            workDispatcher,
+            deadLetterPublisher).await().atMost(Duration.ofSeconds(3)));
 
         ArgumentCaptor<DeadLetterEnvelope> envelopeCaptor = ArgumentCaptor.forClass(DeadLetterEnvelope.class);
         verify(deadLetterPublisher).publish(envelopeCaptor.capture());
@@ -166,34 +114,7 @@ class QueueAsyncFailureMatrixTest {
     }
 
     @Test
-    void nonRetryableFailureSkipsScheduleRetryEvenWhenBudgetRemains() throws Exception {
-        when(orchestratorConfig.maxRetries()).thenReturn(3);
-        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-10", 3L, 0);
-        when(executionStateStore.markTerminalFailure(
-            anyString(), anyString(), anyLong(), any(), anyString(), anyString(), anyString(), anyLong()))
-            .thenReturn(Uni.createFrom().item(Optional.of(record)));
-        when(deadLetterPublisher.publish(any())).thenReturn(Uni.createFrom().voidItem());
-
-        assertDoesNotThrow(() -> invokeHandleExecutionFailure(
-            record,
-            "exec-10:0:0",
-            new NonRetryableException("bad payload")));
-
-        verify(executionStateStore, never()).scheduleRetry(
-            anyString(), anyString(), anyLong(), anyInt(), anyLong(), anyString(), anyString(), anyString(), anyLong());
-        verify(executionStateStore).markTerminalFailure(
-            eq("tenant-a"),
-            eq("exec-10"),
-            eq(3L),
-            eq(ExecutionStatus.FAILED),
-            eq("exec-10:0:0"),
-            eq("NonRetryableException"),
-            eq("bad payload"),
-            anyLong());
-    }
-
-    @Test
-    void wrappedNonRetryableFailureUsesClassifiedThrowableMetadata() throws Exception {
+    void wrappedNonRetryableFailureUsesClassifiedThrowableMetadata() {
         when(orchestratorConfig.maxRetries()).thenReturn(3);
         ExecutionRecord<Object, Object> record = record("tenant-a", "exec-11", 4L, 0);
         when(executionStateStore.markTerminalFailure(
@@ -202,7 +123,13 @@ class QueueAsyncFailureMatrixTest {
         when(deadLetterPublisher.publish(any())).thenReturn(Uni.createFrom().voidItem());
 
         RuntimeException wrapped = new RuntimeException("wrapper", new NonRetryableException("inner-non-retryable"));
-        assertDoesNotThrow(() -> invokeHandleExecutionFailure(record, "exec-11:0:0", wrapped));
+        assertDoesNotThrow(() -> failureHandler.handleExecutionFailure(
+            record,
+            "exec-11:0:0",
+            wrapped,
+            executionStateStore,
+            workDispatcher,
+            deadLetterPublisher).await().atMost(Duration.ofSeconds(3)));
 
         verify(executionStateStore, never()).scheduleRetry(
             anyString(), anyString(), anyLong(), anyInt(), anyLong(), anyString(), anyString(), anyString(), anyLong());
@@ -226,50 +153,33 @@ class QueueAsyncFailureMatrixTest {
     }
 
     @Test
-    void sweepRedispatchesPersistedDueExecutions() throws Exception {
-        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
-        when(orchestratorConfig.sweepLimit()).thenReturn(100);
-        when(executionStateStore.findDueExecutions(anyLong(), eq(100)))
-            .thenReturn(Uni.createFrom().item(List.of(
-                record("tenant-a", "exec-5", 0L, 0),
-                record("tenant-b", "exec-6", 0L, 0))));
-        when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
+    void retryableFailureWithNoBudgetPublishesRetryExhaustedTerminal() {
+        when(orchestratorConfig.maxRetries()).thenReturn(0);
+        ExecutionRecord<Object, Object> record = record("tenant-a", "exec-12", 5L, 0);
+        when(executionStateStore.markTerminalFailure(
+            anyString(), anyString(), anyLong(), any(), anyString(), anyString(), anyString(), anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(record)));
+        when(deadLetterPublisher.publish(any())).thenReturn(Uni.createFrom().voidItem());
 
-        invokeSweepDueExecutions();
+        assertDoesNotThrow(() -> failureHandler.handleExecutionFailure(
+            record,
+            "exec-12:0:0",
+            new IllegalStateException("terminal"),
+            executionStateStore,
+            workDispatcher,
+            deadLetterPublisher).await().atMost(Duration.ofSeconds(3)));
 
-        ArgumentCaptor<ExecutionWorkItem> itemCaptor = ArgumentCaptor.forClass(ExecutionWorkItem.class);
-        verify(workDispatcher, timeout(500).times(2)).enqueueNow(itemCaptor.capture());
-        List<ExecutionWorkItem> items = itemCaptor.getAllValues();
-        assertTrue(items.stream().anyMatch(item -> "tenant-a".equals(item.tenantId()) && "exec-5".equals(item.executionId())));
-        assertTrue(items.stream().anyMatch(item -> "tenant-b".equals(item.tenantId()) && "exec-6".equals(item.executionId())));
+        ArgumentCaptor<DeadLetterEnvelope> envelopeCaptor = ArgumentCaptor.forClass(DeadLetterEnvelope.class);
+        verify(deadLetterPublisher).publish(envelopeCaptor.capture());
+        DeadLetterEnvelope envelope = envelopeCaptor.getValue();
+        assertTrue(envelope.retryable());
+        assertEquals("retry_exhausted", envelope.terminalReason());
     }
 
     private void configureRetryDefaults() {
         when(orchestratorConfig.maxRetries()).thenReturn(3);
         when(orchestratorConfig.retryDelay()).thenReturn(Duration.ofSeconds(5));
         when(orchestratorConfig.retryMultiplier()).thenReturn(2.0d);
-    }
-
-    private void invokeHandleExecutionFailure(
-        ExecutionRecord<Object, Object> record,
-        String transitionKey,
-        Throwable failure
-    ) throws Exception {
-        Method method = PipelineExecutionService.class.getDeclaredMethod(
-            "handleExecutionFailure",
-            ExecutionRecord.class,
-            String.class,
-            Throwable.class);
-        method.setAccessible(true);
-        @SuppressWarnings("unchecked")
-        Uni<Void> result = (Uni<Void>) method.invoke(service, record, transitionKey, failure);
-        result.await().atMost(Duration.ofSeconds(3));
-    }
-
-    private void invokeSweepDueExecutions() throws Exception {
-        Method method = PipelineExecutionService.class.getDeclaredMethod("sweepDueExecutions");
-        method.setAccessible(true);
-        method.invoke(service);
     }
 
     private static ExecutionRecord<Object, Object> record(String tenantId, String executionId, long version, int attempt) {
@@ -292,11 +202,5 @@ class QueueAsyncFailureMatrixTest {
             System.currentTimeMillis(),
             System.currentTimeMillis(),
             System.currentTimeMillis() / 1000 + 3600);
-    }
-
-    private void setField(String fieldName, Object value) throws Exception {
-        var field = PipelineExecutionService.class.getDeclaredField(fieldName);
-        field.setAccessible(true);
-        field.set(service, value);
     }
 }

@@ -14,15 +14,13 @@
  * limitations under the License.
  */
 
-package org.pipelineframework.pipeline;
+package org.pipelineframework;
 
-import java.lang.reflect.Method;
 import java.util.List;
 import jakarta.inject.Inject;
 
 import io.quarkus.test.junit.QuarkusTest;
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.PipelineExecutionService;
 import org.pipelineframework.pipeline.order.OrderedStepA;
 import org.pipelineframework.pipeline.order.OrderedStepB;
 
@@ -35,12 +33,8 @@ class PipelineOrderTest {
     PipelineExecutionService pipelineExecutionService;
 
     @Test
-    void loadsStepsInPipelineOrder() throws Exception {
-        Method method = PipelineExecutionService.class.getDeclaredMethod("loadPipelineSteps");
-        method.setAccessible(true);
-
-        @SuppressWarnings("unchecked")
-        List<Object> steps = (List<Object>) method.invoke(pipelineExecutionService);
+    void loadsStepsInPipelineOrder() {
+        List<Object> steps = pipelineExecutionService.loadPipelineSteps();
 
         List<Class<?>> stepTypes = steps.stream()
             .map(step -> {
@@ -53,5 +47,4 @@ class PipelineOrderTest {
             List.of(OrderedStepA.class, OrderedStepB.class, OrderedStepA.class),
             stepTypes);
     }
-
 }
