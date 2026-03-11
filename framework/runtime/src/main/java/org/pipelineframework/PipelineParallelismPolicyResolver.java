@@ -31,6 +31,7 @@ class PipelineParallelismPolicyResolver {
 
     private static final Logger logger = Logger.getLogger(PipelineParallelismPolicyResolver.class);
     static final int DEFAULT_MAX_CONCURRENCY = 128;
+    private static final int MAX_ALLOWED_CONCURRENCY = 1024;
 
     enum StepParallelismType {
         ONE_TO_ONE(false),
@@ -61,10 +62,20 @@ class PipelineParallelismPolicyResolver {
             logger.warnf("Invalid maxConcurrency=%s; using 1", configured);
             return 1;
         }
+        if (configured > MAX_ALLOWED_CONCURRENCY) {
+            logger.warnf("Configured maxConcurrency=%s exceeds cap=%s; using %s",
+                configured,
+                MAX_ALLOWED_CONCURRENCY,
+                MAX_ALLOWED_CONCURRENCY);
+            return MAX_ALLOWED_CONCURRENCY;
+        }
         return configured;
     }
 
-    boolean shouldParallelize(Object step, ParallelismPolicy policy, StepParallelismType stepType) {
+    static boolean shouldParallelize(Object step, ParallelismPolicy policy, StepParallelismType stepType) {
+        if (stepType == null) {
+            throw new IllegalArgumentException("stepType must not be null");
+        }
         OrderingRequirement orderingRequirement = OrderingRequirement.RELAXED;
         ThreadSafety threadSafety = ThreadSafety.SAFE;
         boolean hasHints = false;
@@ -99,6 +110,8 @@ class PipelineParallelismPolicyResolver {
             return false;
         }
 
+        // STRICT_ADVISED has already been handled for SEQUENTIAL above. Under AUTO we warn and
+        // keep execution sequential; only an explicit PARALLEL policy overrides the advice.
         if (orderingRequirement == OrderingRequirement.STRICT_ADVISED) {
             if (effectivePolicy == ParallelismPolicy.AUTO) {
                 logger.warnf("Step %s advises strict ordering; AUTO will run sequentially. " +

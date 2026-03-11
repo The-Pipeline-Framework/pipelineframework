@@ -42,14 +42,14 @@ class PipelineCacheSupportFactory {
     String cachePolicyDefault;
 
     PipelineRunner.CacheReadSupport buildCacheReadSupport() {
-        if (cacheReaders == null) {
+        if (cacheReaders == null || cacheReaders.isUnsatisfied()) {
             return null;
         }
         List<PipelineCacheReader> readers = cacheReaders.stream()
             .sorted(Comparator.comparingInt(PipelineCacheReader::priority).reversed()
                 .thenComparing(cacheReader -> cacheReader.getClass().getName()))
             .toList();
-        if (readers.isEmpty() || cacheKeyStrategies == null) {
+        if (readers.isEmpty() || cacheKeyStrategies == null || cacheKeyStrategies.isUnsatisfied()) {
             return null;
         }
         if (readers.size() > 1) {

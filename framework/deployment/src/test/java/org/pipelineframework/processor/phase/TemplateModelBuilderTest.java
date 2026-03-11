@@ -49,7 +49,7 @@ class TemplateModelBuilderTest {
     }
 
     @Test
-    void buildModels_blankBasePackage_rejectedByConfig() {
+    void pipelineTemplateConfig_blankBasePackage_throwsException() {
         PipelineTemplateStep step = step("Process Data", "Input", "Output");
         IllegalArgumentException ex = assertThrows(
             IllegalArgumentException.class,

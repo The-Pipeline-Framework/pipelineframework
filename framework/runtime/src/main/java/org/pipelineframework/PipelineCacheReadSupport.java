@@ -17,6 +17,7 @@
 package org.pipelineframework;
 
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 
 import org.pipelineframework.cache.CacheKeyStrategy;
@@ -26,14 +27,14 @@ import org.pipelineframework.context.PipelineContext;
 
 class PipelineCacheReadSupport {
 
-    final PipelineCacheReader reader;
+    private final PipelineCacheReader reader;
     private final List<CacheKeyStrategy> strategies;
     private final String defaultPolicy;
 
     PipelineCacheReadSupport(PipelineCacheReader reader, List<CacheKeyStrategy> strategies, String defaultPolicy) {
-        this.reader = reader;
-        this.strategies = strategies;
-        this.defaultPolicy = defaultPolicy;
+        this.reader = Objects.requireNonNull(reader, "reader must not be null");
+        this.strategies = List.copyOf(Objects.requireNonNull(strategies, "strategies must not be null"));
+        this.defaultPolicy = Objects.requireNonNull(defaultPolicy, "defaultPolicy must not be null");
     }
 
     Optional<String> resolveKey(Object item, PipelineContext context) {
@@ -44,6 +45,9 @@ class PipelineCacheReadSupport {
         if (item == null) {
             return Optional.empty();
         }
+        // Key resolution is target-aware first: if any strategy supports the requested target type,
+        // only those strategies participate and an all-empty result means an explicit no-match.
+        // If no strategy supports the target type, fall back to the full strategy list.
         boolean foundSupporting = false;
         if (targetType != null) {
             for (CacheKeyStrategy strategy : strategies) {
@@ -90,7 +94,7 @@ class PipelineCacheReadSupport {
     }
 
     String withVersionPrefix(String key, PipelineContext context) {
-        if (context == null) {
+        if (key == null || context == null) {
             return key;
         }
         String versionTag = context.versionTag();
@@ -98,5 +102,9 @@ class PipelineCacheReadSupport {
             return key;
         }
         return versionTag + ":" + key;
+    }
+
+    PipelineCacheReader reader() {
+        return reader;
     }
 }

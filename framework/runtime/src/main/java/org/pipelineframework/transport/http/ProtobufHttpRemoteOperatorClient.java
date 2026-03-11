@@ -148,12 +148,11 @@ public class ProtobufHttpRemoteOperatorClient {
             return metadata;
         }
         String seed = UUID.nameUUIDFromBytes(requestBody).toString();
-        String invocationId = UUID.randomUUID().toString();
         long now = Instant.now().toEpochMilli();
         return new TransportDispatchMetadata(
             "remote-" + seed,
             "remote-" + seed,
-            operatorId + ":" + seed + ":" + invocationId,
+            operatorId + ":" + seed,
             0,
             null,
             now,

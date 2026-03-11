@@ -159,7 +159,7 @@ public record PipelineTemplateField(
             name,
             type,
             Objects.requireNonNullElse(resolvedCanonicalType, canonicalType),
-            resolvedMessageRef,
+            Objects.requireNonNullElse(resolvedMessageRef, messageRef),
             javaType,
             protoType,
             keyType,

@@ -17,8 +17,10 @@
 package org.pipelineframework;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -73,11 +75,14 @@ class PipelineStepOrderer {
 
         Map<String, List<Object>> stepMap = new HashMap<>();
         for (Object step : steps) {
+            if (step == null) {
+                continue;
+            }
             stepMap.computeIfAbsent(step.getClass().getName(), ignored -> new ArrayList<>()).add(step);
         }
 
         List<Object> orderedSteps = new ArrayList<>();
-        Set<Object> addedSteps = new HashSet<>();
+        Set<Object> addedSteps = Collections.newSetFromMap(new IdentityHashMap<>());
         for (String stepClassName : filteredPipelineOrder) {
             List<Object> stepInstances = stepMap.get(stepClassName);
             if (stepInstances != null && !stepInstances.isEmpty()) {

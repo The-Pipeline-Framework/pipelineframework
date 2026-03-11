@@ -116,6 +116,9 @@ public class PipelineTemplateConfigLoader {
      */
     private Object loadYaml(Path configPath) {
         LoaderOptions loaderOptions = new LoaderOptions();
+        loaderOptions.setCodePointLimit(3_000_000);
+        loaderOptions.setMaxAliasesForCollections(50);
+        loaderOptions.setAllowDuplicateKeys(false);
         Yaml yaml = new Yaml(new SafeConstructor(loaderOptions));
         try (Reader reader = Files.newBufferedReader(configPath)) {
             return yaml.load(reader);
@@ -216,6 +219,8 @@ public class PipelineTemplateConfigLoader {
                 throw new IllegalStateException("Message name '" + name + "' conflicts with a built-in semantic type");
             }
             if (!(entry.getValue() instanceof Map<?, ?> messageMap)) {
+                LOG.warning("Skipping malformed message entry: key=" + name
+                    + " valueType=" + (entry.getValue() == null ? "null" : entry.getValue().getClass().getName()));
                 continue;
             }
             List<PipelineTemplateField> fields = readFields(messageMap.get("fields"), 2);
@@ -286,13 +291,14 @@ public class PipelineTemplateConfigLoader {
      */
     private Map<String, PipelineTemplateMessage> normalizeMessages(Map<String, PipelineTemplateMessage> rawMessages) {
         Set<String> knownNames = new LinkedHashSet<>(rawMessages.keySet());
+        List<String> knownNamesList = List.copyOf(knownNames);
         Map<String, PipelineTemplateMessage> normalized = new LinkedHashMap<>();
         for (Map.Entry<String, PipelineTemplateMessage> entry : rawMessages.entrySet()) {
             String name = entry.getKey();
             PipelineTemplateMessage rawMessage = entry.getValue();
             List<PipelineTemplateField> normalizedFields = new ArrayList<>();
             for (PipelineTemplateField field : rawMessage.fields()) {
-                normalizedFields.add(PipelineTemplateTypeMappings.normalizeV2Field(field, List.copyOf(knownNames)));
+                normalizedFields.add(PipelineTemplateTypeMappings.normalizeV2Field(field, knownNamesList));
             }
             PipelineTemplateReserved reserved = rawMessage.reserved();
             validateReserved(name, normalizedFields, reserved);
@@ -354,12 +360,12 @@ public class PipelineTemplateConfigLoader {
         String stepName,
         String direction
     ) {
+        List<String> knownMessages = List.copyOf(messages.keySet());
         if (typeName == null || typeName.isBlank()) {
             if (inlineFields == null || inlineFields.isEmpty()) {
                 return List.of();
             }
             List<PipelineTemplateField> normalizedInline = new ArrayList<>();
-            List<String> knownMessages = List.copyOf(messages.keySet());
             for (PipelineTemplateField field : inlineFields) {
                 normalizedInline.add(PipelineTemplateTypeMappings.normalizeV2Field(field, knownMessages));
             }
@@ -373,7 +379,6 @@ public class PipelineTemplateConfigLoader {
         }
         if (inlineFields != null && !inlineFields.isEmpty()) {
             List<PipelineTemplateField> normalizedInline = new ArrayList<>();
-            List<String> knownMessages = List.copyOf(messages.keySet());
             for (PipelineTemplateField field : inlineFields) {
                 normalizedInline.add(PipelineTemplateTypeMappings.normalizeV2Field(field, knownMessages));
             }

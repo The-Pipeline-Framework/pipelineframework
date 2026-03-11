@@ -42,7 +42,7 @@ public final class PipelineIdlCompatibilityChecker {
         List<String> errors = new ArrayList<>();
         compareSteps(baseline.steps(), current.steps(), errors);
         compareMessages(baseline.messages(), current.messages(), errors);
-        return errors;
+        return List.copyOf(errors);
     }
 
     /**

@@ -175,25 +175,25 @@ class PipelineRunnerCacheReadTest {
 
     @Test
     void cacheReadFailureFallsBackToMissWhenPolicyDoesNotRequireCache() {
-        StatusCapturingStep step = new StatusCapturingStep();
-        PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
-            new FailingReader(),
-            List.of(new FixedKeyStrategy()),
-            "prefer-cache");
-
-        PipelineContext context = new PipelineContext("v1", null, "prefer-cache");
-
-        Object result = PipelineRunner.applyOneToOneUnchecked(
-            step,
-            Uni.createFrom().item("input"),
-            false,
-            128,
-            null,
-            null,
-            support,
-            context);
-
         try {
+            StatusCapturingStep step = new StatusCapturingStep();
+            PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
+                new FailingReader(),
+                List.of(new FixedKeyStrategy()),
+                "prefer-cache");
+
+            PipelineContext context = new PipelineContext("v1", null, "prefer-cache");
+
+            Object result = PipelineRunner.applyOneToOneUnchecked(
+                step,
+                Uni.createFrom().item("input"),
+                false,
+                128,
+                null,
+                null,
+                support,
+                context);
+
             String value = ((Uni<String>) result).await().indefinitely();
             assertEquals("computed-input", value);
             assertEquals(1, step.calls.get());

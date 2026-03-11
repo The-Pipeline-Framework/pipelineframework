@@ -460,7 +460,7 @@ public class StepDefinitionParser {
             return null;
         }
         try {
-            int parsed;
+            long parsed;
             if (rawValue instanceof Number number) {
                 double value = number.doubleValue();
                 if (value != Math.rint(value)) {
@@ -470,9 +470,16 @@ public class StepDefinitionParser {
                     report(Diagnostic.Kind.ERROR, message);
                     throw new IllegalArgumentException(message);
                 }
-                parsed = (int) value;
+                parsed = number.longValue();
             } else {
-                parsed = Integer.parseInt(String.valueOf(rawValue).trim());
+                parsed = Long.parseLong(String.valueOf(rawValue).trim());
+            }
+            if (parsed > Integer.MAX_VALUE) {
+                String message = "Skipping step '" + stepName + "': invalid integer value for " + fieldName
+                    + " -> '" + rawValue + "'";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                throw new IllegalArgumentException(message);
             }
             if (parsed <= 0) {
                 String message = "Skipping step '" + stepName + "': " + fieldName + " must be > 0";
@@ -480,7 +487,7 @@ public class StepDefinitionParser {
                 report(Diagnostic.Kind.ERROR, message);
                 throw new IllegalArgumentException(message);
             }
-            return parsed;
+            return (int) parsed;
         } catch (NumberFormatException ex) {
             String message = "Skipping step '" + stepName + "': invalid integer value for " + fieldName
                 + " -> '" + rawValue + "'";

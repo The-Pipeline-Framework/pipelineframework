@@ -28,6 +28,14 @@ public record PipelineTemplateRemoteTarget(
     String url,
     String urlConfigKey
 ) {
+    public static PipelineTemplateRemoteTarget ofUrl(String url) {
+        return new PipelineTemplateRemoteTarget(url, null);
+    }
+
+    public static PipelineTemplateRemoteTarget ofUrlConfigKey(String urlConfigKey) {
+        return new PipelineTemplateRemoteTarget(null, urlConfigKey);
+    }
+
     public PipelineTemplateRemoteTarget {
         url = normalize(url);
         urlConfigKey = normalize(urlConfigKey);

@@ -17,8 +17,13 @@
 package org.pipelineframework;
 
 import java.util.List;
+import java.util.Optional;
 
+import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.cache.CacheKeyStrategy;
+import org.pipelineframework.cache.CachePolicy;
+import org.pipelineframework.context.PipelineContext;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -56,14 +61,18 @@ class PipelineCacheSupportFactoryTest {
         PipelineRunner.CacheReadSupport support = factory.buildCacheReadSupport();
 
         assertNotNull(support);
-        assertEquals("cached-high", support.reader.get("v1:key").await().indefinitely().orElseThrow());
-        assertEquals(org.pipelineframework.cache.CachePolicy.REQUIRE_CACHE, support.resolvePolicy(null));
+        Uni<Optional<Object>> readUni = support.reader().get("v1:key");
+        Optional<Object> cached = readUni.await().indefinitely();
+        Object actual = cached.orElseThrow();
+        assertEquals("cached-high", actual);
+        assertEquals(CachePolicy.REQUIRE_CACHE, support.resolvePolicy(null));
     }
 
     @Test
     void tiesCacheKeyStrategiesByClassNameDeterministically() {
         PipelineCacheSupportFactory factory = new PipelineCacheSupportFactory();
         factory.cacheReaders = new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of(new PipelineRunnerCacheReadTest.HighPriorityReader()));
+        // Equal-priority strategies are ordered by class name, so AStrategy wins over ZStrategy.
         factory.cacheKeyStrategies = new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of(
             new ZStrategy(),
             new AStrategy()));
@@ -75,10 +84,10 @@ class PipelineCacheSupportFactoryTest {
         assertEquals("a", support.resolveKey("input", null).orElseThrow());
     }
 
-    static final class AStrategy implements org.pipelineframework.cache.CacheKeyStrategy {
+    static final class AStrategy implements CacheKeyStrategy {
         @Override
-        public java.util.Optional<String> resolveKey(Object item, org.pipelineframework.context.PipelineContext context) {
-            return java.util.Optional.of("a");
+        public Optional<String> resolveKey(Object item, PipelineContext context) {
+            return Optional.of("a");
         }
 
         @Override
@@ -87,10 +96,10 @@ class PipelineCacheSupportFactoryTest {
         }
     }
 
-    static final class ZStrategy implements org.pipelineframework.cache.CacheKeyStrategy {
+    static final class ZStrategy implements CacheKeyStrategy {
         @Override
-        public java.util.Optional<String> resolveKey(Object item, org.pipelineframework.context.PipelineContext context) {
-            return java.util.Optional.of("z");
+        public Optional<String> resolveKey(Object item, PipelineContext context) {
+            return Optional.of("z");
         }
 
         @Override

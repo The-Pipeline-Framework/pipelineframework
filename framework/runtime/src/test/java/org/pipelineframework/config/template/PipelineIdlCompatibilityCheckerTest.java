@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PipelineIdlCompatibilityCheckerTest {
@@ -122,6 +123,19 @@ class PipelineIdlCompatibilityCheckerTest {
     }
 
     @Test
+    void changingMapKeyTypeIsIncompatible() {
+        PipelineIdlSnapshot baseline = snapshot(List.of(
+            field(1, "metadata", "map", null, "string", "string", false, false)));
+        PipelineIdlSnapshot current = snapshot(List.of(
+            field(1, "metadata", "map", null, "int64", "string", false, false)));
+
+        List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
+
+        assertTrue(errors.stream().anyMatch(msg -> msg.contains("changed map key type")),
+            "expected errors containing 'changed map key type', got: " + errors);
+    }
+
+    @Test
     void changingRepeatedStructureIsIncompatible() {
         PipelineIdlSnapshot baseline = snapshot(List.of(
             field(1, "auditTrail", "string", null, null, null, false, false)));
@@ -184,6 +198,47 @@ class PipelineIdlCompatibilityCheckerTest {
             "expected errors containing 'reused reserved field name', got: " + errors);
     }
 
+    @Test
+    void changingStepOutputMessageIsIncompatible() {
+        PipelineIdlSnapshot baseline = snapshotWith(
+            Map.of(
+                "ChargeRequest",
+                message("ChargeRequest", List.of(simpleField(1, "orderId", "uuid")), List.of(), List.of()),
+                "ChargeResult",
+                message("ChargeResult", List.of(simpleField(1, "paymentId", "uuid")), List.of(), List.of())),
+            List.of(new PipelineIdlSnapshot.StepSnapshot("Charge Card", "ChargeRequest", "ChargeResult")));
+        PipelineIdlSnapshot current = snapshotWith(
+            baseline.messages(),
+            List.of(new PipelineIdlSnapshot.StepSnapshot("Charge Card", "ChargeRequest", "AltChargeResult")));
+
+        List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
+
+        assertEquals(1, errors.size());
+        assertTrue(errors.getFirst().contains("changed output message"));
+    }
+
+    @Test
+    void removingStepIsIncompatible() {
+        PipelineIdlSnapshot baseline = snapshot(List.of(simpleField(1, "paymentId", "uuid")));
+        PipelineIdlSnapshot current = snapshotWith(baseline.messages(), List.of());
+
+        List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
+
+        assertEquals(1, errors.size());
+        assertTrue(errors.getFirst().contains("Missing step in current IDL"));
+    }
+
+    @Test
+    void deprecatingFieldRemainsCompatible() {
+        PipelineIdlSnapshot baseline = snapshot(List.of(simpleField(1, "paymentId", "uuid")));
+        PipelineIdlSnapshot current = snapshot(List.of(field(1, "paymentId", "uuid", null, null, null, false, false, true, "string")));
+
+        List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
+
+        assertTrue(errors.isEmpty(), "Expected deprecation metadata to remain compatible, got: " + errors);
+        assertThrows(UnsupportedOperationException.class, () -> errors.add("mutate"));
+    }
+
     private PipelineIdlSnapshot snapshot(List<PipelineIdlSnapshot.FieldSnapshot> fields) {
         return snapshotWith(
             Map.of(
@@ -224,6 +279,10 @@ class PipelineIdlCompatibilityCheckerTest {
         boolean repeated
     ) {
         return field(number, name, canonicalType, messageRef, keyType, valueType, optional, repeated, false, "string");
+    }
+
+    private PipelineIdlSnapshot.FieldSnapshot simpleField(int number, String name, String canonicalType) {
+        return field(number, name, canonicalType, null, null, null, false, false);
     }
 
     private PipelineIdlSnapshot.FieldSnapshot field(

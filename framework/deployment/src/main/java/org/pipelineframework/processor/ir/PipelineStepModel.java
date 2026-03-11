@@ -71,11 +71,9 @@ public record PipelineStepModel(
      * @param externalMapper the operator mapper class if operator mapping is used, otherwise null
      * @param mapperFallbackMode mapper fallback strategy for delegated mapping when no mapper is resolved
      * @throws IllegalArgumentException if any parameter documented as 'must not be null' is null
-     */
-    @SuppressWarnings("ConstantValue")
-    /**
      * @deprecated prefer {@link Builder} for construction.
      */
+    @SuppressWarnings("ConstantValue")
     @Deprecated
     public PipelineStepModel(String serviceName,
             String generatedName,

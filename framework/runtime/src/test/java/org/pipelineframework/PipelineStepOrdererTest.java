@@ -42,7 +42,7 @@ class PipelineStepOrdererTest {
             new TestSteps.TestStepOneToMany(),
             new TestSteps.TestStepManyToMany());
 
-        List<Object> orderedSteps = withContextClassLoader(classLoaderFor(tempDir), () -> orderer.orderSteps(originalSteps));
+        List<Object> orderedSteps = withContextClassLoader(tempDir, () -> orderer.orderSteps(originalSteps));
 
         assertEquals(originalSteps, orderedSteps);
     }
@@ -84,31 +84,23 @@ class PipelineStepOrdererTest {
         assertEquals(List.of(first, second), ordered);
     }
 
-    private static URLClassLoader classLoaderFor(Path root) {
-        try {
-            return new URLClassLoader(new URL[] {root.toUri().toURL()}, Thread.currentThread().getContextClassLoader());
+    private static <T> T withContextClassLoader(Path root, java.util.concurrent.Callable<T> callable) {
+        try (URLClassLoader classLoader = new URLClassLoader(
+            new URL[] {root.toUri().toURL()},
+            Thread.currentThread().getContextClassLoader())) {
+            ClassLoader previous = Thread.currentThread().getContextClassLoader();
+            Thread.currentThread().setContextClassLoader(classLoader);
+            try {
+                return callable.call();
+            } catch (RuntimeException e) {
+                throw e;
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            } finally {
+                Thread.currentThread().setContextClassLoader(previous);
+            }
         } catch (IOException e) {
             throw new IllegalStateException(e);
-        }
-    }
-
-    private static <T> T withContextClassLoader(ClassLoader classLoader, java.util.concurrent.Callable<T> callable) {
-        ClassLoader previous = Thread.currentThread().getContextClassLoader();
-        Thread.currentThread().setContextClassLoader(classLoader);
-        try {
-            return callable.call();
-        } catch (RuntimeException e) {
-            throw e;
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        } finally {
-            Thread.currentThread().setContextClassLoader(previous);
-            if (classLoader instanceof URLClassLoader urlClassLoader) {
-                try {
-                    urlClassLoader.close();
-                } catch (IOException ignored) {
-                }
-            }
         }
     }
 }

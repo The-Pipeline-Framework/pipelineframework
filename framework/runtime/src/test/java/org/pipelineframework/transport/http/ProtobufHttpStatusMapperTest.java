@@ -23,6 +23,7 @@ import org.junit.jupiter.api.Test;
 import org.pipelineframework.step.NonRetryableException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProtobufHttpStatusMapperTest {
@@ -111,5 +112,15 @@ class ProtobufHttpStatusMapperTest {
         assertEquals(Code.INVALID_ARGUMENT_VALUE, status.getCode());
         assertEquals(400, ProtobufHttpStatusMapper.toHttpStatus(status));
         assertTrue(status.getMessage().contains("bad wrapped input"));
+    }
+
+    @Test
+    void treatsDataLossAsNonRetryable() {
+        Status status = Status.newBuilder()
+            .setCode(Code.DATA_LOSS_VALUE)
+            .setMessage("corrupt")
+            .build();
+
+        assertFalse(ProtobufHttpStatusMapper.isRetryable(status));
     }
 }

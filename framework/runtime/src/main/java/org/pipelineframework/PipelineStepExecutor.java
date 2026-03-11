@@ -47,7 +47,6 @@ class PipelineStepExecutor {
     Object applyStep(
         Object step,
         Object current,
-        PipelineParallelismPolicyResolver parallelismPolicyResolver,
         org.pipelineframework.config.ParallelismPolicy parallelismPolicy,
         int maxConcurrency,
         PipelineTelemetry telemetry,
@@ -56,7 +55,7 @@ class PipelineStepExecutor {
         PipelineContext contextSnapshot) {
         return switch (step) {
             case StepOneToOne<?, ?> stepOneToOne -> {
-                boolean parallel = parallelismPolicyResolver.shouldParallelize(
+                boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
                     stepOneToOne,
                     parallelismPolicy,
                     PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_ONE);
@@ -64,7 +63,7 @@ class PipelineStepExecutor {
                     contextSnapshot);
             }
             case StepOneToOneCompletableFuture<?, ?> stepFuture -> {
-                boolean parallel = parallelismPolicyResolver.shouldParallelize(
+                boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
                     stepFuture,
                     parallelismPolicy,
                     PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_ONE_FUTURE);
@@ -72,7 +71,7 @@ class PipelineStepExecutor {
                     contextSnapshot);
             }
             case StepOneToMany<?, ?> stepOneToMany -> {
-                boolean parallel = parallelismPolicyResolver.shouldParallelize(
+                boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
                     stepOneToMany,
                     parallelismPolicy,
                     PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_MANY);
@@ -82,10 +81,7 @@ class PipelineStepExecutor {
             case ManyToOne<?, ?> manyToOne -> applyManyToOneUnchecked(manyToOne, current, telemetry, telemetryContext, contextSnapshot);
             case StepManyToMany<?, ?> manyToMany -> applyManyToManyUnchecked(manyToMany, current, telemetry, telemetryContext,
                 contextSnapshot);
-            default -> {
-                logger.errorf("Step not recognised: %s", step.getClass().getName());
-                throw new IllegalArgumentException("Step not recognised: " + step.getClass().getName());
-            }
+            default -> throw new IllegalArgumentException("Step not recognised: " + step.getClass().getName());
         };
     }
 
@@ -163,7 +159,9 @@ class PipelineStepExecutor {
                 })
                 .concatenate();
         }
-        throw new IllegalArgumentException(MessageFormat.format("Unsupported current type for StepOneToOne: {0}", current));
+        throw new IllegalArgumentException(MessageFormat.format(
+            "Unsupported current type for StepOneToOne: {0}",
+            current == null ? "null" : current.getClass().getName()));
     }
 
     private static <I, O> Uni<O> applyOneToOneWithCache(
@@ -206,7 +204,7 @@ class PipelineStepExecutor {
             });
         }
         String key = cacheReadSupport.withVersionPrefix(resolvedKey.get(), contextSnapshot);
-        return cacheReadSupport.reader.get(key)
+        return cacheReadSupport.reader().get(key)
             .onItemOrFailure().transformToUni((cached, failure) -> {
                 if (failure != null) {
                     if (policy == CachePolicy.REQUIRE_CACHE) {

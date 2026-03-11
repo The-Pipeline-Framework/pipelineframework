@@ -127,7 +127,6 @@ public class PipelineRunner implements AutoCloseable {
             current = stepExecutor.applyStep(
                 step,
                 current,
-                parallelismPolicyResolver,
                 parallelismPolicy,
                 maxConcurrency,
                 telemetry,
