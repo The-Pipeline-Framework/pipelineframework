@@ -59,4 +59,43 @@ class PipelineCacheSupportFactoryTest {
         assertEquals("cached-high", support.reader.get("v1:key").await().indefinitely().orElseThrow());
         assertEquals(org.pipelineframework.cache.CachePolicy.REQUIRE_CACHE, support.resolvePolicy(null));
     }
+
+    @Test
+    void tiesCacheKeyStrategiesByClassNameDeterministically() {
+        PipelineCacheSupportFactory factory = new PipelineCacheSupportFactory();
+        factory.cacheReaders = new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of(new PipelineRunnerCacheReadTest.HighPriorityReader()));
+        factory.cacheKeyStrategies = new PipelineRunnerCacheReadTest.SimpleInstance<>(List.of(
+            new ZStrategy(),
+            new AStrategy()));
+        factory.cachePolicyDefault = "prefer-cache";
+
+        PipelineRunner.CacheReadSupport support = factory.buildCacheReadSupport();
+
+        assertNotNull(support);
+        assertEquals("a", support.resolveKey("input", null).orElseThrow());
+    }
+
+    static final class AStrategy implements org.pipelineframework.cache.CacheKeyStrategy {
+        @Override
+        public java.util.Optional<String> resolveKey(Object item, org.pipelineframework.context.PipelineContext context) {
+            return java.util.Optional.of("a");
+        }
+
+        @Override
+        public int priority() {
+            return 100;
+        }
+    }
+
+    static final class ZStrategy implements org.pipelineframework.cache.CacheKeyStrategy {
+        @Override
+        public java.util.Optional<String> resolveKey(Object item, org.pipelineframework.context.PipelineContext context) {
+            return java.util.Optional.of("z");
+        }
+
+        @Override
+        public int priority() {
+            return 100;
+        }
+    }
 }

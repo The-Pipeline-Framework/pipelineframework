@@ -72,6 +72,18 @@ class PipelineStepOrdererTest {
         assertEquals(List.of(stepB, stepA), ordered);
     }
 
+    @Test
+    void appliesConfiguredOrderWithoutCollapsingDuplicateStepClasses() {
+        TestSteps.TestStepOneToOneProcessed first = new TestSteps.TestStepOneToOneProcessed();
+        TestSteps.TestStepOneToOneProcessed second = new TestSteps.TestStepOneToOneProcessed();
+
+        List<Object> ordered = orderer.applyConfiguredOrder(
+            List.of(first, second),
+            List.of(first.getClass().getName(), second.getClass().getName()));
+
+        assertEquals(List.of(first, second), ordered);
+    }
+
     private static URLClassLoader classLoaderFor(Path root) {
         try {
             return new URLClassLoader(new URL[] {root.toUri().toURL()}, Thread.currentThread().getContextClassLoader());

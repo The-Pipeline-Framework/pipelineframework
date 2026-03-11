@@ -24,6 +24,7 @@ import jakarta.inject.Inject;
 
 import io.quarkus.arc.Unremovable;
 import io.smallrye.mutiny.Multi;
+import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.pipelineframework.cache.CacheKeyStrategy;
 import org.pipelineframework.cache.PipelineCacheReader;
@@ -90,7 +91,7 @@ public class PipelineRunner implements AutoCloseable {
      */
     public Object run(Object input, List<Object> steps) {
         Objects.requireNonNull(steps, "Steps list must not be null");
-        if (!(input instanceof io.smallrye.mutiny.Uni<?> || input instanceof Multi<?>)) {
+        if (!(input instanceof Uni<?> || input instanceof Multi<?>)) {
             throw new IllegalArgumentException(MessageFormat.format(
                 "Unsupported input type for PipelineRunner: {0}",
                 input == null ? "null" : input.getClass().getName()));
@@ -192,6 +193,13 @@ public class PipelineRunner implements AutoCloseable {
             contextSnapshot);
     }
 
+    /**
+     * Compatibility wrapper for callers that still reference {@code PipelineRunner.CacheReadSupport}.
+     *
+     * @deprecated Use {@link PipelineCacheReadSupport} directly. The constructor mapping is unchanged:
+     * pass the same {@link PipelineCacheReader}, {@link List} of {@link CacheKeyStrategy}, and
+     * {@code defaultPolicy}.
+     */
     @Deprecated(forRemoval = false)
     static final class CacheReadSupport extends PipelineCacheReadSupport {
         CacheReadSupport(PipelineCacheReader reader, List<CacheKeyStrategy> strategies, String defaultPolicy) {

@@ -95,6 +95,31 @@ class PipelineRunnerCacheReadTest {
     }
 
     @Test
+    void cacheOnlyReadsFromCache() {
+        CountingStep step = new CountingStep();
+        PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
+            new FixedReader(Map.of("v1:key", "cached-value")),
+            List.of(new FixedKeyStrategy()),
+            "cache-only");
+
+        PipelineContext context = new PipelineContext("v1", null, "cache-only");
+
+        Object result = PipelineRunner.applyOneToOneUnchecked(
+            step,
+            Uni.createFrom().item("input"),
+            false,
+            128,
+            null,
+            null,
+            support,
+            context);
+
+        String value = ((Uni<String>) result).await().indefinitely();
+        assertEquals("cached-value", value);
+        assertEquals(0, step.calls.get());
+    }
+
+    @Test
     void targetedStrategyPreferredWhenStepProvidesTargetType() {
         CountingTargetStep step = new CountingTargetStep();
         PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(

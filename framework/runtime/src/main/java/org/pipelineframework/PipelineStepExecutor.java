@@ -84,7 +84,7 @@ class PipelineStepExecutor {
                 contextSnapshot);
             default -> {
                 logger.errorf("Step not recognised: %s", step.getClass().getName());
-                yield current;
+                throw new IllegalArgumentException("Step not recognised: " + step.getClass().getName());
             }
         };
     }

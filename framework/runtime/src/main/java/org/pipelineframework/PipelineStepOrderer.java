@@ -61,6 +61,8 @@ class PipelineStepOrderer {
         }
 
         Set<String> configuredNames = new HashSet<>(filteredPipelineOrder);
+        // A partial generated order is unreliable: if any runtime step class is missing from the
+        // metadata, preserve the original list to avoid applying an incomplete order to the pipeline.
         boolean hasUnconfiguredSteps = steps.stream()
             .map(step -> step != null ? step.getClass().getName() : null)
             .anyMatch(name -> name != null && !configuredNames.contains(name));
@@ -69,16 +71,17 @@ class PipelineStepOrderer {
             return steps;
         }
 
-        Map<String, Object> stepMap = new HashMap<>();
+        Map<String, List<Object>> stepMap = new HashMap<>();
         for (Object step : steps) {
-            stepMap.put(step.getClass().getName(), step);
+            stepMap.computeIfAbsent(step.getClass().getName(), ignored -> new ArrayList<>()).add(step);
         }
 
         List<Object> orderedSteps = new ArrayList<>();
         Set<Object> addedSteps = new HashSet<>();
         for (String stepClassName : filteredPipelineOrder) {
-            Object step = stepMap.get(stepClassName);
-            if (step != null) {
+            List<Object> stepInstances = stepMap.get(stepClassName);
+            if (stepInstances != null && !stepInstances.isEmpty()) {
+                Object step = stepInstances.remove(0);
                 orderedSteps.add(step);
                 addedSteps.add(step);
             } else {

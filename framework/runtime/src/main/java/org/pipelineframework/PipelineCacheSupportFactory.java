@@ -65,7 +65,8 @@ class PipelineCacheSupportFactory {
         }
         PipelineCacheReader reader = readers.get(0);
         List<CacheKeyStrategy> ordered = cacheKeyStrategies.stream()
-            .sorted(Comparator.comparingInt(CacheKeyStrategy::priority).reversed())
+            .sorted(Comparator.comparingInt(CacheKeyStrategy::priority).reversed()
+                .thenComparing(strategy -> strategy.getClass().getName()))
             .toList();
         if (ordered.isEmpty()) {
             return null;
