@@ -109,6 +109,7 @@ jobs:
           # Search transport/topology-specific tests stay in their dedicated smoke or E2E lanes, not in the generic unit lane.
           ./mvnw "${maven_args[@]}" clean test \
             "-Dtest=${{ env.UNIT_TEST_PATTERN }}" \
+            -Dsurefire.failIfNoSpecifiedTests=false \
             -DskipITs=true \
             -DskipNative=true \
             -Dquarkus.container-image.build=false
