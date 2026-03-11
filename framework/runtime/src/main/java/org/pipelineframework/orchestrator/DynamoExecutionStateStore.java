@@ -3,6 +3,7 @@ package org.pipelineframework.orchestrator;
 import java.net.URI;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -13,11 +14,14 @@ import java.util.UUID;
 import java.util.function.Supplier;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 
+import com.google.protobuf.Message;
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.jboss.logging.Logger;
+import org.pipelineframework.cache.ProtobufMessageParser;
 import org.pipelineframework.config.pipeline.PipelineJson;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
@@ -63,9 +67,16 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     private static final String CREATED_AT_EPOCH_MS = "created_at_epoch_ms";
     private static final String UPDATED_AT_EPOCH_MS = "updated_at_epoch_ms";
     private static final String TTL_EPOCH_S = "ttl_epoch_s";
+    private static final String ENCODED_TYPE = "_tpf_type";
+    private static final String ENCODED_MESSAGE_CLASS = "protobuf";
+    private static final String ENCODED_MESSAGE_NAME = "_tpf_message";
+    private static final String ENCODED_PAYLOAD = "_tpf_payload_b64";
 
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
+
+    @Inject
+    Instance<ProtobufMessageParser> protobufMessageParsers;
 
     private volatile DynamoDbClient client;
 
@@ -76,8 +87,17 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     }
 
     DynamoExecutionStateStore(DynamoDbClient client, PipelineOrchestratorConfig orchestratorConfig) {
+        this(client, orchestratorConfig, null);
+    }
+
+    DynamoExecutionStateStore(
+        DynamoDbClient client,
+        PipelineOrchestratorConfig orchestratorConfig,
+        Instance<ProtobufMessageParser> protobufMessageParsers
+    ) {
         this.client = client;
         this.orchestratorConfig = orchestratorConfig;
+        this.protobufMessageParsers = protobufMessageParsers;
     }
 
     @Override
@@ -828,26 +848,86 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         return value.substring(0, 512);
     }
 
-    private static String toJson(Object value) {
+    private String toJson(Object value) {
         if (value == null) {
             return null;
         }
         try {
-            return PipelineJson.mapper().writeValueAsString(value);
+            return PipelineJson.mapper().writeValueAsString(encodeValue(value));
         } catch (Exception e) {
             throw new IllegalStateException("Failed serializing execution payload to JSON.", e);
         }
     }
 
-    private static Object fromJson(String value) {
+    private Object fromJson(String value) {
         if (value == null || value.isBlank()) {
             return null;
         }
         try {
-            return PipelineJson.mapper().readValue(value, Object.class);
+            return decodeValue(PipelineJson.mapper().readValue(value, Object.class));
         } catch (Exception e) {
             throw new IllegalStateException("Failed deserializing execution payload JSON.", e);
         }
+    }
+
+    private Object encodeValue(Object value) {
+        if (value instanceof Message message) {
+            return Map.of(
+                ENCODED_TYPE, ENCODED_MESSAGE_CLASS,
+                ENCODED_MESSAGE_NAME, messageTypeName(message.getClass()),
+                ENCODED_PAYLOAD, Base64.getEncoder().encodeToString(message.toByteArray()));
+        }
+        if (value instanceof List<?> list) {
+            return list.stream().map(this::encodeValue).toList();
+        }
+        if (value instanceof Map<?, ?> map) {
+            Map<Object, Object> encoded = new HashMap<>(map.size());
+            map.forEach((key, nestedValue) -> encoded.put(key, encodeValue(nestedValue)));
+            return encoded;
+        }
+        return value;
+    }
+
+    private Object decodeValue(Object value) {
+        if (value instanceof List<?> list) {
+            return list.stream().map(this::decodeValue).toList();
+        }
+        if (!(value instanceof Map<?, ?> map)) {
+            return value;
+        }
+        Object encodedType = map.get(ENCODED_TYPE);
+        if (!ENCODED_MESSAGE_CLASS.equals(encodedType)) {
+            Map<Object, Object> decoded = new HashMap<>(map.size());
+            map.forEach((key, nestedValue) -> decoded.put(key, decodeValue(nestedValue)));
+            return decoded;
+        }
+        String messageType = Objects.toString(map.get(ENCODED_MESSAGE_NAME), "");
+        String payload = Objects.toString(map.get(ENCODED_PAYLOAD), "");
+        if (messageType.isBlank() || payload.isBlank()) {
+            throw new IllegalStateException("Stored protobuf payload metadata is incomplete.");
+        }
+        ProtobufMessageParser parser = findProtobufParser(messageType);
+        return parser.parseFrom(Base64.getDecoder().decode(payload));
+    }
+
+    private ProtobufMessageParser findProtobufParser(String messageType) {
+        if (protobufMessageParsers == null) {
+            throw new IllegalStateException("No protobuf parsers available for " + messageType);
+        }
+        String normalizedMessageType = normalizeMessageType(messageType);
+        return protobufMessageParsers.stream()
+            .filter(parser -> normalizeMessageType(parser.type()).equals(normalizedMessageType))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("No protobuf parser registered for " + messageType));
+    }
+
+    private static String messageTypeName(Class<?> messageClass) {
+        String canonicalName = messageClass.getCanonicalName();
+        return canonicalName != null ? canonicalName : normalizeMessageType(messageClass.getName());
+    }
+
+    private static String normalizeMessageType(String messageType) {
+        return messageType == null ? "" : messageType.replace('$', '.');
     }
 
     private DynamoDbClient dynamoClient() {

@@ -218,6 +218,15 @@ public interface PipelineOrchestratorConfig {
     interface SqsConfig {
 
         /**
+         * Optional delay before the SQS poller starts consuming work.
+         *
+         * @return poller start delay
+         */
+        @WithName("poll-start-delay")
+        @WithDefault("PT0S")
+        Duration pollStartDelay();
+
+        /**
          * Optional region override.
          *
          * @return region when configured
