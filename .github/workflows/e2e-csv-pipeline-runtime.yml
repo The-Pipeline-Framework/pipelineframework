@@ -51,7 +51,12 @@ jobs:
         uses: ./.github/actions/setup-testcontainers
 
       - name: Build csv-payments pipeline-runtime topology
-        run: ./examples/csv-payments/build-pipeline-runtime.sh -DskipTests -Dquarkus.container-image.build=false
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          MAVEN_ARGS="${maven_args[*]/-T 1C/-T 1}" \
+            ./examples/csv-payments/build-pipeline-runtime.sh \
+            -DskipTests \
+            -Dquarkus.container-image.build=true
 
       - name: Run csv-payments pipeline-runtime topology + E2E
         run: |

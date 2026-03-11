@@ -164,7 +164,7 @@ jobs:
     secrets: inherit
 
   e2e-csv-pipeline-runtime:
-    name: CSV Pipeline Runtime E2E
+    name: CSV Pipeline Runtime
     needs: bootstrap
     uses: ./.github/workflows/e2e-csv-pipeline-runtime.yml
     with:
