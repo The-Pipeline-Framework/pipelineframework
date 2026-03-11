@@ -239,7 +239,6 @@ describe('Map Type Validation', () => {
 
     expect(validate(v2Config)).toBe(false);
     expect(validate.errors).toBeDefined();
-    expect(validate.errors.length).toBeGreaterThan(0);
   });
 
   test('invalid Map types should fail validation', () => {

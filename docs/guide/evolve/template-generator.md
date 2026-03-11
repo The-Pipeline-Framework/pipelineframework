@@ -96,6 +96,7 @@ java -jar template-generator-<version>.jar --config my-pipeline-config.yaml --ou
 ```
 
 Replace `<version>` with the installed template-generator version.
+You can determine that version with `template-generator --version`, by checking the project's release tags or changelog, or by looking up the published artifact on Maven Central or the project's releases page.
 
 The generator copies the authored config into `config/pipeline.yaml` so the build can recreate `.proto` definitions during `generate-sources`.
 
@@ -164,9 +165,13 @@ Overrides are available, but they are an advanced escape hatch:
 Unsafe overrides are rejected during loading and normalization.
 
 - Lossy type changes are rejected.
+  Example: changing a field from `int64` to `int32` is rejected because values may no longer fit.
 - Overrides that break canonical invariants are rejected.
+  Example: renaming a canonical field or changing the stable field ordering contract through overrides is rejected.
 - Unsupported encodings are rejected.
+  Example: setting `overrides.proto.encoding: uuid` on a `decimal` field is rejected because that encoding is not valid for the base type.
 - Overrides that conflict with message or map structure are rejected.
+  Example: changing a scalar field into a map, or reshaping a map key into a repeated field via overrides, is rejected.
 
 For example, `decimal` with `overrides.proto.encoding: double` is rejected. `decimal` with `overrides.proto.encoding: string` remains valid.
 

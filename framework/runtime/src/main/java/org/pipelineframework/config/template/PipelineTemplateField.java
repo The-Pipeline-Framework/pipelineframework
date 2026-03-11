@@ -150,7 +150,7 @@ public record PipelineTemplateField(
      * Create a copy of this field with updated canonical type information.
      *
      * @param resolvedCanonicalType the resolved canonical type to use; if `null` the existing `canonicalType` is preserved
-     * @param resolvedMessageRef the resolved message reference to set (may be `null`)
+     * @param resolvedMessageRef the resolved message reference to set; if `null` the existing `messageRef` is preserved, otherwise the provided value replaces it
      * @return a new PipelineTemplateField with the updated `canonicalType` and `messageRef`, preserving all other components
      */
     public PipelineTemplateField withCanonicalType(String resolvedCanonicalType, String resolvedMessageRef) {

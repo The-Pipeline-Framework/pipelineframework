@@ -129,12 +129,12 @@ class StepArtifactGenerationServiceTest {
             null,
             null,
             new RoleMetadataGenerator(processingEnv),
-            mock(org.pipelineframework.processor.renderer.GrpcServiceAdapterRenderer.class),
-            mock(org.pipelineframework.processor.renderer.ClientStepRenderer.class),
-            mock(org.pipelineframework.processor.renderer.LocalClientStepRenderer.class),
-            mock(org.pipelineframework.processor.renderer.RestClientStepRenderer.class),
-            mock(org.pipelineframework.processor.renderer.RestResourceRenderer.class),
-            mock(org.pipelineframework.processor.renderer.RestFunctionHandlerRenderer.class),
+            mock(GrpcServiceAdapterRenderer.class),
+            mock(ClientStepRenderer.class),
+            mock(LocalClientStepRenderer.class),
+            mock(RestClientStepRenderer.class),
+            mock(RestResourceRenderer.class),
+            mock(RestFunctionHandlerRenderer.class),
             renderer
         );
 
@@ -174,7 +174,7 @@ class StepArtifactGenerationServiceTest {
         Descriptors.FileDescriptor fileDescriptor = buildFileDescriptor();
         Descriptors.ServiceDescriptor serviceDescriptor = fileDescriptor.findServiceByName("ChargeCard");
         Descriptors.MethodDescriptor methodDescriptor = serviceDescriptor.findMethodByName("remoteProcess");
-        PipelineStepModel model = buildChargeCardModel().toBuilder().build();
+        PipelineStepModel model = buildChargeCardModel();
         return new GrpcBinding(model, serviceDescriptor, methodDescriptor);
     }
 

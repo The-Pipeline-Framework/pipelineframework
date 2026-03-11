@@ -42,6 +42,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     public static final String NO_YAML_DEFINITIONS_MESSAGE =
         "No YAML step definitions were found. Falling back to annotation-driven extraction.";
     private static final String MAPPER_FALLBACK_GLOBAL_OPTION = "pipeline.mapper.fallback.enabled";
+    private static final String DEFAULT_SERVICE_PACKAGE = "org.pipelineframework.pipeline.service";
 
     private final ModelContextRoleEnricher contextRoleEnricher;
 
@@ -370,16 +371,16 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 return packageName.substring(0, packageName.length() - suffix.length()) + ".service";
             }
             if (warningLogger != null) {
-                warningLogger.accept("Falling back to default service package 'org.pipelineframework.pipeline.service' "
+                warningLogger.accept("Falling back to default service package '" + DEFAULT_SERVICE_PACKAGE + "' "
                     + "for domain type '" + domainType + "' with package '" + packageName + "'");
             }
-            return "org.pipelineframework.pipeline.service";
+            return DEFAULT_SERVICE_PACKAGE;
         }
         if (warningLogger != null) {
-            warningLogger.accept("Falling back to default service package 'org.pipelineframework.pipeline.service' "
+            warningLogger.accept("Falling back to default service package '" + DEFAULT_SERVICE_PACKAGE + "' "
                 + "for domain type '" + domainType + "'");
         }
-        return "org.pipelineframework.pipeline.service";
+        return DEFAULT_SERVICE_PACKAGE;
     }
 
     /**
