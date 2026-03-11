@@ -21,4 +21,6 @@ public enum GenerationTarget {
     ORCHESTRATOR_CLI,
     /** External adapter that delegates to operator services */
     EXTERNAL_ADAPTER,
+    /** Generated service implementation that dispatches to a remote operator endpoint */
+    REMOTE_OPERATOR_ADAPTER,
 }

@@ -8,7 +8,7 @@
       "type": "string",
       "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*::[a-zA-Z_$][a-zA-Z\\d_$]*$"
     },
-    "fieldDefinition": {
+    "legacyFieldDefinition": {
       "type": "object",
       "properties": {
         "name": {
@@ -20,7 +20,7 @@
           "description": "Java type of the field",
           "anyOf": [
             {
-              "enum": ["String", "Integer", "Long", "Double", "Boolean", "UUID", "BigDecimal", "Currency", "Path", "LocalDateTime", "LocalDate", "OffsetDateTime", "ZonedDateTime", "Instant", "Duration", "Period", "URI", "URL", "File", "BigInteger", "AtomicInteger", "AtomicLong", "List<String>"]
+              "enum": ["String", "Integer", "Long", "Double", "Float", "Boolean", "UUID", "BigDecimal", "Currency", "Path", "LocalDateTime", "LocalDate", "OffsetDateTime", "ZonedDateTime", "Instant", "Duration", "Period", "URI", "URL", "File", "BigInteger", "AtomicInteger", "AtomicLong", "List<String>"]
             },
             {
               "type": "string",
@@ -28,8 +28,7 @@
             },
             {
               "type": "string",
-              "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)*$",
-              "description": "Custom domain type, including types defined by other steps."
+              "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)*$"
             }
           ]
         },
@@ -46,16 +45,520 @@
             },
             {
               "type": "string",
-              "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)*$",
-              "description": "Custom message type, including messages defined by other steps."
+              "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)*$"
             }
           ]
         }
       },
-      "required": ["name", "type", "protoType"]
+      "required": ["name", "type", "protoType"],
+      "additionalProperties": false
+    },
+    "v2ProtoOverride": {
+      "type": "object",
+      "properties": {
+        "encoding": {
+          "type": "string",
+          "enum": ["string", "bool", "int32", "int64", "float", "double", "bytes"]
+        }
+      },
+      "required": ["encoding"],
+      "additionalProperties": false
+    },
+    "v2FieldOverrides": {
+      "type": "object",
+      "properties": {
+        "proto": {
+          "$ref": "#/$defs/v2ProtoOverride"
+        }
+      },
+      "additionalProperties": false
+    },
+    "v2FieldDefinition": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "anyOf": [
+            {
+              "enum": ["string", "bool", "int32", "int64", "float32", "float64", "decimal", "uuid", "timestamp", "datetime", "date", "duration", "bytes", "currency", "uri", "path", "map"]
+            },
+            {
+              "pattern": "^[A-Z][A-Za-z0-9_]*$"
+            }
+          ]
+        },
+        "keyType": {
+          "type": "string",
+          "enum": ["string", "bool", "int32", "int64"]
+        },
+        "valueType": {
+          "type": "string",
+          "anyOf": [
+            {
+              "enum": ["string", "bool", "int32", "int64", "float32", "float64", "decimal", "uuid", "timestamp", "datetime", "date", "duration", "bytes", "currency", "uri", "path"]
+            },
+            {
+              "pattern": "^[A-Z][A-Za-z0-9_]*$"
+            }
+          ]
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "repeated": {
+          "type": "boolean"
+        },
+        "deprecated": {
+          "type": "boolean"
+        },
+        "since": {
+          "type": "string"
+        },
+        "deprecatedSince": {
+          "type": "string"
+        },
+        "comment": {
+          "type": "string"
+        },
+        "overrides": {
+          "$ref": "#/$defs/v2FieldOverrides"
+        }
+      },
+      "required": ["number", "name", "type"],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "map"
+              }
+            },
+            "required": ["type"]
+          },
+          "then": {
+            "required": ["keyType", "valueType"]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": ["keyType"]
+                },
+                {
+                  "required": ["valueType"]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "not": {
+            "properties": {
+              "optional": {
+                "const": true
+              },
+              "repeated": {
+                "const": true
+              }
+            },
+            "required": ["optional", "repeated"]
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "v2Reserved": {
+      "type": "object",
+      "properties": {
+        "numbers": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "v2MessageDefinition": {
+      "type": "object",
+      "properties": {
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/v2FieldDefinition"
+          }
+        },
+        "reserved": {
+          "$ref": "#/$defs/v2Reserved"
+        }
+      },
+      "required": ["fields"],
+      "additionalProperties": false
+    },
+    "v2RemoteTarget": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "minLength": 1
+        },
+        "urlConfigKey": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["url"]
+        },
+        {
+          "required": ["urlConfigKey"]
+        }
+      ],
+      "additionalProperties": false
+    },
+    "v2Execution": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["LOCAL", "REMOTE"]
+        },
+        "operatorId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "protocol": {
+          "type": "string",
+          "enum": ["PROTOBUF_HTTP_V1"]
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "target": {
+          "$ref": "#/$defs/v2RemoteTarget"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "enum": ["REMOTE"]
+              }
+            },
+            "required": ["mode"]
+          },
+          "then": {
+            "required": ["operatorId", "protocol", "target"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "mode": {
+                "enum": ["LOCAL"]
+              }
+            },
+            "required": ["mode"]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": ["operatorId"]
+                },
+                {
+                  "required": ["protocol"]
+                },
+                {
+                  "required": ["target"]
+                },
+                {
+                  "required": ["timeoutMs"]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "legacyTemplateStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "cardinality": {
+          "type": "string",
+          "enum": ["ONE_TO_ONE", "EXPANSION", "REDUCTION", "SIDE_EFFECT", "MANY_TO_MANY", "ONE_TO_MANY", "MANY_TO_ONE"]
+        },
+        "inputTypeName": {
+          "type": "string"
+        },
+        "inputFields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/legacyFieldDefinition"
+          }
+        },
+        "outputTypeName": {
+          "type": "string"
+        },
+        "outputFields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/legacyFieldDefinition"
+          }
+        },
+        "batchSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "batchTimeoutMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "parallel": {
+          "type": "boolean"
+        }
+      },
+      "required": ["name", "cardinality", "inputTypeName", "inputFields", "outputTypeName", "outputFields"]
+    },
+    "v2TemplateStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "cardinality": {
+          "type": "string",
+          "enum": ["ONE_TO_ONE", "EXPANSION", "REDUCTION", "SIDE_EFFECT", "MANY_TO_MANY", "ONE_TO_MANY", "MANY_TO_ONE"]
+        },
+        "inputTypeName": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+        },
+        "inputFields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/v2FieldDefinition"
+          }
+        },
+        "outputTypeName": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Za-z0-9_]*$"
+        },
+        "outputFields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/v2FieldDefinition"
+          }
+        },
+        "batchSize": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "batchTimeoutMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "parallel": {
+          "type": "boolean"
+        },
+        "execution": {
+          "$ref": "#/$defs/v2Execution"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "execution": {
+                "type": "object",
+                "properties": {
+                  "mode": {
+                    "enum": ["REMOTE", "remote"]
+                  }
+                },
+                "required": ["mode"]
+              }
+            },
+            "required": ["execution"]
+          },
+          "then": {
+            "properties": {
+              "cardinality": {
+                "enum": ["ONE_TO_ONE"]
+              }
+            }
+          }
+        }
+      ],
+      "required": ["name", "cardinality", "inputTypeName", "outputTypeName"]
+    },
+    "delegatedOrInternalStep": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the step (e.g., Process Customer)"
+        },
+        "service": {
+          "type": "string",
+          "description": "Fully qualified class name of the internal service annotated with @PipelineStep",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+        },
+        "operator": {
+          "description": "Delegated operator reference in fully.qualified.Class::method format",
+          "allOf": [
+            {
+              "$ref": "#/$defs/operatorReference"
+            }
+          ]
+        },
+        "delegate": {
+          "description": "Legacy alias for operator (deprecated; prefer 'operator'): delegated operator reference in fully.qualified.Class::method format",
+          "allOf": [
+            {
+              "$ref": "#/$defs/operatorReference"
+            }
+          ]
+        },
+        "input": {
+          "type": "string",
+          "description": "Fully qualified class name of the input type",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+        },
+        "output": {
+          "type": "string",
+          "description": "Fully qualified class name of the output type",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+        },
+        "operatorMapper": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+        },
+        "externalMapper": {
+          "type": "string",
+          "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
+        },
+        "mapperFallback": {
+          "type": "string",
+          "enum": ["NONE", "JACKSON", "none", "jackson"]
+        }
+      },
+      "oneOf": [
+        {
+          "required": ["name", "service"]
+        },
+        {
+          "required": ["name", "operator"]
+        },
+        {
+          "required": ["name", "delegate"]
+        }
+      ],
+      "allOf": [
+        {
+          "if": {
+            "required": ["input"]
+          },
+          "then": {
+            "required": ["output"]
+          }
+        },
+        {
+          "if": {
+            "required": ["output"]
+          },
+          "then": {
+            "required": ["input"]
+          }
+        },
+        {
+          "not": {
+            "required": ["operatorMapper", "externalMapper"]
+          }
+        }
+      ],
+      "additionalProperties": false
     }
   },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "version": {
+            "const": 2
+          }
+        },
+        "required": ["version"]
+      },
+      "then": {
+        "properties": {
+          "steps": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/v2TemplateStep"
+                },
+                {
+                  "$ref": "#/$defs/delegatedOrInternalStep"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "required": ["messages"]
+        },
+        "properties": {
+          "steps": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/legacyTemplateStep"
+                },
+                {
+                  "$ref": "#/$defs/delegatedOrInternalStep"
+                }
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
   "properties": {
+    "version": {
+      "type": "integer",
+      "enum": [1, 2],
+      "default": 1
+    },
     "appName": {
       "type": "string",
       "description": "Name of the application to generate"
@@ -77,141 +580,19 @@
       "enum": ["MODULAR", "PIPELINE_RUNTIME", "MONOLITH", "modular", "pipeline-runtime", "monolith"],
       "default": "MODULAR"
     },
+    "messages": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[A-Z][A-Za-z0-9_]*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/v2MessageDefinition"
+      }
+    },
     "steps": {
       "type": "array",
-      "description": "List of pipeline steps. YAML-defined service/delegate steps drive strict compiler step generation; scaffold-style cardinality blocks are for template generation workflows.",
-      "items": {
-        "oneOf": [
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "name": {
-                "type": "string",
-                "description": "Name of the step (e.g., Process Customer)"
-              },
-              "cardinality": {
-                "type": "string",
-                "description": "Cardinality of the step",
-                "enum": ["ONE_TO_ONE", "EXPANSION", "REDUCTION", "SIDE_EFFECT", "MANY_TO_MANY"]
-              },
-              "inputTypeName": {
-                "type": "string",
-                "description": "Name of the input type (plural if reduction)"
-              },
-              "inputFields": {
-                "type": "array",
-                "description": "List of fields in the input type",
-                "items": {
-                  "$ref": "#/$defs/fieldDefinition"
-                }
-              },
-              "outputTypeName": {
-                "type": "string",
-                "description": "Name of the output type (plural if expansion)"
-              },
-              "outputFields": {
-                "type": "array",
-                "description": "List of fields in the output type",
-                "items": {
-                  "$ref": "#/$defs/fieldDefinition"
-                }
-              }
-            },
-            "required": ["name", "cardinality", "inputTypeName", "inputFields", "outputTypeName", "outputFields"]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "description": "Name of the step (e.g., Process Customer)"
-              },
-              "service": {
-                "type": "string",
-                "description": "Fully qualified class name of the internal service annotated with @PipelineStep",
-                "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
-              },
-              "operator": {
-                "description": "Delegated operator reference in fully.qualified.Class::method format",
-                "allOf": [
-                  {
-                    "$ref": "#/$defs/operatorReference"
-                  }
-                ]
-              },
-              "delegate": {
-                "description": "Legacy alias for operator (deprecated; prefer 'operator'): delegated operator reference in fully.qualified.Class::method format",
-                "allOf": [
-                  {
-                    "$ref": "#/$defs/operatorReference"
-                  }
-                ]
-              },
-              "input": {
-                "type": "string",
-                "description": "Fully qualified class name of the input type",
-                "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
-              },
-              "output": {
-                "type": "string",
-                "description": "Fully qualified class name of the output type",
-                "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
-              },
-              "operatorMapper": {
-                "type": "string",
-                "description": "Fully qualified class name of the operator mapper for converting between domain and operator types",
-                "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
-              },
-              "externalMapper": {
-                "type": "string",
-                "description": "Legacy alias for operatorMapper (deprecated; prefer 'operatorMapper')",
-                "pattern": "^[a-zA-Z_$][a-zA-Z\\d_$]*(\\.[a-zA-Z_$][a-zA-Z\\d_$]*)*\\.[A-Z][a-zA-Z\\d_$]*$"
-              },
-              "mapperFallback": {
-                "type": "string",
-                "description": "Optional mapper fallback strategy used when no operator mapper matches. Effective only when global pipeline.mapper.fallback.enabled=true.",
-                "enum": ["NONE", "JACKSON", "none", "jackson"]
-              }
-            },
-            "oneOf": [
-              {
-                "required": ["name", "service"]
-              },
-              {
-                "required": ["name", "operator"]
-              },
-              {
-                "required": ["name", "delegate"]
-              }
-            ],
-            "allOf": [
-              {
-                "if": {
-                  "required": ["input"]
-                },
-                "then": {
-                  "required": ["output"]
-                }
-              },
-              {
-                "if": {
-                  "required": ["output"]
-                },
-                "then": {
-                  "required": ["input"]
-                }
-              },
-              {
-                "not": {
-                  "required": ["operatorMapper", "externalMapper"]
-                }
-              }
-            ],
-            "additionalProperties": false
-          }
-        ]
-      }
+      "description": "List of pipeline steps."
     },
     "aspects": {
       "type": "object",

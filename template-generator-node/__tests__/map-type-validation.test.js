@@ -101,6 +101,143 @@ describe('Map Type Validation', () => {
     expect(validate(complexMapConfig)).toBe(true);
   });
 
+  test('valid v2 semantic map fields should pass validation', () => {
+    const v2Config = {
+      "version": 2,
+      "appName": "TestApp",
+      "basePackage": "com.example.test",
+      "messages": {
+        "TestInput": {
+          "fields": [
+            {
+              "number": 1,
+              "name": "attributes",
+              "type": "map",
+              "keyType": "string",
+              "valueType": "int32"
+            }
+          ]
+        },
+        "TestOutput": {
+          "fields": [
+            {
+              "number": 1,
+              "name": "status",
+              "type": "string"
+            }
+          ],
+          "reserved": {
+            "numbers": [4],
+            "names": ["legacyField"]
+          }
+        }
+      },
+      "steps": [
+        {
+          "name": "Test Step",
+          "cardinality": "ONE_TO_ONE",
+          "inputTypeName": "TestInput",
+          "outputTypeName": "TestOutput"
+        }
+      ]
+    };
+
+    expect(validate(v2Config)).toBe(true);
+  });
+
+  test('invalid v2 semantic map keyType/valueType should fail', () => {
+    const v2Config = {
+      version: 2,
+      appName: 'TestApp',
+      basePackage: 'com.example.test',
+      messages: {
+        TestInput: {
+          fields: [
+            {
+              number: 1,
+              name: 'attributes',
+              type: 'map',
+              keyType: 'float32',
+              valueType: 'flot32'
+            }
+          ]
+        }
+      },
+      steps: [
+        {
+          name: 'Test Step',
+          cardinality: 'ONE_TO_ONE',
+          inputTypeName: 'TestInput',
+          outputTypeName: 'TestInput'
+        }
+      ]
+    };
+
+    expect(validate(v2Config)).toBe(false);
+  });
+
+  test('missing map keyType/valueType should fail', () => {
+    const v2Config = {
+      version: 2,
+      appName: 'TestApp',
+      basePackage: 'com.example.test',
+      messages: {
+        TestInput: {
+          fields: [
+            {
+              number: 1,
+              name: 'attributes',
+              type: 'map'
+            }
+          ]
+        }
+      },
+      steps: [
+        {
+          name: 'Test Step',
+          cardinality: 'ONE_TO_ONE',
+          inputTypeName: 'TestInput',
+          outputTypeName: 'TestInput'
+        }
+      ]
+    };
+
+    expect(validate(v2Config)).toBe(false);
+  });
+
+  test('invalid reserved config should fail', () => {
+    const v2Config = {
+      version: 2,
+      appName: 'TestApp',
+      basePackage: 'com.example.test',
+      messages: {
+        TestInput: {
+          fields: [
+            {
+              number: 1,
+              name: 'status',
+              type: 'string'
+            }
+          ],
+          reserved: {
+            numbers: ['four'],
+            names: [1]
+          }
+        }
+      },
+      steps: [
+        {
+          name: 'Test Step',
+          cardinality: 'ONE_TO_ONE',
+          inputTypeName: 'TestInput',
+          outputTypeName: 'TestInput'
+        }
+      ]
+    };
+
+    expect(validate(v2Config)).toBe(false);
+  });
+
   test('invalid Map types should fail validation', () => {
     // Invalid Map types that should fail
     const invalidConfigs = [

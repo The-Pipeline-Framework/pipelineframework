@@ -5,6 +5,7 @@ import java.util.Set;
 
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.TypeName;
+import org.pipelineframework.config.template.PipelineTemplateStepExecution;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
 
@@ -29,6 +30,7 @@ import org.pipelineframework.parallelism.ThreadSafety;
  * @param delegateService Gets the delegate service class if this is a delegation step, otherwise null.
  * @param externalMapper Gets the operator mapper class if operator mapping is used, otherwise null.
  * @param mapperFallbackMode Gets mapper fallback mode used when no explicit/inferred mapper matches.
+ * @param remoteExecution Gets remote operator execution metadata when the step is remote, otherwise null.
  */
 public record PipelineStepModel(
         String serviceName,
@@ -47,7 +49,8 @@ public record PipelineStepModel(
         ThreadSafety threadSafety,
         ClassName delegateService,
         ClassName externalMapper,
-        MapperFallbackMode mapperFallbackMode
+        MapperFallbackMode mapperFallbackMode,
+        PipelineTemplateStepExecution remoteExecution
 ) {
     /**
          * Creates a new PipelineStepModel with the supplied service identity, type mappings and generation configuration.
@@ -70,6 +73,10 @@ public record PipelineStepModel(
      * @throws IllegalArgumentException if any parameter documented as 'must not be null' is null
      */
     @SuppressWarnings("ConstantValue")
+    /**
+     * @deprecated prefer {@link Builder} for construction.
+     */
+    @Deprecated
     public PipelineStepModel(String serviceName,
             String generatedName,
             String servicePackage,
@@ -86,7 +93,8 @@ public record PipelineStepModel(
             ThreadSafety threadSafety,
             ClassName delegateService,
             ClassName externalMapper,
-            MapperFallbackMode mapperFallbackMode) {
+            MapperFallbackMode mapperFallbackMode,
+            PipelineTemplateStepExecution remoteExecution) {
         // Validate non-null invariants
         if (serviceName == null)
             throw new IllegalArgumentException("serviceName cannot be null");
@@ -122,8 +130,13 @@ public record PipelineStepModel(
         this.delegateService = delegateService;
         this.externalMapper = externalMapper;
         this.mapperFallbackMode = mapperFallbackMode == null ? MapperFallbackMode.NONE : mapperFallbackMode;
+        this.remoteExecution = remoteExecution;
     }
 
+    /**
+     * @deprecated prefer {@link Builder} for construction.
+     */
+    @Deprecated
     public PipelineStepModel(String serviceName,
             String generatedName,
             String servicePackage,
@@ -156,7 +169,49 @@ public record PipelineStepModel(
             threadSafety,
             delegateService,
             externalMapper,
-            MapperFallbackMode.NONE);
+            MapperFallbackMode.NONE,
+            null);
+    }
+
+    /**
+     * @deprecated prefer {@link Builder} for construction.
+     */
+    @Deprecated
+    public PipelineStepModel(String serviceName,
+            String generatedName,
+            String servicePackage,
+            ClassName serviceClassName,
+            TypeMapping inputMapping,
+            TypeMapping outputMapping,
+            StreamingShape streamingShape,
+            Set<GenerationTarget> enabledTargets,
+            ExecutionMode executionMode,
+            DeploymentRole deploymentRole,
+            boolean sideEffect,
+            ClassName cacheKeyGenerator,
+            OrderingRequirement orderingRequirement,
+            ThreadSafety threadSafety,
+            ClassName delegateService,
+            ClassName externalMapper,
+            MapperFallbackMode mapperFallbackMode) {
+        this(serviceName,
+            generatedName,
+            servicePackage,
+            serviceClassName,
+            inputMapping,
+            outputMapping,
+            streamingShape,
+            enabledTargets,
+            executionMode,
+            deploymentRole,
+            sideEffect,
+            cacheKeyGenerator,
+            orderingRequirement,
+            threadSafety,
+            delegateService,
+            externalMapper,
+            mapperFallbackMode,
+            null);
     }
 
     /**
@@ -207,7 +262,8 @@ public record PipelineStepModel(
             ThreadSafety.SAFE,
             null,
             null,
-            MapperFallbackMode.NONE);
+            MapperFallbackMode.NONE,
+            null);
     }
 
     /**
@@ -256,6 +312,7 @@ public record PipelineStepModel(
         private ClassName delegateService;
         private ClassName externalMapper;
         private MapperFallbackMode mapperFallbackMode = MapperFallbackMode.NONE;
+        private PipelineTemplateStepExecution remoteExecution;
 
         /**
          * Sets the service name.
@@ -456,6 +513,17 @@ public record PipelineStepModel(
         }
 
         /**
+         * Sets the remote execution configuration for this step model.
+         *
+         * @param remoteExecution remote execution metadata describing how the step is invoked remotely
+         * @return this {@link PipelineStepModel.Builder} for chaining
+         */
+        public Builder remoteExecution(PipelineTemplateStepExecution remoteExecution) {
+            this.remoteExecution = remoteExecution;
+            return this;
+        }
+
+        /**
          * Create a PipelineStepModel populated from the builder's current state.
          *
          * @return a PipelineStepModel populated with the builder's state
@@ -482,22 +550,23 @@ public record PipelineStepModel(
                 throw new IllegalStateException("deploymentRole is required");
 
             return new PipelineStepModel(serviceName,
-                    generatedName,
-                    servicePackage,
-                    serviceClassName,
-                    inputMapping,
-                    outputMapping,
-                    streamingShape,
-                    enabledTargets,
-                    executionMode,
-                    deploymentRole,
-                    sideEffect,
-                    cacheKeyGenerator,
-                    orderingRequirement,
-                    threadSafety,
-                    delegateService,
-                    externalMapper,
-                    mapperFallbackMode);
+                generatedName,
+                servicePackage,
+                serviceClassName,
+                inputMapping,
+                outputMapping,
+                streamingShape,
+                enabledTargets,
+                executionMode,
+                deploymentRole,
+                sideEffect,
+                cacheKeyGenerator,
+                orderingRequirement,
+                threadSafety,
+                delegateService,
+                externalMapper,
+                mapperFallbackMode,
+                remoteExecution);
         }
     }
     
@@ -525,7 +594,8 @@ public record PipelineStepModel(
             threadSafety,
             delegateService,
             externalMapper,
-            mapperFallbackMode
+            mapperFallbackMode,
+            remoteExecution
         );
     }
 
@@ -559,6 +629,7 @@ public record PipelineStepModel(
             .threadSafety(threadSafety)
             .delegateService(delegateService)
             .externalMapper(externalMapper)
-            .mapperFallbackMode(mapperFallbackMode);
+            .mapperFallbackMode(mapperFallbackMode)
+            .remoteExecution(remoteExecution);
     }
 }

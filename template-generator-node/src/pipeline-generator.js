@@ -35,7 +35,8 @@ class PipelineGenerator {
      */
     async generateFromConfig(configPath, outputPath) {
         const config = this.loadConfig(configPath);
-        const { appName, basePackage, steps, aspects, transport, runtimeLayout } = config;
+        const scaffoldConfig = this.toScaffoldConfig(config);
+        const { appName, basePackage, steps, aspects, transport, runtimeLayout } = scaffoldConfig;
         await this.engine.generateApplication({
             appName,
             basePackage,
@@ -55,28 +56,49 @@ class PipelineGenerator {
      */
     async generateSampleConfig(outputPath) {
         const config = {
+            version: 2,
             appName: 'Sample Pipeline App',
             basePackage: 'com.example.sample',
             transport: 'GRPC',
             runtimeLayout: 'MODULAR',
+            messages: {
+                CustomerInput: {
+                    fields: [
+                        { number: 1, name: 'id', type: 'uuid' },
+                        { number: 2, name: 'name', type: 'string' },
+                        { number: 3, name: 'email', type: 'string' },
+                        { number: 4, name: 'createdAt', type: 'datetime' }
+                    ]
+                },
+                CustomerOutput: {
+                    fields: [
+                        { number: 1, name: 'id', type: 'uuid' },
+                        { number: 2, name: 'name', type: 'string' },
+                        { number: 3, name: 'status', type: 'string' },
+                        { number: 4, name: 'processedAt', type: 'timestamp' }
+                    ]
+                },
+                OrderInput: {
+                    fields: [
+                        { number: 1, name: 'id', type: 'uuid' },
+                        { number: 2, name: 'customerId', type: 'uuid' },
+                        { number: 3, name: 'amount', type: 'decimal' }
+                    ]
+                },
+                ValidationOutput: {
+                    fields: [
+                        { number: 1, name: 'id', type: 'uuid' },
+                        { number: 2, name: 'isValid', type: 'bool' },
+                        { number: 3, name: 'message', type: 'string' }
+                    ]
+                }
+            },
             steps: [
                 {
                     name: 'Process Customer',
                     cardinality: 'ONE_TO_ONE',
                     inputTypeName: 'CustomerInput',
-                    inputFields: [
-                        { name: 'id', type: 'UUID', protoType: 'string' },
-                        { name: 'name', type: 'String', protoType: 'string' },
-                        { name: 'email', type: 'String', protoType: 'string' },
-                        { name: 'createdAt', type: 'LocalDateTime', protoType: 'string' }
-                    ],
                     outputTypeName: 'CustomerOutput',
-                    outputFields: [
-                        { name: 'id', type: 'UUID', protoType: 'string' },
-                        { name: 'name', type: 'String', protoType: 'string' },
-                        { name: 'status', type: 'String', protoType: 'string' },
-                        { name: 'processedAt', type: 'String', protoType: 'string' }
-                    ],
                     batchSize: 10,
                     batchTimeoutMs: 1000
                 },
@@ -84,17 +106,7 @@ class PipelineGenerator {
                     name: 'Validate Order',
                     cardinality: 'ONE_TO_ONE',
                     inputTypeName: 'OrderInput',
-                    inputFields: [
-                        { name: 'id', type: 'UUID', protoType: 'string' },
-                        { name: 'customerId', type: 'UUID', protoType: 'string' },
-                        { name: 'amount', type: 'Double', protoType: 'double' }
-                    ],
                     outputTypeName: 'ValidationOutput',
-                    outputFields: [
-                        { name: 'id', type: 'UUID', protoType: 'string' },
-                        { name: 'isValid', type: 'Boolean', protoType: 'bool' },
-                        { name: 'message', type: 'String', protoType: 'string' }
-                    ],
                     batchSize: 10,
                     batchTimeoutMs: 1000
                 }
@@ -112,6 +124,14 @@ class PipelineGenerator {
     loadConfig(configPath) {
         const yamlStr = fs.readFileSync(configPath, 'utf8');
         const config = YAML.load(yamlStr);
+        if (!config || typeof config !== 'object' || Array.isArray(config)) {
+            throw new Error('Configuration root must be a YAML object');
+        }
+        if (config.version === undefined) {
+            config.version = 1;
+        } else if (!Number.isInteger(config.version)) {
+            throw new Error(`Configuration version must be an integer, got '${config.version}'`);
+        }
 
         // Normalize casing for JSON schema validation.
         if (typeof config.runtimeLayout === 'string') {
@@ -119,6 +139,9 @@ class PipelineGenerator {
         }
         if (typeof config.transport === 'string') {
             config.transport = config.transport.trim().toUpperCase();
+        }
+        if (config.version === 2 && Array.isArray(config.steps)) {
+            config.steps = config.steps.map((step) => this.normalizeV2Step(step));
         }
         
         // Validate the configuration against the schema
@@ -133,15 +156,238 @@ class PipelineGenerator {
             ).join('\n');
             throw new Error(`Configuration validation failed:\n${errorMessages}`);
         }
-        
-        this.validateAspectNames(config.aspects);
 
-        // Process steps to add missing properties that are normally added by interactive mode
-        config.steps = this.processSteps(config.steps);
+        this.validateAspectNames(config.aspects);
         config.runtimeLayout = this.normalizeRuntimeLayout(config.runtimeLayout);
         config.transport = this.normalizeTransport(config.transport, config.runtimeLayout);
         
         return config;
+    }
+
+    toScaffoldConfig(config) {
+        const scaffoldConfig = { ...config };
+        scaffoldConfig.steps = this.processSteps(this.materializeSteps(config));
+        return scaffoldConfig;
+    }
+
+    materializeSteps(config) {
+        if (config.version !== 2) {
+            return config.steps;
+        }
+        const messages = config.messages || {};
+        return config.steps.map((step) => {
+            const materialized = { ...step };
+            materialized.inputFields = this.materializeStepFields(step.inputTypeName, step.inputFields, messages);
+            materialized.outputFields = this.materializeStepFields(step.outputTypeName, step.outputFields, messages);
+            return materialized;
+        });
+    }
+
+    materializeStepFields(typeName, inlineFields, messages) {
+        const topLevel = typeName && messages[typeName] && Array.isArray(messages[typeName].fields)
+            ? messages[typeName].fields
+            : null;
+        if (typeName && !topLevel) {
+            throw new Error(`Missing message definition for '${typeName}'`);
+        }
+        if (topLevel && Array.isArray(inlineFields)) {
+            const topLevelNormalized = this.canonicalizeFields(topLevel.map((field) => this.toScaffoldField(field)));
+            const inlineNormalized = this.canonicalizeFields(inlineFields.map((field) => this.toScaffoldField(field)));
+            if (!this.deepEqual(topLevelNormalized, inlineNormalized)) {
+                throw new Error(`Conflicting inline vs top-level field definitions for '${typeName}'`);
+            }
+        }
+        const sourceFields = topLevel || inlineFields || [];
+        return sourceFields.map((field) => this.toScaffoldField(field));
+    }
+
+    toScaffoldField(field) {
+        const authoredType = field.type;
+        if (authoredType === 'map') {
+            const keyJava = this.isMessageReferenceType(field.keyType)
+                ? field.keyType
+                : this.semanticTypeToJavaType(field.keyType);
+            const valueJava = this.isMessageReferenceType(field.valueType)
+                ? field.valueType
+                : this.semanticTypeToJavaType(field.valueType);
+            const keyProto = this.isMessageReferenceType(field.keyType)
+                ? field.keyType
+                : this.semanticTypeToProtoType(field.keyType);
+            const valueProto = this.isMessageReferenceType(field.valueType)
+                ? field.valueType
+                : this.semanticTypeToProtoType(field.valueType);
+            return {
+                ...field,
+                type: `Map<${keyJava}, ${valueJava}>`,
+                protoType: `map<${keyProto}, ${valueProto}>`
+            };
+        }
+        if (this.isMessageReferenceType(authoredType)) {
+            if (field.repeated) {
+                return {
+                    ...field,
+                    type: `List<${authoredType}>`,
+                    protoType: authoredType
+                };
+            }
+            return {
+                ...field,
+                type: authoredType,
+                protoType: authoredType
+            };
+        }
+        const javaType = this.semanticTypeToJavaType(authoredType);
+        const protoType = this.semanticTypeToProtoType(authoredType);
+        // After the map/message-reference branches (including isMessageReferenceType),
+        // optional semantic fields still use the semanticTypeToJavaType result directly.
+        // This avoids forcing Optional<T> import/converter changes across existing templates;
+        // mapper/runtime layers handle presence semantics from field metadata.
+        if (field.repeated) {
+            return {
+                ...field,
+                type: `List<${javaType}>`,
+                protoType
+            };
+        }
+        return {
+            ...field,
+            type: javaType,
+            protoType
+        };
+    }
+
+    normalizeV2Step(step) {
+        if (!step || typeof step !== 'object') {
+            return step;
+        }
+        const normalized = { ...step };
+        if (normalized.execution && typeof normalized.execution === 'object') {
+            normalized.execution = { ...normalized.execution };
+            if (typeof normalized.execution.mode === 'string') {
+                normalized.execution.mode = normalized.execution.mode.trim().toUpperCase();
+            }
+            if (typeof normalized.execution.protocol === 'string') {
+                normalized.execution.protocol = normalized.execution.protocol.trim().toUpperCase();
+            }
+        }
+        return normalized;
+    }
+
+    canonicalizeFields(fields) {
+        return [...fields]
+            .map((field) => this.canonicalizeValue(field))
+            .sort((left, right) => {
+                const leftNumber = Number.isFinite(left.number) ? left.number : Number.MAX_SAFE_INTEGER;
+                const rightNumber = Number.isFinite(right.number) ? right.number : Number.MAX_SAFE_INTEGER;
+                if (leftNumber !== rightNumber) {
+                    return leftNumber - rightNumber;
+                }
+                return String(left.name || '').localeCompare(String(right.name || ''));
+            });
+    }
+
+    canonicalizeValue(value) {
+        if (Array.isArray(value)) {
+            return value.map((item) => this.canonicalizeValue(item));
+        }
+        if (value && typeof value === 'object') {
+            return Object.keys(value)
+                .sort()
+                .reduce((acc, key) => {
+                    acc[key] = this.canonicalizeValue(value[key]);
+                    return acc;
+                }, {});
+        }
+        return value;
+    }
+
+    deepEqual(left, right) {
+        if (left === right) {
+            return true;
+        }
+        if (Array.isArray(left) && Array.isArray(right)) {
+            return left.length === right.length && left.every((value, index) => this.deepEqual(value, right[index]));
+        }
+        if (left && right && typeof left === 'object' && typeof right === 'object') {
+            const leftKeys = Object.keys(left);
+            const rightKeys = Object.keys(right);
+            return leftKeys.length === rightKeys.length
+                && leftKeys.every((key) => Object.prototype.hasOwnProperty.call(right, key)
+                    && this.deepEqual(left[key], right[key]));
+        }
+        return false;
+    }
+
+    isMessageReferenceType(type) {
+        return typeof type === 'string' && /^[A-Z][A-Za-z0-9_]*$/.test(type);
+    }
+
+    semanticTypeToJavaType(type) {
+        switch (type) {
+            case 'string':
+                return 'String';
+            case 'bool':
+                return 'Boolean';
+            case 'int32':
+                return 'Integer';
+            case 'int64':
+                return 'Long';
+            case 'float32':
+                return 'Float';
+            case 'float64':
+                return 'Double';
+            case 'decimal':
+                return 'BigDecimal';
+            case 'uuid':
+                return 'UUID';
+            case 'timestamp':
+                return 'Instant';
+            case 'datetime':
+                return 'LocalDateTime';
+            case 'date':
+                return 'LocalDate';
+            case 'duration':
+                return 'Duration';
+            case 'bytes':
+                return 'byte[]';
+            case 'currency':
+                return 'Currency';
+            case 'uri':
+                return 'URI';
+            case 'path':
+                return 'Path';
+            default:
+                return type;
+        }
+    }
+
+    semanticTypeToProtoType(type) {
+        switch (type) {
+            case 'bool':
+                return 'bool';
+            case 'int32':
+                return 'int32';
+            case 'int64':
+                return 'int64';
+            case 'float32':
+                return 'float';
+            case 'float64':
+                return 'double';
+            case 'bytes':
+                return 'bytes';
+            case 'string':
+            case 'decimal':
+            case 'uuid':
+            case 'timestamp':
+            case 'datetime':
+            case 'date':
+            case 'duration':
+            case 'currency':
+            case 'uri':
+            case 'path':
+            default:
+                return 'string';
+        }
     }
 
     normalizeRuntimeLayout(runtimeLayout) {

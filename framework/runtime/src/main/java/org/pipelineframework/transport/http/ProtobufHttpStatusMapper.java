@@ -112,6 +112,35 @@ public final class ProtobufHttpStatusMapper {
         };
     }
 
+    /**
+     * Returns whether the protobuf status should be treated as retryable by transport callers.
+     *
+     * @param status protobuf status envelope
+     * @return true when the failure is transient/retryable
+     */
+    public static boolean isRetryable(Status status) {
+        if (status == null) {
+            return true;
+        }
+        Code code = Code.forNumber(status.getCode());
+        if (code == null) {
+            return true;
+        }
+        return switch (code) {
+            case OK,
+                INVALID_ARGUMENT,
+                FAILED_PRECONDITION,
+                NOT_FOUND,
+                ALREADY_EXISTS,
+                CANCELLED,
+                UNAUTHENTICATED,
+                PERMISSION_DENIED,
+                OUT_OF_RANGE,
+                UNIMPLEMENTED -> false;
+            default -> true;
+        };
+    }
+
     private static Status baseStatus(
         int code,
         String message,

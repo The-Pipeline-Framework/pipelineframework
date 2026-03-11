@@ -16,35 +16,73 @@
 
 package org.pipelineframework.config.template;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 /**
  * Full pipeline template configuration loaded from the pipeline template YAML file.
  *
- * @param appName the application name
- * @param basePackage the base Java package
- * @param transport the global transport (GRPC, REST, or LOCAL)
- * @param platform the runtime/deployment platform mode
- * @param steps the pipeline steps defined in the template
- * @param aspects the aspect configurations keyed by aspect name
+ * @param version template config schema version
+ * @param appName application name
+ * @param basePackage base Java package
+ * @param transport global transport
+ * @param platform runtime/deployment platform mode
+ * @param messages top-level named messages
+ * @param steps pipeline steps
+ * @param aspects aspect configurations keyed by aspect name
  */
 public record PipelineTemplateConfig(
+    int version,
     String appName,
     String basePackage,
     String transport,
     PipelinePlatform platform,
+    Map<String, PipelineTemplateMessage> messages,
     List<PipelineTemplateStep> steps,
     Map<String, PipelineTemplateAspect> aspects
 ) {
+    public PipelineTemplateConfig {
+        if (version <= 0) {
+            throw new IllegalArgumentException("version must be > 0");
+        }
+        requireText(appName, "appName");
+        requireText(basePackage, "basePackage");
+        requireText(transport, "transport");
+        if (platform == null) {
+            throw new IllegalArgumentException("platform must not be null");
+        }
+        validateMap(messages, "messages");
+        validateMap(aspects, "aspects");
+        messages = messages == null ? Map.of() : Map.copyOf(messages);
+        // Preserve null step placeholders so downstream phases/tests can explicitly skip them.
+        steps = steps == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(steps));
+        aspects = aspects == null ? Map.of() : Map.copyOf(aspects);
+    }
+
+    private static void requireText(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " must not be blank");
+        }
+    }
+
+    private static void validateMap(Map<?, ?> values, String fieldName) {
+        if (values == null) {
+            return;
+        }
+        for (Map.Entry<?, ?> entry : values.entrySet()) {
+            if (entry.getKey() == null) {
+                throw new IllegalArgumentException(fieldName + " must not contain null keys");
+            }
+            if (entry.getValue() == null) {
+                throw new IllegalArgumentException(fieldName + " must not contain null values");
+            }
+        }
+    }
+
     /**
-     * Backward-compatible constructor used by existing code paths.
-     *
-     * @param appName app name
-     * @param basePackage base package
-     * @param transport transport
-     * @param steps steps
-     * @param aspects aspects
+     * Constructs a PipelineTemplateConfig for existing call sites, supplying defaults for new fields (version = 1, platform = PipelinePlatform.COMPUTE, empty messages).
      */
     public PipelineTemplateConfig(
         String appName,
@@ -53,6 +91,27 @@ public record PipelineTemplateConfig(
         List<PipelineTemplateStep> steps,
         Map<String, PipelineTemplateAspect> aspects
     ) {
-        this(appName, basePackage, transport, PipelinePlatform.COMPUTE, steps, aspects);
+        this(1, appName, basePackage, transport, PipelinePlatform.COMPUTE, Map.of(), steps, aspects);
+    }
+
+    /**
+     * Create a pipeline template configuration preset to version 1 with no messages.
+     *
+     * @param appName     the application name for the generated pipeline artifacts
+     * @param basePackage the root package name for generated code
+     * @param transport   the transport identifier to use for the pipeline
+     * @param platform    the target pipeline platform
+     * @param steps       the ordered list of template steps; may contain null placeholders to indicate skipped positions
+     * @param aspects     a map of aspect identifiers to their template definitions
+     */
+    public PipelineTemplateConfig(
+        String appName,
+        String basePackage,
+        String transport,
+        PipelinePlatform platform,
+        List<PipelineTemplateStep> steps,
+        Map<String, PipelineTemplateAspect> aspects
+    ) {
+        this(1, appName, basePackage, transport, platform, Map.of(), steps, aspects);
     }
 }

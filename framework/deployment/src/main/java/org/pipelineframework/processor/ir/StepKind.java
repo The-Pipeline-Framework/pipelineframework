@@ -17,7 +17,7 @@
 package org.pipelineframework.processor.ir;
 
 /**
- * Enum representing the kind of step: internal or delegated.
+ * Enum representing the kind of step: internal, delegated, or remote.
  */
 public enum StepKind {
     /**
@@ -30,5 +30,11 @@ public enum StepKind {
      * A delegated step where the execution is provided by an operator service
      * that is not annotated with @PipelineStep.
      */
-    DELEGATED
+    DELEGATED,
+
+    /**
+     * A remote step whose execution is delegated to an external operator endpoint
+     * resolved from v2 template execution metadata.
+     */
+    REMOTE
 }

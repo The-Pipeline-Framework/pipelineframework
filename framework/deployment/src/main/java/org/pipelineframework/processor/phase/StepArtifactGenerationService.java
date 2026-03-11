@@ -18,6 +18,7 @@ import org.pipelineframework.processor.renderer.ClientStepRenderer;
 import org.pipelineframework.processor.renderer.GenerationContext;
 import org.pipelineframework.processor.renderer.GrpcServiceAdapterRenderer;
 import org.pipelineframework.processor.renderer.LocalClientStepRenderer;
+import org.pipelineframework.processor.renderer.RemoteOperatorAdapterRenderer;
 import org.pipelineframework.processor.renderer.RestClientStepRenderer;
 import org.pipelineframework.processor.renderer.RestFunctionHandlerRenderer;
 import org.pipelineframework.processor.renderer.RestResourceRenderer;
@@ -59,7 +60,8 @@ class StepArtifactGenerationService {
             LocalClientStepRenderer localClientRenderer,
             RestClientStepRenderer restClientRenderer,
             RestResourceRenderer restRenderer,
-            RestFunctionHandlerRenderer restFunctionHandlerRenderer) throws IOException {
+            RestFunctionHandlerRenderer restFunctionHandlerRenderer,
+            RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer) throws IOException {
         for (GenerationTarget target : model.enabledTargets()) {
             switch (target) {
                 case GRPC_SERVICE -> {
@@ -237,6 +239,24 @@ class StepArtifactGenerationService {
                         cacheKeyGenerator,
                         descriptorSet));
                     roleMetadataGenerator.recordClassWithRole(restClientClassName, restClientRole.name());
+                }
+                case REMOTE_OPERATOR_ADAPTER -> {
+                    if (grpcBinding == null) {
+                        ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
+                            "Skipping remote operator adapter generation for '" + model.generatedName()
+                                + "' because no gRPC binding is available.");
+                        break;
+                    }
+                    String adapterClassName = model.servicePackage() + PIPELINE_DOT + model.serviceClassName().simpleName();
+                    DeploymentRole adapterRole = model.deploymentRole();
+                    remoteOperatorAdapterRenderer.render(grpcBinding, new GenerationContext(
+                        ctx.getProcessingEnv(),
+                        pathResolver.resolveRoleOutputDir(ctx, adapterRole),
+                        adapterRole,
+                        enabledAspects,
+                        cacheKeyGenerator,
+                        descriptorSet));
+                    roleMetadataGenerator.recordClassWithRole(adapterClassName, adapterRole.name());
                 }
                 default -> {
                     if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {

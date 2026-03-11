@@ -1,64 +1,70 @@
+version: 2
 appName: Sample Pipeline App
 basePackage: com.example.sample
 runtimeLayout: modular
+messages:
+  CustomerInput:
+    fields:
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: name
+        type: string
+      - number: 3
+        name: email
+        type: string
+      - number: 4
+        name: createdAt
+        type: datetime
+  CustomerOutput:
+    fields:
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: name
+        type: string
+      - number: 3
+        name: status
+        type: string
+      - number: 4
+        name: processedAt
+        type: timestamp
+  OrderInput:
+    fields:
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: customerId
+        type: uuid
+      - number: 3
+        name: amount
+        type: decimal
+  ValidationOutput:
+    fields:
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: isValid
+        type: bool
+      - number: 3
+        name: message
+        type: string
 steps:
   - name: Process Customer
     cardinality: ONE_TO_ONE
     inputTypeName: CustomerInput
-    inputFields:
-      - name: id
-        type: UUID
-        protoType: string
-      - name: name
-        type: String
-        protoType: string
-      - name: email
-        type: String
-        protoType: string
-      - name: createdAt
-        type: LocalDateTime
-        protoType: string
     outputTypeName: CustomerOutput
-    outputFields:
-      - name: id
-        type: UUID
-        protoType: string
-      - name: name
-        type: String
-        protoType: string
-      - name: status
-        type: String
-        protoType: string
-      - name: processedAt
-        type: LocalDateTime
-        protoType: string
     batchSize: 10
     batchTimeoutMs: 1000
     parallel: false
   - name: Validate Order
     cardinality: ONE_TO_ONE
     inputTypeName: OrderInput
-    inputFields:
-      - name: id
-        type: UUID
-        protoType: string
-      - name: customerId
-        type: UUID
-        protoType: string
-      - name: amount
-        type: Double
-        protoType: double
     outputTypeName: ValidationOutput
-    outputFields:
-      - name: id
-        type: UUID
-        protoType: string
-      - name: isValid
-        type: Boolean
-        protoType: bool
-      - name: message
-        type: String
-        protoType: string
     batchSize: 10
     batchTimeoutMs: 1000
     parallel: false

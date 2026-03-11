@@ -140,4 +140,461 @@ class PipelineTemplateConfigLoaderTest {
         assertEquals(PipelinePlatform.COMPUTE, config.platform());
         assertEquals("REST", config.transport());
     }
+
+    @Test
+    void loadsV2MessagesAndResolvesStepContracts() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "GRPC"
+            messages:
+              Money:
+                fields:
+                  - number: 1
+                    name: "amount"
+                    type: "decimal"
+                  - number: 2
+                    name: "currency"
+                    type: "currency"
+              ChargeRequest:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+                  - number: 2
+                    name: "money"
+                    type: "Money"
+                reserved:
+                  numbers: [4, 5]
+                  names: ["discount"]
+              ChargeResult:
+                fields:
+                  - number: 1
+                    name: "paymentId"
+                    type: "uuid"
+                    optional: true
+                  - number: 2
+                    name: "auditTrail"
+                    type: "string"
+                    repeated: true
+                    deprecated: true
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ChargeRequest"
+                outputTypeName: "ChargeResult"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2.yaml");
+        Files.writeString(configPath, yaml);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+
+        assertEquals(2, config.version());
+        assertTrue(config.messages().containsKey("Money"));
+        assertTrue(config.messages().containsKey("ChargeRequest"));
+        assertEquals(1, config.steps().size());
+        PipelineTemplateStep step = config.steps().getFirst();
+        assertEquals("ChargeRequest", step.inputTypeName());
+        assertEquals("ChargeResult", step.outputTypeName());
+        assertEquals(2, step.inputFields().size());
+        assertEquals(2, step.outputFields().size());
+
+        PipelineTemplateField moneyField = step.inputFields().get(1);
+        assertEquals("message", moneyField.canonicalType());
+        assertEquals("Money", moneyField.messageRef());
+        assertEquals("Money", moneyField.protoType());
+
+        PipelineTemplateField resultField = step.outputFields().getFirst();
+        assertTrue(resultField.optional());
+        assertEquals("uuid", resultField.canonicalType());
+        assertEquals("string", resultField.protoType());
+
+        PipelineTemplateField repeatedField = step.outputFields().get(1);
+        assertTrue(repeatedField.repeated());
+        assertTrue(repeatedField.deprecated());
+        assertEquals("List<String>", repeatedField.javaType());
+
+        PipelineTemplateMessage requestMessage = config.messages().get("ChargeRequest");
+        assertEquals(List.of(4, 5), requestMessage.reserved().numbers());
+        assertEquals(List.of("discount"), requestMessage.reserved().names());
+    }
+
+    @Test
+    void loadsRemoteExecutionMetadataForV2Steps() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "REST"
+            messages:
+              ChargeRequest:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+              ChargeResult:
+                fields:
+                  - number: 1
+                    name: "paymentId"
+                    type: "uuid"
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ChargeRequest"
+                outputTypeName: "ChargeResult"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "charge-card"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  timeoutMs: 3000
+                  target:
+                    urlConfigKey: "tpf.remote-operators.charge-card.url"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-remote.yaml");
+        Files.writeString(configPath, yaml);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+        PipelineTemplateStep step = config.steps().getFirst();
+
+        assertNotNull(step.execution());
+        assertTrue(step.execution().isRemote());
+        assertEquals("charge-card", step.execution().operatorId());
+        assertEquals("PROTOBUF_HTTP_V1", step.execution().protocol());
+        assertEquals(3000, step.execution().timeoutMs());
+        assertEquals("tpf.remote-operators.charge-card.url", step.execution().target().urlConfigKey());
+    }
+
+    @Test
+    void rejectsRemoteExecutionWhenCardinalityIsNotUnary() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "REST"
+            messages:
+              ChargeRequest:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+              ChargeResult:
+                fields:
+                  - number: 1
+                    name: "paymentId"
+                    type: "uuid"
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_MANY"
+                inputTypeName: "ChargeRequest"
+                outputTypeName: "ChargeResult"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "charge-card"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  target:
+                    url: "https://example.com/operators/charge-card"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-remote-invalid.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+        assertTrue(ex.getMessage().contains("ONE_TO_ONE"));
+    }
+
+    @Test
+    void rejectsRemoteExecutionWithoutExactlyOneTargetSource() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "REST"
+            messages:
+              ChargeRequest:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+              ChargeResult:
+                fields:
+                  - number: 1
+                    name: "paymentId"
+                    type: "uuid"
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ChargeRequest"
+                outputTypeName: "ChargeResult"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "charge-card"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  target:
+                    url: "https://example.com/operators/charge-card"
+                    urlConfigKey: "tpf.remote-operators.charge-card.url"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-remote-invalid-target.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalArgumentException ex = assertThrows(
+            IllegalArgumentException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+        assertTrue(ex.getMessage().contains("Specify either url or urlConfigKey"));
+    }
+
+    @Test
+    void rejectsNonNumericTemplateVersion() throws Exception {
+        String yaml = """
+            version: "2"
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "REST"
+            steps: []
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-invalid-version.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+        assertTrue(ex.getMessage().contains("Template version must be numeric"));
+    }
+
+    @Test
+    void rejectsLocalExecutionBlockOnV2Step() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "REST"
+            messages:
+              ChargeRequest:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+              ChargeResult:
+                fields:
+                  - number: 1
+                    name: "paymentId"
+                    type: "uuid"
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ChargeRequest"
+                outputTypeName: "ChargeResult"
+                execution:
+                  mode: "LOCAL"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-local-execution.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+        assertTrue(ex.getMessage().contains("REMOTE mode"));
+    }
+
+    @Test
+    void rejectsDuplicateFieldNumbersWithinMessage() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "GRPC"
+            messages:
+              ChargeResult:
+                fields:
+                  - number: 1
+                    name: "paymentId"
+                    type: "uuid"
+                  - number: 1
+                    name: "paymentRef"
+                    type: "uuid"
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ChargeResult"
+                outputTypeName: "ChargeResult"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-duplicate-fields.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+        assertTrue(ex.getMessage().contains("Duplicate field number"));
+    }
+
+    @Test
+    void rejectsDuplicateFieldNamesWithinMessage() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "GRPC"
+            messages:
+              ChargeResult:
+                fields:
+                  - number: 1
+                    name: "paymentId"
+                    type: "uuid"
+                  - number: 2
+                    name: "paymentId"
+                    type: "string"
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ChargeResult"
+                outputTypeName: "ChargeResult"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-duplicate-field-names.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+        assertTrue(ex.getMessage().contains("Duplicate field name"));
+    }
+
+    @Test
+    void rejectsInvalidMapValueTypeInV2Message() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "GRPC"
+            messages:
+              ChargeResult:
+                fields:
+                  - number: 1
+                    name: "metadata"
+                    type: "map"
+                    keyType: "string"
+                    valueType: "flot32"
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ChargeResult"
+                outputTypeName: "ChargeResult"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-invalid-map-value.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+        assertTrue(ex.getMessage().contains("unsupported valueType"));
+    }
+
+    @Test
+    void normalizesAnonymousInlineV2Contracts() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "GRPC"
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputFields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+                outputFields:
+                  - number: 1
+                    name: "paymentId"
+                    type: "uuid"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-anonymous-inline.yaml");
+        Files.writeString(configPath, yaml);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+        PipelineTemplateStep step = config.steps().getFirst();
+
+        assertEquals("uuid", step.inputFields().getFirst().canonicalType());
+        assertEquals("UUID", step.inputFields().getFirst().javaType());
+        assertEquals("string", step.inputFields().getFirst().protoType());
+        assertEquals("uuid", step.outputFields().getFirst().canonicalType());
+    }
+
+    @Test
+    void rejectsInlineMessageNamesThatShadowBuiltInTypes() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "GRPC"
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "uuid"
+                inputFields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+                outputTypeName: "ChargeResult"
+                outputFields:
+                  - number: 1
+                    name: "paymentId"
+                    type: "uuid"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-inline-builtin-name.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+        assertTrue(ex.getMessage().contains("conflicts with a built-in semantic type"));
+    }
+
+    @Test
+    void rejectsFractionalTemplateVersion() throws Exception {
+        String yaml = """
+            version: 2.5
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "GRPC"
+            steps: []
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-fractional-version.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+        assertTrue(ex.getMessage().contains("fractional values are not allowed"));
+    }
+
+    @Test
+    void rejectsFractionalFieldAndReservedNumbers() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "GRPC"
+            messages:
+              ChargeRequest:
+                fields:
+                  - number: 1.2
+                    name: "orderId"
+                    type: "uuid"
+                reserved:
+                  numbers: [4.2]
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ChargeRequest"
+                outputTypeName: "ChargeRequest"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-fractional-field-values.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+        assertTrue(ex.getMessage().contains("fractional values are not allowed"));
+    }
 }
