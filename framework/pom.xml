@@ -128,6 +128,10 @@
                     </dependencies>
                     <configuration>
                         <useSystemClassLoader>true</useSystemClassLoader>
+                        <!--
+                          skipUnitTests is a Surefire-only CI switch for verify lanes that should run Failsafe ITs
+                          without rerunning unit tests. skipTests preserves standard Maven bootstrap/dev behavior.
+                        -->
                         <skip>${skipUnitTests}</skip>
                         <skipTests>${skipTests}</skipTests>
                         <forkCount>1</forkCount>

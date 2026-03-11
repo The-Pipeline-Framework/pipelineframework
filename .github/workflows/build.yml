@@ -23,11 +23,14 @@ env:
   MAVEN_OPTS: -Xmx1g -Xms512m
   MAVEN_ARGS_BUILD: -B -T 1C -V -P!coverage -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
   BOOTSTRAP_ARTIFACT: pr-m2-cache
+  GENERIC_VERIFY_IT_PATTERN: "*IT,*ITCase,!CsvPaymentsEndToEndIT,!CsvPaymentsPipelineRuntimeEndToEndIT,!SearchPipelineEndToEndIT,!RawDocumentResourceIT,!ParsedDocumentResourceIT,!TokenBatchResourceIT,!IndexAckResourceIT"
 
 jobs:
   bootstrap:
     name: Bootstrap Framework Artifacts
     runs-on: ubuntu-latest
+    outputs:
+      artifact_name: ${{ steps.artifact-meta.outputs.artifact_name }}
 
     steps:
       - name: Checkout
@@ -55,6 +58,10 @@ jobs:
             [ -d "$d" ] && dirs+=("$d")
           done
           [ ${#dirs[@]} -gt 0 ] && tar -czf /tmp/m2-artifacts/${{ env.BOOTSTRAP_ARTIFACT }}.tar.gz "${dirs[@]}"
+
+      - name: Record artifact metadata
+        id: artifact-meta
+        run: echo "artifact_name=${{ env.BOOTSTRAP_ARTIFACT }}" >> "$GITHUB_OUTPUT"
 
       - name: Upload framework artifacts
         uses: actions/upload-artifact@v4
@@ -86,13 +93,13 @@ jobs:
       - name: Download framework artifacts
         uses: actions/download-artifact@v4
         with:
-          name: ${{ env.BOOTSTRAP_ARTIFACT }}
+          name: ${{ needs.bootstrap.outputs.artifact_name }}
           path: /tmp/m2-artifacts
 
       - name: Extract framework artifacts
         run: |
           mkdir -p ~/.m2/repository
-          tar -xzf /tmp/m2-artifacts/${{ env.BOOTSTRAP_ARTIFACT }}.tar.gz -C ~/.m2/repository
+          tar -xzf /tmp/m2-artifacts/${{ needs.bootstrap.outputs.artifact_name }}.tar.gz -C ~/.m2/repository
 
       - name: Run unit tests
         run: |
@@ -124,21 +131,22 @@ jobs:
       - name: Download framework artifacts
         uses: actions/download-artifact@v4
         with:
-          name: ${{ env.BOOTSTRAP_ARTIFACT }}
+          name: ${{ needs.bootstrap.outputs.artifact_name }}
           path: /tmp/m2-artifacts
 
       - name: Extract framework artifacts
         run: |
           mkdir -p ~/.m2/repository
-          tar -xzf /tmp/m2-artifacts/${{ env.BOOTSTRAP_ARTIFACT }}.tar.gz -C ~/.m2/repository
+          tar -xzf /tmp/m2-artifacts/${{ needs.bootstrap.outputs.artifact_name }}.tar.gz -C ~/.m2/repository
 
       - name: Run generic verify
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
+          # Dedicated E2E or topology-specific tests stay in their reusable jobs, not in generic verify.
           ./mvnw "${maven_args[@]}" clean verify \
             -DskipUnitTests=true \
             -DskipNative=true \
-            "-Dit.test=*IT,*ITCase,!CsvPaymentsEndToEndIT,!CsvPaymentsPipelineRuntimeEndToEndIT,!SearchPipelineEndToEndIT,!RawDocumentResourceIT,!ParsedDocumentResourceIT,!TokenBatchResourceIT,!IndexAckResourceIT" \
+            "-Dit.test=${{ env.GENERIC_VERIFY_IT_PATTERN }}" \
             -Dquarkus.container-image.build=false
 
   e2e-csv-monolith:
@@ -146,7 +154,7 @@ jobs:
     needs: bootstrap
     uses: ./.github/workflows/e2e-csv-monolith.yml
     with:
-      artifact_name: pr-m2-cache
+      artifact_name: ${{ needs.bootstrap.outputs.artifact_name }}
     secrets: inherit
 
   e2e-csv-pipeline-runtime:
@@ -154,7 +162,7 @@ jobs:
     needs: bootstrap
     uses: ./.github/workflows/e2e-csv-pipeline-runtime.yml
     with:
-      artifact_name: pr-m2-cache
+      artifact_name: ${{ needs.bootstrap.outputs.artifact_name }}
     secrets: inherit
 
   e2e-search-lambda:
@@ -162,7 +170,7 @@ jobs:
     needs: bootstrap
     uses: ./.github/workflows/e2e-search-lambda-smoke.yml
     with:
-      artifact_name: pr-m2-cache
+      artifact_name: ${{ needs.bootstrap.outputs.artifact_name }}
     secrets: inherit
 
   e2e-checkout-ftgo:
@@ -170,5 +178,5 @@ jobs:
     needs: bootstrap
     uses: ./.github/workflows/e2e-checkout-ftgo-smoke.yml
     with:
-      artifact_name: pr-m2-cache
+      artifact_name: ${{ needs.bootstrap.outputs.artifact_name }}
     secrets: inherit
