@@ -22,6 +22,7 @@ import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -50,7 +51,7 @@ public class PipelineProtoGenerator {
     private static final String TYPES_PROTO = "pipeline-types.proto";
     private static final String IDL_SNAPSHOT_PROPERTY = "tpf.idl.compat.baseline";
     private static final String IDL_SNAPSHOT_ENV = "TPF_IDL_COMPAT_BASELINE";
-    private static final ObjectMapper IDL_MAPPER = PipelineJson.mapper().findAndRegisterModules();
+    private static final ObjectMapper IDL_MAPPER = PipelineJson.mapper().copy().findAndRegisterModules();
 
     /**
      * Creates a new PipelineProtoGenerator.
@@ -100,12 +101,11 @@ public class PipelineProtoGenerator {
             throw new IllegalStateException("Failed to create proto output directory: " + resolvedOutput, e);
         }
 
-        writeIdlSnapshot(resolvedModuleDir, config);
-
         List<PipelineTemplateStep> steps = config.steps();
         if (steps == null || steps.isEmpty()) {
             return;
         }
+        writeIdlSnapshot(resolvedModuleDir, config);
 
         boolean v2 = config.version() >= 2;
         List<ResolvedStep> resolvedSteps = normalizeSteps(steps);
@@ -265,6 +265,7 @@ public class PipelineProtoGenerator {
      *         the rendered message definitions
      */
     private String renderTypesProto(String basePackage, Map<String, PipelineTemplateMessage> messages) {
+        Map<String, PipelineTemplateMessage> safeMessages = messages == null ? Map.of() : new LinkedHashMap<>(messages);
         StringBuilder builder = new StringBuilder();
         builder.append("syntax = \"proto3\";\n\n");
         builder.append("package ").append(basePackage).append(";\n\n");
@@ -272,10 +273,10 @@ public class PipelineProtoGenerator {
             .append(basePackage)
             .append(".grpc\";\n\n");
         boolean first = true;
-        List<String> messageNames = new ArrayList<>(messages.keySet());
+        List<String> messageNames = new ArrayList<>(safeMessages.keySet());
         Collections.sort(messageNames);
         for (String messageName : messageNames) {
-            PipelineTemplateMessage message = messages.get(messageName);
+            PipelineTemplateMessage message = safeMessages.get(messageName);
             if (!first) {
                 builder.append('\n');
             }
@@ -466,7 +467,14 @@ public class PipelineProtoGenerator {
      * @return the protobuf type string, prefixed with "repeated " if the field is repeated; `"string"` if the field's protoType is null or blank, otherwise the field's protoType
      */
     private String renderLegacyFieldType(PipelineTemplateField field) {
-        String baseType = field.protoType() == null || field.protoType().isBlank() ? "string" : field.protoType();
+        String baseType = field.protoType();
+        if (baseType == null || baseType.isBlank()) {
+            System.getLogger(PipelineProtoGenerator.class.getName()).log(
+                System.Logger.Level.WARNING,
+                "Legacy field '{0}' is missing protoType; defaulting to string",
+                field.name());
+            baseType = "string";
+        }
         if (field.repeated()) {
             return "repeated " + baseType;
         }

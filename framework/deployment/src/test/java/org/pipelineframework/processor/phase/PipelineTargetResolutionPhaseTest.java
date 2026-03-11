@@ -213,6 +213,9 @@ class PipelineTargetResolutionPhaseTest {
         assertEquals(
             Set.of(GenerationTarget.GRPC_SERVICE, GenerationTarget.REMOTE_OPERATOR_ADAPTER),
             updated.enabledTargets());
+        assertEquals(
+            Set.of(GenerationTarget.GRPC_SERVICE, GenerationTarget.REMOTE_OPERATOR_ADAPTER),
+            context.getResolvedTargets());
     }
 
     private void assertResolvedTargets(

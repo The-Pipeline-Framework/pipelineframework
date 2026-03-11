@@ -52,12 +52,15 @@ messages:
   Nutrients:
     fields:
       - number: 1
+        name: id
+        type: uuid
+      - number: 2
         name: name
         type: string
-      - number: 2
+      - number: 3
         name: amountMg
         type: float64
-      - number: 3
+      - number: 4
         name: absorptionRate
         type: float64
   Residue:

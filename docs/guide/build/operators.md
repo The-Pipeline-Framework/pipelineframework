@@ -60,7 +60,25 @@ steps:
       protocol: "PROTOBUF_HTTP_V1"
       timeoutMs: 3000
       target:
+        # Set exactly one of execution.target.url or execution.target.urlConfigKey.
         urlConfigKey: "tpf.remote-operators.charge-card.url"
+```
+
+Or provide the full URL directly:
+
+```yaml
+steps:
+  - name: "Charge Card"
+    cardinality: "ONE_TO_ONE"
+    inputTypeName: "ChargeRequest"
+    outputTypeName: "ChargeResult"
+    execution:
+      mode: "REMOTE"
+      operatorId: "charge-card"
+      protocol: "PROTOBUF_HTTP_V1"
+      timeoutMs: 3000
+      target:
+        url: "https://operators.example.com/charge-card/process"
 ```
 
 Rules:
@@ -131,7 +149,7 @@ Operator category does not select transport.
 - Mapper-compatible bindings mean generated protobuf/service bindings must match delegated/operator routing conventions (field/service naming).
 - This ensures RPC requests map to the intended operator implementation.
 - `NON_REACTIVE` and `REACTIVE` categories follow the same transport prerequisites.
-- Remote operators keep the same separation: the pipeline transport controls how callers reach TPF, while the remote step `execution.protocol` controls how TPF reaches the operator.
+- Remote operators maintain the same separation: the pipeline transport controls how callers reach TPF, while the remote step `execution.protocol` controls how TPF reaches the operator.
 
 ## Related
 

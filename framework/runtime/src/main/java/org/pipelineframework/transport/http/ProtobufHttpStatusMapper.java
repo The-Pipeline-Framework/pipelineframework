@@ -116,7 +116,8 @@ public final class ProtobufHttpStatusMapper {
      * Returns whether the protobuf status should be treated as retryable by transport callers.
      *
      * @param status protobuf status envelope
-     * @return true when the failure is transient/retryable
+     * @return true when the failure is transient/retryable. Null status values and unknown
+     *         protobuf codes default to retryable as a fail-safe.
      */
     public static boolean isRetryable(Status status) {
         if (status == null) {
@@ -136,7 +137,8 @@ public final class ProtobufHttpStatusMapper {
                 UNAUTHENTICATED,
                 PERMISSION_DENIED,
                 OUT_OF_RANGE,
-                UNIMPLEMENTED -> false;
+                UNIMPLEMENTED,
+                DATA_LOSS -> false;
             default -> true;
         };
     }

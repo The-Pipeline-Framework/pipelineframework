@@ -49,7 +49,7 @@ public record StepDefinition(
     public StepDefinition(
         String name,
         StepKind kind,
-        @Nullable ClassName executionClass,
+        ClassName executionClass,
         @Nullable ClassName externalMapper,
         MapperFallbackMode mapperFallback,
         @Nullable ClassName inputType,
@@ -71,14 +71,8 @@ public record StepDefinition(
         }
         if (kind == StepKind.REMOTE) {
             Objects.requireNonNull(remoteExecution, "Remote execution cannot be null for REMOTE steps");
-            if (executionClass != null) {
-                throw new IllegalArgumentException("REMOTE steps must not define an execution class");
-            }
         } else {
             Objects.requireNonNull(executionClass, "Execution class cannot be null");
-            if (remoteExecution != null) {
-                throw new IllegalArgumentException("Only REMOTE steps may define remoteExecution");
-            }
         }
         mapperFallback = mapperFallback == null ? MapperFallbackMode.NONE : mapperFallback;
     }

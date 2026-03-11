@@ -540,6 +540,37 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void rejectsOverflowingRemoteTimeoutValue() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        Path file = tempDir.resolve("pipeline.yaml");
+        Files.writeString(file, """
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "charge-card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "com.example.contract.ChargeRequest"
+                outputTypeName: "com.example.contract.ChargeResult"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "charge-card"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  timeoutMs: 3000000000
+                  target:
+                    url: "https://example.com/operators/charge-card"
+            """);
+
+        List<StepDefinition> steps = new StepDefinitionParser((kind, message) ->
+            diagnostics.add(kind + ":" + message)).parseStepDefinitions(file);
+
+        assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()));
+        assertTrue(errorSummary.contains("invalid integer value for execution.timeoutMs"));
+    }
+
+    @Test
     void rejectsExecutionBlockWhenModeIsNotRemote() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         Path file = tempDir.resolve("pipeline.yaml");

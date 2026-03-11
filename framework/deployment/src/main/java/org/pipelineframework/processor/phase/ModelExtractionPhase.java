@@ -42,9 +42,9 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     public static final String NO_YAML_DEFINITIONS_MESSAGE =
         "No YAML step definitions were found. Falling back to annotation-driven extraction.";
     private static final String MAPPER_FALLBACK_GLOBAL_OPTION = "pipeline.mapper.fallback.enabled";
+    private static final String DEFAULT_SERVICE_PACKAGE = "org.pipelineframework.pipeline.service";
 
     private final ModelContextRoleEnricher contextRoleEnricher;
-    private Consumer<String> ctxWarningLogger;
 
     /**
      * Creates a new ModelExtractionPhase.
@@ -79,7 +79,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
      */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
-        this.ctxWarningLogger = message -> {
+        Consumer<String> ctxWarningLogger = message -> {
             if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
                 ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING, message);
             }
@@ -90,7 +90,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         List<PipelineStepModel> stepModels;
         if (hasYamlStepDefinitions) {
             // Extract pipeline step models based on explicit YAML step definitions.
-            stepModels = new ArrayList<>(extractStepModelsFromYaml(ctx, stepDefinitions));
+            stepModels = new ArrayList<>(extractStepModelsFromYaml(ctx, stepDefinitions, ctxWarningLogger));
             // Some template-driven YAMLs declare logical steps without resolvable execution classes
             // for plugin-host modules. Keep legacy behavior by falling back to annotation extraction.
             if (stepModels.isEmpty()) {
@@ -130,7 +130,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
      */
     private List<PipelineStepModel> extractStepModelsFromYaml(
             PipelineCompilationContext ctx,
-            List<org.pipelineframework.processor.ir.StepDefinition> stepDefinitions) {
+            List<org.pipelineframework.processor.ir.StepDefinition> stepDefinitions,
+            Consumer<String> ctxWarningLogger) {
         if (stepDefinitions == null || stepDefinitions.isEmpty()) {
             return List.of();
         }
@@ -139,7 +140,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         PipelineStepIRExtractor irExtractor = new PipelineStepIRExtractor(ctx.getProcessingEnv());
 
         for (org.pipelineframework.processor.ir.StepDefinition stepDef : stepDefinitions) {
-            PipelineStepModel stepModel = createStepModelFromDefinition(ctx, stepDef, irExtractor);
+            PipelineStepModel stepModel = createStepModelFromDefinition(ctx, stepDef, irExtractor, ctxWarningLogger);
             if (stepModel != null) {
                 stepModels.add(stepModel);
             }
@@ -190,7 +191,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     private PipelineStepModel createStepModelFromDefinition(
             PipelineCompilationContext ctx,
             org.pipelineframework.processor.ir.StepDefinition stepDef,
-            PipelineStepIRExtractor irExtractor) {
+            PipelineStepIRExtractor irExtractor,
+            Consumer<String> ctxWarningLogger) {
 
         // Determine if this is an internal or delegated step using switch for exhaustiveness
         return switch (stepDef.kind()) {
@@ -233,14 +235,15 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 yield createDelegatedStepModel(ctx, stepDef);
             }
             case REMOTE -> {
-                yield createRemoteStepModel(ctx, stepDef);
+                yield createRemoteStepModel(ctx, stepDef, ctxWarningLogger);
             }
         };
     }
 
     private PipelineStepModel createRemoteStepModel(
             PipelineCompilationContext ctx,
-            org.pipelineframework.processor.ir.StepDefinition stepDef) {
+            org.pipelineframework.processor.ir.StepDefinition stepDef,
+            Consumer<String> ctxWarningLogger) {
         if (stepDef.remoteExecution() == null) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
@@ -264,7 +267,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
 
         String serviceName = toYamlServiceName(stepDef.name());
-        String servicePackage = deriveYamlServicePackage(stepDef.inputType());
+        String servicePackage = deriveYamlServicePackage(stepDef.inputType(), ctxWarningLogger);
         ClassName generatedAdapterType = ClassName.get(
             servicePackage + org.pipelineframework.processor.PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
             serviceName + "RemoteOperatorAdapter");
@@ -360,19 +363,24 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         return ClassName.bestGuess(basePackage + ".common.domain." + className.simpleName());
     }
 
-    private String deriveYamlServicePackage(TypeName domainType) {
+    private String deriveYamlServicePackage(TypeName domainType, Consumer<String> warningLogger) {
         if (domainType instanceof ClassName className) {
             String packageName = className.packageName();
             String suffix = ".common.domain";
             if (packageName.endsWith(suffix)) {
                 return packageName.substring(0, packageName.length() - suffix.length()) + ".service";
             }
+            if (warningLogger != null) {
+                warningLogger.accept("Falling back to default service package '" + DEFAULT_SERVICE_PACKAGE + "' "
+                    + "for domain type '" + domainType + "' with package '" + packageName + "'");
+            }
+            return DEFAULT_SERVICE_PACKAGE;
         }
-        if (ctxWarningLogger != null) {
-            ctxWarningLogger.accept("Falling back to default service package 'org.pipelineframework.pipeline.service' "
+        if (warningLogger != null) {
+            warningLogger.accept("Falling back to default service package '" + DEFAULT_SERVICE_PACKAGE + "' "
                 + "for domain type '" + domainType + "'");
         }
-        return "org.pipelineframework.pipeline.service";
+        return DEFAULT_SERVICE_PACKAGE;
     }
 
     /**

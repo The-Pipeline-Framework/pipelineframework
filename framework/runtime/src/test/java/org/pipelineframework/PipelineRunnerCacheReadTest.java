@@ -95,6 +95,140 @@ class PipelineRunnerCacheReadTest {
     }
 
     @Test
+    void cacheOnlyReadsFromCache() {
+        CountingStep step = new CountingStep();
+        PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
+            new FixedReader(Map.of("v1:key", "cached-value")),
+            List.of(new FixedKeyStrategy()),
+            "cache-only");
+
+        PipelineContext context = new PipelineContext("v1", null, "cache-only");
+
+        Object result = PipelineRunner.applyOneToOneUnchecked(
+            step,
+            Uni.createFrom().item("input"),
+            false,
+            128,
+            null,
+            null,
+            support,
+            context);
+
+        String value = ((Uni<String>) result).await().indefinitely();
+        assertEquals("cached-value", value);
+        assertEquals(0, step.calls.get());
+    }
+
+    @Test
+    void liveExecutionWithoutCacheSupportResetsStaleCacheStatusToBypass() {
+        StatusCapturingStep step = new StatusCapturingStep();
+        PipelineContext context = new PipelineContext("v1", null, "prefer-cache");
+        PipelineCacheStatusHolder.set(CacheStatus.HIT);
+        try {
+            Object result = PipelineRunner.applyOneToOneUnchecked(
+                step,
+                Uni.createFrom().item("input"),
+                false,
+                128,
+                null,
+                null,
+                null,
+                context);
+
+            String value = ((Uni<String>) result).await().indefinitely();
+            assertEquals("computed-input", value);
+            assertEquals(1, step.calls.get());
+            assertEquals(CacheStatus.BYPASS, step.statusSeen);
+        } finally {
+            PipelineCacheStatusHolder.clear();
+        }
+    }
+
+    @Test
+    void liveExecutionWhenPolicySkipsReadResetsStaleCacheStatusToBypass() {
+        StatusCapturingStep step = new StatusCapturingStep();
+        PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
+            new FixedReader(Map.of("v1:key", "cached-value")),
+            List.of(new FixedKeyStrategy()),
+            "prefer-cache");
+        PipelineContext context = new PipelineContext("v1", null, "bypass-cache");
+        PipelineCacheStatusHolder.set(CacheStatus.HIT);
+        try {
+            Object result = PipelineRunner.applyOneToOneUnchecked(
+                step,
+                Uni.createFrom().item("input"),
+                false,
+                128,
+                null,
+                null,
+                support,
+                context);
+
+            String value = ((Uni<String>) result).await().indefinitely();
+            assertEquals("computed-input", value);
+            assertEquals(1, step.calls.get());
+            assertEquals(CacheStatus.BYPASS, step.statusSeen);
+        } finally {
+            PipelineCacheStatusHolder.clear();
+        }
+    }
+
+    @Test
+    void cacheReadFailureFallsBackToMissWhenPolicyDoesNotRequireCache() {
+        try {
+            StatusCapturingStep step = new StatusCapturingStep();
+            PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
+                new FailingReader(),
+                List.of(new FixedKeyStrategy()),
+                "prefer-cache");
+
+            PipelineContext context = new PipelineContext("v1", null, "prefer-cache");
+
+            Object result = PipelineRunner.applyOneToOneUnchecked(
+                step,
+                Uni.createFrom().item("input"),
+                false,
+                128,
+                null,
+                null,
+                support,
+                context);
+
+            String value = ((Uni<String>) result).await().indefinitely();
+            assertEquals("computed-input", value);
+            assertEquals(1, step.calls.get());
+            assertEquals(CacheStatus.MISS, step.statusSeen);
+        } finally {
+            PipelineCacheStatusHolder.clear();
+        }
+    }
+
+    @Test
+    void cacheReadFailureStillFailsWhenPolicyRequiresCache() {
+        CountingStep step = new CountingStep();
+        PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
+            new FailingReader(),
+            List.of(new FixedKeyStrategy()),
+            "require-cache");
+
+        PipelineContext context = new PipelineContext("v1", null, "require-cache");
+
+        Object result = PipelineRunner.applyOneToOneUnchecked(
+            step,
+            Uni.createFrom().item("input"),
+            false,
+            128,
+            null,
+            null,
+            support,
+            context);
+
+        RuntimeException ex = assertThrows(RuntimeException.class, () -> ((Uni<String>) result).await().indefinitely());
+        assertEquals("cache unavailable", ex.getMessage());
+        assertEquals(0, step.calls.get());
+    }
+
+    @Test
     void targetedStrategyPreferredWhenStepProvidesTargetType() {
         CountingTargetStep step = new CountingTargetStep();
         PipelineRunner.CacheReadSupport support = new PipelineRunner.CacheReadSupport(
@@ -158,17 +292,14 @@ class PipelineRunnerCacheReadTest {
     }
 
     @Test
-    void selectsHighestPriorityCacheReader() throws Exception {
-        PipelineRunner runner = new PipelineRunner();
-        runner.cacheReaders = new SimpleInstance<>(List.of(
+    void selectsHighestPriorityCacheReader() {
+        PipelineCacheSupportFactory factory = new PipelineCacheSupportFactory();
+        factory.cacheReaders = new SimpleInstance<>(List.of(
             new LowPriorityReader(),
             new HighPriorityReader()));
-        runner.cacheKeyStrategies = new SimpleInstance<>(List.of(new FixedKeyStrategy()));
-        runner.cachePolicyDefault = "prefer-cache";
-
-        java.lang.reflect.Method method = PipelineRunner.class.getDeclaredMethod("buildCacheReadSupport");
-        method.setAccessible(true);
-        PipelineRunner.CacheReadSupport support = (PipelineRunner.CacheReadSupport) method.invoke(runner);
+        factory.cacheKeyStrategies = new SimpleInstance<>(List.of(new FixedKeyStrategy()));
+        factory.cachePolicyDefault = "prefer-cache";
+        PipelineRunner.CacheReadSupport support = factory.buildCacheReadSupport();
 
         CountingStep step = new CountingStep();
         PipelineContext context = new PipelineContext("v1", null, "prefer-cache");
@@ -228,6 +359,16 @@ class PipelineRunnerCacheReadTest {
     }
 
     static final class CountingBypassStep extends CountingStep implements CacheReadBypass {
+    }
+
+    static final class StatusCapturingStep extends CountingStep {
+        CacheStatus statusSeen;
+
+        @Override
+        public Uni<String> applyOneToOne(String input) {
+            statusSeen = PipelineCacheStatusHolder.get();
+            return super.applyOneToOne(input);
+        }
     }
 
     static final class FixedKeyStrategy implements CacheKeyStrategy {
@@ -401,6 +542,18 @@ class PipelineRunnerCacheReadTest {
         @Override
         public Uni<Boolean> exists(String key) {
             return Uni.createFrom().item(cache.containsKey(key));
+        }
+    }
+
+    static final class FailingReader implements PipelineCacheReader {
+        @Override
+        public Uni<Optional<Object>> get(String key) {
+            return Uni.createFrom().failure(new RuntimeException("cache unavailable"));
+        }
+
+        @Override
+        public Uni<Boolean> exists(String key) {
+            return Uni.createFrom().failure(new RuntimeException("cache unavailable"));
         }
     }
 }

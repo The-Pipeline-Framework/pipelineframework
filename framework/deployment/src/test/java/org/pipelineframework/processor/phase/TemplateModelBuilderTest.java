@@ -49,14 +49,12 @@ class TemplateModelBuilderTest {
     }
 
     @Test
-    void buildModels_blankBasePackage_emptyOrRejected() {
+    void pipelineTemplateConfig_blankBasePackage_throwsException() {
         PipelineTemplateStep step = step("Process Data", "Input", "Output");
-        try {
-            PipelineTemplateConfig config = new PipelineTemplateConfig("app", "", "GRPC", List.of(step), null);
-            assertTrue(builder.buildModels(config).isEmpty());
-        } catch (IllegalArgumentException ex) {
-            assertEquals("basePackage must not be blank", ex.getMessage());
-        }
+        IllegalArgumentException ex = assertThrows(
+            IllegalArgumentException.class,
+            () -> new PipelineTemplateConfig("app", "", "GRPC", List.of(step), null));
+        assertEquals("basePackage must not be blank", ex.getMessage());
     }
 
     @Test

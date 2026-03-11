@@ -97,6 +97,8 @@ class GrpcRequirementEvaluatorTest {
     @Test
     void needsGrpc_orchestratorWithBlankTransport_trueDefault() {
         PipelineOrchestratorModel orch = new PipelineOrchestratorModel("OrcSvc", "com.example", Set.of(), false);
+        // PipelineTemplateConfig now rejects blank transport at construction time, so this seam test
+        // uses a minimal mock to exercise the evaluator's blank-transport fallback path directly.
         PipelineTemplateConfig config = mock(PipelineTemplateConfig.class);
         when(config.transport()).thenReturn("");
 

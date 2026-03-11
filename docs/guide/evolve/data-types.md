@@ -40,6 +40,7 @@ Structural type:
 - `map`
 
 `map` is a parameterised collection type, not an atomic scalar. It must declare `keyType` and `valueType`.
+`keyType` must be one of `string`, `bool`, `int32`, or `int64`. Message references, nested maps, and other structured types are not valid map keys. Map keys are limited to these scalar types because keys must be hashable and to ensure compatibility with protobuf wire-format encoding and deterministic map semantics.
 
 Enums are not a first-class canonical v2 type in the current schema. Model them with named messages and string-backed fields for now, or keep legacy enum handling in v1 compatibility paths until explicit enum support is added.
 
@@ -103,6 +104,18 @@ Use `type: map` for maps:
   valueType: string
 ```
 
+Invalid example:
+
+`Money` is invalid as a `keyType` because map keys must be scalar values. `Money` is a composite message type, so `name: invalidIndex` cannot use it as a key.
+
+```yaml
+- number: 5
+  name: invalidIndex
+  type: map
+  keyType: Money
+  valueType: string
+```
+
 Use PascalCase message names for references:
 
 ```yaml
@@ -137,6 +150,26 @@ Breaking changes fail compatibility checks when they:
 - remove fields without reserving the old number and name
 - reuse reserved numbers or names
 
+## Optionality and Nullability
+
+Fields are singular by default:
+
+- `optional: false` unless explicitly set
+- `repeated: false` unless explicitly set
+
+Use `optional: true` when presence is part of the contract:
+
+```yaml
+- number: 6
+  name: approvalCode
+  type: string
+  optional: true
+```
+
+`repeated: true` remains the list syntax for list fields and cannot be combined with `optional: true`.
+
+Changing a field's `optional` flag across schema versions is a breaking change.
+
 ## Advanced Overrides
 
 Overrides are optional and intended for exceptional cases only.
@@ -150,7 +183,11 @@ Overrides are optional and intended for exceptional cases only.
       encoding: string
 ```
 
-Overrides are validated. Unsafe or lossy encodings, such as mapping `decimal` to `double`, are rejected.
+Overrides are validated against the canonical type model.
+
+- Unsafe or lossy encodings, such as mapping `decimal` to `double`, are rejected.
+- Encodings must remain compatible with the canonical semantic type.
+- Message and map structures cannot be overridden into incompatible wire forms.
 
 ## Legacy v1 Note
 

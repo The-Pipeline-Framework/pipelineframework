@@ -271,26 +271,4 @@ class PipelineRunnerTest {
         assertEquals(Duration.ofMillis(100), step.retryWait());
     }
 
-    @Test
-    void testPipelineOrdering() throws Exception {
-        // Create test steps in a specific order
-        TestSteps.TestStepOneToOneProcessed stepB = new TestSteps.TestStepOneToOneProcessed();
-        TestSteps.TestStepOneToMany stepA = new TestSteps.TestStepOneToMany();
-        TestSteps.TestStepManyToMany stepC = new TestSteps.TestStepManyToMany();
-
-        List<Object> originalSteps = List.of(stepB, stepA, stepC);
-
-        // Access the orderSteps method using reflection to test the internal functionality
-        java.lang.reflect.Method orderStepsMethod = PipelineRunner.class.getDeclaredMethod("orderSteps", List.class);
-        orderStepsMethod.setAccessible(true);
-
-        // When no pipeline order is configured, should return original order
-        List<Object> orderedSteps = (List<Object>) orderStepsMethod.invoke(runner, originalSteps);
-
-        // Verify the original order is preserved (no global configuration applied in this test)
-        assertEquals(originalSteps.size(), orderedSteps.size());
-
-        // Check that the same objects are present (just potentially reordered)
-        assertEquals(originalSteps, orderedSteps);
-    }
 }

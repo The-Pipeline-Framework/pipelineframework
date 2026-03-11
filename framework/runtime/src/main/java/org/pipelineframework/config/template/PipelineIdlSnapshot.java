@@ -18,9 +18,11 @@ package org.pipelineframework.config.template;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Normalized IDL snapshot used for compatibility checking and build metadata emission.
@@ -107,10 +109,21 @@ public record PipelineIdlSnapshot(
             return;
         }
         List<FieldSnapshot> snapshotFields = new ArrayList<>();
+        Set<Integer> usedNumbers = new HashSet<>();
+        for (PipelineTemplateField field : fields) {
+            if (field.number() != null && !usedNumbers.add(field.number())) {
+                throw new IllegalStateException(
+                    "Conflicting legacy field number " + field.number() + " in message '" + messageName + "'");
+            }
+        }
+        int nextAutoNumber = 1;
         for (int i = 0; i < fields.size(); i++) {
             PipelineTemplateField field = fields.get(i);
+            int resolvedNumber = field.number() == null ? nextAvailableNumber(usedNumbers, nextAutoNumber) : field.number();
+            usedNumbers.add(resolvedNumber);
+            nextAutoNumber = resolvedNumber + 1;
             snapshotFields.add(new FieldSnapshot(
-                field.number() == null ? i + 1 : field.number(),
+                resolvedNumber,
                 field.name(),
                 field.canonicalType(),
                 field.messageRef(),
@@ -130,6 +143,14 @@ public record PipelineIdlSnapshot(
             return;
         }
         messages.put(messageName, candidate);
+    }
+
+    private static int nextAvailableNumber(Set<Integer> usedNumbers, int startingAt) {
+        int number = startingAt;
+        while (usedNumbers.contains(number)) {
+            number++;
+        }
+        return number;
     }
 
     /**

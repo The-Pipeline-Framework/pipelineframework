@@ -17,6 +17,7 @@
 package org.pipelineframework.config.template;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * First-class named message definition for template IDL v2.
@@ -31,9 +32,7 @@ public record PipelineTemplateMessage(
     PipelineTemplateReserved reserved
 ) {
     public PipelineTemplateMessage {
-        if (name == null) {
-            throw new IllegalArgumentException("name must not be null");
-        }
+        Objects.requireNonNull(name, "name must not be null");
         fields = fields == null ? List.of() : List.copyOf(fields);
         reserved = reserved == null ? new PipelineTemplateReserved(List.of(), List.of()) : reserved;
     }

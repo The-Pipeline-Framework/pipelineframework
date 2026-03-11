@@ -84,7 +84,10 @@ When application domain types differ from operator I/O types, mapper coverage is
 - gRPC flow requires descriptor + mapper-compatible bindings.
 - Mapper fallback policies are configuration-driven; implicit conversion is not enabled by default.
 
-Remote v2 operators use the step contract directly. The generated adapter still uses the normal mapper model to bridge domain types to generated protobuf message types. It does not resolve a Java operator implementation. It does not use the FUNCTION remote adapter’s `BytesValue` + JSON contract.
+- Remote v2 operators use the step contract directly.
+- The generated adapter still uses the normal mapper model to bridge domain types to generated protobuf message types.
+- It does not resolve a Java operator implementation.
+- It does not use the FUNCTION remote adapter’s `BytesValue` + JSON contract.
 
 ## Remote Operator Constraints
 
@@ -93,7 +96,7 @@ Remote v2 operators use the step contract directly. The generated adapter still 
 - The generated adapter sends its HTTP `POST` to the fully configured target URL. If you use `execution.target.url`, include the full path to call. If you use `execution.target.urlConfigKey`, the configured value must also be the full target URL, including any path segment.
 - The value of `execution.target.urlConfigKey` is resolved at application startup; if it is missing or blank, the application will fail to start.
 - `execution.timeoutMs`, when set, caps the outbound HTTP call. The runtime also applies the propagated deadline if one is present, using the smaller of the two budgets.
-- Retries and duplicate dispatch are possible. Duplicate dispatch includes automatic retries, transport-layer or network duplicates, and manual replays that can all deliver the same request more than once. For example, an automatic retry after a timeout can race with the original in-flight request. Remote operators are expected to be idempotent and to honour `x-tpf-idempotency-key` across those cases.
+- Retries and duplicate dispatch are possible. This can happen due to automatic retries, transport-layer or network duplicates, and manual replays. For example, an automatic retry after a timeout can race with the original in-flight request. Remote operators are expected to be idempotent and to honour `x-tpf-idempotency-key` across those cases.
 
 ## Example: AI Pipeline Chain
 
