@@ -2,98 +2,157 @@
 
 ## Overview
 
-This page is a reference for the Java type names used in pipeline templates and how they map to protobuf types for gRPC. It reflects what the **template generator** understands and what the **proto generator** emits. It is not a runtime restriction.
+Template IDL `version: 2` is semantic-first.
 
-If you are hand-authoring templates or need special mappings, use the `protoType` field on a template entry and provide your own MapStruct converters.
+Authors declare the meaning of a field once, and the compiler derives:
 
-## Source of Truth
+- Java binding type
+- protobuf wire type
+- compatibility rules for schema evolution
 
-### Template generator (type list + UI defaults)
-- `template-generator-node/src/pipeline-template-schema.json` defines the allowed type names in the generator UI/schema.
-- `template-generator-node/src/handlebars-template-engine.js` and `template-generator-node/src/browser-template-engine.js` map those types to proto scalars for generated scaffolding and imports.
-- `template-generator-node/templates/common-converters.hbs` is optional scaffold for MapStruct conversions.
+Normal v2 authoring does **not** require `protoType`.
 
-### Runtime/compiler (proto generation + binding validation)
-- `framework/runtime/src/main/java/org/pipelineframework/proto/PipelineProtoGenerator.java` generates `.proto` files from pipeline templates and resolves list/map types.
-- `framework/deployment/src/main/java/org/pipelineframework/processor/extractor/PipelineStepIRExtractor.java` and `framework/deployment/src/main/java/org/pipelineframework/processor/ir/TypeMapping.java` capture domain/mapper bindings.
-- `framework/deployment/src/main/java/org/pipelineframework/processor/util/GrpcBindingResolver.java` validates bindings against compiled protobuf descriptors.
+Legacy v1 templates that still declare `type` + `protoType` remain supported for backward compatibility, but v2 is the preferred model.
 
-Note: these paths may move during refactors. If a path changes, search the repository for the class name and follow the current source of truth.
+## Canonical Semantic Types
 
-In short: the generator defines the **type menu**; the proto generator emits the `.proto` shapes; the compiler validates **bindings**; MapStruct (and your converters) handle **actual conversions**.
+Supported built-ins in v2:
 
-## Default Type Mappings (Generator)
+- `string`
+- `bool`
+- `int32`
+- `int64`
+- `float32`
+- `float64`
+- `decimal`
+- `uuid`
+- `timestamp`
+- `datetime`
+- `date`
+- `duration`
+- `bytes`
+- `currency`
+- `uri`
+- `path`
+- `map`
 
-### Basic Types
-- String -> string
-- Integer -> int32
-- Long -> int64
-- Double -> double
-- Float -> float
-- Boolean -> bool
-- Byte -> int32
-- Short -> int32
-- Character -> string
+PascalCase type tokens are treated as references to top-level named messages.
 
-### Binary Types
-- byte[] -> bytes
-
-### Rich Java Types (mapped to string unless noted)
-- UUID -> string
-- BigDecimal -> string
-- BigInteger -> string
-- Currency -> string
-- Path -> string
-- URI -> string
-- URL -> string
-- File -> string
-
-### Date/Time Types
-- LocalDateTime -> string
-- LocalDate -> string
-- OffsetDateTime -> string
-- ZonedDateTime -> string
-- Instant -> string
-- Duration -> string
-- Period -> string
-
-### Atomic Types
-- AtomicInteger -> int32
-- AtomicLong -> int64
-
-### Collection Types
-- `List<T>` -> repeated T (inner type must be a valid protobuf scalar or message name)
-
-### Map Types
-- `Map<K, V>` -> map<key, value> (for example `Map<String, String>` -> `map<string, string>`)
-  - Keys are mapped to protobuf scalars.
-  - Values are mapped to protobuf scalars or left as message types.
-
-### Enums and Optional
-- Enum -> protobuf enum (or string if you choose to map as text).
-- `Optional<T>` -> represent presence using proto3 optional/oneof or wrapper types, and map to nullable DTO fields.
-
-## Conversions
-
-The framework does **not** provide a universal converter library. The generator can scaffold a `CommonConverters` class, but it is optional and expected to be customized per project. MapStruct mappers are responsible for conversions between domain/DTO/gRPC types.
-
-If you override `protoType` in your template, ensure your mappers handle the conversion correctly.
-
-## Example Template
+Example:
 
 ```yaml
-steps:
-  - name: "ProcessPayment"
-    inputTypeName: "PaymentInput"
-    inputFields:
-      - name: "paymentId"
-        type: "UUID"
-      - name: "amount"
-        type: "BigDecimal"
-      - name: "processedAt"
-        type: "LocalDateTime"
-      - name: "labels"
-        type: "List<String>"
-      - name: "metadata"
-        type: "Map<String, String>"
+messages:
+  Money:
+    fields:
+      - number: 1
+        name: amount
+        type: decimal
+      - number: 2
+        name: currency
+        type: currency
 ```
+
+## Default Compiler Mappings
+
+Default wire and Java bindings:
+
+- `decimal` -> protobuf `string`, Java `BigDecimal`
+- `uuid` -> protobuf `string`, Java `UUID`
+- `timestamp` -> protobuf `string`, Java `Instant`
+- `datetime` -> protobuf `string`, Java `LocalDateTime`
+- `date` -> protobuf `string`, Java `LocalDate`
+- `duration` -> protobuf `string`, Java `Duration`
+- `currency` -> protobuf `string`, Java `Currency`
+- `uri` -> protobuf `string`, Java `URI`
+- `path` -> protobuf `string`, Java `Path`
+- `bytes` -> protobuf `bytes`, Java `byte[]`
+
+Important semantic distinctions:
+
+- `timestamp`: absolute point in time
+- `datetime`: local/civil date-time without timezone semantics
+- `date`: calendar date only
+
+`currency`, `uri`, and `path` stay first-class semantic types even though protobuf uses `string` by default.
+
+## Collections and Messages
+
+Use `repeated: true` for lists:
+
+```yaml
+- number: 3
+  name: labels
+  type: string
+  repeated: true
+```
+
+Use `type: map` for maps:
+
+```yaml
+- number: 4
+  name: metadata
+  type: map
+  keyType: string
+  valueType: string
+```
+
+Use PascalCase message names for references:
+
+```yaml
+- number: 2
+  name: money
+  type: Money
+```
+
+## Reserved Fields and Compatibility
+
+Named messages can declare reserved numbers and names:
+
+```yaml
+messages:
+  ChargeResult:
+    fields:
+      - number: 1
+        name: paymentId
+        type: uuid
+    reserved:
+      numbers: [4, 5]
+      names: ["legacyCode"]
+```
+
+The compiler emits a normalized IDL snapshot and can compare it against a baseline using `-Dtpf.idl.compat.baseline=<path>`.
+
+Breaking changes fail compatibility checks when they:
+
+- renumber fields
+- change canonical field types
+- change repeated/map/message-reference structure
+- remove fields without reserving the old number and name
+- reuse reserved numbers or names
+
+## Advanced Overrides
+
+Overrides are optional and intended for exceptional cases only.
+
+```yaml
+- number: 2
+  name: amount
+  type: decimal
+  overrides:
+    proto:
+      encoding: string
+```
+
+Overrides are validated. Unsafe or lossy encodings, such as mapping `decimal` to `double`, are rejected.
+
+## Legacy v1 Note
+
+v1 templates still allow:
+
+```yaml
+- name: amount
+  type: BigDecimal
+  protoType: string
+```
+
+That shape is legacy compatibility only. New templates should use semantic v2 fields and top-level `messages`.

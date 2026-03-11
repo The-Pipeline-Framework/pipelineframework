@@ -21,9 +21,9 @@ import java.nio.file.Path;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junitpioneer.jupiter.ClearSystemProperty;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PipelineProtoGeneratorTest {
 
@@ -450,5 +450,247 @@ class PipelineProtoGeneratorTest {
             "rpc GetExecutionStatus (GetExecutionStatusRequest) returns (GetExecutionStatusResponse);"));
         assertTrue(orchestratorProto.contains(
             "rpc GetExecutionResult (GetExecutionResultRequest) returns (GetExecutionResultResponse);"));
+    }
+
+    @Test
+    void generatesV2TypesProtoAndIdlSnapshot() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "GRPC"
+            messages:
+              ChargeRequest:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+                  - number: 2
+                    name: "amount"
+                    type: "decimal"
+              ChargeResult:
+                fields:
+                  - number: 1
+                    name: "paymentId"
+                    type: "uuid"
+                    optional: true
+                  - number: 2
+                    name: "auditTrail"
+                    type: "string"
+                    repeated: true
+                    deprecated: true
+                reserved:
+                  numbers: [5]
+                  names: ["legacyCode"]
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ChargeRequest"
+                outputTypeName: "ChargeResult"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("proto-v2-out");
+
+        new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+
+        Path typesProto = outputDir.resolve("pipeline-types.proto");
+        Path stepProto = outputDir.resolve("charge-card-svc.proto");
+        Path orchestratorProto = outputDir.resolve("orchestrator.proto");
+        Path idlSnapshot = tempDir.resolve("target/generated-resources/META-INF/pipeline/idl.json");
+
+        assertTrue(Files.exists(typesProto));
+        assertTrue(Files.exists(stepProto));
+        assertTrue(Files.exists(orchestratorProto));
+        assertTrue(Files.exists(idlSnapshot));
+
+        String typesContent = Files.readString(typesProto);
+        assertTrue(typesContent.contains("message ChargeRequest"));
+        assertTrue(typesContent.contains("string amount = 2;"));
+        assertTrue(typesContent.contains("message ChargeResult"));
+        assertTrue(typesContent.contains("reserved 5;"));
+        assertTrue(typesContent.contains("reserved \"legacyCode\";"));
+        assertTrue(typesContent.contains("optional string paymentId = 1;"));
+        assertTrue(typesContent.contains("repeated string auditTrail = 2 [deprecated = true];"));
+
+        String stepContent = Files.readString(stepProto);
+        assertTrue(stepContent.contains("import \"pipeline-types.proto\";"));
+        assertTrue(stepContent.contains("rpc remoteProcess(ChargeRequest) returns (ChargeResult);"));
+
+        String orchestratorContent = Files.readString(orchestratorProto);
+        assertTrue(orchestratorContent.contains("import \"pipeline-types.proto\";"));
+        assertTrue(orchestratorContent.contains("rpc Run (ChargeRequest) returns (ChargeResult);"));
+
+        String snapshot = Files.readString(idlSnapshot);
+        assertTrue(snapshot.contains("\"messages\""));
+        assertTrue(snapshot.contains("\"ChargeRequest\""));
+        assertTrue(snapshot.contains("\"ChargeResult\""));
+    }
+
+    @Test
+    @ClearSystemProperty(key = "tpf.idl.compat.baseline")
+    void failsCompatibilityCheckWhenFieldNumberIsReusedWithoutReserve() throws Exception {
+        String baselineJson = """
+            {
+              "version": 2,
+              "appName": "Baseline",
+              "basePackage": "com.example.v2",
+              "messages": {
+                "ChargeRequest": {
+                  "name": "ChargeRequest",
+                  "fields": [
+                    {
+                      "number": 1,
+                      "name": "orderId",
+                      "canonicalType": "uuid",
+                      "messageRef": null,
+                      "keyType": null,
+                      "valueType": null,
+                      "optional": false,
+                      "repeated": false,
+                      "deprecated": false,
+                      "protoType": "string"
+                    }
+                  ],
+                  "reservedNumbers": [],
+                  "reservedNames": []
+                },
+                "ChargeResult": {
+                  "name": "ChargeResult",
+                  "fields": [
+                    {
+                      "number": 1,
+                      "name": "paymentId",
+                      "canonicalType": "uuid",
+                      "messageRef": null,
+                      "keyType": null,
+                      "valueType": null,
+                      "optional": false,
+                      "repeated": false,
+                      "deprecated": false,
+                      "protoType": "string"
+                    }
+                  ],
+                  "reservedNumbers": [],
+                  "reservedNames": []
+                }
+              },
+              "steps": [
+                {
+                  "name": "Charge Card",
+                  "inputTypeName": "ChargeRequest",
+                  "outputTypeName": "ChargeResult"
+                }
+              ]
+            }
+            """;
+        Path baselinePath = tempDir.resolve("baseline-idl.json");
+        Files.writeString(baselinePath, baselineJson);
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "GRPC"
+            messages:
+              ChargeRequest:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+              ChargeResult:
+                fields:
+                  - number: 1
+                    name: "status"
+                    type: "string"
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ChargeRequest"
+                outputTypeName: "ChargeResult"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-breaking.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("proto-v2-compat-out");
+
+        System.setProperty("tpf.idl.compat.baseline", baselinePath.toString());
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineProtoGenerator().generate(tempDir, configPath, outputDir));
+        assertTrue(ex.getMessage().contains("IDL compatibility check failed"));
+        assertTrue(ex.getMessage().contains("changed field name at number 1"));
+    }
+
+    @Test
+    void rendersMultilineFieldCommentsAsSeparateProtoComments() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "GRPC"
+            messages:
+              ChargeRequest:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+                    comment: |
+                      first line
+                      second line
+              ChargeResult:
+                fields:
+                  - number: 1
+                    name: "paymentId"
+                    type: "uuid"
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ChargeRequest"
+                outputTypeName: "ChargeResult"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-comments.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("proto-v2-comments-out");
+
+        new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+
+        String typesContent = Files.readString(outputDir.resolve("pipeline-types.proto"));
+        assertTrue(typesContent.contains("  // first line"));
+        assertTrue(typesContent.contains("  // second line"));
+    }
+
+    @Test
+    @ClearSystemProperty(key = "tpf.idl.compat.baseline")
+    void rejectsInvalidCompatibilityBaselinePath() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "GRPC"
+            messages:
+              ChargeRequest:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+              ChargeResult:
+                fields:
+                  - number: 1
+                    name: "paymentId"
+                    type: "uuid"
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ChargeRequest"
+                outputTypeName: "ChargeResult"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-invalid-baseline.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("proto-v2-invalid-baseline-out");
+
+        System.setProperty("tpf.idl.compat.baseline", "\u0000bad-path");
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineProtoGenerator().generate(tempDir, configPath, outputDir));
+        assertTrue(ex.getMessage().contains("Invalid IDL compatibility baseline path"));
     }
 }

@@ -30,6 +30,8 @@ import javax.tools.Diagnostic;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.squareup.javapoet.ClassName;
+import org.pipelineframework.config.template.PipelineTemplateRemoteTarget;
+import org.pipelineframework.config.template.PipelineTemplateStepExecution;
 import org.jboss.logging.Logger;
 import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.StepDefinition;
@@ -63,7 +65,8 @@ public class StepDefinitionParser {
         "inputTypeName",
         "inputFields",
         "outputTypeName",
-        "outputFields");
+        "outputFields",
+        "execution");
     private final BiConsumer<Diagnostic.Kind, String> diagnosticReporter;
     private final String legacyInternalPackageSuffix;
 
@@ -119,6 +122,7 @@ public class StepDefinitionParser {
         @SuppressWarnings("unchecked")
         Map<String, Object> templateData = YAML_MAPPER.readValue(yamlContent, Map.class);
         String basePackage = getStringValue(templateData, "basePackage");
+        int version = parseVersion(templateData);
 
         Object stepsObj = templateData.get("steps");
         if (!(stepsObj instanceof List)) {
@@ -135,7 +139,7 @@ public class StepDefinitionParser {
             }
             @SuppressWarnings("unchecked")
             Map<String, Object> stepData = (Map<String, Object>) stepObj;
-            StepDefinition stepDef = parseStepDefinition(stepData, basePackage);
+            StepDefinition stepDef = parseStepDefinition(stepData, basePackage, version);
             if (stepDef != null) {
                 stepDefinitions.add(stepDef);
             }
@@ -156,13 +160,20 @@ public class StepDefinitionParser {
      * @param stepData the map containing step configuration data (YAML-derived keys described above)
      * @return a StepDefinition for the parsed step, or null if the step is invalid, unsupported, or should be skipped
      */
-    private StepDefinition parseStepDefinition(Map<String, Object> stepData, String basePackage) {
+    private StepDefinition parseStepDefinition(Map<String, Object> stepData, String basePackage, int version) {
         String name = getStringValue(stepData, "name");
         if (isBlank(name)) {
             LOG.warnf("Skipping step with null or blank name: %s", stepData);
             return null;
         }
         reportUnknownStepKeys(name, stepData);
+
+        PipelineTemplateStepExecution remoteExecution;
+        try {
+            remoteExecution = parseRemoteExecution(stepData, name, version);
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
 
         // Check if it's an operator step (has 'operator'/'delegate' field) or internal step (has 'service' field)
         String operatorClassName = getStringValue(stepData, "operator");
@@ -188,12 +199,22 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
+        if (remoteExecution != null && (!isBlank(delegatedClassName) || !isBlank(serviceClassName))) {
+            String message = "Skipping step '" + name
+                + "': remote execution is mutually exclusive with 'service', 'operator', and 'delegate'";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
         boolean inferredLegacyInternal = isBlank(delegatedClassName) && isBlank(serviceClassName);
 
         StepKind kind;
         String executionClassName;
 
-        if (!isBlank(delegatedClassName)) {
+        if (remoteExecution != null) {
+            kind = StepKind.REMOTE;
+            executionClassName = null;
+        } else if (!isBlank(delegatedClassName)) {
             kind = StepKind.DELEGATED;
             executionClassName = delegatedClassName;
         } else if (!isBlank(serviceClassName)) {
@@ -298,6 +319,41 @@ public class StepDefinitionParser {
             }
         }
 
+        if (kind == StepKind.REMOTE) {
+            if (inputType == null || outputType == null) {
+                String message = "Skipping step '" + name
+                    + "': remote steps must provide inputTypeName and outputTypeName";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            StreamingShape shape = parseStreamingShapeHint(stepData, name);
+            if (shape != null && shape != StreamingShape.UNARY_UNARY) {
+                String message = "Skipping step '" + name
+                    + "': remote execution currently supports only ONE_TO_ONE cardinality";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            if (!isBlank(operatorMapperName) || !isBlank(externalMapperName) || mapperFallback != MapperFallbackMode.NONE) {
+                String message = "Skipping step '" + name
+                    + "': remote execution cannot be combined with operatorMapper/externalMapper/mapperFallback";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            return new StepDefinition(
+                name,
+                kind,
+                null,
+                remoteExecution,
+                null,
+                MapperFallbackMode.NONE,
+                inputType,
+                outputType,
+                StreamingShape.UNARY_UNARY);
+        }
+
         // Create the execution class name
         ClassName executionClass = parseClassName(executionClassName);
         if (executionClass == null) {
@@ -309,11 +365,133 @@ public class StepDefinitionParser {
             name,
             kind,
             executionClass,
+            null,
             externalMapper,
             mapperFallback,
             inputType,
             outputType,
             parseStreamingShapeHint(stepData, name));
+    }
+
+    private PipelineTemplateStepExecution parseRemoteExecution(Map<String, Object> stepData, String stepName, int version) {
+        Object executionObj = stepData.get("execution");
+        if (executionObj == null) {
+            return null;
+        }
+        if (version < 2) {
+            String message = "Skipping step '" + stepName + "': execution blocks require version: 2";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            throw new IllegalArgumentException(message);
+        }
+        if (!(executionObj instanceof Map<?, ?> rawExecutionMap)) {
+            String message = "Skipping step '" + stepName + "': execution block must be a map";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            throw new IllegalArgumentException(message);
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> executionMap = (Map<String, Object>) rawExecutionMap;
+        PipelineTemplateRemoteTarget target = parseRemoteTarget(executionMap.get("target"));
+        PipelineTemplateStepExecution execution = new PipelineTemplateStepExecution(
+            getStringValue(executionMap, "mode"),
+            getStringValue(executionMap, "operatorId"),
+            getStringValue(executionMap, "protocol"),
+            parseOptionalPositiveInteger(executionMap.get("timeoutMs"), stepName, "execution.timeoutMs"),
+            target);
+        validateRemoteExecution(stepName, execution);
+        if (!execution.isRemote()) {
+            String message = "Skipping step '" + stepName
+                + "': execution block is present but execution.mode must be REMOTE";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            throw new IllegalArgumentException(message);
+        }
+        return execution;
+    }
+
+    private PipelineTemplateRemoteTarget parseRemoteTarget(Object targetObj) {
+        if (!(targetObj instanceof Map<?, ?> rawTargetMap)) {
+            return null;
+        }
+        @SuppressWarnings("unchecked")
+        Map<String, Object> targetMap = (Map<String, Object>) rawTargetMap;
+        return new PipelineTemplateRemoteTarget(
+            getStringValue(targetMap, "url"),
+            getStringValue(targetMap, "urlConfigKey"));
+    }
+
+    private void validateRemoteExecution(String stepName, PipelineTemplateStepExecution execution) {
+        if (execution == null) {
+            return;
+        }
+        if (!execution.isRemote()) {
+            String message = "Skipping step '" + stepName
+                + "': invalid execution.mode '" + execution.mode() + "'; expected REMOTE";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            throw new IllegalArgumentException(message);
+        }
+        if (isBlank(execution.operatorId())) {
+            String message = "Skipping step '" + stepName + "': remote execution requires execution.operatorId";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            throw new IllegalArgumentException(message);
+        }
+        if (!"PROTOBUF_HTTP_V1".equalsIgnoreCase(execution.protocol())) {
+            String message = "Skipping step '" + stepName
+                + "': remote execution requires execution.protocol=PROTOBUF_HTTP_V1";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            throw new IllegalArgumentException(message);
+        }
+        PipelineTemplateRemoteTarget target = execution.target();
+        boolean hasUrl = target != null && !isBlank(target.url());
+        boolean hasConfigKey = target != null && !isBlank(target.urlConfigKey());
+        if (hasUrl == hasConfigKey) {
+            String message = "Skipping step '" + stepName
+                + "': remote execution requires exactly one of execution.target.url or execution.target.urlConfigKey";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            throw new IllegalArgumentException(message);
+        }
+    }
+
+    private Integer parseOptionalPositiveInteger(Object rawValue, String stepName, String fieldName) {
+        if (rawValue == null) {
+            return null;
+        }
+        try {
+            int parsed = rawValue instanceof Number number
+                ? number.intValue()
+                : Integer.parseInt(String.valueOf(rawValue).trim());
+            if (parsed <= 0) {
+                String message = "Skipping step '" + stepName + "': " + fieldName + " must be > 0";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                throw new IllegalArgumentException(message);
+            }
+            return parsed;
+        } catch (NumberFormatException ex) {
+            String message = "Skipping step '" + stepName + "': invalid integer value for " + fieldName
+                + " -> '" + rawValue + "'";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            throw new IllegalArgumentException(message, ex);
+        }
+    }
+
+    private int parseVersion(Map<String, Object> templateData) {
+        Object rawVersion = templateData.get("version");
+        if (rawVersion == null) {
+            return 1;
+        }
+        if (rawVersion instanceof Number number) {
+            return number.intValue();
+        }
+        String message = "Invalid template version: '" + rawVersion + "'";
+        report(Diagnostic.Kind.ERROR, message);
+        throw new IllegalArgumentException(message);
     }
 
     private String deriveLegacyServiceClassName(String basePackage, String stepName) {

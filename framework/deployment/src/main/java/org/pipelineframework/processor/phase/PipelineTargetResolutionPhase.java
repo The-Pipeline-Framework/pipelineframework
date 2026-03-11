@@ -2,6 +2,7 @@ package org.pipelineframework.processor.phase;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -110,6 +111,11 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
      * @return a set of GenerationTarget values applicable to the given step model
      */
     private Set<GenerationTarget> resolveTargetsForModel(PipelineStepModel model, TransportMode transportMode) {
+        if (model.remoteExecution() != null && model.remoteExecution().isRemote()) {
+            Set<GenerationTarget> targets = new LinkedHashSet<>(resolveTargetsForRole(model.deploymentRole(), transportMode));
+            targets.add(GenerationTarget.REMOTE_OPERATOR_ADAPTER);
+            return Set.copyOf(targets);
+        }
         if (model.delegateService() != null) {
             // Delegated steps only resolve local client target here.
             // External adapter generation is bound later in PipelineBindingConstructionPhase.

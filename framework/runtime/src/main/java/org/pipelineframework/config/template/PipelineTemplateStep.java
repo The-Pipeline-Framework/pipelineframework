@@ -27,6 +27,7 @@ import java.util.List;
  * @param inputFields the input field definitions
  * @param outputTypeName the declared output type name
  * @param outputFields the output field definitions
+ * @param execution optional execution metadata for local/remote step invocation
  */
 public record PipelineTemplateStep(
     String name,
@@ -34,6 +35,17 @@ public record PipelineTemplateStep(
     String inputTypeName,
     List<PipelineTemplateField> inputFields,
     String outputTypeName,
-    List<PipelineTemplateField> outputFields
+    List<PipelineTemplateField> outputFields,
+    PipelineTemplateStepExecution execution
 ) {
+    public PipelineTemplateStep(
+        String name,
+        String cardinality,
+        String inputTypeName,
+        List<PipelineTemplateField> inputFields,
+        String outputTypeName,
+        List<PipelineTemplateField> outputFields
+    ) {
+        this(name, cardinality, inputTypeName, inputFields, outputTypeName, outputFields, null);
+    }
 }

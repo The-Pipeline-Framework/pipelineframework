@@ -53,7 +53,8 @@ class StepBindingConstructionService {
 
             GrpcBinding grpcBinding = null;
             if ((model.enabledTargets().contains(GenerationTarget.GRPC_SERVICE)
-                || model.enabledTargets().contains(GenerationTarget.CLIENT_STEP))) {
+                || model.enabledTargets().contains(GenerationTarget.CLIENT_STEP)
+                || model.enabledTargets().contains(GenerationTarget.REMOTE_OPERATOR_ADAPTER))) {
                 grpcBinding = grpcBindingResolver.resolve(model, descriptorSet);
             }
 

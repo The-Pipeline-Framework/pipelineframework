@@ -5,6 +5,8 @@ import java.util.Set;
 
 import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.config.template.PipelineTemplateRemoteTarget;
+import org.pipelineframework.config.template.PipelineTemplateStepExecution;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ExecutionMode;
@@ -162,6 +164,54 @@ class PipelineTargetResolutionPhaseTest {
         PipelineStepModel updated = context.getStepModels().getFirst();
         assertEquals(Set.of(GenerationTarget.LOCAL_CLIENT_STEP), updated.enabledTargets());
         assertEquals(Set.of(GenerationTarget.LOCAL_CLIENT_STEP), context.getResolvedTargets());
+    }
+
+    @Test
+    void remoteStepsRetainTransportTargetsAndAddRemoteAdapterTarget() throws Exception {
+        PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineStepModel remote = step("RemoteChargeStep", DeploymentRole.PIPELINE_SERVER)
+            .toBuilder()
+            .remoteExecution(new PipelineTemplateStepExecution(
+                "REMOTE",
+                "charge-card",
+                "PROTOBUF_HTTP_V1",
+                3000,
+                new PipelineTemplateRemoteTarget(null, "tpf.remote-operators.charge-card.url")))
+            .build();
+        context.setStepModels(List.of(remote));
+        context.setTransportMode(TransportMode.REST);
+
+        phase.execute(context);
+
+        PipelineStepModel updated = context.getStepModels().getFirst();
+        assertEquals(
+            Set.of(GenerationTarget.REST_RESOURCE, GenerationTarget.REMOTE_OPERATOR_ADAPTER),
+            updated.enabledTargets());
+    }
+
+    @Test
+    void remoteStepsAlsoRetainGrpcTargetsWhenPipelineTransportIsGrpc() throws Exception {
+        PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineStepModel remote = step("RemoteChargeStep", DeploymentRole.PIPELINE_SERVER)
+            .toBuilder()
+            .remoteExecution(new PipelineTemplateStepExecution(
+                "REMOTE",
+                "charge-card",
+                "PROTOBUF_HTTP_V1",
+                3000,
+                new PipelineTemplateRemoteTarget("https://operator.example/process", null)))
+            .build();
+        context.setStepModels(List.of(remote));
+        context.setTransportMode(TransportMode.GRPC);
+
+        phase.execute(context);
+
+        PipelineStepModel updated = context.getStepModels().getFirst();
+        assertEquals(
+            Set.of(GenerationTarget.GRPC_SERVICE, GenerationTarget.REMOTE_OPERATOR_ADAPTER),
+            updated.enabledTargets());
     }
 
     private void assertResolvedTargets(

@@ -18,6 +18,7 @@ import javax.lang.model.util.Types;
 
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.TypeName;
+import org.pipelineframework.config.template.PipelineTemplateStepExecution;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
@@ -172,6 +173,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
      * For INTERNAL steps, verifies the referenced service class exists and is annotated with
      * @PipelineStep, extracts semantic information from the class, and applies the YAML-derived
      * identity. For DELEGATED steps, constructs a delegated model via createDelegatedStepModel.
+     * For REMOTE steps, constructs a generated remote-adapter model from template contract metadata.
      *
      * @param ctx the compilation context
      * @param stepDef the step definition to convert
@@ -224,7 +226,63 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 // For delegated steps, create a model based on the delegate service
                 yield createDelegatedStepModel(ctx, stepDef);
             }
+            case REMOTE -> {
+                yield createRemoteStepModel(ctx, stepDef);
+            }
         };
+    }
+
+    private PipelineStepModel createRemoteStepModel(
+            PipelineCompilationContext ctx,
+            org.pipelineframework.processor.ir.StepDefinition stepDef) {
+        if (stepDef.remoteExecution() == null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Remote step '" + stepDef.name() + "' is missing execution metadata");
+            return null;
+        }
+        if (stepDef.inputType() == null || stepDef.outputType() == null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Remote step '" + stepDef.name() + "' must resolve both input and output domain types");
+            return null;
+        }
+        StreamingShape streamingShape = stepDef.streamingShapeHint() != null
+            ? stepDef.streamingShapeHint()
+            : StreamingShape.UNARY_UNARY;
+        if (streamingShape != StreamingShape.UNARY_UNARY) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Remote step '" + stepDef.name() + "' currently supports only unary execution");
+            return null;
+        }
+
+        String serviceName = toYamlServiceName(stepDef.name());
+        String servicePackage = deriveYamlServicePackage(stepDef.inputType());
+        ClassName generatedAdapterType = ClassName.get(
+            servicePackage + org.pipelineframework.processor.PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
+            serviceName + "RemoteOperatorAdapter");
+
+        return new PipelineStepModel.Builder()
+            .serviceName(serviceName)
+            .generatedName(serviceName)
+            .servicePackage(servicePackage)
+            .serviceClassName(generatedAdapterType)
+            // Remote steps carry the same contract type on both sides of TypeMapping inputMapping/outputMapping.
+            // Unlike createDelegatedStepModel, domain vs. gRPC/external types are not split here because the
+            // protobuf contract is resolved later from descriptors and the remote adapter uses that directly.
+            .inputMapping(new TypeMapping(stepDef.inputType(), null, false, stepDef.inputType()))
+            .outputMapping(new TypeMapping(stepDef.outputType(), null, false, stepDef.outputType()))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .enabledTargets(EnumSet.of(GenerationTarget.REMOTE_OPERATOR_ADAPTER))
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+            .sideEffect(false)
+            .cacheKeyGenerator(null)
+            .orderingRequirement(OrderingRequirement.RELAXED)
+            .threadSafety(ThreadSafety.SAFE)
+            .remoteExecution(stepDef.remoteExecution())
+            .build();
     }
 
     PipelineStepModel createCrossModuleInternalModel(
@@ -294,6 +352,17 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ? executionPkg.substring(0, executionPkg.length() - ".service".length())
             : executionPkg;
         return ClassName.bestGuess(basePackage + ".common.domain." + className.simpleName());
+    }
+
+    private String deriveYamlServicePackage(TypeName domainType) {
+        if (domainType instanceof ClassName className) {
+            String packageName = className.packageName();
+            String suffix = ".common.domain";
+            if (packageName.endsWith(suffix)) {
+                return packageName.substring(0, packageName.length() - suffix.length()) + ".service";
+            }
+        }
+        return "org.pipelineframework.pipeline.service";
     }
 
     /**

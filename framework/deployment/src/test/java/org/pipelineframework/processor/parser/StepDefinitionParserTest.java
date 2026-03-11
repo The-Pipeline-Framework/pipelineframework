@@ -400,6 +400,156 @@ class StepDefinitionParserTest {
         assertEquals(MapperFallbackMode.JACKSON, step.mapperFallback());
     }
 
+    @Test
+    void parsesRemoteV2StepExecution() throws IOException {
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "charge-card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "com.example.contract.ChargeRequest"
+                outputTypeName: "com.example.contract.ChargeResult"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "charge-card"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  timeoutMs: 3000
+                  target:
+                    urlConfigKey: "tpf.remote-operators.charge-card.url"
+            """);
+
+        assertEquals(1, steps.size());
+        StepDefinition step = steps.getFirst();
+        assertEquals(StepKind.REMOTE, step.kind());
+        assertNull(step.executionClass());
+        assertNotNull(step.remoteExecution());
+        assertEquals("charge-card", step.remoteExecution().operatorId());
+        assertEquals("PROTOBUF_HTTP_V1", step.remoteExecution().protocol());
+        assertEquals(3000, step.remoteExecution().timeoutMs());
+        assertEquals("tpf.remote-operators.charge-card.url", step.remoteExecution().target().urlConfigKey());
+    }
+
+    @Test
+    void rejectsRemoteExecutionOnLegacyVersion() throws IOException {
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "charge-card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "com.example.contract.ChargeRequest"
+                outputTypeName: "com.example.contract.ChargeResult"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "charge-card"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  target:
+                    url: "https://example.com/operators/charge-card"
+            """);
+
+        assertTrue(steps.isEmpty());
+    }
+
+    @Test
+    void rejectsRemoteExecutionWhenMixedWithLocalServiceFields() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        Path file = tempDir.resolve("pipeline.yaml");
+        Files.writeString(file, """
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "charge-card"
+                service: "com.example.InternalChargeService"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "com.example.contract.ChargeRequest"
+                outputTypeName: "com.example.contract.ChargeResult"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "charge-card"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  target:
+                    url: "https://example.com/operators/charge-card"
+            """);
+        List<StepDefinition> steps = new StepDefinitionParser((kind, message) ->
+            diagnostics.add(kind + ":" + message)).parseStepDefinitions(file);
+
+        assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()));
+        assertTrue(errorSummary.contains("mutually exclusive"));
+    }
+
+    @Test
+    void rejectsRemoteExecutionWhenCardinalityIsNotUnary() throws IOException {
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "charge-card"
+                cardinality: "ONE_TO_MANY"
+                inputTypeName: "com.example.contract.ChargeRequest"
+                outputTypeName: "com.example.contract.ChargeResult"
+                execution:
+                  mode: "REMOTE"
+                  operatorId: "charge-card"
+                  protocol: "PROTOBUF_HTTP_V1"
+                  target:
+                    url: "https://example.com/operators/charge-card"
+            """);
+
+        assertTrue(steps.isEmpty());
+    }
+
+    @Test
+    void rejectsInvalidTemplateVersionValue() throws Exception {
+        Path file = tempDir.resolve("pipeline.yaml");
+        List<String> diagnostics = new ArrayList<>();
+        Files.writeString(file, """
+            version: "two"
+            appName: "Test"
+            basePackage: "com.example"
+            steps: []
+            """);
+
+        IllegalArgumentException ex = assertThrows(
+            IllegalArgumentException.class,
+            () -> new StepDefinitionParser((kind, message) ->
+                diagnostics.add(kind + ":" + message)).parseStepDefinitions(file));
+        assertTrue(ex.getMessage().contains("Invalid template version"));
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()));
+        assertTrue(errorSummary.contains("Invalid template version"));
+    }
+
+    @Test
+    void rejectsExecutionBlockWhenModeIsNotRemote() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        Path file = tempDir.resolve("pipeline.yaml");
+        Files.writeString(file, """
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "charge-card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "com.example.contract.ChargeRequest"
+                outputTypeName: "com.example.contract.ChargeResult"
+                execution:
+                  mode: "LOCAL"
+            """);
+        List<StepDefinition> steps = new StepDefinitionParser((kind, message) ->
+            diagnostics.add(kind + ":" + message)).parseStepDefinitions(file);
+
+        assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()));
+        assertTrue(errorSummary.contains("expected REMOTE"));
+    }
+
     private List<StepDefinition> parse(String yaml) throws IOException {
         Path file = tempDir.resolve("pipeline.yaml");
         Files.writeString(file, yaml);

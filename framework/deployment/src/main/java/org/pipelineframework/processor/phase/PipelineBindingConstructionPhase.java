@@ -83,7 +83,9 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
 
         boolean grpcTransport = ctx.isTransportModeGrpc();
         boolean requiresGrpcArtifacts = ctx.getStepModels().stream().anyMatch(this::isGrpcBoundStep);
-        if (descriptorSet == null && ((grpcTransport && requiresGrpcArtifacts) || needsGrpcBindings(ctx))) {
+        boolean requiresRemoteOperatorDescriptors = ctx.getStepModels().stream().anyMatch(this::isRemoteOperatorStep);
+        if (descriptorSet == null
+            && ((grpcTransport && requiresGrpcArtifacts) || needsGrpcBindings(ctx) || requiresRemoteOperatorDescriptors)) {
             descriptorSet = loadDescriptorSet(ctx);
             ctx.setDescriptorSet(descriptorSet);
         }
@@ -146,6 +148,11 @@ public class PipelineBindingConstructionPhase implements PipelineCompilationPhas
     private boolean isGrpcBoundStep(PipelineStepModel model) {
         return model.enabledTargets().contains(GenerationTarget.CLIENT_STEP)
             || model.enabledTargets().contains(GenerationTarget.GRPC_SERVICE);
+    }
+
+    private boolean isRemoteOperatorStep(PipelineStepModel model) {
+        return model.enabledTargets().contains(GenerationTarget.REMOTE_OPERATOR_ADAPTER)
+            || (model.remoteExecution() != null && model.remoteExecution().isRemote());
     }
 
     /**
