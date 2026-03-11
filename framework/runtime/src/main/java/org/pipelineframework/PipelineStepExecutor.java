@@ -172,7 +172,10 @@ class PipelineStepExecutor {
         PipelineCacheReadSupport cacheReadSupport,
         PipelineContext contextSnapshot) {
         if (cacheReadSupport == null) {
-            return withPipelineContext(contextSnapshot, () -> step.apply(Uni.createFrom().item(item)));
+            return withPipelineContext(contextSnapshot, () -> {
+                PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
+                return step.apply(Uni.createFrom().item(item));
+            });
         }
         if (step instanceof CacheReadBypass) {
             return withPipelineContext(contextSnapshot, () -> {
@@ -182,7 +185,10 @@ class PipelineStepExecutor {
         }
         CachePolicy policy = cacheReadSupport.resolvePolicy(contextSnapshot);
         if (!cacheReadSupport.shouldRead(policy)) {
-            return withPipelineContext(contextSnapshot, () -> step.apply(Uni.createFrom().item(item)));
+            return withPipelineContext(contextSnapshot, () -> {
+                PipelineCacheStatusHolder.set(CacheStatus.BYPASS);
+                return step.apply(Uni.createFrom().item(item));
+            });
         }
         Class<?> targetType = null;
         if (step instanceof CacheKeyTarget cacheKeyTarget) {
@@ -201,7 +207,16 @@ class PipelineStepExecutor {
         }
         String key = cacheReadSupport.withVersionPrefix(resolvedKey.get(), contextSnapshot);
         return cacheReadSupport.reader.get(key)
-            .onItem().transformToUni(cached -> {
+            .onItemOrFailure().transformToUni((cached, failure) -> {
+                if (failure != null) {
+                    if (policy == CachePolicy.REQUIRE_CACHE) {
+                        return Uni.createFrom().failure(failure);
+                    }
+                    return withPipelineContext(contextSnapshot, () -> {
+                        PipelineCacheStatusHolder.set(CacheStatus.MISS);
+                        return step.apply(Uni.createFrom().item(item));
+                    });
+                }
                 if (cached.isPresent()) {
                     return withPipelineContext(contextSnapshot, () -> {
                         PipelineCacheStatusHolder.set(CacheStatus.HIT);
