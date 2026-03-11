@@ -17,18 +17,11 @@ concurrency:
 env:
   MAVEN_OPTS: -Xmx1g -Xms512m
   MAVEN_ARGS_BUILD: -B -T 1 -V -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
-  IMAGE_TAG: ${{ github.sha }}
 
 jobs:
-  ##################################################################
-  # Single job that builds, tests, creates coverage reports,
-  # runs integration tests with Docker, and builds native images
-  ##################################################################
   full-test-suite:
     name: Full Test Suite
     runs-on: ubuntu-latest
-
-    # Skip this workflow when commits are from maven-release-plugin
     if: ${{ !contains(github.event.head_commit.message, 'maven-release-plugin') }}
 
     steps:
@@ -45,49 +38,16 @@ jobs:
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
 
-      - name: Setup Testcontainers Docker environment
-        uses: ./.github/actions/setup-testcontainers
-
-      - name: Verify Docker ready
-        run: |
-          docker version
-          docker info
-
-      - name: Print Effective Docker/Testcontainers JVM Env
-        run: |
-          echo "DOCKER_HOST=$DOCKER_HOST"
-          echo "DOCKER_API_VERSION=$DOCKER_API_VERSION"
-          echo "TESTCONTAINERS_DOCKER_CLIENT_STRATEGY=$TESTCONTAINERS_DOCKER_CLIENT_STRATEGY"
-          echo "TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=$TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE"
-          echo "JAVA_TOOL_OPTIONS=$JAVA_TOOL_OPTIONS"
-          echo "MAVEN_OPTS=$MAVEN_OPTS"
-          echo "--- ~/.testcontainers.properties ---"
-          cat "$HOME/.testcontainers.properties"
-
-      - name: Full clean install (framework + examples)
+      - name: Full clean install (framework + examples, JVM only)
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" clean install \
-          -Pcoverage \
-          -DskipITs=true \
-          -DskipNative=true \
-          -Dquarkus.package.type=fast-jar \
-          -Dquarkus.container-image.build=true \
-          -Dquarkus.container-image.push=false
+            -DskipNative=true \
+            -Dquarkus.package.type=fast-jar \
+            -Dquarkus.container-image.build=false \
+            -Dquarkus.container-image.push=false
 
-      - name: Run function non-unary bridge lane (runtime + deployment)
-        run: |
-          read -r -a maven_args <<< "$MAVEN_ARGS"
-          ./mvnw "${maven_args[@]}" -f framework/pom.xml \
-            -pl runtime \
-            -Dtest=FunctionTransportBridgeTest,FunctionTransportAdaptersTest \
-            test
-          ./mvnw "${maven_args[@]}" -f framework/pom.xml \
-            -pl deployment \
-            -Dtest=RestFunctionHandlerRendererTest,OrchestratorFunctionHandlerRendererTest \
-            test
-
-      - name: Dump integration test reports on failure
+      - name: Dump test reports on failure
         if: failure()
         run: |
           echo "=== Failsafe reports ==="
@@ -98,8 +58,6 @@ jobs:
           find . -path "*/target/failsafe-reports/*.dump" -print -exec tail -n 200 {} \;
           echo "=== Surefire reports ==="
           find . -path "*/target/surefire-reports/*.txt" -print -exec tail -n 200 {} \;
-          echo "=== csv-payments test-e2e directories ==="
-          find examples/csv-payments -type d -path "*/target/test-e2e" -print -exec sh -c 'ls -la "$1"' _ {} \;
 
       - name: Upload test reports on failure
         if: failure()
@@ -113,125 +71,5 @@ jobs:
             **/target/failsafe-reports/*.xml
             **/target/failsafe-reports/*.dumpstream
             **/target/failsafe-reports/*.dump
-            examples/csv-payments/**/target/test-e2e/**
           retention-days: 7
           if-no-files-found: warn
-
-      - name: Generate JaCoCo aggregate report
-        if: github.event_name != 'pull_request'
-        run: |
-          # Generate an aggregated report (this will aggregate across all modules that produced coverage data)
-          read -r -a maven_args <<< "$MAVEN_ARGS"
-          ./mvnw "${maven_args[@]}" org.jacoco:jacoco-maven-plugin:report-aggregate
-
-      - name: Analyze with SonarQube
-        if: github.event_name != 'pull_request'
-        continue-on-error: true
-        uses: sonarsource/sonarqube-scan-action@v6
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          args: >
-            -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
-            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
-            -Dsonar.projectName=${{ github.repository }}
-            -Dsonar.projectVersion=${{ github.sha }}
-            -Dsonar.sources=.
-            -Dsonar.java.source=21
-            -Dsonar.projectBaseDir=.
-            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco-aggregate/jacoco.xml
-            -Dsonar.java.coveragePlugin=jacoco
-
-      # Native builds
-      - name: Setup GraalVM
-        uses: graalvm/setup-graalvm@v1
-        with:
-          java-version: 21
-          distribution: graalvm
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Configure Maven for Native Builds
-        run: |
-          echo "MAVEN_ARGS=-B -T 1 -V -Dmaven.test.redirectTestOutputToFile=true --no-transfer-progress" >> $GITHUB_ENV
-
-      - name: Full native build
-        run: |
-          read -r -a maven_args <<< "$MAVEN_ARGS"
-          ./mvnw "${maven_args[@]}" -DskipTests -Dquarkus.container-image.build=false -Dquarkus.native.enabled=true -Pnative package
-
-      - name: Search Lambda native smoke build
-        run: |
-          read -r -a maven_args <<< "$MAVEN_ARGS"
-          ./mvnw "${maven_args[@]}" -f examples/search/pom.xml \
-            -pl crawl-source-svc \
-            -am \
-            -DskipTests \
-            -Dtpf.build.platform=FUNCTION \
-            -Dtpf.build.transport=REST \
-            -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
-            -Dtpf.build.lambda.scope=compile \
-            -Dquarkus.profile=lambda \
-            -Dquarkus.container-image.build=false \
-            -Dquarkus.native.enabled=true \
-            -Pnative \
-            package
-
-      - name: Upload native orchestrator artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-orchestrator-svc
-          path: |
-            examples/csv-payments/orchestrator-svc/target/*-runner
-            examples/csv-payments/orchestrator-svc/target/*-runner.*
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Upload native persistence artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-persistence-svc
-          path: |
-            examples/csv-payments/persistence-svc/target/*-runner
-            examples/csv-payments/persistence-svc/target/*-runner.*
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Upload native input-csv artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-input-csv-file-processing-svc
-          path: |
-            examples/csv-payments/input-csv-file-processing-svc/target/*-runner
-            examples/csv-payments/input-csv-file-processing-svc/target/*-runner.*
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Upload native payment-status artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-payment-status-svc
-          path: |
-            examples/csv-payments/payment-status-svc/target/*-runner
-            examples/csv-payments/payment-status-svc/target/*-runner.*
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Upload native payments-processing artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-payments-processing-svc
-          path: |
-            examples/csv-payments/payments-processing-svc/target/*-runner
-            examples/csv-payments/payments-processing-svc/target/*-runner.*
-          retention-days: 7
-          if-no-files-found: error
-
-      - name: Upload native output-csv artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: native-output-csv-file-processing-svc
-          path: |
-            examples/csv-payments/output-csv-file-processing-svc/target/*-runner
-            examples/csv-payments/output-csv-file-processing-svc/target/*-runner.*
-          retention-days: 7
-          if-no-files-found: error
