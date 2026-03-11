@@ -16,7 +16,7 @@ The template generator creates a complete Maven multi-module pipeline project fr
 - the orchestrator module
 - runtime config and test scaffolding
 
-The `sample-config` command emits **IDL v2** sample configs by default (internal: `generateSampleConfig`), while user-provided configs passed through `--config` are treated as v1 when `version` is not explicitly set (internal: `loadConfig`).
+The `sample-config` command emits **IDL v2** sample configs by default, while user-provided configs passed through `--config` are treated as v1 when `version` is not explicitly set.
 
 ## Schema Reference
 
@@ -77,7 +77,7 @@ steps:
 
 ## Generating a Sample Config
 
-Generate a sample config:
+Run this command from the project root to generate a sample config:
 
 ```bash
 node template-generator-node/bin/generate.js sample-config
@@ -92,8 +92,10 @@ Use the Node.js `sample-config` command when you want a lightweight v2 config sc
 Generate the complete application from your config:
 
 ```bash
-java -jar template-generator-1.0.0.jar --config my-pipeline-config.yaml --output ./my-pipeline-app
+java -jar template-generator-<version>.jar --config my-pipeline-config.yaml --output ./my-pipeline-app
 ```
+
+Replace `<version>` with the installed template-generator version.
 
 The generator copies the authored config into `config/pipeline.yaml` so the build can recreate `.proto` definitions during `generate-sources`.
 
@@ -159,7 +161,14 @@ Overrides are available, but they are an advanced escape hatch:
       encoding: string
 ```
 
-Unsafe overrides are rejected during loading/normalization. That includes lossy type changes, overrides that break canonical invariants, unsupported encodings, and overrides that conflict with message or map structure. For example, `decimal` with `overrides.proto.encoding: double` is rejected, while `decimal` with `overrides.proto.encoding: string` remains valid.
+Unsafe overrides are rejected during loading and normalization.
+
+- Lossy type changes are rejected.
+- Overrides that break canonical invariants are rejected.
+- Unsupported encodings are rejected.
+- Overrides that conflict with message or map structure are rejected.
+
+For example, `decimal` with `overrides.proto.encoding: double` is rejected. `decimal` with `overrides.proto.encoding: string` remains valid.
 
 ## Compatibility Checking
 

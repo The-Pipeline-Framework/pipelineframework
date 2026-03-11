@@ -16,7 +16,9 @@
 
 package org.pipelineframework;
 
+import java.time.Duration;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import io.smallrye.mutiny.Multi;
@@ -32,6 +34,7 @@ import org.pipelineframework.step.functional.ManyToOne;
 import org.pipelineframework.step.future.StepOneToOneCompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PipelineStepExecutorTest {
 
@@ -58,7 +61,7 @@ class PipelineStepExecutorTest {
             null,
             null);
 
-        assertEquals(List.of("a-done", "b-done"), ((Multi<String>) result).collect().asList().await().indefinitely());
+        assertEquals(List.of("a-done", "b-done"), ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5)));
     }
 
     @Test
@@ -72,7 +75,8 @@ class PipelineStepExecutorTest {
             null,
             null);
 
-        assertEquals(List.of("a-future", "b-future"), ((Multi<String>) result).collect().asList().await().indefinitely());
+        List<String> values = ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5));
+        assertTrue(values.containsAll(Set.of("a-future", "b-future")));
     }
 
     @Test

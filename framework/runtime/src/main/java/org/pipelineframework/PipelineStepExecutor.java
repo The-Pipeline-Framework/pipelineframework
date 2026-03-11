@@ -17,6 +17,7 @@
 package org.pipelineframework;
 
 import java.text.MessageFormat;
+import java.time.Duration;
 import java.util.function.Supplier;
 import jakarta.enterprise.context.ApplicationScoped;
 
@@ -218,9 +219,15 @@ class PipelineStepExecutor {
                 if (cached.isPresent()) {
                     return withPipelineContext(contextSnapshot, () -> {
                         PipelineCacheStatusHolder.set(CacheStatus.HIT);
-                        @SuppressWarnings("unchecked")
-                        O value = (O) cached.get();
-                        return Uni.createFrom().item(value);
+                        try {
+                            @SuppressWarnings("unchecked")
+                            O value = (O) cached.get();
+                            return Uni.createFrom().item(value);
+                        } catch (ClassCastException ex) {
+                            return Uni.createFrom().failure(new IllegalStateException(
+                                "Cached value for key '" + key + "' is incompatible with step "
+                                    + step.getClass().getName(), ex));
+                        }
                     });
                 }
                 if (policy == CachePolicy.REQUIRE_CACHE) {
@@ -302,7 +309,9 @@ class PipelineStepExecutor {
                 })
                 .concatenate();
         }
-        throw new IllegalArgumentException(MessageFormat.format("Unsupported current type for StepOneToOneCompletableFuture: {0}", current));
+        throw new IllegalArgumentException(MessageFormat.format(
+            "Unsupported current type for StepOneToOneCompletableFuture: {0}",
+            current == null ? "null" : current.getClass().getName()));
     }
 
     @SuppressWarnings({"unchecked"})
@@ -358,7 +367,9 @@ class PipelineStepExecutor {
                 })
                 .concatenate();
         }
-        throw new IllegalArgumentException(MessageFormat.format("Unsupported current type for StepOneToMany: {0}", current));
+        throw new IllegalArgumentException(MessageFormat.format(
+            "Unsupported current type for StepOneToMany: {0}",
+            current == null ? "null" : current.getClass().getName()));
     }
 
     @SuppressWarnings("unchecked")
@@ -393,7 +404,10 @@ class PipelineStepExecutor {
             result = telemetry.instrumentItemProduced(step.getClass(), telemetryContext, result);
             return telemetry.instrumentStepUni(step.getClass(), result, telemetryContext, false);
         }
-        throw new IllegalArgumentException(MessageFormat.format("Unsupported current type for StepManyToOne: {0}", current));
+        throw new IllegalArgumentException(MessageFormat.format(
+            "Unsupported current type for StepManyToOne: type={0} value={1}",
+            current == null ? "null" : current.getClass().getName(),
+            current));
     }
 
     @SuppressWarnings("unchecked")
@@ -415,13 +429,13 @@ class PipelineStepExecutor {
             }
             result = telemetry.instrumentItemProduced(step.getClass(), telemetryContext, result);
             return telemetry.instrumentStepMulti(step.getClass(), result, telemetryContext, false);
-        } else if (current instanceof Multi<?> multi) {
+        } else if (current instanceof Multi<?> input) {
             logger.debugf("Applying many-to-many step %s on full stream", step.getClass());
-            Multi<I> input = (Multi<I>) multi;
+            Multi<I> typedInput = (Multi<I>) input;
             if (telemetry != null) {
-                input = telemetry.instrumentItemConsumed(step.getClass(), telemetryContext, input);
+                typedInput = telemetry.instrumentItemConsumed(step.getClass(), telemetryContext, typedInput);
             }
-            Multi<I> finalInput = input;
+            Multi<I> finalInput = typedInput;
             Multi<O> result = withPipelineContext(contextSnapshot, () -> step.apply(finalInput));
             if (telemetry == null) {
                 return result;
@@ -429,6 +443,9 @@ class PipelineStepExecutor {
             result = telemetry.instrumentItemProduced(step.getClass(), telemetryContext, result);
             return telemetry.instrumentStepMulti(step.getClass(), result, telemetryContext, false);
         }
-        throw new IllegalArgumentException(MessageFormat.format("Unsupported current type for StepManyToMany: {0}", current));
+        throw new IllegalArgumentException(MessageFormat.format(
+            "Unsupported current type for StepManyToMany: type={0} value={1}",
+            current == null ? "null" : current.getClass().getName(),
+            current));
     }
 }

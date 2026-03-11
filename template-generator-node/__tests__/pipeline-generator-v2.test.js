@@ -80,6 +80,9 @@ describe('PipelineGenerator v2', () => {
     const scaffold = generator.toScaffoldConfig(config);
     const step = scaffold.steps[0];
 
+    expect(step.inputTypeName).toBe('ChargeRequest');
+    expect(step.outputTypeName).toBe('ChargeResult');
+    expect(step.inputFields.map((field) => field.name)).toEqual(['orderId', 'amount']);
     expect(step.inputFields[0].type).toBe('UUID');
     expect(step.inputFields[0].protoType).toBe('string');
     expect(step.inputFields[1].type).toBe('BigDecimal');
@@ -125,6 +128,7 @@ steps:
     expect(config.steps[0].execution.mode).toBe('REMOTE');
     expect(config.steps[0].execution.operatorId).toBe('charge-card');
     expect(config.steps[0].execution.protocol).toBe('PROTOBUF_HTTP_V1');
+    expect(config.steps[0].execution.timeoutMs).toBe(3000);
     expect(config.steps[0].execution.target.urlConfigKey).toBe('tpf.remote-operators.charge-card.url');
   });
 

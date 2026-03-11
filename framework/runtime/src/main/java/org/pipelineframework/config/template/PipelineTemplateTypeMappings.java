@@ -226,9 +226,6 @@ final class PipelineTemplateTypeMappings {
         if ("map".equals(canonicalType) && (field.keyType() == null || field.valueType() == null)) {
             throw new IllegalStateException("Map field '" + field.name() + "' must declare keyType and valueType");
         }
-        if ("map".equals(canonicalType) && isMessageReferenceToken(field.keyType())) {
-            throw new IllegalStateException("Map field '" + field.name() + "' cannot use a message type as keyType");
-        }
         if ("map".equals(canonicalType)) {
             String keyCanonicalType = canonicalTypeForV2(field.keyType());
             if (keyCanonicalType == null || "message".equals(keyCanonicalType)) {
@@ -393,7 +390,8 @@ final class PipelineTemplateTypeMappings {
      * Validates and returns the protobuf encoding for the field, applying a safe override if present.
      *
      * If the field has no proto encoding override, the provided default is returned. If an override is present,
-     * it must exactly match the default; otherwise an IllegalStateException is thrown.
+     * it must exactly match the default; otherwise an IllegalStateException is thrown. This keeps v2
+     * overrides strictly non-lossy until a broader safe-alternative matrix is explicitly supported.
      *
      * @param field the template field to inspect for a proto encoding override
      * @param defaultProto the default protobuf encoding to use when no override is provided

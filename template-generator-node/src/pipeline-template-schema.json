@@ -176,6 +176,7 @@
     },
     "v2Reserved": {
       "type": "object",
+      "minProperties": 1,
       "properties": {
         "numbers": {
           "type": "array",
@@ -397,7 +398,7 @@
                 "type": "object",
                 "properties": {
                   "mode": {
-                    "enum": ["REMOTE", "remote"]
+                    "enum": ["REMOTE"]
                   }
                 },
                 "required": ["mode"]
@@ -430,19 +431,11 @@
         },
         "operator": {
           "description": "Delegated operator reference in fully.qualified.Class::method format",
-          "allOf": [
-            {
-              "$ref": "#/$defs/operatorReference"
-            }
-          ]
+          "$ref": "#/$defs/operatorReference"
         },
         "delegate": {
           "description": "Legacy alias for operator (deprecated; prefer 'operator'): delegated operator reference in fully.qualified.Class::method format",
-          "allOf": [
-            {
-              "$ref": "#/$defs/operatorReference"
-            }
-          ]
+          "$ref": "#/$defs/operatorReference"
         },
         "input": {
           "type": "string",

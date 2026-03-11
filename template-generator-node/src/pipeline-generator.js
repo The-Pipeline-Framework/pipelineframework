@@ -129,8 +129,8 @@ class PipelineGenerator {
         }
         if (config.version === undefined) {
             config.version = 1;
-        } else if (!Number.isInteger(config.version)) {
-            throw new Error(`Configuration version must be an integer, got '${config.version}'`);
+        } else if (!Number.isInteger(config.version) || config.version <= 0) {
+            throw new Error(`Configuration version must be a positive integer, got '${config.version}'`);
         }
 
         // Normalize casing for JSON schema validation.
@@ -184,11 +184,15 @@ class PipelineGenerator {
     }
 
     materializeStepFields(typeName, inlineFields, messages) {
-        const topLevel = typeName && messages[typeName] && Array.isArray(messages[typeName].fields)
-            ? messages[typeName].fields
+        const messageDefinition = typeName ? messages[typeName] : null;
+        const topLevel = messageDefinition && Array.isArray(messageDefinition.fields)
+            ? messageDefinition.fields
             : null;
         if (typeName && !topLevel) {
-            throw new Error(`Missing message definition for '${typeName}'`);
+            if (messageDefinition === undefined) {
+                throw new Error(`Missing message definition for '${typeName}'`);
+            }
+            throw new Error(`Invalid message definition for '${typeName}': 'fields' must be an array`);
         }
         if (topLevel && Array.isArray(inlineFields)) {
             const topLevelNormalized = this.canonicalizeFields(topLevel.map((field) => this.toScaffoldField(field)));
