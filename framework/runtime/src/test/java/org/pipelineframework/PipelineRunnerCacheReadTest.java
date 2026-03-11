@@ -158,17 +158,14 @@ class PipelineRunnerCacheReadTest {
     }
 
     @Test
-    void selectsHighestPriorityCacheReader() throws Exception {
-        PipelineRunner runner = new PipelineRunner();
-        runner.cacheReaders = new SimpleInstance<>(List.of(
+    void selectsHighestPriorityCacheReader() {
+        PipelineCacheSupportFactory factory = new PipelineCacheSupportFactory();
+        factory.cacheReaders = new SimpleInstance<>(List.of(
             new LowPriorityReader(),
             new HighPriorityReader()));
-        runner.cacheKeyStrategies = new SimpleInstance<>(List.of(new FixedKeyStrategy()));
-        runner.cachePolicyDefault = "prefer-cache";
-
-        java.lang.reflect.Method method = PipelineRunner.class.getDeclaredMethod("buildCacheReadSupport");
-        method.setAccessible(true);
-        PipelineRunner.CacheReadSupport support = (PipelineRunner.CacheReadSupport) method.invoke(runner);
+        factory.cacheKeyStrategies = new SimpleInstance<>(List.of(new FixedKeyStrategy()));
+        factory.cachePolicyDefault = "prefer-cache";
+        PipelineRunner.CacheReadSupport support = factory.buildCacheReadSupport();
 
         CountingStep step = new CountingStep();
         PipelineContext context = new PipelineContext("v1", null, "prefer-cache");
