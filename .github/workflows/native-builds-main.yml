@@ -1,0 +1,140 @@
+name: CI — Native Builds (Main)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'framework/**'
+      - 'examples/**'
+      - 'pom.xml'
+      - '.github/workflows/native-builds-main.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MAVEN_OPTS: -Xmx1g -Xms512m
+  MAVEN_ARGS_BUILD: -B -T 1 -V -Dmaven.test.redirectTestOutputToFile=true
+
+jobs:
+  csv-native-builds:
+    name: CSV Native Builds
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message, 'maven-release-plugin') }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: 21
+          distribution: graalvm
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Maven
+        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
+
+      - name: Full native build
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -DskipTests -Dquarkus.container-image.build=false -Dquarkus.native.enabled=true -Pnative package
+
+      - name: Upload native orchestrator artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-orchestrator-svc
+          path: |
+            examples/csv-payments/orchestrator-svc/target/*-runner
+            examples/csv-payments/orchestrator-svc/target/*-runner.*
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload native persistence artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-persistence-svc
+          path: |
+            examples/csv-payments/persistence-svc/target/*-runner
+            examples/csv-payments/persistence-svc/target/*-runner.*
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload native input-csv artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-input-csv-file-processing-svc
+          path: |
+            examples/csv-payments/input-csv-file-processing-svc/target/*-runner
+            examples/csv-payments/input-csv-file-processing-svc/target/*-runner.*
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload native payment-status artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-payment-status-svc
+          path: |
+            examples/csv-payments/payment-status-svc/target/*-runner
+            examples/csv-payments/payment-status-svc/target/*-runner.*
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload native payments-processing artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-payments-processing-svc
+          path: |
+            examples/csv-payments/payments-processing-svc/target/*-runner
+            examples/csv-payments/payments-processing-svc/target/*-runner.*
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Upload native output-csv artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-output-csv-file-processing-svc
+          path: |
+            examples/csv-payments/output-csv-file-processing-svc/target/*-runner
+            examples/csv-payments/output-csv-file-processing-svc/target/*-runner.*
+          retention-days: 7
+          if-no-files-found: error
+
+  search-lambda-native-smoke:
+    name: Search Lambda Native Smoke
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.event.head_commit.message, 'maven-release-plugin') }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: 21
+          distribution: graalvm
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Maven
+        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
+
+      - name: Search Lambda native smoke build
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f examples/search/pom.xml \
+            -pl crawl-source-svc \
+            -am \
+            -DskipTests \
+            -Dtpf.build.platform=FUNCTION \
+            -Dtpf.build.transport=REST \
+            -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
+            -Dtpf.build.lambda.scope=compile \
+            -Dquarkus.profile=lambda \
+            -Dquarkus.container-image.build=false \
+            -Dquarkus.native.enabled=true \
+            -Pnative \
+            package
