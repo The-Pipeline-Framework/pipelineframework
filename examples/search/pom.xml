@@ -54,6 +54,7 @@
         <quarkus.container-image.group>search-pipeline</quarkus.container-image.group>
         <quarkus.container-image.platforms>linux/amd64,linux/arm64/v8</quarkus.container-image.platforms>
         <quarkus.jib.jvm-additional-arguments>--enable-preview</quarkus.jib.jvm-additional-arguments>
+        <skipUnitTests>false</skipUnitTests>
     </properties>
 
     <dependencyManagement>
@@ -411,6 +412,8 @@
                     </dependencies>
                     <configuration>
                         <useSystemClassLoader>true</useSystemClassLoader>
+                        <skip>${skipUnitTests}</skip>
+                        <skipTests>${skipTests}</skipTests>
                         <forkCount>1</forkCount>
                         <reuseForks>true</reuseForks>
                         <systemPropertyVariables>

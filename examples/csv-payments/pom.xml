@@ -68,6 +68,7 @@
         <lombok.version>1.18.36</lombok.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
         <assertj.version>3.27.7</assertj.version>
+        <skipUnitTests>false</skipUnitTests>
     </properties>
 
     <dependencyManagement>
@@ -423,6 +424,8 @@
                     </dependencies>
                     <configuration>
                         <useSystemClassLoader>true</useSystemClassLoader>
+                        <skip>${skipUnitTests}</skip>
+                        <skipTests>${skipTests}</skipTests>
                         <forkCount>1</forkCount>
                         <reuseForks>true</reuseForks>
                         <systemPropertyVariables>

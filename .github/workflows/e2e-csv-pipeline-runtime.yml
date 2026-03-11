@@ -51,7 +51,7 @@ jobs:
         uses: ./.github/actions/setup-testcontainers
 
       - name: Build csv-payments pipeline-runtime topology
-        run: ./examples/csv-payments/build-pipeline-runtime.sh
+        run: ./examples/csv-payments/build-pipeline-runtime.sh -DskipTests -Dquarkus.container-image.build=true
 
       - name: Run csv-payments pipeline-runtime topology + E2E
         run: |
@@ -62,6 +62,7 @@ jobs:
             -Dcsv.e2e.pipeline.wait.seconds=240 \
             -Dtest=PipelineRuntimeTopologyTest \
             -Dit.test=CsvPaymentsPipelineRuntimeEndToEndIT \
+            -Dquarkus.container-image.build=false \
             verify
 
       - name: Dump reports on failure

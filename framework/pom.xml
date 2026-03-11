@@ -70,6 +70,7 @@
         <grpc.version>1.75.0</grpc.version>
         <maven.deploy.skip>false</maven.deploy.skip>
         <tpf.flatten.skip>true</tpf.flatten.skip>
+        <skipUnitTests>false</skipUnitTests>
         <surefireArgLine />
     </properties>
 
@@ -127,6 +128,8 @@
                     </dependencies>
                     <configuration>
                         <useSystemClassLoader>true</useSystemClassLoader>
+                        <skip>${skipUnitTests}</skip>
+                        <skipTests>${skipTests}</skipTests>
                         <forkCount>1</forkCount>
                         <reuseForks>true</reuseForks>
                         <systemPropertyVariables>
