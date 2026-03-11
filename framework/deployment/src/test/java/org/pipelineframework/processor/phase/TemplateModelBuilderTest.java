@@ -38,27 +38,31 @@ class TemplateModelBuilderTest {
 
     @Test
     void buildModels_nullSteps_empty() {
-        PipelineTemplateConfig config = new PipelineTemplateConfig("app", "com.example", null, null, null);
+        PipelineTemplateConfig config = new PipelineTemplateConfig("app", "com.example", "GRPC", null, null);
         assertTrue(builder.buildModels(config).isEmpty());
     }
 
     @Test
     void buildModels_emptySteps_empty() {
-        PipelineTemplateConfig config = new PipelineTemplateConfig("app", "com.example", null, List.of(), null);
+        PipelineTemplateConfig config = new PipelineTemplateConfig("app", "com.example", "GRPC", List.of(), null);
         assertTrue(builder.buildModels(config).isEmpty());
     }
 
     @Test
-    void buildModels_blankBasePackage_empty() {
+    void buildModels_blankBasePackage_emptyOrRejected() {
         PipelineTemplateStep step = step("Process Data", "Input", "Output");
-        PipelineTemplateConfig config = new PipelineTemplateConfig("app", "", null, List.of(step), null);
-        assertTrue(builder.buildModels(config).isEmpty());
+        try {
+            PipelineTemplateConfig config = new PipelineTemplateConfig("app", "", "GRPC", List.of(step), null);
+            assertTrue(builder.buildModels(config).isEmpty());
+        } catch (IllegalArgumentException ex) {
+            assertEquals("basePackage must not be blank", ex.getMessage());
+        }
     }
 
     @Test
     void buildModels_validStep_buildsModel() {
         PipelineTemplateStep step = step("Process Data", "InputDto", "OutputDto");
-        PipelineTemplateConfig config = new PipelineTemplateConfig("app", "com.example", null, List.of(step), null);
+        PipelineTemplateConfig config = new PipelineTemplateConfig("app", "com.example", "GRPC", List.of(step), null);
 
         List<PipelineStepModel> models = builder.buildModels(config);
 
@@ -74,7 +78,7 @@ class TemplateModelBuilderTest {
         List<PipelineTemplateStep> steps = new java.util.ArrayList<>();
         steps.add(null);
         steps.add(step("Process Item", "In", "Out"));
-        PipelineTemplateConfig config = new PipelineTemplateConfig("app", "com.example", null, steps, null);
+        PipelineTemplateConfig config = new PipelineTemplateConfig("app", "com.example", "GRPC", steps, null);
 
         List<PipelineStepModel> models = builder.buildModels(config);
         assertEquals(1, models.size());
@@ -84,7 +88,7 @@ class TemplateModelBuilderTest {
     void buildModels_multipleSteps() {
         PipelineTemplateStep step1 = step("Process First", "A", "B");
         PipelineTemplateStep step2 = step("Process Second", "B", "C");
-        PipelineTemplateConfig config = new PipelineTemplateConfig("app", "com.example", null, List.of(step1, step2), null);
+        PipelineTemplateConfig config = new PipelineTemplateConfig("app", "com.example", "GRPC", List.of(step1, step2), null);
 
         List<PipelineStepModel> models = builder.buildModels(config);
         assertEquals(2, models.size());
@@ -99,7 +103,7 @@ class TemplateModelBuilderTest {
     @Test
     void buildModels_specialCharsInName_producesValidPackage() {
         PipelineTemplateStep step = step("Process--Data!!", "In", "Out");
-        PipelineTemplateConfig config = new PipelineTemplateConfig("app", "com.example", null, List.of(step), null);
+        PipelineTemplateConfig config = new PipelineTemplateConfig("app", "com.example", "GRPC", List.of(step), null);
 
         List<PipelineStepModel> models = builder.buildModels(config);
         assertEquals(1, models.size());
