@@ -34,7 +34,14 @@ Supported built-ins in v2:
 - `currency`
 - `uri`
 - `path`
+
+Structural type:
+
 - `map`
+
+`map` is a parameterised collection type, not an atomic scalar. It must declare `keyType` and `valueType`.
+
+Enums are not a first-class canonical v2 type in the current schema. Model them with named messages and string-backed fields for now, or keep legacy enum handling in v1 compatibility paths until explicit enum support is added.
 
 PascalCase type tokens are treated as references to top-level named messages.
 
@@ -126,7 +133,7 @@ Breaking changes fail compatibility checks when they:
 
 - renumber fields
 - change canonical field types
-- change repeated/map/message-reference structure
+- change structural shape, such as adding `repeated: true` to a singular field, changing a map key or value type, switching a field to a different message reference, or changing between optional and required semantics
 - remove fields without reserving the old number and name
 - reuse reserved numbers or names
 

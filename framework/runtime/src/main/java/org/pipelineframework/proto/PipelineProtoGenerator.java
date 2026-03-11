@@ -21,6 +21,7 @@ import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -37,6 +38,7 @@ import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateConfigLoader;
 import org.pipelineframework.config.template.PipelineTemplateField;
 import org.pipelineframework.config.template.PipelineTemplateMessage;
+import org.pipelineframework.config.template.PipelineTemplateReserved;
 import org.pipelineframework.config.template.PipelineTemplateStep;
 
 /**
@@ -270,7 +272,10 @@ public class PipelineProtoGenerator {
             .append(basePackage)
             .append(".grpc\";\n\n");
         boolean first = true;
-        for (PipelineTemplateMessage message : messages.values()) {
+        List<String> messageNames = new ArrayList<>(messages.keySet());
+        Collections.sort(messageNames);
+        for (String messageName : messageNames) {
+            PipelineTemplateMessage message = messages.get(messageName);
             if (!first) {
                 builder.append('\n');
             }
@@ -346,28 +351,32 @@ public class PipelineProtoGenerator {
      */
     private void renderMessage(StringBuilder builder, PipelineTemplateMessage message) {
         builder.append("message ").append(message.name()).append(" {\n");
-        if (!message.reserved().numbers().isEmpty()) {
+        PipelineTemplateReserved reserved = message.reserved();
+        List<PipelineTemplateField> fields = message.fields() == null ? List.of() : message.fields();
+        if (reserved != null && reserved.numbers() != null && !reserved.numbers().isEmpty()) {
             builder.append("  reserved ");
-            for (int i = 0; i < message.reserved().numbers().size(); i++) {
+            for (int i = 0; i < reserved.numbers().size(); i++) {
                 if (i > 0) {
                     builder.append(", ");
                 }
-                builder.append(message.reserved().numbers().get(i));
+                builder.append(reserved.numbers().get(i));
             }
             builder.append(";\n");
         }
-        if (!message.reserved().names().isEmpty()) {
+        if (reserved != null && reserved.names() != null && !reserved.names().isEmpty()) {
             builder.append("  reserved ");
-            for (int i = 0; i < message.reserved().names().size(); i++) {
+            for (int i = 0; i < reserved.names().size(); i++) {
                 if (i > 0) {
                     builder.append(", ");
                 }
-                builder.append('"').append(message.reserved().names().get(i)).append('"');
+                builder.append('"').append(reserved.names().get(i)).append('"');
             }
             builder.append(";\n");
         }
-        for (PipelineTemplateField field : message.fields()) {
-            renderFieldLine(builder, field);
+        for (PipelineTemplateField field : fields) {
+            if (field != null) {
+                renderFieldLine(builder, field);
+            }
         }
         builder.append("}\n");
     }
@@ -457,10 +466,11 @@ public class PipelineProtoGenerator {
      * @return the protobuf type string, prefixed with "repeated " if the field is repeated; `"string"` if the field's protoType is null or blank, otherwise the field's protoType
      */
     private String renderLegacyFieldType(PipelineTemplateField field) {
+        String baseType = field.protoType() == null || field.protoType().isBlank() ? "string" : field.protoType();
         if (field.repeated()) {
-            return "repeated " + field.protoType();
+            return "repeated " + baseType;
         }
-        return field.protoType() == null || field.protoType().isBlank() ? "string" : field.protoType();
+        return baseType;
     }
 
     /**

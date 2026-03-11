@@ -11,6 +11,7 @@ import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.pipelineframework.config.template.PipelineTemplateRemoteTarget;
@@ -26,6 +27,7 @@ import org.pipelineframework.processor.ir.TypeMapping;
 import org.pipelineframework.processor.util.RoleMetadataGenerator;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
@@ -106,6 +108,7 @@ class StepArtifactGenerationServiceTest {
             .enabledTargets(Set.of(GenerationTarget.REMOTE_OPERATOR_ADAPTER))
             .executionMode(ExecutionMode.DEFAULT)
             .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+            .sideEffect(false)
             .remoteExecution(new PipelineTemplateStepExecution(
                 "REMOTE",
                 "charge-card",
@@ -120,7 +123,7 @@ class StepArtifactGenerationServiceTest {
         service.generateArtifactsForModel(
             ctx,
             model,
-            grpcBinding(model),
+            grpcBinding(),
             null,
             null,
             new java.util.HashSet<>(),
@@ -137,7 +140,12 @@ class StepArtifactGenerationServiceTest {
             renderer
         );
 
-        verify(renderer).render(any(GrpcBinding.class), any(org.pipelineframework.processor.renderer.GenerationContext.class));
+        ArgumentCaptor<GrpcBinding> bindingCaptor = ArgumentCaptor.forClass(GrpcBinding.class);
+        ArgumentCaptor<org.pipelineframework.processor.renderer.GenerationContext> contextCaptor =
+            ArgumentCaptor.forClass(org.pipelineframework.processor.renderer.GenerationContext.class);
+        verify(renderer).render(bindingCaptor.capture(), contextCaptor.capture());
+        assertEquals("ChargeCard", ((Descriptors.ServiceDescriptor) bindingCaptor.getValue().serviceDescriptor()).getName());
+        assertEquals(DeploymentRole.PIPELINE_SERVER, contextCaptor.getValue().role());
     }
 
     private void invokeGenerateArtifacts(PipelineCompilationContext ctx, PipelineStepModel model) throws Exception {
@@ -162,10 +170,23 @@ class StepArtifactGenerationServiceTest {
         );
     }
 
-    private GrpcBinding grpcBinding(PipelineStepModel model) {
+    private GrpcBinding grpcBinding() {
         Descriptors.FileDescriptor fileDescriptor = buildFileDescriptor();
         Descriptors.ServiceDescriptor serviceDescriptor = fileDescriptor.findServiceByName("ChargeCard");
         Descriptors.MethodDescriptor methodDescriptor = serviceDescriptor.findMethodByName("remoteProcess");
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("ChargeCard")
+            .generatedName("ChargeCard")
+            .servicePackage("com.example.checkout")
+            .serviceClassName(ClassName.get("com.example.checkout.pipeline", "ChargeCardRemoteOperatorAdapter"))
+            .inputMapping(new TypeMapping(ClassName.get("com.example.checkout.domain", "ChargeRequest"), null, false))
+            .outputMapping(new TypeMapping(ClassName.get("com.example.checkout.domain", "ChargeResult"), null, false))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .enabledTargets(Set.of(GenerationTarget.REMOTE_OPERATOR_ADAPTER))
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+            .sideEffect(false)
+            .build();
         return new GrpcBinding(model, serviceDescriptor, methodDescriptor);
     }
 

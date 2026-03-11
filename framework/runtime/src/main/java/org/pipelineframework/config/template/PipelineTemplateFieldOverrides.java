@@ -19,7 +19,7 @@ package org.pipelineframework.config.template;
 /**
  * Optional advanced override metadata for a template field.
  *
- * @param proto protobuf-specific override settings
+ * @param proto optional protobuf-specific override settings; may be {@code null} when no override is declared
  */
 public record PipelineTemplateFieldOverrides(
     PipelineTemplateProtoOverride proto

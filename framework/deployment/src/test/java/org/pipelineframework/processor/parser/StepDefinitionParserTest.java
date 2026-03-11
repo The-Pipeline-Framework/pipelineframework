@@ -433,7 +433,9 @@ class StepDefinitionParserTest {
 
     @Test
     void rejectsRemoteExecutionOnLegacyVersion() throws IOException {
-        List<StepDefinition> steps = parse("""
+        List<String> diagnostics = new ArrayList<>();
+        Path file = tempDir.resolve("pipeline.yaml");
+        Files.writeString(file, """
             appName: "Test"
             basePackage: "com.example"
             steps:
@@ -448,8 +450,13 @@ class StepDefinitionParserTest {
                   target:
                     url: "https://example.com/operators/charge-card"
             """);
+        List<StepDefinition> steps = new StepDefinitionParser((kind, message) ->
+            diagnostics.add(kind + ":" + message)).parseStepDefinitions(file);
 
         assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()));
+        assertTrue(errorSummary.contains("execution blocks require version: 2"));
     }
 
     @Test
@@ -484,7 +491,9 @@ class StepDefinitionParserTest {
 
     @Test
     void rejectsRemoteExecutionWhenCardinalityIsNotUnary() throws IOException {
-        List<StepDefinition> steps = parse("""
+        List<String> diagnostics = new ArrayList<>();
+        Path file = tempDir.resolve("pipeline.yaml");
+        Files.writeString(file, """
             version: 2
             appName: "Test"
             basePackage: "com.example"
@@ -500,8 +509,13 @@ class StepDefinitionParserTest {
                   target:
                     url: "https://example.com/operators/charge-card"
             """);
+        List<StepDefinition> steps = new StepDefinitionParser((kind, message) ->
+            diagnostics.add(kind + ":" + message)).parseStepDefinitions(file);
 
         assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()));
+        assertTrue(errorSummary.contains("currently supports only ONE_TO_ONE"));
     }
 
     @Test

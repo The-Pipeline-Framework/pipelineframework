@@ -96,7 +96,7 @@
         },
         "keyType": {
           "type": "string",
-          "enum": ["string", "bool", "int32", "int64", "float32", "float64", "decimal", "uuid", "timestamp", "datetime", "date", "duration", "bytes", "currency", "uri", "path"]
+          "enum": ["string", "bool", "int32", "int64"]
         },
         "valueType": {
           "type": "string",
@@ -237,7 +237,7 @@
       "properties": {
         "mode": {
           "type": "string",
-          "enum": ["LOCAL", "REMOTE", "local", "remote"]
+          "enum": ["LOCAL", "REMOTE"]
         },
         "operatorId": {
           "type": "string",
@@ -245,7 +245,7 @@
         },
         "protocol": {
           "type": "string",
-          "enum": ["PROTOBUF_HTTP_V1", "protobuf_http_v1"]
+          "enum": ["PROTOBUF_HTTP_V1"]
         },
         "timeoutMs": {
           "type": "integer",
@@ -260,7 +260,7 @@
           "if": {
             "properties": {
               "mode": {
-                "enum": ["REMOTE", "remote"]
+                "enum": ["REMOTE"]
               }
             },
             "required": ["mode"]
@@ -273,7 +273,7 @@
           "if": {
             "properties": {
               "mode": {
-                "enum": ["LOCAL", "local"]
+                "enum": ["LOCAL"]
               }
             },
             "required": ["mode"]
@@ -592,20 +592,7 @@
     },
     "steps": {
       "type": "array",
-      "description": "List of pipeline steps.",
-      "items": {
-        "oneOf": [
-          {
-            "$ref": "#/$defs/legacyTemplateStep"
-          },
-          {
-            "$ref": "#/$defs/v2TemplateStep"
-          },
-          {
-            "$ref": "#/$defs/delegatedOrInternalStep"
-          }
-        ]
-      }
+      "description": "List of pipeline steps."
     },
     "aspects": {
       "type": "object",

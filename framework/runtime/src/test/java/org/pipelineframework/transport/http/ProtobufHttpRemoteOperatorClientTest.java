@@ -106,6 +106,7 @@ class ProtobufHttpRemoteOperatorClientTest {
 
     @Test
     void rejectsExpiredDeadlineBeforeSending() {
+        PipelineContextHolder.set(new PipelineContext("v1", null, null));
         TransportDispatchMetadataHolder.set(new TransportDispatchMetadata(
             "corr-1",
             "exec-1",
@@ -131,6 +132,9 @@ class ProtobufHttpRemoteOperatorClientTest {
             .build();
 
         try (ServerHandle server = startServer(exchange -> respondStatus(exchange, 400, status))) {
+            PipelineContextHolder.set(new PipelineContext("v1", null, null));
+            TransportDispatchMetadataHolder.set(new TransportDispatchMetadata(
+                "corr-1", "exec-1", "idem-1", 0, null, System.currentTimeMillis(), null));
             ProtobufHttpRemoteOperatorClient client = new ProtobufHttpRemoteOperatorClient();
             NonRetryableException ex = assertThrows(
                 NonRetryableException.class,
@@ -149,6 +153,9 @@ class ProtobufHttpRemoteOperatorClientTest {
             .build();
 
         try (ServerHandle server = startServer(exchange -> respondStatus(exchange, 503, status))) {
+            PipelineContextHolder.set(new PipelineContext("v1", null, null));
+            TransportDispatchMetadataHolder.set(new TransportDispatchMetadata(
+                "corr-1", "exec-1", "idem-1", 0, null, System.currentTimeMillis(), null));
             ProtobufHttpRemoteOperatorClient client = new ProtobufHttpRemoteOperatorClient();
             IllegalStateException ex = assertThrows(
                 IllegalStateException.class,

@@ -65,7 +65,7 @@ steps:
 
 Rules:
 - Remote execution is available only in `version: 2`.
-- Only unary `ONE_TO_ONE` remote execution is supported in this slice.
+- Only unary `ONE_TO_ONE` remote execution is supported currently.
 - Exactly one of `execution.target.url` or `execution.target.urlConfigKey` must be set.
 - `execution.target.urlConfigKey` resolves at runtime startup, not at compile time.
 - `pipeline.transport` and the remote operator protocol are orthogonal. TPF can expose the pipeline over REST, gRPC, or local transport while invoking the remote operator over Protobuf-over-HTTP.

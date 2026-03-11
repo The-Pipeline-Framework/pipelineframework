@@ -244,7 +244,7 @@ class StepArtifactGenerationService {
                     if (grpcBinding == null) {
                         ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING,
                             "Skipping remote operator adapter generation for '" + model.generatedName()
-                                + "' because no protobuf binding is available.");
+                                + "' because no gRPC binding is available.");
                         break;
                     }
                     String adapterClassName = model.servicePackage() + PIPELINE_DOT + model.serviceClassName().simpleName();

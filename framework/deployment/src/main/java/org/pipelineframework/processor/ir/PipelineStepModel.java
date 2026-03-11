@@ -73,6 +73,10 @@ public record PipelineStepModel(
      * @throws IllegalArgumentException if any parameter documented as 'must not be null' is null
      */
     @SuppressWarnings("ConstantValue")
+    /**
+     * @deprecated prefer {@link Builder} for construction.
+     */
+    @Deprecated
     public PipelineStepModel(String serviceName,
             String generatedName,
             String servicePackage,
@@ -129,6 +133,10 @@ public record PipelineStepModel(
         this.remoteExecution = remoteExecution;
     }
 
+    /**
+     * @deprecated prefer {@link Builder} for construction.
+     */
+    @Deprecated
     public PipelineStepModel(String serviceName,
             String generatedName,
             String servicePackage,
@@ -165,6 +173,10 @@ public record PipelineStepModel(
             null);
     }
 
+    /**
+     * @deprecated prefer {@link Builder} for construction.
+     */
+    @Deprecated
     public PipelineStepModel(String serviceName,
             String generatedName,
             String servicePackage,
@@ -538,18 +550,18 @@ public record PipelineStepModel(
                 throw new IllegalStateException("deploymentRole is required");
 
             return new PipelineStepModel(serviceName,
-                    generatedName,
-                    servicePackage,
-                    serviceClassName,
-                    inputMapping,
-                    outputMapping,
-                    streamingShape,
-                    enabledTargets,
-                    executionMode,
-                    deploymentRole,
-                    sideEffect,
-                    cacheKeyGenerator,
-                    orderingRequirement,
+                generatedName,
+                servicePackage,
+                serviceClassName,
+                inputMapping,
+                outputMapping,
+                streamingShape,
+                enabledTargets,
+                executionMode,
+                deploymentRole,
+                sideEffect,
+                cacheKeyGenerator,
+                orderingRequirement,
                 threadSafety,
                 delegateService,
                 externalMapper,

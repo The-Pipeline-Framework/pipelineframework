@@ -140,6 +140,9 @@ class PipelineGenerator {
         if (typeof config.transport === 'string') {
             config.transport = config.transport.trim().toUpperCase();
         }
+        if (config.version === 2 && Array.isArray(config.steps)) {
+            config.steps = config.steps.map((step) => this.normalizeV2Step(step));
+        }
         
         // Validate the configuration against the schema
         const ajv = new Ajv();
@@ -188,17 +191,9 @@ class PipelineGenerator {
             throw new Error(`Missing message definition for '${typeName}'`);
         }
         if (topLevel && Array.isArray(inlineFields)) {
-            const sortFields = (fields) => [...fields].sort((left, right) => {
-                const leftNumber = Number.isFinite(left.number) ? left.number : Number.MAX_SAFE_INTEGER;
-                const rightNumber = Number.isFinite(right.number) ? right.number : Number.MAX_SAFE_INTEGER;
-                if (leftNumber !== rightNumber) {
-                    return leftNumber - rightNumber;
-                }
-                return String(left.name || '').localeCompare(String(right.name || ''));
-            });
-            const topLevelNormalized = sortFields(topLevel.map((field) => this.toScaffoldField(field)));
-            const inlineNormalized = sortFields(inlineFields.map((field) => this.toScaffoldField(field)));
-            if (JSON.stringify(topLevelNormalized) !== JSON.stringify(inlineNormalized)) {
+            const topLevelNormalized = this.canonicalizeFields(topLevel.map((field) => this.toScaffoldField(field)));
+            const inlineNormalized = this.canonicalizeFields(inlineFields.map((field) => this.toScaffoldField(field)));
+            if (!this.deepEqual(topLevelNormalized, inlineNormalized)) {
                 throw new Error(`Conflicting inline vs top-level field definitions for '${typeName}'`);
             }
         }
@@ -248,12 +243,10 @@ class PipelineGenerator {
         // This avoids forcing Optional<T> import/converter changes across existing templates;
         // mapper/runtime layers handle presence semantics from field metadata.
         if (field.repeated) {
-            const repeatedJavaType = this.isMessageReferenceType(authoredType) ? authoredType : javaType;
-            const repeatedProtoType = this.isMessageReferenceType(authoredType) ? authoredType : protoType;
             return {
                 ...field,
-                type: `List<${repeatedJavaType}>`,
-                protoType: repeatedProtoType
+                type: `List<${javaType}>`,
+                protoType
             };
         }
         return {
@@ -261,6 +254,68 @@ class PipelineGenerator {
             type: javaType,
             protoType
         };
+    }
+
+    normalizeV2Step(step) {
+        if (!step || typeof step !== 'object') {
+            return step;
+        }
+        const normalized = { ...step };
+        if (normalized.execution && typeof normalized.execution === 'object') {
+            normalized.execution = { ...normalized.execution };
+            if (typeof normalized.execution.mode === 'string') {
+                normalized.execution.mode = normalized.execution.mode.trim().toUpperCase();
+            }
+            if (typeof normalized.execution.protocol === 'string') {
+                normalized.execution.protocol = normalized.execution.protocol.trim().toUpperCase();
+            }
+        }
+        return normalized;
+    }
+
+    canonicalizeFields(fields) {
+        return [...fields]
+            .map((field) => this.canonicalizeValue(field))
+            .sort((left, right) => {
+                const leftNumber = Number.isFinite(left.number) ? left.number : Number.MAX_SAFE_INTEGER;
+                const rightNumber = Number.isFinite(right.number) ? right.number : Number.MAX_SAFE_INTEGER;
+                if (leftNumber !== rightNumber) {
+                    return leftNumber - rightNumber;
+                }
+                return String(left.name || '').localeCompare(String(right.name || ''));
+            });
+    }
+
+    canonicalizeValue(value) {
+        if (Array.isArray(value)) {
+            return value.map((item) => this.canonicalizeValue(item));
+        }
+        if (value && typeof value === 'object') {
+            return Object.keys(value)
+                .sort()
+                .reduce((acc, key) => {
+                    acc[key] = this.canonicalizeValue(value[key]);
+                    return acc;
+                }, {});
+        }
+        return value;
+    }
+
+    deepEqual(left, right) {
+        if (left === right) {
+            return true;
+        }
+        if (Array.isArray(left) && Array.isArray(right)) {
+            return left.length === right.length && left.every((value, index) => this.deepEqual(value, right[index]));
+        }
+        if (left && right && typeof left === 'object' && typeof right === 'object') {
+            const leftKeys = Object.keys(left);
+            const rightKeys = Object.keys(right);
+            return leftKeys.length === rightKeys.length
+                && leftKeys.every((key) => Object.prototype.hasOwnProperty.call(right, key)
+                    && this.deepEqual(left[key], right[key]));
+        }
+        return false;
     }
 
     isMessageReferenceType(type) {

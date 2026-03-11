@@ -93,7 +93,8 @@ public record PipelineTemplateField(
     /**
      * Determines if this field is a reference to another message.
      *
-     * @return `true` if the field's canonical type is "message" and a message reference name is present, `false` otherwise.
+     * @return {@code true} if the field's canonical type is {@code "message"} and a message reference name is present,
+     *         {@code false} otherwise.
      */
     public boolean isMessageReference() {
         return "message".equals(canonicalType) && messageRef != null;

@@ -16,7 +16,7 @@ The template generator creates a complete Maven multi-module pipeline project fr
 - the orchestrator module
 - runtime config and test scaffolding
 
-The generator emits **IDL v2** sample configs by default (`generateSampleConfig`), while user-provided configs loaded via `loadConfig` are treated as v1 when `version` is not explicitly set.
+The `sample-config` command emits **IDL v2** sample configs by default (internal: `generateSampleConfig`), while user-provided configs passed through `--config` are treated as v1 when `version` is not explicitly set (internal: `loadConfig`).
 
 ## Schema Reference
 
@@ -85,6 +85,8 @@ node template-generator-node/bin/generate.js sample-config
 
 This produces a v2 sample config with top-level `messages`.
 
+Use the Node.js `sample-config` command when you want a lightweight v2 config scaffold. Use the Java JAR when you need the full runnable Maven and Java project structure.
+
 ## Generating an Application
 
 Generate the complete application from your config:
@@ -122,7 +124,7 @@ Common semantic types:
 - `duration`
 - `currency`
 - `uri`
-- `path`
+- `path` (filesystem path semantics, not a web/resource identifier)
 - `bytes`
 - `map`
 
@@ -138,6 +140,12 @@ Map fields use `keyType` and `valueType` to define the entry contract:
 
 PascalCase type tokens are treated as named message references.
 
+```yaml
+- number: 5
+  name: paymentDetails
+  type: PaymentInput # PaymentInput is a referenced message type
+```
+
 ## Advanced Overrides
 
 Overrides are available, but they are an advanced escape hatch:
@@ -151,7 +159,7 @@ Overrides are available, but they are an advanced escape hatch:
       encoding: string
 ```
 
-Unsafe overrides are rejected during loading/normalization.
+Unsafe overrides are rejected during loading/normalization. That includes lossy type changes, overrides that break canonical invariants, unsupported encodings, and overrides that conflict with message or map structure. For example, `decimal` with `overrides.proto.encoding: double` is rejected, while `decimal` with `overrides.proto.encoding: string` remains valid.
 
 ## Compatibility Checking
 
