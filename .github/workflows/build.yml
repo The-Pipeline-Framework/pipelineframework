@@ -21,8 +21,10 @@ on:
 
 env:
   MAVEN_OPTS: -Xmx1g -Xms512m
-  MAVEN_ARGS_BUILD: -B -T 1C -V -P!coverage -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
+  MAVEN_ARGS_BOOTSTRAP: -B -T 1C -V -P!coverage -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
+  MAVEN_ARGS_PR: -B -T 1 -V -P!coverage -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
   BOOTSTRAP_ARTIFACT: pr-m2-cache
+  UNIT_TEST_PATTERN: "*,!RawDocumentResourceTest,!ParsedDocumentResourceTest,!TokenBatchResourceTest,!IndexAckResourceTest,!LambdaMockEventServerSmokeTest"
   GENERIC_VERIFY_IT_PATTERN: "*IT,*ITCase,!CsvPaymentsEndToEndIT,!CsvPaymentsPipelineRuntimeEndToEndIT,!SearchPipelineEndToEndIT,!RawDocumentResourceIT,!ParsedDocumentResourceIT,!TokenBatchResourceIT,!IndexAckResourceIT"
 
 jobs:
@@ -44,7 +46,7 @@ jobs:
           cache: maven
 
       - name: Configure Maven
-        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
+        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BOOTSTRAP }} --no-transfer-progress" >> $GITHUB_ENV
 
       - name: Install root POM, framework, and foundational plugins to local repository
         run: ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
@@ -88,7 +90,7 @@ jobs:
           cache: maven
 
       - name: Configure Maven
-        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
+        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_PR }} --no-transfer-progress" >> $GITHUB_ENV
 
       - name: Download framework artifacts
         uses: actions/download-artifact@v4
@@ -104,7 +106,9 @@ jobs:
       - name: Run unit tests
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
+          # Search transport/topology-specific tests stay in their dedicated smoke or E2E lanes, not in the generic unit lane.
           ./mvnw "${maven_args[@]}" clean test \
+            "-Dtest=${{ env.UNIT_TEST_PATTERN }}" \
             -DskipITs=true \
             -DskipNative=true \
             -Dquarkus.container-image.build=false
@@ -126,7 +130,7 @@ jobs:
           cache: maven
 
       - name: Configure Maven
-        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
+        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_PR }} --no-transfer-progress" >> $GITHUB_ENV
 
       - name: Download framework artifacts
         uses: actions/download-artifact@v4
@@ -145,6 +149,7 @@ jobs:
           # Dedicated E2E or topology-specific tests stay in their reusable jobs, not in generic verify.
           ./mvnw "${maven_args[@]}" clean verify \
             -DskipUnitTests=true \
+            -Dfailsafe.failIfNoSpecifiedTests=false \
             -DskipNative=true \
             "-Dit.test=${{ env.GENERIC_VERIFY_IT_PATTERN }}" \
             -Dquarkus.container-image.build=false
