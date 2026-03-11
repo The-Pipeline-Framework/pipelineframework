@@ -144,7 +144,9 @@ runtimeLayout: MODULAR
 steps: []
 `);
 
-    expect(() => generator.loadConfig(configPath)).toThrow('Configuration version must be an integer');
+    expect(() => generator.loadConfig(configPath)).toThrow(
+      'Configuration version must be a positive integer'
+    );
   });
 
   test('toScaffoldConfig rejects missing top-level message definitions', () => {
