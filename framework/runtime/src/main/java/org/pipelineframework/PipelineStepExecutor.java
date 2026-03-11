@@ -52,7 +52,7 @@ class PipelineStepExecutor {
         int maxConcurrency,
         PipelineTelemetry telemetry,
         PipelineTelemetry.RunContext telemetryContext,
-        PipelineRunner.CacheReadSupport cacheReadSupport,
+        PipelineCacheReadSupport cacheReadSupport,
         PipelineContext contextSnapshot) {
         return switch (step) {
             case StepOneToOne<?, ?> stepOneToOne -> {

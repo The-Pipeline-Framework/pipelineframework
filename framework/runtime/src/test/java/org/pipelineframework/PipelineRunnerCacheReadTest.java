@@ -193,11 +193,14 @@ class PipelineRunnerCacheReadTest {
             support,
             context);
 
-        String value = ((Uni<String>) result).await().indefinitely();
-        assertEquals("computed-input", value);
-        assertEquals(1, step.calls.get());
-        assertEquals(CacheStatus.MISS, step.statusSeen);
-        PipelineCacheStatusHolder.clear();
+        try {
+            String value = ((Uni<String>) result).await().indefinitely();
+            assertEquals("computed-input", value);
+            assertEquals(1, step.calls.get());
+            assertEquals(CacheStatus.MISS, step.statusSeen);
+        } finally {
+            PipelineCacheStatusHolder.clear();
+        }
     }
 
     @Test
