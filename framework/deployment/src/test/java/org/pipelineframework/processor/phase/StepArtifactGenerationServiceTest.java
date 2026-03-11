@@ -24,11 +24,21 @@ import org.pipelineframework.processor.ir.GrpcBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TypeMapping;
+import org.pipelineframework.processor.renderer.ClientStepRenderer;
+import org.pipelineframework.processor.renderer.GenerationContext;
+import org.pipelineframework.processor.renderer.GrpcServiceAdapterRenderer;
+import org.pipelineframework.processor.renderer.LocalClientStepRenderer;
+import org.pipelineframework.processor.renderer.RemoteOperatorAdapterRenderer;
+import org.pipelineframework.processor.renderer.RestClientStepRenderer;
+import org.pipelineframework.processor.renderer.RestFunctionHandlerRenderer;
+import org.pipelineframework.processor.renderer.RestResourceRenderer;
 import org.pipelineframework.processor.util.RoleMetadataGenerator;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -97,18 +107,7 @@ class StepArtifactGenerationServiceTest {
         PipelineCompilationContext ctx = new PipelineCompilationContext(processingEnv, null);
         ctx.setGeneratedSourcesRoot(Path.of("target/generated-sources-test"));
 
-        PipelineStepModel model = new PipelineStepModel.Builder()
-            .serviceName("ChargeCard")
-            .generatedName("ChargeCard")
-            .servicePackage("com.example.checkout")
-            .serviceClassName(ClassName.get("com.example.checkout.pipeline", "ChargeCardRemoteOperatorAdapter"))
-            .inputMapping(new TypeMapping(ClassName.get("com.example.checkout.domain", "ChargeRequest"), null, false))
-            .outputMapping(new TypeMapping(ClassName.get("com.example.checkout.domain", "ChargeResult"), null, false))
-            .streamingShape(StreamingShape.UNARY_UNARY)
-            .enabledTargets(Set.of(GenerationTarget.REMOTE_OPERATOR_ADAPTER))
-            .executionMode(ExecutionMode.DEFAULT)
-            .deploymentRole(DeploymentRole.PIPELINE_SERVER)
-            .sideEffect(false)
+        PipelineStepModel model = buildChargeCardModel().toBuilder()
             .remoteExecution(new PipelineTemplateStepExecution(
                 "REMOTE",
                 "charge-card",
@@ -117,8 +116,7 @@ class StepArtifactGenerationServiceTest {
                 new PipelineTemplateRemoteTarget("https://operator.example/process", null)))
             .build();
 
-        org.pipelineframework.processor.renderer.RemoteOperatorAdapterRenderer renderer =
-            mock(org.pipelineframework.processor.renderer.RemoteOperatorAdapterRenderer.class);
+        RemoteOperatorAdapterRenderer renderer = mock(RemoteOperatorAdapterRenderer.class);
 
         service.generateArtifactsForModel(
             ctx,
@@ -141,10 +139,12 @@ class StepArtifactGenerationServiceTest {
         );
 
         ArgumentCaptor<GrpcBinding> bindingCaptor = ArgumentCaptor.forClass(GrpcBinding.class);
-        ArgumentCaptor<org.pipelineframework.processor.renderer.GenerationContext> contextCaptor =
-            ArgumentCaptor.forClass(org.pipelineframework.processor.renderer.GenerationContext.class);
+        ArgumentCaptor<GenerationContext> contextCaptor = ArgumentCaptor.forClass(GenerationContext.class);
         verify(renderer).render(bindingCaptor.capture(), contextCaptor.capture());
-        assertEquals("ChargeCard", ((Descriptors.ServiceDescriptor) bindingCaptor.getValue().serviceDescriptor()).getName());
+        Object serviceDescriptor = bindingCaptor.getValue().serviceDescriptor();
+        assertNotNull(serviceDescriptor);
+        assertTrue(serviceDescriptor instanceof Descriptors.ServiceDescriptor);
+        assertEquals("ChargeCard", ((Descriptors.ServiceDescriptor) serviceDescriptor).getName());
         assertEquals(DeploymentRole.PIPELINE_SERVER, contextCaptor.getValue().role());
     }
 
@@ -160,13 +160,13 @@ class StepArtifactGenerationServiceTest {
             null,
             null,
             new RoleMetadataGenerator(processingEnv),
-            mock(org.pipelineframework.processor.renderer.GrpcServiceAdapterRenderer.class),
-            mock(org.pipelineframework.processor.renderer.ClientStepRenderer.class),
-            mock(org.pipelineframework.processor.renderer.LocalClientStepRenderer.class),
-            mock(org.pipelineframework.processor.renderer.RestClientStepRenderer.class),
-            mock(org.pipelineframework.processor.renderer.RestResourceRenderer.class),
-            mock(org.pipelineframework.processor.renderer.RestFunctionHandlerRenderer.class),
-            mock(org.pipelineframework.processor.renderer.RemoteOperatorAdapterRenderer.class)
+            mock(GrpcServiceAdapterRenderer.class),
+            mock(ClientStepRenderer.class),
+            mock(LocalClientStepRenderer.class),
+            mock(RestClientStepRenderer.class),
+            mock(RestResourceRenderer.class),
+            mock(RestFunctionHandlerRenderer.class),
+            mock(RemoteOperatorAdapterRenderer.class)
         );
     }
 
@@ -174,7 +174,12 @@ class StepArtifactGenerationServiceTest {
         Descriptors.FileDescriptor fileDescriptor = buildFileDescriptor();
         Descriptors.ServiceDescriptor serviceDescriptor = fileDescriptor.findServiceByName("ChargeCard");
         Descriptors.MethodDescriptor methodDescriptor = serviceDescriptor.findMethodByName("remoteProcess");
-        PipelineStepModel model = new PipelineStepModel.Builder()
+        PipelineStepModel model = buildChargeCardModel().toBuilder().build();
+        return new GrpcBinding(model, serviceDescriptor, methodDescriptor);
+    }
+
+    private PipelineStepModel buildChargeCardModel() {
+        return new PipelineStepModel.Builder()
             .serviceName("ChargeCard")
             .generatedName("ChargeCard")
             .servicePackage("com.example.checkout")
@@ -187,7 +192,6 @@ class StepArtifactGenerationServiceTest {
             .deploymentRole(DeploymentRole.PIPELINE_SERVER)
             .sideEffect(false)
             .build();
-        return new GrpcBinding(model, serviceDescriptor, methodDescriptor);
     }
 
     private Descriptors.FileDescriptor buildFileDescriptor() {
