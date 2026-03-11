@@ -33,6 +33,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /** Unit tests for GrpcRequirementEvaluator */
 @ExtendWith(MockitoExtension.class)
@@ -95,7 +97,8 @@ class GrpcRequirementEvaluatorTest {
     @Test
     void needsGrpc_orchestratorWithBlankTransport_trueDefault() {
         PipelineOrchestratorModel orch = new PipelineOrchestratorModel("OrcSvc", "com.example", Set.of(), false);
-        PipelineTemplateConfig config = new PipelineTemplateConfig("app", "com.example", "", List.of(), null);
+        PipelineTemplateConfig config = mock(PipelineTemplateConfig.class);
+        when(config.transport()).thenReturn("");
 
         assertTrue(evaluator.needsGrpcBindings(List.of(), List.of(orch), config, messager));
     }
