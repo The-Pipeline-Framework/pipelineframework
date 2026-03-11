@@ -91,7 +91,8 @@ class PipelineIdlCompatibilityCheckerTest {
 
         List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
 
-        assertTrue(errors.stream().anyMatch(msg -> msg.contains("changed canonical type")));
+        assertTrue(errors.stream().anyMatch(msg -> msg.contains("changed canonical type")),
+            "expected errors containing 'changed canonical type', got: " + errors);
     }
 
     @Test
@@ -103,7 +104,8 @@ class PipelineIdlCompatibilityCheckerTest {
 
         List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
 
-        assertTrue(errors.stream().anyMatch(msg -> msg.contains("changed message reference")));
+        assertTrue(errors.stream().anyMatch(msg -> msg.contains("changed message reference")),
+            "expected errors containing 'changed message reference', got: " + errors);
     }
 
     @Test
@@ -115,7 +117,8 @@ class PipelineIdlCompatibilityCheckerTest {
 
         List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
 
-        assertTrue(errors.stream().anyMatch(msg -> msg.contains("changed map structure")));
+        assertTrue(errors.stream().anyMatch(msg -> msg.contains("changed map value type")),
+            "expected errors containing 'changed map value type', got: " + errors);
     }
 
     @Test
@@ -127,7 +130,8 @@ class PipelineIdlCompatibilityCheckerTest {
 
         List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
 
-        assertTrue(errors.stream().anyMatch(msg -> msg.contains("changed repeated structure")));
+        assertTrue(errors.stream().anyMatch(msg -> msg.contains("changed repeated structure")),
+            "expected errors containing 'changed repeated structure', got: " + errors);
     }
 
     @Test
@@ -139,7 +143,8 @@ class PipelineIdlCompatibilityCheckerTest {
 
         List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
 
-        assertTrue(errors.stream().anyMatch(msg -> msg.contains("changed optionality")));
+        assertTrue(errors.stream().anyMatch(msg -> msg.contains("changed optionality")),
+            "expected errors containing 'changed optionality', got: " + errors);
     }
 
     @Test
@@ -173,8 +178,10 @@ class PipelineIdlCompatibilityCheckerTest {
 
         List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
 
-        assertTrue(errors.stream().anyMatch(msg -> msg.contains("reused reserved field number")));
-        assertTrue(errors.stream().anyMatch(msg -> msg.contains("reused reserved field name")));
+        assertTrue(errors.stream().anyMatch(msg -> msg.contains("reused reserved field number")),
+            "expected errors containing 'reused reserved field number', got: " + errors);
+        assertTrue(errors.stream().anyMatch(msg -> msg.contains("reused reserved field name")),
+            "expected errors containing 'reused reserved field name', got: " + errors);
     }
 
     private PipelineIdlSnapshot snapshot(List<PipelineIdlSnapshot.FieldSnapshot> fields) {
@@ -216,6 +223,21 @@ class PipelineIdlCompatibilityCheckerTest {
         boolean optional,
         boolean repeated
     ) {
+        return field(number, name, canonicalType, messageRef, keyType, valueType, optional, repeated, false, "string");
+    }
+
+    private PipelineIdlSnapshot.FieldSnapshot field(
+        int number,
+        String name,
+        String canonicalType,
+        String messageRef,
+        String keyType,
+        String valueType,
+        boolean optional,
+        boolean repeated,
+        boolean deprecated,
+        String protoType
+    ) {
         return new PipelineIdlSnapshot.FieldSnapshot(
             number,
             name,
@@ -225,7 +247,7 @@ class PipelineIdlCompatibilityCheckerTest {
             valueType,
             optional,
             repeated,
-            false,
-            "string");
+            deprecated,
+            protoType);
     }
 }

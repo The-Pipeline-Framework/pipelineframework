@@ -5,9 +5,10 @@ import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
 import javax.lang.model.element.TypeElement;
@@ -18,7 +19,6 @@ import javax.lang.model.util.Types;
 
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.TypeName;
-import org.pipelineframework.config.template.PipelineTemplateStepExecution;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
@@ -44,6 +44,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     private static final String MAPPER_FALLBACK_GLOBAL_OPTION = "pipeline.mapper.fallback.enabled";
 
     private final ModelContextRoleEnricher contextRoleEnricher;
+    private Consumer<String> ctxWarningLogger;
 
     /**
      * Creates a new ModelExtractionPhase.
@@ -78,6 +79,11 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
      */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
+        this.ctxWarningLogger = message -> {
+            if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
+                ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.WARNING, message);
+            }
+        };
         List<org.pipelineframework.processor.ir.StepDefinition> stepDefinitions = ctx.getStepDefinitions();
         boolean hasYamlStepDefinitions = stepDefinitions != null && !stepDefinitions.isEmpty();
 
@@ -361,6 +367,10 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             if (packageName.endsWith(suffix)) {
                 return packageName.substring(0, packageName.length() - suffix.length()) + ".service";
             }
+        }
+        if (ctxWarningLogger != null) {
+            ctxWarningLogger.accept("Falling back to default service package 'org.pipelineframework.pipeline.service' "
+                + "for domain type '" + domainType + "'");
         }
         return "org.pipelineframework.pipeline.service";
     }

@@ -400,17 +400,15 @@ public class StepDefinitionParser {
             parseOptionalPositiveInteger(executionMap.get("timeoutMs"), stepName, "execution.timeoutMs"),
             target);
         validateRemoteExecution(stepName, execution);
-        if (!execution.isRemote()) {
-            String message = "Skipping step '" + stepName
-                + "': execution block is present but execution.mode must be REMOTE";
-            LOG.warn(message);
-            report(Diagnostic.Kind.ERROR, message);
-            throw new IllegalArgumentException(message);
-        }
         return execution;
     }
 
     private PipelineTemplateRemoteTarget parseRemoteTarget(Object targetObj) {
+        if (targetObj != null && !(targetObj instanceof Map<?, ?>)) {
+            LOG.warnf("Ignoring invalid remote target block of type %s: %s",
+                targetObj.getClass().getName(), targetObj);
+            return null;
+        }
         if (!(targetObj instanceof Map<?, ?> rawTargetMap)) {
             return null;
         }
@@ -462,9 +460,20 @@ public class StepDefinitionParser {
             return null;
         }
         try {
-            int parsed = rawValue instanceof Number number
-                ? number.intValue()
-                : Integer.parseInt(String.valueOf(rawValue).trim());
+            int parsed;
+            if (rawValue instanceof Number number) {
+                double value = number.doubleValue();
+                if (value != Math.rint(value)) {
+                    String message = "Skipping step '" + stepName + "': " + fieldName
+                        + " must be a whole integer value, got '" + rawValue + "'";
+                    LOG.warn(message);
+                    report(Diagnostic.Kind.ERROR, message);
+                    throw new IllegalArgumentException(message);
+                }
+                parsed = (int) value;
+            } else {
+                parsed = Integer.parseInt(String.valueOf(rawValue).trim());
+            }
             if (parsed <= 0) {
                 String message = "Skipping step '" + stepName + "': " + fieldName + " must be > 0";
                 LOG.warn(message);
@@ -487,9 +496,24 @@ public class StepDefinitionParser {
             return 1;
         }
         if (rawVersion instanceof Number number) {
-            return number.intValue();
+            double value = number.doubleValue();
+            if (value != Math.rint(value)) {
+                String message = "Invalid template version: '" + rawVersion + "'";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                throw new IllegalArgumentException(message);
+            }
+            return (int) value;
+        }
+        if (rawVersion instanceof String text) {
+            try {
+                return Integer.parseInt(text.trim());
+            } catch (NumberFormatException ignored) {
+                // fall through
+            }
         }
         String message = "Invalid template version: '" + rawVersion + "'";
+        LOG.warn(message);
         report(Diagnostic.Kind.ERROR, message);
         throw new IllegalArgumentException(message);
     }

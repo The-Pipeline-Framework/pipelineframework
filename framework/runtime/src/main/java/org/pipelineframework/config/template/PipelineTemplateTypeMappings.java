@@ -312,15 +312,19 @@ final class PipelineTemplateTypeMappings {
         String javaType = declaredType;
         String protoType = field.protoType();
         if (isLegacyListType(declaredType)) {
-            canonicalType = canonicalForLegacySimple(listInnerType(declaredType));
+            String innerType = listInnerType(declaredType);
+            canonicalType = canonicalForLegacySimple(innerType);
+            if ("message".equals(canonicalType)) {
+                messageRef = innerType;
+            }
             javaType = declaredType;
-            protoType = protoScalarForToken(listInnerType(declaredType), false);
+            protoType = protoScalarForToken(innerType, false);
             return new PipelineTemplateField(
                 null,
                 field.name(),
                 declaredType,
                 canonicalType,
-                null,
+                messageRef,
                 javaType,
                 protoType,
                 null,
@@ -334,8 +338,9 @@ final class PipelineTemplateTypeMappings {
                 null);
         }
         if (isLegacyMapType(declaredType)) {
-            String keyType = mapParts(declaredType).get(0);
-            String valueType = mapParts(declaredType).get(1);
+            List<String> parts = mapParts(declaredType);
+            String keyType = parts.get(0);
+            String valueType = parts.get(1);
             javaType = declaredType;
             protoType = "map<" + protoScalarForToken(keyType, true) + ", " + protoScalarForToken(valueType, false) + ">";
             return new PipelineTemplateField(
@@ -517,9 +522,27 @@ final class PipelineTemplateTypeMappings {
      */
     private static List<String> mapParts(String type) {
         String inner = type.substring(4, type.length() - 1);
-        String[] parts = inner.split(",");
-        String key = parts.length > 0 ? parts[0].trim() : "String";
-        String value = parts.length > 1 ? parts[1].trim() : "String";
+        int depth = 0;
+        int splitIndex = -1;
+        for (int i = 0; i < inner.length(); i++) {
+            char ch = inner.charAt(i);
+            if (ch == '<') {
+                depth++;
+            } else if (ch == '>') {
+                depth = Math.max(0, depth - 1);
+            } else if (ch == ',' && depth == 0) {
+                splitIndex = i;
+                break;
+            }
+        }
+        String key = splitIndex >= 0 ? inner.substring(0, splitIndex).trim() : inner.trim();
+        String value = splitIndex >= 0 ? inner.substring(splitIndex + 1).trim() : "String";
+        if (key.isBlank()) {
+            key = "String";
+        }
+        if (value.isBlank()) {
+            value = "String";
+        }
         return List.of(key, value);
     }
 }

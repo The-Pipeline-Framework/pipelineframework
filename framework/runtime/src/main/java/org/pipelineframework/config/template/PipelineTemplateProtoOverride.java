@@ -19,7 +19,7 @@ package org.pipelineframework.config.template;
 /**
  * Optional protobuf-specific override settings for a field.
  *
- * @param encoding explicit protobuf encoding override
+ * @param encoding explicit protobuf encoding override; may be {@code null} when no encoding override is declared
  */
 public record PipelineTemplateProtoOverride(
     String encoding

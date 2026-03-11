@@ -44,10 +44,41 @@ public record PipelineTemplateConfig(
     Map<String, PipelineTemplateAspect> aspects
 ) {
     public PipelineTemplateConfig {
+        if (version <= 0) {
+            throw new IllegalArgumentException("version must be > 0");
+        }
+        requireText(appName, "appName");
+        requireText(basePackage, "basePackage");
+        requireText(transport, "transport");
+        if (platform == null) {
+            throw new IllegalArgumentException("platform must not be null");
+        }
+        validateMap(messages, "messages");
+        validateMap(aspects, "aspects");
         messages = messages == null ? Map.of() : Map.copyOf(messages);
         // Preserve null step placeholders so downstream phases/tests can explicitly skip them.
         steps = steps == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(steps));
         aspects = aspects == null ? Map.of() : Map.copyOf(aspects);
+    }
+
+    private static void requireText(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(fieldName + " must not be blank");
+        }
+    }
+
+    private static void validateMap(Map<?, ?> values, String fieldName) {
+        if (values == null) {
+            return;
+        }
+        for (Map.Entry<?, ?> entry : values.entrySet()) {
+            if (entry.getKey() == null) {
+                throw new IllegalArgumentException(fieldName + " must not contain null keys");
+            }
+            if (entry.getValue() == null) {
+                throw new IllegalArgumentException(fieldName + " must not contain null values");
+            }
+        }
     }
 
     /**

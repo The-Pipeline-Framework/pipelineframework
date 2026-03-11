@@ -37,6 +37,8 @@ public final class PipelineIdlCompatibilityChecker {
      * @return a list of compatibility error messages; empty if there are no violations
      */
     public List<String> compare(PipelineIdlSnapshot baseline, PipelineIdlSnapshot current) {
+        Objects.requireNonNull(baseline, "baseline must not be null");
+        Objects.requireNonNull(current, "current must not be null");
         List<String> errors = new ArrayList<>();
         compareSteps(baseline.steps(), current.steps(), errors);
         compareMessages(baseline.messages(), current.messages(), errors);
@@ -191,9 +193,13 @@ public final class PipelineIdlCompatibilityChecker {
             errors.add("Message '" + messageName + "' changed message reference for field '" + baselineField.name()
                 + "' from '" + baselineField.messageRef() + "' to '" + currentField.messageRef() + "'");
         }
-        if (!Objects.equals(baselineField.keyType(), currentField.keyType())
-            || !Objects.equals(baselineField.valueType(), currentField.valueType())) {
-            errors.add("Message '" + messageName + "' changed map structure for field '" + baselineField.name() + "'");
+        if (!Objects.equals(baselineField.keyType(), currentField.keyType())) {
+            errors.add("Message '" + messageName + "' changed map key type for field '" + baselineField.name()
+                + "' from '" + baselineField.keyType() + "' to '" + currentField.keyType() + "'");
+        }
+        if (!Objects.equals(baselineField.valueType(), currentField.valueType())) {
+            errors.add("Message '" + messageName + "' changed map value type for field '" + baselineField.name()
+                + "' from '" + baselineField.valueType() + "' to '" + currentField.valueType() + "'");
         }
         if (baselineField.repeated() != currentField.repeated()) {
             errors.add("Message '" + messageName + "' changed repeated structure for field '" + baselineField.name() + "'");

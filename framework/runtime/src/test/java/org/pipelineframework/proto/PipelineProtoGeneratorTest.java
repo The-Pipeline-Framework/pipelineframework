@@ -353,7 +353,7 @@ class PipelineProtoGeneratorTest {
 
         PipelineProtoGenerator generator = new PipelineProtoGenerator();
 
-        assertThrows(IllegalStateException.class, () ->
+        assertThrows(IllegalArgumentException.class, () ->
             generator.generate(tempDir, configPath, outputDir));
     }
 
@@ -529,7 +529,7 @@ class PipelineProtoGeneratorTest {
 
     @Test
     @ClearSystemProperty(key = "tpf.idl.compat.baseline")
-    void failsCompatibilityCheckWhenFieldNumberIsReusedWithoutReserve() throws Exception {
+    void failsCompatibilityCheckWhenFieldNameChangesAtExistingNumber() throws Exception {
         String baselineJson = """
             {
               "version": 2,

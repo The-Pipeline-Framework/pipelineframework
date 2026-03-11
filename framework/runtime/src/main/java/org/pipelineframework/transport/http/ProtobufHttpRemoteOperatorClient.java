@@ -18,6 +18,7 @@ package org.pipelineframework.transport.http;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.http.HttpTimeoutException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -101,6 +102,8 @@ public class ProtobufHttpRemoteOperatorClient {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Remote operator invocation was interrupted", e);
+        } catch (HttpTimeoutException e) {
+            throw new IllegalStateException("Remote operator invocation timed out", e);
         } catch (IOException e) {
             throw new IllegalStateException("Remote operator invocation failed", e);
         }
@@ -195,8 +198,10 @@ public class ProtobufHttpRemoteOperatorClient {
         if (body.length > 0) {
             try {
                 Status status = Status.parseFrom(body);
+                Code code = Code.forNumber(status.getCode());
+                String codeLabel = code == null ? "code=" + status.getCode() : code.name();
                 String message = "Remote operator '" + operatorId + "' failed with HTTP " + response.statusCode()
-                    + " at " + targetUrl + " (" + Code.forNumber(status.getCode()) + ": " + status.getMessage() + ")";
+                    + " at " + targetUrl + " (" + codeLabel + ": " + status.getMessage() + ")";
                 if (ProtobufHttpStatusMapper.isRetryable(status)) {
                     return new IllegalStateException(message);
                 }

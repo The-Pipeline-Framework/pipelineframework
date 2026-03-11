@@ -338,10 +338,10 @@ class PipelineTemplateConfigLoaderTest {
         Path configPath = tempDir.resolve("pipeline-config-v2-remote-invalid-target.yaml");
         Files.writeString(configPath, yaml);
 
-        IllegalStateException ex = assertThrows(
-            IllegalStateException.class,
+        IllegalArgumentException ex = assertThrows(
+            IllegalArgumentException.class,
             () -> new PipelineTemplateConfigLoader().load(configPath));
-        assertTrue(ex.getMessage().contains("exactly one"));
+        assertTrue(ex.getMessage().contains("Specify either url or urlConfigKey"));
     }
 
     @Test
@@ -398,7 +398,7 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
-    void rejectsDuplicateFieldNumbersAndNamesWithinMessage() throws Exception {
+    void rejectsDuplicateFieldNumbersWithinMessage() throws Exception {
         String yaml = """
             version: 2
             appName: "IDL v2"
@@ -413,9 +413,6 @@ class PipelineTemplateConfigLoaderTest {
                   - number: 1
                     name: "paymentRef"
                     type: "uuid"
-                  - number: 2
-                    name: "paymentId"
-                    type: "string"
             steps:
               - name: "Charge Card"
                 cardinality: "ONE_TO_ONE"
@@ -428,8 +425,38 @@ class PipelineTemplateConfigLoaderTest {
         IllegalStateException ex = assertThrows(
             IllegalStateException.class,
             () -> new PipelineTemplateConfigLoader().load(configPath));
-        assertTrue(ex.getMessage().contains("Duplicate field number")
-            || ex.getMessage().contains("Duplicate field name"));
+        assertTrue(ex.getMessage().contains("Duplicate field number"));
+    }
+
+    @Test
+    void rejectsDuplicateFieldNamesWithinMessage() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "IDL v2"
+            basePackage: "com.example.v2"
+            transport: "GRPC"
+            messages:
+              ChargeResult:
+                fields:
+                  - number: 1
+                    name: "paymentId"
+                    type: "uuid"
+                  - number: 2
+                    name: "paymentId"
+                    type: "string"
+            steps:
+              - name: "Charge Card"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "ChargeResult"
+                outputTypeName: "ChargeResult"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-v2-duplicate-field-names.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+        assertTrue(ex.getMessage().contains("Duplicate field name"));
     }
 
     @Test

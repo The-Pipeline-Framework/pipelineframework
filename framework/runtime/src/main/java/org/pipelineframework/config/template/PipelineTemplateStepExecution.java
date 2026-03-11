@@ -33,9 +33,12 @@ public record PipelineTemplateStepExecution(
     PipelineTemplateRemoteTarget target
 ) {
     public PipelineTemplateStepExecution {
-        mode = normalize(mode);
+        mode = defaultMode(mode);
         operatorId = normalize(operatorId);
         protocol = normalize(protocol);
+        if (timeoutMs != null && timeoutMs <= 0) {
+            throw new IllegalArgumentException("timeoutMs must be positive");
+        }
     }
 
     public boolean isRemote() {
@@ -44,5 +47,10 @@ public record PipelineTemplateStepExecution(
 
     private static String normalize(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private static String defaultMode(String value) {
+        String normalized = normalize(value);
+        return normalized == null ? "LOCAL" : normalized;
     }
 }

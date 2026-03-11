@@ -188,6 +188,7 @@ class PipelineTargetResolutionPhaseTest {
         assertEquals(
             Set.of(GenerationTarget.REST_RESOURCE, GenerationTarget.REMOTE_OPERATOR_ADAPTER),
             updated.enabledTargets());
+        assertEquals(updated.enabledTargets(), context.getResolvedTargets());
     }
 
     @Test

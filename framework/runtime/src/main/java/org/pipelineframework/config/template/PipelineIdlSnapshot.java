@@ -54,16 +54,17 @@ public record PipelineIdlSnapshot(
      * @return a PipelineIdlSnapshot containing normalized messages and steps extracted from the config
      */
     public static PipelineIdlSnapshot from(PipelineTemplateConfig config) {
+        List<PipelineTemplateStep> configSteps = config.steps() == null ? List.of() : config.steps();
         Map<String, MessageSnapshot> messages = new LinkedHashMap<>();
         if (config.messages() != null && !config.messages().isEmpty()) {
             for (Map.Entry<String, PipelineTemplateMessage> entry : config.messages().entrySet()) {
                 messages.put(entry.getKey(), toMessageSnapshot(entry.getValue()));
             }
         } else {
-            collectLegacyMessages(messages, config.steps());
+            collectLegacyMessages(messages, configSteps);
         }
         List<StepSnapshot> steps = new ArrayList<>();
-        for (PipelineTemplateStep step : config.steps()) {
+        for (PipelineTemplateStep step : configSteps) {
             steps.add(new StepSnapshot(step.name(), step.inputTypeName(), step.outputTypeName()));
         }
         return new PipelineIdlSnapshot(config.version(), config.appName(), config.basePackage(), messages, steps);
@@ -139,8 +140,12 @@ public record PipelineIdlSnapshot(
      * @throws IllegalStateException if any field in the template message does not have a number
      */
     private static MessageSnapshot toMessageSnapshot(PipelineTemplateMessage message) {
+        List<PipelineTemplateField> messageFields = message.fields() == null ? List.of() : message.fields();
+        PipelineTemplateReserved reserved = message.reserved() == null
+            ? new PipelineTemplateReserved(List.of(), List.of())
+            : message.reserved();
         List<FieldSnapshot> fields = new ArrayList<>();
-        for (PipelineTemplateField field : message.fields()) {
+        for (PipelineTemplateField field : messageFields) {
             if (field.number() == null) {
                 throw new IllegalStateException(
                     "Message '" + message.name() + "' field '" + field.name() + "' is missing required field number");
@@ -160,8 +165,8 @@ public record PipelineIdlSnapshot(
         return new MessageSnapshot(
             message.name(),
             fields,
-            message.reserved().numbers(),
-            message.reserved().names());
+            reserved.numbers(),
+            reserved.names());
     }
 
     public record MessageSnapshot(

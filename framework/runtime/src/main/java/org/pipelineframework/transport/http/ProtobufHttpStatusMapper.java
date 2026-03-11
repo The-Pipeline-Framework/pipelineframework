@@ -127,7 +127,8 @@ public final class ProtobufHttpStatusMapper {
             return true;
         }
         return switch (code) {
-            case INVALID_ARGUMENT,
+            case OK,
+                INVALID_ARGUMENT,
                 FAILED_PRECONDITION,
                 NOT_FOUND,
                 ALREADY_EXISTS,

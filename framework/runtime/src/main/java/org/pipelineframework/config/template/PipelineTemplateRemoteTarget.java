@@ -19,6 +19,8 @@ package org.pipelineframework.config.template;
 /**
  * Remote operator target definition.
  *
+ * <p>Exactly one of {@code url} or {@code urlConfigKey} must be provided.
+ *
  * @param url literal target URL
  * @param urlConfigKey configuration key resolved at runtime startup to the target URL
  */
@@ -31,6 +33,9 @@ public record PipelineTemplateRemoteTarget(
         urlConfigKey = normalize(urlConfigKey);
         if (url == null && urlConfigKey == null) {
             throw new IllegalArgumentException("PipelineTemplateRemoteTarget requires either url or urlConfigKey");
+        }
+        if (url != null && urlConfigKey != null) {
+            throw new IllegalArgumentException("Specify either url or urlConfigKey, not both");
         }
     }
 
