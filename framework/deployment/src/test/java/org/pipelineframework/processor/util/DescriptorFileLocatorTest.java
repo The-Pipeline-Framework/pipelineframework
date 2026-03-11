@@ -10,11 +10,13 @@ import java.util.Set;
 import com.google.protobuf.DescriptorProtos;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.parallel.Isolated;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@Isolated
 class DescriptorFileLocatorTest {
 
     private static final String PROTOBUF_DESCRIPTOR_OPTION = "protobuf.descriptor.path";
