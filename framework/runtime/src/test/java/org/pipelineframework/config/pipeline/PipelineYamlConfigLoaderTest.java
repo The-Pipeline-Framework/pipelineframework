@@ -66,4 +66,93 @@ class PipelineYamlConfigLoaderTest {
         assertNotNull(connector.idempotencyKeyFields());
         assertEquals(2, connector.idempotencyKeyFields().size());
     }
+
+    @Test
+    void loadsMultipleConnectorsFromPipelineYaml() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            transport: "GRPC"
+            platform: "COMPUTE"
+            steps: []
+            connectors:
+              - name: "connector-1"
+                enabled: true
+                source:
+                  kind: "OUTPUT_BUS"
+                  step: "Step 1"
+                  type: "Type1"
+                target:
+                  kind: "LIVE_INGEST"
+                  pipeline: "pipeline-1"
+                  type: "TargetType1"
+                  adapter: "Adapter1"
+              - name: "connector-2"
+                enabled: false
+                source:
+                  kind: "OUTPUT_BUS"
+                  step: "Step 2"
+                  type: "Type2"
+                target:
+                  kind: "LIVE_INGEST"
+                  pipeline: "pipeline-2"
+                  type: "TargetType2"
+                  adapter: "Adapter2"
+            """));
+
+        assertEquals(2, config.connectors().size());
+        assertEquals("connector-1", config.connectors().get(0).name());
+        assertEquals("connector-2", config.connectors().get(1).name());
+    }
+
+    @Test
+    void loadsConnectorWithDefaultValues() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            transport: "GRPC"
+            platform: "COMPUTE"
+            steps: []
+            connectors:
+              - name: "minimal-connector"
+                source:
+                  kind: "OUTPUT_BUS"
+                  step: "Step"
+                  type: "Type"
+                target:
+                  kind: "LIVE_INGEST"
+                  pipeline: "pipeline"
+                  type: "TargetType"
+                  adapter: "Adapter"
+            """));
+
+        var connector = config.connectors().getFirst();
+        assertEquals("minimal-connector", connector.name());
+        assertEquals(true, connector.enabled());
+        assertEquals(256, connector.backpressureBufferCapacity());
+        assertEquals(10000, connector.idempotencyMaxKeys());
+    }
+
+    @Test
+    void loadsEmptyConnectorsList() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            transport: "GRPC"
+            platform: "COMPUTE"
+            steps: []
+            connectors: []
+            """));
+
+        assertEquals(0, config.connectors().size());
+    }
+
+    @Test
+    void loadsConfigWithoutConnectorsSection() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            transport: "GRPC"
+            platform: "COMPUTE"
+            steps: []
+            """));
+
+        assertEquals(0, config.connectors().size());
+    }
 }
