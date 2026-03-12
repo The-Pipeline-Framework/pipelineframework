@@ -76,7 +76,8 @@ public record PipelineYamlConfig(
     }
 
     /**
-     * Backward-compatible constructor used by existing callers that set transport and platform but no connectors.
+     * Creates a PipelineYamlConfig with the given base package, transport, platform, steps, and aspects,
+     * defaulting connectors to an empty list for backward compatibility.
      *
      * @param basePackage base package
      * @param transport transport mode

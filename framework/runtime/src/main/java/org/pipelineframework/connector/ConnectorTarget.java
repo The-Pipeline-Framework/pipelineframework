@@ -38,11 +38,11 @@ public interface ConnectorTarget<T> {
 Cancellable forward(Multi<ConnectorRecord<T>> connectorStream);
 
     /**
-     * Forwards the given stream to the target after attaching side-effect callbacks for accepted items and failures.
+     * Forward the stream to the target after attaching side-effect callbacks for each accepted record and for failures.
      *
-     * @param connectorStream the source stream of ConnectorRecord items
-     * @param onAccepted invoked for each item emitted by the stream
-     * @param onFailure invoked when the stream signals a failure
+     * @param connectorStream the source stream of ConnectorRecord items; must not be null
+     * @param onAccepted consumer invoked for each item emitted by the stream; must not be null
+     * @param onFailure consumer invoked when the stream signals a failure; must not be null
      * @return a Cancellable that can be used to cancel the forwarded subscription
      * @throws NullPointerException if any argument is null
      */

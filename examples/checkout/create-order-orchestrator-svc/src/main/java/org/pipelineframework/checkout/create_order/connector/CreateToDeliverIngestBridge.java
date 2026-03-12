@@ -44,16 +44,16 @@ public class CreateToDeliverIngestBridge {
     private Cancellable forwardingSubscription;
 
     /**
-     * Creates a bridge that forwards checkpoint outputs from the CreateOrder pipeline to the DeliverOrder ingest client.
+     * Constructs a bridge that forwards CreateOrder pipeline checkpoint outputs to the DeliverOrder ingest client.
      *
-     * Initializes bridge configuration, including optional idempotency tracking and normalized backpressure settings.
+     * Initializes optional in-memory idempotency tracking and normalizes backpressure strategy and buffer capacity.
      *
-     * @param outputBus the source of pipeline checkpoint outputs
-     * @param deliverOrderIngestClient the gRPC client used to forward ready orders
-     * @param idempotencyEnabled if true, enables in-memory idempotency tracking to filter duplicate order ids
-     * @param idempotencyMaxKeys maximum number of order id keys retained by the idempotency tracker (uses 10000 if non-positive)
-     * @param backpressureStrategy overflow strategy for connector handoff (normalized; expected values include `BUFFER` or `DROP`)
-     * @param backpressureBufferCapacity buffer capacity used when the backpressure strategy is `BUFFER` (uses 256 if non-positive)
+     * @param outputBus the source of pipeline checkpoint outputs; must not be null
+     * @param deliverOrderIngestClient the gRPC client used to forward ready orders; must not be null
+     * @param idempotencyEnabled if true, enables in-memory idempotency tracking to filter duplicate order IDs
+     * @param idempotencyMaxKeys maximum number of order ID keys retained by the idempotency tracker; if non-positive, 10000 is used
+     * @param backpressureStrategy overflow strategy for connector handoff (normalized; common values include {@code BUFFER} or {@code DROP})
+     * @param backpressureBufferCapacity buffer capacity used when the backpressure strategy is {@code BUFFER}; if non-positive, 256 is used
      * @throws NullPointerException if {@code outputBus} or {@code deliverOrderIngestClient} is null
      */
     public CreateToDeliverIngestBridge(
@@ -81,12 +81,8 @@ public class CreateToDeliverIngestBridge {
     /**
      * Start forwarding ReadyOrder events from the pipeline output bus to the DeliverOrder ingest client.
      *
-     * <p>Subscribes to the application PipelineOutputBus, maps emitted items to
-     * OrderDispatchSvc.ReadyOrder when possible, forwards the resulting stream to
-     * the DeliverOrderIngestClient, stores the resulting cancellable subscription, and
-     * logs the bridge startup.</p>
-     *
-     * @param ignored the startup event (unused)
+     * Initializes and starts the connector runtime, stores the resulting cancellable subscription,
+     * and logs bridge startup.
      */
     void onStartup(@Observes StartupEvent ignored) {
         boolean connectorEnabled = true;
@@ -129,16 +125,14 @@ public class CreateToDeliverIngestBridge {
     }
 
     /**
-     * Convert a pipeline output item into an OrderDispatchSvc.ReadyOrder suitable for the DeliverOrder pipeline.
+     * Map a pipeline output item to an OrderDispatchSvc.ReadyOrder for the DeliverOrder pipeline.
      *
-     * <p>Supports two input shapes:
-     * <ul>
-     *   <li>OrderReadySvc.ReadyOrder — mapped directly to the dispatch ReadyOrder.</li>
-     *   <li>com.google.protobuf.Message — reads string fields "order_id", "customer_id", and "ready_at" and maps them when all are present and non-blank.</li>
-     * </ul>
+     * <p>Supports two input shapes: an OrderReadySvc.ReadyOrder (mapped directly) or a
+     * com.google.protobuf.Message from which the string fields "order_id", "customer_id", and
+     * "ready_at" are read and required to be non-blank.
      *
-     * @param item the pipeline output item to map; may be an OrderReadySvc.ReadyOrder, a protobuf Message, or any other type
-     * @return the mapped OrderDispatchSvc.ReadyOrder if mapping succeeds; `null` if the item type is unsupported or required fields are missing
+     * @param item the pipeline output item to map; may be an OrderReadySvc.ReadyOrder, a protobuf Message, or another type
+     * @return the mapped OrderDispatchSvc.ReadyOrder if all required fields are present and non-blank; {@code null} otherwise
      */
     private OrderDispatchSvc.ReadyOrder toDeliverReadyOrder(Object item) {
         if (item instanceof OrderReadySvc.ReadyOrder readyOrder) {

@@ -58,10 +58,12 @@ public class PipelineTemplateConfigLoader {
     }
 
     /**
-     * Creates a loader with custom property/environment lookup functions.
+     * Creates a loader that uses the provided functions to resolve system property and environment variable lookups.
      *
-     * @param propertyLookup lookup used for system properties
-     * @param envLookup lookup used for environment variables
+     * If either function is null, it will be replaced with a lookup that always returns null.
+     *
+     * @param propertyLookup function that returns a property value for a given key, or null to disable property lookups
+     * @param envLookup function that returns an environment value for a given key, or null to disable environment lookups
      */
     public PipelineTemplateConfigLoader(Function<String, String> propertyLookup, Function<String, String> envLookup) {
         this.propertyLookup = propertyLookup == null ? key -> null : propertyLookup;
@@ -723,10 +725,10 @@ public class PipelineTemplateConfigLoader {
     }
 
     /**
-     * Parse the optional top-level "aspects" section into a map of PipelineTemplateAspect objects.
+     * Parse the optional top-level "aspects" section of the YAML into a map of PipelineTemplateAspect instances.
      *
-     * @param rootMap the YAML-derived root map that may contain an "aspects" entry
-     * @return a map keyed by aspect name to its PipelineTemplateAspect; empty if no valid "aspects" map is present
+     * The method reads an "aspects" map from the provided YAML root and constructs a LinkedHashMap
+     * keyed by aspect name. If the "aspects" entry is missing or not a map, an empty map is returned.
      *
      * Defaults applied when an aspect's fields are missing or blank:
      * - enabled: true
@@ -734,6 +736,9 @@ public class PipelineTemplateConfigLoader {
      * - scope: "GLOBAL"
      * - order: 0
      * - config: empty map
+     *
+     * @param rootMap the YAML-derived root map that may contain an "aspects" entry
+     * @return a map keyed by aspect name to its PipelineTemplateAspect; empty if no valid "aspects" map is present
      */
     private Map<String, PipelineTemplateAspect> readAspects(Map<?, ?> rootMap) {
         Object aspectsObj = rootMap.get("aspects");
@@ -814,10 +819,10 @@ public class PipelineTemplateConfigLoader {
     }
 
     /**
-     * Parses the optional "source" block from a connector definition into a ConnectorSourceConfig.
+     * Parses the optional "source" block of a connector and returns its ConnectorSourceConfig.
      *
-     * @param connectorMap the connector map (typically the parsed YAML map) that may contain a "source" entry
-     * @return a ConnectorSourceConfig built from the "kind", "step", and "type" keys of the "source" map, or `null` if no valid "source" map is present
+     * @param connectorMap the connector definition map that may contain a "source" entry
+     * @return a ConnectorSourceConfig built from the source block's "kind", "step", and "type" keys, or null if the source entry is missing or not a map
      */
     private ConnectorSourceConfig readConnectorSource(Map<?, ?> connectorMap) {
         Object sourceObj = connectorMap.get("source");
@@ -831,10 +836,10 @@ public class PipelineTemplateConfigLoader {
     }
 
     /**
-     * Parses the optional "target" block of a connector configuration into a ConnectorTargetConfig.
+     * Parse the optional "target" block of a connector configuration into a ConnectorTargetConfig.
      *
-     * @param connectorMap the connector configuration map (typically parsed from YAML)
-     * @return a ConnectorTargetConfig built from the "target" block, or `null` if no valid "target" map is present
+     * @param connectorMap the connector configuration map parsed from YAML
+     * @return a ConnectorTargetConfig constructed from the "target" block, or `null` if the "target" entry is missing or not a map
      */
     private ConnectorTargetConfig readConnectorTarget(Map<?, ?> connectorMap) {
         Object targetObj = connectorMap.get("target");

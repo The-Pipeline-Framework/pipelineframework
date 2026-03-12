@@ -29,7 +29,7 @@ public final class ConnectorIdempotencyTracker {
     private final Set<String> inFlight = new HashSet<>();
 
     /**
-     * Create a ConnectorIdempotencyTracker with a bounded accepted-key window.
+     * Creates a ConnectorIdempotencyTracker with a bounded accepted-key window.
      *
      * @param maxKeys the maximum number of accepted keys retained in the idempotency window
      */
@@ -38,12 +38,12 @@ public final class ConnectorIdempotencyTracker {
     }
 
     /**
-     * Attempt to reserve or record an idempotency key according to the given policy.
+     * Reserve or record an idempotency key according to the provided policy.
      *
      * @param key    the idempotency key to check or reserve; must be non-null and not blank unless {@code policy} is {@code DISABLED}
      * @param policy the idempotency policy that controls behavior:
      *               {@code DISABLED} always succeeds,
-     *               {@code PRE_FORWARD} marks unseen keys as accepted,
+     *               {@code PRE_FORWARD} records unseen keys as accepted,
      *               {@code ON_ACCEPT} reserves the key as in-flight if it is not already accepted or reserved
      * @return       {@code true} if the key was accepted or reserved according to the policy, {@code false} otherwise
      */
@@ -102,12 +102,12 @@ public final class ConnectorIdempotencyTracker {
     }
 
     /**
-     * Checks whether the given connector handoff key is currently reserved as in-flight.
+     * Determines whether the connector handoff key is currently reserved as in-flight.
      *
      * @param key the connector handoff key to check
-     * @return `true` if the key is present in the in-flight set, `false` otherwise
-     * @throws NullPointerException if `key` is null
-     * @throws IllegalArgumentException if `key` is blank
+     * @return true if the key is present in the in-flight set, false otherwise
+     * @throws NullPointerException if key is null
+     * @throws IllegalArgumentException if key is blank (empty or only whitespace)
      */
     public synchronized boolean containsInFlight(String key) {
         validateKey(key);

@@ -41,6 +41,12 @@ public final class ConnectorIdempotencyWindow {
         }
         this.maxKeys = maxKeys;
         this.seen = new LinkedHashMap<>(16, 0.75f, true) {
+            /**
+             * Decides whether the eldest entry should be evicted when the map exceeds the configured maximum number of keys.
+             *
+             * @param eldest the eldest map entry (candidate for removal)
+             * @return `true` if the map's size is greater than the configured maximum, `false` otherwise
+             */
             @Override
             protected boolean removeEldestEntry(Map.Entry<String, Boolean> eldest) {
                 return size() > ConnectorIdempotencyWindow.this.maxKeys;
