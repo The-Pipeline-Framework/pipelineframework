@@ -65,6 +65,13 @@ public record PipelineTemplateConfig(
         connectors = connectors == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(connectors));
     }
 
+    /**
+     * Validates that the provided text is not null, empty, or only whitespace.
+     *
+     * @param value the string to validate
+     * @param fieldName the name of the field used in the exception message
+     * @throws IllegalArgumentException if {@code value} is null or blank
+     */
     private static void requireText(String value, String fieldName) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(fieldName + " must not be blank");
@@ -86,7 +93,15 @@ public record PipelineTemplateConfig(
     }
 
     /**
-     * Constructs a PipelineTemplateConfig for existing call sites, supplying defaults for new fields (version = 1, platform = PipelinePlatform.COMPUTE, empty messages).
+     * Create a PipelineTemplateConfig using legacy call-site parameters and supply sensible defaults for new fields.
+     *
+     * Defaults applied: version = 1, platform = PipelinePlatform.COMPUTE, messages = empty map, connectors = empty list.
+     *
+     * @param appName the application name
+     * @param basePackage the base Java package
+     * @param transport the global transport identifier
+     * @param steps the pipeline steps (may contain null placeholders to preserve positions)
+     * @param aspects aspect configurations keyed by aspect name
      */
     public PipelineTemplateConfig(
         String appName,
@@ -99,10 +114,10 @@ public record PipelineTemplateConfig(
     }
 
     /**
-     * Create a pipeline template configuration preset to version 1 with no messages.
+     * Create a pipeline template configuration preset to version 1 with no messages and no connectors.
      *
-     * @param appName     the application name for the generated pipeline artifacts
-     * @param basePackage the root package name for generated code
+     * @param appName     the application name for generated pipeline artifacts
+     * @param basePackage the root Java package for generated code
      * @param transport   the transport identifier to use for the pipeline
      * @param platform    the target pipeline platform
      * @param steps       the ordered list of template steps; may contain null placeholders to indicate skipped positions

@@ -40,14 +40,37 @@ public record ConnectorRecord<T>(
         meta = normalizeMeta(meta);
     }
 
+    /**
+     * Create a ConnectorRecord containing the given payload with no dispatch metadata and an empty metadata map.
+     *
+     * @param  payload the payload to include in the record
+     * @return         a ConnectorRecord with the provided payload, `null` dispatch metadata, and an empty meta map
+     */
     public static <T> ConnectorRecord<T> ofPayload(T payload) {
         return new ConnectorRecord<>(payload, null, Map.of());
     }
 
+    /**
+     * Creates a ConnectorRecord containing the given payload and dispatch metadata with an empty metadata map.
+     *
+     * @param <T> the payload type
+     * @param payload the payload to include in the record
+     * @param dispatchMetadata canonical transport dispatch metadata; may be null
+     * @return a ConnectorRecord holding the provided payload and dispatch metadata and an empty immutable meta map
+     */
     public static <T> ConnectorRecord<T> ofPayload(T payload, TransportDispatchMetadata dispatchMetadata) {
         return new ConnectorRecord<>(payload, dispatchMetadata, Map.of());
     }
 
+    /**
+     * Create a ConnectorRecord containing the given payload, dispatch metadata, and meta map.
+     *
+     * @param  payload           the payload forwarded to the connector target
+     * @param  dispatchMetadata  canonical transport dispatch metadata; may be null
+     * @param  meta              optional metadata map; null or empty becomes an empty immutable map,
+     *                           otherwise a new unmodifiable LinkedHashMap copy is made to preserve insertion order
+     * @return                   a ConnectorRecord with the provided payload, dispatch metadata, and normalized meta
+     */
     public static <T> ConnectorRecord<T> ofPayload(
         T payload,
         TransportDispatchMetadata dispatchMetadata,
@@ -56,28 +79,51 @@ public record ConnectorRecord<T>(
         return new ConnectorRecord<>(payload, dispatchMetadata, meta);
     }
 
+    /**
+     * Retrieve the idempotency key associated with this record's dispatch metadata.
+     *
+     * @return the idempotency key from the dispatch metadata, or `null` if no dispatch metadata is present
+     */
     public String idempotencyKey() {
         return dispatchMetadata == null ? null : dispatchMetadata.idempotencyKey();
     }
 
+    /**
+     * Create a new ConnectorRecord with the given transport dispatch metadata while preserving the payload and meta.
+     *
+     * @param metadata the transport dispatch metadata to set; may be {@code null} to clear dispatch metadata
+     * @return a ConnectorRecord with the provided dispatch metadata and the original payload and meta
+     */
     public ConnectorRecord<T> withDispatchMetadata(TransportDispatchMetadata metadata) {
         return new ConnectorRecord<>(payload, metadata, meta);
     }
 
+    /**
+     * Create a copy of this ConnectorRecord with the provided payload.
+     *
+     * @param  nextPayload the payload for the new ConnectorRecord
+     * @return             a new ConnectorRecord containing `nextPayload` and the same dispatch metadata and meta map as this record
+     */
     public <N> ConnectorRecord<N> withPayload(N nextPayload) {
         return new ConnectorRecord<>(nextPayload, dispatchMetadata, meta);
     }
 
+    /**
+     * Create a new ConnectorRecord preserving payload and dispatch metadata while replacing the meta map.
+     *
+     * @param nextMeta the meta map to apply; may be null or empty — it will be normalized to an immutable empty map or an unmodifiable insertion-ordered copy
+     * @return a ConnectorRecord with the same payload and dispatchMetadata and the provided meta (after normalization)
+     */
     public ConnectorRecord<T> withMeta(Map<String, String> nextMeta) {
         return new ConnectorRecord<>(payload, dispatchMetadata, nextMeta);
     }
 
     /**
-     * Returns a copy of this record with one additional metadata entry.
+     * Create a new ConnectorRecord with the provided metadata entry added to the record's meta map.
      *
      * @param key metadata key; must not be null
      * @param value metadata value; must not be null
-     * @return copied record with the extra metadata entry
+     * @return a ConnectorRecord containing the same payload and dispatch metadata, with meta augmented by the given key and value
      * @throws NullPointerException if {@code key} or {@code value} is null
      */
     public ConnectorRecord<T> withMetaEntry(String key, String value) {
@@ -88,6 +134,16 @@ public record ConnectorRecord<T>(
         return new ConnectorRecord<>(payload, dispatchMetadata, updated);
     }
 
+    /**
+     * Normalize a metadata map into a stable, immutable form.
+     *
+     * If the input is null or empty, an empty immutable map is returned.
+     * Otherwise a new unmodifiable LinkedHashMap copy is returned to preserve
+     * insertion order while preventing modification.
+     *
+     * @param meta the metadata map to normalize; may be null
+     * @return an immutable map containing the same entries (empty if input was null or empty)
+     */
     private static Map<String, String> normalizeMeta(Map<String, String> meta) {
         if (meta == null || meta.isEmpty()) {
             return Map.of();

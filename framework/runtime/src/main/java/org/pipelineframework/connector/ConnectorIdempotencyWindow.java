@@ -28,6 +28,13 @@ public final class ConnectorIdempotencyWindow {
     private final int maxKeys;
     private final LinkedHashMap<String, Boolean> seen;
 
+    /**
+     * Creates a new idempotency window that keeps at most {@code maxKeys} distinct keys and evicts
+     * the least-recently-used key when the capacity is exceeded.
+     *
+     * @param maxKeys the maximum number of keys to retain; must be greater than zero
+     * @throws IllegalArgumentException if {@code maxKeys} is less than or equal to zero
+     */
     public ConnectorIdempotencyWindow(int maxKeys) {
         if (maxKeys <= 0) {
             throw new IllegalArgumentException("maxKeys must be > 0");
@@ -41,24 +48,57 @@ public final class ConnectorIdempotencyWindow {
         };
     }
 
+    /**
+     * Record the given idempotency key and indicate whether it was newly added.
+     *
+     * @param key the idempotency key to record; must not be null or blank
+     * @return `true` if the key was not previously present and was added, `false` if it was already present
+     * @throws NullPointerException     if `key` is null
+     * @throws IllegalArgumentException if `key` is blank
+     */
     public synchronized boolean markIfNew(String key) {
         validate(key);
         return seen.put(key, Boolean.TRUE) == null;
     }
 
+    /**
+     * Checks whether the given idempotency key is present in the window.
+     *
+     * @param key the idempotency key to check; must not be {@code null} or blank
+     * @return {@code true} if the key is present in the window, {@code false} otherwise
+     * @throws NullPointerException if {@code key} is {@code null}
+     * @throws IllegalArgumentException if {@code key} is blank
+     */
     public synchronized boolean contains(String key) {
         validate(key);
         return seen.containsKey(key);
     }
 
+    /**
+     * Gets the number of keys currently tracked in the idempotency window.
+     *
+     * @return the current number of entries in the window
+     */
     synchronized int size() {
         return seen.size();
     }
 
+    /**
+     * Create an immutable snapshot of the current idempotency keys and their presence markers.
+     *
+     * @return an unmodifiable map containing the keys currently tracked and their boolean markers; the map reflects the state at the time of the call
+     */
     synchronized Map<String, Boolean> snapshot() {
         return Map.copyOf(seen);
     }
 
+    /**
+     * Validate that the provided idempotency key is neither null nor blank.
+     *
+     * @param key the idempotency key to validate
+     * @throws NullPointerException     if {@code key} is null
+     * @throws IllegalArgumentException if {@code key} contains only whitespace
+     */
     private static void validate(String key) {
         Objects.requireNonNull(key, "key must not be null");
         if (key.isBlank()) {

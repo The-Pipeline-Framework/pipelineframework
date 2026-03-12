@@ -29,11 +29,11 @@ import org.pipelineframework.connector.ConnectorRecord;
 public interface BrokerConnectorAdapter<M, T> {
 
     /**
-     * Converts a broker-native message into a connector record.
+     * Converts a broker-native message into a connector record for downstream handoff.
      *
-     * @param message broker-native message to decode; must not be null
-     * @return non-null connector record for downstream handoff
-     * @throws RuntimeException when the broker message is invalid or cannot be mapped
+     * @param message the non-null broker-native message to map
+     * @return the mapped non-null ConnectorRecord containing the connector payload
+     * @throws RuntimeException if the broker message is invalid or cannot be mapped
      */
     @Nonnull
     ConnectorRecord<T> toRecord(@Nonnull M message);

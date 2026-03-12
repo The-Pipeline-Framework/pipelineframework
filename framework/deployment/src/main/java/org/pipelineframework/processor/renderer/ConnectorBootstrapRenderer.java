@@ -21,6 +21,16 @@ import org.pipelineframework.config.connector.ConnectorConfig;
  */
 public class ConnectorBootstrapRenderer {
 
+    /**
+     * Generate a CDI connector bridge class for the given ConnectorConfig and write it to the processing environment.
+     *
+     * @param connector the connector configuration describing source/target types, adapters, and policies
+     * @param basePackage the base Java package under which the connector bridge package (basePackage.connector) will be created
+     * @param ctx the generation context providing access to the annotation processing environment and filer
+     * @return the ClassName of the generated connector bridge type
+     * @throws IOException if writing the generated Java file to the filer fails
+     * @throws IllegalStateException if the connector requires a mapper (source and target types differ) but none is provided
+     */
     public ClassName render(ConnectorConfig connector, String basePackage, GenerationContext ctx) throws IOException {
         String packageName = basePackage + ".connector";
         String className = toPascalCase(connector.name()) + "ConnectorBridge";
@@ -186,10 +196,26 @@ public class ConnectorBootstrapRenderer {
         return generatedType;
     }
 
+    /**
+     * Normalize a possibly-null string to an empty string.
+     *
+     * @param value the input string that may be null
+     * @return the original string if non-null, or an empty string if {@code value} is null
+     */
     private static String safe(String value) {
         return value == null ? "" : value;
     }
 
+    /**
+     * Converts the input into a PascalCase identifier suitable for a class name.
+     *
+     * Splits the input on non-alphanumeric characters, ignores empty segments, lowercases each segment,
+     * capitalizes the first character of each segment, and concatenates them. If the input is null
+     * or blank, returns "Generated".
+     *
+     * @param value the input string to convert
+     * @return the PascalCase result, or "Generated" when the input is null or blank
+     */
     private static String toPascalCase(String value) {
         if (value == null || value.isBlank()) {
             return "Generated";
@@ -208,6 +234,12 @@ public class ConnectorBootstrapRenderer {
         return builder.toString();
     }
 
+    /**
+     * Create a CodeBlock representing a comma-separated list of quoted string literals.
+     *
+     * @param values the strings to quote and join; may be null or empty
+     * @return a {@code CodeBlock} containing the provided strings as comma-separated quoted literals, or an empty {@code CodeBlock} if {@code values} is null or empty
+     */
     private static CodeBlock joinQuoted(List<String> values) {
         if (values == null || values.isEmpty()) {
             return CodeBlock.of("");

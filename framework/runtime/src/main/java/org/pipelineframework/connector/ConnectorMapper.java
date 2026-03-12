@@ -28,8 +28,20 @@ import java.util.function.Function;
 @FunctionalInterface
 public interface ConnectorMapper<I, O> extends Function<I, O> {
 
-    O map(I input);
+    /**
+ * Converts the given source payload to the target payload type.
+ *
+ * @param input the source payload to map
+ * @return the mapped target payload
+ */
+O map(I input);
 
+    /**
+     * Apply mapping to the given input and return the mapped result.
+     *
+     * @param input the source payload to map
+     * @return the mapped target payload
+     */
     @Override
     default O apply(I input) {
         return map(input);

@@ -69,11 +69,15 @@ public class PipelineTemplateConfigLoader {
     }
 
     /**
-     * Load and parse the pipeline template configuration from the specified file path.
+     * Load a pipeline template YAML file and construct a PipelineTemplateConfig.
+     *
+     * <p>Parses the YAML at the given path and builds a configuration object. For version 2 and
+     * later, top-level and inline message definitions are collected and normalized and step inputs/
+     * outputs are resolved; for version 1, the returned config contains no messages.
      *
      * @param configPath the path to the pipeline template YAML file
      * @return a PipelineTemplateConfig built from the file's contents
-     * @throws IllegalStateException if the YAML root is not a map or the file cannot be read/parsed
+     * @throws IllegalStateException if the YAML root is not a map or the file cannot be read or parsed
      */
     public PipelineTemplateConfig load(Path configPath) {
         Object root = loadYaml(configPath);
@@ -719,12 +723,12 @@ public class PipelineTemplateConfigLoader {
     }
 
     /**
-     * Parse the "aspects" section from the root configuration map into a map of PipelineTemplateAspect instances.
+     * Parse the optional top-level "aspects" section into a map of PipelineTemplateAspect objects.
      *
-     * @param rootMap the top-level YAML-derived map containing an optional "aspects" entry
-     * @return a map keyed by aspect name with the corresponding PipelineTemplateAspect; empty if no valid "aspects" map is present
+     * @param rootMap the YAML-derived root map that may contain an "aspects" entry
+     * @return a map keyed by aspect name to its PipelineTemplateAspect; empty if no valid "aspects" map is present
      *
-     * Defaults applied when fields are missing or blank:
+     * Defaults applied when an aspect's fields are missing or blank:
      * - enabled: true
      * - position: "AFTER_STEP"
      * - scope: "GLOBAL"
@@ -760,6 +764,15 @@ public class PipelineTemplateConfigLoader {
         return aspects;
     }
 
+    /**
+     * Parses the optional top-level "connectors" section and constructs a list of ConnectorConfig objects.
+     *
+     * <p>Malformed entries (non-map) and entries with missing or duplicate names are skipped. If the
+     * "connectors" key is absent or not iterable, an empty list is returned.
+     *
+     * @param rootMap the parsed YAML root map to read the "connectors" section from
+     * @return a list of ConnectorConfig for each valid connector definition; empty list if none found
+     */
     private List<ConnectorConfig> readConnectors(Map<?, ?> rootMap) {
         Object connectorsObj = rootMap.get("connectors");
         if (!(connectorsObj instanceof Iterable<?> connectors)) {
@@ -800,6 +813,12 @@ public class PipelineTemplateConfigLoader {
         return values;
     }
 
+    /**
+     * Parses the optional "source" block from a connector definition into a ConnectorSourceConfig.
+     *
+     * @param connectorMap the connector map (typically the parsed YAML map) that may contain a "source" entry
+     * @return a ConnectorSourceConfig built from the "kind", "step", and "type" keys of the "source" map, or `null` if no valid "source" map is present
+     */
     private ConnectorSourceConfig readConnectorSource(Map<?, ?> connectorMap) {
         Object sourceObj = connectorMap.get("source");
         if (!(sourceObj instanceof Map<?, ?> sourceMap)) {
@@ -811,6 +830,12 @@ public class PipelineTemplateConfigLoader {
             readString(sourceMap, "type"));
     }
 
+    /**
+     * Parses the optional "target" block of a connector configuration into a ConnectorTargetConfig.
+     *
+     * @param connectorMap the connector configuration map (typically parsed from YAML)
+     * @return a ConnectorTargetConfig built from the "target" block, or `null` if no valid "target" map is present
+     */
     private ConnectorTargetConfig readConnectorTarget(Map<?, ?> connectorMap) {
         Object targetObj = connectorMap.get("target");
         if (!(targetObj instanceof Map<?, ?> targetMap)) {
@@ -823,6 +848,12 @@ public class PipelineTemplateConfigLoader {
             readString(targetMap, "adapter"));
     }
 
+    /**
+     * Parses the "broker" sub-object from a connector map into a ConnectorBrokerConfig.
+     *
+     * @param connectorMap the connector configuration map that may contain a "broker" entry
+     * @return a ConnectorBrokerConfig built from the broker's provider, destination, and adapter, or {@code null} if the "broker" entry is absent or not a map
+     */
     private ConnectorBrokerConfig readConnectorBroker(Map<?, ?> connectorMap) {
         Object brokerObj = connectorMap.get("broker");
         if (!(brokerObj instanceof Map<?, ?> brokerMap)) {
@@ -968,6 +999,13 @@ public class PipelineTemplateConfigLoader {
         return Boolean.parseBoolean(value.toString());
     }
 
+    /**
+     * Read a list of strings from the map entry at the given key by converting each iterable element to a trimmed string and omitting null or blank results.
+     *
+     * @param map the source map to read from; may contain any object at {@code key}
+     * @param key the key whose associated value is expected to be an iterable of elements to convert
+     * @return a list of trimmed, non-null strings produced from the iterable at {@code key}, or an empty list if the entry is missing or not iterable
+     */
     private List<String> readStringList(Map<?, ?> map, String key) {
         Object value = map.get(key);
         if (!(value instanceof Iterable<?> values)) {

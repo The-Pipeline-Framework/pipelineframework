@@ -83,7 +83,10 @@ public class PipelineCompilationContext {
     private DescriptorProtos.FileDescriptorSet descriptorSet;
     
     /**
-     * Create a compilation context for the given annotation processing round.
+     * Create a compilation context initialized for the given annotation processing round.
+     *
+     * The constructed context starts with empty model collections and default modes:
+     * transport mode GRPC and platform mode COMPUTE.
      *
      * @param processingEnv the processing environment providing compiler utilities and messaging
      * @param roundEnv the round environment containing the annotated elements visible in this round

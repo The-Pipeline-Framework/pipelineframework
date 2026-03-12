@@ -26,5 +26,12 @@ import io.smallrye.mutiny.Multi;
 @FunctionalInterface
 public interface ConnectorSource<T> {
 
-    Multi<ConnectorRecord<T>> stream();
+    /**
+ * Produce a reactive stream of connector records from the source.
+ *
+ * The stream emits ConnectorRecord&lt;T&gt; items representing payloads from a live or replay source.
+ *
+ * @return a Multi that emits ConnectorRecord&lt;T&gt; instances from the source
+ */
+Multi<ConnectorRecord<T>> stream();
 }

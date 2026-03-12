@@ -30,9 +30,22 @@ public final class ConnectorMetrics {
 
     private static volatile LongCounter events;
 
+    /**
+     * Prevents instantiation of this utility class.
+     */
     private ConnectorMetrics() {
     }
 
+    /**
+     * Record a single connector event with the provided connector name and outcome.
+     *
+     * Increments the internal connector events counter and attaches attributes for
+     * the connector name and outcome; a null or blank value for either parameter
+     * is recorded as the literal `"unknown"`.
+     *
+     * @param connectorName the connector identifier; treated as `"unknown"` if null or blank
+     * @param outcome       the event outcome (for example "success" or "failure"); treated as `"unknown"` if null or blank
+     */
     public static void record(String connectorName, String outcome) {
         counter().add(1L, Attributes.of(
             CONNECTOR, connectorName == null || connectorName.isBlank() ? "unknown" : connectorName,
@@ -40,7 +53,9 @@ public final class ConnectorMetrics {
     }
 
     /**
-     * For tests only.
+     * Resets the internal cached event counter to allow test isolation.
+     *
+     * <p>After calling this method, the counter will be recreated on next use.
      */
     static void resetForTest() {
         synchronized (ConnectorMetrics.class) {
@@ -48,6 +63,13 @@ public final class ConnectorMetrics {
         }
     }
 
+    /**
+     * Lazily initializes and returns the shared LongCounter used to record connector events.
+     *
+     * The counter is created once and cached for subsequent calls.
+     *
+     * @return the cached LongCounter for connector events
+     */
     private static LongCounter counter() {
         LongCounter active = events;
         if (active != null) {

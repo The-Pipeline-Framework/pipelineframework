@@ -59,12 +59,12 @@ public record PipelineYamlConfig(
     }
 
     /**
-     * Backward-compatible constructor used by existing callers that only set transport.
+     * Backward-compatible constructor that defaults the platform to "COMPUTE" and the connectors list to empty.
      *
-     * @param basePackage base package
-     * @param transport transport mode
-     * @param steps configured steps
-     * @param aspects configured aspects
+     * @param basePackage base package for generated pipeline classes
+     * @param transport transport mode (e.g., "GRPC", "REST", or "LOCAL")
+     * @param steps configured pipeline steps
+     * @param aspects configured pipeline aspects
      */
     public PipelineYamlConfig(
         String basePackage,

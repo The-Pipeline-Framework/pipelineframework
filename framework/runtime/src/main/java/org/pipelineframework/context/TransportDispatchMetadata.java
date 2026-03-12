@@ -54,16 +54,17 @@ public record TransportDispatchMetadata(
 
 
     /**
-     * Creates metadata from incoming headers, trimming blanks to null and parsing numeric values.
+     * Builds a TransportDispatchMetadata instance from header values, normalizing blank strings to `null`
+     * and parsing numeric header strings to their numeric types.
      *
-     * @param correlationId correlation id header
-     * @param executionId execution id header
-     * @param idempotencyKey idempotency key header
-     * @param retryAttempt retry attempt header
-     * @param deadlineEpochMs deadline header
-     * @param dispatchTsEpochMs dispatch timestamp header
-     * @param parentItemId parent item header
-     * @return normalized metadata
+     * @param correlationId correlation id header; trimmed to `null` if blank
+     * @param executionId execution id header; trimmed to `null` if blank
+     * @param idempotencyKey idempotency key header; trimmed to `null` if blank
+     * @param retryAttempt retry attempt header as a string; parsed to an `Integer` if present and valid
+     * @param deadlineEpochMs deadline header as a string; parsed to a `Long` if present and valid
+     * @param dispatchTsEpochMs dispatch timestamp header as a string; parsed to a `Long` if present and valid
+     * @param parentItemId parent item header; trimmed to `null` if blank
+     * @return a TransportDispatchMetadata with normalized string fields and parsed numeric fields where applicable
      */
     public static TransportDispatchMetadata fromHeaders(
         String correlationId,
@@ -85,10 +86,10 @@ public record TransportDispatchMetadata(
     }
 
     /**
-     * Returns a copy of this metadata with a different idempotency key.
+     * Create a copy of this metadata with the specified idempotency key.
      *
-     * @param nextIdempotencyKey replacement idempotency key
-     * @return copied metadata preserving all other fields
+     * @param nextIdempotencyKey the idempotency key to set on the returned metadata
+     * @return a new TransportDispatchMetadata identical to this instance except with the specified idempotency key
      */
     public TransportDispatchMetadata withIdempotencyKey(String nextIdempotencyKey) {
         return new TransportDispatchMetadata(
@@ -101,6 +102,12 @@ public record TransportDispatchMetadata(
             parentItemId);
     }
 
+    /**
+     * Converts an input string to a trimmed value or yields no value for blank input.
+     *
+     * @param value the input string to normalize
+     * @return the input string with leading and trailing whitespace removed, or `null` if the input is `null` or contains only whitespace
+     */
     private static String normalize(String value) {
         if (value == null || value.isBlank()) {
             return null;
