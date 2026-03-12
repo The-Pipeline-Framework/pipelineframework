@@ -529,7 +529,10 @@ class DynamoExecutionStateStoreTest {
             parsers);
 
         IllegalStateException error = assertThrows(IllegalStateException.class, () ->
-            invokeFromJson(store, wrappedEnvelopeJson(payload.getDescriptorForType().getFullName(), "%%%not-base64%%%")));
+            invokeFromJson(store, wrappedEnvelopeJson(
+                payload.getDescriptorForType().getFullName(),
+                payload.getClass().getName(),
+                "%%%not-base64%%%")));
 
         assertTrue(error.getMessage().contains(payload.getDescriptorForType().getFullName()));
         assertTrue(error.getMessage().contains("_tpf_payload_b64"));
@@ -546,7 +549,10 @@ class DynamoExecutionStateStoreTest {
             parsers);
 
         IllegalStateException error = assertThrows(IllegalStateException.class, () ->
-            invokeFromJson(store, wrappedEnvelopeJson("checkout.v1.UnknownEvent", Base64.getEncoder().encodeToString(new byte[] {1}))));
+            invokeFromJson(store, wrappedEnvelopeJson(
+                "checkout.v1.UnknownEvent",
+                "checkout.v1.UnknownEvent",
+                Base64.getEncoder().encodeToString(new byte[] {1}))));
 
         assertTrue(error.getMessage().contains("checkout.v1.UnknownEvent"));
         assertTrue(error.getMessage().contains("No protobuf parser registered"));
@@ -603,10 +609,6 @@ class DynamoExecutionStateStoreTest {
         return DescriptorProtos.FileDescriptorSet.newBuilder()
             .addFile(DescriptorProtos.FileDescriptorProto.newBuilder().setName("checkout.proto").build())
             .build();
-    }
-
-    private static String wrappedEnvelopeJson(String messageType, String payload) {
-        return wrappedEnvelopeJson(messageType, null, payload);
     }
 
     private static String wrappedEnvelopeJson(String messageType, String messageJavaClass, String payload) {
