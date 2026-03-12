@@ -1,0 +1,124 @@
+name: Reusable — Search Pipeline E2E
+
+on:
+  workflow_call:
+    inputs:
+      artifact_name:
+        description: 'Name of the Maven artifacts tarball'
+        required: false
+        default: 'framework-m2-cache'
+        type: string
+      download_artifacts:
+        description: 'Whether to download prebuilt framework artifacts instead of bootstrapping locally'
+        required: false
+        default: true
+        type: boolean
+  push:
+    branches:
+      - main
+    paths:
+      - 'framework/**'
+      - 'examples/search/**'
+      - 'plugins/**'
+      - 'pom.xml'
+      - 'mvnw'
+      - '.mvn/**'
+      - 'scripts/ci/**'
+      - '.github/workflows/build.yml'
+      - '.github/actions/setup-testcontainers/**'
+      - '.github/workflows/e2e-search-pipeline-e2e.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-e2e-search-pipeline
+  cancel-in-progress: true
+
+env:
+  MAVEN_OPTS: -Xmx2g -Xms512m
+  MAVEN_ARGS_BUILD: -B -T 1C -V -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
+
+jobs:
+  search-pipeline-e2e:
+    name: Search Pipeline E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Configure Maven
+        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
+
+      - name: Download framework artifacts
+        if: ${{ inputs.download_artifacts }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: /tmp/m2-artifacts
+
+      - name: Extract framework artifacts
+        if: ${{ inputs.download_artifacts }}
+        run: |
+          mkdir -p ~/.m2/repository
+          tar -xzf "/tmp/m2-artifacts/${{ inputs.artifact_name }}.tar.gz" -C ~/.m2/repository
+
+      - name: Bootstrap framework artifacts locally
+        if: ${{ !inputs.download_artifacts }}
+        run: ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
+
+      - name: Setup Testcontainers Docker environment
+        uses: ./.github/actions/setup-testcontainers
+
+      - name: Build Search topology images
+        run: |
+          local_maven_args="${MAVEN_ARGS/-T 1C/-T 1}"
+          read -r -a maven_args <<< "$local_maven_args"
+          ./mvnw "${maven_args[@]}" -f examples/search/pom.xml \
+            -DskipTests \
+            -DskipNative=true \
+            -Dquarkus.container-image.build=true \
+            clean install
+
+      - name: Run Search pipeline end-to-end test
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f examples/search/pom.xml \
+            -pl orchestrator-svc \
+            -am \
+            -DskipUnitTests=true \
+            -DskipNative=true \
+            -Dquarkus.container-image.build=false \
+            -Dfailsafe.failIfNoSpecifiedTests=false \
+            -Dit.test=SearchPipelineEndToEndIT \
+            verify
+
+      - name: Dump reports on failure
+        if: failure()
+        run: |
+          find examples/search -path "*/target/failsafe-reports/*.txt" -print -exec tail -n 200 {} \;
+          find examples/search -path "*/target/failsafe-reports/*.dumpstream" -print -exec tail -n 400 {} \;
+          find examples/search -path "*/target/failsafe-reports/*.dump" -print -exec tail -n 200 {} \;
+          find examples/search -path "*/target/surefire-reports/*.txt" -print -exec tail -n 200 {} \;
+
+      - name: Upload reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: search-pipeline-e2e-reports
+          path: |
+            examples/search/**/target/surefire-reports/*.txt
+            examples/search/**/target/surefire-reports/*.xml
+            examples/search/**/target/failsafe-reports/*.txt
+            examples/search/**/target/failsafe-reports/*.xml
+            examples/search/**/target/failsafe-reports/*.dumpstream
+            examples/search/**/target/failsafe-reports/*.dump
+          retention-days: 7
+          if-no-files-found: warn

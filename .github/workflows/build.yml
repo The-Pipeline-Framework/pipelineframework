@@ -18,6 +18,8 @@ on:
       - '.github/workflows/build.yml'
       - '.github/workflows/e2e-csv-monolith.yml'
       - '.github/workflows/e2e-checkout-ftgo-smoke.yml'
+      - '.github/workflows/e2e-search-pipeline-e2e.yml'
+      - '.github/workflows/e2e-search-resource-it.yml'
       - '.github/workflows/e2e-search-lambda-smoke.yml'
 
 env:
@@ -26,6 +28,7 @@ env:
   MAVEN_ARGS_PR: -B -T 1 -V -P!coverage -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
   BOOTSTRAP_ARTIFACT: pr-m2-cache
   UNIT_TEST_PATTERN: "*,!*IT,!*ITCase,!RawDocumentResourceTest,!ParsedDocumentResourceTest,!TokenBatchResourceTest,!IndexAckResourceTest,!LambdaMockEventServerSmokeTest"
+  # Dedicated Search E2E and resource IT workflows own the excluded Search classes below.
   GENERIC_VERIFY_IT_PATTERN: "*IT,*ITCase,!CsvPaymentsEndToEndIT,!CsvPaymentsPipelineRuntimeEndToEndIT,!SearchPipelineEndToEndIT,!RawDocumentResourceIT,!ParsedDocumentResourceIT,!TokenBatchResourceIT,!IndexAckResourceIT"
 
 jobs:
