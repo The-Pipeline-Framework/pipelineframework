@@ -49,7 +49,7 @@ In `QUEUE_ASYNC` mode:
 2. dispatch and operator invocation are at-least-once,
 3. duplicate invocation can occur and must be handled with idempotency keys,
 4. streaming outputs are rejected for async execution in this milestone,
-5. persisted protobuf payload metadata stores `_tpf_message` as the protobuf schema full name, while legacy Java-class-name envelopes remain readable during migration.
+5. persisted protobuf payload metadata stores `_tpf_message` as the protobuf schema full name.
 
 ## Queue-Async Control Plane
 

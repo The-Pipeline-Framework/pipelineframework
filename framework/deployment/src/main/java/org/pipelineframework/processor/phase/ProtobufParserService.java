@@ -19,7 +19,6 @@ import com.google.protobuf.Descriptors;
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
-import com.squareup.javapoet.ParameterizedTypeName;
 import com.squareup.javapoet.TypeSpec;
 import org.jboss.logging.Logger;
 import org.pipelineframework.processor.PipelineCompilationContext;
@@ -112,20 +111,12 @@ public class ProtobufParserService {
         ClassName parserInterface = ClassName.get("org.pipelineframework.cache", "ProtobufMessageParser");
         ClassName messageBase = ClassName.get("com.google.protobuf", "Message");
         ClassName invalidProto = ClassName.get("com.google.protobuf", "InvalidProtocolBufferException");
-        ClassName setType = ClassName.get(Set.class);
 
         MethodSpec typeMethod = MethodSpec.methodBuilder("type")
             .addAnnotation(Override.class)
             .addModifiers(javax.lang.model.element.Modifier.PUBLIC)
             .returns(String.class)
             .addStatement("return $S", schemaFullName)
-            .build();
-
-        MethodSpec legacyAliasesMethod = MethodSpec.methodBuilder("legacyTypeAliases")
-            .addAnnotation(Override.class)
-            .addModifiers(javax.lang.model.element.Modifier.PUBLIC)
-            .returns(ParameterizedTypeName.get(setType, ClassName.get(String.class)))
-            .addStatement("return $T.of($S)", Set.class, messageType.toString())
             .build();
 
         MethodSpec parseMethod = MethodSpec.methodBuilder("parseFrom")
@@ -148,7 +139,6 @@ public class ProtobufParserService {
             .addAnnotation(ClassName.get("io.quarkus.arc", "Unremovable"))
             .addSuperinterface(parserInterface)
             .addMethod(typeMethod)
-            .addMethod(legacyAliasesMethod)
             .addMethod(parseMethod)
             .build();
     }

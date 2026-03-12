@@ -436,7 +436,7 @@ class DynamoExecutionStateStoreTest {
     }
 
     @Test
-    void getExecutionDecodesLegacyJavaClassNamePayloadWithSchemaNameParserAlias() {
+    void getExecutionDecodesSchemaNamePayload() {
         DynamoDbClient client = mock(DynamoDbClient.class);
         PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
         @SuppressWarnings("unchecked")
@@ -448,7 +448,6 @@ class DynamoExecutionStateStoreTest {
         long ttl = System.currentTimeMillis() / 1000 + 3600;
         when(parsers.stream()).thenAnswer(invocation -> java.util.stream.Stream.of(parser));
         when(parser.type()).thenReturn(payload.getDescriptorForType().getFullName());
-        when(parser.legacyTypeAliases()).thenReturn(Set.of(DescriptorProtos.FileDescriptorSet.class.getName()));
         when(parser.parseFrom(argThat(bytes -> Arrays.equals(bytes, payload.toByteArray())))).thenReturn(payload);
         when(client.getItem(any(GetItemRequest.class)))
             .thenReturn(GetItemResponse.builder()
@@ -458,7 +457,7 @@ class DynamoExecutionStateStoreTest {
                     "key-1",
                     ttl,
                     payload,
-                    DescriptorProtos.FileDescriptorSet.class.getName()))
+                    payload.getDescriptorForType().getFullName()))
                 .build());
         DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config, parsers);
 
@@ -535,7 +534,7 @@ class DynamoExecutionStateStoreTest {
     }
 
     @Test
-    void fromJsonReportsUnknownParserWithSchemaOrLegacyContext() {
+    void fromJsonReportsUnknownParserWithSchemaContext() {
         @SuppressWarnings("unchecked")
         Instance<ProtobufMessageParser> parsers = mock(Instance.class);
         when(parsers.stream()).thenAnswer(invocation -> java.util.stream.Stream.empty());
@@ -548,7 +547,7 @@ class DynamoExecutionStateStoreTest {
             invokeFromJson(store, wrappedEnvelopeJson("checkout.v1.UnknownEvent", Base64.getEncoder().encodeToString(new byte[] {1}))));
 
         assertTrue(error.getMessage().contains("checkout.v1.UnknownEvent"));
-        assertTrue(error.getMessage().contains("schema name or legacy Java type alias"));
+        assertTrue(error.getMessage().contains("No protobuf parser registered"));
     }
 
     private static Map<String, AttributeValue> executionItemWithInputPayload(

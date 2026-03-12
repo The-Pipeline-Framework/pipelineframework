@@ -17,7 +17,6 @@
 package org.pipelineframework.cache;
 
 import com.google.protobuf.Message;
-import java.util.Set;
 
 /**
  * Supplies a non-reflective protobuf parser for a specific message type.
@@ -30,15 +29,6 @@ public interface ProtobufMessageParser {
      * @return the protobuf schema full name for this parser
      */
     String type();
-
-    /**
-     * Legacy Java type aliases that should still resolve to this parser during persistence migration.
-     *
-     * @return backward-compatible Java type aliases for stored payload metadata
-     */
-    default Set<String> legacyTypeAliases() {
-        return Set.of();
-    }
 
     /**
      * Parses the provided protobuf payload into a Message instance.

@@ -10,7 +10,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.stream.StreamSupport;
@@ -937,25 +936,9 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
         String normalizedMessageType = normalizeMessageType(messageType);
         return protobufMessageParsers.stream()
-            .filter(parser -> parserSupportsType(parser, normalizedMessageType))
+            .filter(parser -> normalizeMessageType(parser.type()).equals(normalizedMessageType))
             .findFirst()
-            .orElseThrow(() -> new IllegalStateException(
-                "No protobuf parser registered for " + messageType
-                    + " (expected protobuf schema name or legacy Java type alias)."));
-    }
-
-    private static boolean parserSupportsType(ProtobufMessageParser parser, String normalizedMessageType) {
-        if (normalizeMessageType(parser.type()).equals(normalizedMessageType)) {
-            return true;
-        }
-        Set<String> aliases = parser.legacyTypeAliases();
-        if (aliases == null || aliases.isEmpty()) {
-            return false;
-        }
-        return aliases.stream()
-            .filter(Objects::nonNull)
-            .map(DynamoExecutionStateStore::normalizeMessageType)
-            .anyMatch(normalizedMessageType::equals);
+            .orElseThrow(() -> new IllegalStateException("No protobuf parser registered for " + messageType));
     }
 
     private static String messageTypeName(Message message) {

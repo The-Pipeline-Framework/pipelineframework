@@ -35,7 +35,7 @@ class ProtobufParserServiceTest {
 
         String source = Files.readString(generated);
         assertTrue(source.contains("return \"checkout.v1.OrderPlaced\";"));
-        assertTrue(source.contains("return Set.of(\"com.acme.checkout.OrderPlaced\");"));
+        assertTrue(!source.contains("legacyTypeAliases"));
     }
 
     private static DescriptorProtos.FileDescriptorSet descriptorSet() {
