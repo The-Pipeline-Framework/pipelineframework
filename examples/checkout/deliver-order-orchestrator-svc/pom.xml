@@ -13,6 +13,7 @@
     <name>Checkout Deliver Order Orchestrator</name>
 
     <properties>
+        <awaitility.version>4.2.2</awaitility.version>
         <pipeline.generatedSourcesArg>-Apipeline.generatedSourcesDir=${project.build.directory}/generated-sources/pipeline</pipeline.generatedSourcesArg>
         <protobuf.descriptor.fileArg>-Aprotobuf.descriptor.file=${project.build.directory}/generated-sources/grpc/descriptor_set.dsc</protobuf.descriptor.fileArg>
         <generated.proto.dir>${project.build.directory}/generated-sources/proto</generated.proto.dir>
@@ -52,6 +53,23 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-junit5-mockito</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>${awaitility.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-netty-shaded</artifactId>
+            <version>${grpc.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -177,6 +195,22 @@
                         <quarkus.grpc.codegen.proto-directory>${generated.proto.dir}</quarkus.grpc.codegen.proto-directory>
                         <quarkus.generate-code.grpc.descriptor-set.generate>true</quarkus.generate-code.grpc.descriptor-set.generate>
                     </properties>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.5.1</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+                <configuration>
+                    <argLine>${surefireArgLine} --enable-preview</argLine>
                 </configuration>
             </plugin>
             <plugin>

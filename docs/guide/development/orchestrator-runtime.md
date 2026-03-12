@@ -105,6 +105,17 @@ Operational expectations for this baseline:
 2. queue delivery and operator invocation remain at-least-once,
 3. terminal dead-letter events are durable, not process-local log-only.
 
+CI confidence for this baseline:
+
+1. `SYNC` remains the default runtime mode and the fast baseline configuration.
+2. `QUEUE_ASYNC` remains opt-in and requires explicit durable provider configuration.
+3. the durable HA gate exercises the checkout `deliver-order` recovery path against `dynamo` + `sqs` semantics with `DynamoDB Local` + `ElasticMQ`.
+4. this gate covers:
+   - worker kill takeover,
+   - sweeper redispatch,
+   - duplicate submit determinism,
+   - durable DLQ publication.
+
 ## Generated Structure
 
 ```text
