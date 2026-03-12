@@ -45,7 +45,7 @@ Generated orchestrator endpoints are transport-native:
 
 Framework connectors provide the live handoff boundary between one pipeline output and another pipeline ingest target.
 
-Current v1 scope:
+Supported in this release:
 
 1. source: live `PipelineOutputBus` stream,
 2. target: live ingest adapter bean,
@@ -83,7 +83,7 @@ Runtime behavior:
 
 Bridge beans are manually registered application components that keep an existing handoff implementation in place when you are not yet using the generated connector startup wiring from `pipeline.yaml`.
 
-Current non-goals:
+Not yet supported:
 
 1. generic broker-message re-drive,
 2. connector-owned durable state or connector DLQ,

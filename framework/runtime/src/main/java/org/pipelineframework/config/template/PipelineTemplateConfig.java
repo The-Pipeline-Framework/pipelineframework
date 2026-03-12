@@ -62,6 +62,9 @@ public record PipelineTemplateConfig(
         // Preserve null step placeholders so downstream phases/tests can explicitly skip them.
         steps = steps == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(steps));
         aspects = aspects == null ? Map.of() : Map.copyOf(aspects);
+        if (connectors != null && connectors.stream().anyMatch(java.util.Objects::isNull)) {
+            throw new IllegalArgumentException("connectors must not contain null entries");
+        }
         connectors = connectors == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(connectors));
     }
 

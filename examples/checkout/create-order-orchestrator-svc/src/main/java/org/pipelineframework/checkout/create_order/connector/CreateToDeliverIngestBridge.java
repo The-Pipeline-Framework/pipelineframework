@@ -85,14 +85,13 @@ public class CreateToDeliverIngestBridge {
      * and logs bridge startup.
      */
     void onStartup(@Observes StartupEvent ignored) {
-        boolean connectorEnabled = true;
         ConnectorRuntime<Object, OrderDispatchSvc.ReadyOrder> runtime = new ConnectorRuntime<>(
             "create-to-deliver",
             new OutputBusConnectorSource<>(outputBus, Object.class),
             new GrpcIngestConnectorTarget<>(deliverOrderIngestClient::forward),
             this::mapRecord,
             new ConnectorPolicy(
-                connectorEnabled,
+                true,
                 ConnectorSupport.normalizeBackpressurePolicy(backpressureStrategy),
                 backpressureBufferCapacity,
                 idempotencyEnabled ? ConnectorIdempotencyPolicy.PRE_FORWARD : ConnectorIdempotencyPolicy.DISABLED,

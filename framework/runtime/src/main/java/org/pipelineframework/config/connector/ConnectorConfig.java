@@ -67,6 +67,7 @@ public record ConnectorConfig(
         if (idempotencyMaxKeys < 0) {
             throw new IllegalArgumentException("idempotencyMaxKeys must be >= 0");
         }
+        idempotencyMaxKeys = idempotencyMaxKeys > 0 ? idempotencyMaxKeys : 10000;
         idempotencyKeyFields = idempotencyKeyFields == null
             ? List.of()
             : Collections.unmodifiableList(new ArrayList<>(idempotencyKeyFields));

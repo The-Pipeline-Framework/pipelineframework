@@ -781,24 +781,25 @@ public class PipelineTemplateConfigLoader {
     private List<ConnectorConfig> readConnectors(Map<?, ?> rootMap) {
         Object connectorsObj = rootMap.get("connectors");
         if (!(connectorsObj instanceof Iterable<?> connectors)) {
-            return List.of();
+            if (connectorsObj == null) {
+                return List.of();
+            }
+            throw new IllegalArgumentException("connectors must be declared as a YAML list");
         }
 
         List<ConnectorConfig> values = new ArrayList<>();
         Set<String> seenNames = new LinkedHashSet<>();
         for (Object connectorObj : connectors) {
             if (!(connectorObj instanceof Map<?, ?> connectorMap)) {
-                LOG.warning("Skipping malformed connector entry: expected a map but found " + connectorObj);
-                continue;
+                throw new IllegalArgumentException(
+                    "connectors entries must be maps; found: " + connectorObj);
             }
             String name = readString(connectorMap, "name");
             if (name == null || name.isBlank()) {
-                LOG.warning("Skipping connector entry with missing name: " + connectorMap);
-                continue;
+                throw new IllegalArgumentException("connector entry is missing a non-blank name: " + connectorMap);
             }
             if (!seenNames.add(name)) {
-                LOG.warning("Skipping duplicate connector declaration '" + name + "'");
-                continue;
+                throw new IllegalArgumentException("duplicate connector declaration '" + name + "'");
             }
             values.add(new ConnectorConfig(
                 name,
@@ -827,7 +828,8 @@ public class PipelineTemplateConfigLoader {
     private ConnectorSourceConfig readConnectorSource(Map<?, ?> connectorMap) {
         Object sourceObj = connectorMap.get("source");
         if (!(sourceObj instanceof Map<?, ?> sourceMap)) {
-            return null;
+            throw new IllegalArgumentException(
+                "ConnectorConfig '" + readString(connectorMap, "name") + "' requires a source section defined as a map");
         }
         return new ConnectorSourceConfig(
             readString(sourceMap, "kind"),
@@ -844,7 +846,8 @@ public class PipelineTemplateConfigLoader {
     private ConnectorTargetConfig readConnectorTarget(Map<?, ?> connectorMap) {
         Object targetObj = connectorMap.get("target");
         if (!(targetObj instanceof Map<?, ?> targetMap)) {
-            return null;
+            throw new IllegalArgumentException(
+                "ConnectorConfig '" + readString(connectorMap, "name") + "' requires a target section defined as a map");
         }
         return new ConnectorTargetConfig(
             readString(targetMap, "kind"),

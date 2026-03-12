@@ -56,6 +56,7 @@ public record PipelineYamlConfig(
             }
         }
         platform = normalizedPlatform;
+        connectors = connectors == null ? List.of() : List.copyOf(connectors);
     }
 
     /**

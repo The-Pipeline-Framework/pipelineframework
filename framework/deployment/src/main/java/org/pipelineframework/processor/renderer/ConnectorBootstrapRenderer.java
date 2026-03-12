@@ -15,6 +15,8 @@ import java.util.Locale;
 import java.util.Map;
 import javax.lang.model.element.Modifier;
 import org.pipelineframework.config.connector.ConnectorConfig;
+import org.pipelineframework.connector.ConnectorIdempotencyPolicy;
+import org.pipelineframework.connector.ConnectorSupport;
 
 /**
  * Generates CDI bootstrap beans for declared framework connectors.
@@ -111,9 +113,36 @@ public class ConnectorBootstrapRenderer {
         ctor.addStatement("this.enabled = enabled");
         typeBuilder.addMethod(ctor.build());
 
-        CodeBlock trackerInit = "DISABLED".equals(connector.idempotency())
+        ConnectorIdempotencyPolicy idempotencyPolicyValue =
+            ConnectorSupport.normalizeIdempotencyPolicy(connector.idempotency());
+        CodeBlock trackerInit = idempotencyPolicyValue == ConnectorIdempotencyPolicy.DISABLED
             ? CodeBlock.of("null")
             : CodeBlock.of("new $T($L)", connectorTracker, connector.idempotencyMaxKeys());
+        CodeBlock policyInit = CodeBlock.of(
+            "new $T(true, $T.$L, $L, $T.$L, $T.$L)",
+            connectorPolicy,
+            connectorBackpressure,
+            connector.backpressure(),
+            connector.backpressureBufferCapacity(),
+            connectorIdempotency,
+            connector.idempotency(),
+            connectorFailureMode,
+            connector.failureMode());
+        CodeBlock handlersBlock = CodeBlock.of(
+            "$L, rejected -> {}, duplicate -> LOG.debugf($S, duplicate == null ? null : duplicate.idempotencyKey()), failure -> LOG.error($S, failure)",
+            trackerInit,
+            "Dropped duplicate connector handoff " + connector.name() + " idempotencyKey=%s",
+            "Connector '" + connector.name() + "' failed");
+        CodeBlock runtimeInit = CodeBlock.of(
+            "var runtime = new $T<$T, $T>($S, new $T<>(outputBus, $T.class), targetAdapter, this::mapRecord, $L, $L)",
+            connectorRuntime,
+            sourceType,
+            targetType,
+            connector.name(),
+            outputBusSource,
+            sourceType,
+            policyInit,
+            handlersBlock);
 
         MethodSpec onStartup = MethodSpec.methodBuilder("onStartup")
             .addModifiers(Modifier.PUBLIC)
@@ -124,26 +153,7 @@ public class ConnectorBootstrapRenderer {
             .addStatement("LOG.info($S)", "Connector '" + connector.name() + "' disabled via config")
             .addStatement("return")
             .endControlFlow()
-            .addStatement(
-                "var runtime = new $T<$T, $T>($S, new $T<>(outputBus, $T.class), targetAdapter, this::mapRecord, "
-                    + "new $T(true, $T.$L, $L, $T.$L, $T.$L), $L, rejected -> {}, duplicate -> LOG.debugf($S, duplicate == null ? null : duplicate.idempotencyKey()), failure -> LOG.error($S, failure))",
-                connectorRuntime,
-                sourceType,
-                targetType,
-                connector.name(),
-                outputBusSource,
-                sourceType,
-                connectorPolicy,
-                connectorBackpressure,
-                connector.backpressure(),
-                connector.backpressureBufferCapacity(),
-                connectorIdempotency,
-                connector.idempotency(),
-                connectorFailureMode,
-                connector.failureMode(),
-                trackerInit,
-                "Dropped duplicate connector handoff " + connector.name() + " idempotencyKey=%s",
-                "Connector '" + connector.name() + "' failed")
+            .addStatement("$L", runtimeInit)
             .addStatement("forwardingSubscription = runtime.start()")
             .addStatement("LOG.infof($S, $S)", "Connector %s started", connector.name())
             .build();

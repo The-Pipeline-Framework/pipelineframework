@@ -17,7 +17,7 @@
 package org.pipelineframework.connector.broker;
 
 import jakarta.annotation.Nonnull;
-import javax.annotation.Nullable;
+import jakarta.annotation.Nullable;
 import org.pipelineframework.connector.ConnectorRecord;
 
 /**

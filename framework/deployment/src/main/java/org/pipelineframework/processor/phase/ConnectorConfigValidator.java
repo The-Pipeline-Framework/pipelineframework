@@ -58,7 +58,6 @@ final class ConnectorConfigValidator {
         }
 
         List<String> errors = new ArrayList<>();
-        List<String> warnings = new ArrayList<>();
         List<ConnectorConfig> normalized = new ArrayList<>();
         Set<String> names = new HashSet<>();
         Set<String> knownSteps = new HashSet<>();
@@ -85,17 +84,11 @@ final class ConnectorConfigValidator {
             if (!names.add(next.name())) {
                 errors.add("Duplicate connector name '" + next.name() + "'");
             }
-            validateStructure(next, knownSteps, errors, warnings);
-            if (processingEnv != null) {
+            validateStructure(next, knownSteps, errors);
+            if (processingEnv != null && hasRequiredTypeNames(next)) {
                 validateTypes(next, processingEnv, errors);
             }
             normalized.add(next);
-        }
-
-        if (messager != null) {
-            for (String warning : warnings) {
-                messager.printMessage(Diagnostic.Kind.WARNING, warning);
-            }
         }
         if (!errors.isEmpty()) {
             if (messager != null) {
@@ -154,7 +147,7 @@ final class ConnectorConfigValidator {
             ConnectorSupport.normalizeBackpressurePolicy(connector.backpressure()).name(),
             ConnectorSupport.normalizeFailureMode(connector.failureMode()).name(),
             connector.backpressureBufferCapacity() > 0 ? connector.backpressureBufferCapacity() : 256,
-            connector.idempotencyMaxKeys() > 0 ? connector.idempotencyMaxKeys() : 10000,
+            connector.idempotencyMaxKeys(),
             connector.idempotencyKeyFields(),
             broker);
     }
@@ -174,8 +167,7 @@ final class ConnectorConfigValidator {
     private void validateStructure(
         ConnectorConfig connector,
         Set<String> knownSteps,
-        List<String> errors,
-        List<String> warnings
+        List<String> errors
     ) {
         if (connector.name() == null || connector.name().isBlank()) {
             errors.add("Connector declarations require a non-blank name");
@@ -200,9 +192,9 @@ final class ConnectorConfigValidator {
         if (connector.source().step() == null || connector.source().step().isBlank()) {
             errors.add("Connector '" + connector.name() + "': source.step is required");
         } else if (knownSteps.isEmpty()) {
-            warnings.add("Connector '" + connector.name() + "': source.step '" + connector.source().step()
+            errors.add("Connector '" + connector.name() + "': source.step '" + connector.source().step()
                 + "' cannot be validated because no steps are defined");
-        } else if (!knownSteps.isEmpty() && !knownSteps.contains(connector.source().step())) {
+        } else if (!knownSteps.contains(connector.source().step())) {
             errors.add("Connector '" + connector.name() + "': source.step '" + connector.source().step()
                 + "' does not match any declared pipeline step");
         }
@@ -220,6 +212,17 @@ final class ConnectorConfigValidator {
             errors.add("Connector '" + connector.name()
                 + "': mapper is required when source.type and target.type differ");
         }
+    }
+
+<<<<<<< HEAD
+    private boolean hasRequiredTypeNames(ConnectorConfig connector) {
+        return hasText(connector.source().type())
+            && hasText(connector.target().type())
+            && hasText(connector.target().adapter());
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     /**

@@ -95,7 +95,7 @@ public record TransportDispatchMetadata(
         return new TransportDispatchMetadata(
             correlationId,
             executionId,
-            nextIdempotencyKey,
+            normalize(nextIdempotencyKey),
             retryAttempt,
             deadlineEpochMs,
             dispatchTsEpochMs,
