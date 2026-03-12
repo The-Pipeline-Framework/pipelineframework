@@ -56,10 +56,10 @@ jobs:
           mkdir -p /tmp/m2-artifacts
           cd ~/.m2/repository
           dirs=()
-          for d in org/pipelineframework org.pipelineframework.csv org.pipelineframework.search; do
+          for d in org/pipelineframework org/pipelineframework/csv org/pipelineframework/search; do
             [ -d "$d" ] && dirs+=("$d")
           done
-          [ ${#dirs[@]} -gt 0 ] && tar -czf /tmp/m2-artifacts/${{ env.BOOTSTRAP_ARTIFACT }}.tar.gz "${dirs[@]}"
+          [ ${`#dirs`[@]} -gt 0 ] && tar -czf /tmp/m2-artifacts/${{ env.BOOTSTRAP_ARTIFACT }}.tar.gz "${dirs[@]}"
 
       - name: Record artifact metadata
         id: artifact-meta
