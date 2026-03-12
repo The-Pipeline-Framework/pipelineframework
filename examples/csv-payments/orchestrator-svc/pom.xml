@@ -212,6 +212,14 @@
                     <value>pipeline-runtime</value>
                 </property>
             </activation>
+            <dependencies>
+                <dependency>
+                    <groupId>org.pipelineframework</groupId>
+                    <artifactId>persistence-plugin</artifactId>
+                    <version>${project.version}</version>
+                    <scope>provided</scope>
+                </dependency>
+            </dependencies>
             <properties>
                 <pipeline.runtime.source.root>${project.basedir}/..</pipeline.runtime.source.root>
                 <pipeline.runtime.source.dir.input>${pipeline.runtime.source.root}/input-csv-file-processing-svc/src/main/java</pipeline.runtime.source.dir.input>

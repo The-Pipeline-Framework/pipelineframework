@@ -11,6 +11,8 @@ import java.util.Optional;
 import java.util.Set;
 
 import com.google.protobuf.DescriptorProtos;
+import com.google.protobuf.Message;
+import com.google.protobuf.Timestamp;
 import jakarta.enterprise.inject.Instance;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.cache.ProtobufMessageParser;
@@ -550,12 +552,41 @@ class DynamoExecutionStateStoreTest {
         assertTrue(error.getMessage().contains("No protobuf parser registered"));
     }
 
+    @Test
+    void getExecutionDecodesProtobufPayloadReflectivelyWhenParserBeanMissing() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        Timestamp payload = Timestamp.newBuilder()
+            .setSeconds(1234)
+            .build();
+        long ttl = System.currentTimeMillis() / 1000 + 3600;
+        when(client.getItem(any(GetItemRequest.class)))
+            .thenReturn(GetItemResponse.builder()
+                .item(executionItemWithInputPayload(
+                    "tenant-a",
+                    "exec-2",
+                    "key-2",
+                    ttl,
+                    payload,
+                    payload.getDescriptorForType().getFullName()))
+                .build());
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config, null);
+
+        Optional<ExecutionRecord<Object, Object>> result = store.getExecution("tenant-a", "exec-2")
+            .await().indefinitely();
+
+        assertTrue(result.isPresent());
+        ExecutionInputSnapshot snapshot = assertInstanceOf(ExecutionInputSnapshot.class, result.get().inputPayload());
+        assertEquals(ExecutionInputShape.UNI, snapshot.shape());
+        assertEquals(payload, snapshot.payload());
+    }
+
     private static Map<String, AttributeValue> executionItemWithInputPayload(
         String tenantId,
         String executionId,
         String executionKey,
         long ttl,
-        DescriptorProtos.FileDescriptorSet payload,
+        Message payload,
         String messageType
     ) {
         Map<String, AttributeValue> item = new HashMap<>(executionItem(tenantId, executionId, executionKey, ttl));

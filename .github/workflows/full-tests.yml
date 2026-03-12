@@ -6,8 +6,12 @@ on:
       - main
     paths:
       - 'framework/**'
+      - 'plugins/**'
       - 'examples/**'
+      - 'mvnw'
+      - '.mvn/**'
       - 'pom.xml'
+      - 'scripts/ci/**'
       - '.github/workflows/full-tests.yml'
 
 concurrency:
@@ -37,6 +41,9 @@ jobs:
 
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
+
+      - name: Bootstrap framework and foundational plugins
+        run: ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
 
       - name: Full clean install (framework + examples, JVM only)
         run: |

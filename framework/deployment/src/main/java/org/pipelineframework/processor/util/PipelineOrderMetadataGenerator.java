@@ -90,7 +90,7 @@ public class PipelineOrderMetadataGenerator {
         Set<String> generatedClientSteps = resolveGeneratedClientSteps(ctx);
         if (!generatedClientSteps.isEmpty()) {
             expanded = expanded.stream()
-                .filter(generatedClientSteps::contains)
+                .filter(step -> isSideEffectClientStep(step) || generatedClientSteps.contains(step))
                 .toList();
         }
         if (expanded.isEmpty()) {
@@ -210,6 +210,13 @@ public class PipelineOrderMetadataGenerator {
                 + model.generatedName().replace("Service", "") + suffix);
         }
         return generated;
+    }
+
+    private boolean isSideEffectClientStep(String className) {
+        return className != null
+            && (className.contains("SideEffectGrpcClientStep")
+                || className.contains("SideEffectRestClientStep")
+                || className.contains("SideEffectLocalClientStep"));
     }
 
     private GenerationTarget clientGenerationTarget(PipelineCompilationContext ctx) {

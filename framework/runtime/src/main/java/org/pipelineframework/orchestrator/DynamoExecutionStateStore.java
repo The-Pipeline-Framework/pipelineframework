@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import java.net.URI;
+import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -917,7 +918,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         if (messageType.isBlank() || payload.isBlank()) {
             throw new IllegalStateException("Stored protobuf payload metadata is incomplete.");
         }
-        ProtobufMessageParser parser = findProtobufParser(messageType);
+        ProtobufMessageParser parser = findProtobufParser(messageType)
+            .orElseGet(() -> reflectiveParser(messageType));
         try {
             return parser.parseFrom(Base64.getDecoder().decode(payload));
         } catch (IllegalArgumentException e) {
@@ -933,14 +935,78 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
     }
 
-    private ProtobufMessageParser findProtobufParser(String messageType) {
-        Map<String, ProtobufMessageParser> parserLookup = protobufParserLookup();
-        String normalizedMessageType = normalizeMessageType(messageType);
-        ProtobufMessageParser parser = parserLookup.get(normalizedMessageType);
-        if (parser == null) {
-            throw new IllegalStateException("No protobuf parser registered for " + messageType);
+    private Optional<ProtobufMessageParser> findProtobufParser(String messageType) {
+        if (protobufMessageParsers == null) {
+            return Optional.empty();
         }
-        return parser;
+        return Optional.ofNullable(protobufParserLookup().get(normalizeMessageType(messageType)));
+    }
+
+    private ProtobufMessageParser reflectiveParser(String messageType) {
+        Class<? extends Message> messageClass = loadProtobufMessageClass(messageType)
+            .orElseThrow(() -> new IllegalStateException("No protobuf parser registered for " + messageType));
+        return new ProtobufMessageParser() {
+            @Override
+            public String type() {
+                return messageType;
+            }
+
+            @Override
+            public Message parseFrom(byte[] bytes) {
+                try {
+                    Method parseFrom = messageClass.getMethod("parseFrom", byte[].class);
+                    Object parsed = parseFrom.invoke(null, bytes);
+                    if (parsed instanceof Message message) {
+                        return message;
+                    }
+                    throw new IllegalStateException(
+                        "Static parseFrom(byte[]) on " + messageClass.getName() + " did not return a protobuf Message.");
+                } catch (ReflectiveOperationException e) {
+                    throw new IllegalStateException(
+                        "Failed to parse protobuf payload reflectively for messageType=" + messageType + ".",
+                        e);
+                }
+            }
+        };
+    }
+
+    private Optional<Class<? extends Message>> loadProtobufMessageClass(String messageType) {
+        for (String candidate : protobufMessageTypeCandidates(messageType)) {
+            try {
+                Class<?> loaded = Thread.currentThread().getContextClassLoader().loadClass(candidate);
+                if (Message.class.isAssignableFrom(loaded)) {
+                    @SuppressWarnings("unchecked")
+                    Class<? extends Message> messageClass = (Class<? extends Message>) loaded;
+                    return Optional.of(messageClass);
+                }
+            } catch (ClassNotFoundException ignored) {
+                // Keep trying progressively more nested binary names.
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static List<String> protobufMessageTypeCandidates(String messageType) {
+        List<String> candidates = new ArrayList<>();
+        if (messageType == null || messageType.isBlank()) {
+            return candidates;
+        }
+        String candidate = normalizeMessageType(messageType);
+        addProtobufMessageTypeCandidates(candidates, candidate);
+        if (candidate.startsWith("google.protobuf.")) {
+            addProtobufMessageTypeCandidates(candidates, "com." + candidate);
+        }
+        return candidates;
+    }
+
+    private static void addProtobufMessageTypeCandidates(List<String> candidates, String candidate) {
+        candidates.add(candidate);
+        int index = candidate.lastIndexOf('.');
+        while (index > 0) {
+            candidate = candidate.substring(0, index) + '$' + candidate.substring(index + 1);
+            candidates.add(candidate);
+            index = candidate.lastIndexOf('.');
+        }
     }
 
     private Map<String, ProtobufMessageParser> protobufParserLookup() {

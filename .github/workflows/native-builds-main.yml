@@ -6,10 +6,12 @@ on:
       - main
     paths:
       - 'framework/**'
+      - 'plugins/**'
       - 'examples/**'
       - 'mvnw'
       - '.mvn/**'
       - 'pom.xml'
+      - 'scripts/ci/**'
       - '.github/workflows/native-builds-main.yml'
 
 concurrency:
@@ -123,6 +125,11 @@ jobs:
 
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
+
+      - name: Bootstrap framework and search prerequisites
+        run: |
+          ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
+          ./scripts/ci/bootstrap-local-repo-prereqs.sh search
 
       - name: Search Lambda native smoke build
         run: |
