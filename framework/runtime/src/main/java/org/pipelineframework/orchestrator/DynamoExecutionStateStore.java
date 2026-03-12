@@ -947,6 +947,14 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     private ProtobufMessageParser reflectiveParser(String messageType, String messageJavaClass) {
         Class<? extends Message> messageClass = loadProtobufMessageClass(messageType, messageJavaClass)
             .orElseThrow(() -> new IllegalStateException("No protobuf parser registered for " + messageType));
+        final Method parseFromMethod;
+        try {
+            parseFromMethod = messageClass.getMethod("parseFrom", byte[].class);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(
+                "Failed to initialise protobuf parser reflectively for messageType=" + messageType + ".",
+                e);
+        }
         return new ProtobufMessageParser() {
             @Override
             public String type() {
@@ -956,8 +964,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             @Override
             public Message parseFrom(byte[] bytes) {
                 try {
-                    Method parseFrom = messageClass.getMethod("parseFrom", byte[].class);
-                    Object parsed = parseFrom.invoke(null, bytes);
+                    Object parsed = parseFromMethod.invoke(null, bytes);
                     if (parsed instanceof Message message) {
                         return message;
                     }
