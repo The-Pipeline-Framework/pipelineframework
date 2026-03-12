@@ -32,6 +32,10 @@ import java.util.logging.Logger;
 
 import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
+import org.pipelineframework.config.connector.ConnectorBrokerConfig;
+import org.pipelineframework.config.connector.ConnectorConfig;
+import org.pipelineframework.config.connector.ConnectorSourceConfig;
+import org.pipelineframework.config.connector.ConnectorTargetConfig;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
@@ -88,6 +92,7 @@ public class PipelineTemplateConfigLoader {
             : new LinkedHashMap<>();
         List<PipelineTemplateStep> steps = readSteps(rootMap, version);
         Map<String, PipelineTemplateAspect> aspects = readAspects(rootMap);
+        List<ConnectorConfig> connectors = readConnectors(rootMap);
 
         if (version >= 2) {
             collectInlineMessages(rawMessages, steps);
@@ -101,10 +106,20 @@ public class PipelineTemplateConfigLoader {
                 resolvedPlatform,
                 normalizedMessages,
                 steps,
-                aspects);
+                aspects,
+                connectors);
         }
 
-        return new PipelineTemplateConfig(version, appName, basePackage, transport, resolvedPlatform, Map.of(), steps, aspects);
+        return new PipelineTemplateConfig(
+            version,
+            appName,
+            basePackage,
+            transport,
+            resolvedPlatform,
+            Map.of(),
+            steps,
+            aspects,
+            connectors);
     }
 
     /**
@@ -745,6 +760,80 @@ public class PipelineTemplateConfigLoader {
         return aspects;
     }
 
+    private List<ConnectorConfig> readConnectors(Map<?, ?> rootMap) {
+        Object connectorsObj = rootMap.get("connectors");
+        if (!(connectorsObj instanceof Iterable<?> connectors)) {
+            return List.of();
+        }
+
+        List<ConnectorConfig> values = new ArrayList<>();
+        Set<String> seenNames = new LinkedHashSet<>();
+        for (Object connectorObj : connectors) {
+            if (!(connectorObj instanceof Map<?, ?> connectorMap)) {
+                LOG.warning("Skipping malformed connector entry: expected a map but found " + connectorObj);
+                continue;
+            }
+            String name = readString(connectorMap, "name");
+            if (name == null || name.isBlank()) {
+                LOG.warning("Skipping connector entry with missing name: " + connectorMap);
+                continue;
+            }
+            if (!seenNames.add(name)) {
+                LOG.warning("Skipping duplicate connector declaration '" + name + "'");
+                continue;
+            }
+            values.add(new ConnectorConfig(
+                name,
+                readBoolean(connectorMap, "enabled", true),
+                readConnectorSource(connectorMap),
+                readConnectorTarget(connectorMap),
+                readString(connectorMap, "mapper"),
+                readString(connectorMap, "transport"),
+                readString(connectorMap, "idempotency"),
+                readString(connectorMap, "backpressure"),
+                readString(connectorMap, "failureMode"),
+                readInt(connectorMap, "backpressureBufferCapacity", 256),
+                readInt(connectorMap, "idempotencyMaxKeys", 10000),
+                readStringList(connectorMap, "idempotencyKeyFields"),
+                readConnectorBroker(connectorMap)));
+        }
+        return values;
+    }
+
+    private ConnectorSourceConfig readConnectorSource(Map<?, ?> connectorMap) {
+        Object sourceObj = connectorMap.get("source");
+        if (!(sourceObj instanceof Map<?, ?> sourceMap)) {
+            return null;
+        }
+        return new ConnectorSourceConfig(
+            readString(sourceMap, "kind"),
+            readString(sourceMap, "step"),
+            readString(sourceMap, "type"));
+    }
+
+    private ConnectorTargetConfig readConnectorTarget(Map<?, ?> connectorMap) {
+        Object targetObj = connectorMap.get("target");
+        if (!(targetObj instanceof Map<?, ?> targetMap)) {
+            return null;
+        }
+        return new ConnectorTargetConfig(
+            readString(targetMap, "kind"),
+            readString(targetMap, "pipeline"),
+            readString(targetMap, "type"),
+            readString(targetMap, "adapter"));
+    }
+
+    private ConnectorBrokerConfig readConnectorBroker(Map<?, ?> connectorMap) {
+        Object brokerObj = connectorMap.get("broker");
+        if (!(brokerObj instanceof Map<?, ?> brokerMap)) {
+            return null;
+        }
+        return new ConnectorBrokerConfig(
+            readString(brokerMap, "provider"),
+            readString(brokerMap, "destination"),
+            readString(brokerMap, "adapter"));
+    }
+
     /**
      * Convert an arbitrary object into a Map<String, Object> by copying entries when the object is a Map; otherwise produce an empty map.
      *
@@ -877,6 +966,21 @@ public class PipelineTemplateConfigLoader {
             return flag;
         }
         return Boolean.parseBoolean(value.toString());
+    }
+
+    private List<String> readStringList(Map<?, ?> map, String key) {
+        Object value = map.get(key);
+        if (!(value instanceof Iterable<?> values)) {
+            return List.of();
+        }
+        List<String> items = new ArrayList<>();
+        for (Object element : values) {
+            String text = stringify(element);
+            if (text != null) {
+                items.add(text);
+            }
+        }
+        return items;
     }
 
     /**

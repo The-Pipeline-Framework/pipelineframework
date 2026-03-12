@@ -104,6 +104,62 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
+    void loadsConnectorDeclarations() throws Exception {
+        String yaml = """
+            appName: "Test App"
+            basePackage: "com.example.test"
+            transport: "GRPC"
+            steps:
+              - name: "Process Foo"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "FooInput"
+                outputTypeName: "FooOutput"
+            connectors:
+              - name: "foo-to-bar"
+                enabled: true
+                transport: "GRPC"
+                mapper: "com.example.test.connector.FooToBarConnectorMapper"
+                idempotency: "PRE_FORWARD"
+                backpressure: "BUFFER"
+                failureMode: "PROPAGATE"
+                idempotencyKeyFields: ["orderId", "customerId"]
+                source:
+                  kind: "OUTPUT_BUS"
+                  step: "Process Foo"
+                  type: "com.example.test.grpc.FooOutput"
+                target:
+                  kind: "LIVE_INGEST"
+                  pipeline: "bar-pipeline"
+                  type: "com.example.test.grpc.BarInput"
+                  adapter: "com.example.test.connector.BarConnectorTarget"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-connectors.yaml");
+        Files.writeString(configPath, yaml);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+
+        assertEquals(1, config.connectors().size());
+        var connector = config.connectors().getFirst();
+        assertEquals("foo-to-bar", connector.name());
+        assertTrue(connector.enabled());
+        assertEquals("GRPC", connector.transport());
+        assertEquals("com.example.test.connector.FooToBarConnectorMapper", connector.mapper());
+        assertEquals("PRE_FORWARD", connector.idempotency());
+        assertEquals("BUFFER", connector.backpressure());
+        assertEquals("PROPAGATE", connector.failureMode());
+        assertEquals(256, connector.backpressureBufferCapacity());
+        assertEquals(10000, connector.idempotencyMaxKeys());
+        assertEquals("OUTPUT_BUS", connector.source().kind());
+        assertEquals("Process Foo", connector.source().step());
+        assertEquals("com.example.test.grpc.FooOutput", connector.source().type());
+        assertEquals("LIVE_INGEST", connector.target().kind());
+        assertEquals("bar-pipeline", connector.target().pipeline());
+        assertEquals("com.example.test.grpc.BarInput", connector.target().type());
+        assertEquals("com.example.test.connector.BarConnectorTarget", connector.target().adapter());
+        assertEquals(List.of("orderId", "customerId"), connector.idempotencyKeyFields());
+    }
+
+    @Test
     void platformCanBeOverriddenViaSystemProperty() throws Exception {
         String yaml = """
             appName: "Test App"

@@ -116,6 +116,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             new OrchestratorFunctionHandlerRenderer();
         OrchestratorCliRenderer orchestratorCliRenderer = new OrchestratorCliRenderer();
         OrchestratorIngestClientRenderer orchestratorIngestClientRenderer = new OrchestratorIngestClientRenderer();
+        ConnectorBootstrapRenderer connectorBootstrapRenderer = new ConnectorBootstrapRenderer();
         ExternalAdapterRenderer externalAdapterRenderer = new ExternalAdapterRenderer(GenerationTarget.EXTERNAL_ADAPTER);
 
         // Initialize role metadata generator
@@ -247,6 +248,36 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     roleMetadataGenerator,
                     cacheKeyGenerator
                 );
+            }
+        }
+
+        if (!ctx.getConnectorConfigs().isEmpty() && ctx.getPipelineTemplateConfig() instanceof org.pipelineframework.config.template.PipelineTemplateConfig templateConfig) {
+            GenerationContext connectorContext = new GenerationContext(
+                ctx.getProcessingEnv(),
+                generationPathResolver.resolveRoleOutputDir(ctx, DeploymentRole.PIPELINE_SERVER),
+                DeploymentRole.PIPELINE_SERVER,
+                Set.of(),
+                cacheKeyGenerator,
+                descriptorSet);
+            for (var connector : ctx.getConnectorConfigs()) {
+                try {
+                    ClassName generatedClass = connectorBootstrapRenderer.render(
+                        connector,
+                        templateConfig.basePackage(),
+                        connectorContext);
+                    roleMetadataGenerator.recordClassWithRole(generatedClass, DeploymentRole.PIPELINE_SERVER.name());
+                } catch (IOException | RuntimeException e) {
+                    if (ctx.getProcessingEnv() != null) {
+                        ctx.getProcessingEnv().getMessager().printMessage(
+                            javax.tools.Diagnostic.Kind.WARNING,
+                            "Failed to generate connector bootstrap for '"
+                                + connector.name()
+                                + "' in base package '"
+                                + templateConfig.basePackage()
+                                + "': "
+                                + e.getMessage());
+                    }
+                }
             }
         }
 

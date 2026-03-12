@@ -41,6 +41,54 @@ Generated orchestrator endpoints are transport-native:
    - `PipelineExecutionStatusFunctionHandler`
    - `PipelineExecutionResultFunctionHandler`
 
+## Framework Connectors
+
+Framework connectors provide the live handoff boundary between one pipeline output and another pipeline ingest target.
+
+Current v1 scope:
+
+1. source: live `PipelineOutputBus` stream,
+2. target: live ingest adapter bean,
+3. policies: idempotency, backpressure, failure handling, and metadata propagation,
+4. ownership: downstream execution retry/DLQ remains orchestrator-owned after ingest acceptance.
+
+Declare connectors in `pipeline.yaml`:
+
+```yaml
+connectors:
+  - name: "orders-to-delivery"
+    transport: "GRPC"
+    idempotency: "PRE_FORWARD"
+    backpressure: "BUFFER"
+    failureMode: "PROPAGATE"
+    source:
+      kind: "OUTPUT_BUS"
+      step: "Order Ready"
+      type: "com.example.connector.ReadyOrderMessage"
+    target:
+      kind: "LIVE_INGEST"
+      pipeline: "deliver-order"
+      type: "com.example.connector.DispatchReadyOrderMessage"
+      adapter: "com.example.connector.DispatchConnectorTarget"
+    mapper: "com.example.connector.ReadyOrderConnectorMapper"
+    idempotencyKeyFields: ["orderId", "customerId", "readyAt"]
+```
+
+Runtime behavior:
+
+1. build-time validation checks source/target classes and mapper and target-adapter signatures,
+2. generated bootstrap starts the connector on `StartupEvent` and cancels it on shutdown,
+3. `TransportDispatchMetadata` fields are preserved when present; otherwise a deterministic handoff idempotency key is derived from the configured key fields,
+4. manual application `Bridge` beans remain supported as compatibility mode.
+
+Bridge beans are manually registered application components that keep an existing handoff implementation in place when you are not yet using the generated connector startup wiring from `pipeline.yaml`.
+
+Current non-goals:
+
+1. generic broker-message re-drive,
+2. connector-owned durable state or connector DLQ,
+3. framework-generated broker connector bootstrap.
+
 ## Queue-Async Semantics
 
 In `QUEUE_ASYNC` mode:

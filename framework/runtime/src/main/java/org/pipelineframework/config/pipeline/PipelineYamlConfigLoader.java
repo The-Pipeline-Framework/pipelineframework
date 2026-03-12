@@ -31,6 +31,10 @@ import java.util.logging.Logger;
 
 import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
+import org.pipelineframework.config.connector.ConnectorBrokerConfig;
+import org.pipelineframework.config.connector.ConnectorConfig;
+import org.pipelineframework.config.connector.ConnectorSourceConfig;
+import org.pipelineframework.config.connector.ConnectorTargetConfig;
 import org.yaml.snakeyaml.Yaml;
 
 /**
@@ -152,8 +156,9 @@ public class PipelineYamlConfigLoader {
             "platform");
         List<PipelineYamlStep> steps = readSteps(rootMap);
         List<PipelineYamlAspect> aspects = readAspects(rootMap);
+        List<ConnectorConfig> connectors = readConnectors(rootMap);
 
-        return new PipelineYamlConfig(basePackage, transport, platform, steps, aspects);
+        return new PipelineYamlConfig(basePackage, transport, platform, steps, aspects, connectors);
     }
 
     /**
@@ -260,27 +265,97 @@ public class PipelineYamlConfigLoader {
         return aspects;
     }
 
+    private List<ConnectorConfig> readConnectors(Map<?, ?> rootMap) {
+        Object connectorsObj = rootMap.get("connectors");
+        if (!(connectorsObj instanceof Iterable<?> connectors)) {
+            return List.of();
+        }
+
+        List<ConnectorConfig> values = new ArrayList<>();
+        for (Object connectorObj : connectors) {
+            if (!(connectorObj instanceof Map<?, ?> connectorMap)) {
+                continue;
+            }
+            String name = readString(connectorMap, "name");
+            if (name == null || name.isBlank()) {
+                continue;
+            }
+            values.add(new ConnectorConfig(
+                name,
+                readBoolean(connectorMap, "enabled", true),
+                readSource(connectorMap),
+                readTarget(connectorMap),
+                readString(connectorMap, "mapper"),
+                readString(connectorMap, "transport"),
+                readString(connectorMap, "idempotency"),
+                readString(connectorMap, "backpressure"),
+                readString(connectorMap, "failureMode"),
+                readInt(connectorMap, "backpressureBufferCapacity", 256),
+                readInt(connectorMap, "idempotencyMaxKeys", 10000),
+                readStringList(connectorMap, "idempotencyKeyFields"),
+                readBroker(connectorMap)));
+        }
+        return values;
+    }
+
+    private ConnectorSourceConfig readSource(Map<?, ?> connectorMap) {
+        Object sourceObj = connectorMap.get("source");
+        if (!(sourceObj instanceof Map<?, ?> sourceMap)) {
+            return null;
+        }
+        return new ConnectorSourceConfig(
+            readString(sourceMap, "kind"),
+            readString(sourceMap, "step"),
+            readString(sourceMap, "type"));
+    }
+
+    private ConnectorTargetConfig readTarget(Map<?, ?> connectorMap) {
+        Object targetObj = connectorMap.get("target");
+        if (!(targetObj instanceof Map<?, ?> targetMap)) {
+            return null;
+        }
+        return new ConnectorTargetConfig(
+            readString(targetMap, "kind"),
+            readString(targetMap, "pipeline"),
+            readString(targetMap, "type"),
+            readString(targetMap, "adapter"));
+    }
+
+    private ConnectorBrokerConfig readBroker(Map<?, ?> connectorMap) {
+        Object brokerObj = connectorMap.get("broker");
+        if (!(brokerObj instanceof Map<?, ?> brokerMap)) {
+            return null;
+        }
+        return new ConnectorBrokerConfig(
+            readString(brokerMap, "provider"),
+            readString(brokerMap, "destination"),
+            readString(brokerMap, "adapter"));
+    }
+
+    private List<String> readStringList(Map<?, ?> map, String key) {
+        Object value = map.get(key);
+        if (!(value instanceof Iterable<?> values)) {
+            return List.of();
+        }
+        List<String> items = new ArrayList<>();
+        for (Object element : values) {
+            if (element == null) {
+                continue;
+            }
+            String text = element.toString().trim();
+            if (!text.isBlank()) {
+                items.add(text);
+            }
+        }
+        return items;
+    }
+
     private List<String> readTargetSteps(Map<?, ?> aspectConfig) {
         Object configObj = aspectConfig.get("config");
         if (!(configObj instanceof Map<?, ?> configMap)) {
             return List.of();
         }
-
-        Object targetsObj = configMap.get("targetSteps");
-        if (!(targetsObj instanceof Iterable<?> targets)) {
-            return List.of();
-        }
-
-        List<String> values = new ArrayList<>();
-        for (Object target : targets) {
-            if (target != null) {
-                String name = target.toString();
-                if (!name.isBlank()) {
-                    values.add(name);
-                }
-            }
-        }
-        return values;
+        return readStringList(configMap, "targetSteps");
     }
 
     private String readString(Map<?, ?> map, String key) {
@@ -297,5 +372,24 @@ public class PipelineYamlConfigLoader {
             return flag;
         }
         return Boolean.parseBoolean(value.toString());
+    }
+
+    private int readInt(Map<?, ?> map, String key, int defaultValue) {
+        Object value = map.get(key);
+        if (value == null) {
+            return defaultValue;
+        }
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        String text = value.toString();
+        if (text.isBlank()) {
+            return defaultValue;
+        }
+        try {
+            return Integer.parseInt(text.trim());
+        } catch (NumberFormatException ex) {
+            throw new IllegalStateException("Invalid integer value '" + text + "' for key '" + key + "'", ex);
+        }
     }
 }

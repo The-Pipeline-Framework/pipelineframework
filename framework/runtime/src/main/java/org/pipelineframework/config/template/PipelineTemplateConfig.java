@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import org.pipelineframework.config.connector.ConnectorConfig;
 
 /**
  * Full pipeline template configuration loaded from the pipeline template YAML file.
@@ -32,6 +33,7 @@ import java.util.Map;
  * @param messages top-level named messages
  * @param steps pipeline steps
  * @param aspects aspect configurations keyed by aspect name
+ * @param connectors framework connector declarations
  */
 public record PipelineTemplateConfig(
     int version,
@@ -41,7 +43,8 @@ public record PipelineTemplateConfig(
     PipelinePlatform platform,
     Map<String, PipelineTemplateMessage> messages,
     List<PipelineTemplateStep> steps,
-    Map<String, PipelineTemplateAspect> aspects
+    Map<String, PipelineTemplateAspect> aspects,
+    List<ConnectorConfig> connectors
 ) {
     public PipelineTemplateConfig {
         if (version <= 0) {
@@ -59,6 +62,7 @@ public record PipelineTemplateConfig(
         // Preserve null step placeholders so downstream phases/tests can explicitly skip them.
         steps = steps == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(steps));
         aspects = aspects == null ? Map.of() : Map.copyOf(aspects);
+        connectors = connectors == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(connectors));
     }
 
     private static void requireText(String value, String fieldName) {
@@ -91,7 +95,7 @@ public record PipelineTemplateConfig(
         List<PipelineTemplateStep> steps,
         Map<String, PipelineTemplateAspect> aspects
     ) {
-        this(1, appName, basePackage, transport, PipelinePlatform.COMPUTE, Map.of(), steps, aspects);
+        this(1, appName, basePackage, transport, PipelinePlatform.COMPUTE, Map.of(), steps, aspects, List.of());
     }
 
     /**
@@ -112,6 +116,6 @@ public record PipelineTemplateConfig(
         List<PipelineTemplateStep> steps,
         Map<String, PipelineTemplateAspect> aspects
     ) {
-        this(1, appName, basePackage, transport, platform, Map.of(), steps, aspects);
+        this(1, appName, basePackage, transport, platform, Map.of(), steps, aspects, List.of());
     }
 }

@@ -7,13 +7,22 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import com.google.protobuf.Message;
 import io.quarkus.runtime.StartupEvent;
-import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.subscription.Cancellable;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import org.jboss.logging.Logger;
+import org.pipelineframework.connector.ConnectorFailureMode;
+import org.pipelineframework.connector.ConnectorIdempotencyPolicy;
+import org.pipelineframework.connector.ConnectorIdempotencyTracker;
+import org.pipelineframework.connector.ConnectorPolicy;
+import org.pipelineframework.connector.ConnectorRecord;
+import org.pipelineframework.connector.ConnectorRuntime;
+import org.pipelineframework.connector.ConnectorSupport;
+import org.pipelineframework.connector.GrpcIngestConnectorTarget;
+import org.pipelineframework.connector.OutputBusConnectorSource;
 import org.pipelineframework.checkout.common.connector.ConnectorUtils;
 import org.pipelineframework.PipelineOutputBus;
-import org.pipelineframework.checkout.common.connector.IdempotencyGuard;
 import org.pipelineframework.checkout.createorder.grpc.OrderReadySvc;
 import org.pipelineframework.checkout.deliverorder.grpc.OrderDispatchSvc;
 
@@ -28,7 +37,7 @@ public class CreateToDeliverIngestBridge {
     private final PipelineOutputBus outputBus;
     private final DeliverOrderIngestClient deliverOrderIngestClient;
     private final boolean idempotencyEnabled;
-    private final IdempotencyGuard idempotencyGuard;
+    private final ConnectorIdempotencyTracker idempotencyTracker;
     private final String backpressureStrategy;
     private final int backpressureBufferCapacity;
 
@@ -62,7 +71,7 @@ public class CreateToDeliverIngestBridge {
             Objects.requireNonNull(deliverOrderIngestClient, "deliverOrderIngestClient must not be null");
         this.idempotencyEnabled = idempotencyEnabled;
         int normalizedIdempotencyMaxKeys = idempotencyMaxKeys > 0 ? idempotencyMaxKeys : 10000;
-        this.idempotencyGuard = idempotencyEnabled ? new IdempotencyGuard(normalizedIdempotencyMaxKeys) : null;
+        this.idempotencyTracker = idempotencyEnabled ? new ConnectorIdempotencyTracker(normalizedIdempotencyMaxKeys) : null;
         this.backpressureStrategy = ConnectorUtils.normalizeBackpressureStrategy(backpressureStrategy);
         this.backpressureBufferCapacity = backpressureBufferCapacity > 0 ? backpressureBufferCapacity : 256;
     }
@@ -78,15 +87,28 @@ public class CreateToDeliverIngestBridge {
      * @param ignored the startup event (unused)
      */
     void onStartup(@Observes StartupEvent ignored) {
-        Multi<Object> sourceStream =
-            ConnectorUtils.applyBackpressure(outputBus.stream(Object.class), backpressureStrategy, backpressureBufferCapacity);
-        Multi<OrderDispatchSvc.ReadyOrder> readyOrderStream = sourceStream
-            .onItem().transformToMulti(item -> {
-                OrderDispatchSvc.ReadyOrder mapped = toDeliverReadyOrder(item);
-                return mapped == null ? Multi.createFrom().empty() : Multi.createFrom().item(mapped);
-            }).concatenate();
+        boolean connectorEnabled = true;
+        ConnectorRuntime<Object, OrderDispatchSvc.ReadyOrder> runtime = new ConnectorRuntime<>(
+            "create-to-deliver",
+            new OutputBusConnectorSource<>(outputBus, Object.class),
+            new GrpcIngestConnectorTarget<>(deliverOrderIngestClient::forward),
+            this::mapRecord,
+            new ConnectorPolicy(
+                connectorEnabled,
+                ConnectorSupport.normalizeBackpressurePolicy(backpressureStrategy),
+                backpressureBufferCapacity,
+                idempotencyEnabled ? ConnectorIdempotencyPolicy.PRE_FORWARD : ConnectorIdempotencyPolicy.DISABLED,
+                ConnectorFailureMode.PROPAGATE),
+            idempotencyTracker,
+            rejected -> LOG.debugf(
+                "Rejected create-to-deliver handoff payloadType=%s",
+                rejected == null || rejected.payload() == null ? "null" : rejected.payload().getClass().getName()),
+            duplicate -> LOG.debugf(
+                "Dropped duplicate create-to-deliver handoff idempotencyKey=%s",
+                duplicate == null ? null : duplicate.idempotencyKey()),
+            failure -> LOG.error("Create->Deliver connector failed", failure));
 
-        forwardingSubscription = deliverOrderIngestClient.forward(readyOrderStream);
+        forwardingSubscription = runtime.start();
 
         LOG.infof("Create->Deliver gRPC ingest bridge started using client %s",
             deliverOrderIngestClient.getClass().getName());
@@ -133,9 +155,6 @@ public class CreateToDeliverIngestBridge {
                     readyOrder.getClass().getName());
                 return null;
             }
-            if (isDuplicateHandoff(orderId, customerId, readyAt)) {
-                return null;
-            }
             return OrderDispatchSvc.ReadyOrder.newBuilder()
                 .setOrderId(orderId)
                 .setCustomerId(customerId)
@@ -147,9 +166,6 @@ public class CreateToDeliverIngestBridge {
             String customerId = ConnectorUtils.readField(message, "customer_id");
             String readyAt = ConnectorUtils.readField(message, "ready_at");
             if (!orderId.isBlank() && !customerId.isBlank() && !readyAt.isBlank()) {
-                if (isDuplicateHandoff(orderId, customerId, readyAt)) {
-                    return null;
-                }
                 LOG.debugf(
                     "Mapped Message -> ReadyOrder messageType=%s orderId=%s customerId=%s readyAt=%s",
                     message.getClass().getName(), orderId, customerId, readyAt);
@@ -182,30 +198,22 @@ public class CreateToDeliverIngestBridge {
         return null;
     }
 
-    /**
-     * Determines whether a create->deliver handoff for the specified order has already been seen.
-     *
-     * The check is performed only when idempotency is enabled; otherwise this always returns `false`.
-     *
-     * @param orderId    the order identifier used in the handoff key
-     * @param customerId the customer identifier used in the handoff key
-     * @param readyAt    the ready timestamp used in the handoff key
-     * @return           `true` if the handoff has been observed before (duplicate) and should be dropped, `false` otherwise
-     */
-    private boolean isDuplicateHandoff(String orderId, String customerId, String readyAt) {
-        if (!idempotencyEnabled || orderId == null || orderId.isBlank() || idempotencyGuard == null) {
-            return false;
+    private ConnectorRecord<OrderDispatchSvc.ReadyOrder> mapRecord(ConnectorRecord<Object> sourceRecord) {
+        OrderDispatchSvc.ReadyOrder mapped = toDeliverReadyOrder(sourceRecord.payload());
+        if (mapped == null) {
+            return null;
         }
-        String handoffKey = ConnectorUtils.deterministicHandoffKey(
-            "create-to-deliver",
-            orderId,
-            customerId,
-            readyAt);
-        boolean firstOccurrence = idempotencyGuard.markIfNew(handoffKey);
-        if (!firstOccurrence) {
-            LOG.debugf("Dropped duplicate create->deliver handoff orderId=%s handoffKey=%s", orderId, handoffKey);
-        }
-        return !firstOccurrence;
+        return ConnectorRecord.ofPayload(
+            mapped,
+            ConnectorSupport.ensureDispatchMetadata(
+                sourceRecord.dispatchMetadata(),
+                "create-to-deliver",
+                mapped,
+                List.of("orderId", "customerId", "readyAt")),
+            Map.of(
+                "connector.name", "create-to-deliver",
+                "connector.source.step", "Order Ready",
+                "connector.target.pipeline", "deliver-order",
+                "connector.contract", mapped.getDescriptorForType().getFullName()));
     }
-
 }

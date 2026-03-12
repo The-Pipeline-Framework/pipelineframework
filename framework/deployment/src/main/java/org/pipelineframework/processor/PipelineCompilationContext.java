@@ -10,6 +10,7 @@ import javax.annotation.processing.RoundEnvironment;
 import com.google.protobuf.DescriptorProtos;
 import lombok.Getter;
 import lombok.Setter;
+import org.pipelineframework.config.connector.ConnectorConfig;
 import org.pipelineframework.config.PlatformMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
@@ -45,6 +46,8 @@ public class PipelineCompilationContext {
     private Object pipelineTemplateConfig; // Store as Object to avoid circular dependencies
     @Setter
     private List<StepDefinition> stepDefinitions;
+    @Setter
+    private List<ConnectorConfig> connectorConfigs;
     
     // Resolved generation targets
     @Setter
@@ -90,6 +93,7 @@ public class PipelineCompilationContext {
         this.orchestratorModels = List.of();
         this.pipelineTemplateConfig = null;
         this.stepDefinitions = List.of();
+        this.connectorConfigs = List.of();
         this.resolvedTargets = Set.of();
         this.rendererBindings = Map.of();
         this.pluginHost = false;
