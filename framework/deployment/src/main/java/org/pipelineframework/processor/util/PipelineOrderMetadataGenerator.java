@@ -213,10 +213,16 @@ public class PipelineOrderMetadataGenerator {
     }
 
     private boolean isSideEffectClientStep(String className) {
-        return className != null
-            && (className.contains("SideEffectGrpcClientStep")
-                || className.contains("SideEffectRestClientStep")
-                || className.contains("SideEffectLocalClientStep"));
+        return hasGeneratedStepSuffix(className, "SideEffectGrpcClientStep")
+            || hasGeneratedStepSuffix(className, "SideEffectRestClientStep")
+            || hasGeneratedStepSuffix(className, "SideEffectLocalClientStep");
+    }
+
+    private boolean hasGeneratedStepSuffix(String className, String suffix) {
+        if (className == null) {
+            return false;
+        }
+        return className.endsWith(suffix) || className.endsWith(suffix + "_Subclass");
     }
 
     private GenerationTarget clientGenerationTarget(PipelineCompilationContext ctx) {

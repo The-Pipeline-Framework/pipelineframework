@@ -480,7 +480,7 @@ class DynamoExecutionStateStoreTest {
         String json = invokeToJson(store, payload);
 
         assertTrue(json.contains("\"_tpf_message\":\"" + payload.getDescriptorForType().getFullName() + "\""));
-        assertFalse(json.contains(DescriptorProtos.FileDescriptorSet.class.getName()));
+        assertTrue(json.contains("\"_tpf_java_class\":\"" + payload.getClass().getName() + "\""));
     }
 
     @Test
@@ -593,6 +593,7 @@ class DynamoExecutionStateStoreTest {
         item.put("input_shape", AttributeValue.builder().s(ExecutionInputShape.UNI.name()).build());
         item.put("input_payload_json", AttributeValue.builder().s(wrappedEnvelopeJson(
             messageType,
+            payload.getClass().getName(),
             Base64.getEncoder().encodeToString(payload.toByteArray())))
             .build());
         return item;
@@ -605,12 +606,20 @@ class DynamoExecutionStateStoreTest {
     }
 
     private static String wrappedEnvelopeJson(String messageType, String payload) {
+        return wrappedEnvelopeJson(messageType, null, payload);
+    }
+
+    private static String wrappedEnvelopeJson(String messageType, String messageJavaClass, String payload) {
         try {
+            Map<String, Object> envelope = new HashMap<>();
+            envelope.put("_tpf_type", "protobuf");
+            envelope.put("_tpf_message", messageType);
+            if (messageJavaClass != null && !messageJavaClass.isBlank()) {
+                envelope.put("_tpf_java_class", messageJavaClass);
+            }
+            envelope.put("_tpf_payload_b64", payload);
             return PipelineJson.mapper().writeValueAsString(Map.of(
-                "_tpf_internal", Map.of(
-                    "_tpf_type", "protobuf",
-                    "_tpf_message", messageType,
-                    "_tpf_payload_b64", payload)));
+                "_tpf_internal", envelope));
         } catch (Exception e) {
             throw new IllegalStateException("Failed creating protobuf envelope JSON for test.", e);
         }
