@@ -10,6 +10,7 @@ import javax.annotation.processing.RoundEnvironment;
 import com.google.protobuf.DescriptorProtos;
 import lombok.Getter;
 import lombok.Setter;
+import org.pipelineframework.config.connector.ConnectorConfig;
 import org.pipelineframework.config.PlatformMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineAspectModel;
@@ -45,6 +46,7 @@ public class PipelineCompilationContext {
     private Object pipelineTemplateConfig; // Store as Object to avoid circular dependencies
     @Setter
     private List<StepDefinition> stepDefinitions;
+    private List<ConnectorConfig> connectorConfigs;
     
     // Resolved generation targets
     @Setter
@@ -76,7 +78,10 @@ public class PipelineCompilationContext {
     private DescriptorProtos.FileDescriptorSet descriptorSet;
     
     /**
-     * Create a compilation context for the given annotation processing round.
+     * Create a compilation context initialized for the given annotation processing round.
+     *
+     * The constructed context starts with empty model collections and default modes:
+     * transport mode GRPC and platform mode COMPUTE.
      *
      * @param processingEnv the processing environment providing compiler utilities and messaging
      * @param roundEnv the round environment containing the annotated elements visible in this round
@@ -90,6 +95,7 @@ public class PipelineCompilationContext {
         this.orchestratorModels = List.of();
         this.pipelineTemplateConfig = null;
         this.stepDefinitions = List.of();
+        this.connectorConfigs = List.of();
         this.resolvedTargets = Set.of();
         this.rendererBindings = Map.of();
         this.pluginHost = false;
@@ -133,6 +139,15 @@ public class PipelineCompilationContext {
          */
     public Path getModuleDir() {
         return moduleDir;
+    }
+
+    /**
+     * Set the validated connector configurations for the current compilation.
+     *
+     * @param connectorConfigs the connector configurations, or {@code null} to clear them
+     */
+    public void setConnectorConfigs(List<ConnectorConfig> connectorConfigs) {
+        this.connectorConfigs = connectorConfigs == null ? List.of() : List.copyOf(connectorConfigs);
     }
 
     /**

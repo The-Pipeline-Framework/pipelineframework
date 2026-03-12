@@ -70,12 +70,45 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
          */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
-        // Only proceed if there are models to process or orchestrator to generate
+        // Get the bindings map from the context
+        Map<String, Object> bindingsMap = ctx.getRendererBindings();
+
+        // Initialize renderers
+        GrpcServiceAdapterRenderer grpcRenderer = new GrpcServiceAdapterRenderer(GenerationTarget.GRPC_SERVICE);
+        org.pipelineframework.processor.renderer.ClientStepRenderer clientRenderer =
+            new org.pipelineframework.processor.renderer.ClientStepRenderer(GenerationTarget.CLIENT_STEP);
+        org.pipelineframework.processor.renderer.LocalClientStepRenderer localClientRenderer =
+            new org.pipelineframework.processor.renderer.LocalClientStepRenderer();
+        RestClientStepRenderer restClientRenderer = new RestClientStepRenderer();
+        RestResourceRenderer restRenderer = new RestResourceRenderer();
+        RestFunctionHandlerRenderer restFunctionHandlerRenderer = new RestFunctionHandlerRenderer();
+        RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer = new RemoteOperatorAdapterRenderer();
+        OrchestratorGrpcRenderer orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
+        OrchestratorRestResourceRenderer orchestratorRestRenderer = new OrchestratorRestResourceRenderer();
+        OrchestratorFunctionHandlerRenderer orchestratorFunctionHandlerRenderer =
+            new OrchestratorFunctionHandlerRenderer();
+        OrchestratorCliRenderer orchestratorCliRenderer = new OrchestratorCliRenderer();
+        OrchestratorIngestClientRenderer orchestratorIngestClientRenderer = new OrchestratorIngestClientRenderer();
+        ConnectorBootstrapRenderer connectorBootstrapRenderer = new ConnectorBootstrapRenderer();
+        ExternalAdapterRenderer externalAdapterRenderer = new ExternalAdapterRenderer(GenerationTarget.EXTERNAL_ADAPTER);
+
+        // Initialize role metadata generator
+        RoleMetadataGenerator roleMetadataGenerator = new RoleMetadataGenerator(ctx.getProcessingEnv());
+        PipelinePlatformMetadataGenerator platformMetadataGenerator =
+            new PipelinePlatformMetadataGenerator(ctx.getProcessingEnv());
+
+        // Get the cache key generator
+        ClassName cacheKeyGenerator = resolveCacheKeyGenerator(ctx);
+
+        DescriptorProtos.FileDescriptorSet descriptorSet = ctx.getDescriptorSet();
+        generateConnectorBootstraps(
+            ctx,
+            connectorBootstrapRenderer,
+            roleMetadataGenerator,
+            cacheKeyGenerator,
+            descriptorSet);
+
         if (ctx.getStepModels().isEmpty() && !ctx.isOrchestratorGenerated()) {
-            // Still need to write role metadata even if no models to process
-            RoleMetadataGenerator roleMetadataGenerator = new RoleMetadataGenerator(ctx.getProcessingEnv());
-            PipelinePlatformMetadataGenerator platformMetadataGenerator =
-                new PipelinePlatformMetadataGenerator(ctx.getProcessingEnv());
             try {
                 roleMetadataGenerator.writeRoleMetadata();
             } catch (IOException e) {
@@ -96,37 +129,6 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             }
             return;
         }
-
-        // Get the bindings map from the context
-        Map<String, Object> bindingsMap = ctx.getRendererBindings();
-
-        // Initialize renderers
-        GrpcServiceAdapterRenderer grpcRenderer = new GrpcServiceAdapterRenderer(GenerationTarget.GRPC_SERVICE);
-        org.pipelineframework.processor.renderer.ClientStepRenderer clientRenderer =
-            new org.pipelineframework.processor.renderer.ClientStepRenderer(GenerationTarget.CLIENT_STEP);
-        org.pipelineframework.processor.renderer.LocalClientStepRenderer localClientRenderer =
-            new org.pipelineframework.processor.renderer.LocalClientStepRenderer();
-        RestClientStepRenderer restClientRenderer = new RestClientStepRenderer();
-        RestResourceRenderer restRenderer = new RestResourceRenderer();
-        RestFunctionHandlerRenderer restFunctionHandlerRenderer = new RestFunctionHandlerRenderer();
-        RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer = new RemoteOperatorAdapterRenderer();
-        OrchestratorGrpcRenderer orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
-        OrchestratorRestResourceRenderer orchestratorRestRenderer = new OrchestratorRestResourceRenderer();
-        OrchestratorFunctionHandlerRenderer orchestratorFunctionHandlerRenderer =
-            new OrchestratorFunctionHandlerRenderer();
-        OrchestratorCliRenderer orchestratorCliRenderer = new OrchestratorCliRenderer();
-        OrchestratorIngestClientRenderer orchestratorIngestClientRenderer = new OrchestratorIngestClientRenderer();
-        ExternalAdapterRenderer externalAdapterRenderer = new ExternalAdapterRenderer(GenerationTarget.EXTERNAL_ADAPTER);
-
-        // Initialize role metadata generator
-        RoleMetadataGenerator roleMetadataGenerator = new RoleMetadataGenerator(ctx.getProcessingEnv());
-        PipelinePlatformMetadataGenerator platformMetadataGenerator =
-            new PipelinePlatformMetadataGenerator(ctx.getProcessingEnv());
-
-        // Get the cache key generator
-        ClassName cacheKeyGenerator = resolveCacheKeyGenerator(ctx);
-
-        DescriptorProtos.FileDescriptorSet descriptorSet = ctx.getDescriptorSet();
 
         Set<String> generatedSideEffectBeans = new HashSet<>();
         Set<String> enabledAspects = computeEnabledAspects(ctx);
@@ -301,6 +303,49 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.WARNING,
                 "Failed to write step definitions: " + e.getMessage());
+        }
+    }
+
+    private void generateConnectorBootstraps(
+        PipelineCompilationContext ctx,
+        ConnectorBootstrapRenderer connectorBootstrapRenderer,
+        RoleMetadataGenerator roleMetadataGenerator,
+        ClassName cacheKeyGenerator,
+        DescriptorProtos.FileDescriptorSet descriptorSet
+    ) {
+        if (ctx.getConnectorConfigs().isEmpty()
+            || !(ctx.getPipelineTemplateConfig() instanceof org.pipelineframework.config.template.PipelineTemplateConfig templateConfig)) {
+            return;
+        }
+
+        GenerationContext connectorContext = new GenerationContext(
+            ctx.getProcessingEnv(),
+            generationPathResolver.resolveRoleOutputDir(ctx, DeploymentRole.PIPELINE_SERVER),
+            DeploymentRole.PIPELINE_SERVER,
+            Set.of(),
+            cacheKeyGenerator,
+            descriptorSet);
+        for (var connector : ctx.getConnectorConfigs()) {
+            try {
+                ClassName generatedClass = connectorBootstrapRenderer.render(
+                    connector,
+                    templateConfig.basePackage(),
+                    connectorContext);
+                roleMetadataGenerator.recordClassWithRole(generatedClass, DeploymentRole.PIPELINE_SERVER.name());
+            } catch (IOException | RuntimeException e) {
+                String message = "Failed to generate connector bootstrap for '"
+                    + connector.name()
+                    + "' in base package '"
+                    + templateConfig.basePackage()
+                    + "': "
+                    + e.getMessage();
+                if (ctx.getProcessingEnv() != null) {
+                    ctx.getProcessingEnv().getMessager().printMessage(
+                        javax.tools.Diagnostic.Kind.ERROR,
+                        message);
+                }
+                throw new RuntimeException(message, e);
+            }
         }
     }
 

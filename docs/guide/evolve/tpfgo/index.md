@@ -34,7 +34,8 @@ Current completion scope:
 ## Core terms used in this guide
 
 - **Connector**: the runtime handoff boundary between pipelines/contexts.
-  For example: ingest -> subscribe bridge path.
+  In TPF v1 the runtime boundary is enabled by a first-class framework model: YAML declaration, build-time validation, and generated startup wiring (runtime initialization code produced from the YAML declaration).
+  `Bridge` remains the compatibility label for manual application beans that replace that generated Connector lifecycle.
   Responsibilities:
   - idempotency/dedup
   - backpressure policy

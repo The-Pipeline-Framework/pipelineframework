@@ -19,6 +19,7 @@ package org.pipelineframework.config.pipeline;
 import java.util.List;
 
 import org.pipelineframework.config.PlatformOverrideResolver;
+import org.pipelineframework.config.connector.ConnectorConfig;
 
 /**
  * Pipeline configuration parsed from pipeline.yaml.
@@ -28,13 +29,15 @@ import org.pipelineframework.config.PlatformOverrideResolver;
  * @param platform the runtime/deployment platform mode (COMPUTE or FUNCTION)
  * @param steps the configured pipeline steps
  * @param aspects the configured pipeline aspects
+ * @param connectors the configured framework connectors
  */
 public record PipelineYamlConfig(
     String basePackage,
     String transport,
     String platform,
     List<PipelineYamlStep> steps,
-    List<PipelineYamlAspect> aspects
+    List<PipelineYamlAspect> aspects,
+    List<ConnectorConfig> connectors
 ) {
     /**
      * Creates a validated pipeline configuration.
@@ -53,15 +56,16 @@ public record PipelineYamlConfig(
             }
         }
         platform = normalizedPlatform;
+        connectors = connectors == null ? List.of() : List.copyOf(connectors);
     }
 
     /**
-     * Backward-compatible constructor used by existing callers that only set transport.
+     * Backward-compatible constructor that defaults the platform to "COMPUTE" and the connectors list to empty.
      *
-     * @param basePackage base package
-     * @param transport transport mode
-     * @param steps configured steps
-     * @param aspects configured aspects
+     * @param basePackage base package for generated pipeline classes
+     * @param transport transport mode (e.g., "GRPC", "REST", or "LOCAL")
+     * @param steps configured pipeline steps
+     * @param aspects configured pipeline aspects
      */
     public PipelineYamlConfig(
         String basePackage,
@@ -69,6 +73,46 @@ public record PipelineYamlConfig(
         List<PipelineYamlStep> steps,
         List<PipelineYamlAspect> aspects
     ) {
-        this(basePackage, transport, "COMPUTE", steps, aspects);
+        this(basePackage, transport, "COMPUTE", steps, aspects, List.of());
+    }
+
+    /**
+     * Creates a PipelineYamlConfig with the given base package, transport, platform, steps, and aspects,
+     * defaulting connectors to an empty list for backward compatibility.
+     *
+     * @param basePackage base package
+     * @param transport transport mode
+     * @param platform platform mode
+     * @param steps configured steps
+     * @param aspects configured aspects
+     */
+    public PipelineYamlConfig(
+        String basePackage,
+        String transport,
+        String platform,
+        List<PipelineYamlStep> steps,
+        List<PipelineYamlAspect> aspects
+    ) {
+        this(basePackage, transport, platform, steps, aspects, List.of());
+    }
+
+    /**
+     * Returns a copy of this config with the given transport while preserving existing connectors.
+     *
+     * @param transport the transport to use in the returned config
+     * @return a new PipelineYamlConfig with the updated transport
+     */
+    public PipelineYamlConfig withTransport(String transport) {
+        return new PipelineYamlConfig(basePackage, transport, platform, steps, aspects, connectors);
+    }
+
+    /**
+     * Returns a copy of this config with the given platform while preserving existing connectors.
+     *
+     * @param platform the platform to use in the returned config
+     * @return a new PipelineYamlConfig with the updated platform
+     */
+    public PipelineYamlConfig withPlatform(String platform) {
+        return new PipelineYamlConfig(basePackage, transport, platform, steps, aspects, connectors);
     }
 }

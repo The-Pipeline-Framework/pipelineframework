@@ -2,20 +2,29 @@ package org.pipelineframework.checkout.deliver_order.connector;
 
 import com.google.protobuf.Message;
 import io.quarkus.runtime.StartupEvent;
-import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.subscription.Cancellable;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
-import java.time.Duration;
-import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.function.Consumer;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import org.pipelineframework.PipelineOutputBus;
+import org.pipelineframework.connector.ConnectorFailureMode;
+import org.pipelineframework.connector.ConnectorIdempotencyPolicy;
+import org.pipelineframework.connector.ConnectorIdempotencyTracker;
+import org.pipelineframework.connector.ConnectorPolicy;
+import org.pipelineframework.connector.ConnectorRecord;
+import org.pipelineframework.connector.ConnectorRuntime;
+import org.pipelineframework.connector.ConnectorSupport;
+import org.pipelineframework.connector.ConnectorTarget;
+import org.pipelineframework.connector.OutputBusConnectorSource;
 import org.pipelineframework.checkout.common.connector.ConnectorUtils;
-import org.pipelineframework.checkout.common.connector.IdempotencyGuard;
 import org.pipelineframework.checkout.deliverorder.grpc.OrderDeliveredSvc;
 
 @ApplicationScoped
@@ -28,11 +37,9 @@ public class DeliverToNextIngestBridge {
     private final boolean enabled;
     private final boolean idempotencyEnabled;
     private final int idempotencyMaxKeys;
-    private final IdempotencyGuard idempotencyGuard;
+    private final ConnectorIdempotencyTracker idempotencyTracker;
     private final String backpressureStrategy;
     private final int backpressureBufferCapacity;
-    private final Set<String> inFlightHandoffKeys = new HashSet<>();
-    private final Object inFlightLock = new Object();
 
     private Cancellable forwardingSubscription;
 
@@ -41,11 +48,11 @@ public class DeliverToNextIngestBridge {
      *
      * @param outputBus the pipeline output bus to consume delivered-order events from
      * @param forwardClient client used to forward delivered orders to the next ingest step
-     * @param enabled whether forwarding is enabled
-     * @param idempotencyEnabled whether idempotency filtering of duplicates is enabled
-     * @param idempotencyMaxKeys maximum number of in-memory keys retained for idempotency filtering
-     * @param backpressureStrategy strategy to apply when the connector handoff overflows (e.g., BUFFER or DROP)
-     * @param backpressureBufferCapacity buffer capacity used when the backpressure strategy is BUFFER
+     * @param enabled enablement flag for forwarding
+     * @param idempotencyEnabled enablement flag for idempotency filtering of duplicates
+     * @param idempotencyMaxKeys maximum number of in-memory keys retained for idempotency tracking; values less than or equal to 0 are normalized to 10000
+     * @param backpressureStrategy backpressure strategy to apply when the connector handoff overflows (normalized via ConnectorUtils)
+     * @param backpressureBufferCapacity buffer capacity used when the backpressure strategy is BUFFER; values less than or equal to 0 are normalized to 256
      */
     public DeliverToNextIngestBridge(
         PipelineOutputBus outputBus,
@@ -66,7 +73,7 @@ public class DeliverToNextIngestBridge {
         this.idempotencyEnabled = idempotencyEnabled;
         int normalizedIdempotencyMaxKeys = idempotencyMaxKeys > 0 ? idempotencyMaxKeys : 10000;
         this.idempotencyMaxKeys = normalizedIdempotencyMaxKeys;
-        this.idempotencyGuard = idempotencyEnabled ? new IdempotencyGuard(normalizedIdempotencyMaxKeys) : null;
+        this.idempotencyTracker = idempotencyEnabled ? new ConnectorIdempotencyTracker(normalizedIdempotencyMaxKeys) : null;
         this.backpressureStrategy = ConnectorUtils.normalizeBackpressureStrategy(backpressureStrategy);
         this.backpressureBufferCapacity = backpressureBufferCapacity > 0 ? backpressureBufferCapacity : 256;
     }
@@ -86,47 +93,41 @@ public class DeliverToNextIngestBridge {
             return;
         }
 
-        Multi<Object> sourceStream =
-            ConnectorUtils.applyBackpressure(outputBus.stream(Object.class), backpressureStrategy, backpressureBufferCapacity);
-        Multi<OrderDeliveredSvc.DeliveredOrder> deliveredStream = sourceStream
-            // Use concatenate intentionally so mapping/idempotency reservation is serialized in this bridge.
-            .onItem().transformToMulti(item -> {
-                OrderDeliveredSvc.DeliveredOrder mapped = toDeliveredOrder(item);
-                return mapped == null ? Multi.createFrom().empty() : Multi.createFrom().item(mapped);
-            }).concatenate()
-            .onFailure().invoke(error -> {
-                clearInFlightReservations();
-                LOG.errorf(error, "Deliver->next stream failed before forwarding signature=%s",
-                    ConnectorUtils.failureSignature(
-                        "deliver-to-next",
-                        "stream",
-                        "downstream_ingest_failure",
-                        "na",
-                        "na"));
-            })
-            .onFailure().retry().withBackOff(Duration.ofMillis(100), Duration.ofSeconds(1)).indefinitely();
+        ConnectorRuntime<Object, OrderDeliveredSvc.DeliveredOrder> runtime = new ConnectorRuntime<>(
+            "deliver-to-next",
+            new OutputBusConnectorSource<>(outputBus, Object.class),
+            connectorTarget(),
+            this::mapRecord,
+            new ConnectorPolicy(
+                true,
+                ConnectorSupport.normalizeBackpressurePolicy(backpressureStrategy),
+                backpressureBufferCapacity,
+                idempotencyEnabled ? ConnectorIdempotencyPolicy.ON_ACCEPT : ConnectorIdempotencyPolicy.DISABLED,
+                ConnectorFailureMode.PROPAGATE),
+            idempotencyTracker,
+            rejected -> LOG.debugf(
+                "Rejected deliver-to-next handoff payloadType=%s",
+                rejected == null || rejected.payload() == null ? "null" : rejected.payload().getClass().getName()),
+            duplicate -> LOG.debugf(
+                "Dropped duplicate deliver-to-next handoff idempotencyKey=%s",
+                duplicate == null ? null : duplicate.idempotencyKey()),
+            failure -> LOG.errorf(failure, "Deliver->next forwarding failed signature=%s",
+                ConnectorUtils.failureSignature(
+                    "deliver-to-next",
+                    "forward",
+                    "downstream_ingest_failure",
+                    "na",
+                    "na")));
 
-        forwardingSubscription = forwardClient.forward(
-            deliveredStream,
-            this::markForwarded,
-            failure -> {
-                clearInFlightReservations();
-                LOG.errorf(failure, "Deliver->next forwarding failed signature=%s",
-                    ConnectorUtils.failureSignature(
-                        "deliver-to-next",
-                        "forward",
-                        "downstream_ingest_failure",
-                        "na",
-                        "na"));
-            });
+        forwardingSubscription = runtime.start();
         LOG.infof("Deliver->next forwarding bridge started using client %s", forwardClient.getClass().getName());
     }
 
     /**
-     * Cancel the active forwarding subscription to the next ingest stage if present.
+     * Cancel the active forwarding subscription to the next ingest stage if one exists.
      *
-     * <p>If a forwarding subscription exists, it is cancelled and a log entry is made; otherwise a
-     * log entry notes that no subscription was active at shutdown.
+     * <p>If a forwarding subscription is present, this method cancels it; otherwise it returns without
+     * effect.
      */
     @PreDestroy
     void onShutdown() {
@@ -140,16 +141,10 @@ public class DeliverToNextIngestBridge {
     }
 
     /**
-     * Produces an OrderDeliveredSvc.DeliveredOrder from an input item when possible.
+     * Converts an input object into an OrderDeliveredSvc.DeliveredOrder when it contains all required fields.
      *
-     * If the item is already a DeliveredOrder it is validated and returned. If the item is a protobuf
-     * Message the required fields order_id, customer_id, ready_at, dispatch_id, dispatched_at, and
-     * delivered_at are extracted and used to build a DeliveredOrder. Converts only when all required
-     * fields are present and the order is not considered a duplicate or already in-flight.
-     *
-     * @param item the input object to convert (may be a DeliveredOrder or a protobuf Message)
-     * @return the converted OrderDeliveredSvc.DeliveredOrder, or null if the item is unsupported,
-     *         required fields are missing, or the order is duplicate/in-flight
+     * @param item the input object; may be an OrderDeliveredSvc.DeliveredOrder or a protobuf Message with the required fields
+     * @return the constructed OrderDeliveredSvc.DeliveredOrder, or null if the input type is unsupported or required fields are missing
      */
     private OrderDeliveredSvc.DeliveredOrder toDeliveredOrder(Object item) {
         if (item instanceof OrderDeliveredSvc.DeliveredOrder delivered) {
@@ -172,9 +167,6 @@ public class DeliverToNextIngestBridge {
                         orderId));
                 return null;
             }
-            if (isDuplicateOrInFlight(orderId, delivered.getDispatchId(), delivered.getDeliveredAt())) {
-                return null;
-            }
             return delivered;
         }
         if (item instanceof Message message) {
@@ -185,9 +177,6 @@ public class DeliverToNextIngestBridge {
             String dispatchedAt = ConnectorUtils.readField(message, "dispatched_at");
             String deliveredAt = ConnectorUtils.readField(message, "delivered_at");
             if (hasRequiredDeliveredFields(orderId, customerId, readyAt, dispatchId, dispatchedAt, deliveredAt)) {
-                if (isDuplicateOrInFlight(orderId, dispatchId, deliveredAt)) {
-                    return null;
-                }
                 return OrderDeliveredSvc.DeliveredOrder.newBuilder()
                     .setOrderId(orderId)
                     .setCustomerId(customerId)
@@ -220,95 +209,6 @@ public class DeliverToNextIngestBridge {
     }
 
     /**
-     * Checks whether a delivered order is a duplicate or already being forwarded, and reserves a handoff key when not.
-     *
-     * <p>If idempotency is inactive or `orderId` is blank, the method returns `false` and does not reserve anything.
-     *
-     * @param orderId   the order identifier used as primary idempotency input
-     * @param dispatchId the dispatch identifier included in the handoff key
-     * @param deliveredAt the delivery timestamp included in the handoff key
-     * @return `true` if the derived handoff key has already been seen or is currently reserved (duplicate or in-flight), `false` otherwise
-     */
-    private boolean isDuplicateOrInFlight(String orderId, String dispatchId, String deliveredAt) {
-        if (!isIdempotencyActive() || orderId == null || orderId.isBlank()) {
-            return false;
-        }
-        String handoffKey = handoffKey(orderId, dispatchId, deliveredAt);
-        // Lock ordering invariant:
-        // Always acquire inFlightLock before touching inFlightHandoffKeys and idempotencyGuard.
-        // markForwarded follows the same order. Preserve this ordering in future changes.
-        synchronized (inFlightLock) {
-            if (idempotencyGuard.contains(handoffKey) || inFlightHandoffKeys.contains(handoffKey)) {
-                LOG.debugf("Dropped duplicate deliver->next handoff orderId=%s handoffKey=%s", orderId, handoffKey);
-                return true;
-            }
-            inFlightHandoffKeys.add(handoffKey);
-        }
-        return false;
-    }
-
-    /**
-     * Mark a delivered order's handoff key as forwarded and clear any in-flight reservation.
-     *
-     * If idempotency is active and the order contains a non-blank orderId, this removes the
-     * corresponding handoff key from the in-flight reservations and records the key in the
-     * idempotency guard so the order is considered seen; otherwise the method is a no-op.
-     *
-     * @param order the delivered order to mark forwarded; if `null` or the order's `orderId` is blank,
-     *              the method has no effect
-     */
-    private void markForwarded(OrderDeliveredSvc.DeliveredOrder order) {
-        String orderId = order == null ? null : order.getOrderId();
-        if (!isIdempotencyActive() || orderId == null || orderId.isBlank()) {
-            return;
-        }
-        String handoffKey = handoffKey(orderId, order.getDispatchId(), order.getDeliveredAt());
-        synchronized (inFlightLock) {
-            inFlightHandoffKeys.remove(handoffKey);
-            idempotencyGuard.markIfNew(handoffKey);
-        }
-    }
-
-    /**
-     * Indicates whether idempotency checks are active.
-     *
-     * @return `true` if idempotency is enabled and an IdempotencyGuard is available, `false` otherwise.
-     */
-    private boolean isIdempotencyActive() {
-        return idempotencyEnabled && idempotencyGuard != null;
-    }
-
-    /**
-     * Releases all current in-flight handoff reservations so those items may be retried or reprocessed.
-     *
-     * <p>Idempotency guard state is intentionally preserved so keys already recorded as forwarded remain treated as delivered.
-     * This method synchronizes on {@code inFlightLock} while clearing {@code inFlightHandoffKeys}.
-     */
-    private void clearInFlightReservations() {
-        synchronized (inFlightLock) {
-            // Intentionally retain idempotencyGuard state here:
-            // this bridge currently enforces at-most-once semantics for forwarded orderIds.
-            inFlightHandoffKeys.clear();
-        }
-    }
-
-    /**
-     * Create a deterministic handoff key used for idempotency and in-flight tracking.
-     *
-     * @param orderId    the order identifier to include in the key
-     * @param dispatchId the dispatch identifier to include in the key
-     * @param deliveredAt the delivery timestamp to include in the key
-     * @return a deterministic string key derived from the provided identifiers and the "deliver-to-next" context
-     */
-    private String handoffKey(String orderId, String dispatchId, String deliveredAt) {
-        return ConnectorUtils.deterministicHandoffKey(
-            "deliver-to-next",
-            orderId,
-            dispatchId,
-            deliveredAt);
-    }
-
-    /**
      * Determine whether all required delivered-order fields contain non-blank text.
      *
      * @param orderId      the order identifier
@@ -333,11 +233,120 @@ public class DeliverToNextIngestBridge {
         return idempotencyMaxKeys;
     }
 
+    /**
+     * The normalized backpressure strategy used when forwarding delivered orders.
+     *
+     * @return the normalized backpressure strategy string
+     */
     String getBackpressureStrategy() {
         return backpressureStrategy;
     }
 
+    /**
+     * Configured buffer capacity used when the backpressure strategy is `BUFFER`.
+     *
+     * @return the buffer capacity (maximum number of buffered elements)
+     */
     int getBackpressureBufferCapacity() {
         return backpressureBufferCapacity;
+    }
+
+    /**
+     * Map a source record's payload into a DeliveredOrder and produce a ConnectorRecord
+     * with ensured dispatch metadata and connector metadata.
+     *
+     * @param sourceRecord the input record whose payload will be converted to a DeliveredOrder; its dispatch metadata is preserved and normalized
+     * @return a ConnectorRecord containing the mapped DeliveredOrder with ensured dispatch metadata and connector metadata, or {@code null} if the payload cannot be converted
+     */
+    private ConnectorRecord<OrderDeliveredSvc.DeliveredOrder> mapRecord(ConnectorRecord<Object> sourceRecord) {
+        OrderDeliveredSvc.DeliveredOrder mapped = toDeliveredOrder(sourceRecord.payload());
+        if (mapped == null) {
+            return null;
+        }
+        return ConnectorRecord.ofPayload(
+            mapped,
+            ConnectorSupport.ensureDispatchMetadata(
+                sourceRecord.dispatchMetadata(),
+                "deliver-to-next",
+                mapped,
+                List.of("orderId", "dispatchId", "deliveredAt")),
+            Map.of(
+                "connector.name", "deliver-to-next",
+                "connector.source.step", "Order Delivered",
+                "connector.target.pipeline", "next-ingest",
+                "connector.contract", mapped.getDescriptorForType().getFullName()));
+    }
+
+    /**
+     * Create a ConnectorTarget that forwards DeliveredOrder payloads to the configured forwardClient while correlating acceptances back to their original ConnectorRecord when possible.
+     *
+     * <p>Incoming ConnectorRecord instances are tracked in an in-memory pending map keyed by each record's idempotency key when present. The target forwards only payloads to the forwardClient; when the client signals acceptance it derives an idempotency key to look up and remove the original ConnectorRecord from the pending map and invokes the provided acceptance callback with the original record if found or with a reconstructed ConnectorRecord otherwise. If the forwardClient signals a failure, the pending map is cleared and the failure is forwarded to the provided failure callback.</p>
+     *
+     * @return a ConnectorTarget that forwards delivered orders and invokes the acceptance callback with the original ConnectorRecord when a matching idempotency key is found (or a reconstructed record otherwise); failures clear in-flight tracking and are propagated to the failure callback
+     */
+    private ConnectorTarget<OrderDeliveredSvc.DeliveredOrder> connectorTarget() {
+        return new ConnectorTarget<>() {
+            /**
+             * Forwards the provided stream of connector records using default no-op handlers for accepted and failed records.
+             *
+             * <p>This is a convenience overload that delegates to the full `forward` method with empty acceptance and failure callbacks.</p>
+             *
+             * @param connectorStream the stream of connector records to forward
+             * @return a `Cancellable` that can be used to cancel the forwarding subscription
+             */
+            @Override
+            public Cancellable forward(io.smallrye.mutiny.Multi<ConnectorRecord<OrderDeliveredSvc.DeliveredOrder>> connectorStream) {
+                return forward(connectorStream, ignored -> {
+                }, ignored -> {
+                });
+            }
+
+            /**
+             * Forwards delivered-order records to the configured forward client while tracking in-flight records by idempotency key.
+             *
+             * The method records pending records for non-blank idempotency keys before handing payloads to the forward client.
+             * When a payload is accepted, the provided `onAccepted` consumer is invoked with the original pending ConnectorRecord if one
+             * was tracked for the payload's idempotency key, or with a reconstructed ConnectorRecord built from the payload if no
+             * pending record is found. If a failure occurs, all pending entries are cleared and the provided `onFailure` consumer is invoked.
+             *
+             * @param connectorStream stream of connector records to forward; each record's payload is sent to the forward client
+             * @param onAccepted consumer invoked when a payload is accepted by the forward client; receives the original ConnectorRecord if available, otherwise a reconstructed ConnectorRecord created from the accepted payload
+             * @param onFailure consumer invoked when the forward client reports a failure
+             * @return a Cancellable that can be used to cancel the active forwarding subscription
+             */
+            @Override
+            public Cancellable forward(
+                io.smallrye.mutiny.Multi<ConnectorRecord<OrderDeliveredSvc.DeliveredOrder>> connectorStream,
+                Consumer<ConnectorRecord<OrderDeliveredSvc.DeliveredOrder>> onAccepted,
+                Consumer<Throwable> onFailure
+            ) {
+                ConcurrentMap<String, ConnectorRecord<OrderDeliveredSvc.DeliveredOrder>> pending = new ConcurrentHashMap<>();
+                return forwardClient.forward(
+                    connectorStream.onItem().invoke(record -> {
+                        String key = ConnectorSupport.deriveIdempotencyKey(
+                            "deliver-to-next",
+                            record.payload(),
+                            List.of("orderId", "dispatchId", "deliveredAt"));
+                        if (key != null && !key.isBlank()) {
+                            pending.put(key, record);
+                        }
+                    }).onItem().transform(ConnectorRecord::payload),
+                    payload -> {
+                        String lookupKey = ConnectorSupport.deriveIdempotencyKey(
+                            "deliver-to-next",
+                            payload,
+                            List.of("orderId", "dispatchId", "deliveredAt"));
+                        ConnectorRecord<OrderDeliveredSvc.DeliveredOrder> accepted =
+                            lookupKey == null ? null : pending.remove(lookupKey);
+                        onAccepted.accept(accepted == null
+                            ? mapRecord(ConnectorRecord.<Object>ofPayload(payload))
+                            : accepted);
+                    },
+                    failure -> {
+                        pending.clear();
+                        onFailure.accept(failure);
+                    });
+            }
+        };
     }
 }

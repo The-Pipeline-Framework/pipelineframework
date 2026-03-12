@@ -18,6 +18,7 @@ import org.pipelineframework.annotation.PipelineOrchestrator;
 import org.pipelineframework.annotation.PipelinePlugin;
 import org.pipelineframework.config.PlatformMode;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
+import org.pipelineframework.config.connector.ConnectorConfig;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.config.PipelineStepConfigLoader;
@@ -39,14 +40,43 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     private final DiscoveryPathResolver discoveryPathResolver;
     private final DiscoveryConfigLoader discoveryConfigLoader;
     private final TransportPlatformResolver transportPlatformResolver;
+    private final ConnectorConfigValidator connectorConfigValidator;
 
     /**
-     * Create a PipelineDiscoveryPhase initialized with default collaborators.
+     * Creates a PipelineDiscoveryPhase configured with the default collaborators.
      *
-     * <p>Uses a new DiscoveryPathResolver, DiscoveryConfigLoader, and TransportPlatformResolver.
+     * <p>The default collaborators are DiscoveryPathResolver, DiscoveryConfigLoader,
+     * TransportPlatformResolver, and ConnectorConfigValidator.
      */
     public PipelineDiscoveryPhase() {
-        this(new DiscoveryPathResolver(), new DiscoveryConfigLoader(), new TransportPlatformResolver());
+        this(
+            new DiscoveryPathResolver(),
+            new DiscoveryConfigLoader(),
+            new TransportPlatformResolver(),
+            new ConnectorConfigValidator());
+    }
+
+    /**
+     * Create a PipelineDiscoveryPhase using the provided collaborators and a default ConnectorConfigValidator.
+     *
+     * @param discoveryPathResolver resolver for locating pipeline-related paths
+     * @param discoveryConfigLoader loader for discovery configuration
+     * @param transportPlatformResolver resolver for transport and platform modes
+     * @throws NullPointerException if any argument is null
+     * @deprecated prefer {@link #PipelineDiscoveryPhase(DiscoveryPathResolver, DiscoveryConfigLoader,
+     * TransportPlatformResolver, ConnectorConfigValidator)} so tests and callers can provide an explicit
+     * connector validator
+     */
+    @Deprecated
+    public PipelineDiscoveryPhase(
+            DiscoveryPathResolver discoveryPathResolver,
+            DiscoveryConfigLoader discoveryConfigLoader,
+            TransportPlatformResolver transportPlatformResolver) {
+        this(
+            discoveryPathResolver,
+            discoveryConfigLoader,
+            transportPlatformResolver,
+            new ConnectorConfigValidator());
     }
 
     /**
@@ -55,15 +85,18 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @param discoveryPathResolver resolver for locating pipeline-related paths
      * @param discoveryConfigLoader loader for discovery configuration
      * @param transportPlatformResolver resolver for transport and platform modes
+     * @param connectorConfigValidator validator for connector declarations
      * @throws NullPointerException if any argument is null
      */
     public PipelineDiscoveryPhase(
             DiscoveryPathResolver discoveryPathResolver,
             DiscoveryConfigLoader discoveryConfigLoader,
-            TransportPlatformResolver transportPlatformResolver) {
+            TransportPlatformResolver transportPlatformResolver,
+            ConnectorConfigValidator connectorConfigValidator) {
         this.discoveryPathResolver = Objects.requireNonNull(discoveryPathResolver, "discoveryPathResolver");
         this.discoveryConfigLoader = Objects.requireNonNull(discoveryConfigLoader, "discoveryConfigLoader");
         this.transportPlatformResolver = Objects.requireNonNull(transportPlatformResolver, "transportPlatformResolver");
+        this.connectorConfigValidator = Objects.requireNonNull(connectorConfigValidator, "connectorConfigValidator");
     }
 
     /**
@@ -121,6 +154,12 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         // Parse step definitions from YAML
         List<StepDefinition> stepDefinitions = parseStepDefinitions(configPath, messager);
         ctx.setStepDefinitions(stepDefinitions);
+        List<ConnectorConfig> connectorConfigs = validateConnectorConfigs(
+            templateConfig,
+            stepDefinitions,
+            ctx,
+            messager);
+        ctx.setConnectorConfigs(connectorConfigs);
 
         // Load runtime mapping config (optional)
         PipelineRuntimeMapping runtimeMapping = loadRuntimeMapping(moduleDir, messager);
@@ -153,17 +192,52 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Locates and loads the pipeline template configuration from the module directory.
+     * Loads the pipeline template configuration from the given config path.
      *
-     * @param configPath the optional resolved pipeline configuration path
-     * @param messager the messager used to report warnings, may be null
-     * @return the loaded PipelineTemplateConfig, or `null` if no configuration is present or if loading fails (a warning is emitted via the processing environment when available)
+     * @param configPath an Optional containing the resolved pipeline configuration path, or empty if none was found
+     * @param messager used to report diagnostics; may be null
+     * @return the loaded PipelineTemplateConfig, or `null` if no configuration path was provided or if loading fails; when loading fails a diagnostic is reported via `messager` if available
      */
     private PipelineTemplateConfig loadPipelineTemplateConfig(Optional<Path> configPath, Messager messager) {
         if (configPath.isEmpty()) {
             return null;
         }
         return discoveryConfigLoader.loadTemplateConfig(configPath.get(), messager);
+    }
+
+    /**
+     * Validate connector declarations from the pipeline template against the provided step
+     * definitions and return the resulting connector configurations.
+     *
+     * @param templateConfig   the pipeline template configuration; if null no validation is performed
+     * @param stepDefinitions  the parsed step definitions to validate connector usage against
+     * @param ctx              the compilation context providing the processing environment
+     * @param messager         optional Messager for reporting diagnostics
+     * @return                 a list of validated {@code ConnectorConfig} instances; empty if {@code templateConfig} is null
+     * @throws RuntimeException if validation fails; an ERROR diagnostic is emitted via {@code messager} before the exception is rethrown
+     */
+    private List<ConnectorConfig> validateConnectorConfigs(
+        PipelineTemplateConfig templateConfig,
+        List<StepDefinition> stepDefinitions,
+        PipelineCompilationContext ctx,
+        Messager messager
+    ) {
+        if (templateConfig == null) {
+            return List.of();
+        }
+        try {
+            return connectorConfigValidator.validate(
+                templateConfig,
+                stepDefinitions,
+                ctx.getProcessingEnv(),
+                messager);
+        } catch (RuntimeException e) {
+            if (messager != null) {
+                messager.printMessage(Diagnostic.Kind.ERROR,
+                    "Failed to validate connector declarations: " + e.getMessage());
+            }
+            throw e;
+        }
     }
 
     /**

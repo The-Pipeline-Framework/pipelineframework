@@ -243,8 +243,8 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 
 4) **Idempotency / duplicate handoff**
 - **Problem**: Connector retries can duplicate downstream processing.
-- **Stance**: Function runtime now carries deterministic idempotency keys in envelopes and adapters, but connector-level de-dup policy is not yet fully formalized for all pipeline-to-pipeline handoffs. Action: define connector-level retry keys and de-dup semantics.
-- **Status**: PARTIAL
+- **Stance**: Framework connectors now preserve incoming idempotency metadata when present and derive deterministic handoff keys from declared connector key fields when absent. `PRE_FORWARD` (dedupe before forwarding, lower duplicate risk but possible lost handoff after downstream delivery failure) and `ON_ACCEPT` (dedupe becomes authoritative on downstream accept, lower lost-work risk but possible duplicate re-forward on retry) are explicit runtime policies.
+- **Status**: RESOLVED
 
 5) **Traceability / lineage**
 - **Problem**: Track the lineage of items through steps and pipelines.
@@ -253,13 +253,13 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 
 6) **Type compatibility between pipelines**
 - **Problem**: Pipeline B should not depend on Pipeline A internals.
-- **Stance**: Use Pipeline B input DTO as the handoff contract; build-time checks exist for operator/mapping compatibility, with full cross-pipeline handoff contract governance still maturing.
-- **Status**: PARTIAL
+- **Stance**: Connector declarations now validate source payload class, target payload class, mapper signature, and target adapter signature at build time. Cross-pipeline handoff remains explicit through connector contracts instead of hidden pipeline internals.
+- **Status**: RESOLVED
 
-7) **Backpressure across pipelines**
+7. **Backpressure across pipelines**
 - **Problem**: Piping should preserve backpressure end-to-end.
-- **Stance**: Step/runtime backpressure controls are in place (buffer strategy/capacity), but connector-level end-to-end demand signalling and limits are still not a closed contract. Action: specify end-to-end demand signalling and buffer limits.
-- **Status**: PARTIAL
+- **Stance**: Framework connectors now expose explicit `BUFFER` (bounded buffering before overflow) and `DROP` (drop or reject excess handoffs when saturated) policies with configured buffer capacity for live handoffs. Broker connectors remain strategy-based and do not claim end-to-end broker demand control in v1.
+- **Status**: RESOLVED
 
 8) **Branching outputs (multi-out steps)**
 - **Problem**: A step may need to emit different output types based on business decisions.
@@ -297,14 +297,12 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 ## Near-Term Design Work
 
 - **Error Sink**: define a runtime error sink interface with a default StdErrSink and optional gRPC/REST sink service.
-- **Connector Backpressure Policy**: define demand propagation, buffer limits, and flow control. (Pain-point #7, Owner: TBD, Acceptance: documented policy + tests)
-- **Connector Idempotency Policy**: define de-duplication, retry keys, and exactly-once semantics. (Pain-point #4, Owner: TBD, Acceptance: documented policy + tests)
-- **Build-Time Checks**: existing operator/mapping compatibility checks are in place; extend to explicit pipeline-to-pipeline handoff contracts.
+- **Connector Backpressure Policy**: completed for v1 live connectors with explicit `BUFFER`/`DROP`, configurable buffer capacity, runtime support, and test coverage. Follow-on work remains broker-specific policy shape, not the live connector baseline. (Pain-point #7)
+- **Connector Idempotency Policy**: completed for v1 live connectors with preserved or derived handoff keys plus explicit `PRE_FORWARD`/`ON_ACCEPT` runtime policy and test coverage. Follow-on work remains broker/re-drive semantics, not the live connector baseline. (Pain-point #4)
+- **Build-Time Checks**: existing operator/mapping compatibility checks have been extended to explicit pipeline-to-pipeline handoff contracts for declared connectors.
 
 ## Open Questions
 
-- Should the connector enforce strict backpressure by default?
-- Should connector idempotency be mandatory or opt-in?
 - How should the tracing store be configured (inline vs reference)?
 - Should the pipeline definition expose a formal "checkpoint contract"?
 - How should multi-out decisions be modeled (discriminated envelopes vs explicit pipelines)?
