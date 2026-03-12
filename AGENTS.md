@@ -16,6 +16,8 @@ Core modules:
 
 Supporting repo surfaces:
 
+- `examples`: reference applications, topology smoke paths, and end-to-end compatibility surfaces
+- `ai-sdk`: standalone Java SDK used for delegation/operator stress testing and mapper/transport exercises
 - `template-generator-node`: Node-based template generator and schema/templates
 - `web-ui`: SvelteKit Canvas/web UI
 - `docs`: VitePress documentation site
@@ -92,6 +94,7 @@ Targeted unit-test coverage helper:
 
 Node/docs surfaces:
 
+- AI SDK compile/test surface: `./mvnw -f ai-sdk/pom.xml test`
 - Template generator tests: `npm --prefix template-generator-node test`
 - Web UI type/build checks: `npm --prefix web-ui run check`, `npm --prefix web-ui run build`
 - Docs build: `npm --prefix docs run build`
@@ -182,6 +185,7 @@ Prefer the split annotation-processor guide under `docs/guide/evolve/annotation-
 - Do not perform destructive git operations unless explicitly requested.
 - Do not commit/push unless explicitly requested.
 - If unexpected unrelated working-tree changes appear mid-task, stop and ask.
+- Treat `examples/` and `ai-sdk/` as compatibility/reference surfaces, not disposable demos, when framework semantics change.
 - Keep user-facing docs (`build`/`development`/`operations`) free of internal planning terminology unless the topic is explicitly implementation-internal (`docs/guide/evolve/`).
 - Prefer enriching existing guide pages over introducing standalone “feature islands” that duplicate navigation.
 - Do not add “audience declaration” sections in user-facing docs. Make docs audience-fit by placing content in the right guide area:
