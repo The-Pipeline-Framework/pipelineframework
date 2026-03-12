@@ -4,9 +4,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,6 +11,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -45,8 +43,11 @@ import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
+import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.BillingMode;
 import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest;
+import software.amazon.awssdk.services.dynamodb.model.GetItemRequest;
+import software.amazon.awssdk.services.dynamodb.model.GetItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
 import software.amazon.awssdk.services.dynamodb.model.KeyType;
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
@@ -143,7 +144,6 @@ class QueueAsyncDurableHaIT {
     void workerKillTransfersDurableExecutionToSecondInstance() throws Exception {
         environment = DurableEnvironment.create("worker-kill");
         orchestratorA = environment.startProcess("a", 8282, 9292);
-        orchestratorB = environment.startProcess("b", 8283, 9293);
 
         ReadyOrderSeed order = ReadyOrderSeed.create("slow-dispatch-once");
         Orchestrator.RunAsyncResponse accepted = orchestratorA.submit(order, "kill-key");
@@ -151,11 +151,15 @@ class QueueAsyncDurableHaIT {
         Awaitility.await()
             .atMost(Duration.ofSeconds(5))
             .pollInterval(Duration.ofMillis(200))
-            .untilAsserted(() -> assertEquals("RUNNING",
-                orchestratorB.status(accepted.getExecutionId()).getStatus(),
-                "execution should be running before the first worker is killed"));
+            .untilAsserted(() -> {
+                Orchestrator.GetExecutionStatusResponse status = orchestratorA.status(accepted.getExecutionId());
+                assertEquals("RUNNING", status.getStatus(), "execution should be running before the first worker is killed");
+                assertTrue(environment.executionLeaseOwner(accepted.getExecutionId()).isPresent(),
+                    "a durable lease owner should be recorded before the first worker is killed");
+            });
 
         orchestratorA.destroy();
+        orchestratorB = environment.startProcess("b", 8283, 9293);
 
         Orchestrator.GetExecutionStatusResponse status = awaitTerminalStatus(orchestratorB, accepted.getExecutionId(), "SUCCEEDED");
         assertEquals("SUCCEEDED", status.getStatus());
@@ -315,6 +319,21 @@ class QueueAsyncDurableHaIT {
             return dynamoDbClient.scan(ScanRequest.builder().tableName(executionTable).build()).count();
         }
 
+        Optional<String> executionLeaseOwner(String executionId) {
+            GetItemResponse response = dynamoDbClient.getItem(GetItemRequest.builder()
+                .tableName(executionTable)
+                .key(Map.of(
+                    "tenant_id", AttributeValue.builder().s("default").build(),
+                    "execution_id", AttributeValue.builder().s(executionId).build()))
+                .consistentRead(true)
+                .build());
+            if (!response.hasItem()) {
+                return Optional.empty();
+            }
+            AttributeValue leaseOwner = response.item().get("lease_owner");
+            return leaseOwner == null ? Optional.empty() : Optional.ofNullable(leaseOwner.s());
+        }
+
         List<Message> workQueueMessages() {
             return receiveMessages(workQueueUrl);
         }
@@ -462,6 +481,8 @@ class QueueAsyncDurableHaIT {
             env.put("PIPELINE_ORCHESTRATOR_DYNAMO_REGION", REGION);
             env.put("PIPELINE_ORCHESTRATOR_DYNAMO_ENDPOINT_OVERRIDE",
                 "http://" + DYNAMO_DB.getHost() + ":" + DYNAMO_DB.getMappedPort(8000));
+            env.put("AWS_ACCESS_KEY_ID", "test");
+            env.put("AWS_SECRET_ACCESS_KEY", "test");
             env.put("PIPELINE_ORCHESTRATOR_SQS_REGION", REGION);
             env.put("PIPELINE_ORCHESTRATOR_SQS_ENDPOINT_OVERRIDE",
                 "http://" + ELASTIC_MQ.getHost() + ":" + ELASTIC_MQ.getMappedPort(9324));
@@ -525,18 +546,15 @@ class QueueAsyncDurableHaIT {
         }
 
         private static void waitForHealth(int httpPort) {
-            HttpClient client = HttpClient.newHttpClient();
             Awaitility.await()
                 .atMost(Duration.ofSeconds(30))
                 .pollInterval(Duration.ofMillis(250))
                 .ignoreExceptions()
                 .until(() -> {
-                    HttpRequest request = HttpRequest.newBuilder()
-                        .uri(URI.create("http://127.0.0.1:" + httpPort + "/q/health"))
-                        .timeout(Duration.ofSeconds(2))
-                        .build();
-                    HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-                    return response.statusCode() == 200;
+                    try (java.net.Socket socket = new java.net.Socket()) {
+                        socket.connect(new InetSocketAddress("127.0.0.1", httpPort), (int) Duration.ofSeconds(2).toMillis());
+                        return true;
+                    }
                 });
         }
     }

@@ -60,15 +60,20 @@ jobs:
       - name: Package checkout deliver-order orchestrator
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
-          ./mvnw "${maven_args[@]}" -f examples/checkout/deliver-order-orchestrator-svc/pom.xml \
+          ./mvnw "${maven_args[@]}" -f examples/checkout/pom.xml \
+            -pl deliver-order-orchestrator-svc \
+            -am \
             -DskipTests \
             package
 
       - name: Run checkout durable QUEUE_ASYNC HA chaos lane
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
-          ./mvnw "${maven_args[@]}" -f examples/checkout/deliver-order-orchestrator-svc/pom.xml \
+          ./mvnw "${maven_args[@]}" -f examples/checkout/pom.xml \
+            -pl deliver-order-orchestrator-svc \
+            -am \
             -Dit.test=QueueAsyncDurableHaIT \
+            -Dfailsafe.failIfNoSpecifiedTests=false \
             failsafe:integration-test \
             failsafe:verify
 

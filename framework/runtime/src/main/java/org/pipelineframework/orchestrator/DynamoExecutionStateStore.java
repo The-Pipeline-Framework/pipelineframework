@@ -12,6 +12,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
+import java.util.stream.StreamSupport;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
@@ -877,8 +878,10 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
                 ENCODED_MESSAGE_NAME, messageTypeName(message.getClass()),
                 ENCODED_PAYLOAD, Base64.getEncoder().encodeToString(message.toByteArray()));
         }
-        if (value instanceof List<?> list) {
-            return list.stream().map(this::encodeValue).toList();
+        if (value instanceof Iterable<?> iterable) {
+            return StreamSupport.stream(iterable.spliterator(), false)
+                .map(this::encodeValue)
+                .toList();
         }
         if (value instanceof Map<?, ?> map) {
             Map<Object, Object> encoded = new HashMap<>(map.size());

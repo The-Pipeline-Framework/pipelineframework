@@ -5,6 +5,10 @@ on:
     branches:
       - main
     paths:
+      - "pom.xml"
+      - "mvnw"
+      - "mvnw.cmd"
+      - ".mvn/**"
       - "framework/**"
       - "examples/checkout/**"
       - "docs/**"

@@ -112,9 +112,9 @@ public class SqsWorkPoller {
         }
     }
 
-    void pollOnce() {
+    boolean pollOnce() {
         if (!enabled()) {
-            return;
+            return true;
         }
         String queueUrl = orchestratorConfig.queueUrl()
             .filter(url -> !url.isBlank())
@@ -131,18 +131,22 @@ public class SqsWorkPoller {
             messages = sqsClient().receiveMessage(request).messages();
         } catch (RuntimeException e) {
             LOG.errorf(e, "Failed receiving SQS work items from queueUrl=%s", queueUrl);
-            return;
+            consecutivePollFailures.incrementAndGet();
+            sleepFailureBackoff();
+            return false;
         }
         for (Message message : messages) {
             handleMessage(queueUrl, message);
         }
+        return true;
     }
 
     private void pollLoop() {
         while (running && !Thread.currentThread().isInterrupted()) {
             try {
-                pollOnce();
-                consecutivePollFailures.set(0);
+                if (pollOnce()) {
+                    consecutivePollFailures.set(0);
+                }
             } catch (Exception e) {
                 LOG.error("SQS work poll failed.", e);
                 sleepFailureBackoff();
