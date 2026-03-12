@@ -917,7 +917,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         String messageType = Objects.toString(map.get(ENCODED_MESSAGE_NAME), "");
         String messageJavaClass = Objects.toString(map.get(ENCODED_MESSAGE_JAVA_CLASS), "");
         String payload = Objects.toString(map.get(ENCODED_PAYLOAD), "");
-        if (messageType.isBlank() || messageJavaClass.isBlank() || payload.isBlank()) {
+        if (messageType.isBlank() || payload.isBlank()) {
             throw new IllegalStateException("Stored protobuf payload metadata is incomplete.");
         }
         ProtobufMessageParser parser = findProtobufParser(messageType)
@@ -972,15 +972,28 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         };
     }
 
+    private Optional<Class<? extends Message>> loadProtobufMessageClass(String messageType) {
+        return loadProtobufMessageClass(messageType, null);
+    }
+
     private Optional<Class<? extends Message>> loadProtobufMessageClass(String messageType, String messageJavaClass) {
         ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
         if (classLoader == null) {
             classLoader = DynamoExecutionStateStore.class.getClassLoader();
         }
-        if (messageJavaClass == null || messageJavaClass.isBlank()) {
-            return Optional.empty();
+        if (messageJavaClass != null && !messageJavaClass.isBlank()) {
+            Optional<Class<? extends Message>> exactJavaClass = loadProtobufMessageClassCandidate(classLoader, messageJavaClass);
+            if (exactJavaClass.isPresent()) {
+                return exactJavaClass;
+            }
         }
-        return loadProtobufMessageClassCandidate(classLoader, messageJavaClass);
+        for (String candidate : protobufMessageTypeCandidates(messageType)) {
+            Optional<Class<? extends Message>> resolved = loadProtobufMessageClassCandidate(classLoader, candidate);
+            if (resolved.isPresent()) {
+                return resolved;
+            }
+        }
+        return Optional.empty();
     }
 
     private Optional<Class<? extends Message>> loadProtobufMessageClassCandidate(ClassLoader classLoader, String candidate) {
@@ -992,9 +1005,32 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
                 return Optional.of(messageClass);
             }
         } catch (ClassNotFoundException ignored) {
-            // The persisted Java class did not resolve in this runtime.
+            // Keep trying progressively more specific candidates.
         }
         return Optional.empty();
+    }
+
+    private static List<String> protobufMessageTypeCandidates(String messageType) {
+        List<String> candidates = new ArrayList<>();
+        if (messageType == null || messageType.isBlank()) {
+            return candidates;
+        }
+        String candidate = normalizeMessageType(messageType);
+        addProtobufMessageTypeCandidates(candidates, candidate);
+        if (candidate.startsWith("google.protobuf.")) {
+            addProtobufMessageTypeCandidates(candidates, "com." + candidate);
+        }
+        return candidates;
+    }
+
+    private static void addProtobufMessageTypeCandidates(List<String> candidates, String candidate) {
+        candidates.add(candidate);
+        int index = candidate.lastIndexOf('.');
+        while (index > 0) {
+            candidate = candidate.substring(0, index) + '$' + candidate.substring(index + 1);
+            candidates.add(candidate);
+            index = candidate.lastIndexOf('.');
+        }
     }
 
     private Map<String, ProtobufMessageParser> protobufParserLookup() {
