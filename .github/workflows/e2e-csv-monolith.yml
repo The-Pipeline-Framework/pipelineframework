@@ -51,7 +51,13 @@ jobs:
         uses: ./.github/actions/setup-testcontainers
 
       - name: Build csv-payments monolith runtime
-        run: ./examples/csv-payments/build-monolith.sh -DskipTests -Dquarkus.container-image.build=false
+        run: |
+          local_maven_args="${MAVEN_ARGS/-T 1C/-T 1}"
+          read -r -a maven_args <<< "$local_maven_args"
+          MAVEN_ARGS="$local_maven_args" \
+            ./examples/csv-payments/build-monolith.sh \
+            -DskipTests \
+            -Dquarkus.container-image.build=true
 
       - name: Run csv-payments monolith E2E
         run: |
