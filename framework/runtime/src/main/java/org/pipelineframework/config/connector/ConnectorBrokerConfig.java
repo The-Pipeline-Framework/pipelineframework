@@ -36,6 +36,14 @@ public record ConnectorBrokerConfig(
         requireText(adapter, "adapter");
     }
 
+    /**
+     * Validate that a text value is non-null and contains at least one non-whitespace character.
+     *
+     * @param value the text to validate
+     * @param fieldName the field name used in exception messages
+     * @throws NullPointerException if {@code value} is null
+     * @throws IllegalArgumentException if {@code value} contains only whitespace
+     */
     private static void requireText(String value, String fieldName) {
         Objects.requireNonNull(value, fieldName + " must not be null");
         if (value.isBlank()) {

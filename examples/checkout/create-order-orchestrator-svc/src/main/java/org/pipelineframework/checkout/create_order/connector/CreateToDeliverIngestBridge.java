@@ -46,12 +46,14 @@ public class CreateToDeliverIngestBridge {
     /**
      * Creates a bridge that forwards checkpoint outputs from the CreateOrder pipeline to the DeliverOrder ingest client.
      *
-     * @param outputBus the source of pipeline checkpoint outputs; must not be null
-     * @param deliverOrderIngestClient the gRPC client used to forward ready orders; must not be null
-     * @param idempotencyEnabled whether duplicate order ids should be filtered before forwarding
-     * @param idempotencyMaxKeys max in-memory keys retained for duplicate filtering
-     * @param backpressureStrategy overflow strategy for connector handoff (`BUFFER` or `DROP`)
-     * @param backpressureBufferCapacity overflow buffer capacity when strategy is `BUFFER`
+     * Initializes bridge configuration, including optional idempotency tracking and normalized backpressure settings.
+     *
+     * @param outputBus the source of pipeline checkpoint outputs
+     * @param deliverOrderIngestClient the gRPC client used to forward ready orders
+     * @param idempotencyEnabled if true, enables in-memory idempotency tracking to filter duplicate order ids
+     * @param idempotencyMaxKeys maximum number of order id keys retained by the idempotency tracker (uses 10000 if non-positive)
+     * @param backpressureStrategy overflow strategy for connector handoff (normalized; expected values include `BUFFER` or `DROP`)
+     * @param backpressureBufferCapacity buffer capacity used when the backpressure strategy is `BUFFER` (uses 256 if non-positive)
      * @throws NullPointerException if {@code outputBus} or {@code deliverOrderIngestClient} is null
      */
     public CreateToDeliverIngestBridge(
@@ -198,6 +200,12 @@ public class CreateToDeliverIngestBridge {
         return null;
     }
 
+    /**
+     * Map a source record's payload to an OrderDispatchSvc.ReadyOrder and attach dispatch and connector metadata.
+     *
+     * @param sourceRecord the incoming connector record whose payload will be converted; its dispatch metadata is used as the base for augmentation
+     * @return a ConnectorRecord containing the mapped ReadyOrder with ensured dispatch metadata and connector context, or `null` if the payload could not be mapped
+     */
     private ConnectorRecord<OrderDispatchSvc.ReadyOrder> mapRecord(ConnectorRecord<Object> sourceRecord) {
         OrderDispatchSvc.ReadyOrder mapped = toDeliverReadyOrder(sourceRecord.payload());
         if (mapped == null) {

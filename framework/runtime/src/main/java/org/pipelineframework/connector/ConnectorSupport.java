@@ -36,9 +36,26 @@ public final class ConnectorSupport {
     private static final int DEFAULT_BACKPRESSURE_BUFFER_CAPACITY = 256;
     private static final Logger LOG = Logger.getLogger(ConnectorSupport.class);
 
+    /**
+     * Prevents instantiation of this utility class.
+     */
     private ConnectorSupport() {
     }
 
+    /**
+     * Apply a backpressure strategy to a Reactive Streams Multi source.
+     *
+     * <p>If the policy is DROP, emitted items are dropped when downstream cannot keep up.
+     * If the policy is BUFFER, emitted items are buffered up to the provided capacity; a
+     * non-positive capacity selects the default buffer capacity.
+     *
+     * @param source the source Multi to which backpressure behavior will be applied
+     * @param policy the backpressure policy to enforce (DROP or BUFFER)
+     * @param backpressureBufferCapacity the buffer size to use when {@code policy} is BUFFER; if
+     *        less than or equal to zero the default buffer capacity is used
+     * @param <T> the element type of the Multi
+     * @return a Multi that enforces the specified backpressure behavior
+     */
     public static <T> Multi<T> applyBackpressure(
         Multi<T> source,
         ConnectorBackpressurePolicy policy,
@@ -55,6 +72,12 @@ public final class ConnectorSupport {
         };
     }
 
+    /**
+     * Convert a textual backpressure policy name to a ConnectorBackpressurePolicy.
+     *
+     * @param policy the policy name (case-insensitive); recognized value: "DROP". Null or blank input is treated as unspecified.
+     * @return the corresponding ConnectorBackpressurePolicy; `BUFFER` when the input is null, blank, or not recognized
+     */
     public static ConnectorBackpressurePolicy normalizeBackpressurePolicy(String policy) {
         if (policy == null || policy.isBlank()) {
             return ConnectorBackpressurePolicy.BUFFER;
@@ -66,10 +89,22 @@ public final class ConnectorSupport {
         };
     }
 
+    /**
+     * Convert a backpressure policy string to the normalized enum name.
+     *
+     * @param policy the policy name to normalize; null or blank yields "BUFFER", the case-insensitive value "DROP" yields "DROP", any other value yields "BUFFER"
+     * @return the name of the corresponding ConnectorBackpressurePolicy enum ("BUFFER" or "DROP")
+     */
     public static String normalizeBackpressurePolicyName(String policy) {
         return normalizeBackpressurePolicy(policy).name();
     }
 
+    /**
+     * Convert a string policy name into a ConnectorIdempotencyPolicy enum value.
+     *
+     * @param policy the policy name (case-insensitive); expected values include "PRE_FORWARD" and "ON_ACCEPT"
+     * @return {@code ConnectorIdempotencyPolicy.PRE_FORWARD} for "PRE_FORWARD", {@code ConnectorIdempotencyPolicy.ON_ACCEPT} for "ON_ACCEPT", or {@code ConnectorIdempotencyPolicy.DISABLED} when the input is null, blank, or unrecognized
+     */
     public static ConnectorIdempotencyPolicy normalizeIdempotencyPolicy(String policy) {
         if (policy == null || policy.isBlank()) {
             return ConnectorIdempotencyPolicy.DISABLED;
@@ -82,6 +117,14 @@ public final class ConnectorSupport {
         };
     }
 
+    /**
+     * Convert a failure mode name to the corresponding ConnectorFailureMode.
+     *
+     * @param mode the failure mode name (case-insensitive). Recognized value: "LOG_AND_CONTINUE".
+     *             Null or blank selects the default.
+     * @return `ConnectorFailureMode.LOG_AND_CONTINUE` if `mode` equals "LOG_AND_CONTINUE" (case-insensitive),
+     *         `ConnectorFailureMode.PROPAGATE` otherwise.
+     */
     public static ConnectorFailureMode normalizeFailureMode(String mode) {
         if (mode == null || mode.isBlank()) {
             return ConnectorFailureMode.PROPAGATE;
@@ -93,6 +136,18 @@ public final class ConnectorSupport {
         };
     }
 
+    /**
+     * Ensures the given dispatch metadata contains an idempotency key by returning metadata that preserves
+     * an existing key or populates one derived from the payload when missing.
+     *
+     * @param existing      the current TransportDispatchMetadata, may be null
+     * @param connectorName the connector namespace used when deriving an idempotency key
+     * @param payload       the message or object from which idempotency key components are extracted
+     * @param keyFields     the list of payload field names used to derive the idempotency key
+     * @return the original metadata if it already contains a non-empty idempotency key or if no key can be derived;
+     *         otherwise a metadata instance with the derived idempotency key (a new instance is created when
+     *         {@code existing} is null) 
+     */
     public static TransportDispatchMetadata ensureDispatchMetadata(
         TransportDispatchMetadata existing,
         String connectorName,
@@ -113,6 +168,14 @@ public final class ConnectorSupport {
         return existing.withIdempotencyKey(derivedKey);
     }
 
+    /**
+     * Builds a deterministic idempotency key for a payload from the specified fields and connector namespace.
+     *
+     * @param connectorName namespace used as the key prefix (identifies the connector)
+     * @param payload       the object containing fields to derive the key from (may be a protobuf Message, Map, record, or POJO)
+     * @param keyFields     ordered list of property names to extract and combine into the key
+     * @return              a namespaced deterministic idempotency key constructed from the connector name and the specified field values, or `null` if `payload` is null or `keyFields` is null/empty
+     */
     public static String deriveIdempotencyKey(String connectorName, Object payload, List<String> keyFields) {
         if (payload == null || keyFields == null || keyFields.isEmpty()) {
             return null;
@@ -124,6 +187,13 @@ public final class ConnectorSupport {
         return deterministicHandoffKey(connectorName, components.toArray(String[]::new));
     }
 
+    /**
+     * Extracts a single primitive or enum field value from a protobuf Message by field name.
+     *
+     * @param message   the protobuf Message to read from
+     * @param fieldName the protobuf field name (as declared in the .proto)
+     * @return the string representation of the field's primitive or enum value, or an empty string if the field is missing, repeated, a map field, a bytes/message type, or otherwise unsupported
+     */
     public static String readField(Message message, String fieldName) {
         var field = message.getDescriptorForType().findFieldByName(fieldName);
         if (field == null || field.isRepeated() || field.isMapField()) {
@@ -136,6 +206,15 @@ public final class ConnectorSupport {
         };
     }
 
+    /**
+     * Reads a property's value from a payload that may be a protobuf Message, a Map, a Java record, or a POJO and returns it as a string.
+     *
+     * <p>The method attempts common lookup strategies for each payload shape and returns an empty string when the property is missing or cannot be read.</p>
+     *
+     * @param payload the object to read the property from; may be a protobuf {@code Message}, {@code Map}, record, or POJO
+     * @param propertyName the name of the property to read
+     * @return the property's value as a string, or an empty string if the property is not present or cannot be read
+     */
     public static String readProperty(Object payload, String propertyName) {
         if (payload == null || propertyName == null || propertyName.isBlank()) {
             return "";
@@ -159,6 +238,17 @@ public final class ConnectorSupport {
         return methodValue == null ? "" : methodValue;
     }
 
+    /**
+     * Generates a deterministic, namespaced handoff key from the provided namespace and ordered components.
+     *
+     * The returned key is of the form "<namespace>:<uuid>" where the UUID is deterministically derived
+     * from the framed sequence of the namespace and each component. If `namespace` is null or empty it
+     * defaults to "handoff". Any null component is treated as an empty string.
+     *
+     * @param namespace  the namespace to prefix the key (defaults to "handoff" when null/empty)
+     * @param components ordered components used to deterministically derive the UUID; null or missing components are treated as empty strings
+     * @return           a namespaced deterministic key in the form "<namespace>:<uuid>"
+     */
     public static String deterministicHandoffKey(String namespace, String... components) {
         StringBuilder seed = new StringBuilder();
         appendFramed(seed, normalizeOrDefault(namespace, "handoff"));
@@ -171,6 +261,24 @@ public final class ConnectorSupport {
         return normalizeOrDefault(namespace, "handoff") + ":" + id;
     }
 
+    /**
+     * Builds a sanitized, structured failure signature string for a connector event.
+     *
+     * <p>Format: {@code connector=<value>;phase=<value>;reason=<value>;traceId=<value>;itemId=<value>}.</p>
+     *
+     * <p>Null or blank inputs are replaced with defaults: connector and phase -> "unknown",
+     * reason -> "unspecified", traceId and itemId -> "na". Each value is sanitized to escape
+     * characters that would interfere with parsing (backslash, semicolon, equals, carriage return,
+     * newline).</p>
+     *
+     * @param connector the connector name or identifier
+     * @param phase the phase or stage in which the failure occurred
+     * @param reason a short reason or classification for the failure
+     * @param traceId an associated trace identifier, if available
+     * @param itemId an associated item identifier, if available
+     * @return the composed, sanitized failure signature string in the format
+     *         {@code connector=<value>;phase=<value>;reason=<value>;traceId=<value>;itemId=<value>}
+     */
     public static String failureSignature(
         String connector,
         String phase,
@@ -185,6 +293,13 @@ public final class ConnectorSupport {
             + ";itemId=" + sanitizeForSignature(normalizeOrDefault(itemId, "na"));
     }
 
+    /**
+     * Return the trimmed input string, or the provided fallback when the input is null or empty after trimming.
+     *
+     * @param value    the input string to normalize
+     * @param fallback the value to return when {@code value} is null or empty after trimming
+     * @return         the trimmed {@code value} when non-empty, otherwise {@code fallback}
+     */
     public static String normalizeOrDefault(String value, String fallback) {
         if (value == null) {
             return fallback;
@@ -193,6 +308,14 @@ public final class ConnectorSupport {
         return normalized.isEmpty() ? fallback : normalized;
     }
 
+    /**
+     * Reads a property value from a Java record by invoking the record component accessor.
+     *
+     * @param payload       the record instance to read from
+     * @param propertyName  the record component name to read
+     * @return              the component value as a string, or an empty string if the payload is not a record,
+     *                      the component is not present, the value is null, or the accessor cannot be invoked
+     */
     private static String readRecordProperty(Object payload, String propertyName) {
         if (!payload.getClass().isRecord()) {
             return "";
@@ -215,6 +338,13 @@ public final class ConnectorSupport {
         return "";
     }
 
+    /**
+     * Reads a property's value from a POJO by trying common no-arg accessor method names.
+     *
+     * @param payload the object to read the property from
+     * @param propertyName the base property name to look up (will also try `getX` and `isX` variants)
+     * @return the property's string value, or an empty string if the property is missing, inaccessible, or null
+     */
     private static String readMethodProperty(Object payload, String propertyName) {
         for (String candidate : List.of(
             propertyName,
@@ -234,6 +364,14 @@ public final class ConnectorSupport {
         return "";
     }
 
+    /**
+     * Returns the input string with its first character converted to uppercase.
+     *
+     * If the input is null or empty, an empty string is returned.
+     *
+     * @param value the string to capitalize
+     * @return the string with the first character uppercased, or an empty string if {@code value} is null or empty
+     */
     private static String capitalize(String value) {
         if (value == null || value.isEmpty()) {
             return "";
@@ -241,6 +379,12 @@ public final class ConnectorSupport {
         return Character.toUpperCase(value.charAt(0)) + value.substring(1);
     }
 
+    /**
+     * Converts a camelCase or PascalCase string to snake_case.
+     *
+     * @param value the input string in camelCase or PascalCase
+     * @return the input converted to snake_case (all lowercase with underscores before former uppercase letters)
+     */
     private static String toSnakeCase(String value) {
         StringBuilder result = new StringBuilder();
         for (int i = 0; i < value.length(); i++) {
@@ -253,10 +397,22 @@ public final class ConnectorSupport {
         return result.toString();
     }
 
+    /**
+     * Appends a framed token to the target in the form "#<length>:<value>" where <length> is the number of characters in `value`.
+     *
+     * @param target the StringBuilder to append the framed token to
+     * @param value  the string value to frame; treated as-is (may be empty)
+     */
     private static void appendFramed(StringBuilder target, String value) {
         target.append('#').append(value.length()).append(':').append(value);
     }
 
+    /**
+     * Escapes characters that could interfere with signature parsing by prefixing them with a backslash.
+     *
+     * @param value the input string to sanitize
+     * @return the input with backslashes, semicolons, equals signs, carriage returns, and newlines escaped
+     */
     private static String sanitizeForSignature(String value) {
         return value
             .replace("\\", "\\\\")

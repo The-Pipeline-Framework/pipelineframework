@@ -33,6 +33,20 @@ final class ConnectorConfigValidator {
     private static final String CONNECTOR_MAPPER = "org.pipelineframework.connector.ConnectorMapper";
     private static final String CONNECTOR_TARGET = "org.pipelineframework.connector.ConnectorTarget";
 
+    /**
+     * Validates and normalizes connector declarations from a pipeline template.
+     *
+     * Processes each connector in the provided template, normalizes its fields, checks structural constraints,
+     * optionally performs compile-time type checks using the provided processing environment, and collects
+     * diagnostics via the provided messager.
+     *
+     * @param templateConfig   the pipeline template containing connector declarations to validate
+     * @param stepDefinitions  additional step definitions whose names are considered known for validation
+     * @param processingEnv    the annotation processing environment used to resolve and validate types; may be null to skip type checks
+     * @param messager         a messager for reporting warnings and errors; may be null to suppress diagnostic output
+     * @return                 a list of normalized ConnectorConfig objects derived from the template's connectors
+     * @throws IllegalStateException if validation produces one or more errors
+     */
     List<ConnectorConfig> validate(
         PipelineTemplateConfig templateConfig,
         List<StepDefinition> stepDefinitions,
@@ -95,6 +109,18 @@ final class ConnectorConfigValidator {
         return normalized;
     }
 
+    /**
+     * Produce a normalized ConnectorConfig with defaults applied and values canonicalized.
+     *
+     * <p>Normalization rules include: uppercasing transport and kind values, supplying default
+     * source/target/broker objects when missing, and normalizing policy and numeric limit fields
+     * (including default buffer capacity of 256 and default idempotency max keys of 10000 when
+     * non-positive).
+     *
+     * @param connector the original ConnectorConfig to normalize
+     * @return a new ConnectorConfig with normalized transport, source, target, broker, policy names,
+     *         and numeric defaults applied
+     */
     private ConnectorConfig normalize(ConnectorConfig connector) {
         String transport = normalizeOrDefault(connector.transport(), GRPC).toUpperCase(Locale.ROOT);
         ConnectorSourceConfig source = connector.source() == null
@@ -130,6 +156,18 @@ final class ConnectorConfigValidator {
             broker);
     }
 
+    /**
+     * Validate structural requirements of a connector declaration and record any problems.
+     *
+     * Adds human-readable error messages to {@code errors} for violations of required fields
+     * and unsupported configuration for generated v1 connectors. Adds human-readable warnings
+     * to {@code warnings} when a source step cannot be verified because no known steps are available.
+     *
+     * @param connector the connector configuration to validate
+     * @param knownSteps set of declared pipeline step names used to verify the connector's source.step; may be empty
+     * @param errors     mutable list to which validation error messages will be appended
+     * @param warnings   mutable list to which non-fatal warning messages will be appended
+     */
     private void validateStructure(
         ConnectorConfig connector,
         Set<String> knownSteps,
@@ -181,6 +219,20 @@ final class ConnectorConfigValidator {
         }
     }
 
+    /**
+     * Validate that the connector's referenced types resolve and that its adapter and optional mapper
+     * implement the expected parameterized interfaces.
+     *
+     * Validations performed:
+     * - source.type, target.type, and target.adapter must be resolvable; unresolved names append errors.
+     * - target.adapter must implement ConnectorTarget<target.type>; mismatch appends an error.
+     * - if a mapper is specified, it must be resolvable and implement ConnectorMapper<source.type, target.type>;
+     *   unresolved or non-conforming mappers append errors.
+     *
+     * @param connector the connector configuration to validate
+     * @param processingEnv the annotation-processing environment used to resolve types
+     * @param errors a mutable list to which human-readable validation error messages will be appended
+     */
     private void validateTypes(ConnectorConfig connector, ProcessingEnvironment processingEnv, List<String> errors) {
         Elements elements = processingEnv.getElementUtils();
         Types types = processingEnv.getTypeUtils();
@@ -226,6 +278,16 @@ final class ConnectorConfigValidator {
         }
     }
 
+    /**
+     * Checks whether a given type implements a parameterized interface with the specified type arguments.
+     *
+     * @param candidate the type to inspect
+     * @param interfaceName the fully-qualified name of the interface to check for
+     * @param expectedArguments the expected type argument mirrors for the interface (order-sensitive)
+     * @param elements utility for resolving type elements
+     * @param types utility for type comparisons and erasure
+     * @return `true` if `candidate` implements the named interface whose type arguments match `expectedArguments`, `false` otherwise
+     */
     private boolean implementsParameterizedInterface(
         TypeMirror candidate,
         String interfaceName,
@@ -245,6 +307,17 @@ final class ConnectorConfigValidator {
             new HashSet<>());
     }
 
+    /**
+     * Determines whether the given candidate type or any of its supertypes implements the target
+     * interface with the specified type arguments (comparison performed on erasures).
+     *
+     * @param candidate the type to inspect
+     * @param targetErasure the erasure of the target interface type to match against
+     * @param expectedArguments the expected type arguments for the target interface
+     * @param types utility for type operations
+     * @param visited a set of type identity keys used to avoid infinite recursion; the method adds the candidate key to this set
+     * @return true if the candidate or any direct supertype implements the target interface with matching type arguments, false otherwise
+     */
     private boolean implementsParameterizedInterface(
         TypeMirror candidate,
         TypeMirror targetErasure,
@@ -279,6 +352,13 @@ final class ConnectorConfigValidator {
         return false;
     }
 
+    /**
+     * Return the trimmed input string or the provided fallback when the input is null or blank.
+     *
+     * @param value the input string to normalize
+     * @param fallback the value to return when {@code value} is null or blank
+     * @return the trimmed input string, or {@code fallback} if {@code value} is null or blank
+     */
     private String normalizeOrDefault(String value, String fallback) {
         if (value == null || value.isBlank()) {
             return fallback;

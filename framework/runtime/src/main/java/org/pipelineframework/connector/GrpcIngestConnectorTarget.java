@@ -29,10 +29,23 @@ import java.util.function.Function;
 public final class GrpcIngestConnectorTarget<T> implements ConnectorTarget<T> {
     private final Function<Multi<T>, Cancellable> forwarder;
 
+    /**
+     * Create a GrpcIngestConnectorTarget that forwards payload streams using the provided forwarder.
+     *
+     * @param forwarder function that receives a stream of payloads (`Multi<T>`) and starts forwarding, returning a `Cancellable` to control the forwarding subscription
+     * @throws NullPointerException if {@code forwarder} is {@code null}
+     */
     public GrpcIngestConnectorTarget(Function<Multi<T>, Cancellable> forwarder) {
         this.forwarder = Objects.requireNonNull(forwarder, "forwarder must not be null");
     }
 
+    /**
+     * Forwards the payloads from the given connector record stream to the configured forwarder.
+     *
+     * @param connectorStream stream of ConnectorRecord whose payloads will be extracted and forwarded
+     * @return a Cancellable that can be used to cancel the forwarding subscription
+     * @throws NullPointerException if {@code connectorStream} is null
+     */
     @Override
     public Cancellable forward(Multi<ConnectorRecord<T>> connectorStream) {
         Objects.requireNonNull(connectorStream, "connectorStream must not be null");

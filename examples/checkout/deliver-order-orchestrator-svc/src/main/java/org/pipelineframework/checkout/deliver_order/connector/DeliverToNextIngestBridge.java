@@ -48,11 +48,11 @@ public class DeliverToNextIngestBridge {
      *
      * @param outputBus the pipeline output bus to consume delivered-order events from
      * @param forwardClient client used to forward delivered orders to the next ingest step
-     * @param enabled whether forwarding is enabled
-     * @param idempotencyEnabled whether idempotency filtering of duplicates is enabled
-     * @param idempotencyMaxKeys maximum number of in-memory keys retained for idempotency filtering
-     * @param backpressureStrategy strategy to apply when the connector handoff overflows (e.g., BUFFER or DROP)
-     * @param backpressureBufferCapacity buffer capacity used when the backpressure strategy is BUFFER
+     * @param enabled enablement flag for forwarding
+     * @param idempotencyEnabled enablement flag for idempotency filtering of duplicates
+     * @param idempotencyMaxKeys maximum number of in-memory keys retained for idempotency tracking; values less than or equal to 0 are normalized to 10000
+     * @param backpressureStrategy backpressure strategy to apply when the connector handoff overflows (normalized via ConnectorUtils)
+     * @param backpressureBufferCapacity buffer capacity used when the backpressure strategy is BUFFER; values less than or equal to 0 are normalized to 256
      */
     public DeliverToNextIngestBridge(
         PipelineOutputBus outputBus,
@@ -141,16 +141,10 @@ public class DeliverToNextIngestBridge {
     }
 
     /**
-     * Produces an OrderDeliveredSvc.DeliveredOrder from an input item when possible.
+     * Converts an input object into an OrderDeliveredSvc.DeliveredOrder when it contains all required fields.
      *
-     * If the item is already a DeliveredOrder it is validated and returned. If the item is a protobuf
-     * Message the required fields order_id, customer_id, ready_at, dispatch_id, dispatched_at, and
-     * delivered_at are extracted and used to build a DeliveredOrder. Converts only when all required
-     * fields are present and the order is not considered a duplicate or already in-flight.
-     *
-     * @param item the input object to convert (may be a DeliveredOrder or a protobuf Message)
-     * @return the converted OrderDeliveredSvc.DeliveredOrder, or null if the item is unsupported,
-     *         required fields are missing, or the order is duplicate/in-flight
+     * @param item the input object; may be an OrderDeliveredSvc.DeliveredOrder or a protobuf Message with the required fields
+     * @return the constructed OrderDeliveredSvc.DeliveredOrder, or null if the input type is unsupported or required fields are missing
      */
     private OrderDeliveredSvc.DeliveredOrder toDeliveredOrder(Object item) {
         if (item instanceof OrderDeliveredSvc.DeliveredOrder delivered) {
@@ -243,10 +237,22 @@ public class DeliverToNextIngestBridge {
         return backpressureStrategy;
     }
 
+    /**
+     * Configured buffer capacity used when the backpressure strategy is `BUFFER`.
+     *
+     * @return the buffer capacity (maximum number of buffered elements)
+     */
     int getBackpressureBufferCapacity() {
         return backpressureBufferCapacity;
     }
 
+    /**
+     * Convert the source record's payload to a DeliveredOrder and return a new ConnectorRecord
+     * containing the mapped payload with dispatch metadata ensured and connector metadata added.
+     *
+     * @param sourceRecord the input record whose payload will be mapped; its dispatch metadata is preserved and normalized
+     * @return a ConnectorRecord wrapping the mapped DeliveredOrder with enriched metadata, or `null` if the payload cannot be converted
+     */
     private ConnectorRecord<OrderDeliveredSvc.DeliveredOrder> mapRecord(ConnectorRecord<Object> sourceRecord) {
         OrderDeliveredSvc.DeliveredOrder mapped = toDeliveredOrder(sourceRecord.payload());
         if (mapped == null) {
@@ -266,6 +272,17 @@ public class DeliverToNextIngestBridge {
                 "connector.contract", mapped.getDescriptorForType().getFullName()));
     }
 
+    /**
+     * Creates a ConnectorTarget that forwards DeliveredOrder records to the configured forwardClient
+     * while tracking in-flight records by idempotency key so accepted callbacks receive the original ConnectorRecord when available.
+     *
+     * <p>The returned target:
+     * - Records incoming ConnectorRecord instances in an in-memory pending map keyed by each record's idempotency key (when non-blank).
+     * - Forwards only the payloads to the forwardClient and, on acceptance, uses a derived idempotency key to look up and remove the original ConnectorRecord from the pending map; if none is found, the payload is converted back into a ConnectorRecord via mapRecord before invoking the acceptance callback.
+     * - Clears the pending map and forwards failures to the provided failure callback when the forwardClient signals an error.</p>
+     *
+     * @return a ConnectorTarget that forwards delivered orders and correlates acceptances back to original ConnectorRecord instances when possible
+     */
     private ConnectorTarget<OrderDeliveredSvc.DeliveredOrder> connectorTarget() {
         return new ConnectorTarget<>() {
             @Override

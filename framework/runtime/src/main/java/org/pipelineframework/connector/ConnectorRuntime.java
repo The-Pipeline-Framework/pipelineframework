@@ -42,6 +42,23 @@ public final class ConnectorRuntime<I, O> {
     private final Consumer<ConnectorRecord<O>> duplicateObserver;
     private final Consumer<Throwable> failureObserver;
 
+    /**
+     * Creates a ConnectorRuntime that wires a source to a target using the provided mapper and policy.
+     *
+     * The constructor normalizes the connector name, enforces non-null requirements for core components,
+     * conditionally enables idempotency tracking based on the policy, and replaces any null observers with no-op consumers.
+     *
+     * @param connectorName       the connector name to normalize; defaults to "connector" if null or blank
+     * @param source              the record source (must not be null)
+     * @param target              the record target (must not be null)
+     * @param mapper              function to map source records to target records (must not be null)
+     * @param policy              connector policy controlling enablement, backpressure, idempotency and failure handling (must not be null)
+     * @param idempotencyTracker  tracker used when idempotency is enabled; ignored and set to null when policy disables idempotency
+     * @param rejectionObserver   invoked when a record is rejected by the mapper; if null a no-op consumer is used
+     * @param duplicateObserver   invoked when a mapped record is identified as a duplicate; if null a no-op consumer is used
+     * @param failureObserver     invoked on mapping or processing failures; if null a no-op consumer is used
+     * @throws NullPointerException if source, target, mapper, or policy is null, or if idempotency is enabled and idempotencyTracker is null
+     */
     public ConnectorRuntime(
         String connectorName,
         ConnectorSource<I> source,
@@ -69,6 +86,11 @@ public final class ConnectorRuntime<I, O> {
         } : failureObserver;
     }
 
+    /**
+     * Starts processing records from the configured source, applying mapping, deduplication, backpressure, and forwarding to the target.
+     *
+     * @return a Cancellable that stops the runtime processing when invoked; if the connector policy is disabled, returns a no-op Cancellable
+     */
     public Cancellable start() {
         if (!policy.enabled()) {
             return () -> {
@@ -87,6 +109,13 @@ public final class ConnectorRuntime<I, O> {
             this::handleFailure);
     }
 
+    /**
+     * Map a source record to an output record and apply filtering rules for rejection, duplicates, and failures.
+     *
+     * @param sourceRecord the incoming source record to map and evaluate
+     * @return a Multi that emits the mapped ConnectorRecord when it should be forwarded; an empty Multi when the record is rejected, identified as a duplicate, or skipped due to a mapping failure handled by policy
+     * @throws RuntimeException if the mapper throws and the connector failure mode is not LOG_AND_CONTINUE
+     */
     private Multi<ConnectorRecord<O>> mapAndFilter(ConnectorRecord<I> sourceRecord) {
         ConnectorRecord<O> mapped;
         try {
@@ -114,6 +143,12 @@ public final class ConnectorRuntime<I, O> {
         return Multi.createFrom().item(mapped);
     }
 
+    /**
+     * Determine whether the mapped record may be forwarded under the configured idempotency policy.
+     *
+     * @param mapped the mapped record whose idempotency key (if present) will be evaluated
+     * @return `true` if the record should be forwarded (acquired); `false` if it is a duplicate and should be suppressed
+     */
     private boolean tryAcquire(ConnectorRecord<O> mapped) {
         if (policy.idempotencyPolicy() == ConnectorIdempotencyPolicy.DISABLED) {
             return true;
@@ -126,6 +161,13 @@ public final class ConnectorRuntime<I, O> {
         return idempotencyTracker.tryAcquire(key, policy.idempotencyPolicy());
     }
 
+    /**
+     * Marks a forwarded record as accepted and, if idempotency is enabled, informs the idempotency tracker.
+     *
+     * @param record the forwarded record; may be null. If non-null and the record's idempotency key is not blank,
+     *               the key will be marked accepted according to the configured idempotency policy. An "accepted"
+     *               metric is recorded in all cases.
+     */
     private void markAccepted(ConnectorRecord<O> record) {
         if (policy.idempotencyPolicy() == ConnectorIdempotencyPolicy.DISABLED) {
             ConnectorMetrics.record(connectorName, "accepted");
@@ -138,6 +180,12 @@ public final class ConnectorRuntime<I, O> {
         ConnectorMetrics.record(connectorName, "accepted");
     }
 
+    /**
+     * Handles a delivery failure by clearing any idempotency reservations, recording a delivery-failure metric,
+     * logging the error, and notifying the configured failure observer.
+     *
+     * @param failure the delivery failure that occurred
+     */
     private void handleFailure(Throwable failure) {
         if (idempotencyTracker != null) {
             idempotencyTracker.clearReservations();

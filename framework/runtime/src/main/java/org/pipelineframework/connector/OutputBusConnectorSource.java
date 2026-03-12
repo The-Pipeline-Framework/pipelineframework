@@ -29,11 +29,23 @@ public final class OutputBusConnectorSource<T> implements ConnectorSource<T> {
     private final PipelineOutputBus outputBus;
     private final Class<T> sourceType;
 
+    /**
+     * Creates a connector source backed by the provided pipeline output bus for the given payload type.
+     *
+     * @param outputBus the PipelineOutputBus to obtain payloads from
+     * @param sourceType the class of payloads produced by the output bus
+     * @throws NullPointerException if {@code outputBus} or {@code sourceType} is {@code null}
+     */
     public OutputBusConnectorSource(PipelineOutputBus outputBus, Class<T> sourceType) {
         this.outputBus = Objects.requireNonNull(outputBus, "outputBus must not be null");
         this.sourceType = Objects.requireNonNull(sourceType, "sourceType must not be null");
     }
 
+    /**
+     * Provide a reactive stream of ConnectorRecord<T> items sourced from the configured output bus.
+     *
+     * @return a Multi<ConnectorRecord<T>> that emits records wrapping payloads produced by the output bus
+     */
     @Override
     public Multi<ConnectorRecord<T>> stream() {
         return outputBus.stream(sourceType)

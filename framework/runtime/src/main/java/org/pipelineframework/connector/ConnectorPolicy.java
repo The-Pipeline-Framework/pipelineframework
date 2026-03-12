@@ -47,6 +47,14 @@ public record ConnectorPolicy(
         failureMode = failureMode == null ? ConnectorFailureMode.PROPAGATE : failureMode;
     }
 
+    /**
+     * Create a ConnectorPolicy with connector startup disabled and default policy settings.
+     *
+     * @return a ConnectorPolicy with enabled=false, backpressurePolicy=ConnectorBackpressurePolicy.BUFFER,
+     *         backpressureBufferCapacity=DEFAULT_BACKPRESSURE_BUFFER_CAPACITY,
+     *         idempotencyPolicy=ConnectorIdempotencyPolicy.DISABLED, and
+     *         failureMode=ConnectorFailureMode.PROPAGATE
+     */
     public static ConnectorPolicy disabled() {
         return new ConnectorPolicy(
             false,

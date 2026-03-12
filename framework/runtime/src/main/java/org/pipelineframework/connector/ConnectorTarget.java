@@ -29,8 +29,23 @@ import java.util.function.Consumer;
 @FunctionalInterface
 public interface ConnectorTarget<T> {
 
-    Cancellable forward(Multi<ConnectorRecord<T>> connectorStream);
+    /**
+ * Forwards a stream of connector records to the target boundary.
+ *
+ * @param connectorStream the stream of {@code ConnectorRecord<T>} to consume and forward
+ * @return a {@code Cancellable} that can be used to cancel the in-progress forwarding
+ */
+Cancellable forward(Multi<ConnectorRecord<T>> connectorStream);
 
+    /**
+     * Forwards the given stream to the target after attaching side-effect callbacks for accepted items and failures.
+     *
+     * @param connectorStream the source stream of ConnectorRecord items
+     * @param onAccepted invoked for each item emitted by the stream
+     * @param onFailure invoked when the stream signals a failure
+     * @return a Cancellable that can be used to cancel the forwarded subscription
+     * @throws NullPointerException if any argument is null
+     */
     default Cancellable forward(
         Multi<ConnectorRecord<T>> connectorStream,
         Consumer<ConnectorRecord<T>> onAccepted,
