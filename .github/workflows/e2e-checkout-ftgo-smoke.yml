@@ -55,6 +55,7 @@ jobs:
             -am \
             -Dtest=DeliverForwardBridgeE2ETest \
             -Dsurefire.failIfNoSpecifiedTests=false \
+            -Dquarkus.container-image.build=false \
             test
 
       - name: Dump reports on failure

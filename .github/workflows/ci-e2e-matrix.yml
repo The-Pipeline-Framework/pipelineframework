@@ -1,18 +1,6 @@
 name: CI — E2E Test Matrix
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - "framework/**"
-      - "examples/**"
-      - "pom.xml"
-      - ".github/workflows/ci-e2e-matrix.yml"
-      - ".github/workflows/e2e-csv-monolith.yml"
-      - ".github/workflows/e2e-csv-pipeline-runtime.yml"
-      - ".github/workflows/e2e-checkout-ftgo-smoke.yml"
-      - ".github/workflows/e2e-search-lambda-smoke.yml"
   workflow_dispatch:
 
 concurrency:
