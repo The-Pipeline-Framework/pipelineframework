@@ -57,31 +57,27 @@ jobs:
           fi
           tar -xzf "$artifact" -C ~/.m2/repository
 
-      - name: Package checkout deliver-order orchestrator
-        run: |
-          read -r -a maven_args <<< "$MAVEN_ARGS"
-          ./mvnw "${maven_args[@]}" -f examples/checkout/pom.xml \
-            -pl deliver-order-orchestrator-svc \
-            -am \
-            -DskipTests \
-            package
-
       - name: Run checkout durable QUEUE_ASYNC HA chaos lane
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" -f examples/checkout/pom.xml \
             -pl deliver-order-orchestrator-svc \
             -am \
+            -Dtest=NoMatchingUnitTest \
+            -Dsurefire.failIfNoSpecifiedTests=false \
             -Dit.test=QueueAsyncDurableHaIT \
             -Dfailsafe.failIfNoSpecifiedTests=false \
-            failsafe:integration-test \
-            failsafe:verify
+            verify
 
       - name: Dump durable HA diagnostics on failure
         if: failure()
         run: |
-          find examples/checkout/deliver-order-orchestrator-svc/target/failsafe-reports -maxdepth 2 -type f -print -exec tail -n 200 {} \;
-          find examples/checkout/deliver-order-orchestrator-svc/target/failsafe-reports/queue-async-ha -type f -print -exec tail -n 200 {} \;
+          if [ -d examples/checkout/deliver-order-orchestrator-svc/target/failsafe-reports ]; then
+            find examples/checkout/deliver-order-orchestrator-svc/target/failsafe-reports -maxdepth 2 -type f -print -exec tail -n 200 {} \;
+          fi
+          if [ -d examples/checkout/deliver-order-orchestrator-svc/target/failsafe-reports/queue-async-ha ]; then
+            find examples/checkout/deliver-order-orchestrator-svc/target/failsafe-reports/queue-async-ha -type f -print -exec tail -n 200 {} \;
+          fi
 
       - name: Upload durable HA diagnostics on failure
         if: failure()

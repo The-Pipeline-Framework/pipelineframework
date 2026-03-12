@@ -1,7 +1,7 @@
 name: CI — TPFGo QUEUE_ASYNC Durable HA Gate
 
 on:
-  pull_request:
+  push:
     branches:
       - main
     paths:
