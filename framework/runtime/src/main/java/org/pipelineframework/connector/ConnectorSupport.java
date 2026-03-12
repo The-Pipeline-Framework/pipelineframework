@@ -182,7 +182,11 @@ public final class ConnectorSupport {
         }
         List<String> components = new ArrayList<>();
         for (String field : keyFields) {
-            components.add(normalizeOrDefault(readProperty(payload, field), ""));
+            String value = readProperty(payload, field);
+            if (value == null || value.isBlank()) {
+                return null;
+            }
+            components.add(value.trim());
         }
         return deterministicHandoffKey(connectorName, components.toArray(String[]::new));
     }

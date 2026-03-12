@@ -16,9 +16,9 @@ Developer implementation guidance lives in [Item Reject Sink](/guide/development
 
 Triage rule:
 
-1. Rising item rejects with stable execution success usually indicates data quality or business-rule drift.
-2. Rising execution DLQ indicates control-plane, dependency, or systemic execution failure.
-3. Rising connector backlog indicates throughput or admission pressure before downstream execution has started.
+1. An increase in item rejects with stable execution success usually indicates data quality or business-rule drift.
+2. A growing execution DLQ indicates control-plane, dependency, or systemic execution failure.
+3. When connector backlog rises, it indicates throughput or admission pressure before downstream execution has started.
 
 ## Execution DLQ Configuration (Queue-Async)
 

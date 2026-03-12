@@ -286,12 +286,15 @@ public class PipelineYamlConfigLoader {
         }
 
         List<ConnectorConfig> values = new ArrayList<>();
+        int index = 0;
         for (Object connectorObj : connectors) {
+            index++;
             if (!(connectorObj instanceof Map<?, ?> connectorMap)) {
                 continue;
             }
             String name = readString(connectorMap, "name");
             if (name == null || name.isBlank()) {
+                LOG.warning("Skipping connector entry #" + index + " with missing name: " + connectorMap);
                 continue;
             }
             values.add(new ConnectorConfig(
@@ -320,7 +323,8 @@ public class PipelineYamlConfigLoader {
     private ConnectorSourceConfig readSource(Map<?, ?> connectorMap) {
         Object sourceObj = connectorMap.get("source");
         if (!(sourceObj instanceof Map<?, ?> sourceMap)) {
-            return null;
+            throw new IllegalArgumentException(
+                "ConnectorConfig '" + readString(connectorMap, "name") + "' requires a source section defined as a map");
         }
         return new ConnectorSourceConfig(
             readString(sourceMap, "kind"),
@@ -338,7 +342,8 @@ public class PipelineYamlConfigLoader {
     private ConnectorTargetConfig readTarget(Map<?, ?> connectorMap) {
         Object targetObj = connectorMap.get("target");
         if (!(targetObj instanceof Map<?, ?> targetMap)) {
-            return null;
+            throw new IllegalArgumentException(
+                "ConnectorConfig '" + readString(connectorMap, "name") + "' requires a target section defined as a map");
         }
         return new ConnectorTargetConfig(
             readString(targetMap, "kind"),

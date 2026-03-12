@@ -103,10 +103,14 @@ public final class ConnectorRuntime<I, O> {
         Multi<ConnectorRecord<O>> forwarded = backpressured
             .onItem().transformToMulti(this::mapAndFilter)
             .concatenate();
-        return target.forward(
+        Cancellable active = target.forward(
             forwarded,
             this::markAccepted,
             this::handleFailure);
+        return () -> {
+            active.cancel();
+            clearOutstandingReservations();
+        };
     }
 
     /**
@@ -122,7 +126,7 @@ public final class ConnectorRuntime<I, O> {
             mapped = mapper.apply(sourceRecord);
         } catch (RuntimeException e) {
             ConnectorMetrics.record(connectorName, "mapping_failure");
-            failureObserver.accept(e);
+            invokeFailureObserver(e);
             if (policy.failureMode() == ConnectorFailureMode.LOG_AND_CONTINUE) {
                 LOG.warnf(e, "Connector %s mapping failure ignored due to LOG_AND_CONTINUE", connectorName);
                 return Multi.createFrom().empty();
@@ -131,12 +135,12 @@ public final class ConnectorRuntime<I, O> {
         }
         if (mapped == null) {
             ConnectorMetrics.record(connectorName, "rejected");
-            rejectionObserver.accept(sourceRecord);
+            invokeRejectionObserver(sourceRecord);
             return Multi.createFrom().empty();
         }
         if (!tryAcquire(mapped)) {
             ConnectorMetrics.record(connectorName, "duplicate_suppressed");
-            duplicateObserver.accept(mapped);
+            invokeDuplicateObserver(mapped);
             return Multi.createFrom().empty();
         }
         ConnectorMetrics.record(connectorName, "forwarded");
@@ -192,6 +196,36 @@ public final class ConnectorRuntime<I, O> {
         }
         ConnectorMetrics.record(connectorName, "delivery_failure");
         LOG.errorf(failure, "Connector %s delivery failed", connectorName);
-        failureObserver.accept(failure);
+        invokeFailureObserver(failure);
+    }
+
+    private void clearOutstandingReservations() {
+        if (idempotencyTracker != null) {
+            idempotencyTracker.clearReservations();
+        }
+    }
+
+    private void invokeRejectionObserver(ConnectorRecord<I> sourceRecord) {
+        try {
+            rejectionObserver.accept(sourceRecord);
+        } catch (RuntimeException e) {
+            LOG.warnf(e, "Connector %s rejection observer failed", connectorName);
+        }
+    }
+
+    private void invokeDuplicateObserver(ConnectorRecord<O> mapped) {
+        try {
+            duplicateObserver.accept(mapped);
+        } catch (RuntimeException e) {
+            LOG.warnf(e, "Connector %s duplicate observer failed", connectorName);
+        }
+    }
+
+    private void invokeFailureObserver(Throwable failure) {
+        try {
+            failureObserver.accept(failure);
+        } catch (RuntimeException e) {
+            LOG.warnf(e, "Connector %s failure observer failed", connectorName);
+        }
     }
 }

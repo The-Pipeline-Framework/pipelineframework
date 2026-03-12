@@ -20,6 +20,9 @@ import io.smallrye.mutiny.Multi;
 
 /**
  * Produces connector records from a live or replay source.
+ * Implementations must return a non-blocking reactive stream and avoid doing blocking I/O or
+ * long-running CPU work on caller or event-loop threads. If blocking work is required, offload it
+ * to a worker executor before emitting records into the returned stream.
  *
  * @param <T> source payload type
  */
@@ -27,11 +30,10 @@ import io.smallrye.mutiny.Multi;
 public interface ConnectorSource<T> {
 
     /**
- * Produce a reactive stream of connector records from the source.
- *
- * The stream emits ConnectorRecord&lt;T&gt; items representing payloads from a live or replay source.
- *
- * @return a Multi that emits ConnectorRecord&lt;T&gt; instances from the source
- */
-Multi<ConnectorRecord<T>> stream();
+     * Returns an eager, non-blocking stream of connector records.
+     * The stream emits {@code ConnectorRecord<T>} items representing payloads from a live or replay source.
+     *
+     * @return non-blocking connector record stream
+     */
+    Multi<ConnectorRecord<T>> stream();
 }

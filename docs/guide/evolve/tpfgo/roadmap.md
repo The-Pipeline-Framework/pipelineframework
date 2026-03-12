@@ -256,7 +256,7 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 - **Stance**: Connector declarations now validate source payload class, target payload class, mapper signature, and target adapter signature at build time. Cross-pipeline handoff remains explicit through connector contracts instead of hidden pipeline internals.
 - **Status**: RESOLVED
 
-7) **Backpressure across pipelines**
+7. **Backpressure across pipelines**
 - **Problem**: Piping should preserve backpressure end-to-end.
 - **Stance**: Framework connectors now expose explicit `BUFFER` (bounded buffering before overflow) and `DROP` (drop or reject excess handoffs when saturated) policies with configured buffer capacity for live handoffs. Broker connectors remain strategy-based and do not claim end-to-end broker demand control in v1.
 - **Status**: RESOLVED

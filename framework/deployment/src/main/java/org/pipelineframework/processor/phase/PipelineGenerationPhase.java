@@ -70,33 +70,6 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
          */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
-        // Only proceed if there are models to process or orchestrator to generate
-        if (ctx.getStepModels().isEmpty() && !ctx.isOrchestratorGenerated()) {
-            // Still need to write role metadata even if no models to process
-            RoleMetadataGenerator roleMetadataGenerator = new RoleMetadataGenerator(ctx.getProcessingEnv());
-            PipelinePlatformMetadataGenerator platformMetadataGenerator =
-                new PipelinePlatformMetadataGenerator(ctx.getProcessingEnv());
-            try {
-                roleMetadataGenerator.writeRoleMetadata();
-            } catch (IOException e) {
-                if (ctx.getProcessingEnv() != null) {
-                    ctx.getProcessingEnv().getMessager().printMessage(
-                        javax.tools.Diagnostic.Kind.WARNING,
-                        "Failed to write role metadata: " + e.getMessage());
-                }
-            }
-            try {
-                platformMetadataGenerator.writePlatformMetadata(ctx);
-            } catch (IOException e) {
-                if (ctx.getProcessingEnv() != null) {
-                    ctx.getProcessingEnv().getMessager().printMessage(
-                        javax.tools.Diagnostic.Kind.WARNING,
-                        "Failed to write platform metadata: " + e.getMessage());
-                }
-            }
-            return;
-        }
-
         // Get the bindings map from the context
         Map<String, Object> bindingsMap = ctx.getRendererBindings();
 
@@ -128,6 +101,34 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         ClassName cacheKeyGenerator = resolveCacheKeyGenerator(ctx);
 
         DescriptorProtos.FileDescriptorSet descriptorSet = ctx.getDescriptorSet();
+        generateConnectorBootstraps(
+            ctx,
+            connectorBootstrapRenderer,
+            roleMetadataGenerator,
+            cacheKeyGenerator,
+            descriptorSet);
+
+        if (ctx.getStepModels().isEmpty() && !ctx.isOrchestratorGenerated()) {
+            try {
+                roleMetadataGenerator.writeRoleMetadata();
+            } catch (IOException e) {
+                if (ctx.getProcessingEnv() != null) {
+                    ctx.getProcessingEnv().getMessager().printMessage(
+                        javax.tools.Diagnostic.Kind.WARNING,
+                        "Failed to write role metadata: " + e.getMessage());
+                }
+            }
+            try {
+                platformMetadataGenerator.writePlatformMetadata(ctx);
+            } catch (IOException e) {
+                if (ctx.getProcessingEnv() != null) {
+                    ctx.getProcessingEnv().getMessager().printMessage(
+                        javax.tools.Diagnostic.Kind.WARNING,
+                        "Failed to write platform metadata: " + e.getMessage());
+                }
+            }
+            return;
+        }
 
         Set<String> generatedSideEffectBeans = new HashSet<>();
         Set<String> enabledAspects = computeEnabledAspects(ctx);
@@ -251,36 +252,6 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             }
         }
 
-        if (!ctx.getConnectorConfigs().isEmpty() && ctx.getPipelineTemplateConfig() instanceof org.pipelineframework.config.template.PipelineTemplateConfig templateConfig) {
-            GenerationContext connectorContext = new GenerationContext(
-                ctx.getProcessingEnv(),
-                generationPathResolver.resolveRoleOutputDir(ctx, DeploymentRole.PIPELINE_SERVER),
-                DeploymentRole.PIPELINE_SERVER,
-                Set.of(),
-                cacheKeyGenerator,
-                descriptorSet);
-            for (var connector : ctx.getConnectorConfigs()) {
-                try {
-                    ClassName generatedClass = connectorBootstrapRenderer.render(
-                        connector,
-                        templateConfig.basePackage(),
-                        connectorContext);
-                    roleMetadataGenerator.recordClassWithRole(generatedClass, DeploymentRole.PIPELINE_SERVER.name());
-                } catch (IOException | RuntimeException e) {
-                    if (ctx.getProcessingEnv() != null) {
-                        ctx.getProcessingEnv().getMessager().printMessage(
-                            javax.tools.Diagnostic.Kind.WARNING,
-                            "Failed to generate connector bootstrap for '"
-                                + connector.name()
-                                + "' in base package '"
-                                + templateConfig.basePackage()
-                                + "': "
-                                + e.getMessage());
-                    }
-                }
-            }
-        }
-
         // Write role metadata
         try {
             roleMetadataGenerator.writeRoleMetadata();
@@ -332,6 +303,49 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.WARNING,
                 "Failed to write step definitions: " + e.getMessage());
+        }
+    }
+
+    private void generateConnectorBootstraps(
+        PipelineCompilationContext ctx,
+        ConnectorBootstrapRenderer connectorBootstrapRenderer,
+        RoleMetadataGenerator roleMetadataGenerator,
+        ClassName cacheKeyGenerator,
+        DescriptorProtos.FileDescriptorSet descriptorSet
+    ) {
+        if (ctx.getConnectorConfigs().isEmpty()
+            || !(ctx.getPipelineTemplateConfig() instanceof org.pipelineframework.config.template.PipelineTemplateConfig templateConfig)) {
+            return;
+        }
+
+        GenerationContext connectorContext = new GenerationContext(
+            ctx.getProcessingEnv(),
+            generationPathResolver.resolveRoleOutputDir(ctx, DeploymentRole.PIPELINE_SERVER),
+            DeploymentRole.PIPELINE_SERVER,
+            Set.of(),
+            cacheKeyGenerator,
+            descriptorSet);
+        for (var connector : ctx.getConnectorConfigs()) {
+            try {
+                ClassName generatedClass = connectorBootstrapRenderer.render(
+                    connector,
+                    templateConfig.basePackage(),
+                    connectorContext);
+                roleMetadataGenerator.recordClassWithRole(generatedClass, DeploymentRole.PIPELINE_SERVER.name());
+            } catch (IOException | RuntimeException e) {
+                String message = "Failed to generate connector bootstrap for '"
+                    + connector.name()
+                    + "' in base package '"
+                    + templateConfig.basePackage()
+                    + "': "
+                    + e.getMessage();
+                if (ctx.getProcessingEnv() != null) {
+                    ctx.getProcessingEnv().getMessager().printMessage(
+                        javax.tools.Diagnostic.Kind.ERROR,
+                        message);
+                }
+                throw new RuntimeException(message, e);
+            }
         }
     }
 

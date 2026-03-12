@@ -40,12 +40,16 @@ class ConnectorRuntimeTest {
             null,
             null);
 
-        runtime.start();
-        await(latch, "accepted records for pre-forward duplicate suppression");
+        Cancellable subscription = runtime.start();
+        try {
+            await(latch, "accepted records for pre-forward duplicate suppression");
 
-        assertEquals(2, accepted.size());
-        assertEquals("order-1", accepted.get(0).payload().orderId());
-        assertEquals("order-2", accepted.get(1).payload().orderId());
+            assertEquals(2, accepted.size());
+            assertEquals("order-1", accepted.get(0).payload().orderId());
+            assertEquals("order-2", accepted.get(1).payload().orderId());
+        } finally {
+            subscription.cancel();
+        }
     }
 
     @Test
@@ -98,11 +102,15 @@ class ConnectorRuntimeTest {
             null,
             null);
 
-        runtime.start();
-        await(latch, "connector attempts after on-accept failure");
+        Cancellable subscription = runtime.start();
+        try {
+            await(latch, "connector attempts after on-accept failure");
 
-        assertEquals(2, attempts.size());
-        assertEquals(1, failureCallbacks.get());
+            assertEquals(2, attempts.size());
+            assertEquals(1, failureCallbacks.get());
+        } finally {
+            subscription.cancel();
+        }
     }
 
     @Test
@@ -135,12 +143,16 @@ class ConnectorRuntimeTest {
             null,
             failure -> failures.incrementAndGet());
 
-        runtime.start();
-        await(acceptedLatch, "accepted records after mapping failure");
+        Cancellable subscription = runtime.start();
+        try {
+            await(acceptedLatch, "accepted records after mapping failure");
 
-        assertEquals(1, accepted.size());
-        assertEquals("good", accepted.get(0).payload().orderId());
-        assertEquals(1, failures.get());
+            assertEquals(1, accepted.size());
+            assertEquals("good", accepted.get(0).payload().orderId());
+            assertEquals(1, failures.get());
+        } finally {
+            subscription.cancel();
+        }
     }
 
     private static ConnectorTarget<TestPayload> connectorTarget(

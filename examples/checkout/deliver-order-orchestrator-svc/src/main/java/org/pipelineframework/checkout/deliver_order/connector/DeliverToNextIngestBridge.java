@@ -323,17 +323,21 @@ public class DeliverToNextIngestBridge {
                 ConcurrentMap<String, ConnectorRecord<OrderDeliveredSvc.DeliveredOrder>> pending = new ConcurrentHashMap<>();
                 return forwardClient.forward(
                     connectorStream.onItem().invoke(record -> {
-                        String key = record.idempotencyKey();
+                        String key = ConnectorSupport.deriveIdempotencyKey(
+                            "deliver-to-next",
+                            record.payload(),
+                            List.of("orderId", "dispatchId", "deliveredAt"));
                         if (key != null && !key.isBlank()) {
                             pending.put(key, record);
                         }
                     }).onItem().transform(ConnectorRecord::payload),
                     payload -> {
-                        String key = ConnectorSupport.deriveIdempotencyKey(
+                        String lookupKey = ConnectorSupport.deriveIdempotencyKey(
                             "deliver-to-next",
                             payload,
                             List.of("orderId", "dispatchId", "deliveredAt"));
-                        ConnectorRecord<OrderDeliveredSvc.DeliveredOrder> accepted = key == null ? null : pending.remove(key);
+                        ConnectorRecord<OrderDeliveredSvc.DeliveredOrder> accepted =
+                            lookupKey == null ? null : pending.remove(lookupKey);
                         onAccepted.accept(accepted == null
                             ? mapRecord(ConnectorRecord.<Object>ofPayload(payload))
                             : accepted);

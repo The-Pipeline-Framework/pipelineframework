@@ -59,10 +59,15 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     /**
      * Create a PipelineDiscoveryPhase using the provided collaborators and a default ConnectorConfigValidator.
      *
-     * @param discoveryPathResolver resolver for locating generated sources, module directory, and module name
-     * @param discoveryConfigLoader loader for discovery-related configuration (aspects, templates, step config, runtime mapping)
-     * @param transportPlatformResolver resolver for transport and platform modes from step configuration
+     * @param discoveryPathResolver resolver for locating pipeline-related paths
+     * @param discoveryConfigLoader loader for discovery configuration
+     * @param transportPlatformResolver resolver for transport and platform modes
+     * @throws NullPointerException if any argument is null
+     * @deprecated prefer {@link #PipelineDiscoveryPhase(DiscoveryPathResolver, DiscoveryConfigLoader,
+     * TransportPlatformResolver, ConnectorConfigValidator)} so tests and callers can provide an explicit
+     * connector validator
      */
+    @Deprecated
     public PipelineDiscoveryPhase(
             DiscoveryPathResolver discoveryPathResolver,
             DiscoveryConfigLoader discoveryConfigLoader,
@@ -75,12 +80,12 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Creates a PipelineDiscoveryPhase configured with the given collaborators.
+     * Constructs a PipelineDiscoveryPhase with the provided collaborators.
      *
-     * @param discoveryPathResolver resolves paths for generated sources, module directory, and module name
-     * @param discoveryConfigLoader loads discovery-related configuration (aspects, template/step configs, runtime mapping)
-     * @param transportPlatformResolver resolves transport and platform modes from step config
-     * @param connectorConfigValidator validates connector declarations against template and step definitions
+     * @param discoveryPathResolver resolver for locating pipeline-related paths
+     * @param discoveryConfigLoader loader for discovery configuration
+     * @param transportPlatformResolver resolver for transport and platform modes
+     * @param connectorConfigValidator validator for connector declarations
      * @throws NullPointerException if any argument is null
      */
     public PipelineDiscoveryPhase(
