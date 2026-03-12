@@ -8,16 +8,23 @@ on:
         required: false
         default: 'framework-m2-cache'
         type: string
+      download_artifacts:
+        description: 'Whether to download prebuilt framework artifacts instead of bootstrapping locally'
+        required: false
+        default: true
+        type: boolean
   push:
     branches:
       - main
     paths:
       - 'framework/**'
       - 'examples/csv-payments/**'
+      - 'plugins/**'
       - 'pom.xml'
       - 'mvnw'
       - '.mvn/**'
       - 'scripts/ci/**'
+      - '.github/actions/setup-testcontainers/**'
       - '.github/workflows/e2e-csv-pipeline-runtime.yml'
   workflow_dispatch:
 
@@ -49,20 +56,20 @@ jobs:
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
 
       - name: Download framework artifacts
-        if: ${{ github.event_name == 'workflow_call' }}
+        if: ${{ github.event_name == 'workflow_call' && inputs.download_artifacts }}
         uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.artifact_name }}
           path: /tmp/m2-artifacts
 
       - name: Extract framework artifacts
-        if: ${{ github.event_name == 'workflow_call' }}
+        if: ${{ github.event_name == 'workflow_call' && inputs.download_artifacts }}
         run: |
           mkdir -p ~/.m2/repository
           tar -xzf /tmp/m2-artifacts/${{ inputs.artifact_name }}.tar.gz -C ~/.m2/repository
 
       - name: Bootstrap framework artifacts locally
-        if: ${{ github.event_name != 'workflow_call' }}
+        if: ${{ github.event_name != 'workflow_call' || !inputs.download_artifacts }}
         run: ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
 
       - name: Setup Testcontainers Docker environment
@@ -70,8 +77,9 @@ jobs:
 
       - name: Build csv-payments pipeline-runtime topology
         run: |
-          read -r -a maven_args <<< "$MAVEN_ARGS"
-          MAVEN_ARGS="${maven_args[*]/-T 1C/-T 1}" \
+          local_maven_args="${MAVEN_ARGS/-T 1C/-T 1}"
+          read -r -a maven_args <<< "$local_maven_args"
+          MAVEN_ARGS="$local_maven_args" \
             ./examples/csv-payments/build-pipeline-runtime.sh \
             -DskipTests \
             -Dquarkus.container-image.build=true

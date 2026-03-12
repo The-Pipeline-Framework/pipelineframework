@@ -9,6 +9,7 @@ on:
     paths:
       - 'framework/**'
       - 'examples/**'
+      - 'plugins/**'
       - 'pom.xml'
       - 'mvnw'
       - '.mvn/**'
@@ -23,7 +24,7 @@ env:
   MAVEN_ARGS_BOOTSTRAP: -B -T 1C -V -P!coverage -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
   MAVEN_ARGS_PR: -B -T 1 -V -P!coverage -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
   BOOTSTRAP_ARTIFACT: pr-m2-cache
-  UNIT_TEST_PATTERN: "*,!RawDocumentResourceTest,!ParsedDocumentResourceTest,!TokenBatchResourceTest,!IndexAckResourceTest,!LambdaMockEventServerSmokeTest"
+  UNIT_TEST_PATTERN: "*,!RawDocumentResourceTest,!ParsedDocumentResourceTest,!TokenBatchResourceTest,!IndexAckResourceTest,!LambdaMockEventServerSmokeTest,!CsvPaymentsEndToEndIT,!CsvPaymentsPipelineRuntimeEndToEndIT"
   GENERIC_VERIFY_IT_PATTERN: "*IT,*ITCase,!CsvPaymentsEndToEndIT,!CsvPaymentsPipelineRuntimeEndToEndIT,!SearchPipelineEndToEndIT,!RawDocumentResourceIT,!ParsedDocumentResourceIT,!TokenBatchResourceIT,!IndexAckResourceIT"
 
 jobs:
