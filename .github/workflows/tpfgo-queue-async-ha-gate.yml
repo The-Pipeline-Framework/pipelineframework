@@ -53,13 +53,15 @@ jobs:
         run: |
           mkdir -p /tmp/m2-artifacts
           cd ~/.m2/repository
-          dirs=()
-          for d in org/pipelineframework org/pipelineframework/csv org/pipelineframework/search; do
-            if [ ! -d "$d" ]; then
-              echo "::error::Missing required framework artifact subtree '$d' before packaging framework-m2-cache."
-              exit 1
+          dirs=(org/pipelineframework)
+          if [ ! -d "org/pipelineframework" ]; then
+            echo "::error::Missing required framework artifact subtree 'org/pipelineframework' before packaging framework-m2-cache."
+            exit 1
+          fi
+          for d in org/pipelineframework/csv org/pipelineframework/search; do
+            if [ -d "$d" ]; then
+              dirs+=("$d")
             fi
-            dirs+=("$d")
           done
           tar -czf /tmp/m2-artifacts/framework-m2-cache.tar.gz "${dirs[@]}"
 
