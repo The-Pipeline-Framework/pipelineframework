@@ -84,6 +84,23 @@ public record TransportDispatchMetadata(
             normalize(parentItemId));
     }
 
+    /**
+     * Returns a copy of this metadata with a different idempotency key.
+     *
+     * @param nextIdempotencyKey replacement idempotency key
+     * @return copied metadata preserving all other fields
+     */
+    public TransportDispatchMetadata withIdempotencyKey(String nextIdempotencyKey) {
+        return new TransportDispatchMetadata(
+            correlationId,
+            executionId,
+            nextIdempotencyKey,
+            retryAttempt,
+            deadlineEpochMs,
+            dispatchTsEpochMs,
+            parentItemId);
+    }
+
     private static String normalize(String value) {
         if (value == null || value.isBlank()) {
             return null;

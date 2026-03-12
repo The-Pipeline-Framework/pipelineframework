@@ -19,6 +19,7 @@ package org.pipelineframework.config.pipeline;
 import java.util.List;
 
 import org.pipelineframework.config.PlatformOverrideResolver;
+import org.pipelineframework.config.connector.ConnectorConfig;
 
 /**
  * Pipeline configuration parsed from pipeline.yaml.
@@ -28,13 +29,15 @@ import org.pipelineframework.config.PlatformOverrideResolver;
  * @param platform the runtime/deployment platform mode (COMPUTE or FUNCTION)
  * @param steps the configured pipeline steps
  * @param aspects the configured pipeline aspects
+ * @param connectors the configured framework connectors
  */
 public record PipelineYamlConfig(
     String basePackage,
     String transport,
     String platform,
     List<PipelineYamlStep> steps,
-    List<PipelineYamlAspect> aspects
+    List<PipelineYamlAspect> aspects,
+    List<ConnectorConfig> connectors
 ) {
     /**
      * Creates a validated pipeline configuration.
@@ -69,6 +72,25 @@ public record PipelineYamlConfig(
         List<PipelineYamlStep> steps,
         List<PipelineYamlAspect> aspects
     ) {
-        this(basePackage, transport, "COMPUTE", steps, aspects);
+        this(basePackage, transport, "COMPUTE", steps, aspects, List.of());
+    }
+
+    /**
+     * Backward-compatible constructor used by existing callers that set transport and platform but no connectors.
+     *
+     * @param basePackage base package
+     * @param transport transport mode
+     * @param platform platform mode
+     * @param steps configured steps
+     * @param aspects configured aspects
+     */
+    public PipelineYamlConfig(
+        String basePackage,
+        String transport,
+        String platform,
+        List<PipelineYamlStep> steps,
+        List<PipelineYamlAspect> aspects
+    ) {
+        this(basePackage, transport, platform, steps, aspects, List.of());
     }
 }

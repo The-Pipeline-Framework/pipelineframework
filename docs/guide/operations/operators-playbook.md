@@ -108,6 +108,13 @@ Fast triage checklist:
 3. If systemic: stabilise dependency first, then replay.
 4. If data-specific: isolate failing payloads and route to item reject sink for single-item/data-level failures, or to execution DLQ for job/task-level or systemic execution failures.
 
+### Connector backlog and handoff failures
+
+1. Treat connector backlog as pre-execution pressure: work has not yet been admitted into downstream orchestration.
+2. Separate connector mapping rejects and delivery failures from execution DLQ and item reject sink incidents.
+3. For live connector incidents, check the target ingest adapter health, duplicate-suppression counters, and handoff latency before replaying anything.
+4. For broker-backed manual bridges, use broker-native requeue/reject controls; framework v1 does not ship a generic re-drive consumer.
+
 ### Execution DLQ Re-drive Guidance
 
 1. Treat execution DLQ entries as at-least-once replays of full execution transitions.
@@ -127,6 +134,7 @@ Current boundary:
 1. TPF does not provide a built-in generic re-drive consumer that reads item-reject SQS messages and re-submits directly to orchestrator async endpoints.
 2. Default reject envelopes are metadata-only (`pipeline.item-reject.include-payload=false`), so queue entries are often insufficient to reconstruct full replay input.
 3. Item reject re-drive is application-owned by design and should follow domain-specific replay procedures.
+4. Connector replay ownership is also application- or broker-operated in v1; framework connectors stop at live handoff admission and policy enforcement.
 
 Example (CSV payments style):
 
