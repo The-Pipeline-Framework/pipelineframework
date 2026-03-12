@@ -119,6 +119,9 @@ public class ConnectorBootstrapRenderer {
 
         ConnectorIdempotencyPolicy idempotencyPolicyValue =
             ConnectorSupport.normalizeIdempotencyPolicy(connector.idempotency());
+        String backpressurePolicyName = ConnectorSupport.normalizeBackpressurePolicy(connector.backpressure()).name();
+        String idempotencyPolicyName = idempotencyPolicyValue.name();
+        String failureModeName = ConnectorSupport.normalizeFailureMode(connector.failureMode()).name();
         CodeBlock trackerInit = idempotencyPolicyValue == ConnectorIdempotencyPolicy.DISABLED
             ? CodeBlock.of("null")
             : CodeBlock.of("new $T($L)", connectorTracker, connector.idempotencyMaxKeys());
@@ -126,12 +129,12 @@ public class ConnectorBootstrapRenderer {
             "new $T(true, $T.$L, $L, $T.$L, $T.$L)",
             connectorPolicy,
             connectorBackpressure,
-            connector.backpressure(),
+            backpressurePolicyName,
             connector.backpressureBufferCapacity(),
             connectorIdempotency,
-            connector.idempotency(),
+            idempotencyPolicyName,
             connectorFailureMode,
-            connector.failureMode());
+            failureModeName);
         CodeBlock handlersBlock = CodeBlock.of(
             "$L, rejected -> {}, duplicate -> LOG.debugf($S, duplicate == null ? null : duplicate.idempotencyKey()), failure -> LOG.error($S, failure)",
             trackerInit,

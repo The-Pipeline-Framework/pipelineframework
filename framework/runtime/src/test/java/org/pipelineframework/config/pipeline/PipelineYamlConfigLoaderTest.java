@@ -17,6 +17,7 @@
 package org.pipelineframework.config.pipeline;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import java.io.StringReader;
@@ -154,5 +155,32 @@ class PipelineYamlConfigLoaderTest {
             """));
 
         assertEquals(0, config.connectors().size());
+    }
+
+    @Test
+    void rejectsMalformedConnectorBrokerBlock() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                transport: "GRPC"
+                platform: "COMPUTE"
+                steps: []
+                connectors:
+                  - name: "orders-to-delivery"
+                    source:
+                      kind: "OUTPUT_BUS"
+                      step: "Order Ready"
+                      type: "com.example.grpc.OrderReady"
+                    target:
+                      kind: "LIVE_INGEST"
+                      pipeline: "deliver-order"
+                      type: "com.example.grpc.DispatchReadyOrder"
+                      adapter: "com.example.bridge.DeliverConnectorTarget"
+                    broker: "not-a-map"
+                """)));
+
+        assertEquals(
+            "ConnectorConfig 'orders-to-delivery' requires broker to be defined as a map, but got: not-a-map",
+            exception.getMessage());
     }
 }

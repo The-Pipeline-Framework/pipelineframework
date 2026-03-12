@@ -58,12 +58,7 @@ public class PipelineOrderMetadataGenerator {
             return;
         }
         if (ctx.getTransportMode() != null) {
-            config = new PipelineYamlConfig(
-                config.basePackage(),
-                ctx.getTransportMode().name(),
-                config.platform(),
-                config.steps(),
-                config.aspects());
+            config = config.withTransport(ctx.getTransportMode().name());
         }
 
         List<String> baseSteps = resolveBaseClientSteps(ctx);

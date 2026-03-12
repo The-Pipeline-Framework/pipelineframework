@@ -160,6 +160,42 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
+    void rejectsMalformedConnectorBrokerBlock() throws Exception {
+        String yaml = """
+            appName: "Test App"
+            basePackage: "com.example.test"
+            transport: "GRPC"
+            steps:
+              - name: "Process Foo"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "FooInput"
+                outputTypeName: "FooOutput"
+            connectors:
+              - name: "foo-to-bar"
+                source:
+                  kind: "OUTPUT_BUS"
+                  step: "Process Foo"
+                  type: "com.example.test.grpc.FooOutput"
+                target:
+                  kind: "LIVE_INGEST"
+                  pipeline: "bar-pipeline"
+                  type: "com.example.test.grpc.BarInput"
+                  adapter: "com.example.test.connector.BarConnectorTarget"
+                broker: "not-a-map"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-connectors-bad-broker.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertEquals(
+            "ConnectorConfig 'foo-to-bar' requires broker to be defined as a map, but got: not-a-map",
+            exception.getMessage());
+    }
+
+    @Test
     void platformCanBeOverriddenViaSystemProperty() throws Exception {
         String yaml = """
             appName: "Test App"

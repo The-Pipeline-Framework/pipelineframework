@@ -95,4 +95,24 @@ public record PipelineYamlConfig(
     ) {
         this(basePackage, transport, platform, steps, aspects, List.of());
     }
+
+    /**
+     * Returns a copy of this config with the given transport while preserving existing connectors.
+     *
+     * @param transport the transport to use in the returned config
+     * @return a new PipelineYamlConfig with the updated transport
+     */
+    public PipelineYamlConfig withTransport(String transport) {
+        return new PipelineYamlConfig(basePackage, transport, platform, steps, aspects, connectors);
+    }
+
+    /**
+     * Returns a copy of this config with the given platform while preserving existing connectors.
+     *
+     * @param platform the platform to use in the returned config
+     * @return a new PipelineYamlConfig with the updated platform
+     */
+    public PipelineYamlConfig withPlatform(String platform) {
+        return new PipelineYamlConfig(basePackage, transport, platform, steps, aspects, connectors);
+    }
 }
