@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -229,7 +230,7 @@ class ConnectorConfigTest {
         ConnectorSourceConfig source = new ConnectorSourceConfig("OUTPUT_BUS", "step", "Type");
         ConnectorTargetConfig target = new ConnectorTargetConfig("LIVE_INGEST", "pipeline", "Type", "Adapter");
 
-        List<String> fields = List.of("field1", "field2");
+        List<String> fields = new ArrayList<>(List.of("field1", "field2"));
         ConnectorConfig config = new ConnectorConfig(
             "connector-1",
             true,
@@ -245,6 +246,9 @@ class ConnectorConfigTest {
             fields,
             null);
 
+        fields.add("field3");
+
+        assertEquals(List.of("field1", "field2"), config.idempotencyKeyFields());
         assertThrows(UnsupportedOperationException.class, () ->
             config.idempotencyKeyFields().add("field3"));
     }

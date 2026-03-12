@@ -214,7 +214,6 @@ final class ConnectorConfigValidator {
         }
     }
 
-<<<<<<< HEAD
     private boolean hasRequiredTypeNames(ConnectorConfig connector) {
         return hasText(connector.source().type())
             && hasText(connector.target().type())

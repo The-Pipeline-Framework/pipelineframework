@@ -17,25 +17,9 @@
 package org.pipelineframework.connector;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-
 import org.junit.jupiter.api.Test;
 
 class ConnectorBackpressurePolicyTest {
-
-    @Test
-    void enumContainsBufferPolicy() {
-        ConnectorBackpressurePolicy policy = ConnectorBackpressurePolicy.BUFFER;
-        assertNotNull(policy);
-        assertEquals("BUFFER", policy.name());
-    }
-
-    @Test
-    void enumContainsDropPolicy() {
-        ConnectorBackpressurePolicy policy = ConnectorBackpressurePolicy.DROP;
-        assertNotNull(policy);
-        assertEquals("DROP", policy.name());
-    }
 
     @Test
     void valueOfReturnsCorrectPolicy() {

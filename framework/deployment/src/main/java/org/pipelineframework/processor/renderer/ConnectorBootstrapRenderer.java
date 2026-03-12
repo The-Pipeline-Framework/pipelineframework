@@ -22,6 +22,9 @@ import org.pipelineframework.connector.ConnectorSupport;
  * Generates CDI bootstrap beans for declared framework connectors.
  */
 public class ConnectorBootstrapRenderer {
+    private static final String OUTPUT_BUS = "OUTPUT_BUS";
+    private static final String LIVE_INGEST = "LIVE_INGEST";
+    private static final String GRPC = "GRPC";
 
     /**
      * Generate a CDI connector bridge class for the given ConnectorConfig and write it to the processing environment.
@@ -34,6 +37,7 @@ public class ConnectorBootstrapRenderer {
      * @throws IllegalStateException if the connector requires a mapper (source and target types differ) but none is provided
      */
     public ClassName render(ConnectorConfig connector, String basePackage, GenerationContext ctx) throws IOException {
+        validateSupportedShape(connector);
         String packageName = basePackage + ".connector";
         String className = toPascalCase(connector.name()) + "ConnectorBridge";
         ClassName generatedType = ClassName.get(packageName, className);
@@ -204,6 +208,23 @@ public class ConnectorBootstrapRenderer {
             .build()
             .writeTo(ctx.processingEnv().getFiler());
         return generatedType;
+    }
+
+    private static void validateSupportedShape(ConnectorConfig connector) {
+        String sourceKind = ConnectorSupport.normalizeOrDefault(
+            connector.source() == null ? null : connector.source().kind(),
+            "").toUpperCase(Locale.ROOT);
+        String targetKind = ConnectorSupport.normalizeOrDefault(
+            connector.target() == null ? null : connector.target().kind(),
+            "").toUpperCase(Locale.ROOT);
+        String transport = ConnectorSupport.normalizeOrDefault(connector.transport(), "").toUpperCase(Locale.ROOT);
+        if (!OUTPUT_BUS.equals(sourceKind)
+            || !LIVE_INGEST.equals(targetKind)
+            || !GRPC.equals(transport)) {
+            throw new IllegalStateException(
+                "Connector '" + connector.name()
+                    + "' uses an unsupported generated shape; only OUTPUT_BUS -> LIVE_INGEST over GRPC is supported");
+        }
     }
 
     /**

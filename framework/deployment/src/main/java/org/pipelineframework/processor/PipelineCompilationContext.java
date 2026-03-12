@@ -46,7 +46,6 @@ public class PipelineCompilationContext {
     private Object pipelineTemplateConfig; // Store as Object to avoid circular dependencies
     @Setter
     private List<StepDefinition> stepDefinitions;
-    @Setter
     private List<ConnectorConfig> connectorConfigs;
     
     // Resolved generation targets
@@ -140,6 +139,15 @@ public class PipelineCompilationContext {
          */
     public Path getModuleDir() {
         return moduleDir;
+    }
+
+    /**
+     * Set the validated connector configurations for the current compilation.
+     *
+     * @param connectorConfigs the connector configurations, or {@code null} to clear them
+     */
+    public void setConnectorConfigs(List<ConnectorConfig> connectorConfigs) {
+        this.connectorConfigs = connectorConfigs == null ? List.of() : connectorConfigs;
     }
 
     /**

@@ -19,6 +19,7 @@ package org.pipelineframework.config.connector;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -152,9 +153,9 @@ class ConnectorTargetConfigTest {
 
         String str = config.toString();
         assertNotNull(str);
-        assertEquals(true, str.contains("LIVE_INGEST"));
-        assertEquals(true, str.contains("pipeline"));
-        assertEquals(true, str.contains("type"));
-        assertEquals(true, str.contains("adapter"));
+        assertTrue(str.contains("LIVE_INGEST"), "expected substring missing: LIVE_INGEST");
+        assertTrue(str.contains("pipeline"), "expected substring missing: pipeline");
+        assertTrue(str.contains("type"), "expected substring missing: type");
+        assertTrue(str.contains("adapter"), "expected substring missing: adapter");
     }
 }

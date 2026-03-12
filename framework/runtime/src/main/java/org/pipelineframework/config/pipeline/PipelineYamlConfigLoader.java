@@ -20,6 +20,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -461,7 +463,7 @@ public class PipelineYamlConfigLoader {
             return defaultValue;
         }
         if (value instanceof Number number) {
-            return number.intValue();
+            return exactIntegerValue(number, key);
         }
         String text = value.toString();
         if (text.isBlank()) {
@@ -472,5 +474,46 @@ public class PipelineYamlConfigLoader {
         } catch (NumberFormatException ex) {
             throw new IllegalStateException("Invalid integer value '" + text + "' for key '" + key + "'", ex);
         }
+    }
+
+    private int exactIntegerValue(Number number, String key) {
+        if (number instanceof Byte || number instanceof Short || number instanceof Integer) {
+            return number.intValue();
+        }
+        if (number instanceof Long longValue) {
+            if (longValue < Integer.MIN_VALUE || longValue > Integer.MAX_VALUE) {
+                throw new IllegalStateException("Invalid integer value '" + number + "' for key '" + key + "'");
+            }
+            return longValue.intValue();
+        }
+        if (number instanceof BigInteger bigInteger) {
+            if (bigInteger.compareTo(BigInteger.valueOf(Integer.MIN_VALUE)) < 0
+                || bigInteger.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
+                throw new IllegalStateException("Invalid integer value '" + number + "' for key '" + key + "'");
+            }
+            return bigInteger.intValueExact();
+        }
+        if (number instanceof BigDecimal bigDecimal) {
+            try {
+                return bigDecimal.intValueExact();
+            } catch (ArithmeticException ex) {
+                throw new IllegalStateException("Invalid integer value '" + number + "' for key '" + key + "'", ex);
+            }
+        }
+        if (number instanceof Float || number instanceof Double) {
+            double doubleValue = number.doubleValue();
+            if (!Double.isFinite(doubleValue)
+                || doubleValue != Math.rint(doubleValue)
+                || doubleValue < Integer.MIN_VALUE
+                || doubleValue > Integer.MAX_VALUE) {
+                throw new IllegalStateException("Invalid integer value '" + number + "' for key '" + key + "'");
+            }
+            return (int) doubleValue;
+        }
+        long longValue = number.longValue();
+        if (longValue < Integer.MIN_VALUE || longValue > Integer.MAX_VALUE || number.doubleValue() != longValue) {
+            throw new IllegalStateException("Invalid integer value '" + number + "' for key '" + key + "'");
+        }
+        return (int) longValue;
     }
 }
