@@ -35,6 +35,12 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>persistence-plugin</artifactId>
+            <version>${project.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-arc</artifactId>
         </dependency>

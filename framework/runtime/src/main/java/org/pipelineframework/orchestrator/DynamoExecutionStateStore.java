@@ -1,6 +1,7 @@
 package org.pipelineframework.orchestrator;
 
 import java.net.URI;
+import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
@@ -71,6 +72,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     private static final String ENCODED_TYPE = "_tpf_type";
     private static final String ENCODED_MESSAGE_CLASS = "protobuf";
     private static final String ENCODED_MESSAGE_NAME = "_tpf_message";
+    private static final String ENCODED_MESSAGE_JAVA_CLASS = "_tpf_java_class";
     private static final String ENCODED_PAYLOAD = "_tpf_payload_b64";
     private static final String ENCODED_INTERNAL = "_tpf_internal";
     private static final String ENCODED_ESCAPED_MAP = "_tpf_user_map";
@@ -913,11 +915,13 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
 
     private Object decodeProtobufEnvelope(Map<?, ?> map) {
         String messageType = Objects.toString(map.get(ENCODED_MESSAGE_NAME), "");
+        String messageJavaClass = Objects.toString(map.get(ENCODED_MESSAGE_JAVA_CLASS), "");
         String payload = Objects.toString(map.get(ENCODED_PAYLOAD), "");
         if (messageType.isBlank() || payload.isBlank()) {
             throw new IllegalStateException("Stored protobuf payload metadata is incomplete.");
         }
-        ProtobufMessageParser parser = findProtobufParser(messageType);
+        ProtobufMessageParser parser = findProtobufParser(messageType)
+            .orElseGet(() -> reflectiveParser(messageType, messageJavaClass));
         try {
             return parser.parseFrom(Base64.getDecoder().decode(payload));
         } catch (IllegalArgumentException e) {
@@ -933,14 +937,107 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         }
     }
 
-    private ProtobufMessageParser findProtobufParser(String messageType) {
-        Map<String, ProtobufMessageParser> parserLookup = protobufParserLookup();
-        String normalizedMessageType = normalizeMessageType(messageType);
-        ProtobufMessageParser parser = parserLookup.get(normalizedMessageType);
-        if (parser == null) {
-            throw new IllegalStateException("No protobuf parser registered for " + messageType);
+    private Optional<ProtobufMessageParser> findProtobufParser(String messageType) {
+        if (protobufMessageParsers == null) {
+            return Optional.empty();
         }
-        return parser;
+        return Optional.ofNullable(protobufParserLookup().get(normalizeMessageType(messageType)));
+    }
+
+    private ProtobufMessageParser reflectiveParser(String messageType, String messageJavaClass) {
+        Class<? extends Message> messageClass = loadProtobufMessageClass(messageType, messageJavaClass)
+            .orElseThrow(() -> new IllegalStateException("No protobuf parser registered for " + messageType));
+        final Method parseFromMethod;
+        try {
+            parseFromMethod = messageClass.getMethod("parseFrom", byte[].class);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(
+                "Failed to initialise protobuf parser reflectively for messageType=" + messageType + ".",
+                e);
+        }
+        return new ProtobufMessageParser() {
+            @Override
+            public String type() {
+                return messageType;
+            }
+
+            @Override
+            public Message parseFrom(byte[] bytes) {
+                try {
+                    Object parsed = parseFromMethod.invoke(null, bytes);
+                    if (parsed instanceof Message message) {
+                        return message;
+                    }
+                    throw new IllegalStateException(
+                        "Static parseFrom(byte[]) on " + messageClass.getName() + " did not return a protobuf Message.");
+                } catch (ReflectiveOperationException e) {
+                    throw new IllegalStateException(
+                        "Failed to parse protobuf payload reflectively for messageType=" + messageType + ".",
+                        e);
+                }
+            }
+        };
+    }
+
+    private Optional<Class<? extends Message>> loadProtobufMessageClass(String messageType) {
+        return loadProtobufMessageClass(messageType, null);
+    }
+
+    private Optional<Class<? extends Message>> loadProtobufMessageClass(String messageType, String messageJavaClass) {
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        if (classLoader == null) {
+            classLoader = DynamoExecutionStateStore.class.getClassLoader();
+        }
+        if (messageJavaClass != null && !messageJavaClass.isBlank()) {
+            Optional<Class<? extends Message>> exactJavaClass = loadProtobufMessageClassCandidate(classLoader, messageJavaClass);
+            if (exactJavaClass.isPresent()) {
+                return exactJavaClass;
+            }
+        }
+        for (String candidate : protobufMessageTypeCandidates(messageType)) {
+            Optional<Class<? extends Message>> resolved = loadProtobufMessageClassCandidate(classLoader, candidate);
+            if (resolved.isPresent()) {
+                return resolved;
+            }
+        }
+        return Optional.empty();
+    }
+
+    private Optional<Class<? extends Message>> loadProtobufMessageClassCandidate(ClassLoader classLoader, String candidate) {
+        try {
+            Class<?> loaded = classLoader.loadClass(candidate);
+            if (Message.class.isAssignableFrom(loaded)) {
+                @SuppressWarnings("unchecked")
+                Class<? extends Message> messageClass = (Class<? extends Message>) loaded;
+                return Optional.of(messageClass);
+            }
+        } catch (ClassNotFoundException ignored) {
+            // Keep trying progressively more specific candidates.
+        }
+        return Optional.empty();
+    }
+
+    private static List<String> protobufMessageTypeCandidates(String messageType) {
+        List<String> candidates = new ArrayList<>();
+        if (messageType == null || messageType.isBlank()) {
+            return candidates;
+        }
+        String candidate = normalizeMessageType(messageType);
+        addProtobufMessageTypeCandidates(candidates, candidate);
+        if (candidate.startsWith("google.protobuf.")) {
+            addProtobufMessageTypeCandidates(candidates, "com." + candidate);
+        }
+        return candidates;
+    }
+
+    private static void addProtobufMessageTypeCandidates(List<String> candidates, String candidate) {
+        candidates.add(candidate);
+        int index = candidate.lastIndexOf('.');
+        while (index > 0) {
+            candidate = candidate.substring(0, index) + '$' + candidate.substring(index + 1);
+            candidates.add(candidate);
+            index = candidate.lastIndexOf('.');
+        }
     }
 
     private Map<String, ProtobufMessageParser> protobufParserLookup() {
@@ -970,6 +1067,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         return Map.of(
             ENCODED_TYPE, ENCODED_MESSAGE_CLASS,
             ENCODED_MESSAGE_NAME, messageTypeName(message),
+            ENCODED_MESSAGE_JAVA_CLASS, message.getClass().getName(),
             ENCODED_PAYLOAD, Base64.getEncoder().encodeToString(message.toByteArray()));
     }
 
@@ -979,6 +1077,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             || map.containsKey(ENCODED_ESCAPED_MAP)
             || map.containsKey(ENCODED_TYPE)
             || map.containsKey(ENCODED_MESSAGE_NAME)
+            || map.containsKey(ENCODED_MESSAGE_JAVA_CLASS)
             || map.containsKey(ENCODED_PAYLOAD);
     }
 
@@ -992,9 +1091,11 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     }
 
     private static boolean isProtobufEnvelope(Map<?, ?> map) {
-        return map.size() == 3
+        return (map.size() == 3 || map.size() == 4)
             && ENCODED_MESSAGE_CLASS.equals(map.get(ENCODED_TYPE))
             && map.containsKey(ENCODED_MESSAGE_NAME)
+            && (!map.containsKey(ENCODED_MESSAGE_JAVA_CLASS)
+                || map.get(ENCODED_MESSAGE_JAVA_CLASS) instanceof String)
             && map.containsKey(ENCODED_PAYLOAD);
     }
 
