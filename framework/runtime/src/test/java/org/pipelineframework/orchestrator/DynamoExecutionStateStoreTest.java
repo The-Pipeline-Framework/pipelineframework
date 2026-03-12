@@ -3,6 +3,7 @@ package org.pipelineframework.orchestrator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Arrays;
 
 import com.google.protobuf.DescriptorProtos;
 import jakarta.enterprise.inject.Instance;
@@ -440,7 +441,7 @@ class DynamoExecutionStateStoreTest {
         long ttl = System.currentTimeMillis() / 1000 + 3600;
         when(parsers.stream()).thenReturn(java.util.stream.Stream.of(parser));
         when(parser.type()).thenReturn(DescriptorProtos.FileDescriptorSet.class.getName());
-        when(parser.parseFrom(any(byte[].class))).thenReturn(payload);
+        when(parser.parseFrom(argThat(bytes -> Arrays.equals(bytes, payload.toByteArray())))).thenReturn(payload);
         when(client.getItem(any(GetItemRequest.class)))
             .thenReturn(GetItemResponse.builder()
                 .item(executionItemWithInputPayload("tenant-a", "exec-1", "key-1", ttl, payload))

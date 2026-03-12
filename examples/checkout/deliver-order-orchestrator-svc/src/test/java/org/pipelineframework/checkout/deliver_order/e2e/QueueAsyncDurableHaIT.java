@@ -4,6 +4,9 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -29,6 +32,7 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.checkout.deliverorder.grpc.Orchestrator;
 import org.pipelineframework.checkout.deliverorder.grpc.OrderDeliveredSvc;
 import org.pipelineframework.checkout.deliverorder.grpc.OrderDispatchSvc;
@@ -54,6 +58,8 @@ import software.amazon.awssdk.services.dynamodb.model.ScanRequest;
 import software.amazon.awssdk.services.sqs.SqsClient;
 import software.amazon.awssdk.services.sqs.model.CreateQueueRequest;
 import software.amazon.awssdk.services.sqs.model.CreateQueueResponse;
+import software.amazon.awssdk.services.sqs.model.GetQueueUrlRequest;
+import software.amazon.awssdk.services.sqs.model.GetQueueUrlResponse;
 import software.amazon.awssdk.services.sqs.model.Message;
 import software.amazon.awssdk.services.sqs.model.PurgeQueueRequest;
 import software.amazon.awssdk.services.sqs.model.QueueAttributeName;
@@ -399,11 +405,26 @@ class QueueAsyncDurableHaIT {
             String queueName,
             Map<QueueAttributeName, String> attributes
         ) {
-            CreateQueueResponse response = sqsClient.createQueue(CreateQueueRequest.builder()
-                .queueName(queueName)
-                .attributes(attributes)
-                .build());
-            URI queueUri = URI.create(response.queueUrl());
+            String queueUrl;
+            try {
+                CreateQueueResponse response = sqsClient.createQueue(CreateQueueRequest.builder()
+                    .queueName(queueName)
+                    .attributes(attributes)
+                    .build());
+                queueUrl = response.queueUrl();
+            } catch (SqsException e) {
+                GetQueueUrlResponse response = sqsClient.getQueueUrl(GetQueueUrlRequest.builder()
+                    .queueName(queueName)
+                    .build());
+                queueUrl = response.queueUrl();
+            }
+            if (queueUrl == null || queueUrl.isBlank()) {
+                GetQueueUrlResponse response = sqsClient.getQueueUrl(GetQueueUrlRequest.builder()
+                    .queueName(queueName)
+                    .build());
+                queueUrl = response.queueUrl();
+            }
+            URI queueUri = URI.create(queueUrl);
             return "http://" + ELASTIC_MQ.getHost() + ":" + ELASTIC_MQ.getMappedPort(9324) + queueUri.getPath();
         }
 
@@ -494,7 +515,6 @@ class QueueAsyncDurableHaIT {
             env.put("QUARKUS_GRPC_CLIENTS_PROCESS_ORDER_DELIVERED_HOST", "127.0.0.1");
             env.put("QUARKUS_GRPC_CLIENTS_PROCESS_ORDER_DELIVERED_PORT", Integer.toString(harnessGrpcPort));
             env.put("QUARKUS_GRPC_CLIENTS_PROCESS_ORDER_DELIVERED_PLAIN_TEXT", "true");
-
             Process process = builder.start();
             waitForHealth(httpPort);
             return new OrchestratorProcess(process, httpPort, grpcPort);
@@ -527,7 +547,8 @@ class QueueAsyncDurableHaIT {
             if (!process.waitFor(10, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
                 if (!process.waitFor(10, TimeUnit.SECONDS)) {
-                    throw new IllegalStateException("Failed to terminate orchestrator process pid=" + process.pid());
+                    throw new IllegalStateException("Failed to terminate orchestrator process pid="
+                        + process.pid() + ", exitCode=" + exitCodeForDiagnostics());
                 }
             }
         }
@@ -541,20 +562,42 @@ class QueueAsyncDurableHaIT {
             process.destroy();
             if (!process.waitFor(10, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
-                process.waitFor(10, TimeUnit.SECONDS);
+                if (!process.waitFor(10, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("Failed to close orchestrator process pid="
+                        + process.pid() + ", exitCode=" + exitCodeForDiagnostics());
+                }
+            }
+        }
+
+        private String exitCodeForDiagnostics() {
+            try {
+                return Integer.toString(process.exitValue());
+            } catch (IllegalThreadStateException ignored) {
+                return "unknown";
             }
         }
 
         private static void waitForHealth(int httpPort) {
+            HttpClient client = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(2))
+                .build();
+            URI livenessUri = URI.create("http://127.0.0.1:" + httpPort + "/q/health/live");
             Awaitility.await()
-                .atMost(Duration.ofSeconds(30))
+                .atMost(Duration.ofSeconds(10))
                 .pollInterval(Duration.ofMillis(250))
                 .ignoreExceptions()
                 .until(() -> {
-                    try (java.net.Socket socket = new java.net.Socket()) {
-                        socket.connect(new InetSocketAddress("127.0.0.1", httpPort), (int) Duration.ofSeconds(2).toMillis());
-                        return true;
+                    HttpRequest request = HttpRequest.newBuilder(livenessUri)
+                        .timeout(Duration.ofSeconds(2))
+                        .GET()
+                        .build();
+                    HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+                    if (response.statusCode() != 200) {
+                        return false;
                     }
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> body = PipelineJson.mapper().readValue(response.body(), Map.class);
+                    return "UP".equals(body.get("status"));
                 });
         }
     }

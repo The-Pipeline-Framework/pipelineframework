@@ -44,7 +44,7 @@ public class SqsWorkPoller {
     private static final Duration DELETE_RETRY_MAX_DELAY = Duration.ofSeconds(2);
     private static final int DELETE_MAX_ATTEMPTS = 3;
     private static final int VISIBILITY_EXTENSION_SECONDS = 30;
-    private static final long VISIBILITY_EXTENSION_PERIOD_SECONDS = 1L;
+    private static final long VISIBILITY_EXTENSION_PERIOD_SECONDS = 20L;
 
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
@@ -131,7 +131,6 @@ public class SqsWorkPoller {
             messages = sqsClient().receiveMessage(request).messages();
         } catch (RuntimeException e) {
             LOG.errorf(e, "Failed receiving SQS work items from queueUrl=%s", queueUrl);
-            consecutivePollFailures.incrementAndGet();
             sleepFailureBackoff();
             return false;
         }

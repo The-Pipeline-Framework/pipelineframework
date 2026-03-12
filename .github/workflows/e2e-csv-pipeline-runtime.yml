@@ -18,6 +18,7 @@ on:
       - 'mvnw'
       - '.mvn/**'
       - 'scripts/ci/**'
+      - '.github/actions/setup-testcontainers/**'
       - '.github/workflows/e2e-csv-pipeline-runtime.yml'
   workflow_dispatch:
 

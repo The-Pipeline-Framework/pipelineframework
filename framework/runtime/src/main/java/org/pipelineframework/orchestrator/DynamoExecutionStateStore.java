@@ -72,6 +72,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     private static final String ENCODED_MESSAGE_CLASS = "protobuf";
     private static final String ENCODED_MESSAGE_NAME = "_tpf_message";
     private static final String ENCODED_PAYLOAD = "_tpf_payload_b64";
+    private static final String ENCODED_INTERNAL = "_tpf_internal";
+    private static final String ENCODED_ESCAPED_MAP = "_tpf_user_map";
 
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
@@ -873,10 +875,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
 
     private Object encodeValue(Object value) {
         if (value instanceof Message message) {
-            return Map.of(
-                ENCODED_TYPE, ENCODED_MESSAGE_CLASS,
-                ENCODED_MESSAGE_NAME, messageTypeName(message.getClass()),
-                ENCODED_PAYLOAD, Base64.getEncoder().encodeToString(message.toByteArray()));
+            return Map.of(ENCODED_INTERNAL, protobufEnvelope(message));
         }
         if (value instanceof Iterable<?> iterable) {
             return StreamSupport.stream(iterable.spliterator(), false)
@@ -886,7 +885,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         if (value instanceof Map<?, ?> map) {
             Map<Object, Object> encoded = new HashMap<>(map.size());
             map.forEach((key, nestedValue) -> encoded.put(key, encodeValue(nestedValue)));
-            return encoded;
+            return containsReservedEnvelopeKeys(encoded) ? Map.of(ENCODED_ESCAPED_MAP, encoded) : encoded;
         }
         return value;
     }
@@ -898,12 +897,21 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         if (!(value instanceof Map<?, ?> map)) {
             return value;
         }
-        Object encodedType = map.get(ENCODED_TYPE);
-        if (!ENCODED_MESSAGE_CLASS.equals(encodedType)) {
+        if (isWrappedEnvelope(map)) {
+            return decodeProtobufEnvelope(requireEnvelopeMap(map.get(ENCODED_INTERNAL)));
+        }
+        if (isEscapedUserMap(map)) {
+            return decodeValue(requireEnvelopeMap(map.get(ENCODED_ESCAPED_MAP)));
+        }
+        if (!isLegacyProtobufEnvelope(map)) {
             Map<Object, Object> decoded = new HashMap<>(map.size());
             map.forEach((key, nestedValue) -> decoded.put(key, decodeValue(nestedValue)));
             return decoded;
         }
+        return decodeProtobufEnvelope(map);
+    }
+
+    private Object decodeProtobufEnvelope(Map<?, ?> map) {
         String messageType = Objects.toString(map.get(ENCODED_MESSAGE_NAME), "");
         String payload = Objects.toString(map.get(ENCODED_PAYLOAD), "");
         if (messageType.isBlank() || payload.isBlank()) {
@@ -927,6 +935,45 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     private static String messageTypeName(Class<?> messageClass) {
         String canonicalName = messageClass.getCanonicalName();
         return canonicalName != null ? canonicalName : normalizeMessageType(messageClass.getName());
+    }
+
+    private static Map<String, Object> protobufEnvelope(Message message) {
+        return Map.of(
+            ENCODED_TYPE, ENCODED_MESSAGE_CLASS,
+            ENCODED_MESSAGE_NAME, messageTypeName(message.getClass()),
+            ENCODED_PAYLOAD, Base64.getEncoder().encodeToString(message.toByteArray()));
+    }
+
+    private static boolean containsReservedEnvelopeKeys(Map<?, ?> map) {
+        return map.containsKey(ENCODED_INTERNAL)
+            || map.containsKey(ENCODED_ESCAPED_MAP)
+            || map.containsKey(ENCODED_TYPE)
+            || map.containsKey(ENCODED_MESSAGE_NAME)
+            || map.containsKey(ENCODED_PAYLOAD);
+    }
+
+    private static boolean isWrappedEnvelope(Map<?, ?> map) {
+        return map.size() == 1 && map.containsKey(ENCODED_INTERNAL) && map.get(ENCODED_INTERNAL) instanceof Map<?, ?> nested
+            && isLegacyProtobufEnvelope(nested);
+    }
+
+    private static boolean isEscapedUserMap(Map<?, ?> map) {
+        return map.size() == 1 && map.containsKey(ENCODED_ESCAPED_MAP) && map.get(ENCODED_ESCAPED_MAP) instanceof Map<?, ?>;
+    }
+
+    private static boolean isLegacyProtobufEnvelope(Map<?, ?> map) {
+        return map.size() == 3
+            && ENCODED_MESSAGE_CLASS.equals(map.get(ENCODED_TYPE))
+            && map.containsKey(ENCODED_MESSAGE_NAME)
+            && map.containsKey(ENCODED_PAYLOAD);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<?, ?> requireEnvelopeMap(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return map;
+        }
+        throw new IllegalStateException("Stored payload metadata wrapper is malformed.");
     }
 
     private static String normalizeMessageType(String messageType) {

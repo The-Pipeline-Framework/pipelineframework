@@ -73,10 +73,10 @@ jobs:
         if: failure()
         run: |
           if [ -d examples/checkout/deliver-order-orchestrator-svc/target/failsafe-reports ]; then
-            find examples/checkout/deliver-order-orchestrator-svc/target/failsafe-reports -maxdepth 2 -type f -print -exec tail -n 200 {} \;
+            find examples/checkout/deliver-order-orchestrator-svc/target/failsafe-reports -maxdepth 2 -type f -print -exec tail -n 200 {} \; || true
           fi
           if [ -d examples/checkout/deliver-order-orchestrator-svc/target/failsafe-reports/queue-async-ha ]; then
-            find examples/checkout/deliver-order-orchestrator-svc/target/failsafe-reports/queue-async-ha -type f -print -exec tail -n 200 {} \;
+            find examples/checkout/deliver-order-orchestrator-svc/target/failsafe-reports/queue-async-ha -type f -print -exec tail -n 200 {} \; || true
           fi
 
       - name: Upload durable HA diagnostics on failure

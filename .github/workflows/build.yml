@@ -58,7 +58,11 @@ jobs:
           for d in org/pipelineframework org/pipelineframework/csv org/pipelineframework/search; do
             [ -d "$d" ] && dirs+=("$d")
           done
-          [ ${#dirs[@]} -gt 0 ] && tar -czf /tmp/m2-artifacts/${{ env.BOOTSTRAP_ARTIFACT }}.tar.gz "${dirs[@]}"
+          if [ ${#dirs[@]} -eq 0 ]; then
+            echo "::error::Expected framework artifacts under org/pipelineframework, org/pipelineframework/csv, or org/pipelineframework/search before packaging ${{ env.BOOTSTRAP_ARTIFACT }}."
+            exit 1
+          fi
+          tar -czf /tmp/m2-artifacts/${{ env.BOOTSTRAP_ARTIFACT }}.tar.gz "${dirs[@]}"
 
       - name: Record artifact metadata
         id: artifact-meta
