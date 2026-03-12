@@ -320,7 +320,8 @@ public class PipelineYamlConfigLoader {
     /**
      * Creates a ConnectorSourceConfig from the connector's "source" map.
      *
-     * @return the ConnectorSourceConfig populated with the "kind", "step", and "type" values, or null if the "source" entry is missing or not a map
+     * @return the ConnectorSourceConfig populated with the "kind", "step", and "type" values
+     * @throws IllegalArgumentException if the "source" entry is missing or not a map
      */
     private ConnectorSourceConfig readSource(Map<?, ?> connectorMap) {
         Object sourceObj = connectorMap.get("source");
@@ -338,8 +339,8 @@ public class PipelineYamlConfigLoader {
      * Creates a ConnectorTargetConfig from the "target" entry of a connector configuration map.
      *
      * @param connectorMap the connector configuration map containing a "target" entry
-     * @return a ConnectorTargetConfig populated from the target map's "kind", "pipeline", "type", and "adapter" values,
-     *         or {@code null} if the "target" entry is missing or not a map
+     * @return a ConnectorTargetConfig populated from the target map's "kind", "pipeline", "type", and "adapter" values
+     * @throws IllegalArgumentException if the "target" entry is missing or not a map
      */
     private ConnectorTargetConfig readTarget(Map<?, ?> connectorMap) {
         Object targetObj = connectorMap.get("target");

@@ -147,7 +147,7 @@ public class PipelineCompilationContext {
      * @param connectorConfigs the connector configurations, or {@code null} to clear them
      */
     public void setConnectorConfigs(List<ConnectorConfig> connectorConfigs) {
-        this.connectorConfigs = connectorConfigs == null ? List.of() : connectorConfigs;
+        this.connectorConfigs = connectorConfigs == null ? List.of() : List.copyOf(connectorConfigs);
     }
 
     /**

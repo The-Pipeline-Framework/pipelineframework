@@ -24,7 +24,7 @@ class ConnectorConfigValidatorTest {
 
     @Test
     void validateReturnsEmptyListWhenConnectorsIsNull() {
-        PipelineTemplateConfig config = createTemplateConfig(List.of());
+        PipelineTemplateConfig config = createTemplateConfig(null);
         List<ConnectorConfig> result = validator.validate(config, List.of(), null, null);
         assertTrue(result.isEmpty());
     }
