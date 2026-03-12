@@ -33,8 +33,10 @@ public interface ProtobufMessageParser {
     /**
      * Parses the provided protobuf payload into a Message instance.
      *
-     * @param bytes the serialized protobuf bytes
-     * @return the parsed protobuf Message instance
+     * @param bytes the serialized protobuf bytes; must not be {@code null}
+     * @return the parsed protobuf Message instance without mutating {@code bytes}
+     * @throws NullPointerException if {@code bytes} is {@code null} and the implementation does not accept it
+     * @throws RuntimeException if the payload is malformed or cannot be parsed into this message type
      */
     Message parseFrom(byte[] bytes);
 }

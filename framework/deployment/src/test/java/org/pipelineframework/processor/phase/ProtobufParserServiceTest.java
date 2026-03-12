@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.processor.PipelineCompilationContext;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProtobufParserServiceTest {
@@ -17,7 +18,7 @@ class ProtobufParserServiceTest {
     Path tempDir;
 
     @Test
-    void generatedParserUsesSchemaNameAndLegacyJavaAlias() throws IOException {
+    void generatedParserUsesSchemaNameWithoutLegacyTypeAliases() throws IOException {
         PipelineCompilationContext context = new PipelineCompilationContext(null, null);
         context.setGeneratedSourcesRoot(tempDir);
         ProtobufParserService service = new ProtobufParserService(new GenerationPathResolver());
@@ -35,7 +36,7 @@ class ProtobufParserServiceTest {
 
         String source = Files.readString(generated);
         assertTrue(source.contains("return \"checkout.v1.OrderPlaced\";"));
-        assertTrue(!source.contains("legacyTypeAliases"));
+        assertFalse(source.contains("legacyTypeAliases"));
     }
 
     private static DescriptorProtos.FileDescriptorSet descriptorSet() {

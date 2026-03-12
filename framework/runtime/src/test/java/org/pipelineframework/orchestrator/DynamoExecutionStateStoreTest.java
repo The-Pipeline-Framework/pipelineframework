@@ -2,7 +2,6 @@ package org.pipelineframework.orchestrator;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashMap;
@@ -27,6 +26,7 @@ import software.amazon.awssdk.services.dynamodb.model.UpdateItemResponse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -465,8 +465,7 @@ class DynamoExecutionStateStoreTest {
             .await().indefinitely();
 
         assertTrue(result.isPresent());
-        assertTrue(result.get().inputPayload() instanceof ExecutionInputSnapshot);
-        ExecutionInputSnapshot snapshot = (ExecutionInputSnapshot) result.get().inputPayload();
+        ExecutionInputSnapshot snapshot = assertInstanceOf(ExecutionInputSnapshot.class, result.get().inputPayload());
         assertEquals(ExecutionInputShape.UNI, snapshot.shape());
         assertEquals(payload, snapshot.payload());
     }
@@ -510,7 +509,8 @@ class DynamoExecutionStateStoreTest {
         assertEquals("user-value", decodedMap.get("_tpf_type"));
         assertEquals(payload, ((Map<?, ?>) decodedMap.get("nested")).get("proto"));
         assertEquals(List.of(payload), decodedMap.get("items"));
-        assertEquals(List.of(payload), new ArrayList<>((List<?>) decodedMap.get("iterable")));
+        // Iterables are persisted as JSON arrays, so Set inputs round-trip as Lists after deserialisation.
+        assertEquals(List.of(payload), decodedMap.get("iterable"));
     }
 
     @Test
@@ -560,10 +560,9 @@ class DynamoExecutionStateStoreTest {
     ) {
         Map<String, AttributeValue> item = new HashMap<>(executionItem(tenantId, executionId, executionKey, ttl));
         item.put("input_shape", AttributeValue.builder().s(ExecutionInputShape.UNI.name()).build());
-        item.put("input_payload_json", AttributeValue.builder().s(
-            "{\"_tpf_type\":\"protobuf\",\"_tpf_message\":\"" + messageType
-                + "\",\"_tpf_payload_b64\":\""
-                + Base64.getEncoder().encodeToString(payload.toByteArray()) + "\"}")
+        item.put("input_payload_json", AttributeValue.builder().s(wrappedEnvelopeJson(
+            messageType,
+            Base64.getEncoder().encodeToString(payload.toByteArray())))
             .build());
         return item;
     }

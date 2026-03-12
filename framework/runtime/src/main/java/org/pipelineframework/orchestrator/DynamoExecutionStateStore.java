@@ -81,6 +81,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     @Inject
     Instance<ProtobufMessageParser> protobufMessageParsers;
 
+    private volatile Map<String, ProtobufMessageParser> protobufParserLookup;
     private volatile DynamoDbClient client;
 
     /**
@@ -905,12 +906,9 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         if (isEscapedUserMap(map)) {
             return decodeValue(requireEnvelopeMap(map.get(ENCODED_ESCAPED_MAP)));
         }
-        if (!isLegacyProtobufEnvelope(map)) {
-            Map<Object, Object> decoded = new HashMap<>(map.size());
-            map.forEach((key, nestedValue) -> decoded.put(key, decodeValue(nestedValue)));
-            return decoded;
-        }
-        return decodeProtobufEnvelope(map);
+        Map<Object, Object> decoded = new HashMap<>(map.size());
+        map.forEach((key, nestedValue) -> decoded.put(key, decodeValue(nestedValue)));
+        return decoded;
     }
 
     private Object decodeProtobufEnvelope(Map<?, ?> map) {
@@ -927,18 +925,41 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
                 "Stored protobuf payload metadata is corrupted for messageType=" + messageType
                     + ": failed to decode " + ENCODED_PAYLOAD + ".",
                 e);
+        } catch (RuntimeException e) {
+            throw new IllegalStateException(
+                "Stored protobuf payload metadata is corrupted for messageType=" + messageType
+                    + ": protobuf payload bytes are invalid.",
+                e);
         }
     }
 
     private ProtobufMessageParser findProtobufParser(String messageType) {
-        if (protobufMessageParsers == null) {
-            throw new IllegalStateException("No protobuf parsers available for " + messageType);
-        }
+        Map<String, ProtobufMessageParser> parserLookup = protobufParserLookup();
         String normalizedMessageType = normalizeMessageType(messageType);
-        return protobufMessageParsers.stream()
-            .filter(parser -> normalizeMessageType(parser.type()).equals(normalizedMessageType))
-            .findFirst()
-            .orElseThrow(() -> new IllegalStateException("No protobuf parser registered for " + messageType));
+        ProtobufMessageParser parser = parserLookup.get(normalizedMessageType);
+        if (parser == null) {
+            throw new IllegalStateException("No protobuf parser registered for " + messageType);
+        }
+        return parser;
+    }
+
+    private Map<String, ProtobufMessageParser> protobufParserLookup() {
+        Map<String, ProtobufMessageParser> active = protobufParserLookup;
+        if (active != null) {
+            return active;
+        }
+        if (protobufMessageParsers == null) {
+            throw new IllegalStateException("No protobuf parsers available.");
+        }
+        synchronized (this) {
+            if (protobufParserLookup == null) {
+                Map<String, ProtobufMessageParser> resolved = new HashMap<>();
+                protobufMessageParsers.stream().forEach(parser ->
+                    resolved.put(normalizeMessageType(parser.type()), parser));
+                protobufParserLookup = Map.copyOf(resolved);
+            }
+            return protobufParserLookup;
+        }
     }
 
     private static String messageTypeName(Message message) {
@@ -952,6 +973,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             ENCODED_PAYLOAD, Base64.getEncoder().encodeToString(message.toByteArray()));
     }
 
+    // Reserved _tpf_* keys are internal persistence metadata and must be escaped in user payload maps.
     private static boolean containsReservedEnvelopeKeys(Map<?, ?> map) {
         return map.containsKey(ENCODED_INTERNAL)
             || map.containsKey(ENCODED_ESCAPED_MAP)
@@ -962,21 +984,20 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
 
     private static boolean isWrappedEnvelope(Map<?, ?> map) {
         return map.size() == 1 && map.containsKey(ENCODED_INTERNAL) && map.get(ENCODED_INTERNAL) instanceof Map<?, ?> nested
-            && isLegacyProtobufEnvelope(nested);
+            && isProtobufEnvelope(nested);
     }
 
     private static boolean isEscapedUserMap(Map<?, ?> map) {
         return map.size() == 1 && map.containsKey(ENCODED_ESCAPED_MAP) && map.get(ENCODED_ESCAPED_MAP) instanceof Map<?, ?>;
     }
 
-    private static boolean isLegacyProtobufEnvelope(Map<?, ?> map) {
+    private static boolean isProtobufEnvelope(Map<?, ?> map) {
         return map.size() == 3
             && ENCODED_MESSAGE_CLASS.equals(map.get(ENCODED_TYPE))
             && map.containsKey(ENCODED_MESSAGE_NAME)
             && map.containsKey(ENCODED_PAYLOAD);
     }
 
-    @SuppressWarnings("unchecked")
     private static Map<?, ?> requireEnvelopeMap(Object value) {
         if (value instanceof Map<?, ?> map) {
             return map;
