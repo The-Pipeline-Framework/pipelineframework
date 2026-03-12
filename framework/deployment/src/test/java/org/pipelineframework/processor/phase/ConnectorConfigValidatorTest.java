@@ -38,7 +38,7 @@ class ConnectorConfigValidatorTest {
 
     @Test
     void validateFailsWhenConnectorNameIsNull() {
-        ConnectorConfig connector = new ConnectorConfig(
+        assertThrows(NullPointerException.class, () -> new ConnectorConfig(
             null,
             true,
             new ConnectorSourceConfig("OUTPUT_BUS", "step", "Type"),
@@ -51,18 +51,12 @@ class ConnectorConfigValidatorTest {
             256,
             10000,
             List.of(),
-            null);
-
-        PipelineTemplateConfig config = createTemplateConfig(List.of(connector));
-
-        IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
-            validator.validate(config, List.of(), null, null));
-        assertTrue(exception.getMessage().contains("non-blank name"));
+            null));
     }
 
     @Test
     void validateFailsWhenConnectorNameIsBlank() {
-        ConnectorConfig connector = new ConnectorConfig(
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> new ConnectorConfig(
             "   ",
             true,
             new ConnectorSourceConfig("OUTPUT_BUS", "step", "Type"),
@@ -75,13 +69,8 @@ class ConnectorConfigValidatorTest {
             256,
             10000,
             List.of(),
-            null);
-
-        PipelineTemplateConfig config = createTemplateConfig(List.of(connector));
-
-        IllegalStateException exception = assertThrows(IllegalStateException.class, () ->
-            validator.validate(config, List.of(), null, null));
-        assertTrue(exception.getMessage().contains("non-blank name"));
+            null));
+        assertTrue(exception.getMessage().contains("must not be blank"));
     }
 
     @Test

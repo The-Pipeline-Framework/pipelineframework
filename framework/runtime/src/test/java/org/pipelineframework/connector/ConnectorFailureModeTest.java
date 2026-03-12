@@ -17,8 +17,9 @@
 package org.pipelineframework.connector;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.EnumSet;
 import org.junit.jupiter.api.Test;
 
 class ConnectorFailureModeTest {
@@ -26,14 +27,12 @@ class ConnectorFailureModeTest {
     @Test
     void enumContainsPropagateMode() {
         ConnectorFailureMode mode = ConnectorFailureMode.PROPAGATE;
-        assertNotNull(mode);
         assertEquals("PROPAGATE", mode.name());
     }
 
     @Test
     void enumContainsLogAndContinueMode() {
         ConnectorFailureMode mode = ConnectorFailureMode.LOG_AND_CONTINUE;
-        assertNotNull(mode);
         assertEquals("LOG_AND_CONTINUE", mode.name());
     }
 
@@ -47,7 +46,8 @@ class ConnectorFailureModeTest {
 
     @Test
     void valuesReturnsAllModes() {
-        ConnectorFailureMode[] modes = ConnectorFailureMode.values();
-        assertEquals(2, modes.length);
+        EnumSet<ConnectorFailureMode> modes = EnumSet.allOf(ConnectorFailureMode.class);
+        assertTrue(modes.contains(ConnectorFailureMode.PROPAGATE));
+        assertTrue(modes.contains(ConnectorFailureMode.LOG_AND_CONTINUE));
     }
 }

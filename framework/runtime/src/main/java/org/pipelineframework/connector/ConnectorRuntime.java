@@ -208,7 +208,7 @@ public final class ConnectorRuntime<I, O> {
     private void invokeRejectionObserver(ConnectorRecord<I> sourceRecord) {
         try {
             rejectionObserver.accept(sourceRecord);
-        } catch (RuntimeException e) {
+        } catch (Throwable e) {
             LOG.warnf(e, "Connector %s rejection observer failed", connectorName);
         }
     }
@@ -216,7 +216,7 @@ public final class ConnectorRuntime<I, O> {
     private void invokeDuplicateObserver(ConnectorRecord<O> mapped) {
         try {
             duplicateObserver.accept(mapped);
-        } catch (RuntimeException e) {
+        } catch (Throwable e) {
             LOG.warnf(e, "Connector %s duplicate observer failed", connectorName);
         }
     }
@@ -224,7 +224,7 @@ public final class ConnectorRuntime<I, O> {
     private void invokeFailureObserver(Throwable failure) {
         try {
             failureObserver.accept(failure);
-        } catch (RuntimeException e) {
+        } catch (Throwable e) {
             LOG.warnf(e, "Connector %s failure observer failed", connectorName);
         }
     }

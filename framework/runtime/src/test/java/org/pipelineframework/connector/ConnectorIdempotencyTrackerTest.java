@@ -267,7 +267,7 @@ class ConnectorIdempotencyTrackerTest {
     }
 
     @Test
-    void trackerHandlesConcurrentDifferentKeys() {
+    void trackerAcquiresDifferentKeysSequentially() {
         ConnectorIdempotencyTracker tracker = new ConnectorIdempotencyTracker(100);
 
         for (int i = 0; i < 50; i++) {
