@@ -156,13 +156,11 @@ final class ConnectorConfigValidator {
      * Validate structural requirements of a connector declaration and record any problems.
      *
      * Adds human-readable error messages to {@code errors} for violations of required fields
-     * and unsupported configuration for generated v1 connectors. Adds human-readable warnings
-     * to {@code warnings} when a source step cannot be verified because no known steps are available.
+     * and unsupported configuration for generated v1 connectors.
      *
      * @param connector the connector configuration to validate
      * @param knownSteps set of declared pipeline step names used to verify the connector's source.step; may be empty
-     * @param errors     mutable list to which validation error messages will be appended
-     * @param warnings   mutable list to which non-fatal warning messages will be appended
+     * @param errors mutable list to which non-recoverable validation problems will be appended
      */
     private void validateStructure(
         ConnectorConfig connector,

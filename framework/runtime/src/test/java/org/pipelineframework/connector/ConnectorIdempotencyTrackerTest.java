@@ -98,13 +98,13 @@ class ConnectorIdempotencyTrackerTest {
     }
 
     @Test
-    void markAcceptedWithPreForwardPolicyDoesNothing() {
+    void markAcceptedIsNoOpWhenPreForwardAlreadyAccepted() {
         ConnectorIdempotencyTracker tracker = new ConnectorIdempotencyTracker(100);
 
         tracker.tryAcquire("key-1", ConnectorIdempotencyPolicy.PRE_FORWARD);
         tracker.markAccepted("key-1", ConnectorIdempotencyPolicy.PRE_FORWARD);
 
-        // Should have no effect since PRE_FORWARD doesn't use in-flight tracking
+        // PRE_FORWARD immediately records the key as accepted, so markAccepted has no additional effect.
         assertTrue(tracker.containsAccepted("key-1"));
         assertFalse(tracker.containsInFlight("key-1"));
     }
@@ -150,6 +150,42 @@ class ConnectorIdempotencyTrackerTest {
 
         assertTrue(tracker.containsAccepted("key-1"));
         assertTrue(tracker.containsAccepted("key-2"));
+    }
+
+    @Test
+    void preForwardAcceptedKeysEvictOldestEntryWhenCapacityExceeded() {
+        ConnectorIdempotencyTracker tracker = new ConnectorIdempotencyTracker(3);
+
+        assertTrue(tracker.tryAcquire("key-1", ConnectorIdempotencyPolicy.PRE_FORWARD));
+        assertTrue(tracker.tryAcquire("key-2", ConnectorIdempotencyPolicy.PRE_FORWARD));
+        assertTrue(tracker.tryAcquire("key-3", ConnectorIdempotencyPolicy.PRE_FORWARD));
+        assertTrue(tracker.tryAcquire("key-4", ConnectorIdempotencyPolicy.PRE_FORWARD));
+
+        assertFalse(tracker.containsAccepted("key-1"));
+        assertTrue(tracker.containsAccepted("key-2"));
+        assertTrue(tracker.containsAccepted("key-3"));
+        assertTrue(tracker.containsAccepted("key-4"));
+        assertTrue(tracker.tryAcquire("key-1", ConnectorIdempotencyPolicy.PRE_FORWARD));
+    }
+
+    @Test
+    void onAcceptAcceptedKeysEvictOldestEntryWhenCapacityExceeded() {
+        ConnectorIdempotencyTracker tracker = new ConnectorIdempotencyTracker(3);
+
+        assertTrue(tracker.tryAcquire("key-1", ConnectorIdempotencyPolicy.ON_ACCEPT));
+        tracker.markAccepted("key-1", ConnectorIdempotencyPolicy.ON_ACCEPT);
+        assertTrue(tracker.tryAcquire("key-2", ConnectorIdempotencyPolicy.ON_ACCEPT));
+        tracker.markAccepted("key-2", ConnectorIdempotencyPolicy.ON_ACCEPT);
+        assertTrue(tracker.tryAcquire("key-3", ConnectorIdempotencyPolicy.ON_ACCEPT));
+        tracker.markAccepted("key-3", ConnectorIdempotencyPolicy.ON_ACCEPT);
+        assertTrue(tracker.tryAcquire("key-4", ConnectorIdempotencyPolicy.ON_ACCEPT));
+        tracker.markAccepted("key-4", ConnectorIdempotencyPolicy.ON_ACCEPT);
+
+        assertFalse(tracker.containsAccepted("key-1"));
+        assertTrue(tracker.containsAccepted("key-2"));
+        assertTrue(tracker.containsAccepted("key-3"));
+        assertTrue(tracker.containsAccepted("key-4"));
+        assertTrue(tracker.tryAcquire("key-1", ConnectorIdempotencyPolicy.ON_ACCEPT));
     }
 
     @Test

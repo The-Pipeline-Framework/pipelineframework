@@ -40,6 +40,7 @@ public class ConnectorBootstrapRenderer {
         validateSupportedShape(connector);
         String packageName = basePackage + ".connector";
         String className = toPascalCase(connector.name()) + "ConnectorBridge";
+        validateGeneratedClassName(connector.name(), className);
         ClassName generatedType = ClassName.get(packageName, className);
 
         ClassName outputBus = ClassName.get("org.pipelineframework", "PipelineOutputBus");
@@ -227,6 +228,19 @@ public class ConnectorBootstrapRenderer {
             throw new IllegalStateException(
                 "Connector '" + connector.name()
                     + "' uses an unsupported generated shape; only OUTPUT_BUS -> LIVE_INGEST over GRPC is supported");
+        }
+    }
+
+    private static void validateGeneratedClassName(String connectorName, String className) {
+        if (className == null || className.isEmpty() || !Character.isJavaIdentifierStart(className.charAt(0))) {
+            throw new IllegalStateException(
+                "Connector '" + connectorName + "' generated invalid bootstrap class name '" + className + "'");
+        }
+        for (int i = 1; i < className.length(); i++) {
+            if (!Character.isJavaIdentifierPart(className.charAt(i))) {
+                throw new IllegalStateException(
+                    "Connector '" + connectorName + "' generated invalid bootstrap class name '" + className + "'");
+            }
         }
     }
 
