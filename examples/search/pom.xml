@@ -54,7 +54,7 @@
         <quarkus.container-image.group>search-pipeline</quarkus.container-image.group>
         <quarkus.container-image.platforms>linux/amd64,linux/arm64/v8</quarkus.container-image.platforms>
         <quarkus.jib.jvm-additional-arguments>--enable-preview</quarkus.jib.jvm-additional-arguments>
-        <skipUnitTests>false</skipUnitTests>
+        <skipUnitTests>${maven.test.skip}</skipUnitTests>
     </properties>
 
     <dependencyManagement>

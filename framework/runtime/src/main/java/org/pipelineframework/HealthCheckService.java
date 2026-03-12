@@ -195,6 +195,13 @@ public class HealthCheckService {
      * @return `true` if all detected dependent services are healthy, `false` otherwise
      */
     public boolean checkHealthOfDependentServices(List<Object> steps) {
+        boolean healthChecksEnabled = ConfigProvider.getConfig()
+            .getOptionalValue("pipeline.health.enabled", Boolean.class)
+            .orElse(Boolean.TRUE);
+        if (!healthChecksEnabled) {
+            LOG.info("Pipeline startup health checks are disabled by configuration.");
+            return true;
+        }
         if (isLocalTransport()) {
             LOG.info("Local transport detected; skipping dependent service health checks.");
             return true;

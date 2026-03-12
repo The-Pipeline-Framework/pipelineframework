@@ -3,8 +3,12 @@ package org.pipelineframework.orchestrator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Arrays;
 
+import com.google.protobuf.DescriptorProtos;
+import jakarta.enterprise.inject.Instance;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.cache.ProtobufMessageParser;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
@@ -19,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class DynamoExecutionStateStoreTest {
@@ -421,5 +426,52 @@ class DynamoExecutionStateStoreTest {
 
         assertTrue(validationError.isPresent());
         assertTrue(validationError.get().contains("dynamo.* configuration"));
+    }
+
+    @Test
+    void getExecutionDecodesNestedProtobufPayloadWhenStoredTypeUsesBinaryClassName() {
+        DynamoDbClient client = mock(DynamoDbClient.class);
+        PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
+        @SuppressWarnings("unchecked")
+        Instance<ProtobufMessageParser> parsers = mock(Instance.class);
+        ProtobufMessageParser parser = mock(ProtobufMessageParser.class);
+        DescriptorProtos.FileDescriptorSet payload = DescriptorProtos.FileDescriptorSet.newBuilder()
+            .addFile(DescriptorProtos.FileDescriptorProto.newBuilder().setName("checkout.proto").build())
+            .build();
+        long ttl = System.currentTimeMillis() / 1000 + 3600;
+        when(parsers.stream()).thenReturn(java.util.stream.Stream.of(parser));
+        when(parser.type()).thenReturn(DescriptorProtos.FileDescriptorSet.class.getName());
+        when(parser.parseFrom(argThat(bytes -> Arrays.equals(bytes, payload.toByteArray())))).thenReturn(payload);
+        when(client.getItem(any(GetItemRequest.class)))
+            .thenReturn(GetItemResponse.builder()
+                .item(executionItemWithInputPayload("tenant-a", "exec-1", "key-1", ttl, payload))
+                .build());
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config, parsers);
+
+        Optional<ExecutionRecord<Object, Object>> result = store.getExecution("tenant-a", "exec-1")
+            .await().indefinitely();
+
+        assertTrue(result.isPresent());
+        assertTrue(result.get().inputPayload() instanceof ExecutionInputSnapshot);
+        ExecutionInputSnapshot snapshot = (ExecutionInputSnapshot) result.get().inputPayload();
+        assertEquals(ExecutionInputShape.UNI, snapshot.shape());
+        assertEquals(payload, snapshot.payload());
+    }
+
+    private static Map<String, AttributeValue> executionItemWithInputPayload(
+        String tenantId,
+        String executionId,
+        String executionKey,
+        long ttl,
+        DescriptorProtos.FileDescriptorSet payload
+    ) {
+        Map<String, AttributeValue> item = new HashMap<>(executionItem(tenantId, executionId, executionKey, ttl));
+        item.put("input_shape", AttributeValue.builder().s(ExecutionInputShape.UNI.name()).build());
+        item.put("input_payload_json", AttributeValue.builder().s(
+            "{\"_tpf_type\":\"protobuf\",\"_tpf_message\":\"" + payload.getClass().getName()
+                + "\",\"_tpf_payload_b64\":\""
+                + java.util.Base64.getEncoder().encodeToString(payload.toByteArray()) + "\"}")
+            .build());
+        return item;
     }
 }
