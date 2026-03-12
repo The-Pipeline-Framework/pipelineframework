@@ -45,10 +45,19 @@ jobs:
       - name: Bootstrap framework and foundational plugins
         run: ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
 
-      - name: Full clean install (framework + examples, JVM only)
+      - name: Framework clean install (JVM only)
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
-          ./mvnw "${maven_args[@]}" clean install \
+          ./mvnw "${maven_args[@]}" -f framework/pom.xml clean install \
+            -DskipNative=true \
+            -Dquarkus.package.type=fast-jar \
+            -Dquarkus.container-image.build=false \
+            -Dquarkus.container-image.push=false
+
+      - name: CSV payments clean install (JVM only)
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.xml clean install \
             -DskipNative=true \
             -Dquarkus.package.type=fast-jar \
             -Dquarkus.container-image.build=false \
