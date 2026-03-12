@@ -35,6 +35,8 @@ class SqsWorkPollerTest {
         assertDoesNotThrow(poller::pollOnce);
 
         verify(pipelineExecutionService).processExecutionWorkItem(new ExecutionWorkItem("tenant-a", "exec-1"));
+        verify(client).receiveMessage(argThat((ReceiveMessageRequest request) ->
+            request.visibilityTimeout() != null && request.visibilityTimeout().equals(30)));
         verify(client).deleteMessage(argThat((DeleteMessageRequest request) ->
             request.queueUrl().equals("http://elasticmq.local/queue/work")
                 && request.receiptHandle().equals("receipt-1")));
@@ -76,6 +78,26 @@ class SqsWorkPollerTest {
         verify(client).deleteMessage(argThat((DeleteMessageRequest request) ->
             request.queueUrl().equals("http://elasticmq.local/queue/work")
                 && request.receiptHandle().equals("receipt-3")));
+    }
+
+    @Test
+    void pollOnceDeletesNullBodyMessagesWhenReceiptHandleIsPresent() {
+        SqsClient client = mock(SqsClient.class);
+        PipelineExecutionService pipelineExecutionService = mock(PipelineExecutionService.class);
+        when(client.receiveMessage(any(ReceiveMessageRequest.class))).thenReturn(ReceiveMessageResponse.builder()
+            .messages(Message.builder()
+                .messageId("null-body")
+                .receiptHandle("receipt-null")
+                .build())
+            .build());
+        SqsWorkPoller poller = new SqsWorkPoller(mockConfig(true), pipelineExecutionService, client);
+
+        assertDoesNotThrow(poller::pollOnce);
+
+        verifyNoInteractions(pipelineExecutionService);
+        verify(client).deleteMessage(argThat((DeleteMessageRequest request) ->
+            request.queueUrl().equals("http://elasticmq.local/queue/work")
+                && request.receiptHandle().equals("receipt-null")));
     }
 
     @Test

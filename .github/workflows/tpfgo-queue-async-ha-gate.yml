@@ -55,12 +55,12 @@ jobs:
           cd ~/.m2/repository
           dirs=()
           for d in org/pipelineframework org/pipelineframework/csv org/pipelineframework/search; do
-            [ -d "$d" ] && dirs+=("$d")
+            if [ ! -d "$d" ]; then
+              echo "::error::Missing required framework artifact subtree '$d' before packaging framework-m2-cache."
+              exit 1
+            fi
+            dirs+=("$d")
           done
-          if [ ${#dirs[@]} -eq 0 ]; then
-            echo "::error::No framework artifacts were found in ~/.m2/repository after bootstrap."
-            exit 1
-          fi
           tar -czf /tmp/m2-artifacts/framework-m2-cache.tar.gz "${dirs[@]}"
 
       - name: Upload framework artifacts

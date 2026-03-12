@@ -918,7 +918,14 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             throw new IllegalStateException("Stored protobuf payload metadata is incomplete.");
         }
         ProtobufMessageParser parser = findProtobufParser(messageType);
-        return parser.parseFrom(Base64.getDecoder().decode(payload));
+        try {
+            return parser.parseFrom(Base64.getDecoder().decode(payload));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException(
+                "Stored protobuf payload metadata is corrupted for messageType=" + messageType
+                    + ": failed to decode " + ENCODED_PAYLOAD + ".",
+                e);
+        }
     }
 
     private ProtobufMessageParser findProtobufParser(String messageType) {
@@ -933,6 +940,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     }
 
     private static String messageTypeName(Class<?> messageClass) {
+        // Persist Java type names for compatibility with existing generated parser.type() values.
         String canonicalName = messageClass.getCanonicalName();
         return canonicalName != null ? canonicalName : normalizeMessageType(messageClass.getName());
     }

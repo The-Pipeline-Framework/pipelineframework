@@ -43,10 +43,23 @@ jobs:
           name: ${{ inputs.artifact_name }}
           path: /tmp/m2-artifacts
 
+      - name: Purge stale framework artifacts from local Maven cache
+        run: rm -rf ~/.m2/repository/org/pipelineframework
+
       - name: Extract framework artifacts
         run: |
           mkdir -p ~/.m2/repository
-          artifact="/tmp/m2-artifacts/${{ inputs.artifact_name }}.tar.gz"
+          mapfile -t artifacts < <(find /tmp/m2-artifacts -maxdepth 1 -type f -name '*.tar.gz' | sort)
+          if [ ${#artifacts[@]} -eq 0 ]; then
+            echo "::error::No framework artifact tarball found under /tmp/m2-artifacts for ${{ inputs.artifact_name }}"
+            exit 1
+          fi
+          if [ ${#artifacts[@]} -ne 1 ]; then
+            printf '::error::Expected exactly one framework artifact tarball for %s but found %s: %s\n' \
+              "${{ inputs.artifact_name }}" "${#artifacts[@]}" "${artifacts[*]}"
+            exit 1
+          fi
+          artifact="${artifacts[0]}"
           if [ ! -r "$artifact" ]; then
             echo "::error::Missing or unreadable framework artifact tarball: $artifact"
             exit 1

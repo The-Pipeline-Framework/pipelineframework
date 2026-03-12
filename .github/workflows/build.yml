@@ -58,12 +58,12 @@ jobs:
           cd ~/.m2/repository
           dirs=()
           for d in org/pipelineframework org/pipelineframework/csv org/pipelineframework/search; do
-            [ -d "$d" ] && dirs+=("$d")
+            if [ ! -d "$d" ]; then
+              echo "::error::Missing required framework artifact subtree '$d' before packaging ${{ env.BOOTSTRAP_ARTIFACT }}."
+              exit 1
+            fi
+            dirs+=("$d")
           done
-          if [ ${#dirs[@]} -eq 0 ]; then
-            echo "::error::Expected framework artifacts under org/pipelineframework, org/pipelineframework/csv, or org/pipelineframework/search before packaging ${{ env.BOOTSTRAP_ARTIFACT }}."
-            exit 1
-          fi
           tar -czf /tmp/m2-artifacts/${{ env.BOOTSTRAP_ARTIFACT }}.tar.gz "${dirs[@]}"
 
       - name: Record artifact metadata

@@ -125,6 +125,7 @@ public class SqsWorkPoller {
             .queueUrl(queueUrl)
             .maxNumberOfMessages(MAX_MESSAGES_PER_POLL)
             .waitTimeSeconds(WAIT_TIME_SECONDS)
+            .visibilityTimeout(VISIBILITY_EXTENSION_SECONDS)
             .build();
         List<Message> messages;
         try {
@@ -154,7 +155,12 @@ public class SqsWorkPoller {
     }
 
     private void handleMessage(String queueUrl, Message message) {
-        if (message == null || message.body() == null || message.receiptHandle() == null) {
+        if (message == null || message.receiptHandle() == null) {
+            return;
+        }
+        if (message.body() == null) {
+            LOG.warnf("Dropping SQS work message with null body id=%s", message.messageId());
+            deleteMessage(queueUrl, message.receiptHandle());
             return;
         }
         ExecutionWorkItem workItem;
