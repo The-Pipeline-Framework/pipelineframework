@@ -15,7 +15,6 @@ on:
       - 'scripts/ci/**'
       - '.github/workflows/build.yml'
       - '.github/workflows/e2e-csv-monolith.yml'
-      - '.github/workflows/e2e-csv-pipeline-runtime.yml'
       - '.github/workflows/e2e-checkout-ftgo-smoke.yml'
       - '.github/workflows/e2e-search-lambda-smoke.yml'
 
@@ -59,7 +58,7 @@ jobs:
           for d in org/pipelineframework org/pipelineframework/csv org/pipelineframework/search; do
             [ -d "$d" ] && dirs+=("$d")
           done
-          [ ${`#dirs`[@]} -gt 0 ] && tar -czf /tmp/m2-artifacts/${{ env.BOOTSTRAP_ARTIFACT }}.tar.gz "${dirs[@]}"
+          [ ${#dirs[@]} -gt 0 ] && tar -czf /tmp/m2-artifacts/${{ env.BOOTSTRAP_ARTIFACT }}.tar.gz "${dirs[@]}"
 
       - name: Record artifact metadata
         id: artifact-meta
@@ -159,14 +158,6 @@ jobs:
     name: CSV Monolith E2E
     needs: bootstrap
     uses: ./.github/workflows/e2e-csv-monolith.yml
-    with:
-      artifact_name: ${{ needs.bootstrap.outputs.artifact_name }}
-    secrets: inherit
-
-  e2e-csv-pipeline-runtime:
-    name: CSV Pipeline Runtime
-    needs: bootstrap
-    uses: ./.github/workflows/e2e-csv-pipeline-runtime.yml
     with:
       artifact_name: ${{ needs.bootstrap.outputs.artifact_name }}
     secrets: inherit

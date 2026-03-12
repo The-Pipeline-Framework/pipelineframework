@@ -8,6 +8,18 @@ on:
         required: false
         default: 'framework-m2-cache'
         type: string
+  push:
+    branches:
+      - main
+    paths:
+      - 'framework/**'
+      - 'examples/csv-payments/**'
+      - 'pom.xml'
+      - 'mvnw'
+      - '.mvn/**'
+      - 'scripts/ci/**'
+      - '.github/workflows/e2e-csv-pipeline-runtime.yml'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-e2e-csv-pipeline-runtime
@@ -19,7 +31,7 @@ env:
 
 jobs:
   csv-pipeline-runtime-e2e:
-    name: CSV Pipeline Runtime E2E
+    name: CSV Pipeline Runtime Topology + E2E
     runs-on: ubuntu-latest
 
     steps:
@@ -37,15 +49,21 @@ jobs:
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
 
       - name: Download framework artifacts
+        if: ${{ github.event_name == 'workflow_call' }}
         uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.artifact_name }}
           path: /tmp/m2-artifacts
 
       - name: Extract framework artifacts
+        if: ${{ github.event_name == 'workflow_call' }}
         run: |
           mkdir -p ~/.m2/repository
           tar -xzf /tmp/m2-artifacts/${{ inputs.artifact_name }}.tar.gz -C ~/.m2/repository
+
+      - name: Bootstrap framework artifacts locally
+        if: ${{ github.event_name != 'workflow_call' }}
+        run: ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
 
       - name: Setup Testcontainers Docker environment
         uses: ./.github/actions/setup-testcontainers
