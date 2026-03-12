@@ -19,6 +19,9 @@ package org.pipelineframework.config.pipeline;
 import java.util.List;
 
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.config.connector.ConnectorConfig;
+import org.pipelineframework.config.connector.ConnectorSourceConfig;
+import org.pipelineframework.config.connector.ConnectorTargetConfig;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -59,5 +62,35 @@ class PipelineYamlConfigPlatformTest {
             List.of(),
             List.of());
         assertEquals("COMPUTE", config.platform());
+    }
+
+    @Test
+    void withTransportPreservesConnectors() {
+        ConnectorConfig connector = new ConnectorConfig(
+            "orders-to-delivery",
+            true,
+            new ConnectorSourceConfig("OUTPUT_BUS", "Order Ready", "com.example.ReadyOrder"),
+            new ConnectorTargetConfig("LIVE_INGEST", "deliver-order", "com.example.DispatchOrder", "com.example.Target"),
+            null,
+            "GRPC",
+            "PRE_FORWARD",
+            "BUFFER",
+            "PROPAGATE",
+            256,
+            10000,
+            List.of("orderId"),
+            null);
+        PipelineYamlConfig config = new PipelineYamlConfig(
+            "org.example",
+            "REST",
+            "FUNCTION",
+            List.of(),
+            List.of(),
+            List.of(connector));
+
+        PipelineYamlConfig updated = config.withTransport("GRPC");
+
+        assertEquals("GRPC", updated.transport());
+        assertEquals(config.connectors(), updated.connectors());
     }
 }

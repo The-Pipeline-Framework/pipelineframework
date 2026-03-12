@@ -36,9 +36,9 @@ class ConnectorBootstrapGenerationTest {
               - name: "orders-to-delivery"
                 transport: "GRPC"
                 mapper: "com.example.connector.ReadyOrderConnectorMapper"
-                idempotency: "PRE_FORWARD"
-                backpressure: "BUFFER"
-                failureMode: "PROPAGATE"
+                idempotency: "pre_forward"
+                backpressure: "buffer"
+                failureMode: "propagate"
                 source:
                   kind: "OUTPUT_BUS"
                   step: "Order Ready"

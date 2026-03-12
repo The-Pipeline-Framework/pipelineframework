@@ -362,8 +362,13 @@ public class PipelineYamlConfigLoader {
      */
     private ConnectorBrokerConfig readBroker(Map<?, ?> connectorMap) {
         Object brokerObj = connectorMap.get("broker");
-        if (!(brokerObj instanceof Map<?, ?> brokerMap)) {
+        if (brokerObj == null) {
             return null;
+        }
+        if (!(brokerObj instanceof Map<?, ?> brokerMap)) {
+            throw new IllegalArgumentException(
+                "ConnectorConfig '" + readString(connectorMap, "name")
+                    + "' requires broker to be defined as a map, but got: " + brokerObj);
         }
         return new ConnectorBrokerConfig(
             readString(brokerMap, "provider"),

@@ -126,8 +126,8 @@ public final class ConnectorRuntime<I, O> {
             mapped = mapper.apply(sourceRecord);
         } catch (RuntimeException e) {
             ConnectorMetrics.record(connectorName, "mapping_failure");
-            invokeFailureObserver(e);
             if (policy.failureMode() == ConnectorFailureMode.LOG_AND_CONTINUE) {
+                invokeFailureObserver(e);
                 LOG.warnf(e, "Connector %s mapping failure ignored due to LOG_AND_CONTINUE", connectorName);
                 return Multi.createFrom().empty();
             }

@@ -81,7 +81,7 @@ For at-least-once boundaries (queue delivery, operator invocation, re-drive), en
 1. Classify incident scope first: item reject trend vs execution DLQ growth.
 2. For connector incidents, inspect connector lag, handoff latency, duplicate suppression (records intentionally skipped because a connector idempotency key was already seen), and delivery failure logs (connector log events emitted when downstream handoff fails) before treating the incident as downstream execution failure.
 3. Connector mapping rejects and delivery failures occur before downstream execution admission.
-4. They are not execution DLQ events and they do not use Item Reject Sink by default.
+4. They are not execution DLQ events, and they do not use Item Reject Sink by default.
 5. For item reject incidents, check fingerprint concentration and dominant error classes; route to business-data remediation and selective re-drive.
 6. Treat item reject re-drive as application-owned: default reject envelopes are metadata-only, so replay payload reconstruction is not provided by framework runtime.
 7. For execution DLQ incidents, triage terminal execution causes (`FAILED` vs `DLQ`) and validate idempotency before replay.

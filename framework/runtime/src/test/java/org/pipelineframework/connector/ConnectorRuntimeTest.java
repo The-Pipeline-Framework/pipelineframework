@@ -155,6 +155,36 @@ class ConnectorRuntimeTest {
         }
     }
 
+    @Test
+    void reportsPropagatedMappingFailureOnlyOnce() throws InterruptedException {
+        AtomicInteger failures = new AtomicInteger();
+        CountDownLatch failureLatch = new CountDownLatch(1);
+        ConnectorRuntime<TestPayload, TestPayload> runtime = new ConnectorRuntime<>(
+            "test-mapping-failure-propagate",
+            () -> Multi.createFrom().item(ConnectorRecord.ofPayload(new TestPayload("bad", "customer-1", "ready-1"))),
+            connectorTarget(new CopyOnWriteArrayList<>(), new CountDownLatch(1)),
+            record -> {
+                throw new IllegalStateException("bad payload");
+            },
+            new ConnectorPolicy(true, ConnectorBackpressurePolicy.BUFFER, 16,
+                ConnectorIdempotencyPolicy.PRE_FORWARD, ConnectorFailureMode.PROPAGATE),
+            new ConnectorIdempotencyTracker(16),
+            null,
+            null,
+            failure -> {
+                failures.incrementAndGet();
+                failureLatch.countDown();
+            });
+
+        Cancellable subscription = runtime.start();
+        try {
+            await(failureLatch, "single propagated mapping failure callback");
+            assertEquals(1, failures.get());
+        } finally {
+            subscription.cancel();
+        }
+    }
+
     private static ConnectorTarget<TestPayload> connectorTarget(
         List<ConnectorRecord<TestPayload>> accepted,
         CountDownLatch latch
