@@ -24,17 +24,19 @@ import com.google.protobuf.Message;
 public interface ProtobufMessageParser {
 
     /**
- * The fully qualified class name of the protobuf message.
- *
- * @return the fully qualified protobuf message class name
- */
+     * The protobuf schema full name for the message type, such as {@code package.Message}.
+     *
+     * @return the protobuf schema full name for this parser
+     */
     String type();
 
     /**
- * Parses the provided protobuf payload into a Message instance.
- *
- * @param bytes the serialized protobuf bytes
- * @return the parsed protobuf Message instance
- */
+     * Parses the provided protobuf payload into a Message instance.
+     *
+     * @param bytes the serialized protobuf bytes; must not be {@code null}
+     * @return the parsed protobuf Message instance without mutating {@code bytes}
+     * @throws NullPointerException if {@code bytes} is {@code null} and the implementation does not accept it
+     * @throws RuntimeException if the payload is malformed or cannot be parsed into this message type
+     */
     Message parseFrom(byte[] bytes);
 }

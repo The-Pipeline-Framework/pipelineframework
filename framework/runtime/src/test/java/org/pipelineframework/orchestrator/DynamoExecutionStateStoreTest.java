@@ -1,14 +1,20 @@
 package org.pipelineframework.orchestrator;
 
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.Arrays;
+import java.util.Base64;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Arrays;
+import java.util.Set;
 
 import com.google.protobuf.DescriptorProtos;
 import jakarta.enterprise.inject.Instance;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.cache.ProtobufMessageParser;
+import org.pipelineframework.config.pipeline.PipelineJson;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.AttributeValue;
 import software.amazon.awssdk.services.dynamodb.model.ConditionalCheckFailedException;
@@ -20,10 +26,11 @@ import software.amazon.awssdk.services.dynamodb.model.UpdateItemResponse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.*;
 
 class DynamoExecutionStateStoreTest {
@@ -429,7 +436,7 @@ class DynamoExecutionStateStoreTest {
     }
 
     @Test
-    void getExecutionDecodesNestedProtobufPayloadWhenStoredTypeUsesBinaryClassName() {
+    void getExecutionDecodesSchemaNamePayload() {
         DynamoDbClient client = mock(DynamoDbClient.class);
         PipelineOrchestratorConfig config = mockConfig("tpf_execution", "tpf_execution_key");
         @SuppressWarnings("unchecked")
@@ -439,12 +446,18 @@ class DynamoExecutionStateStoreTest {
             .addFile(DescriptorProtos.FileDescriptorProto.newBuilder().setName("checkout.proto").build())
             .build();
         long ttl = System.currentTimeMillis() / 1000 + 3600;
-        when(parsers.stream()).thenReturn(java.util.stream.Stream.of(parser));
-        when(parser.type()).thenReturn(DescriptorProtos.FileDescriptorSet.class.getName());
+        when(parsers.stream()).thenAnswer(invocation -> java.util.stream.Stream.of(parser));
+        when(parser.type()).thenReturn(payload.getDescriptorForType().getFullName());
         when(parser.parseFrom(argThat(bytes -> Arrays.equals(bytes, payload.toByteArray())))).thenReturn(payload);
         when(client.getItem(any(GetItemRequest.class)))
             .thenReturn(GetItemResponse.builder()
-                .item(executionItemWithInputPayload("tenant-a", "exec-1", "key-1", ttl, payload))
+                .item(executionItemWithInputPayload(
+                    "tenant-a",
+                    "exec-1",
+                    "key-1",
+                    ttl,
+                    payload,
+                    payload.getDescriptorForType().getFullName()))
                 .build());
         DynamoExecutionStateStore store = new DynamoExecutionStateStore(client, config, parsers);
 
@@ -452,10 +465,89 @@ class DynamoExecutionStateStoreTest {
             .await().indefinitely();
 
         assertTrue(result.isPresent());
-        assertTrue(result.get().inputPayload() instanceof ExecutionInputSnapshot);
-        ExecutionInputSnapshot snapshot = (ExecutionInputSnapshot) result.get().inputPayload();
+        ExecutionInputSnapshot snapshot = assertInstanceOf(ExecutionInputSnapshot.class, result.get().inputPayload());
         assertEquals(ExecutionInputShape.UNI, snapshot.shape());
         assertEquals(payload, snapshot.payload());
+    }
+
+    @Test
+    void toJsonStoresProtobufSchemaNameForNewPayloads() {
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(null, mockConfig("tpf_execution", "tpf_execution_key"));
+        DescriptorProtos.FileDescriptorSet payload = samplePayload();
+
+        String json = invokeToJson(store, payload);
+
+        assertTrue(json.contains("\"_tpf_message\":\"" + payload.getDescriptorForType().getFullName() + "\""));
+        assertFalse(json.contains(DescriptorProtos.FileDescriptorSet.class.getName()));
+    }
+
+    @Test
+    void fromJsonRoundTripsNestedMapsListsAndIterablesWithProtobufPayloads() {
+        @SuppressWarnings("unchecked")
+        Instance<ProtobufMessageParser> parsers = mock(Instance.class);
+        ProtobufMessageParser parser = mock(ProtobufMessageParser.class);
+        DescriptorProtos.FileDescriptorSet payload = samplePayload();
+        when(parsers.stream()).thenAnswer(invocation -> java.util.stream.Stream.of(parser));
+        when(parser.type()).thenReturn(payload.getDescriptorForType().getFullName());
+        when(parser.parseFrom(argThat(bytes -> Arrays.equals(bytes, payload.toByteArray())))).thenReturn(payload);
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(
+            null,
+            mockConfig("tpf_execution", "tpf_execution_key"),
+            parsers);
+
+        Map<String, Object> original = new HashMap<>();
+        original.put("_tpf_type", "user-value");
+        original.put("nested", Map.of("proto", payload));
+        original.put("items", List.of(payload));
+        original.put("iterable", Set.of(payload));
+
+        String json = invokeToJson(store, original);
+        Object decoded = invokeFromJson(store, json);
+
+        assertTrue(decoded instanceof Map<?, ?>);
+        Map<?, ?> decodedMap = (Map<?, ?>) decoded;
+        assertEquals("user-value", decodedMap.get("_tpf_type"));
+        assertEquals(payload, ((Map<?, ?>) decodedMap.get("nested")).get("proto"));
+        assertEquals(List.of(payload), decodedMap.get("items"));
+        // Iterables are persisted as JSON arrays, so Set inputs round-trip as Lists after deserialisation.
+        assertEquals(List.of(payload), decodedMap.get("iterable"));
+    }
+
+    @Test
+    void fromJsonReportsCorruptedBase64WithSchemaContext() {
+        @SuppressWarnings("unchecked")
+        Instance<ProtobufMessageParser> parsers = mock(Instance.class);
+        ProtobufMessageParser parser = mock(ProtobufMessageParser.class);
+        DescriptorProtos.FileDescriptorSet payload = samplePayload();
+        when(parsers.stream()).thenAnswer(invocation -> java.util.stream.Stream.of(parser));
+        when(parser.type()).thenReturn(payload.getDescriptorForType().getFullName());
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(
+            null,
+            mockConfig("tpf_execution", "tpf_execution_key"),
+            parsers);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () ->
+            invokeFromJson(store, wrappedEnvelopeJson(payload.getDescriptorForType().getFullName(), "%%%not-base64%%%")));
+
+        assertTrue(error.getMessage().contains(payload.getDescriptorForType().getFullName()));
+        assertTrue(error.getMessage().contains("_tpf_payload_b64"));
+    }
+
+    @Test
+    void fromJsonReportsUnknownParserWithSchemaContext() {
+        @SuppressWarnings("unchecked")
+        Instance<ProtobufMessageParser> parsers = mock(Instance.class);
+        when(parsers.stream()).thenAnswer(invocation -> java.util.stream.Stream.empty());
+        DynamoExecutionStateStore store = new DynamoExecutionStateStore(
+            null,
+            mockConfig("tpf_execution", "tpf_execution_key"),
+            parsers);
+
+        IllegalStateException error = assertThrows(IllegalStateException.class, () ->
+            invokeFromJson(store, wrappedEnvelopeJson("checkout.v1.UnknownEvent", Base64.getEncoder().encodeToString(new byte[] {1}))));
+
+        assertTrue(error.getMessage().contains("checkout.v1.UnknownEvent"));
+        assertTrue(error.getMessage().contains("No protobuf parser registered"));
     }
 
     private static Map<String, AttributeValue> executionItemWithInputPayload(
@@ -463,15 +555,62 @@ class DynamoExecutionStateStoreTest {
         String executionId,
         String executionKey,
         long ttl,
-        DescriptorProtos.FileDescriptorSet payload
+        DescriptorProtos.FileDescriptorSet payload,
+        String messageType
     ) {
         Map<String, AttributeValue> item = new HashMap<>(executionItem(tenantId, executionId, executionKey, ttl));
         item.put("input_shape", AttributeValue.builder().s(ExecutionInputShape.UNI.name()).build());
-        item.put("input_payload_json", AttributeValue.builder().s(
-            "{\"_tpf_type\":\"protobuf\",\"_tpf_message\":\"" + payload.getClass().getName()
-                + "\",\"_tpf_payload_b64\":\""
-                + java.util.Base64.getEncoder().encodeToString(payload.toByteArray()) + "\"}")
+        item.put("input_payload_json", AttributeValue.builder().s(wrappedEnvelopeJson(
+            messageType,
+            Base64.getEncoder().encodeToString(payload.toByteArray())))
             .build());
         return item;
+    }
+
+    private static DescriptorProtos.FileDescriptorSet samplePayload() {
+        return DescriptorProtos.FileDescriptorSet.newBuilder()
+            .addFile(DescriptorProtos.FileDescriptorProto.newBuilder().setName("checkout.proto").build())
+            .build();
+    }
+
+    private static String wrappedEnvelopeJson(String messageType, String payload) {
+        try {
+            return PipelineJson.mapper().writeValueAsString(Map.of(
+                "_tpf_internal", Map.of(
+                    "_tpf_type", "protobuf",
+                    "_tpf_message", messageType,
+                    "_tpf_payload_b64", payload)));
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed creating protobuf envelope JSON for test.", e);
+        }
+    }
+
+    private static String invokeToJson(DynamoExecutionStateStore store, Object value) {
+        return (String) invoke(store, "toJson", new Class<?>[] {Object.class}, value);
+    }
+
+    private static Object invokeFromJson(DynamoExecutionStateStore store, String value) {
+        return invoke(store, "fromJson", new Class<?>[] {String.class}, value);
+    }
+
+    private static Object invoke(
+        DynamoExecutionStateStore store,
+        String methodName,
+        Class<?>[] parameterTypes,
+        Object argument
+    ) {
+        try {
+            Method method = DynamoExecutionStateStore.class.getDeclaredMethod(methodName, parameterTypes);
+            method.setAccessible(true);
+            return method.invoke(store, argument);
+        } catch (InvocationTargetException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new IllegalStateException("Failed invoking " + methodName + " for test.", cause);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("Failed invoking " + methodName + " for test.", e);
+        }
     }
 }

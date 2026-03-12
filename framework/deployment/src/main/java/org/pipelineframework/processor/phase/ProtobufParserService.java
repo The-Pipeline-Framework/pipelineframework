@@ -83,7 +83,7 @@ public class ProtobufParserService {
                 String parserName = "Proto" + String.join("_", messageType.simpleNames()) + "Parser";
                 String fqcn = parserPackage + "." + parserName;
                 if (generated.add(fqcn)) {
-                    TypeSpec parserClass = buildParserClass(messageType, parserName);
+                    TypeSpec parserClass = buildParserClass(messageType, descriptor.getFullName(), parserName);
                     try {
                         JavaFile.builder(parserPackage, parserClass).build().writeTo(outputDir);
                     } catch (IOException e) {
@@ -107,7 +107,7 @@ public class ProtobufParserService {
         }
     }
 
-    private TypeSpec buildParserClass(ClassName messageType, String parserName) {
+    private TypeSpec buildParserClass(ClassName messageType, String schemaFullName, String parserName) {
         ClassName parserInterface = ClassName.get("org.pipelineframework.cache", "ProtobufMessageParser");
         ClassName messageBase = ClassName.get("com.google.protobuf", "Message");
         ClassName invalidProto = ClassName.get("com.google.protobuf", "InvalidProtocolBufferException");
@@ -116,7 +116,7 @@ public class ProtobufParserService {
             .addAnnotation(Override.class)
             .addModifiers(javax.lang.model.element.Modifier.PUBLIC)
             .returns(String.class)
-            .addStatement("return $S", messageType.toString())
+            .addStatement("return $S", schemaFullName)
             .build();
 
         MethodSpec parseMethod = MethodSpec.methodBuilder("parseFrom")
