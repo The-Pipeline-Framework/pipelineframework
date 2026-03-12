@@ -24,6 +24,7 @@ on:
       - 'mvnw'
       - '.mvn/**'
       - 'scripts/ci/**'
+      - '.github/workflows/build.yml'
       - '.github/actions/setup-testcontainers/**'
       - '.github/workflows/e2e-search-pipeline-e2e.yml'
   workflow_dispatch:

@@ -24,6 +24,7 @@ on:
       - 'mvnw'
       - '.mvn/**'
       - 'scripts/ci/**'
+      - '.github/workflows/build.yml'
       - '.github/workflows/e2e-search-resource-it.yml'
   workflow_dispatch:
 
@@ -39,6 +40,7 @@ jobs:
   search-resource-it:
     name: Search Resource IT
     runs-on: ubuntu-latest
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
