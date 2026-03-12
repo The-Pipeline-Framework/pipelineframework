@@ -56,20 +56,20 @@ jobs:
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
 
       - name: Download framework artifacts
-        if: ${{ github.event_name == 'workflow_call' && inputs.download_artifacts }}
+        if: ${{ inputs.download_artifacts }}
         uses: actions/download-artifact@v4
         with:
           name: ${{ inputs.artifact_name }}
           path: /tmp/m2-artifacts
 
       - name: Extract framework artifacts
-        if: ${{ github.event_name == 'workflow_call' && inputs.download_artifacts }}
+        if: ${{ inputs.download_artifacts }}
         run: |
           mkdir -p ~/.m2/repository
           tar -xzf /tmp/m2-artifacts/${{ inputs.artifact_name }}.tar.gz -C ~/.m2/repository
 
       - name: Bootstrap framework artifacts locally
-        if: ${{ github.event_name != 'workflow_call' || !inputs.download_artifacts }}
+        if: ${{ !inputs.download_artifacts }}
         run: ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
 
       - name: Setup Testcontainers Docker environment

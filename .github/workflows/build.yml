@@ -14,6 +14,7 @@ on:
       - 'mvnw'
       - '.mvn/**'
       - 'scripts/ci/**'
+      - '.github/actions/setup-testcontainers/**'
       - '.github/workflows/build.yml'
       - '.github/workflows/e2e-csv-monolith.yml'
       - '.github/workflows/e2e-checkout-ftgo-smoke.yml'
