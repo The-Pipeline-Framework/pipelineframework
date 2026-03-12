@@ -381,6 +381,11 @@ abstract class AbstractCsvPaymentsEndToEnd {
                             .withEnv("SERVER_KEYSTORE_PASSWORD", "secret")
                             .withEnv("CLIENT_TRUSTSTORE_PATH", CONTAINER_TRUSTSTORE_PATH)
                             .withEnv("CLIENT_TRUSTSTORE_PASSWORD", "secret")
+                            // Keep the pipeline-runtime lane on the same low-retry, bounded-concurrency
+                            // settings used by the other E2E topologies regardless of image defaults.
+                            .withEnv("PIPELINE_MAX_CONCURRENCY", "128")
+                            .withEnv("PIPELINE_DEFAULTS_RETRY_LIMIT", "3")
+                            .withEnv("PIPELINE_DEFAULTS_RETRY_WAIT_MS", "100")
                             .withLogConsumer(containerLog("pipeline-runtime-svc"))
                             .waitingFor(
                                     Wait.forHttps("/q/health")
