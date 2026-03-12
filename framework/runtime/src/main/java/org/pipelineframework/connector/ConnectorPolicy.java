@@ -48,12 +48,12 @@ public record ConnectorPolicy(
     }
 
     /**
-     * Create a ConnectorPolicy with connector startup disabled and default policy settings.
+     * Create a ConnectorPolicy with connector startup disabled and default runtime policies.
      *
-     * @return a ConnectorPolicy with enabled=false, backpressurePolicy=ConnectorBackpressurePolicy.BUFFER,
-     *         backpressureBufferCapacity=DEFAULT_BACKPRESSURE_BUFFER_CAPACITY,
-     *         idempotencyPolicy=ConnectorIdempotencyPolicy.DISABLED, and
-     *         failureMode=ConnectorFailureMode.PROPAGATE
+     * @return a ConnectorPolicy with enabled = false, backpressurePolicy = ConnectorBackpressurePolicy.BUFFER,
+     *         backpressureBufferCapacity = DEFAULT_BACKPRESSURE_BUFFER_CAPACITY,
+     *         idempotencyPolicy = ConnectorIdempotencyPolicy.DISABLED, and
+     *         failureMode = ConnectorFailureMode.PROPAGATE
      */
     public static ConnectorPolicy disabled() {
         return new ConnectorPolicy(

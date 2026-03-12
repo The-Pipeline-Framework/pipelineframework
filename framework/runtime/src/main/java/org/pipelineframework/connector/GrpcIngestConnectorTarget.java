@@ -30,9 +30,9 @@ public final class GrpcIngestConnectorTarget<T> implements ConnectorTarget<T> {
     private final Function<Multi<T>, Cancellable> forwarder;
 
     /**
-     * Create a GrpcIngestConnectorTarget that forwards payload streams using the provided forwarder.
+     * Creates a GrpcIngestConnectorTarget that forwards payload streams using the provided forwarder.
      *
-     * @param forwarder function that receives a stream of payloads (`Multi<T>`) and starts forwarding, returning a `Cancellable` to control the forwarding subscription
+     * @param forwarder function that accepts a {@code Multi<T>} of payloads and returns a {@code Cancellable} to control the forwarding subscription
      * @throws NullPointerException if {@code forwarder} is {@code null}
      */
     public GrpcIngestConnectorTarget(Function<Multi<T>, Cancellable> forwarder) {

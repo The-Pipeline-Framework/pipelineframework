@@ -78,6 +78,14 @@ public record PipelineTemplateConfig(
         }
     }
 
+    /**
+     * Validates that the provided map contains no null keys or values.
+     *
+     * @param values the map to validate; may be {@code null}, in which case no validation is performed
+     * @param fieldName the logical name of the field used in exception messages
+     * @throws IllegalArgumentException if any key is {@code null} (message: "<fieldName> must not contain null keys")
+     *                                  or any value is {@code null} (message: "<fieldName> must not contain null values")
+     */
     private static void validateMap(Map<?, ?> values, String fieldName) {
         if (values == null) {
             return;
@@ -93,7 +101,7 @@ public record PipelineTemplateConfig(
     }
 
     /**
-     * Create a PipelineTemplateConfig using legacy call-site parameters and supply sensible defaults for new fields.
+     * Constructs a PipelineTemplateConfig with backward-compatible defaults for newly added fields.
      *
      * Defaults applied: version = 1, platform = PipelinePlatform.COMPUTE, messages = empty map, connectors = empty list.
      *

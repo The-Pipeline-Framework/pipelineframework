@@ -43,7 +43,10 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     private final ConnectorConfigValidator connectorConfigValidator;
 
     /**
-     * Initializes a PipelineDiscoveryPhase configured with the default collaborators.
+     * Creates a PipelineDiscoveryPhase configured with the default collaborators.
+     *
+     * <p>The default collaborators are DiscoveryPathResolver, DiscoveryConfigLoader,
+     * TransportPlatformResolver, and ConnectorConfigValidator.
      */
     public PipelineDiscoveryPhase() {
         this(
@@ -203,12 +206,12 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     }
 
     /**
-         * Load the pipeline template configuration from the provided optional config path.
-         *
-         * @param configPath an Optional containing the resolved pipeline configuration path, or empty if none was found
-         * @param messager used to report diagnostics; may be null
-         * @return the loaded PipelineTemplateConfig, or `null` if no configuration is present or if loading fails (a diagnostic is reported via `messager` when available)
-         */
+     * Loads the pipeline template configuration from the given config path.
+     *
+     * @param configPath an Optional containing the resolved pipeline configuration path, or empty if none was found
+     * @param messager used to report diagnostics; may be null
+     * @return the loaded PipelineTemplateConfig, or `null` if no configuration path was provided or if loading fails; when loading fails a diagnostic is reported via `messager` if available
+     */
     private PipelineTemplateConfig loadPipelineTemplateConfig(Optional<Path> configPath, Messager messager) {
         if (configPath.isEmpty()) {
             return null;

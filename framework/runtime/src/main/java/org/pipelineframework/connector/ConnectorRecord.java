@@ -63,13 +63,15 @@ public record ConnectorRecord<T>(
     }
 
     /**
-     * Create a ConnectorRecord containing the given payload, dispatch metadata, and meta map.
+     * Create a ConnectorRecord containing the given payload, dispatch metadata, and an immutable normalized meta map.
      *
-     * @param  payload           the payload forwarded to the connector target
-     * @param  dispatchMetadata  canonical transport dispatch metadata; may be null
-     * @param  meta              optional metadata map; null or empty becomes an empty immutable map,
-     *                           otherwise a new unmodifiable LinkedHashMap copy is made to preserve insertion order
-     * @return                   a ConnectorRecord with the provided payload, dispatch metadata, and normalized meta
+     * The `meta` parameter is normalized: if `null` or empty an empty immutable map is used; otherwise an unmodifiable
+     * LinkedHashMap copy is created to preserve insertion order.
+     *
+     * @param payload           the payload forwarded to the connector target
+     * @param dispatchMetadata  canonical transport dispatch metadata; may be null
+     * @param meta              optional metadata map to include with the record; will be normalized as described above
+     * @return                  a ConnectorRecord with the provided payload, dispatch metadata, and normalized meta
      */
     public static <T> ConnectorRecord<T> ofPayload(
         T payload,
@@ -99,10 +101,10 @@ public record ConnectorRecord<T>(
     }
 
     /**
-     * Create a copy of this ConnectorRecord with the provided payload.
+     * Create a new ConnectorRecord with the given payload while preserving this record's dispatch metadata and meta.
      *
-     * @param  nextPayload the payload for the new ConnectorRecord
-     * @return             a new ConnectorRecord containing `nextPayload` and the same dispatch metadata and meta map as this record
+     * @param nextPayload the payload for the new record
+     * @return            a ConnectorRecord containing the provided payload and the original dispatch metadata and meta
      */
     public <N> ConnectorRecord<N> withPayload(N nextPayload) {
         return new ConnectorRecord<>(nextPayload, dispatchMetadata, meta);
@@ -119,11 +121,11 @@ public record ConnectorRecord<T>(
     }
 
     /**
-     * Create a new ConnectorRecord with the provided metadata entry added to the record's meta map.
+     * Creates a new ConnectorRecord whose meta includes the given key and value.
      *
      * @param key metadata key; must not be null
      * @param value metadata value; must not be null
-     * @return a ConnectorRecord containing the same payload and dispatch metadata, with meta augmented by the given key and value
+     * @return the new ConnectorRecord with the same payload and dispatch metadata, and meta augmented by the given entry
      * @throws NullPointerException if {@code key} or {@code value} is null
      */
     public ConnectorRecord<T> withMetaEntry(String key, String value) {

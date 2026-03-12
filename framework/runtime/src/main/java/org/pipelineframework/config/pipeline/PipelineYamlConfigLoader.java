@@ -124,17 +124,15 @@ public class PipelineYamlConfigLoader {
     }
 
     /**
-     * Parses the YAML root object and constructs a PipelineYamlConfig.
+     * Create a PipelineYamlConfig by parsing the provided YAML root map.
      *
-     * Reads top-level fields (basePackage, transport, platform), applies overrides if present,
-     * normalizes known transport values (defaults to "GRPC" for unknown transports), normalizes known
-     * platform values (defaults to "COMPUTE" for unknown values), and
-     * reads pipeline steps and aspects from the root map.
+     * Reads top-level keys (basePackage, transport, platform), applies environment/property overrides,
+     * normalizes or defaults transport and platform values, and reads steps, aspects, and connectors.
      *
-     * @param root   the deserialized YAML root; expected to be a Map
-     * @param source descriptive source used in error messages (e.g., file path or resource)
+     * @param root   the deserialized YAML root; must be a Map (otherwise an exception is thrown)
+     * @param source descriptive source used in error messages (for example a file path or resource)
      * @return a PipelineYamlConfig populated from the provided YAML root
-     * @throws IllegalStateException if the root is not a Map
+     * @throws IllegalStateException if {@code root} is not a Map
      */
     private PipelineYamlConfig parseRoot(Object root, String source) {
         if (!(root instanceof Map<?, ?> rootMap)) {
@@ -315,11 +313,9 @@ public class PipelineYamlConfigLoader {
     }
 
     /**
-     * Parses the "source" section of a connector YAML map into a ConnectorSourceConfig.
+     * Creates a ConnectorSourceConfig from the connector's "source" map.
      *
-     * @param connectorMap the connector configuration map (as parsed from YAML)
-     * @return a ConnectorSourceConfig constructed from the "kind", "step", and "type" fields,
-     *         or `null` if the "source" entry is missing or not a map
+     * @return the ConnectorSourceConfig populated with the "kind", "step", and "type" values, or null if the "source" entry is missing or not a map
      */
     private ConnectorSourceConfig readSource(Map<?, ?> connectorMap) {
         Object sourceObj = connectorMap.get("source");
@@ -352,10 +348,10 @@ public class PipelineYamlConfigLoader {
     }
 
     /**
-     * Extracts a broker configuration from a connector mapping and constructs a ConnectorBrokerConfig.
+     * Builds a ConnectorBrokerConfig from the connector's "broker" mapping.
      *
-     * @param connectorMap map representing a connector from the YAML; may contain a "broker" entry with keys "provider", "destination", and "adapter"
-     * @return a ConnectorBrokerConfig populated from the broker entry, or {@code null} if no broker object is present or it is not a map
+     * @param connectorMap the connector map parsed from YAML; may contain a "broker" entry
+     * @return a ConnectorBrokerConfig populated from the "broker" mapping, or {@code null} if the "broker" entry is absent or not a map
      */
     private ConnectorBrokerConfig readBroker(Map<?, ?> connectorMap) {
         Object brokerObj = connectorMap.get("broker");
@@ -394,10 +390,10 @@ public class PipelineYamlConfigLoader {
     }
 
     /**
-     * Retrieve the "targetSteps" list from an aspect's configuration.
+     * Return the list of target step names defined at "config.targetSteps" for an aspect.
      *
      * @param aspectConfig the aspect map (expected to contain a "config" map)
-     * @return a list of target step names from "config.targetSteps", or an empty list if absent or invalid
+     * @return the list of target step names from "config.targetSteps", or an empty list if the entry is missing or not a list
      */
     private List<String> readTargetSteps(Map<?, ?> aspectConfig) {
         Object configObj = aspectConfig.get("config");
@@ -420,12 +416,16 @@ public class PipelineYamlConfigLoader {
     }
 
     /**
-     * Resolve a boolean configuration value from the provided map using the given key, falling back to a default when absent.
+     * Interpret the value at the given key in the map as a boolean, returning a fallback when the key is absent.
+     *
+     * The method returns {@code true} if the value is a {@code Boolean} equal to {@code true} or a string that
+     * parses to {@code true} (case-insensitive). If the map contains no entry for the key, {@code defaultValue}
+     * is returned; otherwise the parsed boolean value is returned (or {@code false} if parsing yields {@code false}).
      *
      * @param map the source map containing configuration values
      * @param key the key whose value should be interpreted as a boolean
      * @param defaultValue the value to return when the map does not contain the key
-     * @return `true` if the value for `key` is a Boolean `true` or a string that parses to `true` (case-insensitive), `defaultValue` if the key is absent, `false` otherwise
+     * @return {@code true} if the value for {@code key} is a {@code Boolean} {@code true} or a string that parses to {@code true}, {@code defaultValue} if the key is absent, {@code false} otherwise
      */
     private boolean readBoolean(Map<?, ?> map, String key, boolean defaultValue) {
         Object value = map.get(key);

@@ -124,10 +124,10 @@ public class DeliverToNextIngestBridge {
     }
 
     /**
-     * Cancel the active forwarding subscription to the next ingest stage if present.
+     * Cancel the active forwarding subscription to the next ingest stage if one exists.
      *
-     * <p>If a forwarding subscription exists, it is cancelled and a log entry is made; otherwise a
-     * log entry notes that no subscription was active at shutdown.
+     * <p>If a forwarding subscription is present, this method cancels it; otherwise it returns without
+     * effect.
      */
     @PreDestroy
     void onShutdown() {
@@ -233,6 +233,11 @@ public class DeliverToNextIngestBridge {
         return idempotencyMaxKeys;
     }
 
+    /**
+     * The normalized backpressure strategy used when forwarding delivered orders.
+     *
+     * @return the normalized backpressure strategy string
+     */
     String getBackpressureStrategy() {
         return backpressureStrategy;
     }
@@ -247,11 +252,11 @@ public class DeliverToNextIngestBridge {
     }
 
     /**
-     * Convert the source record's payload to a DeliveredOrder and return a new ConnectorRecord
-     * containing the mapped payload with dispatch metadata ensured and connector metadata added.
+     * Map a source record's payload into a DeliveredOrder and produce a ConnectorRecord
+     * with ensured dispatch metadata and connector metadata.
      *
-     * @param sourceRecord the input record whose payload will be mapped; its dispatch metadata is preserved and normalized
-     * @return a ConnectorRecord wrapping the mapped DeliveredOrder with enriched metadata, or `null` if the payload cannot be converted
+     * @param sourceRecord the input record whose payload will be converted to a DeliveredOrder; its dispatch metadata is preserved and normalized
+     * @return a ConnectorRecord containing the mapped DeliveredOrder with ensured dispatch metadata and connector metadata, or {@code null} if the payload cannot be converted
      */
     private ConnectorRecord<OrderDeliveredSvc.DeliveredOrder> mapRecord(ConnectorRecord<Object> sourceRecord) {
         OrderDeliveredSvc.DeliveredOrder mapped = toDeliveredOrder(sourceRecord.payload());
@@ -273,18 +278,22 @@ public class DeliverToNextIngestBridge {
     }
 
     /**
-     * Creates a ConnectorTarget that forwards DeliveredOrder records to the configured forwardClient
-     * while tracking in-flight records by idempotency key so accepted callbacks receive the original ConnectorRecord when available.
+     * Create a ConnectorTarget that forwards DeliveredOrder payloads to the configured forwardClient while correlating acceptances back to their original ConnectorRecord when possible.
      *
-     * <p>The returned target:
-     * - Records incoming ConnectorRecord instances in an in-memory pending map keyed by each record's idempotency key (when non-blank).
-     * - Forwards only the payloads to the forwardClient and, on acceptance, uses a derived idempotency key to look up and remove the original ConnectorRecord from the pending map; if none is found, the payload is converted back into a ConnectorRecord via mapRecord before invoking the acceptance callback.
-     * - Clears the pending map and forwards failures to the provided failure callback when the forwardClient signals an error.</p>
+     * <p>Incoming ConnectorRecord instances are tracked in an in-memory pending map keyed by each record's idempotency key when present. The target forwards only payloads to the forwardClient; when the client signals acceptance it derives an idempotency key to look up and remove the original ConnectorRecord from the pending map and invokes the provided acceptance callback with the original record if found or with a reconstructed ConnectorRecord otherwise. If the forwardClient signals a failure, the pending map is cleared and the failure is forwarded to the provided failure callback.</p>
      *
-     * @return a ConnectorTarget that forwards delivered orders and correlates acceptances back to original ConnectorRecord instances when possible
+     * @return a ConnectorTarget that forwards delivered orders and invokes the acceptance callback with the original ConnectorRecord when a matching idempotency key is found (or a reconstructed record otherwise); failures clear in-flight tracking and are propagated to the failure callback
      */
     private ConnectorTarget<OrderDeliveredSvc.DeliveredOrder> connectorTarget() {
         return new ConnectorTarget<>() {
+            /**
+             * Forwards the provided stream of connector records using default no-op handlers for accepted and failed records.
+             *
+             * <p>This is a convenience overload that delegates to the full `forward` method with empty acceptance and failure callbacks.</p>
+             *
+             * @param connectorStream the stream of connector records to forward
+             * @return a `Cancellable` that can be used to cancel the forwarding subscription
+             */
             @Override
             public Cancellable forward(io.smallrye.mutiny.Multi<ConnectorRecord<OrderDeliveredSvc.DeliveredOrder>> connectorStream) {
                 return forward(connectorStream, ignored -> {
@@ -292,6 +301,19 @@ public class DeliverToNextIngestBridge {
                 });
             }
 
+            /**
+             * Forwards delivered-order records to the configured forward client while tracking in-flight records by idempotency key.
+             *
+             * The method records pending records for non-blank idempotency keys before handing payloads to the forward client.
+             * When a payload is accepted, the provided `onAccepted` consumer is invoked with the original pending ConnectorRecord if one
+             * was tracked for the payload's idempotency key, or with a reconstructed ConnectorRecord built from the payload if no
+             * pending record is found. If a failure occurs, all pending entries are cleared and the provided `onFailure` consumer is invoked.
+             *
+             * @param connectorStream stream of connector records to forward; each record's payload is sent to the forward client
+             * @param onAccepted consumer invoked when a payload is accepted by the forward client; receives the original ConnectorRecord if available, otherwise a reconstructed ConnectorRecord created from the accepted payload
+             * @param onFailure consumer invoked when the forward client reports a failure
+             * @return a Cancellable that can be used to cancel the active forwarding subscription
+             */
             @Override
             public Cancellable forward(
                 io.smallrye.mutiny.Multi<ConnectorRecord<OrderDeliveredSvc.DeliveredOrder>> connectorStream,

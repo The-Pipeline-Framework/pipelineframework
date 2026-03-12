@@ -75,7 +75,7 @@ public final class ConnectorSupport {
     /**
      * Convert a textual backpressure policy name to a ConnectorBackpressurePolicy.
      *
-     * @param policy the policy name (case-insensitive); recognized value: "DROP". Null or blank input is treated as unspecified.
+     * @param policy the policy name (case-insensitive); recognized value is "DROP"; null or blank is treated as unspecified
      * @return the corresponding ConnectorBackpressurePolicy; `BUFFER` when the input is null, blank, or not recognized
      */
     public static ConnectorBackpressurePolicy normalizeBackpressurePolicy(String policy) {
@@ -100,10 +100,10 @@ public final class ConnectorSupport {
     }
 
     /**
-     * Convert a string policy name into a ConnectorIdempotencyPolicy enum value.
+     * Map a textual idempotency policy name to a {@link ConnectorIdempotencyPolicy} enum.
      *
-     * @param policy the policy name (case-insensitive); expected values include "PRE_FORWARD" and "ON_ACCEPT"
-     * @return {@code ConnectorIdempotencyPolicy.PRE_FORWARD} for "PRE_FORWARD", {@code ConnectorIdempotencyPolicy.ON_ACCEPT} for "ON_ACCEPT", or {@code ConnectorIdempotencyPolicy.DISABLED} when the input is null, blank, or unrecognized
+     * @param policy the policy name (may be null or blank); matching is case-insensitive
+     * @return {@code ConnectorIdempotencyPolicy.PRE_FORWARD} for {@code "PRE_FORWARD"}, {@code ConnectorIdempotencyPolicy.ON_ACCEPT} for {@code "ON_ACCEPT"}, or {@code ConnectorIdempotencyPolicy.DISABLED} when the input is null, blank, or unrecognized
      */
     public static ConnectorIdempotencyPolicy normalizeIdempotencyPolicy(String policy) {
         if (policy == null || policy.isBlank()) {
@@ -169,12 +169,12 @@ public final class ConnectorSupport {
     }
 
     /**
-     * Builds a deterministic idempotency key for a payload from the specified fields and connector namespace.
+     * Create a deterministic, namespaced idempotency key from the given payload fields.
      *
-     * @param connectorName namespace used as the key prefix (identifies the connector)
+     * @param connectorName namespace used as the key prefix that identifies the connector
      * @param payload       the object containing fields to derive the key from (may be a protobuf Message, Map, record, or POJO)
      * @param keyFields     ordered list of property names to extract and combine into the key
-     * @return              a namespaced deterministic idempotency key constructed from the connector name and the specified field values, or `null` if `payload` is null or `keyFields` is null/empty
+     * @return              the namespaced deterministic idempotency key, or null if {@code payload} is null or {@code keyFields} is null or empty
      */
     public static String deriveIdempotencyKey(String connectorName, Object payload, List<String> keyFields) {
         if (payload == null || keyFields == null || keyFields.isEmpty()) {
@@ -207,11 +207,11 @@ public final class ConnectorSupport {
     }
 
     /**
-     * Reads a property's value from a payload that may be a protobuf Message, a Map, a Java record, or a POJO and returns it as a string.
+     * Extracts a named property from a payload that may be a protobuf {@code Message}, a {@code Map}, a Java record, or a POJO.
      *
-     * <p>The method attempts common lookup strategies for each payload shape and returns an empty string when the property is missing or cannot be read.</p>
+     * <p>Attempts the appropriate lookup strategy for each payload shape and returns an empty string when the property is missing or cannot be read.</p>
      *
-     * @param payload the object to read the property from; may be a protobuf {@code Message}, {@code Map}, record, or POJO
+     * @param payload the object to read the property from; may be a protobuf {@code Message}, {@code Map}, a record, or a POJO
      * @param propertyName the name of the property to read
      * @return the property's value as a string, or an empty string if the property is not present or cannot be read
      */
@@ -309,12 +309,12 @@ public final class ConnectorSupport {
     }
 
     /**
-     * Reads a property value from a Java record by invoking the record component accessor.
+     * Retrieve the named component value from a Java record as a string.
      *
-     * @param payload       the record instance to read from
-     * @param propertyName  the record component name to read
-     * @return              the component value as a string, or an empty string if the payload is not a record,
-     *                      the component is not present, the value is null, or the accessor cannot be invoked
+     * @param payload      the record instance to read the component from
+     * @param propertyName the name of the record component to retrieve
+     * @return the component value as a string, or an empty string if the payload is not a record,
+     *         the component is not present, the component value is null, or the accessor cannot be invoked
      */
     private static String readRecordProperty(Object payload, String propertyName) {
         if (!payload.getClass().isRecord()) {
@@ -365,13 +365,11 @@ public final class ConnectorSupport {
     }
 
     /**
-     * Returns the input string with its first character converted to uppercase.
-     *
-     * If the input is null or empty, an empty string is returned.
-     *
-     * @param value the string to capitalize
-     * @return the string with the first character uppercased, or an empty string if {@code value} is null or empty
-     */
+         * Convert the first character of the given string to uppercase.
+         *
+         * @param value the string whose first character will be uppercased
+         * @return the input string with its first character uppercased, or an empty string if {@code value} is null or empty
+         */
     private static String capitalize(String value) {
         if (value == null || value.isEmpty()) {
             return "";

@@ -110,16 +110,19 @@ final class ConnectorConfigValidator {
     }
 
     /**
-     * Produce a normalized ConnectorConfig with defaults applied and values canonicalized.
+     * Normalize a connector declaration and apply canonical defaults.
      *
-     * <p>Normalization rules include: uppercasing transport and kind values, supplying default
-     * source/target/broker objects when missing, and normalizing policy and numeric limit fields
-     * (including default buffer capacity of 256 and default idempotency max keys of 10000 when
-     * non-positive).
+     * <p>The returned ConnectorConfig has canonicalized token values (transport and kind values
+     * uppercased), default source/target when missing, normalized policy names, and concrete numeric
+     * defaults for capacity and idempotency limits. Notable defaults: transport defaults to "GRPC",
+     * source.kind defaults to "OUTPUT_BUS", target.kind defaults to "LIVE_INGEST", backpressure
+     * buffer capacity defaults to 256 when non-positive, and idempotency max keys defaults to 10000
+     * when non-positive.
      *
      * @param connector the original ConnectorConfig to normalize
-     * @return a new ConnectorConfig with normalized transport, source, target, broker, policy names,
-     *         and numeric defaults applied
+     * @return a new ConnectorConfig with normalized transport/kind values, defaulted source/target,
+     *         normalized policy names, and numeric defaults applied (buffer capacity and idempotency
+     *         max keys)
      */
     private ConnectorConfig normalize(ConnectorConfig connector) {
         String transport = normalizeOrDefault(connector.transport(), GRPC).toUpperCase(Locale.ROOT);
