@@ -242,8 +242,8 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 - **Status**: OPEN
 
 4) **Idempotency / duplicate handoff**
-- **Problem**: Connector retries can duplicate downstream processing.
-- **Stance**: Framework connectors now preserve incoming idempotency metadata when present and derive deterministic handoff keys from declared connector key fields when absent. `PRE_FORWARD` (dedupe before forwarding, lower duplicate risk but possible lost handoff after downstream delivery failure) and `ON_ACCEPT` (dedupe becomes authoritative on downstream accept, lower lost-work risk but possible duplicate re-forward on retry) are explicit runtime policies.
+- **Problem**: Checkpoint publication retries can duplicate downstream processing.
+- **Stance**: Orchestrator-owned checkpoint publication preserves incoming idempotency metadata when present and otherwise derives a deterministic handoff key from declared checkpoint key fields. The public model does not expose publication-local dedupe modes.
 - **Status**: RESOLVED
 
 5) **Traceability / lineage**
@@ -253,12 +253,12 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 
 6) **Type compatibility between pipelines**
 - **Problem**: Pipeline B should not depend on Pipeline A internals.
-- **Stance**: Connector declarations now validate source payload class, target payload class, mapper signature, and target adapter signature at build time. Cross-pipeline handoff remains explicit through connector contracts instead of hidden pipeline internals.
+- **Stance**: Checkpoint publication/subscription declarations validate published output type, subscriber ingress type, and mapper compatibility at build time. Cross-pipeline handoff remains explicit through checkpoint boundary contracts instead of hidden pipeline internals.
 - **Status**: RESOLVED
 
 7. **Backpressure across pipelines**
 - **Problem**: Piping should preserve backpressure end-to-end.
-- **Stance**: Framework connectors now expose explicit `BUFFER` (bounded buffering before overflow) and `DROP` (drop or reject excess handoffs when saturated) policies with configured buffer capacity for live handoffs. Broker connectors remain strategy-based and do not claim end-to-end broker demand control in v1.
+- **Stance**: Reliable checkpoint publication inherits orchestrator queue-async admission behavior instead of exposing publication-local backpressure policies. Live subscribe/tap remains a weaker observation surface and does not define reliable handoff semantics.
 - **Status**: RESOLVED
 
 8) **Branching outputs (multi-out steps)**
@@ -287,8 +287,8 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 - **Schema drift**: handoff DTO versioning can break compatibility without strict rules. (See Pain-point matrix #6; Addressed in Near-Term Design Work: Build-Time Checks)
 - **Temporal coupling**: downstream slowness collapses upstream throughput. (See Pain-point matrix #7)
 - **Hotspot steps**: a single heavy step can dominate latency and throughput.
-- **Backpressure deadlocks**: mismatched demand signalling can stall a chain. (See Pain-point matrix #7; Addressed in Near-Term Design Work: Connector Policy)
-- **Implicit retries**: connector retries can trigger duplicate side effects. (See Pain-point matrix #4; Addressed in Near-Term Design Work: Connector Policy)
+- **Backpressure deadlocks**: mismatched demand signalling can stall a chain. (See Pain-point matrix #7)
+- **Implicit retries**: checkpoint publication retries can trigger duplicate side effects. (See Pain-point matrix #4)
 - **Observability blind spots**: reference-based tracing needs reliable lookup. (See Pain-point matrix #5; Addressed in Near-Term Design Work: TraceEnvelope)
 - **Fan-out/fan-in complexity**: ordering and timeout handling become tricky. (See Pain-point matrix #8)
 - **Distributed time assumptions**: ordering based on timestamps becomes ambiguous.
@@ -297,9 +297,8 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 ## Near-Term Design Work
 
 - **Error Sink**: define a runtime error sink interface with a default StdErrSink and optional gRPC/REST sink service.
-- **Connector Backpressure Policy**: completed for v1 live connectors with explicit `BUFFER`/`DROP`, configurable buffer capacity, runtime support, and test coverage. Follow-on work remains broker-specific policy shape, not the live connector baseline. (Pain-point #7)
-- **Connector Idempotency Policy**: completed for v1 live connectors with preserved or derived handoff keys plus explicit `PRE_FORWARD`/`ON_ACCEPT` runtime policy and test coverage. Follow-on work remains broker/re-drive semantics, not the live connector baseline. (Pain-point #4)
-- **Build-Time Checks**: existing operator/mapping compatibility checks have been extended to explicit pipeline-to-pipeline handoff contracts for declared connectors.
+- **Checkpoint Publication Contract**: define topic publication/subscription rules, queue-async-only support, and orchestrator-owned handoff behavior. (Pain-point #3, #4, #7)
+- **Build-Time Checks**: existing operator/mapping compatibility checks are extended to explicit checkpoint publication/subscription contracts.
 
 ## Open Questions
 

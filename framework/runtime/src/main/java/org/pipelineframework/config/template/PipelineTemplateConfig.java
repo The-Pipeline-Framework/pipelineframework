@@ -20,7 +20,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import org.pipelineframework.config.connector.ConnectorConfig;
+import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
+import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
 
 /**
  * Full pipeline template configuration loaded from the pipeline template YAML file.
@@ -33,7 +34,8 @@ import org.pipelineframework.config.connector.ConnectorConfig;
  * @param messages top-level named messages
  * @param steps pipeline steps
  * @param aspects aspect configurations keyed by aspect name
- * @param connectors framework connector declarations
+ * @param input reliable pipeline input boundary
+ * @param output reliable pipeline output boundary
  */
 public record PipelineTemplateConfig(
     int version,
@@ -44,7 +46,8 @@ public record PipelineTemplateConfig(
     Map<String, PipelineTemplateMessage> messages,
     List<PipelineTemplateStep> steps,
     Map<String, PipelineTemplateAspect> aspects,
-    List<ConnectorConfig> connectors
+    PipelineInputBoundaryConfig input,
+    PipelineOutputBoundaryConfig output
 ) {
     public PipelineTemplateConfig {
         if (version <= 0) {
@@ -62,10 +65,6 @@ public record PipelineTemplateConfig(
         // Preserve null step placeholders so downstream phases/tests can explicitly skip them.
         steps = steps == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(steps));
         aspects = aspects == null ? Map.of() : Map.copyOf(aspects);
-        if (connectors != null && connectors.stream().anyMatch(java.util.Objects::isNull)) {
-            throw new IllegalArgumentException("connectors must not contain null entries");
-        }
-        connectors = connectors == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(connectors));
     }
 
     /**
@@ -106,7 +105,7 @@ public record PipelineTemplateConfig(
     /**
      * Constructs a PipelineTemplateConfig with backward-compatible defaults for newly added fields.
      *
-     * Defaults applied: version = 1, platform = PipelinePlatform.COMPUTE, messages = empty map, connectors = empty list.
+     * Defaults applied: version = 1, platform = PipelinePlatform.COMPUTE, messages = empty map, no input/output boundaries.
      *
      * @param appName the application name
      * @param basePackage the base Java package
@@ -121,11 +120,11 @@ public record PipelineTemplateConfig(
         List<PipelineTemplateStep> steps,
         Map<String, PipelineTemplateAspect> aspects
     ) {
-        this(1, appName, basePackage, transport, PipelinePlatform.COMPUTE, Map.of(), steps, aspects, List.of());
+        this(1, appName, basePackage, transport, PipelinePlatform.COMPUTE, Map.of(), steps, aspects, null, null);
     }
 
     /**
-     * Create a pipeline template configuration preset to version 1 with no messages and no connectors.
+     * Create a pipeline template configuration preset to version 1 with no messages and no input/output boundaries.
      *
      * @param appName     the application name for generated pipeline artifacts
      * @param basePackage the root Java package for generated code
@@ -142,6 +141,6 @@ public record PipelineTemplateConfig(
         List<PipelineTemplateStep> steps,
         Map<String, PipelineTemplateAspect> aspects
     ) {
-        this(1, appName, basePackage, transport, platform, Map.of(), steps, aspects, List.of());
+        this(1, appName, basePackage, transport, platform, Map.of(), steps, aspects, null, null);
     }
 }

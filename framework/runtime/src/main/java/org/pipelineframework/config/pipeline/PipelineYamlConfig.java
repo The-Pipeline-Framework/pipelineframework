@@ -19,7 +19,8 @@ package org.pipelineframework.config.pipeline;
 import java.util.List;
 
 import org.pipelineframework.config.PlatformOverrideResolver;
-import org.pipelineframework.config.connector.ConnectorConfig;
+import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
+import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
 
 /**
  * Pipeline configuration parsed from pipeline.yaml.
@@ -29,7 +30,8 @@ import org.pipelineframework.config.connector.ConnectorConfig;
  * @param platform the runtime/deployment platform mode (COMPUTE or FUNCTION)
  * @param steps the configured pipeline steps
  * @param aspects the configured pipeline aspects
- * @param connectors the configured framework connectors
+ * @param input the configured reliable pipeline input boundary
+ * @param output the configured reliable pipeline output boundary
  */
 public record PipelineYamlConfig(
     String basePackage,
@@ -37,7 +39,8 @@ public record PipelineYamlConfig(
     String platform,
     List<PipelineYamlStep> steps,
     List<PipelineYamlAspect> aspects,
-    List<ConnectorConfig> connectors
+    PipelineInputBoundaryConfig input,
+    PipelineOutputBoundaryConfig output
 ) {
     /**
      * Creates a validated pipeline configuration.
@@ -56,11 +59,10 @@ public record PipelineYamlConfig(
             }
         }
         platform = normalizedPlatform;
-        connectors = connectors == null ? List.of() : List.copyOf(connectors);
     }
 
     /**
-     * Backward-compatible constructor that defaults the platform to "COMPUTE" and the connectors list to empty.
+     * Backward-compatible constructor that defaults the platform to "COMPUTE".
      *
      * @param basePackage base package for generated pipeline classes
      * @param transport transport mode (e.g., "GRPC", "REST", or "LOCAL")
@@ -73,12 +75,12 @@ public record PipelineYamlConfig(
         List<PipelineYamlStep> steps,
         List<PipelineYamlAspect> aspects
     ) {
-        this(basePackage, transport, "COMPUTE", steps, aspects, List.of());
+        this(basePackage, transport, "COMPUTE", steps, aspects, null, null);
     }
 
     /**
      * Creates a PipelineYamlConfig with the given base package, transport, platform, steps, and aspects,
-     * defaulting connectors to an empty list for backward compatibility.
+     * defaulting input/output boundaries to null for backward compatibility.
      *
      * @param basePackage base package
      * @param transport transport mode
@@ -93,26 +95,26 @@ public record PipelineYamlConfig(
         List<PipelineYamlStep> steps,
         List<PipelineYamlAspect> aspects
     ) {
-        this(basePackage, transport, platform, steps, aspects, List.of());
+        this(basePackage, transport, platform, steps, aspects, null, null);
     }
 
     /**
-     * Returns a copy of this config with the given transport while preserving existing connectors.
+     * Returns a copy of this config with the given transport while preserving existing boundaries.
      *
      * @param transport the transport to use in the returned config
      * @return a new PipelineYamlConfig with the updated transport
      */
     public PipelineYamlConfig withTransport(String transport) {
-        return new PipelineYamlConfig(basePackage, transport, platform, steps, aspects, connectors);
+        return new PipelineYamlConfig(basePackage, transport, platform, steps, aspects, input, output);
     }
 
     /**
-     * Returns a copy of this config with the given platform while preserving existing connectors.
+     * Returns a copy of this config with the given platform while preserving existing boundaries.
      *
      * @param platform the platform to use in the returned config
      * @return a new PipelineYamlConfig with the updated platform
      */
     public PipelineYamlConfig withPlatform(String platform) {
-        return new PipelineYamlConfig(basePackage, transport, platform, steps, aspects, connectors);
+        return new PipelineYamlConfig(basePackage, transport, platform, steps, aspects, input, output);
     }
 }

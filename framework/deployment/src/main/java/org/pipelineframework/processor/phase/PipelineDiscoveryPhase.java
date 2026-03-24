@@ -18,7 +18,6 @@ import org.pipelineframework.annotation.PipelineOrchestrator;
 import org.pipelineframework.annotation.PipelinePlugin;
 import org.pipelineframework.config.PlatformMode;
 import org.pipelineframework.config.template.PipelineTemplateConfig;
-import org.pipelineframework.config.connector.ConnectorConfig;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.config.PipelineStepConfigLoader;
@@ -40,32 +39,32 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     private final DiscoveryPathResolver discoveryPathResolver;
     private final DiscoveryConfigLoader discoveryConfigLoader;
     private final TransportPlatformResolver transportPlatformResolver;
-    private final ConnectorConfigValidator connectorConfigValidator;
+    private final CheckpointBoundaryValidator checkpointBoundaryValidator;
 
     /**
      * Creates a PipelineDiscoveryPhase configured with the default collaborators.
      *
      * <p>The default collaborators are DiscoveryPathResolver, DiscoveryConfigLoader,
-     * TransportPlatformResolver, and ConnectorConfigValidator.
+     * TransportPlatformResolver, and CheckpointBoundaryValidator.
      */
     public PipelineDiscoveryPhase() {
         this(
             new DiscoveryPathResolver(),
             new DiscoveryConfigLoader(),
             new TransportPlatformResolver(),
-            new ConnectorConfigValidator());
+            new CheckpointBoundaryValidator());
     }
 
     /**
-     * Create a PipelineDiscoveryPhase using the provided collaborators and a default ConnectorConfigValidator.
+     * Create a PipelineDiscoveryPhase using the provided collaborators and a default CheckpointBoundaryValidator.
      *
      * @param discoveryPathResolver resolver for locating pipeline-related paths
      * @param discoveryConfigLoader loader for discovery configuration
      * @param transportPlatformResolver resolver for transport and platform modes
      * @throws NullPointerException if any argument is null
      * @deprecated prefer {@link #PipelineDiscoveryPhase(DiscoveryPathResolver, DiscoveryConfigLoader,
-     * TransportPlatformResolver, ConnectorConfigValidator)} so tests and callers can provide an explicit
-     * connector validator
+     * TransportPlatformResolver, CheckpointBoundaryValidator)} so tests and callers can provide an explicit
+     * checkpoint-boundary validator
      */
     @Deprecated
     public PipelineDiscoveryPhase(
@@ -76,7 +75,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
             discoveryPathResolver,
             discoveryConfigLoader,
             transportPlatformResolver,
-            new ConnectorConfigValidator());
+            new CheckpointBoundaryValidator());
     }
 
     /**
@@ -85,18 +84,19 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @param discoveryPathResolver resolver for locating pipeline-related paths
      * @param discoveryConfigLoader loader for discovery configuration
      * @param transportPlatformResolver resolver for transport and platform modes
-     * @param connectorConfigValidator validator for connector declarations
+     * @param checkpointBoundaryValidator validator for checkpoint publication/subscription declarations
      * @throws NullPointerException if any argument is null
      */
     public PipelineDiscoveryPhase(
             DiscoveryPathResolver discoveryPathResolver,
             DiscoveryConfigLoader discoveryConfigLoader,
             TransportPlatformResolver transportPlatformResolver,
-            ConnectorConfigValidator connectorConfigValidator) {
+            CheckpointBoundaryValidator checkpointBoundaryValidator) {
         this.discoveryPathResolver = Objects.requireNonNull(discoveryPathResolver, "discoveryPathResolver");
         this.discoveryConfigLoader = Objects.requireNonNull(discoveryConfigLoader, "discoveryConfigLoader");
         this.transportPlatformResolver = Objects.requireNonNull(transportPlatformResolver, "transportPlatformResolver");
-        this.connectorConfigValidator = Objects.requireNonNull(connectorConfigValidator, "connectorConfigValidator");
+        this.checkpointBoundaryValidator = Objects.requireNonNull(
+            checkpointBoundaryValidator, "checkpointBoundaryValidator");
     }
 
     /**
@@ -155,12 +155,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         // Parse step definitions from YAML
         List<StepDefinition> stepDefinitions = parseStepDefinitions(configPath, messager);
         ctx.setStepDefinitions(stepDefinitions);
-        List<ConnectorConfig> connectorConfigs = validateConnectorConfigs(
-            templateConfig,
-            stepDefinitions,
-            ctx,
-            messager);
-        ctx.setConnectorConfigs(connectorConfigs);
+        validateCheckpointBoundaries(templateConfig, ctx, messager);
 
         // Load runtime mapping config (optional)
         PipelineRuntimeMapping runtimeMapping = loadRuntimeMapping(moduleDir, messager);
@@ -225,35 +220,31 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Validate connector declarations from the pipeline template against the provided step
-     * definitions and return the resulting connector configurations.
+     * Validate checkpoint publication/subscription declarations from the pipeline template.
      *
      * @param templateConfig   the pipeline template configuration; if null no validation is performed
-     * @param stepDefinitions  the parsed step definitions to validate connector usage against
      * @param ctx              the compilation context providing the processing environment
      * @param messager         optional Messager for reporting diagnostics
-     * @return                 a list of validated {@code ConnectorConfig} instances; empty if {@code templateConfig} is null
      * @throws RuntimeException if validation fails; an ERROR diagnostic is emitted via {@code messager} before the exception is rethrown
      */
-    private List<ConnectorConfig> validateConnectorConfigs(
+    private void validateCheckpointBoundaries(
         PipelineTemplateConfig templateConfig,
-        List<StepDefinition> stepDefinitions,
         PipelineCompilationContext ctx,
         Messager messager
     ) {
         if (templateConfig == null) {
-            return List.of();
+            return;
         }
         try {
-            return connectorConfigValidator.validate(
+            checkpointBoundaryValidator.validate(
                 templateConfig,
-                stepDefinitions,
+                ctx.getModuleDir(),
                 ctx.getProcessingEnv(),
                 messager);
         } catch (RuntimeException e) {
             if (messager != null) {
                 messager.printMessage(Diagnostic.Kind.ERROR,
-                    "Failed to validate connector declarations: " + e.getMessage());
+                    "Failed to validate checkpoint boundary declarations: " + e.getMessage());
             }
             throw e;
         }

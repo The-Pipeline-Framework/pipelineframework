@@ -33,10 +33,10 @@ import java.util.logging.Logger;
 
 import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
-import org.pipelineframework.config.connector.ConnectorBrokerConfig;
-import org.pipelineframework.config.connector.ConnectorConfig;
-import org.pipelineframework.config.connector.ConnectorSourceConfig;
-import org.pipelineframework.config.connector.ConnectorTargetConfig;
+import org.pipelineframework.config.boundary.PipelineCheckpointConfig;
+import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
+import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
+import org.pipelineframework.config.boundary.PipelineSubscriptionConfig;
 import org.yaml.snakeyaml.Yaml;
 
 /**
@@ -129,7 +129,7 @@ public class PipelineYamlConfigLoader {
      * Create a PipelineYamlConfig by parsing the provided YAML root map.
      *
      * Reads top-level keys (basePackage, transport, platform), applies environment/property overrides,
-     * normalizes or defaults transport and platform values, and reads steps, aspects, and connectors.
+     * normalizes or defaults transport and platform values, and reads steps, aspects, and boundary declarations.
      *
      * @param root   the deserialized YAML root; must be a Map (otherwise an exception is thrown)
      * @param source descriptive source used in error messages (for example a file path or resource)
@@ -156,9 +156,10 @@ public class PipelineYamlConfigLoader {
             "platform");
         List<PipelineYamlStep> steps = readSteps(rootMap);
         List<PipelineYamlAspect> aspects = readAspects(rootMap);
-        List<ConnectorConfig> connectors = readConnectors(rootMap);
+        PipelineInputBoundaryConfig input = readInputBoundary(rootMap);
+        PipelineOutputBoundaryConfig output = readOutputBoundary(rootMap);
 
-        return new PipelineYamlConfig(basePackage, transport, platform, steps, aspects, connectors);
+        return new PipelineYamlConfig(basePackage, transport, platform, steps, aspects, input, output);
     }
 
     /**
@@ -276,105 +277,72 @@ public class PipelineYamlConfigLoader {
     }
 
     /**
-     * Parses the "connectors" section of the YAML root map and constructs a list of ConnectorConfig objects.
+     * Parses the optional root-level input boundary.
      *
-     * @param rootMap the deserialized YAML root map to read the "connectors" entry from
-     * @return a list of ConnectorConfig objects parsed from the "connectors" section; returns an empty list if the section is missing or contains no valid connector entries. Entries that are not maps or lack a non-blank `name` are skipped.
+     * @param rootMap the deserialized YAML root map
+     * @return the input boundary config, or {@code null} when no input boundary is declared
      */
-    private List<ConnectorConfig> readConnectors(Map<?, ?> rootMap) {
-        Object connectorsObj = rootMap.get("connectors");
-        if (!(connectorsObj instanceof Iterable<?> connectors)) {
-            return List.of();
-        }
-
-        List<ConnectorConfig> values = new ArrayList<>();
-        int index = 0;
-        for (Object connectorObj : connectors) {
-            index++;
-            if (!(connectorObj instanceof Map<?, ?> connectorMap)) {
-                continue;
-            }
-            String name = readString(connectorMap, "name");
-            if (name == null || name.isBlank()) {
-                LOG.warning("Skipping connector entry #" + index + " with missing name: " + connectorMap);
-                continue;
-            }
-            values.add(new ConnectorConfig(
-                name,
-                readBoolean(connectorMap, "enabled", true),
-                readSource(connectorMap),
-                readTarget(connectorMap),
-                readString(connectorMap, "mapper"),
-                readString(connectorMap, "transport"),
-                readString(connectorMap, "idempotency"),
-                readString(connectorMap, "backpressure"),
-                readString(connectorMap, "failureMode"),
-                readInt(connectorMap, "backpressureBufferCapacity", 256),
-                readInt(connectorMap, "idempotencyMaxKeys", 10000),
-                readStringList(connectorMap, "idempotencyKeyFields"),
-                readBroker(connectorMap)));
-        }
-        return values;
-    }
-
-    /**
-     * Creates a ConnectorSourceConfig from the connector's "source" map.
-     *
-     * @return the ConnectorSourceConfig populated with the "kind", "step", and "type" values
-     * @throws IllegalArgumentException if the "source" entry is missing or not a map
-     */
-    private ConnectorSourceConfig readSource(Map<?, ?> connectorMap) {
-        Object sourceObj = connectorMap.get("source");
-        if (!(sourceObj instanceof Map<?, ?> sourceMap)) {
-            throw new IllegalArgumentException(
-                "ConnectorConfig '" + readString(connectorMap, "name") + "' requires a source section defined as a map");
-        }
-        return new ConnectorSourceConfig(
-            readString(sourceMap, "kind"),
-            readString(sourceMap, "step"),
-            readString(sourceMap, "type"));
-    }
-
-    /**
-     * Creates a ConnectorTargetConfig from the "target" entry of a connector configuration map.
-     *
-     * @param connectorMap the connector configuration map containing a "target" entry
-     * @return a ConnectorTargetConfig populated from the target map's "kind", "pipeline", "type", and "adapter" values
-     * @throws IllegalArgumentException if the "target" entry is missing or not a map
-     */
-    private ConnectorTargetConfig readTarget(Map<?, ?> connectorMap) {
-        Object targetObj = connectorMap.get("target");
-        if (!(targetObj instanceof Map<?, ?> targetMap)) {
-            throw new IllegalArgumentException(
-                "ConnectorConfig '" + readString(connectorMap, "name") + "' requires a target section defined as a map");
-        }
-        return new ConnectorTargetConfig(
-            readString(targetMap, "kind"),
-            readString(targetMap, "pipeline"),
-            readString(targetMap, "type"),
-            readString(targetMap, "adapter"));
-    }
-
-    /**
-     * Builds a ConnectorBrokerConfig from the connector's "broker" mapping.
-     *
-     * @param connectorMap the connector map parsed from YAML; may contain a "broker" entry
-     * @return a ConnectorBrokerConfig populated from the "broker" mapping, or {@code null} if the "broker" entry is absent or not a map
-     */
-    private ConnectorBrokerConfig readBroker(Map<?, ?> connectorMap) {
-        Object brokerObj = connectorMap.get("broker");
-        if (brokerObj == null) {
+    private PipelineInputBoundaryConfig readInputBoundary(Map<?, ?> rootMap) {
+        rejectLegacyConnectors(rootMap);
+        Object inputObj = rootMap.get("input");
+        if (inputObj == null) {
             return null;
         }
-        if (!(brokerObj instanceof Map<?, ?> brokerMap)) {
-            throw new IllegalArgumentException(
-                "ConnectorConfig '" + readString(connectorMap, "name")
-                    + "' requires broker to be defined as a map, but got: " + brokerObj);
+        if (!(inputObj instanceof Map<?, ?> inputMap)) {
+            throw new IllegalArgumentException("pipeline input boundary must be defined as a map");
         }
-        return new ConnectorBrokerConfig(
-            readString(brokerMap, "provider"),
-            readString(brokerMap, "destination"),
-            readString(brokerMap, "adapter"));
+        Object subscriptionObj = inputMap.get("subscription");
+        if (subscriptionObj == null) {
+            return null;
+        }
+        if (!(subscriptionObj instanceof Map<?, ?> subscriptionMap)) {
+            throw new IllegalArgumentException("input.subscription must be defined as a map");
+        }
+        return new PipelineInputBoundaryConfig(new PipelineSubscriptionConfig(
+            readRequiredString(subscriptionMap, "publication", "input.subscription"),
+            readString(subscriptionMap, "mapper")));
+    }
+
+    /**
+     * Parses the optional root-level output boundary.
+     *
+     * @param rootMap the deserialized YAML root map
+     * @return the output boundary config, or {@code null} when no output boundary is declared
+     */
+    private PipelineOutputBoundaryConfig readOutputBoundary(Map<?, ?> rootMap) {
+        rejectLegacyConnectors(rootMap);
+        Object outputObj = rootMap.get("output");
+        if (outputObj == null) {
+            return null;
+        }
+        if (!(outputObj instanceof Map<?, ?> outputMap)) {
+            throw new IllegalArgumentException("pipeline output boundary must be defined as a map");
+        }
+        Object checkpointObj = outputMap.get("checkpoint");
+        if (checkpointObj == null) {
+            return null;
+        }
+        if (!(checkpointObj instanceof Map<?, ?> checkpointMap)) {
+            throw new IllegalArgumentException("output.checkpoint must be defined as a map");
+        }
+        return new PipelineOutputBoundaryConfig(new PipelineCheckpointConfig(
+            readRequiredString(checkpointMap, "publication", "output.checkpoint"),
+            readStringList(checkpointMap, "idempotencyKeyFields")));
+    }
+
+    private void rejectLegacyConnectors(Map<?, ?> rootMap) {
+        if (rootMap.get("connectors") != null) {
+            throw new IllegalArgumentException(
+                "Top-level connectors are no longer supported; use input.subscription and output.checkpoint");
+        }
+    }
+
+    private String readRequiredString(Map<?, ?> map, String key, String context) {
+        String value = readString(map, key);
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(context + "." + key + " must not be blank");
+        }
+        return value.trim();
     }
 
     /**
