@@ -134,6 +134,54 @@ class RestClientStepRendererTest {
     }
 
     @Test
+    void rendersCachePluginSideEffectWithPreferCacheForwarding() throws IOException {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("ObserveCachePaymentOutputSideEffectService")
+            .servicePackage("org.pipelineframework.csv.service")
+            .serviceClassName(ClassName.get(
+                "org.pipelineframework.plugin.cache",
+                "CacheService"))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.DEFAULT)
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.csv.common.domain", "PaymentOutput"),
+                ClassName.get("org.pipelineframework.csv.common.mapper", "PaymentOutputMapper"),
+                true))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.csv.common.domain", "PaymentOutput"),
+                ClassName.get("org.pipelineframework.csv.common.mapper", "PaymentOutputMapper"),
+                true))
+            .sideEffect(true)
+            .enabledTargets(java.util.Set.of(GenerationTarget.REST_CLIENT_STEP))
+            .build();
+
+        RestBinding binding = new RestBinding(
+            model,
+            "/ObserveCachePaymentOutputSideEffectService/remoteProcess");
+
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(Map.of());
+        GenerationContext context = new GenerationContext(
+            processingEnv,
+            tempDir,
+            DeploymentRole.ORCHESTRATOR_CLIENT,
+            java.util.Set.of(),
+            null,
+            null);
+
+        RestClientStepRenderer renderer = new RestClientStepRenderer();
+        renderer.render(binding, context);
+
+        Path clientStep = tempDir.resolve(
+            "org/pipelineframework/csv/service/pipeline/ObserveCachePaymentOutputSideEffectRestClientStep.java");
+
+        String stepSource = Files.readString(clientStep);
+        assertTrue(stepSource.contains(
+            "String cachePolicy = context != null && \"require-cache\".equals(context.cachePolicy()) ? "
+                + "\"prefer-cache\" : (context != null ? context.cachePolicy() : null)"));
+    }
+
+    @Test
     void rendersRestClientStepWithoutExplicitMapperWhenDomainTypesArePresent() throws IOException {
         PipelineStepModel model = new PipelineStepModel.Builder()
             .serviceName("ProcessCrawlSourceService")

@@ -48,6 +48,24 @@ class PipelineContextClientHeadersFactoryTest {
     }
 
     @Test
+    void preservesExplicitOutgoingHeadersOverAmbientContext() {
+        PipelineContextClientHeadersFactory factory = new PipelineContextClientHeadersFactory();
+        MultivaluedMap<String, String> incoming = new MultivaluedHashMap<>();
+        MultivaluedMap<String, String> outgoing = new MultivaluedHashMap<>();
+        outgoing.add(PipelineContextHeaders.CACHE_POLICY, "prefer-cache");
+
+        PipelineContextHolder.set(new PipelineContext("v2", "1", "require-cache"));
+        try {
+            MultivaluedMap<String, String> result = factory.update(incoming, outgoing);
+            assertEquals("prefer-cache", result.getFirst(PipelineContextHeaders.CACHE_POLICY));
+            assertEquals("v2", result.getFirst(PipelineContextHeaders.VERSION));
+            assertEquals("1", result.getFirst(PipelineContextHeaders.REPLAY));
+        } finally {
+            PipelineContextHolder.clear();
+        }
+    }
+
+    @Test
     void ignoresBlankIncomingValues() {
         PipelineContextClientHeadersFactory factory = new PipelineContextClientHeadersFactory();
         MultivaluedMap<String, String> incoming = new MultivaluedHashMap<>();

@@ -41,53 +41,47 @@ Generated orchestrator endpoints are transport-native:
    - `PipelineExecutionStatusFunctionHandler`
    - `PipelineExecutionResultFunctionHandler`
 
-## Framework Connectors
+## Checkpoint Publication
 
-Framework connectors provide the live handoff boundary between one pipeline output and another pipeline ingest target.
+Reliable cross-pipeline handoff is orchestrator-owned and checkpoint-based.
 
 Supported in this release:
 
-1. source: live `PipelineOutputBus` stream,
-2. target: live ingest adapter bean,
-3. policies: idempotency, backpressure, failure handling, and metadata propagation,
-4. ownership: downstream execution retry/DLQ remains orchestrator-owned after ingest acceptance.
+1. source: final pipeline checkpoint publication from a `QUEUE_ASYNC` orchestrator,
+2. target: downstream orchestrator async admission bound by a named logical publication,
+3. idempotency: preserve incoming dispatch metadata when present, otherwise derive a deterministic handoff key from configured checkpoint fields,
+4. ownership: downstream retry/DLQ remains orchestrator-owned after async admission.
 
-Declare connectors in `pipeline.yaml`:
+Declare reliable handoff in `pipeline.yaml`:
 
 ```yaml
-connectors:
-  - name: "orders-to-delivery"
-    transport: "GRPC"
-    idempotency: "PRE_FORWARD"
-    backpressure: "BUFFER"
-    failureMode: "PROPAGATE"
-    source:
-      kind: "OUTPUT_BUS"
-      step: "Order Ready"
-      type: "com.example.connector.ReadyOrderMessage"
-    target:
-      kind: "LIVE_INGEST"
-      pipeline: "deliver-order"
-      type: "com.example.connector.DispatchReadyOrderMessage"
-      adapter: "com.example.connector.DispatchConnectorTarget"
-    mapper: "com.example.connector.ReadyOrderConnectorMapper"
+input:
+  subscription:
+    publication: "checkout.orders.ready.v1"
+    mapper: "com.example.pipeline.mapper.ReadyOrderMapper"
+
+output:
+  checkpoint:
+    publication: "checkout.orders.dispatched.v1"
     idempotencyKeyFields: ["orderId", "customerId", "readyAt"]
 ```
 
 Runtime behavior:
 
-1. build-time validation checks source/target classes and mapper and target-adapter signatures,
-2. generated bootstrap starts the connector on `StartupEvent` and cancels it on shutdown,
-3. `TransportDispatchMetadata` fields are preserved when present; otherwise a deterministic handoff idempotency key is derived from the configured key fields,
-4. manual application `Bridge` beans remain supported as compatibility mode.
-
-Bridge beans are manually registered application components that keep an existing handoff implementation in place when you are not yet using the generated connector startup wiring from `pipeline.yaml`.
+1. build-time validation checks checkpoint boundary declarations and mapper compatibility,
+2. runtime endpoint bindings come from `pipeline.handoff.bindings.<publication>.targets.*`,
+3. publication is generated into existing orchestrator ownership; no separate connector runtime or deployment role is introduced,
+4. subscriber admission is handled by framework-owned HTTP and gRPC checkpoint publication endpoints instead of runtime subscription discovery,
+5. protobuf-over-HTTP and gRPC use the same framework-owned checkpoint protobuf envelope for transport-native admission,
+6. reliable handoff is supported only for `QUEUE_ASYNC` orchestrators and is rejected for `FUNCTION` pipelines,
+7. live `Subscribe` remains a weaker observer/tap surface and is not the reliable checkpoint handoff path.
 
 Not yet supported:
 
 1. generic broker-message re-drive,
-2. connector-owned durable state or connector DLQ,
-3. framework-generated broker connector bootstrap.
+2. a separate checkpoint-publication durable plane or publication-specific DLQ,
+3. dynamic runtime publication discovery or runtime subscription registration,
+4. broker-backed publication targets such as `SQS` or `KAFKA`.
 
 ## Queue-Async Semantics
 

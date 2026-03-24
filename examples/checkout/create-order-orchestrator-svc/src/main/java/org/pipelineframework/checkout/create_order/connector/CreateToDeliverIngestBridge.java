@@ -7,20 +7,12 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import com.google.protobuf.Message;
 import io.quarkus.runtime.StartupEvent;
+import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.subscription.Cancellable;
-import java.util.List;
-import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.jboss.logging.Logger;
-import org.pipelineframework.connector.ConnectorFailureMode;
-import org.pipelineframework.connector.ConnectorIdempotencyPolicy;
-import org.pipelineframework.connector.ConnectorIdempotencyTracker;
-import org.pipelineframework.connector.ConnectorPolicy;
-import org.pipelineframework.connector.ConnectorRecord;
-import org.pipelineframework.connector.ConnectorRuntime;
-import org.pipelineframework.connector.ConnectorSupport;
-import org.pipelineframework.connector.GrpcIngestConnectorTarget;
-import org.pipelineframework.connector.OutputBusConnectorSource;
 import org.pipelineframework.checkout.common.connector.ConnectorUtils;
 import org.pipelineframework.PipelineOutputBus;
 import org.pipelineframework.checkout.createorder.grpc.OrderReadySvc;
@@ -37,9 +29,9 @@ public class CreateToDeliverIngestBridge {
     private final PipelineOutputBus outputBus;
     private final DeliverOrderIngestClient deliverOrderIngestClient;
     private final boolean idempotencyEnabled;
-    private final ConnectorIdempotencyTracker idempotencyTracker;
     private final String backpressureStrategy;
     private final int backpressureBufferCapacity;
+    private final Set<String> acceptedKeys;
 
     private Cancellable forwardingSubscription;
 
@@ -73,7 +65,9 @@ public class CreateToDeliverIngestBridge {
             Objects.requireNonNull(deliverOrderIngestClient, "deliverOrderIngestClient must not be null");
         this.idempotencyEnabled = idempotencyEnabled;
         int normalizedIdempotencyMaxKeys = idempotencyMaxKeys > 0 ? idempotencyMaxKeys : 10000;
-        this.idempotencyTracker = idempotencyEnabled ? new ConnectorIdempotencyTracker(normalizedIdempotencyMaxKeys) : null;
+        this.acceptedKeys = idempotencyEnabled
+            ? ConcurrentHashMap.newKeySet(normalizedIdempotencyMaxKeys)
+            : Set.of();
         this.backpressureStrategy = ConnectorUtils.normalizeBackpressureStrategy(backpressureStrategy);
         this.backpressureBufferCapacity = backpressureBufferCapacity > 0 ? backpressureBufferCapacity : 256;
     }
@@ -85,27 +79,20 @@ public class CreateToDeliverIngestBridge {
      * and logs bridge startup.
      */
     void onStartup(@Observes StartupEvent ignored) {
-        ConnectorRuntime<Object, OrderDispatchSvc.ReadyOrder> runtime = new ConnectorRuntime<>(
-            "create-to-deliver",
-            new OutputBusConnectorSource<>(outputBus, Object.class),
-            new GrpcIngestConnectorTarget<>(deliverOrderIngestClient::forward),
-            this::mapRecord,
-            new ConnectorPolicy(
-                true,
-                ConnectorSupport.normalizeBackpressurePolicy(backpressureStrategy),
-                backpressureBufferCapacity,
-                idempotencyEnabled ? ConnectorIdempotencyPolicy.PRE_FORWARD : ConnectorIdempotencyPolicy.DISABLED,
-                ConnectorFailureMode.PROPAGATE),
-            idempotencyTracker,
-            rejected -> LOG.debugf(
-                "Rejected create-to-deliver handoff payloadType=%s",
-                rejected == null || rejected.payload() == null ? "null" : rejected.payload().getClass().getName()),
-            duplicate -> LOG.debugf(
-                "Dropped duplicate create-to-deliver handoff idempotencyKey=%s",
-                duplicate == null ? null : duplicate.idempotencyKey()),
-            failure -> LOG.error("Create->Deliver connector failed", failure));
+        Multi<OrderDispatchSvc.ReadyOrder> readyOrderStream = ConnectorUtils.applyBackpressure(
+            outputBus.stream(Object.class),
+            backpressureStrategy,
+            backpressureBufferCapacity)
+            .onItem().transformToMulti(item -> {
+                OrderDispatchSvc.ReadyOrder mapped = toDeliverReadyOrder(item);
+                return mapped == null
+                    ? Multi.createFrom().empty()
+                    : Multi.createFrom().item(mapped);
+            }).concatenate()
+            .select().where(this::shouldForward)
+            .onFailure().invoke(failure -> LOG.error("Create->Deliver bridge failed", failure));
 
-        forwardingSubscription = runtime.start();
+        forwardingSubscription = deliverOrderIngestClient.forward(readyOrderStream);
 
         LOG.infof("Create->Deliver gRPC ingest bridge started using client %s",
             deliverOrderIngestClient.getClass().getName());
@@ -193,28 +180,19 @@ public class CreateToDeliverIngestBridge {
         return null;
     }
 
-    /**
-     * Map a source record's payload to an OrderDispatchSvc.ReadyOrder and attach dispatch and connector metadata.
-     *
-     * @param sourceRecord the incoming connector record whose payload will be converted; its dispatch metadata is used as the base for augmentation
-     * @return a ConnectorRecord containing the mapped ReadyOrder with ensured dispatch metadata and connector context, or `null` if the payload could not be mapped
-     */
-    private ConnectorRecord<OrderDispatchSvc.ReadyOrder> mapRecord(ConnectorRecord<Object> sourceRecord) {
-        OrderDispatchSvc.ReadyOrder mapped = toDeliverReadyOrder(sourceRecord.payload());
-        if (mapped == null) {
-            return null;
+    private boolean shouldForward(OrderDispatchSvc.ReadyOrder readyOrder) {
+        if (!idempotencyEnabled) {
+            return true;
         }
-        return ConnectorRecord.ofPayload(
-            mapped,
-            ConnectorSupport.ensureDispatchMetadata(
-                sourceRecord.dispatchMetadata(),
-                "create-to-deliver",
-                mapped,
-                List.of("orderId", "customerId", "readyAt")),
-            Map.of(
-                "connector.name", "create-to-deliver",
-                "connector.source.step", "Order Ready",
-                "connector.target.pipeline", "deliver-order",
-                "connector.contract", mapped.getDescriptorForType().getFullName()));
+        String key = ConnectorUtils.deterministicHandoffKey(
+            "create-to-deliver",
+            readyOrder.getOrderId(),
+            readyOrder.getCustomerId(),
+            readyOrder.getReadyAt());
+        boolean firstSeen = acceptedKeys.add(key);
+        if (!firstSeen) {
+            LOG.debugf("Dropped duplicate create-to-deliver handoff idempotencyKey=%s", key);
+        }
+        return firstSeen;
     }
 }

@@ -64,16 +64,36 @@ public class PipelineContextClientHeadersFactory implements ClientHeadersFactory
         if (clientOutgoingHeaders == null) {
             return clientOutgoingHeaders;
         }
-        String version = headerValue(incomingHeaders, PipelineContextHeaders.VERSION);
-        String replay = headerValue(incomingHeaders, PipelineContextHeaders.REPLAY);
-        String cachePolicy = headerValue(incomingHeaders, PipelineContextHeaders.CACHE_POLICY);
-        String correlationId = headerValue(incomingHeaders, PipelineContextHeaders.TPF_CORRELATION_ID);
-        String executionId = headerValue(incomingHeaders, PipelineContextHeaders.TPF_EXECUTION_ID);
-        String idempotencyKey = headerValue(incomingHeaders, PipelineContextHeaders.TPF_IDEMPOTENCY_KEY);
-        String retryAttempt = headerValue(incomingHeaders, PipelineContextHeaders.TPF_RETRY_ATTEMPT);
-        String deadlineEpochMs = headerValue(incomingHeaders, PipelineContextHeaders.TPF_DEADLINE_EPOCH_MS);
-        String dispatchTsEpochMs = headerValue(incomingHeaders, PipelineContextHeaders.TPF_DISPATCH_TS_EPOCH_MS);
-        String parentItemId = headerValue(incomingHeaders, PipelineContextHeaders.TPF_PARENT_ITEM_ID);
+        String version = firstPresent(
+            headerValue(clientOutgoingHeaders, PipelineContextHeaders.VERSION),
+            headerValue(incomingHeaders, PipelineContextHeaders.VERSION));
+        String replay = firstPresent(
+            headerValue(clientOutgoingHeaders, PipelineContextHeaders.REPLAY),
+            headerValue(incomingHeaders, PipelineContextHeaders.REPLAY));
+        String cachePolicy = firstPresent(
+            headerValue(clientOutgoingHeaders, PipelineContextHeaders.CACHE_POLICY),
+            headerValue(incomingHeaders, PipelineContextHeaders.CACHE_POLICY));
+        String correlationId = firstPresent(
+            headerValue(clientOutgoingHeaders, PipelineContextHeaders.TPF_CORRELATION_ID),
+            headerValue(incomingHeaders, PipelineContextHeaders.TPF_CORRELATION_ID));
+        String executionId = firstPresent(
+            headerValue(clientOutgoingHeaders, PipelineContextHeaders.TPF_EXECUTION_ID),
+            headerValue(incomingHeaders, PipelineContextHeaders.TPF_EXECUTION_ID));
+        String idempotencyKey = firstPresent(
+            headerValue(clientOutgoingHeaders, PipelineContextHeaders.TPF_IDEMPOTENCY_KEY),
+            headerValue(incomingHeaders, PipelineContextHeaders.TPF_IDEMPOTENCY_KEY));
+        String retryAttempt = firstPresent(
+            headerValue(clientOutgoingHeaders, PipelineContextHeaders.TPF_RETRY_ATTEMPT),
+            headerValue(incomingHeaders, PipelineContextHeaders.TPF_RETRY_ATTEMPT));
+        String deadlineEpochMs = firstPresent(
+            headerValue(clientOutgoingHeaders, PipelineContextHeaders.TPF_DEADLINE_EPOCH_MS),
+            headerValue(incomingHeaders, PipelineContextHeaders.TPF_DEADLINE_EPOCH_MS));
+        String dispatchTsEpochMs = firstPresent(
+            headerValue(clientOutgoingHeaders, PipelineContextHeaders.TPF_DISPATCH_TS_EPOCH_MS),
+            headerValue(incomingHeaders, PipelineContextHeaders.TPF_DISPATCH_TS_EPOCH_MS));
+        String parentItemId = firstPresent(
+            headerValue(clientOutgoingHeaders, PipelineContextHeaders.TPF_PARENT_ITEM_ID),
+            headerValue(incomingHeaders, PipelineContextHeaders.TPF_PARENT_ITEM_ID));
 
         if (version == null || replay == null || cachePolicy == null) {
             PipelineContext context = PipelineContextHolder.get();
@@ -181,6 +201,10 @@ public class PipelineContextClientHeadersFactory implements ClientHeadersFactory
         if (value != null && !value.isBlank()) {
             headers.putSingle(name, value);
         }
+    }
+
+    private String firstPresent(String primary, String fallback) {
+        return primary != null ? primary : fallback;
     }
 
     private String toStringValue(Object value) {

@@ -14,6 +14,7 @@ import org.pipelineframework.processor.StepDefinitionWriter;
 import org.pipelineframework.processor.ir.*;
 import org.pipelineframework.processor.renderer.*;
 import org.pipelineframework.processor.util.OrchestratorClientPropertiesGenerator;
+import org.pipelineframework.processor.util.CheckpointHandoffMetadataGenerator;
 import org.pipelineframework.processor.util.PipelineOrderMetadataGenerator;
 import org.pipelineframework.processor.util.PipelinePlatformMetadataGenerator;
 import org.pipelineframework.processor.util.PipelineTelemetryMetadataGenerator;
@@ -89,7 +90,10 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             new OrchestratorFunctionHandlerRenderer();
         OrchestratorCliRenderer orchestratorCliRenderer = new OrchestratorCliRenderer();
         OrchestratorIngestClientRenderer orchestratorIngestClientRenderer = new OrchestratorIngestClientRenderer();
-        ConnectorBootstrapRenderer connectorBootstrapRenderer = new ConnectorBootstrapRenderer();
+        CheckpointPublicationDescriptorRenderer checkpointPublicationDescriptorRenderer =
+            new CheckpointPublicationDescriptorRenderer();
+        CheckpointSubscriptionHandlerRenderer checkpointSubscriptionHandlerRenderer =
+            new CheckpointSubscriptionHandlerRenderer();
         ExternalAdapterRenderer externalAdapterRenderer = new ExternalAdapterRenderer(GenerationTarget.EXTERNAL_ADAPTER);
 
         // Initialize role metadata generator
@@ -101,9 +105,10 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         ClassName cacheKeyGenerator = resolveCacheKeyGenerator(ctx);
 
         DescriptorProtos.FileDescriptorSet descriptorSet = ctx.getDescriptorSet();
-        generateConnectorBootstraps(
+        generateCheckpointBoundaryArtifacts(
             ctx,
-            connectorBootstrapRenderer,
+            checkpointPublicationDescriptorRenderer,
+            checkpointSubscriptionHandlerRenderer,
             roleMetadataGenerator,
             cacheKeyGenerator,
             descriptorSet);
@@ -272,13 +277,16 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             }
         }
         try {
+            PipelineOrderMetadataGenerator orderMetadataGenerator =
+                new PipelineOrderMetadataGenerator(ctx.getProcessingEnv());
+            orderMetadataGenerator.writeOrderMetadata(ctx);
             if (ctx.isOrchestratorGenerated()) {
-                PipelineOrderMetadataGenerator orderMetadataGenerator =
-                    new PipelineOrderMetadataGenerator(ctx.getProcessingEnv());
-                orderMetadataGenerator.writeOrderMetadata(ctx);
                 PipelineTelemetryMetadataGenerator telemetryMetadataGenerator =
                     new PipelineTelemetryMetadataGenerator(ctx.getProcessingEnv());
                 telemetryMetadataGenerator.writeTelemetryMetadata(ctx);
+                CheckpointHandoffMetadataGenerator handoffMetadataGenerator =
+                    new CheckpointHandoffMetadataGenerator(ctx.getProcessingEnv());
+                handoffMetadataGenerator.writeHandoffMetadata(ctx);
                 OrchestratorClientPropertiesGenerator clientPropertiesGenerator =
                     new OrchestratorClientPropertiesGenerator(ctx.getProcessingEnv());
                 clientPropertiesGenerator.writeClientProperties(ctx);
@@ -306,36 +314,64 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         }
     }
 
-    private void generateConnectorBootstraps(
+    private void generateCheckpointBoundaryArtifacts(
         PipelineCompilationContext ctx,
-        ConnectorBootstrapRenderer connectorBootstrapRenderer,
+        CheckpointPublicationDescriptorRenderer checkpointPublicationDescriptorRenderer,
+        CheckpointSubscriptionHandlerRenderer checkpointSubscriptionHandlerRenderer,
         RoleMetadataGenerator roleMetadataGenerator,
         ClassName cacheKeyGenerator,
         DescriptorProtos.FileDescriptorSet descriptorSet
     ) {
-        if (ctx.getConnectorConfigs().isEmpty()
-            || !(ctx.getPipelineTemplateConfig() instanceof org.pipelineframework.config.template.PipelineTemplateConfig templateConfig)) {
+        if (!(ctx.getPipelineTemplateConfig() instanceof org.pipelineframework.config.template.PipelineTemplateConfig templateConfig)) {
             return;
         }
-
-        GenerationContext connectorContext = new GenerationContext(
-            ctx.getProcessingEnv(),
-            generationPathResolver.resolveRoleOutputDir(ctx, DeploymentRole.PIPELINE_SERVER),
-            DeploymentRole.PIPELINE_SERVER,
-            Set.of(),
-            cacheKeyGenerator,
-            descriptorSet);
-        for (var connector : ctx.getConnectorConfigs()) {
+        Object orchestratorBindingObj = ctx.getRendererBindings().get(ORCHESTRATOR_BINDING_KEY);
+        if (!(orchestratorBindingObj instanceof OrchestratorBinding orchestratorBinding)) {
+            return;
+        }
+        if (templateConfig.output() != null && templateConfig.output().checkpoint() != null) {
+            GenerationContext publicationContext = new GenerationContext(
+                ctx.getProcessingEnv(),
+                generationPathResolver.resolveRoleOutputDir(ctx, DeploymentRole.PIPELINE_SERVER),
+                DeploymentRole.PIPELINE_SERVER,
+                Set.of(),
+                cacheKeyGenerator,
+                descriptorSet);
             try {
-                ClassName generatedClass = connectorBootstrapRenderer.render(
-                    connector,
+                ClassName generatedClass = checkpointPublicationDescriptorRenderer.render(
                     templateConfig.basePackage(),
-                    connectorContext);
+                    templateConfig.output().checkpoint(),
+                    publicationContext);
                 roleMetadataGenerator.recordClassWithRole(generatedClass, DeploymentRole.PIPELINE_SERVER.name());
             } catch (IOException | RuntimeException e) {
-                String message = "Failed to generate connector bootstrap for '"
-                    + connector.name()
-                    + "' in base package '"
+                String message = "Failed to generate checkpoint publication descriptor in base package '"
+                    + templateConfig.basePackage()
+                    + "': "
+                    + e.getMessage();
+                if (ctx.getProcessingEnv() != null) {
+                    ctx.getProcessingEnv().getMessager().printMessage(
+                        javax.tools.Diagnostic.Kind.ERROR,
+                        message);
+                }
+                throw new RuntimeException(message, e);
+            }
+        }
+        if (templateConfig.input() != null && templateConfig.input().subscription() != null) {
+            GenerationContext handlerContext = new GenerationContext(
+                ctx.getProcessingEnv(),
+                generationPathResolver.resolveRoleOutputDir(ctx, DeploymentRole.PIPELINE_SERVER),
+                DeploymentRole.PIPELINE_SERVER,
+                Set.of(),
+                cacheKeyGenerator,
+                descriptorSet);
+            try {
+                ClassName generatedClass = checkpointSubscriptionHandlerRenderer.render(
+                    orchestratorBinding,
+                    templateConfig.input().subscription(),
+                    handlerContext);
+                roleMetadataGenerator.recordClassWithRole(generatedClass, DeploymentRole.PIPELINE_SERVER.name());
+            } catch (IOException | RuntimeException e) {
+                String message = "Failed to generate checkpoint subscription artifacts in base package '"
                     + templateConfig.basePackage()
                     + "': "
                     + e.getMessage();

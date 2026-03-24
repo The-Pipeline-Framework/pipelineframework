@@ -300,8 +300,11 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         if (stepDef.inputType() == null || stepDef.outputType() == null) {
             return null;
         }
-        TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), stepDef.executionClass());
-        TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), stepDef.executionClass());
+        String templateBasePackage = ctx.getPipelineTemplateConfig() instanceof org.pipelineframework.config.template.PipelineTemplateConfig templateConfig
+            ? templateConfig.basePackage()
+            : null;
+        TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), stepDef.executionClass(), templateBasePackage);
+        TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), stepDef.executionClass(), templateBasePackage);
         StreamingShape streamingShape = stepDef.streamingShapeHint() != null
             ? stepDef.streamingShapeHint()
             : StreamingShape.UNARY_UNARY;
@@ -349,9 +352,12 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .build();
     }
 
-    private TypeName normalizeLegacyDomainType(TypeName declaredType, ClassName executionClass) {
+    private TypeName normalizeLegacyDomainType(TypeName declaredType, ClassName executionClass, String templateBasePackage) {
         if (!(declaredType instanceof ClassName className) || !className.packageName().isEmpty()) {
             return declaredType;
+        }
+        if (templateBasePackage != null && !templateBasePackage.isBlank()) {
+            return ClassName.bestGuess(templateBasePackage + ".common.domain." + className.simpleName());
         }
         String executionPkg = executionClass.packageName();
         if (executionPkg == null || executionPkg.isBlank()) {
