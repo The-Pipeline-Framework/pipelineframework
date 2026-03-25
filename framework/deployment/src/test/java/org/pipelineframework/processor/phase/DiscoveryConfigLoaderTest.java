@@ -130,4 +130,57 @@ class DiscoveryConfigLoaderTest {
             loader.loadStepConfig(null, System::getProperty, System::getenv, messager);
         });
     }
+
+    // --- loadTemplateConfig throw-on-failure behavior (changed from return-null) ---
+
+    @Test
+    void loadTemplateConfig_throwsExceptionWhenYamlIsInvalid() throws Exception {
+        Path badYaml = tempDir.resolve("pipeline.yaml");
+        Files.writeString(badYaml, "this is: [invalid: yaml: content: {{{");
+
+        assertThrows(Exception.class, () -> loader.loadTemplateConfig(badYaml, messager));
+    }
+
+    @Test
+    void loadTemplateConfig_reportsErrorDiagnosticOnFailure() throws Exception {
+        Path badYaml = tempDir.resolve("pipeline.yaml");
+        Files.writeString(badYaml, "this is: [invalid: yaml: content: {{{");
+
+        assertThrows(Exception.class, () -> loader.loadTemplateConfig(badYaml, messager));
+
+        verify(messager).printMessage(
+            eq(Diagnostic.Kind.ERROR),
+            contains("Failed to load pipeline template config from"));
+    }
+
+    @Test
+    void loadTemplateConfig_successfullyLoadsValidConfig() throws Exception {
+        Path validYaml = tempDir.resolve("pipeline.yaml");
+        Files.writeString(validYaml, """
+            appName: "TestApp"
+            basePackage: "com.example"
+            transport: "GRPC"
+            platform: "COMPUTE"
+            steps:
+              - name: "Process Order"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "com.example.OrderRequest"
+                outputTypeName: "com.example.OrderResponse"
+            """);
+
+        var config = loader.loadTemplateConfig(validYaml, messager);
+
+        assertNotNull(config);
+        assertEquals("TestApp", config.appName());
+        assertEquals("com.example", config.basePackage());
+    }
+
+    @Test
+    void loadTemplateConfig_doesNotReturnNullOnFailureThrowsInstead() throws Exception {
+        Path badYaml = tempDir.resolve("pipeline.yaml");
+        Files.writeString(badYaml, ": invalid yaml without key");
+
+        Exception caught = assertThrows(Exception.class, () -> loader.loadTemplateConfig(badYaml, null));
+        assertNotNull(caught, "An exception must be thrown instead of returning null");
+    }
 }

@@ -303,4 +303,59 @@ class PipelineDiscoveryPhaseTest {
 
         assertTrue(context.isTransportModeLocal(), "Transport mode should be LOCAL from processor option");
     }
+
+    @Test
+    void fourArgConstructorAcceptsCheckpointBoundaryValidator() {
+        DiscoveryPathResolver pathResolver = new DiscoveryPathResolver();
+        DiscoveryConfigLoader configLoader = new DiscoveryConfigLoader();
+        TransportPlatformResolver tpResolver = new TransportPlatformResolver();
+        CheckpointBoundaryValidator validator = new CheckpointBoundaryValidator();
+
+        PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase(pathResolver, configLoader, tpResolver, validator);
+        assertNotNull(phase);
+        assertEquals("Pipeline Discovery Phase", phase.name());
+    }
+
+    @Test
+    void fourArgConstructorRejectsNullCheckpointBoundaryValidator() {
+        DiscoveryPathResolver pathResolver = new DiscoveryPathResolver();
+        DiscoveryConfigLoader configLoader = new DiscoveryConfigLoader();
+        TransportPlatformResolver tpResolver = new TransportPlatformResolver();
+
+        assertThrows(NullPointerException.class,
+            () -> new PipelineDiscoveryPhase(pathResolver, configLoader, tpResolver, null));
+    }
+
+    @Test
+    void validateCheckpointBoundariesEmitsErrorDiagnosticOnFailure() throws Exception {
+        Path yaml = tempDir.resolve("pipeline.yaml");
+        // FUNCTION platform with subscription should fail checkpoint boundary validation
+        Files.writeString(yaml, """
+            appName: "Test"
+            basePackage: "com.example"
+            transport: "GRPC"
+            platform: "FUNCTION"
+            input:
+              subscription:
+                publication: "orders-ready"
+            steps:
+              - name: "Process Order"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "com.example.OrderRequest"
+                outputTypeName: "com.example.OrderResponse"
+            """);
+        Files.createDirectories(yaml.getParent().resolve("src/main/resources"));
+        Files.writeString(yaml.getParent().resolve("src/main/resources/application.properties"),
+            "pipeline.orchestrator.mode=QUEUE_ASYNC");
+        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.config", yaml.toString()));
+
+        PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
+        assertThrows(RuntimeException.class, () -> phase.execute(context));
+
+        verify(messager).printMessage(
+            eq(Diagnostic.Kind.ERROR),
+            contains("Failed to validate checkpoint boundary declarations"));
+    }
 }
