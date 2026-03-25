@@ -3,7 +3,10 @@ package org.pipelineframework.processor.phase;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
@@ -76,6 +79,7 @@ class CheckpointBoundaryValidatorTest {
             PipelinePlatform.COMPUTE);
 
         assertDoesNotThrow(() -> validator.validate(templateConfig, tempDir, null, messager));
+        verify(messager).printMessage(eq(javax.tools.Diagnostic.Kind.NOTE), contains("orders-dispatched"));
     }
 
     @Test

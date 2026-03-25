@@ -324,6 +324,10 @@ public class PipelineYamlConfigLoader {
         if (!(checkpointObj instanceof Map<?, ?> checkpointMap)) {
             throw new IllegalArgumentException("output.checkpoint must be defined as a map");
         }
+        Object idempotencyKeyFields = checkpointMap.get("idempotencyKeyFields");
+        if (idempotencyKeyFields != null && !(idempotencyKeyFields instanceof Iterable<?>)) {
+            throw new IllegalArgumentException("output.checkpoint.idempotencyKeyFields must be defined as a list");
+        }
         return new PipelineOutputBoundaryConfig(new PipelineCheckpointConfig(
             readRequiredString(checkpointMap, "publication", "output.checkpoint"),
             readStringList(checkpointMap, "idempotencyKeyFields")));

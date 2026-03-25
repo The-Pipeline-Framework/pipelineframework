@@ -16,13 +16,13 @@ class GrpcCheckpointPublicationTargetDispatcherTest {
     @Test
     void dispatchSendsCanonicalProtoRequest() throws Exception {
         AtomicReference<CheckpointPublishRequest> captured = new AtomicReference<>();
+        GrpcCheckpointPublicationTargetDispatcher dispatcher = new GrpcCheckpointPublicationTargetDispatcher();
         Server server = ServerBuilder.forPort(0)
             .addService(new TestService(captured))
             .build()
             .start();
         try {
             int port = server.getPort();
-            GrpcCheckpointPublicationTargetDispatcher dispatcher = new GrpcCheckpointPublicationTargetDispatcher();
             ResolvedCheckpointPublicationTarget target = new ResolvedCheckpointPublicationTarget(
                 "orders-ready",
                 "deliver",
@@ -46,8 +46,8 @@ class GrpcCheckpointPublicationTargetDispatcherTest {
             assertEquals("tenant-1", request.getTenantId());
             assertEquals("idem-1", request.getIdempotencyKey());
             assertEquals("o-1", PipelineJson.mapper().readTree(request.getPayloadJson().toStringUtf8()).get("orderId").asText());
-            dispatcher.shutdown();
         } finally {
+            dispatcher.shutdown();
             server.shutdownNow();
         }
     }
