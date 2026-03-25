@@ -99,6 +99,96 @@ class CheckpointBoundaryValidatorTest {
         assertEquals("Subscription mapper type not found: com.example.mapper.MissingMapper", exception.getMessage());
     }
 
+    @Test
+    void validateDoesNothingWhenTemplateConfigIsNull() {
+        assertDoesNotThrow(() -> validator.validate(null, tempDir, null, null));
+    }
+
+    @Test
+    void validateFailsWhenStepsListIsEmpty() throws IOException {
+        writeApplicationProperties("pipeline.orchestrator.mode=QUEUE_ASYNC");
+        PipelineTemplateConfig templateConfig = new PipelineTemplateConfig(
+            1,
+            "checkpoint-test",
+            "com.example.pipeline",
+            "GRPC",
+            PipelinePlatform.COMPUTE,
+            Map.of(),
+            List.of(), // empty steps
+            Map.of(),
+            new PipelineInputBoundaryConfig(new PipelineSubscriptionConfig("orders-ready", null)),
+            null);
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+            () -> validator.validate(templateConfig, tempDir, null, null));
+        assertEquals("Checkpoint publication/subscription requires at least one pipeline step",
+            exception.getMessage());
+    }
+
+    @Test
+    void validateSucceedsWhenQueueAsyncModeReadFromModuleDir() throws IOException {
+        writeApplicationProperties("pipeline.orchestrator.mode=QUEUE_ASYNC");
+        Messager messager = mock(Messager.class);
+        PipelineTemplateConfig templateConfig = templateConfig(
+            null,
+            new PipelineOutputBoundaryConfig(new PipelineCheckpointConfig("orders-dispatched", List.of("orderId"))),
+            PipelinePlatform.COMPUTE);
+
+        assertDoesNotThrow(() -> validator.validate(templateConfig, tempDir, null, messager));
+    }
+
+    @Test
+    void validateFailsWhenQueueAsyncModeIsNotSetInModuleDir() throws IOException {
+        writeApplicationProperties("pipeline.orchestrator.mode=SYNC");
+        PipelineTemplateConfig templateConfig = templateConfig(
+            null,
+            new PipelineOutputBoundaryConfig(new PipelineCheckpointConfig("orders-dispatched", List.of())),
+            PipelinePlatform.COMPUTE);
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+            () -> validator.validate(templateConfig, tempDir, null, null));
+        assertEquals("Checkpoint publication/subscription requires pipeline.orchestrator.mode=QUEUE_ASYNC",
+            exception.getMessage());
+    }
+
+    @Test
+    void validateFailsWhenNoModuleDirAndNoProcessingEnv() {
+        PipelineTemplateConfig templateConfig = templateConfig(
+            null,
+            new PipelineOutputBoundaryConfig(new PipelineCheckpointConfig("orders-dispatched", List.of())),
+            PipelinePlatform.COMPUTE);
+
+        // No module dir, no processingEnv -> orchestrator mode is null -> fails
+        IllegalStateException exception = assertThrows(IllegalStateException.class,
+            () -> validator.validate(templateConfig, null, null, null));
+        assertEquals("Checkpoint publication/subscription requires pipeline.orchestrator.mode=QUEUE_ASYNC",
+            exception.getMessage());
+    }
+
+    @Test
+    void validateSubscriptionWithNullMapperSkipsMapperValidation() throws IOException {
+        writeApplicationProperties("pipeline.orchestrator.mode=QUEUE_ASYNC");
+        PipelineTemplateConfig templateConfig = templateConfig(
+            new PipelineInputBoundaryConfig(new PipelineSubscriptionConfig("orders-ready", null)),
+            null,
+            PipelinePlatform.COMPUTE);
+
+        // null mapper should not attempt type resolution
+        assertDoesNotThrow(() -> validator.validate(templateConfig, tempDir, null, null));
+    }
+
+    @Test
+    void validateSubscriptionWithBlankMapperSkipsMapperValidation() throws IOException {
+        writeApplicationProperties("pipeline.orchestrator.mode=QUEUE_ASYNC");
+        PipelineTemplateConfig templateConfig = templateConfig(
+            new PipelineInputBoundaryConfig(new PipelineSubscriptionConfig("orders-ready", "  ")),
+            null,
+            PipelinePlatform.COMPUTE);
+
+        // blank mapper should not attempt type resolution
+        assertDoesNotThrow(() -> validator.validate(templateConfig, tempDir, null, null));
+    }
+
     private PipelineTemplateConfig templateConfig(
         PipelineInputBoundaryConfig input,
         PipelineOutputBoundaryConfig output,

@@ -237,4 +237,109 @@ class RestClientStepRendererTest {
         assertTrue(interfaceSource.contains("RawDocumentDto"));
         assertTrue(interfaceSource.contains("process("));
     }
+
+    @Test
+    void rendersObserveCacheInvalidateSideEffectWithStandardCachePolicyNotPreferCache() throws IOException {
+        // ObserveCacheInvalidate* service name should NOT apply prefer-cache override
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("ObserveCacheInvalidatePaymentOutputSideEffectService")
+            .servicePackage("org.pipelineframework.csv.service")
+            .serviceClassName(ClassName.get(
+                "org.pipelineframework.csv.service",
+                "ObserveCacheInvalidatePaymentOutputSideEffectService"))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.DEFAULT)
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.csv.common.domain", "PaymentOutput"),
+                ClassName.get("org.pipelineframework.csv.common.mapper", "PaymentOutputMapper"),
+                true))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.csv.common.domain", "PaymentOutput"),
+                ClassName.get("org.pipelineframework.csv.common.mapper", "PaymentOutputMapper"),
+                true))
+            .sideEffect(true)
+            .enabledTargets(java.util.Set.of(GenerationTarget.REST_CLIENT_STEP))
+            .build();
+
+        RestBinding binding = new RestBinding(
+            model,
+            "/ObserveCacheInvalidatePaymentOutputSideEffectService/remoteProcess");
+
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(Map.of());
+        GenerationContext context = new GenerationContext(
+            processingEnv,
+            tempDir,
+            DeploymentRole.ORCHESTRATOR_CLIENT,
+            java.util.Set.of(),
+            null,
+            null);
+
+        RestClientStepRenderer renderer = new RestClientStepRenderer();
+        renderer.render(binding, context);
+
+        Path clientStep = tempDir.resolve(
+            "org/pipelineframework/csv/service/pipeline/ObserveCacheInvalidatePaymentOutputSideEffectRestClientStep.java");
+        String stepSource = Files.readString(clientStep);
+
+        // ObserveCacheInvalidate should use the standard cache policy (context != null ? context.cachePolicy() : null)
+        // NOT the prefer-cache override
+        assertTrue(stepSource.contains("context != null ? context.cachePolicy() : null"),
+            "ObserveCacheInvalidate service should use standard cache policy, not prefer-cache override");
+        // Should NOT have the require-cache -> prefer-cache override logic
+        assertTrue(
+            !stepSource.contains("\"require-cache\".equals(context.cachePolicy())"),
+            "ObserveCacheInvalidate service should not downgrade require-cache to prefer-cache");
+    }
+
+    @Test
+    void rendersNonSideEffectStepWithStandardCachePolicy() throws IOException {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("ProcessPaymentStatusReactiveService")
+            .servicePackage("org.pipelineframework.csv.service")
+            .serviceClassName(ClassName.get(
+                "org.pipelineframework.csv.service",
+                "ProcessPaymentStatusReactiveService"))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.DEFAULT)
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.csv.common.domain", "PaymentStatus"),
+                ClassName.get("org.pipelineframework.csv.common.mapper", "PaymentStatusMapper"),
+                true))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.csv.common.domain", "PaymentOutput"),
+                ClassName.get("org.pipelineframework.csv.common.mapper", "PaymentOutputMapper"),
+                true))
+            .sideEffect(false) // NOT a side effect
+            .enabledTargets(java.util.Set.of(GenerationTarget.REST_CLIENT_STEP))
+            .build();
+
+        RestBinding binding = new RestBinding(
+            model,
+            "/ProcessPaymentStatusReactiveService/remoteProcess");
+
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(Map.of());
+        GenerationContext context = new GenerationContext(
+            processingEnv,
+            tempDir.resolve("non-side-effect"),
+            DeploymentRole.ORCHESTRATOR_CLIENT,
+            java.util.Set.of(),
+            null,
+            null);
+
+        RestClientStepRenderer renderer = new RestClientStepRenderer();
+        renderer.render(binding, context);
+
+        Path clientStep = tempDir.resolve(
+            "non-side-effect/org/pipelineframework/csv/service/pipeline/ProcessPaymentStatusRestClientStep.java");
+        String stepSource = Files.readString(clientStep);
+
+        // Non-cache-plugin steps should use the standard context-based cache policy
+        assertTrue(stepSource.contains("context != null ? context.cachePolicy() : null"),
+            "Non-side-effect step should use standard cache policy");
+        assertTrue(
+            !stepSource.contains("\"require-cache\".equals(context.cachePolicy())"),
+            "Non-side-effect step should not have prefer-cache override logic");
+    }
 }
