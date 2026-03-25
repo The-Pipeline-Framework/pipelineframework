@@ -140,6 +140,7 @@ public class PipelineYamlConfigLoader {
         if (!(root instanceof Map<?, ?> rootMap)) {
             throw new IllegalStateException("Pipeline config root is not a map for " + source);
         }
+        rejectLegacyConnectors(rootMap);
 
         String basePackage = readString(rootMap, "basePackage");
         String transport = resolveConfigValue(
@@ -283,7 +284,6 @@ public class PipelineYamlConfigLoader {
      * @return the input boundary config, or {@code null} when no input boundary is declared
      */
     private PipelineInputBoundaryConfig readInputBoundary(Map<?, ?> rootMap) {
-        rejectLegacyConnectors(rootMap);
         Object inputObj = rootMap.get("input");
         if (inputObj == null) {
             return null;
@@ -310,7 +310,6 @@ public class PipelineYamlConfigLoader {
      * @return the output boundary config, or {@code null} when no output boundary is declared
      */
     private PipelineOutputBoundaryConfig readOutputBoundary(Map<?, ?> rootMap) {
-        rejectLegacyConnectors(rootMap);
         Object outputObj = rootMap.get("output");
         if (outputObj == null) {
             return null;

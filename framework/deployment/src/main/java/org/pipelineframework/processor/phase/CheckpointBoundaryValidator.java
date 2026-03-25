@@ -14,6 +14,7 @@ import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.Types;
 import javax.tools.Diagnostic;
+import javax.tools.StandardLocation;
 
 import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.config.template.PipelineTemplateStep;
@@ -47,7 +48,7 @@ final class CheckpointBoundaryValidator {
         if (steps.isEmpty()) {
             throw new IllegalStateException("Checkpoint publication/subscription requires at least one pipeline step");
         }
-        String orchestratorMode = loadOrchestratorMode(moduleDir);
+        String orchestratorMode = loadOrchestratorMode(moduleDir, processingEnv);
         if (!QUEUE_ASYNC.equalsIgnoreCase(orchestratorMode)) {
             throw new IllegalStateException(
                 "Checkpoint publication/subscription requires pipeline.orchestrator.mode=QUEUE_ASYNC");
@@ -55,12 +56,13 @@ final class CheckpointBoundaryValidator {
         if (hasInputSubscription) {
             validateSubscriptionMapper(templateConfig, processingEnv);
         }
-        if (hasOutputCheckpoint && templateConfig.output().checkpoint().publication().isBlank()) {
+        String publication = hasOutputCheckpoint ? templateConfig.output().checkpoint().publication() : null;
+        if (hasOutputCheckpoint && (publication == null || publication.isBlank())) {
             throw new IllegalStateException("output.checkpoint.publication must not be blank");
         }
         if (messager != null && hasOutputCheckpoint) {
             messager.printMessage(Diagnostic.Kind.NOTE,
-                "Checkpoint publication enabled for publication '" + templateConfig.output().checkpoint().publication() + "'");
+                "Checkpoint publication enabled for publication '" + publication + "'");
         }
     }
 
@@ -80,7 +82,10 @@ final class CheckpointBoundaryValidator {
         if (mapperInterface == null) {
             throw new IllegalStateException("Mapper interface not found: " + MAPPER_INTERFACE);
         }
-        DeclaredType mapperInterfaceType = (DeclaredType) mapperInterface.asType();
+        TypeMirror rawMapperInterfaceType = mapperInterface.asType();
+        if (!(rawMapperInterfaceType instanceof DeclaredType mapperInterfaceType)) {
+            throw new IllegalStateException("Mapper interface not resolvable as declared type: " + MAPPER_INTERFACE);
+        }
         Types types = processingEnv.getTypeUtils();
         boolean implementsMapper = mapperElement.getInterfaces().stream()
             .filter(DeclaredType.class::isInstance)
@@ -100,7 +105,8 @@ final class CheckpointBoundaryValidator {
                 continue;
             }
             if (declared.getTypeArguments().size() != 2) {
-                continue;
+                throw new IllegalStateException(
+                    "Subscription mapper '" + mapperClass + "' must declare exactly two type arguments for Mapper<D, PublishedCheckpoint>");
             }
             String domainType = declared.getTypeArguments().getFirst().toString();
             if (inputTypeName != null && !inputTypeName.isBlank() && !inputTypeName.equals(domainType)) {
@@ -112,20 +118,29 @@ final class CheckpointBoundaryValidator {
         }
     }
 
-    private String loadOrchestratorMode(Path moduleDir) {
-        if (moduleDir == null) {
-            return null;
-        }
-        Path applicationProperties = moduleDir.resolve(Path.of("src", "main", "resources", "application.properties"));
-        if (!Files.exists(applicationProperties)) {
-            return null;
-        }
+    private String loadOrchestratorMode(Path moduleDir, ProcessingEnvironment processingEnv) {
         Properties properties = new Properties();
-        try (InputStream inputStream = Files.newInputStream(applicationProperties)) {
-            properties.load(inputStream);
-        } catch (IOException e) {
-            throw new IllegalStateException("Failed reading application.properties for checkpoint validation", e);
+        if (moduleDir != null) {
+            Path applicationProperties = moduleDir.resolve(Path.of("src", "main", "resources", "application.properties"));
+            if (Files.exists(applicationProperties)) {
+                try (InputStream inputStream = Files.newInputStream(applicationProperties)) {
+                    properties.load(inputStream);
+                    return properties.getProperty("pipeline.orchestrator.mode");
+                } catch (IOException e) {
+                    throw new IllegalStateException("Failed reading application.properties for checkpoint validation", e);
+                }
+            }
         }
-        return properties.getProperty("pipeline.orchestrator.mode");
+        if (processingEnv == null) {
+            return null;
+        }
+        try (InputStream inputStream = processingEnv.getFiler()
+            .getResource(StandardLocation.SOURCE_PATH, "", "application.properties")
+            .openInputStream()) {
+            properties.load(inputStream);
+            return properties.getProperty("pipeline.orchestrator.mode");
+        } catch (Exception ignored) {
+            return null;
+        }
     }
 }

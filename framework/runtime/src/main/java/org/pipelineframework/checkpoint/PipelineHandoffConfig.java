@@ -38,6 +38,11 @@ public interface PipelineHandoffConfig {
 
     /**
      * One concrete publication target.
+     *
+     * <p>Required fields vary by transport kind:
+     * {@code HTTP} targets require {@code base-url}; {@code path}, {@code method},
+     * {@code content-type}, and {@code idempotency-header} are optional.
+     * {@code GRPC} targets require {@code host} and {@code port}; {@code plaintext} is optional.
      */
     interface TargetConfig {
 
@@ -56,7 +61,7 @@ public interface PipelineHandoffConfig {
         Optional<PublicationEncoding> encoding();
 
         /**
-         * Optional content type override.
+         * Optional content type override for {@link PublicationTargetKind#HTTP} targets.
          *
          * @return content type when configured
          */
@@ -64,7 +69,7 @@ public interface PipelineHandoffConfig {
         Optional<String> contentType();
 
         /**
-         * Optional idempotency header override.
+         * Optional idempotency header override for {@link PublicationTargetKind#HTTP} targets.
          *
          * @return idempotency header name when configured
          */
@@ -72,21 +77,21 @@ public interface PipelineHandoffConfig {
         Optional<String> idempotencyHeader();
 
         /**
-         * gRPC host.
+         * gRPC host for {@link PublicationTargetKind#GRPC} targets.
          *
          * @return host when configured
          */
         Optional<String> host();
 
         /**
-         * gRPC port.
+         * gRPC port for {@link PublicationTargetKind#GRPC} targets.
          *
          * @return port when configured
          */
         Optional<Integer> port();
 
         /**
-         * Whether plaintext gRPC should be used.
+         * Whether plaintext gRPC should be used for {@link PublicationTargetKind#GRPC} targets.
          *
          * @return true when plaintext is enabled
          */
@@ -94,7 +99,7 @@ public interface PipelineHandoffConfig {
         boolean plaintext();
 
         /**
-         * HTTP base URL.
+         * HTTP base URL for {@link PublicationTargetKind#HTTP} targets.
          *
          * @return base URL when configured
          */
@@ -102,14 +107,14 @@ public interface PipelineHandoffConfig {
         Optional<String> baseUrl();
 
         /**
-         * HTTP path override.
+         * HTTP path override for {@link PublicationTargetKind#HTTP} targets.
          *
          * @return path when configured
          */
         Optional<String> path();
 
         /**
-         * HTTP method override.
+         * HTTP method override for {@link PublicationTargetKind#HTTP} targets.
          *
          * @return HTTP method
          */

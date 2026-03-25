@@ -1,6 +1,5 @@
 package org.pipelineframework.config.boundary;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -19,6 +18,6 @@ public record PipelineCheckpointConfig(
         }
         idempotencyKeyFields = idempotencyKeyFields == null
             ? List.of()
-            : List.copyOf(new ArrayList<>(idempotencyKeyFields));
+            : List.copyOf(idempotencyKeyFields);
     }
 }
