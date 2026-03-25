@@ -79,4 +79,35 @@ class PipelineYamlConfigLoaderTest {
 
         assertEquals("output.checkpoint must be defined as a map", exception.getMessage());
     }
+
+    @Test
+    void rejectsMalformedSubscriptionBlock() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                transport: "GRPC"
+                platform: "COMPUTE"
+                steps: []
+                input:
+                  subscription: "not-a-map"
+                """)));
+
+        assertEquals("input.subscription must be defined as a map", exception.getMessage());
+    }
+
+    @Test
+    void rejectsBlankPublicationInSubscription() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                transport: "GRPC"
+                platform: "COMPUTE"
+                steps: []
+                input:
+                  subscription:
+                    publication: "  "
+                """)));
+
+        assertEquals("input.subscription.publication must not be blank", exception.getMessage());
+    }
 }

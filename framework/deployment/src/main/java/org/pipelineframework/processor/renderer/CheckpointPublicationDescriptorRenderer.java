@@ -30,7 +30,7 @@ public class CheckpointPublicationDescriptorRenderer {
 
         CodeBlock keyFields = checkpoint.idempotencyKeyFields().isEmpty()
             ? CodeBlock.of("$T.of()", listType)
-            : CodeBlock.of("$T.of($L)", listType, joinQuoted(checkpoint.idempotencyKeyFields()));
+            : buildKeyFieldsList(checkpoint.idempotencyKeyFields(), listType);
         MethodSpec keyFieldsMethod = MethodSpec.methodBuilder("idempotencyKeyFields")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
@@ -51,7 +51,14 @@ public class CheckpointPublicationDescriptorRenderer {
         return generatedType;
     }
 
-    private String joinQuoted(java.util.List<String> values) {
-        return values.stream().map(value -> "\"" + value + "\"").collect(java.util.stream.Collectors.joining(", "));
+    private CodeBlock buildKeyFieldsList(java.util.List<String> values, ClassName listType) {
+        CodeBlock.Builder builder = CodeBlock.builder().add("$T.of(", listType);
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) {
+                builder.add(", ");
+            }
+            builder.add("$S", values.get(i));
+        }
+        return builder.add(")").build();
     }
 }

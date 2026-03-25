@@ -256,7 +256,7 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 - **Stance**: Checkpoint publication/subscription declarations validate published output type, subscriber ingress type, and mapper compatibility at build time. Cross-pipeline handoff remains explicit through checkpoint boundary contracts instead of hidden pipeline internals.
 - **Status**: RESOLVED
 
-7. **Backpressure across pipelines**
+1. **Backpressure across pipelines**
 - **Problem**: Piping should preserve backpressure end-to-end.
 - **Stance**: Reliable checkpoint publication inherits orchestrator queue-async admission behavior instead of exposing publication-local backpressure policies. Live subscribe/tap remains a weaker observation surface and does not define reliable handoff semantics.
 - **Status**: RESOLVED
@@ -287,7 +287,7 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 - **Schema drift**: handoff DTO versioning can break compatibility without strict rules. (See Pain-point matrix #6; Addressed in Near-Term Design Work: Build-Time Checks)
 - **Temporal coupling**: downstream slowness collapses upstream throughput. (See Pain-point matrix #7)
 - **Hotspot steps**: a single heavy step can dominate latency and throughput.
-- **Backpressure deadlocks**: mismatched demand signalling can stall a chain. (See Pain-point matrix #7)
+- **Backpressure deadlocks**: mismatched demand signaling can stall a chain. (See Pain-point matrix #7)
 - **Implicit retries**: checkpoint publication retries can trigger duplicate side effects. (See Pain-point matrix #4)
 - **Observability blind spots**: reference-based tracing needs reliable lookup. (See Pain-point matrix #5; Addressed in Near-Term Design Work: TraceEnvelope)
 - **Fan-out/fan-in complexity**: ordering and timeout handling become tricky. (See Pain-point matrix #8)

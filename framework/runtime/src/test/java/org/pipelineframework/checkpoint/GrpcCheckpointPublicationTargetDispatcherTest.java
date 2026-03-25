@@ -4,8 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
-import java.io.IOException;
-import java.net.ServerSocket;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.checkpoint.grpc.CheckpointPublishAcceptedResponse;
@@ -18,7 +16,7 @@ class GrpcCheckpointPublicationTargetDispatcherTest {
     @Test
     void dispatchSendsCanonicalProtoRequest() throws Exception {
         AtomicReference<CheckpointPublishRequest> captured = new AtomicReference<>();
-        Server server = ServerBuilder.forPort(nextPort())
+        Server server = ServerBuilder.forPort(0)
             .addService(new TestService(captured))
             .build()
             .start();
@@ -51,12 +49,6 @@ class GrpcCheckpointPublicationTargetDispatcherTest {
             dispatcher.shutdown();
         } finally {
             server.shutdownNow();
-        }
-    }
-
-    private int nextPort() throws IOException {
-        try (ServerSocket socket = new ServerSocket(0)) {
-            return socket.getLocalPort();
         }
     }
 

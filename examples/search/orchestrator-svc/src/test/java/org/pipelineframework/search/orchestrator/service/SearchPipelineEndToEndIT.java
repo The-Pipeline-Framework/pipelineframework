@@ -606,7 +606,7 @@ class SearchPipelineEndToEndIT {
     }
 
     private void assertExitFailure(ProcessResult result, String message) {
-        assertTrue(result.exitCode != 0, message + ": " + result.output);
+        assertTrue(result.exitCode != 0, message + ": " + result.output + diagnosticLogTail());
     }
 
     private void invalidateParsedDocument(UUID docId, String rawContentHash, String versionTag) throws Exception {

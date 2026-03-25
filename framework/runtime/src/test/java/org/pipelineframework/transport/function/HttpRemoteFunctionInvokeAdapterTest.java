@@ -437,6 +437,11 @@ class HttpRemoteFunctionInvokeAdapterTest {
         public void close() {
             server.stop(0);
             executor.shutdownNow();
+            try {
+                executor.awaitTermination(2, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 }

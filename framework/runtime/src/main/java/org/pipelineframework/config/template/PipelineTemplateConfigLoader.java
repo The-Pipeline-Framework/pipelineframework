@@ -98,6 +98,7 @@ public class PipelineTemplateConfigLoader {
             : new LinkedHashMap<>();
         List<PipelineTemplateStep> steps = readSteps(rootMap, version);
         Map<String, PipelineTemplateAspect> aspects = readAspects(rootMap);
+        rejectLegacyConnectors(rootMap);
         PipelineInputBoundaryConfig input = readInputBoundary(rootMap);
         PipelineOutputBoundaryConfig output = readOutputBoundary(rootMap);
 
@@ -773,7 +774,6 @@ public class PipelineTemplateConfigLoader {
     }
 
     private PipelineInputBoundaryConfig readInputBoundary(Map<?, ?> rootMap) {
-        rejectLegacyConnectors(rootMap);
         Object inputObj = rootMap.get("input");
         if (inputObj == null) {
             return null;
@@ -794,7 +794,6 @@ public class PipelineTemplateConfigLoader {
     }
 
     private PipelineOutputBoundaryConfig readOutputBoundary(Map<?, ?> rootMap) {
-        rejectLegacyConnectors(rootMap);
         Object outputObj = rootMap.get("output");
         if (outputObj == null) {
             return null;

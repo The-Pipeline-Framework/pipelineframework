@@ -1,12 +1,12 @@
 package org.pipelineframework.checkpoint;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import jakarta.enterprise.context.ApplicationScoped;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.arc.Unremovable;
 import io.smallrye.mutiny.Uni;
@@ -40,7 +40,7 @@ public class HttpCheckpointPublicationTargetDispatcher implements CheckpointPubl
         byte[] body;
         try {
             body = encodeBody(request, target.encoding(), tenantId, idempotencyKey);
-        } catch (JsonProcessingException e) {
+        } catch (IOException e) {
             return Uni.createFrom().failure(e);
         }
 
@@ -79,15 +79,9 @@ public class HttpCheckpointPublicationTargetDispatcher implements CheckpointPubl
         PublicationEncoding encoding,
         String tenantId,
         String idempotencyKey
-    )
-        throws JsonProcessingException {
+    ) throws IOException {
         if (encoding == PublicationEncoding.PROTO) {
-            try {
-                return CheckpointPublicationProtoSupport.toProtoRequest(request, tenantId, idempotencyKey).toByteArray();
-            } catch (java.io.IOException e) {
-                throw new JsonProcessingException("Failed to encode checkpoint protobuf request", e) {
-                };
-            }
+            return CheckpointPublicationProtoSupport.toProtoRequest(request, tenantId, idempotencyKey).toByteArray();
         }
         return JSON.writeValueAsBytes(request);
     }

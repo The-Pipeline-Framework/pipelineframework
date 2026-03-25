@@ -22,4 +22,15 @@ public record ResolvedCheckpointPublicationTarget(
     String endpoint,
     String method
 ) {
+    public ResolvedCheckpointPublicationTarget {
+        if (publication == null || publication.isBlank()) {
+            throw new IllegalArgumentException("publication must not be blank");
+        }
+        if (kind == null) {
+            throw new NullPointerException("kind must not be null");
+        }
+        if (endpoint == null || endpoint.isBlank()) {
+            throw new IllegalArgumentException("endpoint must not be blank");
+        }
+    }
 }
