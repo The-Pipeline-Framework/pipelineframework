@@ -47,14 +47,16 @@ public interface PipelineHandoffConfig {
     interface TargetConfig {
 
         /**
-         * Target transport kind.
+         * Target transport kind (required).
          *
          * @return transport kind
          */
         PublicationTargetKind kind();
 
         /**
-         * Optional explicit encoding override.
+         * Optional explicit encoding override for {@link PublicationTargetKind#HTTP} targets.
+         *
+         * <p>Ignored for {@link PublicationTargetKind#GRPC} targets, which always use protobuf encoding.
          *
          * @return encoding when configured
          */
@@ -77,14 +79,14 @@ public interface PipelineHandoffConfig {
         Optional<String> idempotencyHeader();
 
         /**
-         * gRPC host for {@link PublicationTargetKind#GRPC} targets.
+         * gRPC host for {@link PublicationTargetKind#GRPC} targets (required).
          *
          * @return host when configured
          */
         Optional<String> host();
 
         /**
-         * gRPC port for {@link PublicationTargetKind#GRPC} targets.
+         * gRPC port for {@link PublicationTargetKind#GRPC} targets (required).
          *
          * @return port when configured
          */
@@ -99,7 +101,7 @@ public interface PipelineHandoffConfig {
         boolean plaintext();
 
         /**
-         * HTTP base URL for {@link PublicationTargetKind#HTTP} targets.
+         * HTTP base URL for {@link PublicationTargetKind#HTTP} targets (required).
          *
          * @return base URL when configured
          */

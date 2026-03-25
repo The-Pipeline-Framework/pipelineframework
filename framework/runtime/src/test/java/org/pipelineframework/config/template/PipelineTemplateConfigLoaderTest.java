@@ -155,6 +155,32 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
+    void rejectsNonListIdempotencyKeyFieldsInCheckpoint() throws Exception {
+        String yaml = """
+            appName: "Test App"
+            basePackage: "com.example.test"
+            transport: "GRPC"
+            steps:
+              - name: "Process Foo"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "FooInput"
+                outputTypeName: "FooOutput"
+            output:
+              checkpoint:
+                publication: "orders-processed"
+                idempotencyKeyFields: "orderId"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-bad-idempotency-keys.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalArgumentException exception = assertThrows(
+            IllegalArgumentException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertEquals("output.checkpoint.idempotencyKeyFields must be declared as a YAML list", exception.getMessage());
+    }
+
+    @Test
     void platformCanBeOverriddenViaSystemProperty() throws Exception {
         String yaml = """
             appName: "Test App"

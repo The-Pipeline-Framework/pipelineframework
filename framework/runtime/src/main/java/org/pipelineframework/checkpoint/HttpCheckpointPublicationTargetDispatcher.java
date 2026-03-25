@@ -5,6 +5,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,8 +23,13 @@ public class HttpCheckpointPublicationTargetDispatcher implements CheckpointPubl
 
     private static final ObjectMapper JSON = PipelineJson.mapper();
     private static final String DEFAULT_IDEMPOTENCY_HEADER = "Idempotency-Key";
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
+    private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
+    private static final int LOG_BODY_PREVIEW_LIMIT = 160;
 
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final HttpClient httpClient = HttpClient.newBuilder()
+        .connectTimeout(CONNECT_TIMEOUT)
+        .build();
 
     @Override
     public PublicationTargetKind kind() {
@@ -45,6 +51,7 @@ public class HttpCheckpointPublicationTargetDispatcher implements CheckpointPubl
         }
 
         HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(target.endpoint()))
+            .timeout(REQUEST_TIMEOUT)
             .header("Content-Type", target.contentType())
             .header("Accept", ProtobufHttpContentTypes.APPLICATION_JSON)
             .method(target.method(), HttpRequest.BodyPublishers.ofByteArray(body));
@@ -70,7 +77,7 @@ public class HttpCheckpointPublicationTargetDispatcher implements CheckpointPubl
                     "Checkpoint publication target '" + target.targetId()
                         + "' rejected publication '" + target.publication()
                         + "' with status " + status
-                        + " and body: " + response.body()));
+                        + previewBodySuffix(response.body())));
             });
     }
 
@@ -84,5 +91,18 @@ public class HttpCheckpointPublicationTargetDispatcher implements CheckpointPubl
             return CheckpointPublicationProtoSupport.toProtoRequest(request, tenantId, idempotencyKey).toByteArray();
         }
         return JSON.writeValueAsBytes(request);
+    }
+
+    private String previewBodySuffix(String body) {
+        if (body == null || body.isBlank()) {
+            return "";
+        }
+        String normalized = body.replaceAll("\\s+", " ").trim();
+        if (normalized.length() <= LOG_BODY_PREVIEW_LIMIT) {
+            return " (body preview: " + normalized + ")";
+        }
+        return " (body preview: "
+            + normalized.substring(0, LOG_BODY_PREVIEW_LIMIT)
+            + "...)";
     }
 }

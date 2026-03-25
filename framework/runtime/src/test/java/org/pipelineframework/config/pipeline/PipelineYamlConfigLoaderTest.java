@@ -81,6 +81,23 @@ class PipelineYamlConfigLoaderTest {
     }
 
     @Test
+    void rejectsNonListIdempotencyKeyFieldsInCheckpoint() {
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+            new PipelineYamlConfigLoader().load(new StringReader("""
+                basePackage: "com.example"
+                transport: "GRPC"
+                platform: "COMPUTE"
+                steps: []
+                output:
+                  checkpoint:
+                    publication: "orders-dispatched"
+                    idempotencyKeyFields: "orderId"
+                """)));
+
+        assertEquals("output.checkpoint.idempotencyKeyFields must be defined as a list", exception.getMessage());
+    }
+
+    @Test
     void rejectsMalformedSubscriptionBlock() {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
             new PipelineYamlConfigLoader().load(new StringReader("""

@@ -808,6 +808,10 @@ public class PipelineTemplateConfigLoader {
         if (!(checkpointObj instanceof Map<?, ?> checkpointMap)) {
             throw new IllegalArgumentException("output.checkpoint must be declared as a YAML map");
         }
+        Object idempotencyKeyFields = checkpointMap.get("idempotencyKeyFields");
+        if (idempotencyKeyFields != null && !(idempotencyKeyFields instanceof Iterable<?>)) {
+            throw new IllegalArgumentException("output.checkpoint.idempotencyKeyFields must be declared as a YAML list");
+        }
         return new PipelineOutputBoundaryConfig(new PipelineCheckpointConfig(
             readRequiredString(checkpointMap, "publication", "output.checkpoint"),
             readStringList(checkpointMap, "idempotencyKeyFields")));
