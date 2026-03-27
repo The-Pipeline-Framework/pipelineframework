@@ -113,7 +113,24 @@ public class CheckpointSubscriptionHandlerRenderer {
         if (mapperElement == null) {
             throw new IllegalStateException("Checkpoint subscription mapper type not found: " + mapperClassName);
         }
-        for (TypeMirror implemented : mapperElement.getInterfaces()) {
+        String externalType = findExternalTypeInHierarchy(mapperElement, mapperInterface, ctx);
+        if (externalType != null) {
+            return externalType;
+        }
+        throw new IllegalStateException(
+            "Checkpoint subscription mapper '" + mapperClassName + "' must declare Mapper<Domain, External>");
+    }
+
+    private String findExternalTypeInHierarchy(
+        javax.lang.model.element.TypeElement element,
+        TypeMirror mapperInterface,
+        GenerationContext ctx
+    ) {
+        if (element == null) {
+            return null;
+        }
+        // Check interfaces implemented by current TypeElement
+        for (TypeMirror implemented : element.getInterfaces()) {
             if (!(implemented instanceof DeclaredType declared)
                 || !ctx.processingEnv().getTypeUtils().isSameType(
                     ctx.processingEnv().getTypeUtils().erasure(declared),
@@ -125,7 +142,14 @@ public class CheckpointSubscriptionHandlerRenderer {
                 return external.toString();
             }
         }
-        throw new IllegalStateException(
-            "Checkpoint subscription mapper '" + mapperClassName + "' must declare Mapper<Domain, External>");
+        // Move to superclass and repeat
+        TypeMirror superclass = element.getSuperclass();
+        if (superclass instanceof DeclaredType declaredSuperclass) {
+            javax.lang.model.element.Element superElement = declaredSuperclass.asElement();
+            if (superElement instanceof javax.lang.model.element.TypeElement superTypeElement) {
+                return findExternalTypeInHierarchy(superTypeElement, mapperInterface, ctx);
+            }
+        }
+        return null;
     }
 }

@@ -77,14 +77,18 @@ public class CheckpointPublicationService {
             record.executionKey(),
             descriptor.idempotencyKeyFields(),
             resultPayload);
-        CheckpointPublicationRequest request = new CheckpointPublicationRequest(
-            descriptor.publication(),
-            org.pipelineframework.config.pipeline.PipelineJson.mapper().valueToTree(resultPayload));
-        return Uni.join().all(
-            resolvedTargets.stream()
-                .map(target -> dispatch(target, request, record, idempotencyKey))
-                .toList()
-        ).andCollectFailures().replaceWithVoid();
+        return Uni.createFrom().item(() -> org.pipelineframework.config.pipeline.PipelineJson.mapper().valueToTree(resultPayload))
+            .runSubscriptionOn(io.smallrye.mutiny.infrastructure.Infrastructure.getDefaultWorkerPool())
+            .flatMap(tree -> {
+                CheckpointPublicationRequest request = new CheckpointPublicationRequest(
+                    descriptor.publication(),
+                    tree);
+                return Uni.join().all(
+                    resolvedTargets.stream()
+                        .map(target -> dispatch(target, request, record, idempotencyKey))
+                        .toList()
+                ).andCollectFailures().replaceWithVoid();
+            });
     }
 
     private Uni<Void> dispatch(
@@ -140,6 +144,9 @@ public class CheckpointPublicationService {
         return switch (target.kind()) {
             case GRPC -> resolveGrpcTarget(publication, targetId, target);
             case HTTP -> resolveHttpTarget(publication, targetId, target);
+            default -> throw new UnsupportedOperationException(
+                "Unsupported PublicationTargetKind '" + target.kind()
+                    + "' for publication '" + publication + "' target '" + targetId + "'");
         };
     }
 

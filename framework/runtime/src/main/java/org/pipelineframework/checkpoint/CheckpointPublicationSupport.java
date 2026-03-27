@@ -25,7 +25,7 @@ public final class CheckpointPublicationSupport {
         if (payload == null || keyFields == null || keyFields.isEmpty()) {
             return null;
         }
-        List<String> parts = new ArrayList<>(keyFields.size() + 1);
+        List<String> parts = new ArrayList<>(keyFields.size());
         for (String field : keyFields) {
             String value = readProperty(payload, field);
             if (value == null || value.isBlank()) {
