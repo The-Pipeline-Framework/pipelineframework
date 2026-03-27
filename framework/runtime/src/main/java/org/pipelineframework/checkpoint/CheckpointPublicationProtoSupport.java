@@ -1,8 +1,6 @@
 package org.pipelineframework.checkpoint;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.pipelineframework.checkpoint.grpc.CheckpointPublishAcceptedResponse;
@@ -28,7 +26,7 @@ public final class CheckpointPublicationProtoSupport {
         return CheckpointPublishRequest.newBuilder()
             .setPublication(request.publication() == null ? "" : request.publication())
             .setPayloadJson(com.google.protobuf.ByteString.copyFrom(
-                JSON.writeValueAsBytes(request.payload() == null ? JSON.nullNode() : request.payload())))
+                JSON.writeValueAsBytes(request.payload() == null ? JSON.getNodeFactory().nullNode() : request.payload())))
             .setTenantId(tenantId == null ? "" : tenantId)
             .setIdempotencyKey(idempotencyKey == null ? "" : idempotencyKey)
             .build();
@@ -42,7 +40,7 @@ public final class CheckpointPublicationProtoSupport {
         if (payloadBytes.length == 0) {
             throw new IllegalArgumentException("Checkpoint protobuf request must include payload_json");
         }
-        JsonNode payload = JSON.readTree(new String(payloadBytes, StandardCharsets.UTF_8));
+        JsonNode payload = JSON.readTree(payloadBytes);
         return new CheckpointPublicationRequest(request.getPublication(), payload);
     }
 

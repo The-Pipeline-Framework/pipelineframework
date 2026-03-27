@@ -32,5 +32,19 @@ public record ResolvedCheckpointPublicationTarget(
         if (endpoint == null || endpoint.isBlank()) {
             throw new IllegalArgumentException("endpoint must not be blank");
         }
+        if (method == null || method.isBlank()) {
+            throw new IllegalArgumentException("method must not be blank");
+        }
+        if (kind == PublicationTargetKind.HTTP) {
+            if (contentType == null || contentType.isBlank()) {
+                throw new IllegalArgumentException("contentType must not be blank for HTTP targets");
+            }
+            if (!"POST".equals(method)) {
+                throw new IllegalArgumentException("HTTP checkpoint publication targets must use method POST");
+            }
+        }
+        if (kind == PublicationTargetKind.GRPC && !"PLAINTEXT".equals(method) && !"TLS".equals(method)) {
+            throw new IllegalArgumentException("GRPC checkpoint publication targets must use method PLAINTEXT or TLS");
+        }
     }
 }

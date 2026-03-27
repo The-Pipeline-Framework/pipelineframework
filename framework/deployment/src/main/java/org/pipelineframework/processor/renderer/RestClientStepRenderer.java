@@ -329,15 +329,17 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
         if (model == null || !model.sideEffect()) {
             return false;
         }
-        if (model.serviceClassName() != null
-            && "org.pipelineframework.plugin.cache.CacheService".equals(
-                model.serviceClassName().canonicalName())) {
-            return true;
-        }
+        String canonicalName = model.serviceClassName() == null ? null : model.serviceClassName().canonicalName();
+        boolean isCacheService = "org.pipelineframework.plugin.cache.CacheService".equals(canonicalName);
         String serviceName = model.serviceName();
-        return serviceName != null
+        if (!isCacheService
+            && serviceName != null
             && serviceName.startsWith("ObserveCache")
-            && !serviceName.startsWith("ObserveCacheInvalidate");
+            && !serviceName.startsWith("ObserveCacheInvalidate")) {
+            throw new IllegalStateException(
+                "Cache side-effect naming requires CacheService binding for '" + serviceName + "'");
+        }
+        return isCacheService;
     }
 
     /**

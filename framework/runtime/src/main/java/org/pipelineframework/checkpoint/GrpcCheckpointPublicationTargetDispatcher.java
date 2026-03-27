@@ -19,7 +19,7 @@ import org.pipelineframework.telemetry.GrpcClientTracing;
  * gRPC dispatcher for runtime checkpoint publication targets.
  */
 @ApplicationScoped
-    @Unremovable
+@Unremovable
 public class GrpcCheckpointPublicationTargetDispatcher implements CheckpointPublicationTargetDispatcher {
 
     private final Map<String, ManagedChannel> channels = new ConcurrentHashMap<>();

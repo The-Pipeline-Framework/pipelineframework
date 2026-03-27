@@ -12,4 +12,9 @@ public record CheckpointPublicationRequest(
     String publication,
     JsonNode payload
 ) {
+    public CheckpointPublicationRequest {
+        if (publication == null || publication.isBlank()) {
+            throw new IllegalArgumentException("publication must not be blank");
+        }
+    }
 }

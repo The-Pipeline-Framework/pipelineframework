@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.Map;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
-import javax.lang.model.SourceVersion;
 import javax.lang.model.util.Elements;
 import javax.lang.model.util.Types;
 import org.junit.jupiter.api.Test;
@@ -90,7 +89,6 @@ class CheckpointBoundaryValidatorTest {
         Types types = mock(Types.class);
         when(processingEnv.getElementUtils()).thenReturn(elements);
         when(processingEnv.getTypeUtils()).thenReturn(types);
-        when(processingEnv.getSourceVersion()).thenReturn(SourceVersion.RELEASE_21);
         when(elements.getTypeElement("com.example.mapper.MissingMapper")).thenReturn(null);
 
         PipelineTemplateConfig templateConfig = templateConfig(
