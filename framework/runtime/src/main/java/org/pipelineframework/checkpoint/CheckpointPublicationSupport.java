@@ -5,12 +5,15 @@ import java.lang.reflect.RecordComponent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Objects;
+
+import org.jboss.logging.Logger;
 
 /**
  * Helpers for checkpoint publication metadata and idempotency-key derivation.
  */
 public final class CheckpointPublicationSupport {
+
+    private static final Logger LOG = Logger.getLogger(CheckpointPublicationSupport.class);
 
     private CheckpointPublicationSupport() {
     }
@@ -30,14 +33,10 @@ public final class CheckpointPublicationSupport {
             }
             parts.add(value.trim());
         }
-        if (parts.isEmpty()) {
-            return null;
-        }
         return String.join(":", parts);
     }
 
     private static String readProperty(Object payload, String field) {
-        Objects.requireNonNull(payload, "payload must not be null");
         if (field == null || field.isBlank()) {
             return null;
         }
@@ -48,7 +47,9 @@ public final class CheckpointPublicationSupport {
                     try {
                         Object value = component.getAccessor().invoke(payload);
                         return value == null ? null : value.toString();
-                    } catch (ReflectiveOperationException ignored) {
+                    } catch (ReflectiveOperationException e) {
+                        LOG.tracef(e, "Failed reading checkpoint idempotency field '%s' from record payload %s",
+                            field, type.getName());
                         return null;
                     }
                 }
@@ -60,7 +61,9 @@ public final class CheckpointPublicationSupport {
                 Method method = type.getMethod(candidate);
                 Object value = method.invoke(payload);
                 return value == null ? null : value.toString();
-            } catch (ReflectiveOperationException ignored) {
+            } catch (ReflectiveOperationException e) {
+                LOG.tracef(e, "Failed reading checkpoint idempotency field '%s' via accessor '%s' on %s",
+                    field, candidate, type.getName());
                 // Try next accessor name.
             }
         }

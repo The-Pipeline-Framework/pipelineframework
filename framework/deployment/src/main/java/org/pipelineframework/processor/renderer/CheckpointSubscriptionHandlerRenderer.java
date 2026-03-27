@@ -80,8 +80,7 @@ public class CheckpointSubscriptionHandlerRenderer {
             .beginControlFlow("try");
         if (hasMapper) {
             admit.addStatement("$T external = JSON.treeToValue(payload, $T.class)", externalType, externalType)
-                .addStatement("$T rawMapper = mapper", mapperInterface)
-                .addStatement("Object mapped = rawMapper.fromExternal(external)")
+                .addStatement("Object mapped = mapper.fromExternal(external)")
                 .addStatement("return pipelineExecutionService.executePipelineAsync(mapped, tenantId, idempotencyKey)");
         } else {
             admit.addStatement("$T mapped = JSON.treeToValue(payload, $T.class)", directInputType, directInputType)

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.checkpoint.grpc.CheckpointPublishAcceptedResponse;
@@ -39,7 +40,7 @@ class GrpcCheckpointPublicationTargetDispatcherTest {
                     "orders-ready",
                     PipelineJson.mapper().valueToTree(new PublishedOrder("o-1"))),
                 "tenant-1",
-                "idem-1").await().indefinitely();
+                "idem-1").await().atMost(Duration.ofSeconds(5));
 
             CheckpointPublishRequest request = captured.get();
             assertEquals("orders-ready", request.getPublication());

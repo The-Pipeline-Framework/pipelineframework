@@ -137,8 +137,7 @@ class DiscoveryConfigLoaderTest {
     void loadTemplateConfig_throwsExceptionWhenYamlIsInvalid() throws Exception {
         Path badYaml = tempDir.resolve("pipeline.yaml");
         Files.writeString(badYaml, "this is: [invalid: yaml: content: {{{");
-
-        assertThrows(Exception.class, () -> loader.loadTemplateConfig(badYaml, messager));
+        assertTemplateConfigLoadFails(badYaml, messager);
     }
 
     @Test
@@ -179,8 +178,11 @@ class DiscoveryConfigLoaderTest {
     void loadTemplateConfig_doesNotReturnNullOnFailureThrowsInstead() throws Exception {
         Path badYaml = tempDir.resolve("pipeline.yaml");
         Files.writeString(badYaml, ": invalid yaml without key");
+        assertTemplateConfigLoadFails(badYaml, null);
+    }
 
-        Exception caught = assertThrows(Exception.class, () -> loader.loadTemplateConfig(badYaml, null));
+    private void assertTemplateConfigLoadFails(Path yamlPath, Messager msg) {
+        Exception caught = assertThrows(Exception.class, () -> loader.loadTemplateConfig(yamlPath, msg));
         assertNotNull(caught, "An exception must be thrown instead of returning null");
     }
 }

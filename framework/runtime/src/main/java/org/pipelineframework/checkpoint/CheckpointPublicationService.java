@@ -46,10 +46,16 @@ public class CheckpointPublicationService {
             throw new IllegalStateException(
                 "Checkpoint publication requires pipeline.orchestrator.mode=QUEUE_ASYNC");
         }
-        dispatcherByKind = targetDispatchers.stream().collect(java.util.stream.Collectors.toMap(
-            CheckpointPublicationTargetDispatcher::kind,
-            java.util.function.Function.identity(),
-            (left, right) -> left));
+        java.util.Map<PublicationTargetKind, CheckpointPublicationTargetDispatcher> dispatchers =
+            new java.util.EnumMap<>(PublicationTargetKind.class);
+        targetDispatchers.stream().forEach(dispatcher -> {
+            CheckpointPublicationTargetDispatcher duplicate = dispatchers.putIfAbsent(dispatcher.kind(), dispatcher);
+            if (duplicate != null) {
+                throw new IllegalStateException(
+                    "Duplicate checkpoint publication dispatcher registered for kind " + dispatcher.kind());
+            }
+        });
+        dispatcherByKind = java.util.Map.copyOf(dispatchers);
         resolvedTargets = resolveTargets(descriptor.publication());
         if (resolvedTargets.isEmpty()) {
             throw new IllegalStateException(
@@ -71,12 +77,6 @@ public class CheckpointPublicationService {
             record.executionKey(),
             descriptor.idempotencyKeyFields(),
             resultPayload);
-        if (resolvedTargets.isEmpty()) {
-            return Uni.createFrom().failure(new IllegalStateException(
-                "Checkpoint publication '" + descriptor.publication()
-                    + "' has no resolved runtime targets"));
-        }
-
         CheckpointPublicationRequest request = new CheckpointPublicationRequest(
             descriptor.publication(),
             org.pipelineframework.config.pipeline.PipelineJson.mapper().valueToTree(resultPayload));
@@ -95,8 +95,8 @@ public class CheckpointPublicationService {
     ) {
         CheckpointPublicationTargetDispatcher dispatcher = dispatcherByKind.get(target.kind());
         if (dispatcher == null) {
-            throw new IllegalStateException(
-                "No checkpoint publication dispatcher is available for target kind " + target.kind());
+            return Uni.createFrom().failure(new IllegalStateException(
+                "No checkpoint publication dispatcher is available for target kind " + target.kind()));
         }
         LOG.infof("Publishing checkpoint publication=%s execution=%s target=%s kind=%s",
             request.publication(), record.executionId(), target.targetId(), target.kind());

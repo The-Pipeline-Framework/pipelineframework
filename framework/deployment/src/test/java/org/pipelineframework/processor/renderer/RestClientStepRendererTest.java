@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.processor.ir.*;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -287,8 +289,8 @@ class RestClientStepRendererTest {
         assertTrue(stepSource.contains("context != null ? context.cachePolicy() : null"),
             "ObserveCacheInvalidate service should use standard cache policy, not prefer-cache override");
         // Should NOT have the require-cache -> prefer-cache override logic
-        assertTrue(
-            !stepSource.contains("\"require-cache\".equals(context.cachePolicy())"),
+        assertFalse(
+            stepSource.contains("\"require-cache\".equals(context.cachePolicy())"),
             "ObserveCacheInvalidate service should not downgrade require-cache to prefer-cache");
     }
 
@@ -338,8 +340,49 @@ class RestClientStepRendererTest {
         // Non-cache-plugin steps should use the standard context-based cache policy
         assertTrue(stepSource.contains("context != null ? context.cachePolicy() : null"),
             "Non-side-effect step should use standard cache policy");
-        assertTrue(
-            !stepSource.contains("\"require-cache\".equals(context.cachePolicy())"),
+        assertFalse(
+            stepSource.contains("\"require-cache\".equals(context.cachePolicy())"),
             "Non-side-effect step should not have prefer-cache override logic");
+    }
+
+    @Test
+    void renderFailsFastForObserveCacheNamedSideEffectWithoutCacheServiceBinding() {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("ObserveCachePaymentOutputSideEffectService")
+            .servicePackage("org.pipelineframework.csv.service")
+            .serviceClassName(ClassName.get(
+                "org.pipelineframework.csv.service",
+                "ObserveCachePaymentOutputSideEffectService"))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .executionMode(ExecutionMode.DEFAULT)
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.csv.common.domain", "PaymentOutput"),
+                ClassName.get("org.pipelineframework.csv.common.mapper", "PaymentOutputMapper"),
+                true))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.csv.common.domain", "PaymentOutput"),
+                ClassName.get("org.pipelineframework.csv.common.mapper", "PaymentOutputMapper"),
+                true))
+            .sideEffect(true)
+            .enabledTargets(java.util.Set.of(GenerationTarget.REST_CLIENT_STEP))
+            .build();
+
+        RestBinding binding = new RestBinding(
+            model,
+            "/ObserveCachePaymentOutputSideEffectService/remoteProcess");
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getOptions()).thenReturn(Map.of());
+        GenerationContext context = new GenerationContext(
+            processingEnv,
+            tempDir.resolve("misclassified-cache"),
+            DeploymentRole.ORCHESTRATOR_CLIENT,
+            java.util.Set.of(),
+            null,
+            null);
+
+        RestClientStepRenderer renderer = new RestClientStepRenderer();
+
+        IllegalStateException exception = assertThrows(IllegalStateException.class, () -> renderer.render(binding, context));
+        assertTrue(exception.getMessage().contains("Cache side-effect naming requires CacheService binding"));
     }
 }
