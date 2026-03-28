@@ -1,118 +1,64 @@
-appName: "FTGo Kitchen Preparation Pipeline"
-basePackage: "org.pipelineframework.checkout.ftgo.kitchen"
+appName: "TPFGo Kitchen Preparation Pipeline"
+basePackage: "org.pipelineframework.tpfgo.kitchen.preparation"
 transport: "GRPC"
+platform: "COMPUTE"
+input:
+  subscription:
+    publication: "tpfgo.restaurant.order-accepted.v1"
 steps:
   - name: "Kitchen Expand Tasks"
+    service: "org.pipelineframework.tpfgo.kitchen.preparation.kitchen_expand_tasks.service.ProcessKitchenExpandTasksService"
     cardinality: "ONE_TO_MANY"
+    input: "org.pipelineframework.tpfgo.common.domain.OrderAcceptedByRestaurant"
     inputTypeName: "OrderAcceptedByRestaurant"
     inputFields:
-      - name: "orderId"
-        type: "UUID"
-        protoType: "string"
-      - name: "requestId"
-        type: "UUID"
-        protoType: "string"
-      - name: "customerId"
-        type: "UUID"
-        protoType: "string"
-      - name: "restaurantId"
-        type: "UUID"
-        protoType: "string"
-      - name: "totalAmount"
-        type: "BigDecimal"
-        protoType: "string"
-      - name: "currency"
-        type: "String"
-        protoType: "string"
-      - name: "acceptedAt"
-        type: "Instant"
-        protoType: "string"
-      - name: "kitchenTicketId"
-        type: "UUID"
-        protoType: "string"
+      - { name: "orderId", type: "UUID", protoType: "string" }
+      - { name: "requestId", type: "UUID", protoType: "string" }
+      - { name: "customerId", type: "UUID", protoType: "string" }
+      - { name: "restaurantId", type: "UUID", protoType: "string" }
+      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
+      - { name: "currency", type: "String", protoType: "string" }
+      - { name: "acceptedAt", type: "Instant", protoType: "string" }
+      - { name: "kitchenTicketId", type: "UUID", protoType: "string" }
+    output: "org.pipelineframework.tpfgo.common.domain.KitchenTask"
     outputTypeName: "KitchenTask"
     outputFields:
-      - name: "orderId"
-        type: "UUID"
-        protoType: "string"
-      - name: "customerId"
-        type: "UUID"
-        protoType: "string"
-      - name: "restaurantId"
-        type: "UUID"
-        protoType: "string"
-      - name: "totalAmount"
-        type: "BigDecimal"
-        protoType: "string"
-      - name: "currency"
-        type: "String"
-        protoType: "string"
-      - name: "kitchenTicketId"
-        type: "UUID"
-        protoType: "string"
-      - name: "taskId"
-        type: "UUID"
-        protoType: "string"
-      - name: "taskName"
-        type: "String"
-        protoType: "string"
-      - name: "taskStatus"
-        type: "String"
-        protoType: "string"
+      - { name: "orderId", type: "UUID", protoType: "string" }
+      - { name: "customerId", type: "UUID", protoType: "string" }
+      - { name: "restaurantId", type: "UUID", protoType: "string" }
+      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
+      - { name: "currency", type: "String", protoType: "string" }
+      - { name: "kitchenTicketId", type: "UUID", protoType: "string" }
+      - { name: "taskId", type: "UUID", protoType: "string" }
+      - { name: "taskName", type: "String", protoType: "string" }
+      - { name: "taskStatus", type: "String", protoType: "string" }
   - name: "Kitchen Reduce Completion"
+    service: "org.pipelineframework.tpfgo.kitchen.preparation.kitchen_reduce_completion.service.ProcessKitchenReduceCompletionService"
     cardinality: "MANY_TO_ONE"
+    input: "org.pipelineframework.tpfgo.common.domain.KitchenTask"
     inputTypeName: "KitchenTask"
     inputFields:
-      - name: "orderId"
-        type: "UUID"
-        protoType: "string"
-      - name: "customerId"
-        type: "UUID"
-        protoType: "string"
-      - name: "restaurantId"
-        type: "UUID"
-        protoType: "string"
-      - name: "totalAmount"
-        type: "BigDecimal"
-        protoType: "string"
-      - name: "currency"
-        type: "String"
-        protoType: "string"
-      - name: "kitchenTicketId"
-        type: "UUID"
-        protoType: "string"
-      - name: "taskId"
-        type: "UUID"
-        protoType: "string"
-      - name: "taskName"
-        type: "String"
-        protoType: "string"
-      - name: "taskStatus"
-        type: "String"
-        protoType: "string"
+      - { name: "orderId", type: "UUID", protoType: "string" }
+      - { name: "customerId", type: "UUID", protoType: "string" }
+      - { name: "restaurantId", type: "UUID", protoType: "string" }
+      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
+      - { name: "currency", type: "String", protoType: "string" }
+      - { name: "kitchenTicketId", type: "UUID", protoType: "string" }
+      - { name: "taskId", type: "UUID", protoType: "string" }
+      - { name: "taskName", type: "String", protoType: "string" }
+      - { name: "taskStatus", type: "String", protoType: "string" }
+    output: "org.pipelineframework.tpfgo.common.domain.OrderReadyForDispatch"
     outputTypeName: "OrderReadyForDispatch"
     outputFields:
-      - name: "orderId"
-        type: "UUID"
-        protoType: "string"
-      - name: "customerId"
-        type: "UUID"
-        protoType: "string"
-      - name: "restaurantId"
-        type: "UUID"
-        protoType: "string"
-      - name: "totalAmount"
-        type: "BigDecimal"
-        protoType: "string"
-      - name: "currency"
-        type: "String"
-        protoType: "string"
-      - name: "readyAt"
-        type: "Instant"
-        protoType: "string"
-      - name: "kitchenTicketId"
-        type: "UUID"
-        protoType: "string"
-      - name: "lineageDigest"
-        type: "String"
-        protoType: "string"
+      - { name: "orderId", type: "UUID", protoType: "string" }
+      - { name: "customerId", type: "UUID", protoType: "string" }
+      - { name: "restaurantId", type: "UUID", protoType: "string" }
+      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
+      - { name: "currency", type: "String", protoType: "string" }
+      - { name: "readyAt", type: "Instant", protoType: "string" }
+      - { name: "kitchenTicketId", type: "UUID", protoType: "string" }
+      - { name: "lineageDigest", type: "String", protoType: "string" }
+output:
+  checkpoint:
+    publication: "tpfgo.kitchen.order-ready.v1"
+    idempotencyKeyFields: [ "orderId" ]

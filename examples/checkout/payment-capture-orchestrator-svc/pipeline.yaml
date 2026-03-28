@@ -1,0 +1,40 @@
+appName: "TPFGo Payment Capture Pipeline"
+basePackage: "org.pipelineframework.tpfgo.payment.capture"
+transport: "GRPC"
+platform: "COMPUTE"
+input:
+  subscription:
+    publication: "tpfgo.delivery.order-delivered.v1"
+    mapper: "org.pipelineframework.tpfgo.payment.capture.payment_capture_order.service.OrderDeliveredMapper"
+steps:
+  - name: "Payment Capture Order"
+    service: "org.pipelineframework.tpfgo.payment.capture.payment_capture_order.service.ProcessPaymentCaptureOrderService"
+    cardinality: "ONE_TO_ONE"
+    input: "org.pipelineframework.tpfgo.common.domain.OrderDelivered"
+    inputTypeName: "OrderDelivered"
+    inputFields:
+      - { name: "orderId", type: "UUID", protoType: "string" }
+      - { name: "customerId", type: "UUID", protoType: "string" }
+      - { name: "dispatchId", type: "UUID", protoType: "string" }
+      - { name: "courierId", type: "UUID", protoType: "string" }
+      - { name: "restaurantId", type: "UUID", protoType: "string" }
+      - { name: "kitchenTicketId", type: "UUID", protoType: "string" }
+      - { name: "deliveredAt", type: "Instant", protoType: "string" }
+      - { name: "amount", type: "BigDecimal", protoType: "string" }
+      - { name: "currency", type: "String", protoType: "string" }
+      - { name: "lineageDigest", type: "String", protoType: "string" }
+    output: "org.pipelineframework.tpfgo.common.domain.PaymentCaptureResult"
+    outputTypeName: "PaymentCaptureResult"
+    outputFields:
+      - { name: "orderId", type: "UUID", protoType: "string" }
+      - { name: "paymentId", type: "UUID", protoType: "string" }
+      - { name: "processedAt", type: "Instant", protoType: "string" }
+      - { name: "amount", type: "BigDecimal", protoType: "string" }
+      - { name: "currency", type: "String", protoType: "string" }
+      - { name: "status", type: "String", protoType: "string" }
+      - { name: "failureCode", type: "String", protoType: "string" }
+      - { name: "failureReason", type: "String", protoType: "string" }
+output:
+  checkpoint:
+    publication: "tpfgo.payment.capture-result.v1"
+    idempotencyKeyFields: [ "orderId" ]

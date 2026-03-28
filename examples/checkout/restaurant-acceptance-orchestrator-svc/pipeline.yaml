@@ -1,0 +1,38 @@
+appName: "TPFGo Restaurant Acceptance Pipeline"
+basePackage: "org.pipelineframework.tpfgo.restaurant.acceptance"
+transport: "GRPC"
+platform: "COMPUTE"
+input:
+  subscription:
+    publication: "tpfgo.consumer.order-approved.v1"
+    mapper: "org.pipelineframework.tpfgo.restaurant.acceptance.restaurant_accept_order.service.OrderApprovedMapper"
+steps:
+  - name: "Restaurant Accept Order"
+    service: "org.pipelineframework.tpfgo.restaurant.acceptance.restaurant_accept_order.service.ProcessRestaurantAcceptOrderService"
+    cardinality: "ONE_TO_ONE"
+    input: "org.pipelineframework.tpfgo.common.domain.OrderApproved"
+    inputTypeName: "OrderApproved"
+    inputFields:
+      - { name: "orderId", type: "UUID", protoType: "string" }
+      - { name: "requestId", type: "UUID", protoType: "string" }
+      - { name: "customerId", type: "UUID", protoType: "string" }
+      - { name: "restaurantId", type: "UUID", protoType: "string" }
+      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
+      - { name: "currency", type: "String", protoType: "string" }
+      - { name: "approvedAt", type: "Instant", protoType: "string" }
+      - { name: "riskBand", type: "String", protoType: "string" }
+    output: "org.pipelineframework.tpfgo.common.domain.OrderAcceptedByRestaurant"
+    outputTypeName: "OrderAcceptedByRestaurant"
+    outputFields:
+      - { name: "orderId", type: "UUID", protoType: "string" }
+      - { name: "requestId", type: "UUID", protoType: "string" }
+      - { name: "customerId", type: "UUID", protoType: "string" }
+      - { name: "restaurantId", type: "UUID", protoType: "string" }
+      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
+      - { name: "currency", type: "String", protoType: "string" }
+      - { name: "acceptedAt", type: "Instant", protoType: "string" }
+      - { name: "kitchenTicketId", type: "UUID", protoType: "string" }
+output:
+  checkpoint:
+    publication: "tpfgo.restaurant.order-accepted.v1"
+    idempotencyKeyFields: [ "orderId" ]

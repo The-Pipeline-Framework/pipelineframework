@@ -30,6 +30,13 @@ Set platform mode during build:
 
 TPF uses build switches for this mode. It does not require a dedicated Maven profile.
 
+::: warning Checkpoint Handoff Is Not Available In FUNCTION Mode
+Checkpoint publication and subscription are not available in `FUNCTION` mode.
+
+If your application depends on reliable cross-pipeline handoff, use `COMPUTE` + `QUEUE_ASYNC` orchestrators instead.
+This is a real platform-selection constraint for multi-pipeline applications such as the TPFGo checkout topology.
+:::
+
 ## Required and Optional Quarkus Extensions
 
 Required for FUNCTION runtime wiring and generated handlers:

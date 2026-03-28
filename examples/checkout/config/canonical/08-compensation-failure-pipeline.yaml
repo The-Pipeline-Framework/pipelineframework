@@ -1,37 +1,36 @@
-appName: "FTGo Compensation and Failure Pipeline"
-basePackage: "org.pipelineframework.checkout.ftgo.compensation"
+appName: "TPFGo Compensation Pipeline"
+basePackage: "org.pipelineframework.tpfgo.compensation.failure"
 transport: "GRPC"
+platform: "COMPUTE"
+input:
+  subscription:
+    publication: "tpfgo.payment.capture-result.v1"
 steps:
-  - name: "Failure Compensation"
+  - name: "Compensation Finalize Order"
+    service: "org.pipelineframework.tpfgo.compensation.failure.compensation_finalize_order.service.ProcessCompensationFinalizeOrderService"
     cardinality: "ONE_TO_ONE"
-    inputTypeName: "PaymentFailed"
+    input: "org.pipelineframework.tpfgo.common.domain.PaymentCaptureResult"
+    inputTypeName: "PaymentCaptureResult"
     inputFields:
-      - name: "orderId"
-        type: "UUID"
-        protoType: "string"
-      - name: "failureCode"
-        type: "String"
-        protoType: "string"
-      - name: "failureReason"
-        type: "String"
-        protoType: "string"
-      - name: "failedAt"
-        type: "Instant"
-        protoType: "string"
-    outputTypeName: "FailureTerminal"
+      - { name: "orderId", type: "UUID", protoType: "string" }
+      - { name: "paymentId", type: "UUID", protoType: "string" }
+      - { name: "processedAt", type: "Instant", protoType: "string" }
+      - { name: "amount", type: "BigDecimal", protoType: "string" }
+      - { name: "currency", type: "String", protoType: "string" }
+      - { name: "status", type: "String", protoType: "string" }
+      - { name: "failureCode", type: "String", protoType: "string" }
+      - { name: "failureReason", type: "String", protoType: "string" }
+    output: "org.pipelineframework.tpfgo.common.domain.TerminalOrderState"
+    outputTypeName: "TerminalOrderState"
     outputFields:
-      - name: "orderId"
-        type: "UUID"
-        protoType: "string"
-      - name: "failureCode"
-        type: "String"
-        protoType: "string"
-      - name: "failureReason"
-        type: "String"
-        protoType: "string"
-      - name: "resolvedAt"
-        type: "Instant"
-        protoType: "string"
-      - name: "resolutionAction"
-        type: "String"
-        protoType: "string"
+      - { name: "orderId", type: "UUID", protoType: "string" }
+      - { name: "outcome", type: "String", protoType: "string" }
+      - { name: "resolvedAt", type: "Instant", protoType: "string" }
+      - { name: "resolutionAction", type: "String", protoType: "string" }
+      - { name: "paymentStatus", type: "String", protoType: "string" }
+      - { name: "paymentId", type: "UUID", protoType: "string" }
+      - { name: "failureCode", type: "String", protoType: "string" }
+output:
+  checkpoint:
+    publication: "tpfgo.compensation.terminal-state.v1"
+    idempotencyKeyFields: [ "orderId" ]
