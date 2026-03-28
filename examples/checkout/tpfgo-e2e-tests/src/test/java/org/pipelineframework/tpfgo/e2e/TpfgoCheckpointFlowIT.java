@@ -37,6 +37,7 @@ import org.pipelineframework.config.pipeline.PipelineJson;
 import org.pipelineframework.tpfgo.checkout.grpc.CheckoutValidateRequestSvc;
 import org.pipelineframework.tpfgo.checkout.grpc.Orchestrator;
 import org.pipelineframework.tpfgo.checkout.grpc.OrchestratorServiceGrpc;
+import org.pipelineframework.tpfgo.common.util.DeterministicIds;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -100,7 +101,13 @@ class TpfgoCheckpointFlowIT {
         assertEquals("COMPLETED", finalPayload.get("outcome").asText());
         assertEquals("CAPTURED", finalPayload.get("paymentStatus").asText());
         assertEquals("none", finalPayload.get("resolutionAction").asText());
-        assertEquals("11111111-1111-1111-1111-111111111111", finalPayload.get("orderId").asText());
+        assertEquals(
+            DeterministicIds.uuid(
+                "order",
+                "11111111-1111-1111-1111-111111111111",
+                "22222222-2222-2222-2222-222222222222",
+                "33333333-3333-3333-3333-333333333333").toString(),
+            finalPayload.get("orderId").asText());
     }
 
     @Test
@@ -176,21 +183,48 @@ class TpfgoCheckpointFlowIT {
     }
 
     private List<AppSpec> specs(int collectorPort) throws IOException {
-        AppSpec checkout = spec("checkout-orchestrator-svc", "tpfgo.checkout.order-pending.v1",
+        AppSpec pipelineRuntime = runtimeSpec("pipeline-runtime-svc");
+        int internalGrpcPort = pipelineRuntime.grpcPort();
+
+        AppSpec checkout = orchestratorSpec(
+            "checkout-orchestrator-svc",
+            "tpfgo.checkout.order-pending.v1",
+            internalGrpcPort,
             List.of("process-checkout-validate-request", "process-checkout-create-pending"));
-        AppSpec consumer = spec("consumer-validation-orchestrator-svc", "tpfgo.consumer.order-approved.v1",
+        AppSpec consumer = orchestratorSpec(
+            "consumer-validation-orchestrator-svc",
+            "tpfgo.consumer.order-approved.v1",
+            internalGrpcPort,
             List.of("process-consumer-validate-order"));
-        AppSpec restaurant = spec("restaurant-acceptance-orchestrator-svc", "tpfgo.restaurant.order-accepted.v1",
+        AppSpec restaurant = orchestratorSpec(
+            "restaurant-acceptance-orchestrator-svc",
+            "tpfgo.restaurant.order-accepted.v1",
+            internalGrpcPort,
             List.of("process-restaurant-accept-order"));
-        AppSpec kitchen = spec("kitchen-preparation-orchestrator-svc", "tpfgo.kitchen.order-ready.v1",
+        AppSpec kitchen = orchestratorSpec(
+            "kitchen-preparation-orchestrator-svc",
+            "tpfgo.kitchen.order-ready.v1",
+            internalGrpcPort,
             List.of("process-kitchen-expand-tasks", "process-kitchen-reduce-completion"));
-        AppSpec dispatch = spec("dispatch-orchestrator-svc", "tpfgo.dispatch.delivery-assigned.v1",
+        AppSpec dispatch = orchestratorSpec(
+            "dispatch-orchestrator-svc",
+            "tpfgo.dispatch.delivery-assigned.v1",
+            internalGrpcPort,
             List.of("process-dispatch-assign-courier"));
-        AppSpec delivery = spec("delivery-execution-orchestrator-svc", "tpfgo.delivery.order-delivered.v1",
+        AppSpec delivery = orchestratorSpec(
+            "delivery-execution-orchestrator-svc",
+            "tpfgo.delivery.order-delivered.v1",
+            internalGrpcPort,
             List.of("process-delivery-execute-order"));
-        AppSpec payment = spec("payment-capture-orchestrator-svc", "tpfgo.payment.capture-result.v1",
+        AppSpec payment = orchestratorSpec(
+            "payment-capture-orchestrator-svc",
+            "tpfgo.payment.capture-result.v1",
+            internalGrpcPort,
             List.of("process-payment-capture-order"));
-        AppSpec compensation = spec("compensation-failure-orchestrator-svc", "tpfgo.compensation.terminal-state.v1",
+        AppSpec compensation = orchestratorSpec(
+            "compensation-failure-orchestrator-svc",
+            "tpfgo.compensation.terminal-state.v1",
+            internalGrpcPort,
             List.of("process-compensation-finalize-order"));
 
         checkout.bindTo(consumer.grpcPort());
@@ -202,13 +236,41 @@ class TpfgoCheckpointFlowIT {
         payment.bindTo(compensation.grpcPort());
         compensation.bindTo(collectorPort);
 
-        return List.of(checkout, consumer, restaurant, kitchen, dispatch, delivery, payment, compensation);
+        return List.of(
+            pipelineRuntime,
+            checkout,
+            consumer,
+            restaurant,
+            kitchen,
+            dispatch,
+            delivery,
+            payment,
+            compensation);
     }
 
-    private AppSpec spec(String moduleDir, String publication, List<String> internalGrpcClients) throws IOException {
+    private AppSpec runtimeSpec(String moduleDir) throws IOException {
+        int httpPort = findFreePort();
+        int grpcPort = httpPort;
+        return new AppSpec(moduleDir, httpPort, grpcPort, false, null, 0, List.of(), new ArrayList<>());
+    }
+
+    private AppSpec orchestratorSpec(
+        String moduleDir,
+        String publication,
+        int internalGrpcTargetPort,
+        List<String> internalGrpcClients
+    ) throws IOException {
         int httpPort = findFreePort();
         int grpcPort = findFreePort();
-        return new AppSpec(moduleDir, httpPort, grpcPort, publication, internalGrpcClients, new ArrayList<>());
+        return new AppSpec(
+            moduleDir,
+            httpPort,
+            grpcPort,
+            true,
+            publication,
+            internalGrpcTargetPort,
+            internalGrpcClients,
+            new ArrayList<>());
     }
 
     private static int findFreePort() throws IOException {
@@ -222,7 +284,9 @@ class TpfgoCheckpointFlowIT {
         String moduleDir,
         int httpPort,
         int grpcPort,
+        boolean orchestrator,
         String publication,
+        int internalGrpcTargetPort,
         List<String> internalGrpcClients,
         List<String> bindingLines
     ) {
@@ -238,7 +302,7 @@ class TpfgoCheckpointFlowIT {
             List<String> lines = new ArrayList<>();
             for (String client : internalGrpcClients) {
                 lines.add("quarkus.grpc.clients." + client + ".host=127.0.0.1");
-                lines.add("quarkus.grpc.clients." + client + ".port=" + grpcPort);
+                lines.add("quarkus.grpc.clients." + client + ".port=" + internalGrpcTargetPort);
                 lines.add("quarkus.grpc.clients." + client + ".plain-text=true");
             }
             return lines;
@@ -251,15 +315,12 @@ class TpfgoCheckpointFlowIT {
         private final int grpcPort;
         private final Process process;
         private final ManagedChannel channel;
-        private final OrchestratorServiceGrpc.OrchestratorServiceBlockingStub orchestrator;
 
         private ManagedApp(String moduleDir, int grpcPort, Process process, ManagedChannel channel) {
             this.moduleDir = moduleDir;
             this.grpcPort = grpcPort;
             this.process = process;
             this.channel = channel;
-            this.orchestrator = OrchestratorServiceGrpc.newBlockingStub(channel)
-                .withDeadlineAfter(10, TimeUnit.SECONDS);
         }
 
         static ManagedApp start(AppSpec spec, Path logDirectory) throws Exception {
@@ -271,11 +332,13 @@ class TpfgoCheckpointFlowIT {
             lines.add("quarkus.grpc.server.host=127.0.0.1");
             lines.add("quarkus.grpc.server.port=" + spec.grpcPort());
             lines.add("quarkus.otel.sdk.disabled=true");
-            lines.add("pipeline.orchestrator.mode=QUEUE_ASYNC");
-            lines.add("pipeline.orchestrator.idempotency-policy=CLIENT_KEY_REQUIRED");
-            lines.add("pipeline.orchestrator.state-provider=memory");
-            lines.add("pipeline.orchestrator.dispatcher-provider=event");
-            lines.add("pipeline.orchestrator.dlq-provider=log");
+            if (spec.orchestrator()) {
+                lines.add("pipeline.orchestrator.mode=QUEUE_ASYNC");
+                lines.add("pipeline.orchestrator.idempotency-policy=CLIENT_KEY_REQUIRED");
+                lines.add("pipeline.orchestrator.state-provider=memory");
+                lines.add("pipeline.orchestrator.dispatcher-provider=event");
+                lines.add("pipeline.orchestrator.dlq-provider=log");
+            }
             lines.addAll(spec.internalGrpcClientLines());
             lines.addAll(spec.bindingLines());
             Files.writeString(configFile, String.join(System.lineSeparator(), lines) + System.lineSeparator());
@@ -301,9 +364,12 @@ class TpfgoCheckpointFlowIT {
                     e);
             }
 
-            ManagedChannel channel = ManagedChannelBuilder.forAddress("127.0.0.1", spec.grpcPort())
-                .usePlaintext()
-                .build();
+            ManagedChannel channel = null;
+            if (spec.orchestrator()) {
+                channel = ManagedChannelBuilder.forAddress("127.0.0.1", spec.grpcPort())
+                    .usePlaintext()
+                    .build();
+            }
             return new ManagedApp(spec.moduleDir(), spec.grpcPort(), process, channel);
         }
 
@@ -372,12 +438,18 @@ class TpfgoCheckpointFlowIT {
         }
 
         OrchestratorServiceGrpc.OrchestratorServiceBlockingStub orchestrator() {
-            return orchestrator;
+            if (channel == null) {
+                throw new IllegalStateException("No orchestrator client available for module " + moduleDir);
+            }
+            return OrchestratorServiceGrpc.newBlockingStub(channel)
+                .withDeadlineAfter(10, TimeUnit.SECONDS);
         }
 
         @Override
         public void close() throws Exception {
-            channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
+            if (channel != null) {
+                channel.shutdownNow().awaitTermination(5, TimeUnit.SECONDS);
+            }
             if (process.isAlive()) {
                 process.destroy();
                 if (!process.waitFor(10, TimeUnit.SECONDS)) {

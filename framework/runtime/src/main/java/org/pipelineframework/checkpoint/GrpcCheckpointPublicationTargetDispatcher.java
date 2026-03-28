@@ -2,7 +2,6 @@ package org.pipelineframework.checkpoint;
 
 import java.io.IOException;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -14,7 +13,6 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.quarkus.arc.Unremovable;
 import io.smallrye.mutiny.Uni;
-import io.smallrye.mutiny.subscription.Cancellable;
 import org.pipelineframework.checkpoint.grpc.MutinyCheckpointPublicationServiceGrpc;
 import org.pipelineframework.telemetry.GrpcClientTracing;
 
@@ -34,19 +32,6 @@ public class GrpcCheckpointPublicationTargetDispatcher implements CheckpointPubl
         return PublicationTargetKind.GRPC;
     }
 
-    /**
-     * Publishes a checkpoint request to the specified gRPC publication target.
-     *
-     * Converts the provided request into the protobuf request and invokes the remote publish RPC; an in-flight RPC is
-     * cancelled if the returned Uni is terminated.
-     *
-     * @param target the resolved publication target containing endpoint and transport details
-     * @param request the checkpoint publication payload to send
-     * @param tenantId the tenant identifier to include in the protobuf request
-     * @param idempotencyKey an idempotency key to include in the protobuf request
-     * @return a `Void` value when publication completes successfully; fails with the underlying error if conversion or
-     *         the gRPC call fails (including the `IOException` thrown during protobuf conversion)
-     */
     @Override
     public Uni<Void> dispatch(
         ResolvedCheckpointPublicationTarget target,
@@ -60,35 +45,17 @@ public class GrpcCheckpointPublicationTargetDispatcher implements CheckpointPubl
         } catch (IOException e) {
             return Uni.createFrom().failure(e);
         }
-        return Uni.createFrom().emitter(emitter -> {
-            AtomicReference<Cancellable> cancellableRef = new AtomicReference<>();
-            Context.ROOT.run(() -> {
-                Cancellable cancellable = GrpcClientTracing.traceUnary(
+        return Uni.createFrom().emitter(emitter ->
+            Context.ROOT.run(() ->
+                GrpcClientTracing.traceUnary(
                     CheckpointPublicationGrpcService.SERVICE,
                     CheckpointPublicationGrpcService.METHOD,
                     stubFor(target).publish(protoRequest))
                     .subscribe().with(
                         response -> emitter.complete(null),
-                        emitter::fail);
-                cancellableRef.set(cancellable);
-            });
-            emitter.onTermination(() -> {
-                Cancellable cancellable = cancellableRef.get();
-                if (cancellable != null) {
-                    cancellable.cancel();
-                }
-            });
-        });
+                        emitter::fail)));
     }
 
-    /**
-     * Shuts down all managed gRPC channels and clears cached channels and stubs.
-     *
-     * <p>Calls {@code shutdown()} on each cached {@link ManagedChannel}, waits up to 5 seconds for
-     * termination, and if interrupted restores the thread interrupt flag and calls
-     * {@code shutdownNow()} for that channel. After attempting shutdown of all channels, clears the
-     * internal channel and stub caches.
-     */
     @PreDestroy
     void shutdown() {
         for (ManagedChannel channel : channels.values()) {

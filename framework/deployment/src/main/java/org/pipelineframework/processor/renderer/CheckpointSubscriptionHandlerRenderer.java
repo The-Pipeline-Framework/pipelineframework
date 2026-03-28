@@ -54,10 +54,13 @@ public class CheckpointSubscriptionHandlerRenderer {
 
         boolean hasMapper = subscription.mapper() != null && !subscription.mapper().isBlank();
         ClassName mapperType = null;
-        TypeName externalType = directInputType;
+        TypeName mapperDomainType = null;
+        TypeName mapperExternalType = directInputType;
         if (hasMapper) {
             mapperType = ClassName.bestGuess(subscription.mapper());
-            externalType = ClassName.bestGuess(resolveExternalType(subscription.mapper(), ctx));
+            MapperTypes mapperTypes = resolveMapperTypes(subscription.mapper(), ctx);
+            mapperDomainType = mapperTypes.domainType();
+            mapperExternalType = mapperTypes.externalType();
             type.addField(FieldSpec.builder(mapperType, "mapper", Modifier.PRIVATE)
                 .addAnnotation(ClassName.get("jakarta.inject", "Inject"))
                 .build());
@@ -79,8 +82,8 @@ public class CheckpointSubscriptionHandlerRenderer {
             .addParameter(String.class, "idempotencyKey")
             .beginControlFlow("try");
         if (hasMapper) {
-            admit.addStatement("$T external = JSON.treeToValue(payload, $T.class)", externalType, externalType)
-                .addStatement("Object mapped = mapper.fromExternal(external)")
+            admit.addStatement("$T domain = JSON.treeToValue(payload, $T.class)", mapperDomainType, mapperDomainType)
+                .addStatement("Object mapped = mapper.toExternal(domain)")
                 .addStatement("return pipelineExecutionService.executePipelineAsync(mapped, tenantId, idempotencyKey)");
         } else {
             admit.addStatement("$T mapped = JSON.treeToValue(payload, $T.class)", directInputType, directInputType)
@@ -189,7 +192,7 @@ public class CheckpointSubscriptionHandlerRenderer {
         return sanitized.isBlank() ? "service" : sanitized.toLowerCase(Locale.ROOT);
     }
 
-    private String resolveExternalType(String mapperClassName, GenerationContext ctx) {
+    private MapperTypes resolveMapperTypes(String mapperClassName, GenerationContext ctx) {
         TypeMirror mapperInterface = Objects.requireNonNull(
             ctx.processingEnv().getElementUtils().getTypeElement(MAPPER_INTERFACE),
             () -> "Mapper interface not found: " + MAPPER_INTERFACE).asType();
@@ -205,11 +208,15 @@ public class CheckpointSubscriptionHandlerRenderer {
                 continue;
             }
             if (declared.getTypeArguments().size() == 2) {
-                TypeName external = TypeName.get(declared.getTypeArguments().get(1));
-                return external.toString();
+                return new MapperTypes(
+                    TypeName.get(declared.getTypeArguments().get(0)),
+                    TypeName.get(declared.getTypeArguments().get(1)));
             }
         }
         throw new IllegalStateException(
             "Checkpoint subscription mapper '" + mapperClassName + "' must declare Mapper<Domain, External>");
+    }
+
+    private record MapperTypes(TypeName domainType, TypeName externalType) {
     }
 }

@@ -5,6 +5,7 @@ platform: "COMPUTE"
 input:
   subscription:
     publication: "tpfgo.consumer.order-approved.v1"
+    mapper: "org.pipelineframework.tpfgo.restaurant.acceptance.restaurant_accept_order.service.OrderApprovedMapper"
 steps:
   - name: "Restaurant Accept Order"
     service: "org.pipelineframework.tpfgo.restaurant.acceptance.restaurant_accept_order.service.ProcessRestaurantAcceptOrderService"

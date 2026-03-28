@@ -5,6 +5,7 @@ platform: "COMPUTE"
 input:
   subscription:
     publication: "tpfgo.restaurant.order-accepted.v1"
+    mapper: "org.pipelineframework.tpfgo.kitchen.preparation.kitchen_expand_tasks.service.OrderAcceptedByRestaurantMapper"
 steps:
   - name: "Kitchen Expand Tasks"
     service: "org.pipelineframework.tpfgo.kitchen.preparation.kitchen_expand_tasks.service.ProcessKitchenExpandTasksService"

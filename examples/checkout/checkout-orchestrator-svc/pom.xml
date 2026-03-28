@@ -39,6 +39,11 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-rest</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -83,6 +88,7 @@
                         <configuration>
                             <compilerArgs>
                                 <arg>${pipeline.generatedSourcesArg}</arg>
+                                <arg>${pipeline.moduleArg}</arg>
                                 <arg>-Apipeline.config=${project.basedir}/pipeline.yaml</arg>
                                 <arg>${protobuf.descriptor.fileArg}</arg>
                             </compilerArgs>

@@ -240,10 +240,10 @@ public interface PipelineStepConfig {
      */
     interface HealthConfig {
         /**
-                 * Whether startup dependency health checks are enabled.
-                 *
-                 * @return `true` if startup dependency health checks are enabled, `false` otherwise
-                 */
+         * Enables or disables startup dependency health checks.
+         *
+         * @return true if startup dependency health checks are enabled
+         */
         @WithDefault("true")
         Boolean enabled();
 

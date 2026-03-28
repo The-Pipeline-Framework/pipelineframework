@@ -66,19 +66,6 @@ final class CheckpointBoundaryValidator {
         }
     }
 
-    /**
-     * Validates the subscription mapper declared in the pipeline template, ensuring it exists,
-     * implements org.pipelineframework.mapper.Mapper, and declares the expected generic arguments
-     * consistent with the pipeline's first step input type.
-     *
-     * @param templateConfig the pipeline template configuration to validate; may be null
-     * @param processingEnv the annotation-processing environment used to resolve types; may be null
-     * @throws IllegalStateException if the declared mapper class cannot be resolved, the mapper
-     *         interface cannot be resolved or is not a declared type, the mapper does not implement
-     *         `org.pipelineframework.mapper.Mapper`, the mapper's `Mapper` declaration does not have
-     *         exactly two type arguments, or the mapper's first type argument does not match the
-     *         pipeline's first step input type when that input type is specified
-     */
     private void validateSubscriptionMapper(PipelineTemplateConfig templateConfig, ProcessingEnvironment processingEnv) {
         if (templateConfig.input() == null || templateConfig.input().subscription() == null) {
             return;
@@ -133,13 +120,6 @@ final class CheckpointBoundaryValidator {
         }
     }
 
-    /**
-     * Determines whether two type names refer to the same type, allowing a match when their simple (unqualified) names are equal.
-     *
-     * @param expectedTypeName the expected fully-qualified or simple type name
-     * @param actualTypeName the actual fully-qualified or simple type name to compare
-     * @return `true` if the names are identical or their simple (unqualified) names are equal, `false` otherwise
-     */
     private boolean typeMatches(String expectedTypeName, String actualTypeName) {
         if (expectedTypeName.equals(actualTypeName)) {
             return true;
@@ -147,12 +127,6 @@ final class CheckpointBoundaryValidator {
         return simpleTypeName(expectedTypeName).equals(simpleTypeName(actualTypeName));
     }
 
-    /**
-     * Extracts the simple (unqualified) type name from a fully qualified type name.
-     *
-     * @param typeName the potentially qualified type name (may be null or blank)
-     * @return the substring after the last '.' character, or an empty string if {@code typeName} is null or blank
-     */
     private String simpleTypeName(String typeName) {
         if (typeName == null || typeName.isBlank()) {
             return "";
@@ -161,18 +135,6 @@ final class CheckpointBoundaryValidator {
         return lastDot >= 0 ? typeName.substring(lastDot + 1) : typeName;
     }
 
-    /**
-     * Load the pipeline orchestrator mode from an application.properties file when present.
-     *
-     * Attempts to read "pipeline.orchestrator.mode" from:
-     * 1) <moduleDir>/src/main/resources/application.properties when moduleDir is non-null and the file exists;
-     * 2) the annotation-processor source path via processingEnv if the file was not found in moduleDir.
-     *
-     * @param moduleDir the project module directory to check for application.properties; may be null
-     * @param processingEnv the annotation processing environment used to load application.properties from the SOURCE_PATH; may be null
-     * @return the value of the "pipeline.orchestrator.mode" property, or null if the property or file is not found
-     * @throws IllegalStateException if application.properties exists under moduleDir but cannot be read due to an I/O error
-     */
     private String loadOrchestratorMode(Path moduleDir, ProcessingEnvironment processingEnv) {
         Properties properties = new Properties();
         if (moduleDir != null) {

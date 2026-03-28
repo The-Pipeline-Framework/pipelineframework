@@ -13,26 +13,11 @@ tmp_file="${target_dir}/pipeline-runtime-source-files.txt"
 mkdir -p "$target_dir"
 trap 'rm -f "$tmp_file"' EXIT
 
-exclude_patterns="${PIPELINE_RUNTIME_EXCLUDE_PATTERNS:-*/orchestrator/*}"
-IFS=':' read -r -a exclude_pattern_array <<< "$exclude_patterns"
-
 {
   for dir in "$@"; do
     if [ -d "$dir" ]; then
       while IFS= read -r -d '' file; do
         rel_path="${file#"${dir}/"}"
-        skip=false
-        # shellcheck disable=SC2053
-        # Note: $pattern is intentionally unquoted to allow glob expansion (e.g., */orchestrator/*)
-        for pattern in "${exclude_pattern_array[@]}"; do
-          if [[ -n "$pattern" && "$rel_path" == $pattern ]]; then
-            skip=true
-            break
-          fi
-        done
-        if [ "$skip" = true ]; then
-          continue
-        fi
         printf '%s\n' "$rel_path"
       done < <(find "$dir" -type f -name '*.java' -print0)
     fi
