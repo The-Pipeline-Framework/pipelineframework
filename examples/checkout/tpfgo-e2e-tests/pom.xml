@@ -26,11 +26,6 @@
         </dependency>
         <dependency>
             <groupId>org.pipelineframework.tpfgo</groupId>
-            <artifactId>pipeline-runtime-svc</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.pipelineframework.tpfgo</groupId>
             <artifactId>checkout-orchestrator-svc</artifactId>
             <version>${project.version}</version>
         </dependency>

@@ -5,7 +5,6 @@ platform: "COMPUTE"
 input:
   subscription:
     publication: "tpfgo.kitchen.order-ready.v1"
-    mapper: "org.pipelineframework.tpfgo.dispatch.dispatch_assign_courier.service.OrderReadyForDispatchMapper"
 steps:
   - name: "Dispatch Assign Courier"
     service: "org.pipelineframework.tpfgo.dispatch.dispatch_assign_courier.service.ProcessDispatchAssignCourierService"

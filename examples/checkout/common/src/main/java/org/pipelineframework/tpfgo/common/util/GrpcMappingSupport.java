@@ -17,8 +17,7 @@ public final class GrpcMappingSupport {
         try {
             return UUID.fromString(value);
         } catch (IllegalArgumentException e) {
-            String displayValue = value.length() > 100 ? value.substring(0, 100) + "..." : value;
-            throw new IllegalArgumentException("Invalid UUID for " + fieldName + ": " + displayValue, e);
+            throw new IllegalArgumentException("Invalid UUID for " + fieldName + ": " + value, e);
         }
     }
 

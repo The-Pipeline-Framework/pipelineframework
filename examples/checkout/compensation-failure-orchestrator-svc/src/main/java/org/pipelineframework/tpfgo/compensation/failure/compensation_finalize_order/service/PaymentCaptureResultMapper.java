@@ -20,8 +20,8 @@ public class PaymentCaptureResultMapper
             GrpcMappingSupport.decimal(external.getAmount(), "amount"),
             external.getCurrency(),
             external.getStatus(),
-            org.pipelineframework.tpfgo.common.domain.CommonDomainValidation.blankToNull(external.getFailureCode()),
-            org.pipelineframework.tpfgo.common.domain.CommonDomainValidation.blankToNull(external.getFailureReason()));
+            external.getFailureCode(),
+            external.getFailureReason());
     }
 
     @Override

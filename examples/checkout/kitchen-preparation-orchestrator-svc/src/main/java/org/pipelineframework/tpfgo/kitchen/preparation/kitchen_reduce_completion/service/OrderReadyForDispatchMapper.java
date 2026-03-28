@@ -1,7 +1,5 @@
 package org.pipelineframework.tpfgo.kitchen.preparation.kitchen_reduce_completion.service;
 
-import java.util.Objects;
-
 import jakarta.enterprise.context.ApplicationScoped;
 
 import org.pipelineframework.mapper.Mapper;
@@ -15,7 +13,6 @@ public class OrderReadyForDispatchMapper
 
     @Override
     public OrderReadyForDispatch fromExternal(KitchenReduceCompletionSvc.OrderReadyForDispatch external) {
-        Objects.requireNonNull(external, "external order ready DTO must not be null");
         return new OrderReadyForDispatch(
             GrpcMappingSupport.uuid(external.getOrderId(), "orderId"),
             GrpcMappingSupport.uuid(external.getCustomerId(), "customerId"),

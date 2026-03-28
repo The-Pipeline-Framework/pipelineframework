@@ -5,7 +5,6 @@ platform: "COMPUTE"
 input:
   subscription:
     publication: "tpfgo.delivery.order-delivered.v1"
-    mapper: "org.pipelineframework.tpfgo.payment.capture.payment_capture_order.service.OrderDeliveredMapper"
 steps:
   - name: "Payment Capture Order"
     service: "org.pipelineframework.tpfgo.payment.capture.payment_capture_order.service.ProcessPaymentCaptureOrderService"

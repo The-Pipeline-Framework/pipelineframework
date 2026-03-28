@@ -20,9 +20,9 @@ public record OrderApproved(
         Objects.requireNonNull(requestId, "requestId must not be null");
         Objects.requireNonNull(customerId, "customerId must not be null");
         Objects.requireNonNull(restaurantId, "restaurantId must not be null");
-        totalAmount = CommonDomainValidation.requireNonNegative(totalAmount, "totalAmount");
-        currency = CommonDomainValidation.requireCurrencyCode(currency, "currency");
+        Objects.requireNonNull(totalAmount, "totalAmount must not be null");
+        Objects.requireNonNull(currency, "currency must not be null");
         Objects.requireNonNull(approvedAt, "approvedAt must not be null");
-        riskBand = CommonDomainValidation.requireNonBlank(riskBand, "riskBand");
+        Objects.requireNonNull(riskBand, "riskBand must not be null");
     }
 }

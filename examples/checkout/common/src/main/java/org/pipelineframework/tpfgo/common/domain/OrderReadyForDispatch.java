@@ -19,10 +19,10 @@ public record OrderReadyForDispatch(
         Objects.requireNonNull(orderId, "orderId must not be null");
         Objects.requireNonNull(customerId, "customerId must not be null");
         Objects.requireNonNull(restaurantId, "restaurantId must not be null");
-        totalAmount = CommonDomainValidation.requireNonNegative(totalAmount, "totalAmount");
-        currency = CommonDomainValidation.requireCurrencyCode(currency, "currency");
+        Objects.requireNonNull(totalAmount, "totalAmount must not be null");
+        Objects.requireNonNull(currency, "currency must not be null");
         Objects.requireNonNull(readyAt, "readyAt must not be null");
         Objects.requireNonNull(kitchenTicketId, "kitchenTicketId must not be null");
-        lineageDigest = CommonDomainValidation.requireNonBlank(lineageDigest, "lineageDigest");
+        Objects.requireNonNull(lineageDigest, "lineageDigest must not be null");
     }
 }

@@ -5,7 +5,6 @@ platform: "COMPUTE"
 input:
   subscription:
     publication: "tpfgo.checkout.order-pending.v1"
-    mapper: "org.pipelineframework.tpfgo.consumer.validation.consumer_validate_order.service.OrderPendingMapper"
 steps:
   - name: "Consumer Validate Order"
     service: "org.pipelineframework.tpfgo.consumer.validation.consumer_validate_order.service.ProcessConsumerValidateOrderService"

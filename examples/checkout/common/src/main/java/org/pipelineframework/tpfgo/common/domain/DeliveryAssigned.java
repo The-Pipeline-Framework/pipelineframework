@@ -22,13 +22,13 @@ public record DeliveryAssigned(
         Objects.requireNonNull(orderId, "orderId must not be null");
         Objects.requireNonNull(customerId, "customerId must not be null");
         Objects.requireNonNull(restaurantId, "restaurantId must not be null");
-        totalAmount = CommonDomainValidation.requireNonNegative(totalAmount, "totalAmount");
-        currency = CommonDomainValidation.requireCurrencyCode(currency, "currency");
+        Objects.requireNonNull(totalAmount, "totalAmount must not be null");
+        Objects.requireNonNull(currency, "currency must not be null");
         Objects.requireNonNull(kitchenTicketId, "kitchenTicketId must not be null");
         Objects.requireNonNull(dispatchId, "dispatchId must not be null");
         Objects.requireNonNull(courierId, "courierId must not be null");
-        etaMinutes = CommonDomainValidation.requireNonNegative(etaMinutes, "etaMinutes");
+        Objects.requireNonNull(etaMinutes, "etaMinutes must not be null");
         Objects.requireNonNull(assignedAt, "assignedAt must not be null");
-        lineageDigest = CommonDomainValidation.requireNonBlank(lineageDigest, "lineageDigest");
+        Objects.requireNonNull(lineageDigest, "lineageDigest must not be null");
     }
 }

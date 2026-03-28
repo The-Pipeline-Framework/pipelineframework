@@ -25,8 +25,8 @@ public record OrderDelivered(
         Objects.requireNonNull(restaurantId, "restaurantId must not be null");
         Objects.requireNonNull(kitchenTicketId, "kitchenTicketId must not be null");
         Objects.requireNonNull(deliveredAt, "deliveredAt must not be null");
-        amount = CommonDomainValidation.requireNonNegative(amount, "amount");
-        currency = CommonDomainValidation.requireCurrencyCode(currency, "currency");
-        lineageDigest = CommonDomainValidation.requireNonBlank(lineageDigest, "lineageDigest");
+        Objects.requireNonNull(amount, "amount must not be null");
+        Objects.requireNonNull(currency, "currency must not be null");
+        Objects.requireNonNull(lineageDigest, "lineageDigest must not be null");
     }
 }

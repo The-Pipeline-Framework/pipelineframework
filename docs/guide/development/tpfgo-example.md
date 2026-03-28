@@ -20,7 +20,6 @@ flowchart LR
 This example proves:
 
 - compile-time declaration of pipeline boundaries
-- grouped `pipeline-runtime` execution for regular steps
 - runtime-configured gRPC handoff bindings
 - downstream async admission through framework-owned checkpoint endpoints
 - explicit checkpoint-boundary idempotency
@@ -64,16 +63,14 @@ The same compiled pipeline can be deployed with different target bindings in dif
 
 ```mermaid
 flowchart LR
-    A["Orchestrator"] --> B["Grouped pipeline-runtime-svc"]
-    A --> C["Final checkpoint publication"]
-    C --> D["Runtime handoff binding"]
-    D --> E["Framework checkpoint admission endpoint"]
-    E --> F["Downstream QUEUE_ASYNC orchestrator"]
+    A["Upstream orchestrator"] --> B["Final checkpoint publication"]
+    B --> C["Runtime handoff binding"]
+    C --> D["Framework checkpoint admission endpoint"]
+    D --> E["Downstream QUEUE_ASYNC orchestrator"]
 ```
 
 Ownership is explicit:
 
-- orchestrators call regular steps through the shared `pipeline-runtime-svc`
 - upstream pipeline owns work until publication is dispatched
 - downstream pipeline owns retry/DLQ semantics after downstream admission
 - checkpoint publication backlog is not the same thing as downstream execution backlog
@@ -81,7 +78,6 @@ Ownership is explicit:
 ## Requirements and limits
 
 - Use `COMPUTE` plus `QUEUE_ASYNC` for the reliable cross-pipeline path.
-- The default TPFGo build uses `layout: pipeline-runtime` with one grouped step runtime and eight orchestrators.
 - The canonical TPFGo lane uses gRPC handoff bindings.
 - `FUNCTION` does not support checkpoint publication or subscription.
 - The example intentionally avoids broker-native handoff targets; HTTP parity can be added later without changing the pipeline YAML.

@@ -2,7 +2,6 @@ package org.pipelineframework.tpfgo.delivery.execution.delivery_execute_order.se
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.Objects;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -28,7 +27,7 @@ public class ProcessDeliveryExecuteOrderService implements ReactiveService<Deliv
 
     @Inject
     public ProcessDeliveryExecuteOrderService(Clock clock) {
-        this.clock = Objects.requireNonNull(clock, "clock must not be null");
+        this.clock = clock;
     }
 
     @Override
