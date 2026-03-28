@@ -20,4 +20,17 @@ public interface CheckpointPublicationDescriptor {
      * @return ordered field names
      */
     List<String> idempotencyKeyFields();
+
+    /**
+     * Normalize the final pipeline result into the stable checkpoint contract payload.
+     *
+     * <p>This allows runtimes such as {@code pipeline-runtime} to publish the declared pipeline-domain output even
+     * when the in-process execution result is still a transport-specific DTO.
+     *
+     * @param resultPayload raw execution result payload
+     * @return normalized checkpoint payload
+     */
+    default Object normalizePayload(Object resultPayload) {
+        return resultPayload;
+    }
 }

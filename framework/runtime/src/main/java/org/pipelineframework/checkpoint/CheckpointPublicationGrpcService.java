@@ -35,6 +35,11 @@ public class CheckpointPublicationGrpcService
     @Override
     public Uni<CheckpointPublishAcceptedResponse> publish(CheckpointPublishRequest request) {
         long startTime = System.nanoTime();
+        LOG.infof("Checkpoint gRPC publish received publication=%s tenant=%s idempotencyKey=%s payloadBytes=%d",
+            request.getPublication(),
+            request.getTenantId(),
+            request.getIdempotencyKey(),
+            request.getPayloadJson().size());
         CheckpointPublicationRequest decoded;
         try {
             decoded = CheckpointPublicationProtoSupport.fromProtoRequest(request);
@@ -47,8 +52,13 @@ public class CheckpointPublicationGrpcService
         return Uni.createFrom().deferred(
                 () -> admissionService.admit(decoded, request.getTenantId(), request.getIdempotencyKey()))
             .onItem().transform(CheckpointPublicationProtoSupport::toProtoResponse)
-            .onItem().invoke(response ->
-                RpcMetrics.recordGrpcServer(SERVICE, METHOD, Status.OK, System.nanoTime() - startTime))
+            .onItem().invoke(response -> {
+                LOG.infof("Checkpoint gRPC publish accepted publication=%s executionId=%s duplicate=%s",
+                    request.getPublication(),
+                    response.getExecutionId(),
+                    response.getDuplicate());
+                RpcMetrics.recordGrpcServer(SERVICE, METHOD, Status.OK, System.nanoTime() - startTime);
+            })
             .onFailure().transform(this::mapFailure)
             .onFailure().invoke(failure ->
                 RpcMetrics.recordGrpcServer(SERVICE, METHOD, Status.fromThrowable(failure),

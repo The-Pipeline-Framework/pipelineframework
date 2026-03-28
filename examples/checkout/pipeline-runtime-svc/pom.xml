@@ -1,0 +1,397 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.pipelineframework.tpfgo</groupId>
+        <artifactId>tpfgo-example</artifactId>
+        <version>26.2.5-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>pipeline-runtime-svc</artifactId>
+    <name>TPFGo Pipeline Runtime</name>
+
+    <properties>
+        <pipeline.generatedSourcesArg>-Apipeline.generatedSourcesDir=${project.build.directory}/generated-sources/pipeline</pipeline.generatedSourcesArg>
+        <protobuf.descriptor.fileArg>-Aprotobuf.descriptor.file=${project.build.directory}/generated-sources/grpc/descriptor_set.dsc</protobuf.descriptor.fileArg>
+        <generated.proto.dir>${project.build.directory}/generated-sources/proto</generated.proto.dir>
+        <pipeline.runtime.source.root>${project.basedir}/..</pipeline.runtime.source.root>
+        <pipeline.runtime.source.dir.checkout>${pipeline.runtime.source.root}/checkout-orchestrator-svc/src/main/java</pipeline.runtime.source.dir.checkout>
+        <pipeline.runtime.source.dir.consumer>${pipeline.runtime.source.root}/consumer-validation-orchestrator-svc/src/main/java</pipeline.runtime.source.dir.consumer>
+        <pipeline.runtime.source.dir.restaurant>${pipeline.runtime.source.root}/restaurant-acceptance-orchestrator-svc/src/main/java</pipeline.runtime.source.dir.restaurant>
+        <pipeline.runtime.source.dir.kitchen>${pipeline.runtime.source.root}/kitchen-preparation-orchestrator-svc/src/main/java</pipeline.runtime.source.dir.kitchen>
+        <pipeline.runtime.source.dir.dispatch>${pipeline.runtime.source.root}/dispatch-orchestrator-svc/src/main/java</pipeline.runtime.source.dir.dispatch>
+        <pipeline.runtime.source.dir.delivery>${pipeline.runtime.source.root}/delivery-execution-orchestrator-svc/src/main/java</pipeline.runtime.source.dir.delivery>
+        <pipeline.runtime.source.dir.payment>${pipeline.runtime.source.root}/payment-capture-orchestrator-svc/src/main/java</pipeline.runtime.source.dir.payment>
+        <pipeline.runtime.source.dir.compensation>${pipeline.runtime.source.root}/compensation-failure-orchestrator-svc/src/main/java</pipeline.runtime.source.dir.compensation>
+        <pipeline.runtime.pipeline.checkout>${project.basedir}/../checkout-orchestrator-svc/pipeline.yaml</pipeline.runtime.pipeline.checkout>
+        <pipeline.runtime.pipeline.consumer>${project.basedir}/../consumer-validation-orchestrator-svc/pipeline.yaml</pipeline.runtime.pipeline.consumer>
+        <pipeline.runtime.pipeline.restaurant>${project.basedir}/../restaurant-acceptance-orchestrator-svc/pipeline.yaml</pipeline.runtime.pipeline.restaurant>
+        <pipeline.runtime.pipeline.kitchen>${project.basedir}/../kitchen-preparation-orchestrator-svc/pipeline.yaml</pipeline.runtime.pipeline.kitchen>
+        <pipeline.runtime.pipeline.dispatch>${project.basedir}/../dispatch-orchestrator-svc/pipeline.yaml</pipeline.runtime.pipeline.dispatch>
+        <pipeline.runtime.pipeline.delivery>${project.basedir}/../delivery-execution-orchestrator-svc/pipeline.yaml</pipeline.runtime.pipeline.delivery>
+        <pipeline.runtime.pipeline.payment>${project.basedir}/../payment-capture-orchestrator-svc/pipeline.yaml</pipeline.runtime.pipeline.payment>
+        <pipeline.runtime.pipeline.compensation>${project.basedir}/../compensation-failure-orchestrator-svc/pipeline.yaml</pipeline.runtime.pipeline.compensation>
+        <pipeline.runtime.duplicate.check.script>${pipeline.runtime.source.root}/build-tools/check-duplicate-sources.sh</pipeline.runtime.duplicate.check.script>
+        <pipeline.runtime.source.exclude.orchestrator>**/orchestrator/**/*.java</pipeline.runtime.source.exclude.orchestrator>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.pipelineframework.tpfgo</groupId>
+            <artifactId>common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>pipelineframework</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-grpc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-health</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <excludes>
+                        <exclude>com/google/protobuf/**/*.java</exclude>
+                    </excludes>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>1.18.36</version>
+                        </path>
+                        <path>
+                            <groupId>org.mapstruct</groupId>
+                            <artifactId>mapstruct-processor</artifactId>
+                            <version>1.5.5.Final</version>
+                        </path>
+                        <path>
+                            <groupId>io.quarkus</groupId>
+                            <artifactId>quarkus-extension-processor</artifactId>
+                            <version>${quarkus.platform.version}</version>
+                        </path>
+                        <path>
+                            <groupId>org.pipelineframework</groupId>
+                            <artifactId>pipelineframework-deployment</artifactId>
+                            <version>${project.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>default-compile</id>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                        <configuration>
+                            <compilerArgs>
+                                <arg>${pipeline.generatedSourcesArg}</arg>
+                                <arg>${pipeline.moduleArg}</arg>
+                                <arg>${protobuf.descriptor.fileArg}</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>compile-pipeline-server-generated</id>
+                        <phase>process-classes</phase>
+                        <goals>
+                            <goal>compile</goal>
+                        </goals>
+                        <configuration>
+                            <proc>none</proc>
+                            <generatedSourcesDirectory>${project.build.directory}/generated-sources/role-compile/pipeline-server</generatedSourcesDirectory>
+                            <compileSourceRoots>
+                                <compileSourceRoot>${project.build.directory}/generated-sources/pipeline/pipeline-server</compileSourceRoot>
+                            </compileSourceRoots>
+                            <outputDirectory>${project.build.outputDirectory}</outputDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.6.1</version>
+                <executions>
+                    <execution>
+                        <id>unpack-google-proto</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>unpack</goal>
+                        </goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>com.google.protobuf</groupId>
+                                    <artifactId>protobuf-java</artifactId>
+                                    <version>${protobuf.version}</version>
+                                    <includes>google/protobuf/empty.proto</includes>
+                                    <outputDirectory>${generated.proto.dir}</outputDirectory>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>generate-checkout-proto</id>
+                        <phase>generate-sources</phase>
+                        <goals><goal>java</goal></goals>
+                        <configuration>
+                            <mainClass>org.pipelineframework.proto.PipelineProtoGenerator</mainClass>
+                            <arguments>
+                                <argument>--module-dir=${project.basedir}</argument>
+                                <argument>--config=${pipeline.runtime.pipeline.checkout}</argument>
+                                <argument>--output-dir=${generated.proto.dir}</argument>
+                            </arguments>
+                            <addOutputToClasspath>true</addOutputToClasspath>
+                            <classpathScope>compile</classpathScope>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>generate-consumer-proto</id>
+                        <phase>generate-sources</phase>
+                        <goals><goal>java</goal></goals>
+                        <configuration>
+                            <mainClass>org.pipelineframework.proto.PipelineProtoGenerator</mainClass>
+                            <arguments>
+                                <argument>--module-dir=${project.basedir}</argument>
+                                <argument>--config=${pipeline.runtime.pipeline.consumer}</argument>
+                                <argument>--output-dir=${generated.proto.dir}</argument>
+                            </arguments>
+                            <addOutputToClasspath>true</addOutputToClasspath>
+                            <classpathScope>compile</classpathScope>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>generate-restaurant-proto</id>
+                        <phase>generate-sources</phase>
+                        <goals><goal>java</goal></goals>
+                        <configuration>
+                            <mainClass>org.pipelineframework.proto.PipelineProtoGenerator</mainClass>
+                            <arguments>
+                                <argument>--module-dir=${project.basedir}</argument>
+                                <argument>--config=${pipeline.runtime.pipeline.restaurant}</argument>
+                                <argument>--output-dir=${generated.proto.dir}</argument>
+                            </arguments>
+                            <addOutputToClasspath>true</addOutputToClasspath>
+                            <classpathScope>compile</classpathScope>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>generate-kitchen-proto</id>
+                        <phase>generate-sources</phase>
+                        <goals><goal>java</goal></goals>
+                        <configuration>
+                            <mainClass>org.pipelineframework.proto.PipelineProtoGenerator</mainClass>
+                            <arguments>
+                                <argument>--module-dir=${project.basedir}</argument>
+                                <argument>--config=${pipeline.runtime.pipeline.kitchen}</argument>
+                                <argument>--output-dir=${generated.proto.dir}</argument>
+                            </arguments>
+                            <addOutputToClasspath>true</addOutputToClasspath>
+                            <classpathScope>compile</classpathScope>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>generate-dispatch-proto</id>
+                        <phase>generate-sources</phase>
+                        <goals><goal>java</goal></goals>
+                        <configuration>
+                            <mainClass>org.pipelineframework.proto.PipelineProtoGenerator</mainClass>
+                            <arguments>
+                                <argument>--module-dir=${project.basedir}</argument>
+                                <argument>--config=${pipeline.runtime.pipeline.dispatch}</argument>
+                                <argument>--output-dir=${generated.proto.dir}</argument>
+                            </arguments>
+                            <addOutputToClasspath>true</addOutputToClasspath>
+                            <classpathScope>compile</classpathScope>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>generate-delivery-proto</id>
+                        <phase>generate-sources</phase>
+                        <goals><goal>java</goal></goals>
+                        <configuration>
+                            <mainClass>org.pipelineframework.proto.PipelineProtoGenerator</mainClass>
+                            <arguments>
+                                <argument>--module-dir=${project.basedir}</argument>
+                                <argument>--config=${pipeline.runtime.pipeline.delivery}</argument>
+                                <argument>--output-dir=${generated.proto.dir}</argument>
+                            </arguments>
+                            <addOutputToClasspath>true</addOutputToClasspath>
+                            <classpathScope>compile</classpathScope>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>generate-payment-proto</id>
+                        <phase>generate-sources</phase>
+                        <goals><goal>java</goal></goals>
+                        <configuration>
+                            <mainClass>org.pipelineframework.proto.PipelineProtoGenerator</mainClass>
+                            <arguments>
+                                <argument>--module-dir=${project.basedir}</argument>
+                                <argument>--config=${pipeline.runtime.pipeline.payment}</argument>
+                                <argument>--output-dir=${generated.proto.dir}</argument>
+                            </arguments>
+                            <addOutputToClasspath>true</addOutputToClasspath>
+                            <classpathScope>compile</classpathScope>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>generate-compensation-proto</id>
+                        <phase>generate-sources</phase>
+                        <goals><goal>java</goal></goals>
+                        <configuration>
+                            <mainClass>org.pipelineframework.proto.PipelineProtoGenerator</mainClass>
+                            <arguments>
+                                <argument>--module-dir=${project.basedir}</argument>
+                                <argument>--config=${pipeline.runtime.pipeline.compensation}</argument>
+                                <argument>--output-dir=${generated.proto.dir}</argument>
+                            </arguments>
+                            <addOutputToClasspath>true</addOutputToClasspath>
+                            <classpathScope>compile</classpathScope>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>io.quarkus</groupId>
+                <artifactId>quarkus-maven-plugin</artifactId>
+                <configuration>
+                    <properties>
+                        <quarkus.grpc.codegen.proto-directory>${generated.proto.dir}</quarkus.grpc.codegen.proto-directory>
+                        <quarkus.generate-code.grpc.descriptor-set.generate>true</quarkus.generate-code.grpc.descriptor-set.generate>
+                    </properties>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.2.0</version>
+                <executions>
+                    <execution>
+                        <id>collect-pipeline-runtime-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <delete dir="${project.build.directory}/pipeline-runtime-sources"/>
+                                <mkdir dir="${project.build.directory}/pipeline-runtime-sources"/>
+                                <condition property="is.windows">
+                                    <os family="windows"/>
+                                </condition>
+                                <fail if="is.windows">
+                                    pipeline-runtime-svc source aggregation runs a Unix shell script (`check-duplicate-sources.sh`). Run this module on Unix-like environments (Linux/macOS/WSL).
+                                </fail>
+                                <exec executable="bash" failonerror="true">
+                                    <arg value="${pipeline.runtime.duplicate.check.script}"/>
+                                    <arg value="${project.build.directory}/pipeline-runtime-sources"/>
+                                    <arg value="${pipeline.runtime.source.dir.checkout}"/>
+                                    <arg value="${pipeline.runtime.source.dir.consumer}"/>
+                                    <arg value="${pipeline.runtime.source.dir.restaurant}"/>
+                                    <arg value="${pipeline.runtime.source.dir.kitchen}"/>
+                                    <arg value="${pipeline.runtime.source.dir.dispatch}"/>
+                                    <arg value="${pipeline.runtime.source.dir.delivery}"/>
+                                    <arg value="${pipeline.runtime.source.dir.payment}"/>
+                                    <arg value="${pipeline.runtime.source.dir.compensation}"/>
+                                </exec>
+                                <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                    <fileset dir="${pipeline.runtime.source.dir.checkout}">
+                                        <exclude name="${pipeline.runtime.source.exclude.orchestrator}"/>
+                                    </fileset>
+                                </copy>
+                                <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                    <fileset dir="${pipeline.runtime.source.dir.consumer}">
+                                        <exclude name="${pipeline.runtime.source.exclude.orchestrator}"/>
+                                    </fileset>
+                                </copy>
+                                <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                    <fileset dir="${pipeline.runtime.source.dir.restaurant}">
+                                        <exclude name="${pipeline.runtime.source.exclude.orchestrator}"/>
+                                    </fileset>
+                                </copy>
+                                <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                    <fileset dir="${pipeline.runtime.source.dir.kitchen}">
+                                        <exclude name="${pipeline.runtime.source.exclude.orchestrator}"/>
+                                    </fileset>
+                                </copy>
+                                <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                    <fileset dir="${pipeline.runtime.source.dir.dispatch}">
+                                        <exclude name="${pipeline.runtime.source.exclude.orchestrator}"/>
+                                    </fileset>
+                                </copy>
+                                <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                    <fileset dir="${pipeline.runtime.source.dir.delivery}">
+                                        <exclude name="${pipeline.runtime.source.exclude.orchestrator}"/>
+                                    </fileset>
+                                </copy>
+                                <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                    <fileset dir="${pipeline.runtime.source.dir.payment}">
+                                        <exclude name="${pipeline.runtime.source.exclude.orchestrator}"/>
+                                    </fileset>
+                                </copy>
+                                <copy todir="${project.build.directory}/pipeline-runtime-sources">
+                                    <fileset dir="${pipeline.runtime.source.dir.compensation}">
+                                        <exclude name="${pipeline.runtime.source.exclude.orchestrator}"/>
+                                    </fileset>
+                                </copy>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.6.0</version>
+                <executions>
+                    <execution>
+                        <id>add-pipeline-runtime-sources</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${project.build.directory}/pipeline-runtime-sources</source>
+                                <source>${generated.proto.dir}</source>
+                            </sources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>com.diffplug.spotless</groupId>
+                <artifactId>spotless-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

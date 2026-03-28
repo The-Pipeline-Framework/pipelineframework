@@ -28,7 +28,7 @@ class CheckoutCanonicalFlowContractTest {
         "examples/checkout/config/canonical/08-compensation-failure-pipeline.yaml";
 
     @Test
-    void canonicalFtgoChainHasStrictHandoffContracts() {
+    void canonicalTpfgoChainHasStrictHandoffContracts() {
         PipelineTemplateConfigLoader loader = new PipelineTemplateConfigLoader();
 
         List<PipelineTemplateConfig> chain = CANONICAL_CHAIN.stream()
@@ -94,9 +94,9 @@ class CheckoutCanonicalFlowContractTest {
         assertEquals(1, compensation.steps().size(), "Compensation pipeline should stay single-purpose.");
 
         PipelineTemplateStep terminal = compensation.steps().getFirst();
-        assertEquals("PaymentFailed", terminal.inputTypeName(),
+        assertEquals("PaymentCaptureResult", terminal.inputTypeName(),
             "Compensation input must remain explicit failure checkpoint type.");
-        assertEquals("FailureTerminal", terminal.outputTypeName(),
+        assertEquals("TerminalOrderState", terminal.outputTypeName(),
             "Compensation output must be stable terminal failure type.");
 
         Map<String, PipelineTemplateField> input = byFieldName(terminal.inputFields());

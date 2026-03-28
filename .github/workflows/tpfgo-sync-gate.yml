@@ -43,7 +43,7 @@ jobs:
         run: ./mvnw $MAVEN_ARGS -f framework/pom.xml verify
 
   checkout-canonical-sync:
-    name: Checkout Canonical E2E (SYNC)
+    name: Checkout TPFGo Canonical E2E
     runs-on: ubuntu-latest
 
     steps:
@@ -63,15 +63,17 @@ jobs:
       - name: Build framework and foundational plugins
         run: ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
 
-      - name: Run canonical checkout SYNC tests
+      - name: Run canonical TPFGo checkpoint-flow tests
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" -f examples/checkout/pom.xml \
-            -pl common,create-order-orchestrator-svc,deliver-order-orchestrator-svc \
+            -pl tpfgo-e2e-tests \
             -am \
-            -Dtest=CanonicalFtgoSyncFlowTest,CreateToDeliverBridgeE2ETest,CreateToDeliverGrpcBridgeE2ETest,DeliverForwardBridgeE2ETest \
+            -Dtest=NoMatchingUnitTest \
             -Dsurefire.failIfNoSpecifiedTests=false \
-            test
+            -Dit.test=TpfgoCheckpointFlowIT \
+            -Dfailsafe.failIfNoSpecifiedTests=false \
+            verify
 
       - name: Dump reports on failure
         if: failure()

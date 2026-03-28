@@ -74,7 +74,7 @@ jobs:
           if-no-files-found: error
 
   checkout-canonical-queue-async-ha:
-    name: Checkout Canonical E2E (QUEUE_ASYNC Durable HA)
+    name: Checkout TPFGo Checkpoint Flow
     needs: build-framework
     uses: ./.github/workflows/e2e-checkout-ftgo-queue-async-ha.yml
     with:
