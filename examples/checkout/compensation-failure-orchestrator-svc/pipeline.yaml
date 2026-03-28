@@ -5,6 +5,7 @@ platform: "COMPUTE"
 input:
   subscription:
     publication: "tpfgo.payment.capture-result.v1"
+    mapper: "org.pipelineframework.tpfgo.compensation.failure.compensation_finalize_order.service.PaymentCaptureResultMapper"
 steps:
   - name: "Compensation Finalize Order"
     service: "org.pipelineframework.tpfgo.compensation.failure.compensation_finalize_order.service.ProcessCompensationFinalizeOrderService"

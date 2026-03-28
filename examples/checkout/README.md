@@ -24,6 +24,7 @@ Concrete handoff targets are supplied at runtime through `pipeline.handoff.bindi
 ## Modules
 
 - `common`: shared TPFGo domain records and runtime helpers
+- `pipeline-runtime-svc`: grouped runtime for all regular step execution
 - `checkout-orchestrator-svc`
 - `consumer-validation-orchestrator-svc`
 - `restaurant-acceptance-orchestrator-svc`
@@ -51,9 +52,11 @@ Each file is kept in sync with the runnable module `pipeline.yaml`.
 
 ## Runtime model
 
+- default topology is `pipeline-runtime`
+- internal `process-*` step calls collapse onto `pipeline-runtime-svc`
 - all pipelines use `platform: COMPUTE`
 - all pipelines use `pipeline.orchestrator.mode=QUEUE_ASYNC`
-- checkpoint handoff is externalized through gRPC runtime bindings
+- checkpoint handoff stays externalized through orchestrator-to-orchestrator gRPC runtime bindings
 - downstream retry and DLQ ownership begins only after downstream admission
 - idempotency is explicit on each publication boundary
 

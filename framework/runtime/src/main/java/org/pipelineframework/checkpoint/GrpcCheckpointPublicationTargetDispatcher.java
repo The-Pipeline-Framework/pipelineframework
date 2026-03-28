@@ -8,6 +8,7 @@ import java.util.concurrent.TimeUnit;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 
+import io.grpc.Context;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.quarkus.arc.Unremovable;
@@ -38,15 +39,21 @@ public class GrpcCheckpointPublicationTargetDispatcher implements CheckpointPubl
         String tenantId,
         String idempotencyKey
     ) {
+        org.pipelineframework.checkpoint.grpc.CheckpointPublishRequest protoRequest;
         try {
-            return GrpcClientTracing.traceUnary(
-                CheckpointPublicationGrpcService.SERVICE,
-                CheckpointPublicationGrpcService.METHOD,
-                stubFor(target).publish(CheckpointPublicationProtoSupport.toProtoRequest(request, tenantId, idempotencyKey)))
-                .replaceWithVoid();
+            protoRequest = CheckpointPublicationProtoSupport.toProtoRequest(request, tenantId, idempotencyKey);
         } catch (IOException e) {
             return Uni.createFrom().failure(e);
         }
+        return Uni.createFrom().emitter(emitter ->
+            Context.ROOT.run(() ->
+                GrpcClientTracing.traceUnary(
+                    CheckpointPublicationGrpcService.SERVICE,
+                    CheckpointPublicationGrpcService.METHOD,
+                    stubFor(target).publish(protoRequest))
+                    .subscribe().with(
+                        response -> emitter.complete(null),
+                        emitter::fail)));
     }
 
     @PreDestroy

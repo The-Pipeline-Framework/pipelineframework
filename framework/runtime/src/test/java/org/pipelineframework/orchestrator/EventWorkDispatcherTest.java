@@ -6,12 +6,14 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import jakarta.enterprise.event.Event;
+import jakarta.enterprise.event.NotificationOptions;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class EventWorkDispatcherTest {
@@ -25,7 +27,7 @@ class EventWorkDispatcherTest {
         dispatcher = new EventWorkDispatcher();
         mockEvent = mock(Event.class);
         dispatcher.setExecutionWorkEvent(mockEvent);
-        when(mockEvent.fireAsync(any())).thenReturn(CompletableFuture.completedFuture(null));
+        when(mockEvent.fireAsync(any(), any(NotificationOptions.class))).thenReturn(CompletableFuture.completedFuture(null));
     }
 
     @Test
@@ -44,13 +46,13 @@ class EventWorkDispatcherTest {
 
         dispatcher.enqueueNow(item).await().indefinitely();
 
-        verify(mockEvent).fireAsync(item);
+        verify(mockEvent).fireAsync(eq(item), any(NotificationOptions.class));
     }
 
     @Test
     void enqueueDelayedSchedulesEvent() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(1);
-        when(mockEvent.fireAsync(any())).thenAnswer(invocation -> {
+        when(mockEvent.fireAsync(any(), any(NotificationOptions.class))).thenAnswer(invocation -> {
             latch.countDown();
             return CompletableFuture.completedFuture(null);
         });
@@ -61,7 +63,7 @@ class EventWorkDispatcherTest {
 
         // Wait for the delayed event to fire
         assertTrue(latch.await(1, TimeUnit.SECONDS));
-        verify(mockEvent).fireAsync(item);
+        verify(mockEvent).fireAsync(eq(item), any(NotificationOptions.class));
     }
 
     @Test
@@ -71,7 +73,7 @@ class EventWorkDispatcherTest {
         dispatcher.enqueueDelayed(item, Duration.ZERO).await().indefinitely();
 
         // Should schedule immediately
-        verify(mockEvent, timeout(1000)).fireAsync(item);
+        verify(mockEvent, timeout(1000)).fireAsync(eq(item), any(NotificationOptions.class));
     }
 
     @Test
@@ -81,13 +83,13 @@ class EventWorkDispatcherTest {
         dispatcher.enqueueDelayed(item, null).await().indefinitely();
 
         // Should treat as immediate
-        verify(mockEvent, timeout(1000)).fireAsync(item);
+        verify(mockEvent, timeout(1000)).fireAsync(eq(item), any(NotificationOptions.class));
     }
 
     @Test
     void shutdownStopsScheduler() throws InterruptedException {
         CountDownLatch scheduledLatch = new CountDownLatch(1);
-        when(mockEvent.fireAsync(any())).thenAnswer(invocation -> {
+        when(mockEvent.fireAsync(any(), any(NotificationOptions.class))).thenAnswer(invocation -> {
             scheduledLatch.countDown();
             return CompletableFuture.completedFuture(null);
         });
@@ -117,6 +119,16 @@ class EventWorkDispatcherTest {
     }
 
     @Test
+    void enqueueNowDoesNotWaitForObserverCompletion() {
+        ExecutionWorkItem item = new ExecutionWorkItem("tenant-fast", "exec-fast");
+        CompletableFuture<ExecutionWorkItem> neverCompletes = new CompletableFuture<>();
+        when(mockEvent.fireAsync(eq(item), any(NotificationOptions.class))).thenReturn(neverCompletes);
+
+        assertDoesNotThrow(() -> dispatcher.enqueueNow(item).await().atMost(java.time.Duration.ofMillis(200)));
+        verify(mockEvent).fireAsync(eq(item), any(NotificationOptions.class));
+    }
+
+    @Test
     void enqueueDelayedReturnsCompletedUni() {
         ExecutionWorkItem item = new ExecutionWorkItem("tenant6", "exec6");
 
@@ -127,11 +139,10 @@ class EventWorkDispatcherTest {
     }
 
     @Test
-    void enqueueNowPropagatesObserverFailure() {
+    void enqueueNowPropagatesDispatchFailure() {
         ExecutionWorkItem item = new ExecutionWorkItem("tenant7", "exec7");
-        CompletableFuture<ExecutionWorkItem> failed = new CompletableFuture<>();
-        failed.completeExceptionally(new IllegalStateException("observer failure"));
-        when(mockEvent.fireAsync(item)).thenReturn(failed);
+        when(mockEvent.fireAsync(eq(item), any(NotificationOptions.class)))
+            .thenThrow(new IllegalStateException("dispatch failure"));
 
         assertThrows(IllegalStateException.class, () -> dispatcher.enqueueNow(item).await().indefinitely());
     }

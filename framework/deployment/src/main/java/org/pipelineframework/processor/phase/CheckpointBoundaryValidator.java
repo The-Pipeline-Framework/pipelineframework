@@ -106,16 +106,33 @@ final class CheckpointBoundaryValidator {
             }
             if (declared.getTypeArguments().size() != 2) {
                 throw new IllegalStateException(
-                    "Subscription mapper '" + mapperClass + "' must declare exactly two type arguments for Mapper<D, PublishedCheckpoint>");
+                    "Subscription mapper '" + mapperClass + "' must declare exactly two type arguments for Mapper<PublishedCheckpoint, PipelineInput>");
             }
             String domainType = declared.getTypeArguments().getFirst().toString();
-            if (inputTypeName != null && !inputTypeName.isBlank() && !inputTypeName.equals(domainType)) {
+            if (inputTypeName != null
+                && !inputTypeName.isBlank()
+                && !typeMatches(inputTypeName, domainType)) {
                 throw new IllegalStateException(
                     "Subscription mapper '" + mapperClass + "' must declare Mapper<"
                         + inputTypeName
-                        + ", PublishedCheckpoint>");
+                        + ", PipelineInput>");
             }
         }
+    }
+
+    private boolean typeMatches(String expectedTypeName, String actualTypeName) {
+        if (expectedTypeName.equals(actualTypeName)) {
+            return true;
+        }
+        return simpleTypeName(expectedTypeName).equals(simpleTypeName(actualTypeName));
+    }
+
+    private String simpleTypeName(String typeName) {
+        if (typeName == null || typeName.isBlank()) {
+            return "";
+        }
+        int lastDot = typeName.lastIndexOf('.');
+        return lastDot >= 0 ? typeName.substring(lastDot + 1) : typeName;
     }
 
     private String loadOrchestratorMode(Path moduleDir, ProcessingEnvironment processingEnv) {

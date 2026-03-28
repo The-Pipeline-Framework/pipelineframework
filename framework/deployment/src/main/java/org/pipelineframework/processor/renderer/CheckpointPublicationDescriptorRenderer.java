@@ -7,6 +7,7 @@ import com.squareup.javapoet.CodeBlock;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
+import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import javax.lang.model.element.Modifier;
 import org.pipelineframework.config.boundary.PipelineCheckpointConfig;
@@ -16,8 +17,14 @@ import org.pipelineframework.config.boundary.PipelineCheckpointConfig;
  */
 public class CheckpointPublicationDescriptorRenderer {
 
-    public ClassName render(String basePackage, PipelineCheckpointConfig checkpoint, GenerationContext ctx) throws IOException {
+    public ClassName render(
+        String basePackage,
+        PipelineCheckpointConfig checkpoint,
+        TypeName publicationPayloadType,
+        GenerationContext ctx
+    ) throws IOException {
         ClassName descriptorType = ClassName.get("org.pipelineframework.checkpoint", "CheckpointPublicationDescriptor");
+        ClassName publicationSupportType = ClassName.get("org.pipelineframework.checkpoint", "CheckpointPublicationSupport");
         ClassName listType = ClassName.get("java.util", "List");
         ClassName generatedType = ClassName.get(basePackage + ".orchestrator.service", "PipelineCheckpointPublicationDescriptor");
 
@@ -38,16 +45,28 @@ public class CheckpointPublicationDescriptorRenderer {
             .addStatement("return $L", keyFields)
             .build();
 
-        TypeSpec descriptor = TypeSpec.classBuilder(generatedType)
+        TypeSpec.Builder descriptor = TypeSpec.classBuilder(generatedType)
             .addModifiers(Modifier.PUBLIC)
             .addSuperinterface(descriptorType)
             .addAnnotation(ClassName.get("jakarta.enterprise.context", "ApplicationScoped"))
             .addAnnotation(ClassName.get("io.quarkus.arc", "Unremovable"))
             .addMethod(publicationMethod)
-            .addMethod(keyFieldsMethod)
-            .build();
+            .addMethod(keyFieldsMethod);
 
-        JavaFile.builder(generatedType.packageName(), descriptor).build().writeTo(ctx.processingEnv().getFiler());
+        if (publicationPayloadType != null) {
+            descriptor
+                .addMethod(MethodSpec.methodBuilder("normalizePayload")
+                    .addAnnotation(Override.class)
+                    .addModifiers(Modifier.PUBLIC)
+                    .returns(TypeName.OBJECT)
+                    .addParameter(TypeName.OBJECT, "resultPayload")
+                    .addStatement("return $T.normalizePayload(resultPayload, $T.class)",
+                        publicationSupportType,
+                        publicationPayloadType)
+                    .build());
+        }
+
+        JavaFile.builder(generatedType.packageName(), descriptor.build()).build().writeTo(ctx.processingEnv().getFiler());
         return generatedType;
     }
 

@@ -8,9 +8,11 @@ import java.util.concurrent.TimeUnit;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
+import jakarta.enterprise.event.NotificationOptions;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 
 /**
  * Dispatcher that routes work through CDI async events.
@@ -43,9 +45,10 @@ public class EventWorkDispatcher implements WorkDispatcher {
 
     @Override
     public Uni<Void> enqueueNow(ExecutionWorkItem item) {
-        return Uni.createFrom()
-            .completionStage(() -> executionWorkEvent.fireAsync(item))
-            .replaceWithVoid();
+        return Uni.createFrom().item(() -> {
+            executionWorkEvent.fireAsync(item, NotificationOptions.ofExecutor(Infrastructure.getDefaultExecutor()));
+            return null;
+        }).replaceWithVoid();
     }
 
     @Override
@@ -55,13 +58,9 @@ public class EventWorkDispatcher implements WorkDispatcher {
         try {
             scheduler.schedule(() -> {
                 try {
-                    executionWorkEvent.fireAsync(item).whenComplete((ignored, failure) -> {
-                        if (failure != null) {
-                            completion.completeExceptionally(failure);
-                            return;
-                        }
-                        completion.complete(null);
-                    });
+                    executionWorkEvent.fireAsync(item,
+                        NotificationOptions.ofExecutor(Infrastructure.getDefaultExecutor()));
+                    completion.complete(null);
                 } catch (Throwable failure) {
                     completion.completeExceptionally(failure);
                 }
