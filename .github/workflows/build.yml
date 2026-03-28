@@ -181,8 +181,8 @@ jobs:
       artifact_name: ${{ needs.bootstrap.outputs.artifact_name }}
     secrets: inherit
 
-  e2e-checkout-ftgo:
-    name: Checkout FTGo Smoke
+  e2e-checkout-tpfgo:
+    name: Checkout TPFGo Smoke
     needs: bootstrap
     uses: ./.github/workflows/e2e-checkout-ftgo-smoke.yml
     with:

@@ -1,4 +1,4 @@
-name: Reusable — Checkout FTGo QUEUE_ASYNC Durable HA
+name: Reusable — Checkout TPFGo Checkpoint Flow
 
 on:
   workflow_call:
@@ -10,7 +10,7 @@ on:
         type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-e2e-checkout-ftgo-queue-async-ha
+  group: ${{ github.workflow }}-${{ github.ref }}-e2e-checkout-tpfgo-checkpoint
   cancel-in-progress: true
 
 env:
@@ -18,8 +18,8 @@ env:
   MAVEN_ARGS_BUILD: -B -T 1 -V -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
 
 jobs:
-  checkout-ftgo-queue-async-ha:
-    name: Checkout FTGo QUEUE_ASYNC Durable HA
+  checkout-tpfgo-checkpoint:
+    name: Checkout TPFGo Checkpoint Flow
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -70,35 +70,32 @@ jobs:
           fi
           tar -xzf "$artifact" -C ~/.m2/repository
 
-      - name: Run checkout durable QUEUE_ASYNC HA chaos lane
+      - name: Run full TPFGo checkpoint-flow suite
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" -f examples/checkout/pom.xml \
-            -pl deliver-order-orchestrator-svc \
+            -pl tpfgo-e2e-tests \
             -am \
             -Dtest=NoMatchingUnitTest \
             -Dsurefire.failIfNoSpecifiedTests=false \
-            -Dit.test=QueueAsyncDurableHaIT \
+            -Dit.test=TpfgoCheckpointFlowIT \
             -Dfailsafe.failIfNoSpecifiedTests=false \
             verify
 
-      - name: Dump durable HA diagnostics on failure
+      - name: Dump TPFGo diagnostics on failure
         if: failure()
         run: |
-          if [ -d examples/checkout/deliver-order-orchestrator-svc/target/failsafe-reports ]; then
-            find examples/checkout/deliver-order-orchestrator-svc/target/failsafe-reports -maxdepth 2 -type f -print -exec tail -n 200 {} \; || true
-          fi
-          if [ -d examples/checkout/deliver-order-orchestrator-svc/target/failsafe-reports/queue-async-ha ]; then
-            find examples/checkout/deliver-order-orchestrator-svc/target/failsafe-reports/queue-async-ha -type f -print -exec tail -n 200 {} \; || true
+          if [ -d examples/checkout/tpfgo-e2e-tests/target/failsafe-reports ]; then
+            find examples/checkout/tpfgo-e2e-tests/target/failsafe-reports -maxdepth 2 -type f -print -exec tail -n 200 {} \; || true
           fi
 
-      - name: Upload durable HA diagnostics on failure
+      - name: Upload TPFGo diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: checkout-ftgo-queue-async-ha-diagnostics
+          name: checkout-tpfgo-checkpoint-diagnostics
           path: |
-            examples/checkout/deliver-order-orchestrator-svc/target/failsafe-reports/**
-            examples/checkout/deliver-order-orchestrator-svc/target/surefire-reports/**
+            examples/checkout/tpfgo-e2e-tests/target/failsafe-reports/**
+            examples/checkout/tpfgo-e2e-tests/target/surefire-reports/**
           retention-days: 7
           if-no-files-found: warn

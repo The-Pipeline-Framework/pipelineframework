@@ -43,14 +43,20 @@ Generated orchestrator endpoints are transport-native:
 
 ## Checkpoint Publication
 
-Reliable cross-pipeline handoff is orchestrator-owned and checkpoint-based.
+Checkpoint publication is the reliable cross-pipeline handoff path for TPF orchestrators.
 
-Supported in this release:
+The source pipeline publishes its final checkpoint under a logical `publication` name.
+The downstream pipeline declares an input subscription for that same logical name.
+Runtime bindings decide where the publication is delivered; the pipeline IDL stays logical and does not embed concrete URLs, queue names, or broker topics.
 
-1. source: final pipeline checkpoint publication from a `QUEUE_ASYNC` orchestrator,
-2. target: downstream orchestrator async admission bound by a named logical publication,
-3. idempotency: preserve incoming dispatch metadata when present, otherwise derive a deterministic handoff key from configured checkpoint fields,
-4. ownership: downstream retry/DLQ remains orchestrator-owned after async admission.
+```mermaid
+flowchart LR
+    A["Source pipeline<br/>QUEUE_ASYNC orchestrator"] --> B["Final checkpoint<br/>output.checkpoint.publication"]
+    B --> C["CheckpointPublicationService<br/>runtime-configured targets"]
+    C --> D["Framework admission endpoint<br/>HTTP or gRPC"]
+    D --> E["Downstream pipeline<br/>QUEUE_ASYNC orchestrator"]
+    E --> F["Downstream execution state,<br/>retry, and DLQ"]
+```
 
 Declare reliable handoff in `pipeline.yaml`:
 
@@ -66,22 +72,47 @@ output:
     idempotencyKeyFields: ["orderId", "customerId", "readyAt"]
 ```
 
-Runtime behavior:
+Runtime binding shape:
 
-1. build-time validation checks checkpoint boundary declarations and mapper compatibility,
-2. runtime endpoint bindings come from `pipeline.handoff.bindings.<publication>.targets.*`,
-3. publication is generated into existing orchestrator ownership; no separate connector runtime or deployment role is introduced,
-4. subscriber admission is handled by framework-owned HTTP and gRPC checkpoint publication endpoints instead of runtime subscription discovery,
-5. protobuf-over-HTTP and gRPC use the same framework-owned checkpoint protobuf envelope for transport-native admission,
-6. reliable handoff is supported only for `QUEUE_ASYNC` orchestrators and is rejected for `FUNCTION` pipelines,
-7. live `Subscribe` remains a weaker observer/tap surface and is not the reliable checkpoint handoff path.
+```properties
+pipeline.handoff.bindings."<publication>".targets.<targetId>.kind=HTTP|GRPC
 
-Not yet supported:
+# HTTP targets
+pipeline.handoff.bindings."<publication>".targets.<targetId>.base-url=...
+pipeline.handoff.bindings."<publication>".targets.<targetId>.path=/pipeline/checkpoints/publish
+pipeline.handoff.bindings."<publication>".targets.<targetId>.encoding=PROTO|JSON
 
-1. generic broker-message re-drive,
-2. a separate checkpoint-publication durable plane or publication-specific DLQ,
-3. dynamic runtime publication discovery or runtime subscription registration,
-4. broker-backed publication targets such as `SQS` or `KAFKA`.
+# gRPC targets
+pipeline.handoff.bindings."<publication>".targets.<targetId>.host=...
+pipeline.handoff.bindings."<publication>".targets.<targetId>.port=9000
+pipeline.handoff.bindings."<publication>".targets.<targetId>.plaintext=false
+```
+
+Quote publication keys when they contain dots or other characters that would otherwise be treated as nested property segments.
+
+Operational model:
+
+1. Build-time validation checks checkpoint boundary declarations and mapper compatibility.
+2. Publication is generated into existing orchestrator ownership; there is no separate connector runtime or deployment role.
+3. Subscriber admission is handled by framework-owned HTTP and gRPC checkpoint publication endpoints, not by runtime subscription discovery.
+4. Protobuf-over-HTTP and gRPC use the same framework-owned checkpoint protobuf envelope for transport-native admission.
+5. When incoming dispatch metadata already carries an idempotency key, publication preserves it. Otherwise, the runtime derives a deterministic handoff key from `output.checkpoint.idempotencyKeyFields`.
+6. After downstream async admission succeeds, downstream retry, DLQ, and execution-state ownership remain fully orchestrator-owned on the subscriber side.
+
+Current requirements and limits:
+
+1. Reliable checkpoint handoff is supported only for `QUEUE_ASYNC` orchestrators.
+2. `FUNCTION` pipelines do not support checkpoint publication or subscription.
+3. Publication is defined at the final checkpoint boundary, not as a live mid-step tap.
+4. Live `Subscribe` remains an observer surface and is not the reliable checkpoint handoff path.
+5. TPF does not provide broker-backed publication targets such as `SQS` or `KAFKA` in this path.
+6. TPF does not provide a generic publication re-drive consumer or a publication-specific durable plane.
+
+Related guides:
+
+- [Error Handling and Recovery](/guide/operations/error-handling)
+- [Operators Playbook](/guide/operations/operators-playbook)
+- [Runtime Layouts and Build Topologies](/guide/build/runtime-layouts/)
 
 ## Queue-Async Semantics
 

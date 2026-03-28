@@ -1,102 +1,83 @@
-# Checkout Canonical Reference (TPFGo)
+# TPFGo Canonical Checkout Flow
 
-This folder is the FTGo-inspired canonical flow reference for TPFGo.
+`examples/checkout` is the canonical TPFGo example for reliable cross-pipeline handoff.
 
-The executable bridge lane starts with two separate checkpoint pipelines:
+It demonstrates an eight-pipeline application using only the framework checkpoint-publication model:
 
-- Pipeline A: `create-order-orchestrator-svc/pipeline.yaml`
-- Pipeline B: `deliver-order-orchestrator-svc/pipeline.yaml`
+1. checkout
+2. consumer-validation
+3. restaurant-acceptance
+4. kitchen-preparation
+5. dispatch
+6. delivery-execution
+7. payment-capture
+8. compensation-failure
 
-The full canonical FTGo chain contract is tracked in:
+Every boundary is declared in pipeline YAML with:
 
-- `config/canonical/01-checkout-pipeline.yaml`
-- `config/canonical/02-consumer-validation-pipeline.yaml`
-- `config/canonical/03-restaurant-acceptance-pipeline.yaml`
-- `config/canonical/04-kitchen-preparation-pipeline.yaml`
-- `config/canonical/05-dispatch-pipeline.yaml`
-- `config/canonical/06-delivery-execution-pipeline.yaml`
-- `config/canonical/07-payment-capture-pipeline.yaml`
-- `config/canonical/08-compensation-failure-pipeline.yaml`
+- `output.checkpoint.publication`
+- `output.checkpoint.idempotencyKeyFields`
+- `input.subscription.publication`
 
-## Intent
+Concrete handoff targets are supplied at runtime through `pipeline.handoff.bindings.*`. There are no hand-written bridge classes, connector helpers, or app-owned boundary forwarders in the happy path.
 
-- Pipeline A (`CreateOrder`) ends at checkpoint type `ReadyOrder`.
-- Pipeline B (`DeliverOrder`) starts from `ReadyOrder`.
-- The handoff contract is explicit and type-based.
+## Modules
 
-This mirrors the TPF checkpoint model:
+- `common`: shared TPFGo domain records and runtime helpers
+- `checkout-orchestrator-svc`
+- `consumer-validation-orchestrator-svc`
+- `restaurant-acceptance-orchestrator-svc`
+- `kitchen-preparation-orchestrator-svc`
+- `dispatch-orchestrator-svc`
+- `delivery-execution-orchestrator-svc`
+- `payment-capture-orchestrator-svc`
+- `compensation-failure-orchestrator-svc`
+- `tpfgo-e2e-tests`: process-based end-to-end verification for the full chain
 
-- Intra-pipeline consistency is guaranteed by pipeline completion.
-- Cross-pipeline composition is explicit and policy-driven.
+## Canonical contracts
 
-## Canonical lane role
+The canonical YAML contracts live under `config/canonical/`:
 
-This lane is the executable FTGo progression starter and CI gate for connector semantics:
+- `01-checkout-pipeline.yaml`
+- `02-consumer-validation-pipeline.yaml`
+- `03-restaurant-acceptance-pipeline.yaml`
+- `04-kitchen-preparation-pipeline.yaml`
+- `05-dispatch-pipeline.yaml`
+- `06-delivery-execution-pipeline.yaml`
+- `07-payment-capture-pipeline.yaml`
+- `08-compensation-failure-pipeline.yaml`
 
-- deterministic lineage at pipeline handoff,
-- strict idempotency/dedup at connector boundaries,
-- gRPC ingest handoff correctness.
+Each file is kept in sync with the runnable module `pipeline.yaml`.
 
-The canonical chain config extends this lane with additional bounded contexts (consumer validation, restaurant acceptance, kitchen fan-out/fan-in, dispatch, delivery, payment, and explicit failure/compensation pipeline contracts). Full SYNC-path canonical execution proof is covered by `CanonicalFtgoSyncFlowTest`.
+## Runtime model
 
-Run that sync-path canonical proof test directly:
+- all pipelines use `platform: COMPUTE`
+- all pipelines use `pipeline.orchestrator.mode=QUEUE_ASYNC`
+- checkpoint handoff is externalized through gRPC runtime bindings
+- downstream retry and DLQ ownership begins only after downstream admission
+- idempotency is explicit on each publication boundary
 
-`./mvnw -f examples/checkout/pom.xml -pl common -am -Dtest=CanonicalFtgoSyncFlowTest -Dsurefire.failIfNoSpecifiedTests=false test`
+## Validation
 
-## Config files
+Build the full example:
 
-- `create-order-orchestrator-svc/pipeline.yaml`
-- `deliver-order-orchestrator-svc/pipeline.yaml`
+```bash
+./mvnw -f examples/checkout/pom.xml verify
+```
 
-## Current module scaffold
+Run the full TPFGo checkpoint-flow integration suite directly:
 
-- `common`: shared DTO contracts used by both pipelines.
-- `create-order-orchestrator-svc`: Pipeline A orchestrator runtime plus concrete step services:
-  - `ProcessOrderRequestProcessService`
-  - `ProcessOrderCreateService`
-  - `ProcessOrderReadyService`
-  - `CreateToDeliverIngestBridge` (streams checkpoint outputs into Pipeline B `ingest`)
-- `deliver-order-orchestrator-svc`: Pipeline B orchestrator runtime plus concrete step services:
-  - `ProcessOrderDispatchService`
-  - `ProcessOrderDeliveredService`
+```bash
+./mvnw -f examples/checkout/pom.xml \
+  -pl tpfgo-e2e-tests \
+  -am \
+  -Dtest=NoMatchingUnitTest \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  -Dit.test=TpfgoCheckpointFlowIT \
+  -Dfailsafe.failIfNoSpecifiedTests=false \
+  verify
+```
 
-These modules are intentionally not yet wired into the root project `pom.xml`.
-Build them explicitly from `examples/checkout` while the reference implementation is evolving.
+## Docs
 
-## Current implementation focus
-
-1. Ensure executable chain and canonical chain contracts remain in sync as additional lane services are added.
-2. Maintain parity and diagnostics suites for REST, gRPC, FUNCTION, and Protobuf-over-HTTP semantic mapping.
-3. Make observer/tap validation diagnostics explicit (required = fail-fast, optional = warn/skip).
-
-## Testing
-
-Bridge behavior is covered in two modes:
-
-- Local capture mode (fast, deterministic):
-  - `CreateToDeliverBridgeE2ETest`
-  - `DeliverForwardBridgeE2ETest`
-- Real gRPC handoff mode (create bridge streams into an embedded downstream gRPC `ingest` endpoint):
-  - `CreateToDeliverGrpcBridgeE2ETest`
-
-Run the stable checkout deliver bridge smoke test:
-
-`./mvnw -f examples/checkout/pom.xml -pl deliver-order-orchestrator-svc -am -Dtest=DeliverForwardBridgeE2ETest -Dsurefire.failIfNoSpecifiedTests=false test`
-
-Validate canonical cross-pipeline contract compatibility:
-
-`./mvnw -f framework/pom.xml -pl runtime -Dtest=CheckoutCanonicalFlowContractTest test`
-
-CI also runs this lane via reusable workflow:
-
-- `.github/workflows/e2e-checkout-ftgo-smoke.yml`
-
-The create-order and deliver-order bridge lanes are both active and validated in CI through local tests; embedded gRPC coverage is provided by `CreateToDeliverGrpcBridgeE2ETest` on the create-order lane.
-
-## Notes
-
-- This starter is deliberately minimal so design constraints remain visible.
-- The first hard gate is A/B handoff contract compatibility, validated by tests.
-- Keep exactly one pipeline config per orchestrator module for generation (`<module>/pipeline.yaml`) to avoid ambiguous config resolution.
-- Pipeline A and B use distinct generated base packages (`...createorder` and `...deliverorder`) to avoid gRPC type collisions during composition.
-- Generated protos now include explicit `package` (derived from `basePackage`) so gRPC full method names stay unique across composed pipelines.
+The user-facing walkthrough is in [docs/guide/development/tpfgo-example.md](/Users/mari/tpf5/docs/guide/development/tpfgo-example.md).

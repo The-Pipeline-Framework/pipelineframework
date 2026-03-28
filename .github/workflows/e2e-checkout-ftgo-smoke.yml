@@ -1,4 +1,4 @@
-name: Reusable — Checkout FTGo Smoke
+name: Reusable — Checkout TPFGo Smoke
 
 on:
   workflow_call:
@@ -10,7 +10,7 @@ on:
         type: string
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-e2e-checkout-ftgo
+  group: ${{ github.workflow }}-${{ github.ref }}-e2e-checkout-tpfgo
   cancel-in-progress: true
 
 env:
@@ -18,8 +18,8 @@ env:
   MAVEN_ARGS_BUILD: -B -T 1C -V -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
 
 jobs:
-  checkout-ftgo-smoke:
-    name: Checkout FTGo Smoke
+  checkout-tpfgo-smoke:
+    name: Checkout TPFGo Smoke
     runs-on: ubuntu-latest
 
     steps:
@@ -47,16 +47,18 @@ jobs:
           mkdir -p ~/.m2/repository
           tar -xzf "/tmp/m2-artifacts/${{ inputs.artifact_name }}.tar.gz" -C ~/.m2/repository
 
-      - name: Run checkout FTGo deliver bridge smoke test
+      - name: Run TPFGo happy-path checkpoint smoke test
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
           ./mvnw "${maven_args[@]}" -f examples/checkout/pom.xml \
-            -pl deliver-order-orchestrator-svc \
+            -pl tpfgo-e2e-tests \
             -am \
-            -Dtest=DeliverForwardBridgeE2ETest \
+            -Dtest=NoMatchingUnitTest \
             -Dsurefire.failIfNoSpecifiedTests=false \
+            -Dit.test=TpfgoCheckpointFlowIT#executesFullCanonicalTpfgoFlowOverGrpcCheckpointHandoff \
+            -Dfailsafe.failIfNoSpecifiedTests=false \
             -Dquarkus.container-image.build=false \
-            test
+            verify
 
       - name: Dump reports on failure
         if: failure()
@@ -68,7 +70,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: checkout-ftgo-smoke-reports
+          name: checkout-tpfgo-smoke-reports
           path: |
             examples/checkout/**/target/surefire-reports/*.txt
             examples/checkout/**/target/surefire-reports/*.xml
