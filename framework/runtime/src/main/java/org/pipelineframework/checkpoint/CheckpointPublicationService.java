@@ -89,6 +89,7 @@ public class CheckpointPublicationService {
      * @param resultPayload the raw result payload to be normalized and published
      * @return a Uni that completes with no value when all dispatches have completed; the Uni fails if publication cannot
      *         proceed due to an invalid orchestrator mode or if any target dispatch fails.
+     */
     public Uni<Void> publishIfConfigured(ExecutionRecord<Object, Object> record, Object resultPayload) {
         if (descriptor == null) {
             LOG.debug("Skipping checkpoint publication because no descriptor is configured");
