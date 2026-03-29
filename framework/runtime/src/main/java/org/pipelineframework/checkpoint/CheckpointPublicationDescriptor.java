@@ -28,7 +28,7 @@ public interface CheckpointPublicationDescriptor {
      * when the in-process execution result is still a transport-specific DTO.
      *
      * @param resultPayload raw execution result payload
-     * @return normalized checkpoint payload
+     * @return normalized checkpoint payload, or {@code null} to skip publication
      */
     default Object normalizePayload(Object resultPayload) {
         return resultPayload;

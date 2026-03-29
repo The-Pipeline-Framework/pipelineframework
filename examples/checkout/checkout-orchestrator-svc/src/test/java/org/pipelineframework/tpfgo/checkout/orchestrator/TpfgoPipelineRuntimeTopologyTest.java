@@ -16,6 +16,8 @@ import java.util.stream.Collectors;
 
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.fail;
+
 class TpfgoPipelineRuntimeTopologyTest {
 
     @Test
@@ -62,7 +64,7 @@ class TpfgoPipelineRuntimeTopologyTest {
         Path mappingPath = resolveRuntimeMappingPath();
         String content = Files.readString(mappingPath);
         if (!content.contains("layout: pipeline-runtime")) {
-            throw new IllegalStateException("Expected active runtime mapping to use layout: pipeline-runtime");
+            fail("Expected active runtime mapping to use layout: pipeline-runtime");
         }
     }
 
@@ -72,7 +74,7 @@ class TpfgoPipelineRuntimeTopologyTest {
             try {
                 return Path.of(resource.toURI()).normalize();
             } catch (URISyntaxException e) {
-                throw new IllegalStateException("Invalid runtime mapping resource URI: " + resource, e);
+                fail("Invalid runtime mapping resource URI: " + resource, e);
             }
         }
 
@@ -86,6 +88,7 @@ class TpfgoPipelineRuntimeTopologyTest {
         if (Files.exists(parent)) {
             return parent;
         }
-        throw new IllegalStateException("Could not resolve examples/checkout/config/pipeline.runtime.yaml");
+        fail("Could not resolve examples/checkout/config/pipeline.runtime.yaml");
+        return Path.of(".");
     }
 }

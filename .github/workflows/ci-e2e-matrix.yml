@@ -100,7 +100,7 @@ jobs:
   e2e-checkout-tpfgo:
     name: Checkout TPFGo Smoke
     needs: build-framework
-    uses: ./.github/workflows/e2e-checkout-ftgo-smoke.yml
+    uses: ./.github/workflows/e2e-checkout-tpfgo-smoke.yml
     with:
       artifact_name: framework-m2-cache
     secrets: inherit

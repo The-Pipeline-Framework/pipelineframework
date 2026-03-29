@@ -2,6 +2,7 @@ package org.pipelineframework.checkpoint;
 
 import java.io.IOException;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -13,6 +14,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.quarkus.arc.Unremovable;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.subscription.Cancellable;
 import org.pipelineframework.checkpoint.grpc.MutinyCheckpointPublicationServiceGrpc;
 import org.pipelineframework.telemetry.GrpcClientTracing;
 
@@ -45,15 +47,25 @@ public class GrpcCheckpointPublicationTargetDispatcher implements CheckpointPubl
         } catch (IOException e) {
             return Uni.createFrom().failure(e);
         }
-        return Uni.createFrom().emitter(emitter ->
-            Context.ROOT.run(() ->
-                GrpcClientTracing.traceUnary(
+        return Uni.createFrom().emitter(emitter -> {
+            AtomicReference<Cancellable> cancellableRef = new AtomicReference<>();
+            Context.ROOT.run(() -> {
+                Cancellable cancellable = GrpcClientTracing.traceUnary(
                     CheckpointPublicationGrpcService.SERVICE,
                     CheckpointPublicationGrpcService.METHOD,
                     stubFor(target).publish(protoRequest))
                     .subscribe().with(
                         response -> emitter.complete(null),
-                        emitter::fail)));
+                        emitter::fail);
+                cancellableRef.set(cancellable);
+            });
+            emitter.onTermination(() -> {
+                Cancellable cancellable = cancellableRef.get();
+                if (cancellable != null) {
+                    cancellable.cancel();
+                }
+            });
+        });
     }
 
     @PreDestroy

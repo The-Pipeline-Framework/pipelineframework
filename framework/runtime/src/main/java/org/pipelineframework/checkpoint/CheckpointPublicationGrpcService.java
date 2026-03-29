@@ -35,11 +35,13 @@ public class CheckpointPublicationGrpcService
     @Override
     public Uni<CheckpointPublishAcceptedResponse> publish(CheckpointPublishRequest request) {
         long startTime = System.nanoTime();
-        LOG.infof("Checkpoint gRPC publish received publication=%s tenant=%s idempotencyKey=%s payloadBytes=%d",
+        LOG.infof("Checkpoint gRPC publish received publication=%s payloadBytes=%d",
+            request.getPublication(),
+            request.getPayloadJson().size());
+        LOG.debugf("Checkpoint gRPC publish metadata publication=%s tenant=%s idempotencyKey=%s",
             request.getPublication(),
             request.getTenantId(),
-            request.getIdempotencyKey(),
-            request.getPayloadJson().size());
+            request.getIdempotencyKey());
         CheckpointPublicationRequest decoded;
         try {
             decoded = CheckpointPublicationProtoSupport.fromProtoRequest(request);

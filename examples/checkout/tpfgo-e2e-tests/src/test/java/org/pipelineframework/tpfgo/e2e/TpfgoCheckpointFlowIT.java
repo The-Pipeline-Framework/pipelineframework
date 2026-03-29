@@ -487,7 +487,7 @@ class TpfgoCheckpointFlowIT {
                 .until(() -> countFor(publication), count -> count > 0);
             return received.stream()
                 .filter(request -> Objects.equals(publication, request.getPublication()))
-                .reduce((first, second) -> second)
+                .reduce((ignored, latest) -> latest)
                 .map(this::toPayload)
                 .orElseThrow();
         }

@@ -7,7 +7,6 @@ import com.squareup.javapoet.CodeBlock;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
 import com.squareup.javapoet.ParameterizedTypeName;
-import com.squareup.javapoet.TypeName;
 import com.squareup.javapoet.TypeSpec;
 import javax.lang.model.element.Modifier;
 import org.pipelineframework.config.boundary.PipelineCheckpointConfig;
@@ -20,7 +19,7 @@ public class CheckpointPublicationDescriptorRenderer {
     public ClassName render(
         String basePackage,
         PipelineCheckpointConfig checkpoint,
-        TypeName publicationPayloadType,
+        ClassName publicationPayloadType,
         GenerationContext ctx
     ) throws IOException {
         ClassName descriptorType = ClassName.get("org.pipelineframework.checkpoint", "CheckpointPublicationDescriptor");
@@ -53,18 +52,16 @@ public class CheckpointPublicationDescriptorRenderer {
             .addMethod(publicationMethod)
             .addMethod(keyFieldsMethod);
 
-        if (publicationPayloadType != null) {
-            descriptor
-                .addMethod(MethodSpec.methodBuilder("normalizePayload")
-                    .addAnnotation(Override.class)
-                    .addModifiers(Modifier.PUBLIC)
-                    .returns(TypeName.OBJECT)
-                    .addParameter(TypeName.OBJECT, "resultPayload")
-                    .addStatement("return $T.normalizePayload(resultPayload, $T.class)",
-                        publicationSupportType,
-                        publicationPayloadType)
-                    .build());
-        }
+        descriptor
+            .addMethod(MethodSpec.methodBuilder("normalizePayload")
+                .addAnnotation(Override.class)
+                .addModifiers(Modifier.PUBLIC)
+                .returns(Object.class)
+                .addParameter(Object.class, "resultPayload")
+                .addStatement("return $T.normalizePayload(resultPayload, $T.class)",
+                    publicationSupportType,
+                    publicationPayloadType)
+                .build());
 
         JavaFile.builder(generatedType.packageName(), descriptor.build()).build().writeTo(ctx.processingEnv().getFiler());
         return generatedType;
