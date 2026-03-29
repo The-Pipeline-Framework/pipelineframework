@@ -22,6 +22,8 @@ IFS=':' read -r -a exclude_pattern_array <<< "$exclude_patterns"
       while IFS= read -r -d '' file; do
         rel_path="${file#"${dir}/"}"
         skip=false
+        # shellcheck disable=SC2053
+        # Note: $pattern is intentionally unquoted to allow glob expansion (e.g., */orchestrator/*)
         for pattern in "${exclude_pattern_array[@]}"; do
           if [[ -n "$pattern" && "$rel_path" == $pattern ]]; then
             skip=true

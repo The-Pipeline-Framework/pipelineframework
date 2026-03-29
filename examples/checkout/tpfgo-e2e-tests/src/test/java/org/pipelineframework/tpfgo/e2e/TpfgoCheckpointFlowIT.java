@@ -66,12 +66,20 @@ class TpfgoCheckpointFlowIT {
     void setUp() throws Exception {
         logDirectory = Path.of("target", "failsafe-reports", "tpfgo-checkpoint-flow");
         Files.createDirectories(logDirectory);
-        collector = new FinalCollector(findFreePort());
-        collector.start();
+        ServerSocket collectorSocket = reservePort();
+        try {
+            int collectorPort = collectorSocket.getLocalPort();
+            collectorSocket.close();
+            collector = new FinalCollector(collectorPort);
+            collector.start();
 
-        List<AppSpec> specs = specs(collector.port());
-        for (AppSpec spec : specs) {
-            apps.add(ManagedApp.start(spec, logDirectory));
+            List<AppSpec> specs = specs(collector.port());
+            for (AppSpec spec : specs) {
+                apps.add(ManagedApp.start(spec, logDirectory));
+            }
+        } catch (Exception e) {
+            collectorSocket.close();
+            throw e;
         }
     }
 
@@ -302,9 +310,14 @@ class TpfgoCheckpointFlowIT {
      * @throws IOException if a free port cannot be allocated
      */
     private AppSpec runtimeSpec(String moduleDir) throws IOException {
-        int httpPort = findFreePort();
-        int grpcPort = httpPort;
-        return new AppSpec(moduleDir, httpPort, grpcPort, false, null, 0, List.of(), new ArrayList<>());
+        ServerSocket socket = reservePort();
+        try {
+            int httpPort = socket.getLocalPort();
+            int grpcPort = httpPort;
+            return new AppSpec(moduleDir, httpPort, grpcPort, false, null, 0, List.of(), new ArrayList<>());
+        } finally {
+            socket.close();
+        }
     }
 
     /**
@@ -323,17 +336,24 @@ class TpfgoCheckpointFlowIT {
         int internalGrpcTargetPort,
         List<String> internalGrpcClients
     ) throws IOException {
-        int httpPort = findFreePort();
-        int grpcPort = findFreePort();
-        return new AppSpec(
-            moduleDir,
-            httpPort,
-            grpcPort,
-            true,
-            publication,
-            internalGrpcTargetPort,
-            internalGrpcClients,
-            new ArrayList<>());
+        ServerSocket httpSocket = reservePort();
+        ServerSocket grpcSocket = reservePort();
+        try {
+            int httpPort = httpSocket.getLocalPort();
+            int grpcPort = grpcSocket.getLocalPort();
+            return new AppSpec(
+                moduleDir,
+                httpPort,
+                grpcPort,
+                true,
+                publication,
+                internalGrpcTargetPort,
+                internalGrpcClients,
+                new ArrayList<>());
+        } finally {
+            httpSocket.close();
+            grpcSocket.close();
+        }
     }
 
     /**
@@ -341,12 +361,28 @@ class TpfgoCheckpointFlowIT {
      *
      * @return the selected free port number
      * @throws IOException if an I/O error occurs while opening or binding the socket
+     * @deprecated Use reservePort() instead to avoid TOCTOU race conditions
      */
+    @Deprecated
     private static int findFreePort() throws IOException {
         try (ServerSocket socket = new ServerSocket()) {
             socket.bind(new InetSocketAddress("127.0.0.1", 0));
             return socket.getLocalPort();
         }
+    }
+
+    /**
+     * Reserves an available TCP port by binding a ServerSocket that remains open.
+     * The caller must close the returned socket after the spawned process has bound the port.
+     *
+     * @return a ServerSocket bound to 127.0.0.1 on an available port
+     * @throws IOException if an I/O error occurs while opening or binding the socket
+     */
+    private static ServerSocket reservePort() throws IOException {
+        ServerSocket socket = new ServerSocket();
+        socket.bind(new InetSocketAddress("127.0.0.1", 0));
+        socket.setReuseAddress(true);
+        return socket;
     }
 
     private record AppSpec(

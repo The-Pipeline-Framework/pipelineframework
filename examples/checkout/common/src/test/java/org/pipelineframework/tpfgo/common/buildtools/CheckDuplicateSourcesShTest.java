@@ -174,6 +174,9 @@ class CheckDuplicateSourcesShTest {
         pb.command().addAll(extraArgs);
         pb.redirectErrorStream(false);
         Process proc = pb.start();
+        // Drain output streams to prevent deadlock when OS pipe buffer fills
+        proc.getInputStream().readAllBytes();
+        proc.getErrorStream().readAllBytes();
         return proc.waitFor();
     }
 

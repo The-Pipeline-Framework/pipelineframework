@@ -3,14 +3,13 @@ package org.pipelineframework.tpfgo.checkout.checkout_create_pending.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.tpfgo.common.domain.OrderPending;
@@ -27,14 +26,9 @@ class ProcessCheckoutCreatePendingServiceTest {
 
     @Test
     void processNullInputReturnsFailure() {
-        AtomicReference<Throwable> captured = new AtomicReference<>();
-        service.process(null)
-            .subscribe().with(
-                ignored -> {},
-                captured::set);
-        assertNotNull(captured.get());
-        assertTrue(captured.get() instanceof IllegalArgumentException);
-        assertEquals("input must not be null", captured.get().getMessage());
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+            () -> service.process(null).await().indefinitely());
+        assertEquals("input must not be null", exception.getMessage());
     }
 
     @Test
@@ -44,11 +38,8 @@ class ProcessCheckoutCreatePendingServiceTest {
         UUID restaurantId = UUID.randomUUID();
         ValidatedOrderRequest input = validatedRequest(requestId, customerId, restaurantId, new BigDecimal("25.00"), "USD");
 
-        AtomicReference<OrderPending> result = new AtomicReference<>();
-        service.process(input)
-            .subscribe().with(result::set, err -> { throw new RuntimeException(err); });
+        OrderPending pending = service.process(input).await().indefinitely();
 
-        OrderPending pending = result.get();
         assertNotNull(pending);
         assertEquals(requestId, pending.requestId());
         assertEquals(customerId, pending.customerId());
@@ -71,11 +62,9 @@ class ProcessCheckoutCreatePendingServiceTest {
             customerId.toString(),
             restaurantId.toString());
 
-        AtomicReference<OrderPending> result = new AtomicReference<>();
-        service.process(input)
-            .subscribe().with(result::set, err -> { throw new RuntimeException(err); });
+        OrderPending result = service.process(input).await().indefinitely();
 
-        assertEquals(expectedOrderId, result.get().orderId());
+        assertEquals(expectedOrderId, result.orderId());
     }
 
     @Test
@@ -85,12 +74,10 @@ class ProcessCheckoutCreatePendingServiceTest {
         UUID restaurantId = UUID.fromString("33333333-3333-3333-3333-333333333333");
         ValidatedOrderRequest input = validatedRequest(requestId, customerId, restaurantId, new BigDecimal("5.00"), "USD");
 
-        AtomicReference<OrderPending> result1 = new AtomicReference<>();
-        AtomicReference<OrderPending> result2 = new AtomicReference<>();
-        service.process(input).subscribe().with(result1::set, err -> { throw new RuntimeException(err); });
-        service.process(input).subscribe().with(result2::set, err -> { throw new RuntimeException(err); });
+        OrderPending result1 = service.process(input).await().indefinitely();
+        OrderPending result2 = service.process(input).await().indefinitely();
 
-        assertEquals(result1.get().orderId(), result2.get().orderId());
+        assertEquals(result1.orderId(), result2.orderId());
     }
 
     @Test
@@ -103,12 +90,10 @@ class ProcessCheckoutCreatePendingServiceTest {
         ValidatedOrderRequest input1 = validatedRequest(requestId1, customerId, restaurantId, new BigDecimal("10.00"), "USD");
         ValidatedOrderRequest input2 = validatedRequest(requestId2, customerId, restaurantId, new BigDecimal("10.00"), "USD");
 
-        AtomicReference<OrderPending> result1 = new AtomicReference<>();
-        AtomicReference<OrderPending> result2 = new AtomicReference<>();
-        service.process(input1).subscribe().with(result1::set, err -> { throw new RuntimeException(err); });
-        service.process(input2).subscribe().with(result2::set, err -> { throw new RuntimeException(err); });
+        OrderPending result1 = service.process(input1).await().indefinitely();
+        OrderPending result2 = service.process(input2).await().indefinitely();
 
-        assertNotEquals(result1.get().orderId(), result2.get().orderId());
+        assertNotEquals(result1.orderId(), result2.orderId());
     }
 
     @Test
@@ -120,10 +105,9 @@ class ProcessCheckoutCreatePendingServiceTest {
         ValidatedOrderRequest input = validatedRequest(
             UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("7.50"), "GBP");
 
-        AtomicReference<OrderPending> result = new AtomicReference<>();
-        svc.process(input).subscribe().with(result::set, err -> { throw new RuntimeException(err); });
+        OrderPending result = svc.process(input).await().indefinitely();
 
-        assertEquals(specificInstant, result.get().createdAt());
+        assertEquals(specificInstant, result.createdAt());
     }
 
     @Test
@@ -131,10 +115,9 @@ class ProcessCheckoutCreatePendingServiceTest {
         ValidatedOrderRequest input = validatedRequest(
             UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("3.00"), "JPY");
 
-        AtomicReference<OrderPending> result = new AtomicReference<>();
-        service.process(input).subscribe().with(result::set, err -> { throw new RuntimeException(err); });
+        OrderPending result = service.process(input).await().indefinitely();
 
-        assertEquals("JPY", result.get().currency());
+        assertEquals("JPY", result.currency());
     }
 
     @Test
@@ -142,10 +125,9 @@ class ProcessCheckoutCreatePendingServiceTest {
         ValidatedOrderRequest input = validatedRequest(
             UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("1.00"), "USD");
 
-        AtomicReference<OrderPending> result = new AtomicReference<>();
-        service.process(input).subscribe().with(result::set, err -> { throw new RuntimeException(err); });
+        OrderPending result = service.process(input).await().indefinitely();
 
-        assertNotNull(result.get().orderId());
+        assertNotNull(result.orderId());
     }
 
     // Regression: zero totalAmount should be accepted
@@ -154,11 +136,10 @@ class ProcessCheckoutCreatePendingServiceTest {
         ValidatedOrderRequest input = validatedRequest(
             UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), BigDecimal.ZERO, "USD");
 
-        AtomicReference<OrderPending> result = new AtomicReference<>();
-        service.process(input).subscribe().with(result::set, err -> { throw new RuntimeException(err); });
+        OrderPending result = service.process(input).await().indefinitely();
 
-        assertNotNull(result.get());
-        assertEquals(BigDecimal.ZERO, result.get().totalAmount());
+        assertNotNull(result);
+        assertEquals(BigDecimal.ZERO, result.totalAmount());
     }
 
     private static ValidatedOrderRequest validatedRequest(

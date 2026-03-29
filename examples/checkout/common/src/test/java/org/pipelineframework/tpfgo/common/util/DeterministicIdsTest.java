@@ -75,11 +75,11 @@ class DeterministicIdsTest {
     void knownStableValue() {
         // Regression: fixed canonical inputs must always produce the same UUID value.
         // If DeterministicIds changes its algorithm this test will catch the regression.
-        UUID id1 = DeterministicIds.uuid("order", "req-fixed", "cust-fixed", "rest-fixed");
-        UUID id2 = DeterministicIds.uuid("order", "req-fixed", "cust-fixed", "rest-fixed");
-        assertEquals(id1, id2);
+        UUID expected = UUID.fromString("4344f342-6a58-3bb1-9dc2-da816369af81");
+        UUID actual = DeterministicIds.uuid("order", "req-fixed", "cust-fixed", "rest-fixed");
+        assertEquals(expected, actual);
         // Confirm it is a valid v3/v5 UUID (not random)
-        assertNotEquals(UUID.randomUUID(), id1);
+        assertNotEquals(UUID.randomUUID(), actual);
     }
 
     @Test

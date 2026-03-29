@@ -358,18 +358,10 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 TypeName publicationPayloadType = ctx.getStepModels().isEmpty()
                     ? null
                     : ctx.getStepModels().getLast().outputMapping().domainType();
-                if (!(publicationPayloadType instanceof ClassName payloadClassName)) {
-                    throw new IllegalStateException(
-                        "Cannot resolve a reifiable checkpoint publication payload type for base package '"
-                            + templateConfig.basePackage()
-                            + "' and publication '"
-                            + templateConfig.output().checkpoint().publication()
-                            + "'. Ensure the terminal step has a resolvable concrete output domain type.");
-                }
                 ClassName generatedClass = checkpointPublicationDescriptorRenderer.render(
                     templateConfig.basePackage(),
                     templateConfig.output().checkpoint(),
-                    payloadClassName,
+                    publicationPayloadType,
                     publicationContext);
                 roleMetadataGenerator.recordClassWithRole(generatedClass, DeploymentRole.PIPELINE_SERVER.name());
             } catch (IOException | RuntimeException e) {
