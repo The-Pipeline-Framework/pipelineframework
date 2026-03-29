@@ -8,9 +8,11 @@ import java.util.concurrent.TimeUnit;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Event;
+import jakarta.enterprise.event.NotificationOptions;
 import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 
 /**
  * Dispatcher that routes work through CDI async events.
@@ -41,13 +43,27 @@ public class EventWorkDispatcher implements WorkDispatcher {
         return -100;
     }
 
+    /**
+     * Enqueues an ExecutionWorkItem for immediate dispatch via the CDI async execution work event.
+     *
+     * @param item the work item to dispatch
+     * @return a Uni that completes with no value after the dispatch has been initiated
+     */
     @Override
     public Uni<Void> enqueueNow(ExecutionWorkItem item) {
-        return Uni.createFrom()
-            .completionStage(() -> executionWorkEvent.fireAsync(item))
-            .replaceWithVoid();
+        return Uni.createFrom().item(() -> {
+            executionWorkEvent.fireAsync(item, NotificationOptions.ofExecutor(Infrastructure.getDefaultExecutor()));
+            return null;
+        }).replaceWithVoid();
     }
 
+    /**
+     * Schedules an ExecutionWorkItem to be dispatched after the given delay.
+     *
+     * @param item the work item to dispatch
+     * @param delay how long to wait before dispatch; null or negative values are treated as zero
+     * @return a Uni that completes normally when the scheduled dispatch task has submitted the work item, or completes exceptionally if scheduling or dispatching fails
+     */
     @Override
     public Uni<Void> enqueueDelayed(ExecutionWorkItem item, Duration delay) {
         long delayMs = Math.max(0L, delay == null ? 0L : delay.toMillis());
@@ -55,13 +71,9 @@ public class EventWorkDispatcher implements WorkDispatcher {
         try {
             scheduler.schedule(() -> {
                 try {
-                    executionWorkEvent.fireAsync(item).whenComplete((ignored, failure) -> {
-                        if (failure != null) {
-                            completion.completeExceptionally(failure);
-                            return;
-                        }
-                        completion.complete(null);
-                    });
+                    executionWorkEvent.fireAsync(item,
+                        NotificationOptions.ofExecutor(Infrastructure.getDefaultExecutor()));
+                    completion.complete(null);
                 } catch (Throwable failure) {
                     completion.completeExceptionally(failure);
                 }

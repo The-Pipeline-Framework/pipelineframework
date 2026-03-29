@@ -30,11 +30,13 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import io.smallrye.mutiny.Uni;
 import io.smallrye.mutiny.unchecked.Unchecked;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.jboss.logging.Logger;
+import org.pipelineframework.config.PipelineStepConfig;
 
 /**
  * Service for checking the health of dependent services before pipeline execution.
@@ -43,6 +45,9 @@ import org.jboss.logging.Logger;
 public class HealthCheckService {
 
     private static final Logger LOG = Logger.getLogger(HealthCheckService.class);
+
+    @Inject
+    PipelineStepConfig pipelineStepConfig;
 
     /**
      * Default constructor for HealthCheckService.
@@ -195,9 +200,7 @@ public class HealthCheckService {
      * @return `true` if all detected dependent services are healthy, `false` otherwise
      */
     public boolean checkHealthOfDependentServices(List<Object> steps) {
-        boolean healthChecksEnabled = ConfigProvider.getConfig()
-            .getOptionalValue("pipeline.health.enabled", Boolean.class)
-            .orElse(Boolean.TRUE);
+        boolean healthChecksEnabled = pipelineStepConfig.health().enabled();
         if (!healthChecksEnabled) {
             LOG.info("Pipeline startup health checks are disabled by configuration.");
             return true;

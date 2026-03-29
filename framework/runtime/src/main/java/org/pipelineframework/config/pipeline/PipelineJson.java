@@ -23,15 +23,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  */
 public final class PipelineJson {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
 
+    /**
+     * Prevents instantiation of this utility class.
+     */
     private PipelineJson() {
     }
 
     /**
-     * Returns a copy of the ObjectMapper instance to prevent mutation of the shared instance.
+     * Provide a copy of the configured ObjectMapper so callers cannot mutate the shared base instance.
      *
-     * @return a copy of the ObjectMapper instance, configured for pipeline JSON operations
+     * @return a new ObjectMapper copied from the class's configured shared mapper
      */
     public static ObjectMapper mapper() {
         return MAPPER.copy();

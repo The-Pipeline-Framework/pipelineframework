@@ -7,6 +7,7 @@ import java.util.stream.Collectors;
 import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
 import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.TypeName;
 import org.jboss.logging.Logger;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
@@ -314,6 +315,22 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         }
     }
 
+    /**
+     * Generate checkpoint publication and subscription artifacts when the pipeline template requests them.
+     *
+     * When a template's checkpoint publication is configured and an orchestrator binding is present, a
+     * publication descriptor is generated and its class is recorded under the PIPELINE_SERVER role.
+     * When a template's checkpoint subscription is configured and an orchestrator binding is present, a
+     * subscription handler is generated and its class is recorded under the PIPELINE_SERVER role.
+     *
+     * @param ctx the pipeline compilation context providing configuration, step models, renderer bindings, and processing environment
+     * @param checkpointPublicationDescriptorRenderer renderer used to produce the checkpoint publication descriptor
+     * @param checkpointSubscriptionHandlerRenderer renderer used to produce the checkpoint subscription handler
+     * @param roleMetadataGenerator generator used to record generated classes with their deployment role
+     * @param cacheKeyGenerator optional cache key generator class name to include in generation context; may be null
+     * @param descriptorSet protobuf file descriptor set used during generation; may be null
+     * @throws RuntimeException if generation of either publication or subscription artifacts fails (an error diagnostic is emitted via the processing environment's Messager when available)
+     */
     private void generateCheckpointBoundaryArtifacts(
         PipelineCompilationContext ctx,
         CheckpointPublicationDescriptorRenderer checkpointPublicationDescriptorRenderer,
@@ -338,9 +355,13 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 cacheKeyGenerator,
                 descriptorSet);
             try {
+                TypeName publicationPayloadType = ctx.getStepModels().isEmpty()
+                    ? null
+                    : ctx.getStepModels().getLast().outputMapping().domainType();
                 ClassName generatedClass = checkpointPublicationDescriptorRenderer.render(
                     templateConfig.basePackage(),
                     templateConfig.output().checkpoint(),
+                    publicationPayloadType,
                     publicationContext);
                 roleMetadataGenerator.recordClassWithRole(generatedClass, DeploymentRole.PIPELINE_SERVER.name());
             } catch (IOException | RuntimeException e) {
