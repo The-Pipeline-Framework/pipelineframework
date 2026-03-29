@@ -19,11 +19,11 @@ public record KitchenTask(
         Objects.requireNonNull(orderId, "orderId must not be null");
         Objects.requireNonNull(customerId, "customerId must not be null");
         Objects.requireNonNull(restaurantId, "restaurantId must not be null");
-        Objects.requireNonNull(totalAmount, "totalAmount must not be null");
-        Objects.requireNonNull(currency, "currency must not be null");
+        totalAmount = CommonDomainValidation.requireNonNegative(totalAmount, "totalAmount");
+        currency = CommonDomainValidation.requireCurrencyCode(currency, "currency");
         Objects.requireNonNull(kitchenTicketId, "kitchenTicketId must not be null");
         Objects.requireNonNull(taskId, "taskId must not be null");
-        Objects.requireNonNull(taskName, "taskName must not be null");
-        Objects.requireNonNull(taskStatus, "taskStatus must not be null");
+        taskName = CommonDomainValidation.requireNonBlank(taskName, "taskName");
+        taskStatus = CommonDomainValidation.requireNonBlank(taskStatus, "taskStatus");
     }
 }

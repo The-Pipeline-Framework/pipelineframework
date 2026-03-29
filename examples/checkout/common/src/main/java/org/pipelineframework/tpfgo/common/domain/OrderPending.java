@@ -19,8 +19,8 @@ public record OrderPending(
         Objects.requireNonNull(requestId, "requestId must not be null");
         Objects.requireNonNull(customerId, "customerId must not be null");
         Objects.requireNonNull(restaurantId, "restaurantId must not be null");
-        Objects.requireNonNull(totalAmount, "totalAmount must not be null");
-        Objects.requireNonNull(currency, "currency must not be null");
+        totalAmount = CommonDomainValidation.requireNonNegative(totalAmount, "totalAmount");
+        currency = CommonDomainValidation.requireCurrencyCode(currency, "currency");
         Objects.requireNonNull(createdAt, "createdAt must not be null");
     }
 }

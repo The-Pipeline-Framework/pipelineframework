@@ -31,10 +31,9 @@ class ProcessCheckoutValidateRequestServiceTest {
 
     @Test
     void processNegativeTotalAmountReturnsFailure() {
-        PlaceOrderRequest request = validRequest(new BigDecimal("-0.01"));
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
-            () -> service.process(request).await().indefinitely());
-        assertEquals("totalAmount must be >= 0", exception.getMessage());
+            () -> validRequest(new BigDecimal("-0.01")));
+        assertEquals("totalAmount must be non-negative", exception.getMessage());
     }
 
     @Test
@@ -91,7 +90,7 @@ class ProcessCheckoutValidateRequestServiceTest {
             UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
             "  item with spaces  ", new BigDecimal("1.00"), "EUR");
         ValidatedOrderRequest result = service.process(request).await().indefinitely();
-        assertEquals("  item with spaces  ", result.items());
+        assertEquals("item with spaces", result.items());
     }
 
     @Test
@@ -106,9 +105,9 @@ class ProcessCheckoutValidateRequestServiceTest {
     // Regression: exactly -1 totalAmount (not just -0.01) is rejected
     @Test
     void processNegativeOneTotalAmountReturnsFailure() {
-        PlaceOrderRequest request = validRequest(new BigDecimal("-1"));
-        assertThrows(IllegalArgumentException.class,
-            () -> service.process(request).await().indefinitely());
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
+            () -> validRequest(new BigDecimal("-1")));
+        assertEquals("totalAmount must be non-negative", exception.getMessage());
     }
 
     private static PlaceOrderRequest validRequest(BigDecimal totalAmount) {
