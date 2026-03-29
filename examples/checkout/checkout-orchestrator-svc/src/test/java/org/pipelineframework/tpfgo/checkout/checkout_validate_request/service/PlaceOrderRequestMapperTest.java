@@ -2,7 +2,6 @@ package org.pipelineframework.tpfgo.checkout.checkout_validate_request.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.math.BigDecimal;
@@ -47,26 +46,19 @@ class PlaceOrderRequestMapperTest {
     }
 
     @Test
-    void fromExternalEmptyUuidStringsYieldNullUuids() {
+    void fromExternalEmptyUuidStringThrowsDueToNonNullRecord() {
         CheckoutValidateRequestSvc.PlaceOrderRequest grpc =
             CheckoutValidateRequestSvc.PlaceOrderRequest.newBuilder()
                 .setRequestId("")
-                .setCustomerId("")
-                .setRestaurantId("")
-                .setItems("some items")
-                .setTotalAmount("")
-                .setCurrency("EUR")
+                .setCustomerId(UUID.randomUUID().toString())
+                .setRestaurantId(UUID.randomUUID().toString())
+                .setItems("item")
+                .setTotalAmount("5.00")
+                .setCurrency("USD")
                 .build();
 
-        PlaceOrderRequest domain = mapper.fromExternal(grpc);
-
-        assertNotNull(domain);
-        assertNull(domain.requestId());
-        assertNull(domain.customerId());
-        assertNull(domain.restaurantId());
-        assertEquals("some items", domain.items());
-        assertNull(domain.totalAmount());
-        assertEquals("EUR", domain.currency());
+        // GrpcMappingSupport.uuid("") returns null; PlaceOrderRequest record rejects null requestId
+        assertThrows(NullPointerException.class, () -> mapper.fromExternal(grpc));
     }
 
     @Test
@@ -111,6 +103,17 @@ class PlaceOrderRequestMapperTest {
         assertEquals("  item with spaces & commas,  more items  ", domain.items());
     }
 
+    @Test
+    void fromExternalPreservesCurrencyCode() {
+        CheckoutValidateRequestSvc.PlaceOrderRequest grpc = validGrpcMessage(
+            UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+            "item", "10.00", "EUR");
+
+        PlaceOrderRequest domain = mapper.fromExternal(grpc);
+
+        assertEquals("EUR", domain.currency());
+    }
+
     // --- toExternal ---
 
     @Test
@@ -136,19 +139,15 @@ class PlaceOrderRequestMapperTest {
     }
 
     @Test
-    void toExternalNullUuidFieldsYieldEmptyStrings() {
+    void toExternalUsesPlainStringForDecimal() {
+        BigDecimal largeAmount = new BigDecimal("1234567.89");
         PlaceOrderRequest domain = new PlaceOrderRequest(
-            null, null, null, "items", null, "USD");
+            UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+            "item", largeAmount, "USD");
 
         CheckoutValidateRequestSvc.PlaceOrderRequest grpc = mapper.toExternal(domain);
 
-        assertNotNull(grpc);
-        assertEquals("", grpc.getRequestId());
-        assertEquals("", grpc.getCustomerId());
-        assertEquals("", grpc.getRestaurantId());
-        assertEquals("items", grpc.getItems());
-        assertEquals("", grpc.getTotalAmount());
-        assertEquals("USD", grpc.getCurrency());
+        assertEquals("1234567.89", grpc.getTotalAmount());
     }
 
     // --- round-trip ---
@@ -180,15 +179,9 @@ class PlaceOrderRequestMapperTest {
         UUID customerId = UUID.randomUUID();
         UUID restaurantId = UUID.randomUUID();
 
-        CheckoutValidateRequestSvc.PlaceOrderRequest original =
-            CheckoutValidateRequestSvc.PlaceOrderRequest.newBuilder()
-                .setRequestId(requestId.toString())
-                .setCustomerId(customerId.toString())
-                .setRestaurantId(restaurantId.toString())
-                .setItems("tacos x4")
-                .setTotalAmount("12.00")
-                .setCurrency("EUR")
-                .build();
+        CheckoutValidateRequestSvc.PlaceOrderRequest original = validGrpcMessage(
+            requestId, customerId, restaurantId,
+            "tacos x4", "12.00", "EUR");
 
         CheckoutValidateRequestSvc.PlaceOrderRequest roundTripped =
             mapper.toExternal(mapper.fromExternal(original));
@@ -211,5 +204,18 @@ class PlaceOrderRequestMapperTest {
         PlaceOrderRequest roundTripped = mapper.fromExternal(mapper.toExternal(domain));
 
         assertEquals(0, BigDecimal.ZERO.compareTo(roundTripped.totalAmount()));
+    }
+
+    private static CheckoutValidateRequestSvc.PlaceOrderRequest validGrpcMessage(
+        UUID requestId, UUID customerId, UUID restaurantId,
+        String items, String totalAmount, String currency) {
+        return CheckoutValidateRequestSvc.PlaceOrderRequest.newBuilder()
+            .setRequestId(requestId.toString())
+            .setCustomerId(customerId.toString())
+            .setRestaurantId(restaurantId.toString())
+            .setItems(items)
+            .setTotalAmount(totalAmount)
+            .setCurrency(currency)
+            .build();
     }
 }

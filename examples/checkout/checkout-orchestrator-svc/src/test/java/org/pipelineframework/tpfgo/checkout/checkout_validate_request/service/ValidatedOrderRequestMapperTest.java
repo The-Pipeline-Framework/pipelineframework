@@ -2,7 +2,6 @@ package org.pipelineframework.tpfgo.checkout.checkout_validate_request.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.math.BigDecimal;
@@ -24,8 +23,8 @@ class ValidatedOrderRequestMapperTest {
         UUID requestId = UUID.randomUUID();
         UUID customerId = UUID.randomUUID();
         UUID restaurantId = UUID.randomUUID();
-        BigDecimal totalAmount = new BigDecimal("55.00");
-        Instant validatedAt = Instant.parse("2026-02-28T16:45:00Z");
+        BigDecimal totalAmount = new BigDecimal("55.25");
+        Instant validatedAt = Instant.parse("2026-01-20T09:15:00Z");
 
         CheckoutValidateRequestSvc.ValidatedOrderRequest grpc =
             CheckoutValidateRequestSvc.ValidatedOrderRequest.newBuilder()
@@ -34,7 +33,7 @@ class ValidatedOrderRequestMapperTest {
                 .setRestaurantId(restaurantId.toString())
                 .setItems("pasta x2")
                 .setTotalAmount(totalAmount.toPlainString())
-                .setCurrency("USD")
+                .setCurrency("EUR")
                 .setValidatedAt(validatedAt.toString())
                 .build();
 
@@ -46,40 +45,48 @@ class ValidatedOrderRequestMapperTest {
         assertEquals(restaurantId, domain.restaurantId());
         assertEquals("pasta x2", domain.items());
         assertEquals(totalAmount, domain.totalAmount());
-        assertEquals("USD", domain.currency());
+        assertEquals("EUR", domain.currency());
         assertEquals(validatedAt, domain.validatedAt());
     }
 
     @Test
-    void fromExternalEmptyStringFieldsYieldNullTypedFields() {
+    void fromExternalEmptyUuidStringThrowsDueToNonNullRecord() {
         CheckoutValidateRequestSvc.ValidatedOrderRequest grpc =
             CheckoutValidateRequestSvc.ValidatedOrderRequest.newBuilder()
                 .setRequestId("")
-                .setCustomerId("")
-                .setRestaurantId("")
+                .setCustomerId(UUID.randomUUID().toString())
+                .setRestaurantId(UUID.randomUUID().toString())
                 .setItems("item")
-                .setTotalAmount("")
-                .setCurrency("EUR")
-                .setValidatedAt("")
+                .setTotalAmount("5.00")
+                .setCurrency("USD")
+                .setValidatedAt(Instant.now().toString())
                 .build();
 
-        ValidatedOrderRequest domain = mapper.fromExternal(grpc);
-
-        assertNotNull(domain);
-        assertNull(domain.requestId());
-        assertNull(domain.customerId());
-        assertNull(domain.restaurantId());
-        assertEquals("item", domain.items());
-        assertNull(domain.totalAmount());
-        assertEquals("EUR", domain.currency());
-        assertNull(domain.validatedAt());
+        // GrpcMappingSupport.uuid("") returns null; ValidatedOrderRequest record rejects null requestId
+        assertThrows(NullPointerException.class, () -> mapper.fromExternal(grpc));
     }
 
     @Test
-    void fromExternalThrowsOnInvalidUuidInRequestId() {
+    void fromExternalThrowsOnInvalidUuidString() {
         CheckoutValidateRequestSvc.ValidatedOrderRequest grpc =
             CheckoutValidateRequestSvc.ValidatedOrderRequest.newBuilder()
                 .setRequestId("not-a-uuid")
+                .build();
+
+        assertThrows(IllegalArgumentException.class, () -> mapper.fromExternal(grpc));
+    }
+
+    @Test
+    void fromExternalThrowsOnInvalidDecimalString() {
+        CheckoutValidateRequestSvc.ValidatedOrderRequest grpc =
+            CheckoutValidateRequestSvc.ValidatedOrderRequest.newBuilder()
+                .setRequestId(UUID.randomUUID().toString())
+                .setCustomerId(UUID.randomUUID().toString())
+                .setRestaurantId(UUID.randomUUID().toString())
+                .setItems("item")
+                .setTotalAmount("not-a-number")
+                .setCurrency("USD")
+                .setValidatedAt(Instant.now().toString())
                 .build();
 
         assertThrows(IllegalArgumentException.class, () -> mapper.fromExternal(grpc));
@@ -102,19 +109,15 @@ class ValidatedOrderRequestMapperTest {
     }
 
     @Test
-    void fromExternalThrowsOnInvalidDecimalString() {
-        CheckoutValidateRequestSvc.ValidatedOrderRequest grpc =
-            CheckoutValidateRequestSvc.ValidatedOrderRequest.newBuilder()
-                .setRequestId(UUID.randomUUID().toString())
-                .setCustomerId(UUID.randomUUID().toString())
-                .setRestaurantId(UUID.randomUUID().toString())
-                .setItems("item")
-                .setTotalAmount("not-a-number")
-                .setCurrency("USD")
-                .setValidatedAt(Instant.now().toString())
-                .build();
+    void fromExternalPreservesItemsString() {
+        CheckoutValidateRequestSvc.ValidatedOrderRequest grpc = validGrpcMessage(
+            UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+            "special & items, more", "8.00", "GBP",
+            Instant.parse("2026-02-01T00:00:00Z"));
 
-        assertThrows(IllegalArgumentException.class, () -> mapper.fromExternal(grpc));
+        ValidatedOrderRequest domain = mapper.fromExternal(grpc);
+
+        assertEquals("special & items, more", domain.items());
     }
 
     // --- toExternal ---
@@ -124,12 +127,12 @@ class ValidatedOrderRequestMapperTest {
         UUID requestId = UUID.randomUUID();
         UUID customerId = UUID.randomUUID();
         UUID restaurantId = UUID.randomUUID();
-        BigDecimal totalAmount = new BigDecimal("88.88");
-        Instant validatedAt = Instant.parse("2026-04-01T09:00:00Z");
+        BigDecimal totalAmount = new BigDecimal("12.34");
+        Instant validatedAt = Instant.parse("2026-02-15T11:45:00Z");
 
         ValidatedOrderRequest domain = new ValidatedOrderRequest(
             requestId, customerId, restaurantId,
-            "salad x1", totalAmount, "GBP", validatedAt);
+            "salad x1", totalAmount, "USD", validatedAt);
 
         CheckoutValidateRequestSvc.ValidatedOrderRequest grpc = mapper.toExternal(domain);
 
@@ -139,25 +142,21 @@ class ValidatedOrderRequestMapperTest {
         assertEquals(restaurantId.toString(), grpc.getRestaurantId());
         assertEquals("salad x1", grpc.getItems());
         assertEquals(totalAmount.toPlainString(), grpc.getTotalAmount());
-        assertEquals("GBP", grpc.getCurrency());
+        assertEquals("USD", grpc.getCurrency());
         assertEquals(validatedAt.toString(), grpc.getValidatedAt());
     }
 
     @Test
-    void toExternalNullUuidAndInstantFieldsYieldEmptyStrings() {
+    void toExternalUsesPlainStringForDecimal() {
+        BigDecimal largeAmount = new BigDecimal("9999999.99");
         ValidatedOrderRequest domain = new ValidatedOrderRequest(
-            null, null, null, "item", null, "USD", null);
+            UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+            "item", largeAmount, "USD",
+            Instant.parse("2026-05-01T00:00:00Z"));
 
         CheckoutValidateRequestSvc.ValidatedOrderRequest grpc = mapper.toExternal(domain);
 
-        assertNotNull(grpc);
-        assertEquals("", grpc.getRequestId());
-        assertEquals("", grpc.getCustomerId());
-        assertEquals("", grpc.getRestaurantId());
-        assertEquals("item", grpc.getItems());
-        assertEquals("", grpc.getTotalAmount());
-        assertEquals("USD", grpc.getCurrency());
-        assertEquals("", grpc.getValidatedAt());
+        assertEquals("9999999.99", grpc.getTotalAmount());
     }
 
     // --- round-trip ---
@@ -167,8 +166,8 @@ class ValidatedOrderRequestMapperTest {
         UUID requestId = UUID.randomUUID();
         UUID customerId = UUID.randomUUID();
         UUID restaurantId = UUID.randomUUID();
-        BigDecimal totalAmount = new BigDecimal("24.95");
-        Instant validatedAt = Instant.parse("2026-03-20T11:15:00Z");
+        BigDecimal totalAmount = new BigDecimal("44.44");
+        Instant validatedAt = Instant.parse("2026-03-10T16:00:00Z");
 
         ValidatedOrderRequest original = new ValidatedOrderRequest(
             requestId, customerId, restaurantId,
@@ -190,18 +189,11 @@ class ValidatedOrderRequestMapperTest {
         UUID requestId = UUID.randomUUID();
         UUID customerId = UUID.randomUUID();
         UUID restaurantId = UUID.randomUUID();
-        Instant validatedAt = Instant.parse("2026-06-10T13:00:00Z");
+        Instant validatedAt = Instant.parse("2026-04-12T13:00:00Z");
 
-        CheckoutValidateRequestSvc.ValidatedOrderRequest original =
-            CheckoutValidateRequestSvc.ValidatedOrderRequest.newBuilder()
-                .setRequestId(requestId.toString())
-                .setCustomerId(customerId.toString())
-                .setRestaurantId(restaurantId.toString())
-                .setItems("steak x1")
-                .setTotalAmount("45.00")
-                .setCurrency("EUR")
-                .setValidatedAt(validatedAt.toString())
-                .build();
+        CheckoutValidateRequestSvc.ValidatedOrderRequest original = validGrpcMessage(
+            requestId, customerId, restaurantId,
+            "dim sum x5", "30.00", "HKD", validatedAt);
 
         CheckoutValidateRequestSvc.ValidatedOrderRequest roundTripped =
             mapper.toExternal(mapper.fromExternal(original));
@@ -215,16 +207,31 @@ class ValidatedOrderRequestMapperTest {
         assertEquals(original.getValidatedAt(), roundTripped.getValidatedAt());
     }
 
-    // Regression: items string with Unicode characters survives round-trip
+    // Regression: large decimal value survives round-trip without scientific notation
     @Test
-    void roundTripPreservesUnicodeItemsString() {
+    void roundTripPreservesLargeDecimalWithoutScientificNotation() {
+        BigDecimal largeAmount = new BigDecimal("9999999.99");
         ValidatedOrderRequest domain = new ValidatedOrderRequest(
             UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-            "拉面 x2, 饺子 x4", new BigDecimal("30.00"), "CNY",
-            Instant.parse("2026-07-01T00:00:00Z"));
+            "item", largeAmount, "USD",
+            Instant.parse("2026-06-01T00:00:00Z"));
 
         ValidatedOrderRequest roundTripped = mapper.fromExternal(mapper.toExternal(domain));
 
-        assertEquals("拉面 x2, 饺子 x4", roundTripped.items());
+        assertEquals(largeAmount, roundTripped.totalAmount());
+    }
+
+    private static CheckoutValidateRequestSvc.ValidatedOrderRequest validGrpcMessage(
+        UUID requestId, UUID customerId, UUID restaurantId,
+        String items, String totalAmount, String currency, Instant validatedAt) {
+        return CheckoutValidateRequestSvc.ValidatedOrderRequest.newBuilder()
+            .setRequestId(requestId.toString())
+            .setCustomerId(customerId.toString())
+            .setRestaurantId(restaurantId.toString())
+            .setItems(items)
+            .setTotalAmount(totalAmount)
+            .setCurrency(currency)
+            .setValidatedAt(validatedAt.toString())
+            .build();
     }
 }

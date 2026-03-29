@@ -2,7 +2,6 @@ package org.pipelineframework.tpfgo.checkout.checkout_create_pending.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.math.BigDecimal;
@@ -51,27 +50,19 @@ class OrderPendingMapperTest {
     }
 
     @Test
-    void fromExternalEmptyUuidStringsYieldNullFields() {
+    void fromExternalEmptyUuidStringThrowsDueToNonNullRecord() {
         CheckoutCreatePendingSvc.OrderPending grpc = CheckoutCreatePendingSvc.OrderPending.newBuilder()
             .setOrderId("")
-            .setRequestId("")
-            .setCustomerId("")
-            .setRestaurantId("")
-            .setTotalAmount("")
-            .setCurrency("EUR")
-            .setCreatedAt("")
+            .setRequestId(UUID.randomUUID().toString())
+            .setCustomerId(UUID.randomUUID().toString())
+            .setRestaurantId(UUID.randomUUID().toString())
+            .setTotalAmount("10.00")
+            .setCurrency("USD")
+            .setCreatedAt(Instant.now().toString())
             .build();
 
-        OrderPending domain = mapper.fromExternal(grpc);
-
-        assertNotNull(domain);
-        assertNull(domain.orderId());
-        assertNull(domain.requestId());
-        assertNull(domain.customerId());
-        assertNull(domain.restaurantId());
-        assertNull(domain.totalAmount());
-        assertEquals("EUR", domain.currency());
-        assertNull(domain.createdAt());
+        // GrpcMappingSupport.uuid("") returns null; OrderPending record rejects null orderId
+        assertThrows(NullPointerException.class, () -> mapper.fromExternal(grpc));
     }
 
     @Test
@@ -113,6 +104,17 @@ class OrderPendingMapperTest {
         assertThrows(IllegalArgumentException.class, () -> mapper.fromExternal(grpc));
     }
 
+    @Test
+    void fromExternalPreservesCurrencyString() {
+        CheckoutCreatePendingSvc.OrderPending grpc = validGrpcMessage(
+            UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+            "99.00", "JPY", Instant.parse("2026-03-01T00:00:00Z"));
+
+        OrderPending domain = mapper.fromExternal(grpc);
+
+        assertEquals("JPY", domain.currency());
+    }
+
     // --- toExternal ---
 
     @Test
@@ -141,21 +143,16 @@ class OrderPendingMapperTest {
     }
 
     @Test
-    void toExternalNullUuidFieldsYieldEmptyStrings() {
+    void toExternalUsesPlainStringForDecimal() {
+        // Verifies toPlainString is used — no scientific notation for large values
+        BigDecimal largeAmount = new BigDecimal("9999999.99");
         OrderPending domain = new OrderPending(
-            null, null, null, null,
-            null, "USD", null);
+            UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+            largeAmount, "USD", Instant.parse("2026-05-01T00:00:00Z"));
 
         CheckoutCreatePendingSvc.OrderPending grpc = mapper.toExternal(domain);
 
-        assertNotNull(grpc);
-        assertEquals("", grpc.getOrderId());
-        assertEquals("", grpc.getRequestId());
-        assertEquals("", grpc.getCustomerId());
-        assertEquals("", grpc.getRestaurantId());
-        assertEquals("", grpc.getTotalAmount());
-        assertEquals("USD", grpc.getCurrency());
-        assertEquals("", grpc.getCreatedAt());
+        assertEquals("9999999.99", grpc.getTotalAmount());
     }
 
     // --- round-trip ---
@@ -192,15 +189,9 @@ class OrderPendingMapperTest {
         UUID restaurantId = UUID.randomUUID();
         Instant createdAt = Instant.parse("2026-04-05T14:30:00Z");
 
-        CheckoutCreatePendingSvc.OrderPending original = CheckoutCreatePendingSvc.OrderPending.newBuilder()
-            .setOrderId(orderId.toString())
-            .setRequestId(requestId.toString())
-            .setCustomerId(customerId.toString())
-            .setRestaurantId(restaurantId.toString())
-            .setTotalAmount("25.00")
-            .setCurrency("EUR")
-            .setCreatedAt(createdAt.toString())
-            .build();
+        CheckoutCreatePendingSvc.OrderPending original = validGrpcMessage(
+            orderId, requestId, customerId, restaurantId,
+            "25.00", "EUR", createdAt);
 
         CheckoutCreatePendingSvc.OrderPending roundTripped = mapper.toExternal(mapper.fromExternal(original));
 
@@ -224,5 +215,19 @@ class OrderPendingMapperTest {
         OrderPending roundTripped = mapper.fromExternal(mapper.toExternal(domain));
 
         assertEquals(largeAmount, roundTripped.totalAmount());
+    }
+
+    private static CheckoutCreatePendingSvc.OrderPending validGrpcMessage(
+        UUID orderId, UUID requestId, UUID customerId, UUID restaurantId,
+        String totalAmount, String currency, Instant createdAt) {
+        return CheckoutCreatePendingSvc.OrderPending.newBuilder()
+            .setOrderId(orderId.toString())
+            .setRequestId(requestId.toString())
+            .setCustomerId(customerId.toString())
+            .setRestaurantId(restaurantId.toString())
+            .setTotalAmount(totalAmount)
+            .setCurrency(currency)
+            .setCreatedAt(createdAt.toString())
+            .build();
     }
 }
