@@ -34,6 +34,19 @@ public class GrpcCheckpointPublicationTargetDispatcher implements CheckpointPubl
         return PublicationTargetKind.GRPC;
     }
 
+    /**
+     * Publishes a checkpoint request to the specified gRPC publication target.
+     *
+     * Converts the provided request into the protobuf request and invokes the remote publish RPC; an in-flight RPC is
+     * cancelled if the returned Uni is terminated.
+     *
+     * @param target the resolved publication target containing endpoint and transport details
+     * @param request the checkpoint publication payload to send
+     * @param tenantId the tenant identifier to include in the protobuf request
+     * @param idempotencyKey an idempotency key to include in the protobuf request
+     * @return a `Void` value when publication completes successfully; fails with the underlying error if conversion or
+     *         the gRPC call fails (including the `IOException` thrown during protobuf conversion)
+     */
     @Override
     public Uni<Void> dispatch(
         ResolvedCheckpointPublicationTarget target,
@@ -68,6 +81,14 @@ public class GrpcCheckpointPublicationTargetDispatcher implements CheckpointPubl
         });
     }
 
+    /**
+     * Shuts down all managed gRPC channels and clears cached channels and stubs.
+     *
+     * <p>Calls {@code shutdown()} on each cached {@link ManagedChannel}, waits up to 5 seconds for
+     * termination, and if interrupted restores the thread interrupt flag and calls
+     * {@code shutdownNow()} for that channel. After attempting shutdown of all channels, clears the
+     * internal channel and stub caches.
+     */
     @PreDestroy
     void shutdown() {
         for (ManagedChannel channel : channels.values()) {

@@ -15,20 +15,21 @@ public interface CheckpointPublicationDescriptor {
     String publication();
 
     /**
-     * Stable payload fields used to derive a handoff idempotency key when no stable execution key is available.
-     *
-     * @return ordered field names
-     */
+ * Defines the ordered payload field names used to derive a handoff idempotency key when no stable execution key is available.
+ *
+ * @return the ordered list of stable payload field names used to derive the idempotency key
+ */
     List<String> idempotencyKeyFields();
 
     /**
      * Normalize the final pipeline result into the stable checkpoint contract payload.
      *
-     * <p>This allows runtimes such as {@code pipeline-runtime} to publish the declared pipeline-domain output even
-     * when the in-process execution result is still a transport-specific DTO.
+     * <p>Runtimes may override this to translate a transport-specific execution result DTO into the
+     * pipeline's stable checkpoint payload. Implementations may return {@code null} to indicate that
+     * checkpoint publication should be skipped for the given result.
      *
-     * @param resultPayload raw execution result payload
-     * @return normalized checkpoint payload, or {@code null} to skip publication
+     * @param resultPayload the raw execution result payload to normalize
+     * @return the normalized checkpoint payload, or {@code null} to skip publication
      */
     default Object normalizePayload(Object resultPayload) {
         return resultPayload;

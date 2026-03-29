@@ -16,6 +16,16 @@ import org.pipelineframework.config.boundary.PipelineCheckpointConfig;
  */
 public class CheckpointPublicationDescriptorRenderer {
 
+    /**
+     * Generates and writes a PipelineCheckpointPublicationDescriptor Java source file for the given checkpoint and returns its type.
+     *
+     * @param basePackage              base package under which the generated class will be placed (used to form the generated class's package)
+     * @param checkpoint               pipeline checkpoint configuration that drives the generated descriptor's content
+     * @param publicationPayloadType   the payload type to use when emitting a normalizePayload delegate; may be null if no payload normalization should be generated
+     * @param ctx                      generation context providing the annotation processing environment and filer
+     * @return                         the ClassName of the generated descriptor class
+     * @throws IOException             if writing the generated source file to the processing environment's filer fails
+     */
     public ClassName render(
         String basePackage,
         PipelineCheckpointConfig checkpoint,

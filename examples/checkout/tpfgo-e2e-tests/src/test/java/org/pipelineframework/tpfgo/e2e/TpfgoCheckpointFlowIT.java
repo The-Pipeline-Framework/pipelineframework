@@ -54,6 +54,14 @@ class TpfgoCheckpointFlowIT {
     private FinalCollector collector;
     private Path logDirectory;
 
+    /**
+     * Prepares the integration test environment by creating the per-test log directory, starting
+     * the in-process FinalCollector on a free port, and launching ManagedApp processes for all
+     * configured AppSpec instances.
+     *
+     * @throws Exception if creating directories, starting the collector, or launching any managed
+     *                   application fails
+     */
     @BeforeEach
     void setUp() throws Exception {
         logDirectory = Path.of("target", "failsafe-reports", "tpfgo-checkpoint-flow");
@@ -67,6 +75,13 @@ class TpfgoCheckpointFlowIT {
         }
     }
 
+    /**
+     * Cleans up resources created for a test by closing all started managed applications and the final collector.
+     *
+     * Closes managed applications in reverse startup order, clears the apps list, and closes the collector if present.
+     *
+     * @throws Exception if shutting down any managed application or the collector fails
+     */
     @AfterEach
     void tearDown() throws Exception {
         for (ManagedApp app : apps.reversed()) {
@@ -79,6 +94,12 @@ class TpfgoCheckpointFlowIT {
         }
     }
 
+    /**
+     * Executes the canonical end-to-end TPFGO order flow and verifies the compensation terminal-state published via gRPC checkpoint handoff.
+     *
+     * Submits a fixed PlaceOrder request to the checkout orchestrator, asserts the submission is not a duplicate, waits for the terminal-state checkpoint published to
+     * "tpfgo.compensation.terminal-state.v1", and verifies the terminal payload indicates a completed outcome with captured payment, no resolution action, and the expected deterministic orderId.
+     */
     @Test
     void executesFullCanonicalTpfgoFlowOverGrpcCheckpointHandoff() {
         ManagedApp checkout = app("checkout-orchestrator-svc");
@@ -110,6 +131,13 @@ class TpfgoCheckpointFlowIT {
             finalPayload.get("orderId").asText());
     }
 
+    /**
+     * Verifies that submitting an order with a zero total amount results in a compensated terminal-state publication.
+     *
+     * Sends a PlaceOrder request with `totalAmount="0"` to the checkout orchestrator, waits for the
+     * `tpfgo.compensation.terminal-state.v1` payload from the collector, and asserts that the terminal
+     * payload indicates a compensated failure with the expected payment status, failure code, and resolution action.
+     */
     @Test
     void routesPaymentFailureIntoCompensationTerminalState() {
         ManagedApp checkout = app("checkout-orchestrator-svc");
@@ -175,6 +203,13 @@ class TpfgoCheckpointFlowIT {
         }
     }
 
+    /**
+     * Locate a started ManagedApp by its module directory identifier.
+     *
+     * @param moduleDir the module directory identifier to match
+     * @return the matching ManagedApp
+     * @throws IllegalStateException if no app with the given moduleDir is found
+     */
     private ManagedApp app(String moduleDir) {
         return apps.stream()
             .filter(app -> app.moduleDir().equals(moduleDir))
@@ -182,6 +217,17 @@ class TpfgoCheckpointFlowIT {
             .orElseThrow(() -> new IllegalStateException("Unknown app " + moduleDir));
     }
 
+    /**
+     * Builds AppSpec instances for the pipeline runtime and all orchestrator modules, configures
+     * the sequential handoff bindings between them, and binds the final orchestrator to the
+     * provided collector port.
+     *
+     * @param collectorPort the port on which the in-process FinalCollector is listening; the final
+     *                      orchestrator will publish to this port
+     * @return a list of AppSpec values in the order they should be started (pipeline runtime first,
+     *         followed by orchestrators with their binding lines already configured)
+     * @throws IOException if a required free port cannot be allocated or underlying spec construction fails
+     */
     private List<AppSpec> specs(int collectorPort) throws IOException {
         AppSpec pipelineRuntime = runtimeSpec("pipeline-runtime-svc");
         int internalGrpcPort = pipelineRuntime.grpcPort();
@@ -248,12 +294,29 @@ class TpfgoCheckpointFlowIT {
             compensation);
     }
 
+    /**
+     * Create an AppSpec for a non-orchestrator runtime module with a free HTTP/gRPC port.
+     *
+     * @param moduleDir the module directory/name used to identify the module
+     * @return an AppSpec configured for a runtime module (not an orchestrator) with its HTTP and gRPC ports set to an available port and no publications or internal clients
+     * @throws IOException if a free port cannot be allocated
+     */
     private AppSpec runtimeSpec(String moduleDir) throws IOException {
         int httpPort = findFreePort();
         int grpcPort = httpPort;
         return new AppSpec(moduleDir, httpPort, grpcPort, false, null, 0, List.of(), new ArrayList<>());
     }
 
+    /**
+     * Create an AppSpec configured as an orchestrator with freshly allocated HTTP and gRPC ports.
+     *
+     * @param moduleDir               module directory identifier used to resolve and start the module
+     * @param publication             the handoff publication name this orchestrator will emit
+     * @param internalGrpcTargetPort  target port to configure internal gRPC clients to connect to
+     * @param internalGrpcClients     names of internal gRPC client bindings to generate
+     * @return                        an AppSpec populated for an orchestrator, with free HTTP/grpc ports and empty binding lines
+     * @throws IOException            if a free port cannot be acquired for HTTP or gRPC
+     */
     private AppSpec orchestratorSpec(
         String moduleDir,
         String publication,
@@ -273,6 +336,12 @@ class TpfgoCheckpointFlowIT {
             new ArrayList<>());
     }
 
+    /**
+     * Selects an available TCP port bound to the loopback address (127.0.0.1).
+     *
+     * @return the selected free port number
+     * @throws IOException if an I/O error occurs while opening or binding the socket
+     */
     private static int findFreePort() throws IOException {
         try (ServerSocket socket = new ServerSocket()) {
             socket.bind(new InetSocketAddress("127.0.0.1", 0));
@@ -290,6 +359,11 @@ class TpfgoCheckpointFlowIT {
         List<String> internalGrpcClients,
         List<String> bindingLines
     ) {
+        /**
+         * Adds configuration property lines that bind this AppSpec's publication to a gRPC target at the given port.
+         *
+         * @param targetGrpcPort the target gRPC port to which the publication should be forwarded
+         */
         private void bindTo(int targetGrpcPort) {
             String bindingPrefix = "pipeline.handoff.bindings.\"" + publication + "\".targets.next";
             bindingLines.add(bindingPrefix + ".kind=GRPC");
@@ -298,6 +372,14 @@ class TpfgoCheckpointFlowIT {
             bindingLines.add(bindingPrefix + ".plaintext=true");
         }
 
+        /**
+         * Generate Quarkus gRPC client property lines for the module's internal gRPC clients.
+         *
+         * @return a list of property lines where each internal client contributes three entries:
+         *         `quarkus.grpc.clients.<name>.host=127.0.0.1`,
+         *         `quarkus.grpc.clients.<name>.port=<internalGrpcTargetPort>`,
+         *         and `quarkus.grpc.clients.<name>.plain-text=true`.
+         */
         private List<String> internalGrpcClientLines() {
             List<String> lines = new ArrayList<>();
             for (String client : internalGrpcClients) {
@@ -316,6 +398,14 @@ class TpfgoCheckpointFlowIT {
         private final Process process;
         private final ManagedChannel channel;
 
+        /**
+         * Creates a ManagedApp representing a started module process, its gRPC port, and an optional orchestrator channel.
+         *
+         * @param moduleDir identifier of the module used for config/log naming and locating the module root
+         * @param grpcPort gRPC server port exposed by the module
+         * @param process spawned Java process running the module
+         * @param channel plaintext gRPC ManagedChannel to the module's orchestrator endpoint, or `null` for non-orchestrator modules
+         */
         private ManagedApp(String moduleDir, int grpcPort, Process process, ManagedChannel channel) {
             this.moduleDir = moduleDir;
             this.grpcPort = grpcPort;
@@ -323,6 +413,15 @@ class TpfgoCheckpointFlowIT {
             this.channel = channel;
         }
 
+        /**
+         * Start a module JVM running Quarkus with a generated per-module properties file, wait until its health endpoint is ready,
+         * and return a ManagedApp representing the running process and optional orchestrator gRPC channel.
+         *
+         * @param spec configuration describing the module to start (ports, orchestrator flag, and binding/client lines)
+         * @param logDirectory directory where the generated properties file and module log will be written
+         * @return a ManagedApp containing the module directory name, exposed gRPC port, spawned Process, and a ManagedChannel when the module is an orchestrator (null otherwise)
+         * @throws Exception if the process cannot be started or the module fails to become healthy within the startup timeout
+         */
         static ManagedApp start(AppSpec spec, Path logDirectory) throws Exception {
             Path moduleRoot = resolveModuleRoot(spec.moduleDir());
             Path configFile = logDirectory.resolve(spec.moduleDir() + ".properties");
@@ -373,6 +472,14 @@ class TpfgoCheckpointFlowIT {
             return new ManagedApp(spec.moduleDir(), spec.grpcPort(), process, channel);
         }
 
+        /**
+         * Locate the filesystem root directory for the given module name by searching upward
+         * from the current working directory and checking common repository locations.
+         *
+         * @param moduleDir the module directory name to find (e.g., "checkout-orchestrator-svc")
+         * @return the Path to the module's root directory
+         * @throws IllegalStateException if no suitable module root is found
+         */
         private static Path resolveModuleRoot(String moduleDir) {
             Path cwd = Path.of("").toAbsolutePath().normalize();
             for (Path cursor = cwd; cursor != null; cursor = cursor.getParent()) {
@@ -391,6 +498,13 @@ class TpfgoCheckpointFlowIT {
             throw new IllegalStateException("Could not resolve module root for " + moduleDir);
         }
 
+        /**
+         * Attempts to terminate the given process: requests a graceful shutdown and, if the process
+         * does not exit within 5 seconds, forces termination and waits up to another 5 seconds.
+         *
+         * @param process the process to terminate
+         * @throws InterruptedException if the current thread is interrupted while waiting for the process to exit
+         */
         private static void destroyProcess(Process process) throws InterruptedException {
             if (!process.isAlive()) {
                 return;
@@ -402,6 +516,14 @@ class TpfgoCheckpointFlowIT {
             }
         }
 
+        /**
+         * Waits until the given process reports healthy by polling its HTTP health endpoint.
+         *
+         * @param port    HTTP port used for the health check (requests made to 127.0.0.1:port)
+         * @param process the process being monitored; if the process exits before becoming healthy this method will fail
+         * @throws IllegalStateException if the process terminates before a successful health check or the thread is interrupted
+         * @throws org.awaitility.core.ConditionTimeoutException if the health check does not succeed within 40 seconds
+         */
         private static void waitForHealth(int port, Process process) {
             Awaitility.await()
                 .atMost(Duration.ofSeconds(40))
@@ -409,6 +531,14 @@ class TpfgoCheckpointFlowIT {
                 .until(() -> healthReady(port, process));
         }
 
+        /**
+         * Checks whether the given process is still running and its /q/health endpoint responds with HTTP 200.
+         *
+         * @param port    the HTTP port where the process exposes its health endpoint
+         * @param process the process being monitored
+         * @return        `true` if the health endpoint returned status 200, `false` otherwise
+         * @throws IllegalStateException if the process has exited before becoming healthy or if the thread is interrupted while waiting
+         */
         private static boolean healthReady(int port, Process process) {
             if (!process.isAlive()) {
                 throw new IllegalStateException("Application process exited before becoming healthy");
@@ -429,14 +559,30 @@ class TpfgoCheckpointFlowIT {
             }
         }
 
+        /**
+         * The module directory identifier used to locate the module root and generate per-module configuration.
+         *
+         * @return the module directory name for this specification
+         */
         String moduleDir() {
             return moduleDir;
         }
 
+        /**
+         * Get the gRPC server port exposed by the module.
+         *
+         * @return the gRPC port number used by the module
+         */
         int grpcPort() {
             return grpcPort;
         }
 
+        /**
+         * Obtain a blocking gRPC stub for the orchestrator service configured with a 10-second deadline.
+         *
+         * @return a blocking stub for the Orchestrator gRPC service
+         * @throws IllegalStateException if no orchestrator gRPC channel is available for this module
+         */
         OrchestratorServiceGrpc.OrchestratorServiceBlockingStub orchestrator() {
             if (channel == null) {
                 throw new IllegalStateException("No orchestrator client available for module " + moduleDir);
@@ -445,6 +591,15 @@ class TpfgoCheckpointFlowIT {
                 .withDeadlineAfter(10, TimeUnit.SECONDS);
         }
 
+        /**
+         * Shuts down the managed resources: closes the gRPC channel if present and stops the spawned process.
+         *
+         * Attempts to terminate the gRPC channel immediately and waits up to 5 seconds for it to finish.
+         * If the process is still alive, attempts a graceful shutdown and waits up to 10 seconds, then
+         * forces termination and waits up to another 10 seconds.
+         *
+         * @throws Exception if the current thread is interrupted while waiting for termination
+         */
         @Override
         public void close() throws Exception {
             if (channel != null) {
@@ -467,19 +622,41 @@ class TpfgoCheckpointFlowIT {
         private final List<CheckpointPublishRequest> received = new CopyOnWriteArrayList<>();
         private final Server server;
 
+        /**
+         * Construct a FinalCollector and build a gRPC server bound to the given port.
+         *
+         * @param port the gRPC port to listen on
+         * @throws IOException if the server cannot be created or bound to the port
+         */
         private FinalCollector(int port) throws IOException {
             this.port = port;
             this.server = ServerBuilder.forPort(port).addService(this).build();
         }
 
+        /**
+         * The gRPC port the collector is listening on.
+         *
+         * @return the port number
+         */
         int port() {
             return port;
         }
 
+        /**
+         * Starts the internal gRPC server so it begins listening for checkpoint publish requests.
+         *
+         * @throws IOException if the server fails to start or bind to the configured port
+         */
         void start() throws IOException {
             server.start();
         }
 
+        /**
+         * Waits until a checkpoint with the given publication name is received and returns its decoded payload.
+         *
+         * @param publication the checkpoint publication name to wait for
+         * @return the decoded JSON payload of the most recently received checkpoint with the specified publication name
+         */
         JsonNode awaitPayload(String publication) {
             Awaitility.await()
                 .atMost(Duration.ofSeconds(40))
@@ -492,12 +669,27 @@ class TpfgoCheckpointFlowIT {
                 .orElseThrow();
         }
 
+        /**
+         * Count received checkpoint publish requests that have the given publication name.
+         *
+         * @param publication the publication name to match
+         * @return the number of received requests whose publication equals the provided name
+         */
         int countFor(String publication) {
             return (int) received.stream()
                 .filter(request -> Objects.equals(publication, request.getPublication()))
                 .count();
         }
 
+        /**
+         * Records an incoming checkpoint publication and returns an acceptance response.
+         *
+         * @param request the incoming checkpoint publication request to record
+         * @return a CheckpointPublishAcceptedResponse containing:
+         *         - executionId set to "collector-N" where N is the count after recording,
+         *         - statusUrl set to "/collector/N",
+         *         - submittedAtEpochMs set to the current epoch millisecond timestamp
+         */
         @Override
         public io.smallrye.mutiny.Uni<CheckpointPublishAcceptedResponse> publish(CheckpointPublishRequest request) {
             received.add(request);
@@ -509,6 +701,13 @@ class TpfgoCheckpointFlowIT {
                     .build());
         }
 
+        /**
+         * Decode a checkpoint publish request into its JSON payload.
+         *
+         * @param request the checkpoint publish request to decode
+         * @return the decoded payload as a JsonNode
+         * @throws IllegalStateException if the request cannot be decoded into JSON
+         */
         private JsonNode toPayload(CheckpointPublishRequest request) {
             try {
                 return CheckpointPublicationProtoSupport.fromProtoRequest(request).payload();
@@ -517,6 +716,11 @@ class TpfgoCheckpointFlowIT {
             }
         }
 
+        /**
+         * Shuts down the gRPC server immediately and waits up to 5 seconds for it to terminate.
+         *
+         * @throws InterruptedException if the current thread is interrupted while waiting for termination
+         */
         @Override
         public void close() throws Exception {
             server.shutdownNow();

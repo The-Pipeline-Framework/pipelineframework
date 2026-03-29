@@ -43,6 +43,12 @@ public class EventWorkDispatcher implements WorkDispatcher {
         return -100;
     }
 
+    /**
+     * Enqueues an ExecutionWorkItem for immediate dispatch via the CDI async execution work event.
+     *
+     * @param item the work item to dispatch
+     * @return a Uni that completes with no value after the dispatch has been initiated
+     */
     @Override
     public Uni<Void> enqueueNow(ExecutionWorkItem item) {
         return Uni.createFrom().item(() -> {
@@ -51,6 +57,13 @@ public class EventWorkDispatcher implements WorkDispatcher {
         }).replaceWithVoid();
     }
 
+    /**
+     * Schedules an ExecutionWorkItem to be dispatched after the given delay.
+     *
+     * @param item the work item to dispatch
+     * @param delay how long to wait before dispatch; null or negative values are treated as zero
+     * @return a Uni that completes normally when the scheduled dispatch task has submitted the work item, or completes exceptionally if scheduling or dispatching fails
+     */
     @Override
     public Uni<Void> enqueueDelayed(ExecutionWorkItem item, Duration delay) {
         long delayMs = Math.max(0L, delay == null ? 0L : delay.toMillis());

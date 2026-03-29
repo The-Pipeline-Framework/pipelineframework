@@ -36,6 +36,16 @@ public class CheckpointPublicationService {
     private volatile java.util.Map<PublicationTargetKind, CheckpointPublicationTargetDispatcher> dispatcherByKind =
         java.util.Map.of();
 
+    /**
+     * Initializes checkpoint publication support: selects the configured publication descriptor,
+     * registers dispatchers by target kind, and resolves runtime publication targets.
+     *
+     * <p>If no publication descriptor is present this method leaves publication disabled and returns.</p>
+     *
+     * @throws IllegalStateException if the orchestrator mode is not QUEUE_ASYNC
+     * @throws IllegalStateException if more than one dispatcher is registered for the same publication target kind
+     * @throws IllegalStateException if the selected publication has no resolved runtime targets configured
+     */
     @PostConstruct
     void initialize() {
         descriptor = publicationDescriptors.stream().findFirst().orElse(null);
@@ -67,6 +77,18 @@ public class CheckpointPublicationService {
             descriptor.publication(), resolvedTargets.size());
     }
 
+    /**
+     * Publish a checkpoint to all configured runtime targets when a publication descriptor and payload are present.
+     *
+     * This method normalizes the provided payload, derives an idempotency key from the execution record and
+     * normalized payload, constructs a checkpoint publication request, and dispatches it to every resolved target.
+     * If publication is not configured, the payload is null, the normalized payload is null, or the orchestrator
+     * mode is not QUEUE_ASYNC, publication is skipped or the returned Uni will fail as appropriate.
+     *
+     * @param record the execution record whose execution key, tenant, and execution id are used for idempotency and logging
+     * @param resultPayload the raw result payload to be normalized and published
+     * @return a Uni that completes with no value when all dispatches have completed; the Uni fails if publication cannot
+     *         proceed due to an invalid orchestrator mode or if any target dispatch fails.
     public Uni<Void> publishIfConfigured(ExecutionRecord<Object, Object> record, Object resultPayload) {
         if (descriptor == null) {
             LOG.debug("Skipping checkpoint publication because no descriptor is configured");
