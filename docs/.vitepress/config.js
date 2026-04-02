@@ -58,6 +58,8 @@ const mainSidebar = [
                     {text: 'Using Runtime Mapping', link: '/guide/build/runtime-layouts/using-runtime-mapping'},
                     {text: 'Maven Migration Playbook', link: '/guide/build/runtime-layouts/maven-migration'},
                     {text: 'Search Lambda Verification Lane', link: '/guide/build/runtime-layouts/search-lambda'},
+                    {text: 'Search Azure Functions Testing Guide', link: '/guide/build/runtime-layouts/search-azure-functions'},
+                    {text: 'Multi-Cloud Function Providers', link: '/guide/build/runtime-layouts/function-providers'},
                     {text: 'POM vs Layout Matrix', link: '/guide/build/runtime-layouts/pom-layout-matrix'},
                     {text: 'CSV Payments Pipeline-Runtime Walkthrough', link: '/guide/build/runtime-layouts/csv-payments-pipeline-runtime'},
                     {text: 'CSV Payments Monolith Walkthrough', link: '/guide/build/runtime-layouts/csv-payments-monolith'}

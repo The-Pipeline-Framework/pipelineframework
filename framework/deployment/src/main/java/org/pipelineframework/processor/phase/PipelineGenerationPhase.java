@@ -471,27 +471,86 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         try {
             String transport = binding.normalizedTransport();
             boolean rest = "REST".equalsIgnoreCase(transport);
-            if (rest && ctx.isPlatformModeFunction() && !binding.inputStreaming() && !binding.outputStreaming()) {
+            boolean local = "LOCAL".equalsIgnoreCase(transport);
+            boolean grpc = "GRPC".equalsIgnoreCase(transport);
+            
+            // Generate REST resource for REST transport
+            if (rest) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER;
-                orchestratorFunctionHandlerRenderer.render(binding, new GenerationContext(
+                org.pipelineframework.processor.renderer.OrchestratorRestResourceRenderer orchestratorRestRenderer = 
+                    new org.pipelineframework.processor.renderer.OrchestratorRestResourceRenderer();
+                orchestratorRestRenderer.render(binding, new GenerationContext(
                     ctx.getProcessingEnv(),
                     resolveRoleOutputDir(ctx, role),
                     role,
                     java.util.Set.of(),
                     cacheKeyGenerator,
                     descriptorSet));
-                roleMetadataGenerator.recordClassWithRole(
-                    AbstractOrchestratorFunctionHandlerRenderer.HANDLER_CLASS,
-                    role.name());
-                roleMetadataGenerator.recordClassWithRole(
-                    AbstractOrchestratorFunctionHandlerRenderer.RUN_ASYNC_HANDLER_CLASS,
-                    role.name());
-                roleMetadataGenerator.recordClassWithRole(
-                    AbstractOrchestratorFunctionHandlerRenderer.STATUS_HANDLER_CLASS,
-                    role.name());
-                roleMetadataGenerator.recordClassWithRole(
-                    AbstractOrchestratorFunctionHandlerRenderer.RESULT_HANDLER_CLASS,
-                    role.name());
+                
+                // Generate function handlers for FUNCTION platform mode (unary only)
+                if (ctx.isPlatformModeFunction() && !binding.inputStreaming() && !binding.outputStreaming()) {
+                    orchestratorFunctionHandlerRenderer.render(binding, new GenerationContext(
+                        ctx.getProcessingEnv(),
+                        resolveRoleOutputDir(ctx, role),
+                        role,
+                        java.util.Set.of(),
+                        cacheKeyGenerator,
+                        descriptorSet));
+                    roleMetadataGenerator.recordClassWithRole(
+                        AbstractOrchestratorFunctionHandlerRenderer.HANDLER_CLASS,
+                        role.name());
+                    roleMetadataGenerator.recordClassWithRole(
+                        AbstractOrchestratorFunctionHandlerRenderer.RUN_ASYNC_HANDLER_CLASS,
+                        role.name());
+                    roleMetadataGenerator.recordClassWithRole(
+                        AbstractOrchestratorFunctionHandlerRenderer.STATUS_HANDLER_CLASS,
+                        role.name());
+                    roleMetadataGenerator.recordClassWithRole(
+                        AbstractOrchestratorFunctionHandlerRenderer.RESULT_HANDLER_CLASS,
+                        role.name());
+                }
+            }
+            
+            // Generate gRPC service for GRPC transport (non-LOCAL)
+            if (grpc && !local) {
+                org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.PIPELINE_SERVER;
+                org.pipelineframework.processor.renderer.OrchestratorGrpcRenderer orchestratorGrpcRenderer = 
+                    new org.pipelineframework.processor.renderer.OrchestratorGrpcRenderer();
+                orchestratorGrpcRenderer.render(binding, new GenerationContext(
+                    ctx.getProcessingEnv(),
+                    resolveRoleOutputDir(ctx, role),
+                    role,
+                    java.util.Set.of(),
+                    cacheKeyGenerator,
+                    descriptorSet));
+            }
+
+            // Generate CLI client if requested
+            if (generateCli) {
+                org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT;
+                org.pipelineframework.processor.renderer.OrchestratorCliRenderer orchestratorCliRenderer = 
+                    new org.pipelineframework.processor.renderer.OrchestratorCliRenderer();
+                orchestratorCliRenderer.render(binding, new GenerationContext(
+                    ctx.getProcessingEnv(),
+                    resolveRoleOutputDir(ctx, role),
+                    role,
+                    java.util.Set.of(),
+                    cacheKeyGenerator,
+                    descriptorSet));
+            }
+
+            // Generate ingest client for GRPC transport (non-LOCAL, non-REST)
+            if (!rest && !local) {
+                org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT;
+                org.pipelineframework.processor.renderer.OrchestratorIngestClientRenderer orchestratorIngestClientRenderer = 
+                    new org.pipelineframework.processor.renderer.OrchestratorIngestClientRenderer();
+                orchestratorIngestClientRenderer.render(binding, new GenerationContext(
+                    ctx.getProcessingEnv(),
+                    resolveRoleOutputDir(ctx, role),
+                    role,
+                    java.util.Set.of(),
+                    cacheKeyGenerator,
+                    descriptorSet));
             }
         } catch (IOException e) {
             ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR,
