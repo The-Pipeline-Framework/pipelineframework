@@ -79,6 +79,16 @@
             <artifactId>quarkus-amazon-lambda</artifactId>
             <scope>${tpf.build.lambda.scope}</scope>
         </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-azure-functions</artifactId>
+            <scope>${tpf.build.azure.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-google-cloud-functions</artifactId>
+            <scope>${tpf.build.gcp.scope}</scope>
+        </dependency>
 
         <!-- Health check dependency -->
         <dependency>

@@ -108,14 +108,9 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             new org.pipelineframework.processor.renderer.LocalClientStepRenderer();
         RestClientStepRenderer restClientRenderer = new RestClientStepRenderer();
         RestResourceRenderer restRenderer = new RestResourceRenderer();
-        RestFunctionHandlerRenderer restFunctionHandlerRenderer = new RestFunctionHandlerRenderer();
+        AbstractFunctionHandlerRenderer restFunctionHandlerRenderer = FunctionHandlerRendererFactory.createRenderer();
+        AbstractOrchestratorFunctionHandlerRenderer orchestratorFunctionHandlerRenderer = FunctionHandlerRendererFactory.createOrchestratorRenderer();
         RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer = new RemoteOperatorAdapterRenderer();
-        OrchestratorGrpcRenderer orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
-        OrchestratorRestResourceRenderer orchestratorRestRenderer = new OrchestratorRestResourceRenderer();
-        OrchestratorFunctionHandlerRenderer orchestratorFunctionHandlerRenderer =
-            new OrchestratorFunctionHandlerRenderer();
-        OrchestratorCliRenderer orchestratorCliRenderer = new OrchestratorCliRenderer();
-        OrchestratorIngestClientRenderer orchestratorIngestClientRenderer = new OrchestratorIngestClientRenderer();
         ExternalAdapterRenderer externalAdapterRenderer = new ExternalAdapterRenderer(GenerationTarget.EXTERNAL_ADAPTER);
 
         // Initialize role metadata generator
@@ -238,12 +233,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 generateOrchestratorServer(
                     ctx,
                     descriptorSet,
-                    orchestratorBinding.cliName() != null, // Using cliName as indicator for CLI generation
-                    orchestratorGrpcRenderer,
-                    orchestratorRestRenderer,
+                    orchestratorBinding.cliName() != null,
                     orchestratorFunctionHandlerRenderer,
-                    orchestratorCliRenderer,
-                    orchestratorIngestClientRenderer,
                     roleMetadataGenerator,
                     cacheKeyGenerator
                 );
@@ -380,7 +371,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             org.pipelineframework.processor.renderer.LocalClientStepRenderer localClientRenderer,
             RestClientStepRenderer restClientRenderer,
             RestResourceRenderer restRenderer,
-            RestFunctionHandlerRenderer restFunctionHandlerRenderer,
+            AbstractFunctionHandlerRenderer restFunctionHandlerRenderer,
             RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer) throws IOException {
         stepArtifactGenerationService.generateArtifactsForModel(
             ctx,
@@ -468,11 +459,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             PipelineCompilationContext ctx,
             DescriptorProtos.FileDescriptorSet descriptorSet,
             boolean generateCli,
-            OrchestratorGrpcRenderer orchestratorGrpcRenderer,
-            OrchestratorRestResourceRenderer orchestratorRestRenderer,
-            OrchestratorFunctionHandlerRenderer orchestratorFunctionHandlerRenderer,
-            OrchestratorCliRenderer orchestratorCliRenderer,
-            OrchestratorIngestClientRenderer orchestratorIngestClientRenderer,
+            AbstractOrchestratorFunctionHandlerRenderer orchestratorFunctionHandlerRenderer,
             RoleMetadataGenerator roleMetadataGenerator,
             ClassName cacheKeyGenerator) {
         // Get orchestrator binding from context
@@ -484,68 +471,27 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         try {
             String transport = binding.normalizedTransport();
             boolean rest = "REST".equalsIgnoreCase(transport);
-            boolean local = "LOCAL".equalsIgnoreCase(transport);
-            if (rest) {
+            if (rest && ctx.isPlatformModeFunction() && !binding.inputStreaming() && !binding.outputStreaming()) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER;
-                orchestratorRestRenderer.render(binding, new GenerationContext(
+                orchestratorFunctionHandlerRenderer.render(binding, new GenerationContext(
                     ctx.getProcessingEnv(),
                     resolveRoleOutputDir(ctx, role),
                     role,
                     java.util.Set.of(),
                     cacheKeyGenerator,
                     descriptorSet));
-                if (ctx.isPlatformModeFunction() && !binding.inputStreaming() && !binding.outputStreaming()) {
-                    orchestratorFunctionHandlerRenderer.render(binding, new GenerationContext(
-                        ctx.getProcessingEnv(),
-                        resolveRoleOutputDir(ctx, role),
-                        role,
-                        java.util.Set.of(),
-                        cacheKeyGenerator,
-                        descriptorSet));
-                    roleMetadataGenerator.recordClassWithRole(
-                        OrchestratorFunctionHandlerRenderer.handlerFqcn(binding.basePackage()),
-                        role.name());
-                    roleMetadataGenerator.recordClassWithRole(
-                        OrchestratorFunctionHandlerRenderer.runAsyncHandlerFqcn(binding.basePackage()),
-                        role.name());
-                    roleMetadataGenerator.recordClassWithRole(
-                        OrchestratorFunctionHandlerRenderer.statusHandlerFqcn(binding.basePackage()),
-                        role.name());
-                    roleMetadataGenerator.recordClassWithRole(
-                        OrchestratorFunctionHandlerRenderer.resultHandlerFqcn(binding.basePackage()),
-                        role.name());
-                }
-            } else if (!local) {
-                org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.PIPELINE_SERVER;
-                orchestratorGrpcRenderer.render(binding, new GenerationContext(
-                    ctx.getProcessingEnv(),
-                    resolveRoleOutputDir(ctx, role),
-                    role,
-                    java.util.Set.of(),
-                    cacheKeyGenerator,
-                    descriptorSet));
-            }
-
-            if (generateCli) {
-                org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT;
-                orchestratorCliRenderer.render(binding, new GenerationContext(
-                    ctx.getProcessingEnv(),
-                    resolveRoleOutputDir(ctx, role),
-                    role,
-                    java.util.Set.of(),
-                    cacheKeyGenerator,
-                    descriptorSet));
-            }
-
-            if (!rest && !local) {
-                org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT;
-                orchestratorIngestClientRenderer.render(binding, new GenerationContext(
-                    ctx.getProcessingEnv(),
-                    resolveRoleOutputDir(ctx, role),
-                    role,
-                    java.util.Set.of(),
-                    cacheKeyGenerator,
-                    descriptorSet));
+                roleMetadataGenerator.recordClassWithRole(
+                    AbstractOrchestratorFunctionHandlerRenderer.HANDLER_CLASS,
+                    role.name());
+                roleMetadataGenerator.recordClassWithRole(
+                    AbstractOrchestratorFunctionHandlerRenderer.RUN_ASYNC_HANDLER_CLASS,
+                    role.name());
+                roleMetadataGenerator.recordClassWithRole(
+                    AbstractOrchestratorFunctionHandlerRenderer.STATUS_HANDLER_CLASS,
+                    role.name());
+                roleMetadataGenerator.recordClassWithRole(
+                    AbstractOrchestratorFunctionHandlerRenderer.RESULT_HANDLER_CLASS,
+                    role.name());
             }
         } catch (IOException e) {
             ctx.getProcessingEnv().getMessager().printMessage(javax.tools.Diagnostic.Kind.ERROR,

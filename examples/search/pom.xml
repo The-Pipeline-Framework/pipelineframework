@@ -46,6 +46,8 @@
         <tpf.build.transport>REST</tpf.build.transport>
         <tpf.build.platform>COMPUTE</tpf.build.platform>
         <tpf.build.lambda.scope>provided</tpf.build.lambda.scope>
+        <tpf.build.azure.scope>provided</tpf.build.azure.scope>
+        <tpf.build.gcp.scope>provided</tpf.build.gcp.scope>
         <tpf.build.rest.naming.strategy>RESOURCEFUL</tpf.build.rest.naming.strategy>
         <pipeline.parallelism>PARALLEL</pipeline.parallelism>
         <quarkus.container-image.build>true</quarkus.container-image.build>

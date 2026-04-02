@@ -20,7 +20,7 @@ import org.pipelineframework.processor.renderer.GrpcServiceAdapterRenderer;
 import org.pipelineframework.processor.renderer.LocalClientStepRenderer;
 import org.pipelineframework.processor.renderer.RemoteOperatorAdapterRenderer;
 import org.pipelineframework.processor.renderer.RestClientStepRenderer;
-import org.pipelineframework.processor.renderer.RestFunctionHandlerRenderer;
+import org.pipelineframework.processor.renderer.AbstractFunctionHandlerRenderer;
 import org.pipelineframework.processor.renderer.RestResourceRenderer;
 import org.pipelineframework.processor.util.ResourceNameUtils;
 import org.pipelineframework.processor.util.RoleMetadataGenerator;
@@ -60,7 +60,7 @@ class StepArtifactGenerationService {
             LocalClientStepRenderer localClientRenderer,
             RestClientStepRenderer restClientRenderer,
             RestResourceRenderer restRenderer,
-            RestFunctionHandlerRenderer restFunctionHandlerRenderer,
+            AbstractFunctionHandlerRenderer restFunctionHandlerRenderer,
             RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer) throws IOException {
         for (GenerationTarget target : model.enabledTargets()) {
             switch (target) {
@@ -207,7 +207,7 @@ class StepArtifactGenerationService {
 
                     if (ctx.isPlatformModeFunction()) {
                         String handlerClassName =
-                            RestFunctionHandlerRenderer.handlerFqcn(model.servicePackage(), model.generatedName());
+                            restFunctionHandlerRenderer.handlerFqcn(model.servicePackage(), model.generatedName());
                         restFunctionHandlerRenderer.render(restBinding, new GenerationContext(
                             ctx.getProcessingEnv(),
                             pathResolver.resolveRoleOutputDir(ctx, restRole),

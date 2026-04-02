@@ -27,7 +27,7 @@ The fastest way to get started is using our visual canvas designer:
 
 ### Architects
 - **Immutability by Design**: No database updates during pipeline execution - only appends/preserves
-- **Kubernetes & Serverless Ready**: Native builds enable quick start-up times for Kubernetes and serverless platforms (AWS Lambda, Google Cloud Run)
+- **Kubernetes & Serverless Ready**: Native builds enable quick start-up times for Kubernetes and serverless platforms (AWS Lambda, Google Cloud Run, Azure Functions)
 - **Cost Efficiency**: Reduced resource consumption with native builds and reactive processing
 - **Scalability**: Each pipeline step can be scaled independently based on demand
 - **gRPC & REST Flexibility**: High-performance gRPC for throughput-intensive tasks, REST for ease of integration

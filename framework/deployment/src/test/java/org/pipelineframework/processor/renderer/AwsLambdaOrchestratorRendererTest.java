@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-class OrchestratorFunctionHandlerRendererTest {
+class AwsLambdaOrchestratorRendererTest {
     // Parity matrix mirrors RestFunctionHandlerRendererTest for orchestrator-generated handlers.
 
     @TempDir
@@ -178,7 +178,7 @@ class OrchestratorFunctionHandlerRendererTest {
 
     @Test
     void handlerReturnsGenerationTargetRESTResource() {
-        OrchestratorFunctionHandlerRenderer renderer = new OrchestratorFunctionHandlerRenderer();
+        AwsLambdaOrchestratorRenderer renderer = new AwsLambdaOrchestratorRenderer();
         assertEquals(GenerationTarget.REST_RESOURCE, renderer.target());
     }
 
@@ -227,25 +227,25 @@ class OrchestratorFunctionHandlerRendererTest {
 
     @Test
     void handlerFqcnReturnsCorrectPath() {
-        String fqcn = OrchestratorFunctionHandlerRenderer.handlerFqcn("com.example");
+        String fqcn = AwsLambdaOrchestratorRenderer.handlerFqcn("com.example");
         assertEquals("com.example.orchestrator.service.PipelineRunFunctionHandler", fqcn);
     }
 
     @Test
     void runAsyncHandlerFqcnReturnsCorrectPath() {
-        String fqcn = OrchestratorFunctionHandlerRenderer.runAsyncHandlerFqcn("com.example");
+        String fqcn = AwsLambdaOrchestratorRenderer.runAsyncHandlerFqcn("com.example");
         assertEquals("com.example.orchestrator.service.PipelineRunAsyncFunctionHandler", fqcn);
     }
 
     @Test
     void statusHandlerFqcnReturnsCorrectPath() {
-        String fqcn = OrchestratorFunctionHandlerRenderer.statusHandlerFqcn("com.example");
+        String fqcn = AwsLambdaOrchestratorRenderer.statusHandlerFqcn("com.example");
         assertEquals("com.example.orchestrator.service.PipelineExecutionStatusFunctionHandler", fqcn);
     }
 
     @Test
     void resultHandlerFqcnReturnsCorrectPath() {
-        String fqcn = OrchestratorFunctionHandlerRenderer.resultHandlerFqcn("com.example");
+        String fqcn = AwsLambdaOrchestratorRenderer.resultHandlerFqcn("com.example");
         assertEquals("com.example.orchestrator.service.PipelineExecutionResultFunctionHandler", fqcn);
     }
 
@@ -327,7 +327,7 @@ class OrchestratorFunctionHandlerRendererTest {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
 
-        OrchestratorFunctionHandlerRenderer renderer = new OrchestratorFunctionHandlerRenderer();
+        AwsLambdaOrchestratorRenderer renderer = new AwsLambdaOrchestratorRenderer();
         renderer.render(binding, new GenerationContext(
             processingEnv, tempDir, DeploymentRole.REST_SERVER, java.util.Set.of(), null, null));
 

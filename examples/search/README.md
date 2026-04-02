@@ -58,6 +58,64 @@ Run only the Lambda mock event server smoke test:
   test
 ```
 
+### Function Platform Build (Azure Functions)
+
+Build the search pipeline for Azure Functions deployment:
+
+```bash
+./build-azure.sh -DskipTests
+```
+
+Run the Azure Functions bootstrap smoke test:
+
+```bash
+./mvnw -pl orchestrator-svc -am \
+  -Dtpf.build.platform=FUNCTION \
+  -Dtpf.build.transport=REST \
+  -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
+  -Dtpf.build.azure.scope=compile \
+  -Dquarkus.profile=azure-functions \
+  -DskipTests \
+  compile
+
+./mvnw -pl orchestrator-svc \
+  -Dtpf.build.platform=FUNCTION \
+  -Dtpf.build.transport=REST \
+  -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
+  -Dtpf.build.azure.scope=compile \
+  -Dquarkus.profile=azure-functions \
+  -Dtest=AzureFunctionsBootstrapSmokeTest \
+  test
+```
+
+For local testing with Azure Functions Core Tools:
+
+**Important**: Quarkus dev mode and `quarkus:run` do not work with Azure Functions. The extension requires a staging directory created during deployment. For local runtime testing, use the helper script to prepare the Azure Functions project structure:
+
+```bash
+# Build the package
+cd examples/search
+./mvnw clean package \
+  -Dtpf.build.platform=FUNCTION \
+  -Dtpf.build.transport=REST \
+  -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
+  -Dtpf.build.azure.scope=compile \
+  -Dquarkus.profile=azure-functions \
+  -DskipTests
+
+# Prepare Azure Functions project structure (creates host.json, etc.)
+./prepare-azure-functions-local.sh
+
+# Run with Azure Functions Core Tools (from examples/search directory where host.json lives)
+func host start --java
+```
+
+The function will be available at:
+- HTTP Trigger URL: `http://localhost:7071/api/{route}`
+- Health endpoint: `http://localhost:7071/q/health` (if configured)
+
+**Prerequisites**: Azure Functions Core Tools v4.x must be installed. See [Search Azure Functions Verification Lane](../../docs/guide/build/runtime-layouts/search-azure-functions.md) for installation instructions.
+
 ### Function Streaming Lane Status
 
 The search FUNCTION lane now includes explicit fan-out/fan-in path coverage.
