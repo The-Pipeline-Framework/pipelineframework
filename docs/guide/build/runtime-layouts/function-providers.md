@@ -201,5 +201,5 @@ Solution: Use REST transport approach - HTTP triggers route to Quarkus REST endp
 ## Next Steps
 
 - Review provider-specific guides for detailed deployment instructions
-- See [Function Platform Architecture](../evolve/compiler-pipeline-architecture.md) for implementation details
-- Consult [Operations Playbook](../operations/operators-playbook.md) for production guidance
+- See [Function Platform Architecture](/guide/evolve/compiler-pipeline-architecture.md) for implementation details
+- Consult [Operations Playbook](/guide/operations/operators-playbook.md) for production guidance
