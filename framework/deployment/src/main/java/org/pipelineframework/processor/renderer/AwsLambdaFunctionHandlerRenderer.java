@@ -36,41 +36,93 @@ public class AwsLambdaFunctionHandlerRenderer extends AbstractFunctionHandlerRen
     public AwsLambdaFunctionHandlerRenderer() {
     }
 
+    /**
+     * Identifies the cloud provider for this renderer.
+     *
+     * @return the cloud provider identifier "aws"
+     */
     @Override
     protected String getCloudProvider() {
         return "aws";
     }
 
+    /**
+     * Provide the JavaPoet ClassName for the AWS Lambda Context type.
+     *
+     * @return the JavaPoet `ClassName` for `com.amazonaws.services.lambda.runtime.Context`
+     */
     @Override
     protected ClassName getContextClassName() {
         return LAMBDA_CONTEXT;
     }
 
+    /**
+     * Provides the AWS Lambda RequestHandler interface ClassName used for generated handlers.
+     *
+     * @return the ClassName for AWS Lambda's com.amazonaws.services.lambda.runtime.RequestHandler.
+     */
     @Override
     protected ClassName getHandlerInterfaceClassName() {
         return REQUEST_HANDLER;
     }
 
+    /**
+     * Provides a JavaPoet format string that selects the AWS request ID from the Lambda {@code Context} or a placeholder when the context is null.
+     *
+     * @return A format string that evaluates to {@code context.getAwsRequestId()} when {@code context != null}, otherwise the {@code $S} placeholder.
+     */
     @Override
     protected String getRequestIdExpression() {
         return "context != null ? context.getAwsRequestId() : $S";
     }
 
+    /**
+     * Provide the JavaPoet expression that yields the AWS Lambda function name from the Lambda Context or a placeholder.
+     *
+     * @return a format string that resolves to `context.getFunctionName()` when `context` is non-null, otherwise the string placeholder `$S`
+     */
     @Override
     protected String getFunctionNameExpression() {
         return "context != null ? context.getFunctionName() : $S";
     }
 
+    /**
+     * Provides the JavaPoet format string used to obtain the execution identifier from the Lambda Context.
+     *
+     * <p>The returned format string selects {@code context.getLogStreamName()} when {@code context} is non-null; otherwise it uses the string placeholder {@code $S}.</p>
+     *
+     * @return the JavaPoet format string {@code "context != null ? context.getLogStreamName() : $S"}
+     */
     @Override
     protected String getExecutionIdExpression() {
         return "context != null ? context.getLogStreamName() : $S";
     }
 
+    /**
+     * Suffix appended to generated handler class names for AWS Lambda RequestHandler wrappers.
+     *
+     * @return the suffix string "FunctionHandler" used when naming generated handler classes
+     */
     @Override
     protected String getHandlerSuffix() {
         return "FunctionHandler";
     }
 
+    /**
+     * Builds a JavaPoet format string that constructs an AWS-specific `transportContext`.
+     *
+     * <p>The returned format string, when supplied with the required `$T`/`$S` arguments and formatted into generated code,
+     * produces an expression that creates a `transportContext` populated from Lambda `Context` values when available
+     * and sensible fallbacks otherwise.
+     *
+     * @return a JavaPoet format string which (once type/string placeholders are provided) generates code that:
+     *         - sets the correlation id from `context.getAwsRequestId()` or from the provided `$S` fallback,
+     *         - sets the function name from `context.getFunctionName()` or from the provided `$S` fallback,
+     *         - sets the execution id to `context.getLogStreamName()` when non-null and not blank, otherwise to `UUID.randomUUID().toString()`,
+     *         - includes a retry-attempt value obtained via a property lookup placeholder,
+     *         - includes a dispatch timestamp based on the current epoch millis;
+     *         callers must supply the matching `$T` and `$S` arguments required by the format string.
+     */
     @Override
     protected String buildTransportContextStatement() {
         // AWS Lambda uses specific context methods for metadata

@@ -60,14 +60,14 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
     }
 
     /**
-         * Generates pipeline source artifacts and metadata for all configured step models and the orchestrator.
-         *
-         * <p>Produces per-step artifacts (gRPC services, REST resources, client classes, side-effect beans), optionally
-         * generates protobuf parsers when applicable, and writes role, platform, and orchestrator-related metadata.</p>
-         *
-         * @param ctx the compilation context containing step models, renderer bindings, descriptor set, environment, and settings
-         * @throws Exception if an unrecoverable generation error occurs that cannot be handled locally
-         */
+     * Generate pipeline source artifacts and metadata for all configured step models and the orchestrator.
+     *
+     * <p>Produces per-step artifacts (gRPC services, REST resources, client classes, side-effect beans), optionally
+     * generates protobuf parsers when applicable, and writes role, platform, and orchestrator-related metadata.</p>
+     *
+     * @param ctx the compilation context containing step models, renderer bindings, descriptor set, processing environment, and generation settings
+     * @throws Exception if an unrecoverable generation error occurs that cannot be handled locally
+     */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
         // Only proceed if there are models to process or orchestrator to generate
@@ -332,28 +332,26 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Generate all source and metadata artifacts for a single pipeline step according to its enabled generation targets.
+     * Generate all source and metadata artifacts for a single pipeline step.
      *
-     * This will invoke the appropriate renderers to produce gRPC services, client steps (gRPC, local, REST),
-     * REST resources, record generated classes with their deployment roles, and generate side-effect CDI beans
-     * when required and permitted by the compilation context.
-     *
-     * @param ctx the compilation context containing processing environment, aspect models, transport and hosting configuration
+     * @param ctx the compilation context with environment, options, and models
      * @param model the pipeline step model to generate artifacts for
-     * @param grpcBinding gRPC binding information for rendering gRPC-related artifacts; may be null
-     * @param restBinding REST binding information for rendering REST-related artifacts; may be null
-     * @param localBinding local-transport binding information for rendering local client artifacts; may be null
-     * @param generatedSideEffectBeans a set used to track already-generated side-effect bean keys to avoid duplicates
+     * @param grpcBinding gRPC binding for the step; may be null when gRPC is not targeted
+     * @param restBinding REST binding for the step; may be null when REST is not targeted
+     * @param localBinding local-transport binding for the step; may be null when local transport is not targeted
+     * @param generatedSideEffectBeans set tracking keys of already-generated side-effect CDI beans to avoid duplicates
+     * @param enabledAspects set of enabled aspect names (lowercased)
      * @param descriptorSet protobuf descriptor set used for protobuf-related generation; may be null
-     * @param cacheKeyGenerator optional cache key generator class to include in generation contexts; may be null
-     * @param roleMetadataGenerator generator used to record generated class names and their deployment roles
-     * @param grpcRenderer renderer responsible for producing gRPC service classes
-     * @param clientRenderer renderer responsible for producing gRPC client step classes
-     * @param localClientRenderer renderer responsible for producing local-transport client step classes
-     * @param restClientRenderer renderer responsible for producing REST client step classes
-     * @param restRenderer renderer responsible for producing REST resource classes
-     * @param restFunctionHandlerRenderer renderer responsible for producing native function handlers for unary REST resources
-     * @throws IOException if an I/O error occurs while writing generated sources or renderers perform IO
+     * @param cacheKeyGenerator optional ClassName of a cache key generator to include in generation contexts; may be null
+     * @param roleMetadataGenerator recorder used to register generated class names with their deployment roles
+     * @param grpcRenderer renderer for producing gRPC service classes
+     * @param clientRenderer renderer for producing gRPC client step classes
+     * @param localClientRenderer renderer for producing local-transport client step classes
+     * @param restClientRenderer renderer for producing REST client step classes
+     * @param restRenderer renderer for producing REST resource classes
+     * @param restFunctionHandlerRenderer renderer for producing function handlers for unary REST resources
+     * @param remoteOperatorAdapterRenderer renderer for producing remote operator adapter classes
+     * @throws IOException if an I/O error occurs while writing generated sources
      */
     private void generateArtifacts(
             PipelineCompilationContext ctx,
@@ -436,22 +434,18 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Generate orchestrator server and client source artifacts based on the configured orchestrator binding.
+     * Generate orchestrator server and client source artifacts according to the configured orchestrator binding.
      *
-     * When the binding transport is REST, emits REST server sources and, if platform-function mode applies and the
-     * binding is non-streaming, also emits native function handlers and records their handler classes in role metadata.
-     * When the transport is gRPC or unspecified, emits a gRPC server. Server generation is skipped for LOCAL transport.
-     * Additionally emits a CLI client when {@code generateCli} is true and emits an ingest client when the transport is
-     * neither REST nor LOCAL. Generation I/O failures are reported to the processing environment messager.
+     * When the binding transport is REST, emits a REST resource and, if running in function platform mode with
+     * non-streaming input/output, emits native function handlers and records their handler classes in role metadata.
+     * When the transport is GRPC (and not LOCAL), emits a gRPC server. Server generation is skipped for LOCAL transport.
+     * Emits a CLI client when {@code generateCli} is true and emits an ingest client when the transport is neither REST
+     * nor LOCAL. I/O failures during generation are reported to the processing environment messager.
      *
      * @param ctx the pipeline compilation context
      * @param descriptorSet protobuf descriptor set used during generation; may be {@code null}
      * @param generateCli whether to generate the CLI orchestrator client
-     * @param orchestratorGrpcRenderer renderer for gRPC orchestrator server artifacts
-     * @param orchestratorRestRenderer renderer for REST orchestrator server artifacts
      * @param orchestratorFunctionHandlerRenderer renderer for native function orchestrator handlers
-     * @param orchestratorCliRenderer renderer for CLI orchestrator client artifacts
-     * @param orchestratorIngestClientRenderer renderer for orchestrator ingest client artifacts
      * @param roleMetadataGenerator generator that records generated classes by deployment role
      * @param cacheKeyGenerator optional cache key generator class; may be {@code null}
      */

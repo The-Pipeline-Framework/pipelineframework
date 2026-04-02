@@ -44,6 +44,32 @@ class StepArtifactGenerationService {
         this.sideEffectBeanService = Objects.requireNonNull(sideEffectBeanService, "sideEffectBeanService");
     }
 
+    /**
+     * Generate Java artifacts for a PipelineStepModel across its enabled GenerationTargets.
+     *
+     * For each enabled target this method renders the appropriate artifact (gRPC service, client steps,
+     * local client step, REST resource and function handler, REST client step, remote operator adapter),
+     * may generate side-effect beans when required, and records produced class-to-role metadata.
+     *
+     * @param ctx the pipeline compilation context providing environment and mode flags
+     * @param model the pipeline step model describing the service to generate artifacts for
+     * @param grpcBinding the gRPC binding for the step, or null if not available
+     * @param restBinding the REST binding for the step, or null if not available
+     * @param localBinding the local binding for the step, or null if not available
+     * @param generatedSideEffectBeans set used to deduplicate side-effect bean generation across steps
+     * @param enabledAspects aspects that should be enabled for artifact generation
+     * @param descriptorSet protocol buffer descriptor set passed to renderers, may be null
+     * @param cacheKeyGenerator class used to generate cache keys for generation artifacts
+     * @param roleMetadataGenerator recorder for associating generated class FQCNs with deployment roles
+     * @param grpcRenderer renderer used to produce gRPC service artifacts
+     * @param clientRenderer renderer used to produce gRPC client-step artifacts
+     * @param localClientRenderer renderer used to produce local client-step artifacts
+     * @param restClientRenderer renderer used to produce REST client-step artifacts
+     * @param restRenderer renderer used to produce REST resource artifacts
+     * @param restFunctionHandlerRenderer renderer used to produce REST function handlers when in function mode
+     * @param remoteOperatorAdapterRenderer renderer used to produce remote operator adapter artifacts
+     * @throws IOException if any renderer or file output operation fails
+     */
     void generateArtifactsForModel(
             PipelineCompilationContext ctx,
             PipelineStepModel model,

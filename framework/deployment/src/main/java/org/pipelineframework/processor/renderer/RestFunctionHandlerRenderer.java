@@ -28,20 +28,22 @@ package org.pipelineframework.processor.renderer;
 @Deprecated
 public class RestFunctionHandlerRenderer extends AwsLambdaFunctionHandlerRenderer {
     /**
-     * Creates a new RestFunctionHandlerRenderer (AWS Lambda-specific).
+     * Constructs a deprecated RestFunctionHandlerRenderer used for backwards compatibility with legacy REST handler generation.
+     *
+     * @deprecated Use {@link AwsLambdaFunctionHandlerRenderer} instead.
      */
     public RestFunctionHandlerRenderer() {
         super();
     }
 
     /**
-     * Returns the generated REST function handler fully-qualified class name.
-     * <p>
-     * <strong>Deprecated:</strong> This method is retained for backwards compatibility only.
+     * Get the fully-qualified class name of the generated REST function handler.
      *
-     * @param servicePackage service package
-     * @param generatedName generated service name
-     * @return handler FQCN
+     * This method is retained for backwards compatibility.
+     *
+     * @param servicePackage the service package name
+     * @param generatedName the generated service name
+     * @return the handler's fully-qualified class name
      * @deprecated Use {@link AwsLambdaFunctionHandlerRenderer} directly
      */
     @Deprecated

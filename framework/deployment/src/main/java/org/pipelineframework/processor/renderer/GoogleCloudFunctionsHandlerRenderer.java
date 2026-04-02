@@ -39,11 +39,21 @@ public class GoogleCloudFunctionsHandlerRenderer extends AbstractFunctionHandler
     public GoogleCloudFunctionsHandlerRenderer() {
     }
 
+    /**
+     * Identifies the target cloud provider for generated handlers.
+     *
+     * @return the cloud provider identifier "gcp"
+     */
     @Override
     protected String getCloudProvider() {
         return "gcp";
     }
 
+    /**
+     * Identify the context class used for extracting request metadata on Google Cloud Functions.
+     *
+     * @return the ClassName representing com.google.cloud.functions.HttpRequest used as the context
+     */
     @Override
     protected ClassName getContextClassName() {
         // GCP HttpFunction doesn't have a context object like Lambda/Azure
@@ -51,11 +61,23 @@ public class GoogleCloudFunctionsHandlerRenderer extends AbstractFunctionHandler
         return HTTP_REQUEST;
     }
 
+    /**
+     * Provide the handler interface used for generated Google Cloud Functions HTTP handlers.
+     *
+     * @return the ClassName representing com.google.cloud.functions.HttpFunction
+     */
     @Override
     protected ClassName getHandlerInterfaceClassName() {
         return HTTP_FUNCTION;
     }
 
+    /**
+     * Provide the code-generation expression that extracts a request identifier from the GCP HttpRequest.
+     *
+     * The expression reads the "X-Cloud-Trace-Context" header and uses its value when present; otherwise it falls back to a randomly generated UUID.
+     *
+     * @return a templated Java expression string that resolves to the request ID
+     */
     @Override
     protected String getRequestIdExpression() {
         // Extract trace ID from X-Cloud-Trace-Context header if present, otherwise generate UUID
@@ -64,18 +86,34 @@ public class GoogleCloudFunctionsHandlerRenderer extends AbstractFunctionHandler
         return "$T.ofNullable(request.getFirstHeader($S).orElse(null)).orElseGet(() -> $T.randomUUID().toString())";
     }
 
+    /**
+     * Provide a Java expression that reads the Cloud Function name from the environment.
+     *
+     * @return a String containing a Java expression that invokes System.getenv with a string placeholder (`$S`) to obtain the function name
+     */
     @Override
     protected String getFunctionNameExpression() {
         // GCP function name is available via environment variable
         return "System.getenv($S)";
     }
 
+    /**
+     * Produce a Java expression that obtains an execution identifier from the incoming request or generates one.
+     *
+     * @return a string expression which reads the `X-Cloud-Trace-Context` header via `request.getFirstHeader(...)`
+     *         and falls back to `UUID.randomUUID().toString()` when the header is absent
+     */
     @Override
     protected String getExecutionIdExpression() {
         // Use request ID from header or generate one
         return "request.getFirstHeader($S).orElseGet(() -> $T.randomUUID().toString())";
     }
 
+    /**
+     * Suffix used when forming the generated handler class name for Google Cloud Functions.
+     *
+     * @return the handler name suffix "GcpFunction".
+     */
     @Override
     protected String getHandlerSuffix() {
         return "GcpFunction";

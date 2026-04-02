@@ -102,50 +102,69 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
         ClassName.get("org.pipelineframework.transport.function", "UnaryFunctionTransportBridge");
 
     /**
-     * Creates a new AbstractFunctionHandlerRenderer.
+     * Constructs an AbstractFunctionHandlerRenderer used as a base for generating REST-oriented cloud function handler wrappers.
      */
     protected AbstractFunctionHandlerRenderer() {
     }
 
+    /**
+     * Specifies the generation target for this renderer.
+     *
+     * @return the generation target: {@link GenerationTarget#REST_RESOURCE}
+     */
     @Override
     public GenerationTarget target() {
         return GenerationTarget.REST_RESOURCE;
     }
 
     /**
-     * Returns the cloud provider name for this renderer (e.g., "aws", "azure", "gcp").
-     */
+ * Provide the cloud provider identifier used by this renderer.
+ *
+ * @return the cloud provider identifier, e.g. "aws", "azure", or "gcp"
+ */
     protected abstract String getCloudProvider();
 
     /**
-     * Returns the fully-qualified class name of the cloud provider's context type.
-     * For example, {@code com.amazonaws.services.lambda.runtime.Context} for AWS Lambda.
-     */
+ * Supply the fully qualified ClassName of the cloud provider's function invocation context.
+ *
+ * @return the ClassName representing the provider-specific context type (for example, {@code com.amazonaws.services.lambda.runtime.Context})
+ */
     protected abstract ClassName getContextClassName();
 
     /**
-     * Returns the fully-qualified interface name that handlers implement.
-     * For example, {@code com.amazonaws.services.lambda.runtime.RequestHandler} for AWS Lambda.
-     */
+ * Fully-qualified handler interface ClassName implemented by the generated handlers.
+ *
+ * @return the handler interface ClassName, e.g. {@code com.amazonaws.services.lambda.runtime.RequestHandler}
+ */
     protected abstract ClassName getHandlerInterfaceClassName();
 
     /**
-     * Returns the expression to extract the request ID from the cloud context.
-     * For example, {@code context.getAwsRequestId()} for AWS Lambda.
-     */
+ * Provide the Java expression that extracts the request ID from the cloud function context.
+ *
+ * <p>Example: {@code context.getAwsRequestId()} for AWS Lambda.
+ *
+ * @return a String containing a Java expression which, when evaluated against the handler's context parameter, yields the request ID
+ */
     protected abstract String getRequestIdExpression();
 
     /**
-     * Returns the expression to extract the function name from the cloud context.
-     * For example, {@code context.getFunctionName()} for AWS Lambda.
-     */
+ * Provide the Java expression used to obtain the function name from the provider's execution context.
+ *
+ * <p>Example: {@code context.getFunctionName()} for AWS Lambda.</p>
+ *
+ * @return a Java expression string that evaluates to the function name from the cloud context
+ */
     protected abstract String getFunctionNameExpression();
 
     /**
-     * Returns the expression to extract execution-scoped identifier from the cloud context.
-     * For example, {@code context.getLogStreamName()} for AWS Lambda.
-     * Returns empty string if not applicable.
-     */
+ * Provide a Java expression that yields an execution-scoped identifier from the cloud context.
+ *
+ * <p>Example: {@code context.getLogStreamName()} for AWS Lambda. Return an empty string if no
+ * execution-scoped identifier is available for the provider.
+ *
+ * @return a Java expression that evaluates to the execution-scoped identifier, or an empty string
+ *         if not applicable
+ */
     protected abstract String getExecutionIdExpression();
 
     /**
@@ -159,18 +178,16 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
     }
 
     /**
-     * Generates and writes a REST-oriented cloud function handler class for the given pipeline binding.
-     *
-     * <p>The generated class implements the cloud provider's function interface for the binding's pipeline
-     * step, adapts domain types to DTOs, selects input/output adapters based on the step's streaming shape,
-     * constructs a function transport context, and emits a handler method that delegates processing to the
-     * pipeline resource.</p>
-     *
-     * @param binding the REST binding describing the pipeline step and service package
-     * @param ctx the generation context providing the output directory and generation utilities
-     * @throws IOException if writing the generated Java file to the output directory fails
-     * @throws IllegalStateException if the binding's PipelineStepModel has a null streamingShape
-     */
+         * Generate a REST-oriented cloud function handler class for the provided pipeline binding and write it to the output directory.
+         *
+         * The generated handler adapts domain types to DTOs, selects adapters and bridge logic based on the step's streaming shape,
+         * and implements the provider-specific function interface delegating processing to the pipeline resource.
+         *
+         * @param binding the REST binding describing the pipeline step and target service package
+         * @param ctx the generation context supplying the output directory and generation utilities
+         * @throws IOException if writing the generated Java file fails
+         * @throws IllegalStateException if the binding's PipelineStepModel has a null streamingShape
+         */
     @Override
     public void render(RestBinding binding, GenerationContext ctx) throws IOException {
         PipelineStepModel model = binding.model();
@@ -232,7 +249,20 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
     }
 
     /**
-     * Builds the handler method specification.
+     * Constructs the generated handler method `handleRequest` that wires source, invoke, sink adapters
+     * and a transport bridge according to the provided streaming shape and DTO types.
+     *
+     * @param baseName               base logical name of the function (used for adapter identifiers)
+     * @param inputDto               DTO type for individual input elements
+     * @param outputDto              DTO type for individual output elements
+     * @param inputEventType         declared type of the incoming event parameter (may be a stream wrapper)
+     * @param handlerOutputType      declared return type of the handler method (may be a collection wrapper)
+     * @param resourceType           the injected REST resource class used for local delegation
+     * @param localInvokeDelegate    expression or method reference used to delegate local invocation (e.g., "resource::process" or a transformation expression)
+     * @param shape                  the StreamingShape describing unary/streaming input and output combinations
+     * @param streamingInput         true when the handler should treat input as a streaming source
+     * @param streamingOutput        true when the handler should produce streaming output
+     * @return                       a JavaPoet MethodSpec representing the complete `handleRequest` method
      */
     protected MethodSpec buildHandlerMethod(
             String baseName,
@@ -311,9 +341,9 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
     }
 
     /**
-     * Builds the execution ID expression for the FunctionTransportContext.
-     * Handles null/empty execution ID expressions from subclasses.
-     * @return Java expression for execution ID
+     * Produces a Java expression that yields the execution id for FunctionTransportContext, using the subclass-provided execution id expression when non-blank and falling back to java.util.UUID.randomUUID().toString().
+     *
+     * @return a Java expression string that evaluates to the execution id
      */
     protected String buildExecutionIdExpression() {
         String executionIdExpr = getExecutionIdExpression();
@@ -325,16 +355,19 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
     }
 
     /**
-     * Returns the fallback expression for execution ID when primary is unavailable.
-     * @return JavaPoet format string for UUID generation
+     * Provide the JavaPoet format fragment used as a fallback execution-id expression.
+     *
+     * @return a JavaPoet format string representing `java.util.UUID`
      */
     protected String buildExecutionIdFallbackExpression() {
         return "java.util.UUID";
     }
 
     /**
-     * Builds the FunctionTransportContext construction statement.
-     * @deprecated Use inline statement construction in buildHandlerMethod
+     * Creates a JavaPoet format string fragment for instantiating a FunctionTransportContext with placeholders for request id, function name, stage, and transport attributes.
+     *
+     * @deprecated Inline context construction is performed in buildHandlerMethod; this template is retained only for backwards compatibility.
+     * @return a JavaPoet-compatible format string that, when rendered, produces code to construct a `FunctionTransportContext` including protocol, correlation id, execution id (with UUID fallback), retry-attempt, and dispatch timestamp attributes
      */
     @Deprecated
     protected String buildTransportContextStatement() {
@@ -363,12 +396,22 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
     }
 
     /**
-     * Returns the handler suffix for this cloud provider (e.g., "FunctionHandler").
-     */
+         * Provider-specific suffix appended to generated handler class names.
+         *
+         * @return the handler class name suffix, for example "FunctionHandler"
+         */
     protected String getHandlerSuffix() {
         return "FunctionHandler";
     }
 
+    /**
+     * Convert a domain type representation to the corresponding DTO type representation.
+     *
+     * @param domainType the domain TypeName to convert; may be null
+     * @return the DTO TypeName corresponding to the domain type, or `ClassName.OBJECT` if `domainType` is null
+     * @throws IllegalArgumentException if the domain type is a type variable, wildcard, primitive, or a parameterized type whose raw type cannot be resolved to a concrete class
+     * @throws IllegalStateException if an unexpected TypeName implementation is encountered
+     */
     private TypeName convertDomainToDtoType(TypeName domainType) {
         if (domainType == null) {
             return ClassName.OBJECT;
@@ -405,6 +448,13 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
             " (class: " + domainType.getClass().getName() + ")");
     }
 
+    /**
+     * Rewrite a package name by replacing the first "domain" or "service" segment with "dto".
+     *
+     * @param packageName the original package name; may be null or blank
+     * @return the rewritten package name with the matched segment replaced by "dto", or an empty string if {@code packageName} is null or blank
+     * @throws IllegalArgumentException if neither "domain" nor "service" appears as a segment in {@code packageName}
+     */
     private String rewritePackageToDto(String packageName) {
         if (packageName == null || packageName.isBlank()) {
             return "";
@@ -427,17 +477,27 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
     }
 
     /**
-     * Returns the generated REST function handler fully-qualified class name.
+     * Compute the fully qualified class name of the generated REST function handler.
      *
-     * @param servicePackage service package
-     * @param generatedName generated service name
-     * @return handler FQCN
+     * @param servicePackage the base package of the service
+     * @param generatedName the generated service class name (may include "Service" or "Reactive" suffix)
+     * @return the fully qualified class name of the generated handler
      */
     public String handlerFqcn(String servicePackage, String generatedName) {
         String baseName = removeSuffix(removeSuffix(generatedName, "Service"), "Reactive");
         return servicePackage + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX + "." + baseName + getHandlerSuffix();
     }
 
+    /**
+     * Selects the appropriate local invoke adapter ClassName for the given streaming shape.
+     *
+     * @param shape the streaming shape that determines which adapter to use
+     * @param localInvokeAdapter adapter for UNARY_UNARY shape
+     * @param localOneToManyInvokeAdapter adapter for UNARY_STREAMING shape
+     * @param localManyToOneInvokeAdapter adapter for STREAMING_UNARY shape
+     * @param localManyToManyInvokeAdapter adapter for STREAMING_STREAMING shape
+     * @return the ClassName of the adapter that corresponds to the provided streaming shape
+     */
     private static ClassName selectInvokeAdapterForShape(
             StreamingShape shape,
             ClassName localInvokeAdapter,
@@ -452,6 +512,14 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
         };
     }
 
+    /**
+     * Selects the transport bridge invocation format string that matches the given streaming shape.
+     *
+     * @param shape the streaming shape of the function invocation
+     * @return a JavaPoet format string for invoking the appropriate bridge method:
+     *         "`invoke`" for UNARY_UNARY, "`invokeOneToMany`" for UNARY_STREAMING,
+     *         "`invokeManyToOne`" for STREAMING_UNARY, and "`invokeManyToMany`" for STREAMING_STREAMING.
+     */
     private static String bridgeInvocationFormat(StreamingShape shape) {
         return switch (shape) {
             case UNARY_UNARY -> "return $T.invoke(input, transportContext, source, invoke, sink)";
@@ -461,6 +529,13 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
         };
     }
 
+    /**
+     * Selects the local invocation delegate expression corresponding to the provided streaming shape.
+     *
+     * @param shape the streaming shape of the pipeline step
+     * @return {@code "resource::process"} for {@code UNARY_UNARY}, {@code UNARY_STREAMING}, and {@code STREAMING_STREAMING}; otherwise the lambda
+     *         {@code "inputStream -> inputStream.collect().asList().onItem().transformToUni(resource::process)"} for {@code STREAMING_UNARY}
+     */
     private static String localInvokeDelegate(StreamingShape shape) {
         return switch (shape) {
             case UNARY_UNARY, UNARY_STREAMING, STREAMING_STREAMING -> "resource::process";
@@ -469,6 +544,13 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
         };
     }
 
+    /**
+     * Removes the specified suffix from the given string if it is present.
+     *
+     * @param value  the input string, may be {@code null}
+     * @param suffix the suffix to remove; if {@code null} or blank no removal is attempted
+     * @return the input string with the suffix removed if it ended with the suffix; otherwise the original string (may be {@code null})
+     */
     private static String removeSuffix(String value, String suffix) {
         if (value == null || suffix == null || suffix.isBlank()) {
             return value;

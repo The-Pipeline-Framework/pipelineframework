@@ -42,24 +42,77 @@ public class GcpOrchestratorRenderer extends AbstractOrchestratorFunctionHandler
     private static final ClassName RUN_ASYNC_ACCEPTED_DTO = ClassName.get("org.pipelineframework.orchestrator.dto", "RunAsyncAcceptedDto");
     private static final ClassName EXECUTION_STATUS_DTO = ClassName.get("org.pipelineframework.orchestrator.dto", "ExecutionStatusDto");
 
+    /**
+     * Specifies the cloud provider identifier used for generated handlers.
+     *
+     * @return the string "gcp" identifying Google Cloud Platform
+     */
     @Override
     protected String getCloudProvider() { return "gcp"; }
 
+    /**
+     * The context class used for GCP HTTP function handlers.
+     *
+     * @return the ClassName representing com.google.cloud.functions.HttpRequest
+     */
     @Override
     protected ClassName getContextClassName() { return HTTP_REQUEST; }
 
+    /**
+     * Provide the handler interface class used for generated Google Cloud Functions.
+     *
+     * @return the ClassName corresponding to {@code com.google.cloud.functions.HttpFunction}
+     */
     @Override
     protected ClassName getHandlerInterfaceClassName() { return HTTP_FUNCTION; }
 
+    /**
+     * Provides the expression used to obtain a request identifier for incoming requests.
+     *
+     * The generated expression yields the first value of the configured request-id header if present;
+     * otherwise it produces a newly generated UUID string.
+     *
+     * @return a Java expression string that evaluates to the header value when available, or a UUID string when not
+     */
     @Override
     protected String getRequestIdExpression() { return "$T.ofNullable(request.getFirstHeader($S).orElse(null)).orElseGet(() -> $T.randomUUID().toString())"; }
 
+    /**
+     * Provides the Java expression used to resolve the function name from an environment variable.
+     *
+     * @return the expression string "System.getenv($S)" where `$S` will be replaced with the environment variable name.
+     */
     @Override
     protected String getFunctionNameExpression() { return "System.getenv($S)"; }
 
+    /**
+     * Provide the template expression used to extract an execution id from an HttpRequest.
+     *
+     * <p>The returned format string represents code that reads the first occurrence of the execution-id
+     * header (placeholder supplied as a format argument) and, if absent, falls back to a newly
+     * generated UUID string.
+     *
+     * @return a format string that resolves to `request.getFirstHeader(<headerName>).orElseGet(() -> UUID.randomUUID().toString())`
+     */
     @Override
     protected String getExecutionIdExpression() { return "request.getFirstHeader($S).orElseGet(() -> $T.randomUUID().toString())"; }
 
+    /**
+     * Generates and writes GCP-specific orchestrator HTTP handler and request DTO classes for async execution.
+     *
+     * This method builds two request DTOs (run-async and execution-lookup) and three HttpFunction handlers
+     * (run-async, status, result) configured for Google Cloud Functions, then writes them into
+     * {@code basePackage + ".orchestrator.service"} in the provided generation context.
+     *
+     * @param binding        orchestrator binding describing the pipeline to generate handlers for
+     * @param ctx            generation context that provides output directory and utilities
+     * @param basePackage    root package under which generated classes will be placed
+     * @param inputDto       ClassName of the pipeline input DTO used by generated request/handler code
+     * @param outputDto      ClassName of the pipeline output DTO used by result handler and DTOs
+     * @param streamingInput true if handlers should accept batched/streaming input
+     * @param streamingOutput true if the result handler should return a list (streaming) of outputs
+     * @throws IOException if writing generated Java files to the output directory fails
+     */
     @Override
     protected void renderAsyncHandlers(OrchestratorBinding binding, GenerationContext ctx, String basePackage, ClassName inputDto, ClassName outputDto, boolean streamingInput, boolean streamingOutput) throws IOException {
         ClassName list = ClassName.get(List.class);
@@ -126,6 +179,21 @@ public class GcpOrchestratorRenderer extends AbstractOrchestratorFunctionHandler
         JavaFile.builder(basePackage + ".orchestrator.service", resultHandler).build().writeTo(ctx.outputDir());
     }
 
+    /**
+     * Builds the GCP HTTP "service" handler method used to submit an orchestrator run request.
+     *
+     * The generated method deserializes the request payload into the provided input DTO type,
+     * reads the `X-Tenant-ID` and `Idempotency-Key` headers, invokes `pipelineExecutionService.executePipelineAsync(...)`
+     * with the computed execution input and header values, and returns the accepted execution DTO.
+     *
+     * @param basePackage the base Java package for generated types (used for naming/placement)
+     * @param inputDto the class of the input DTO to deserialize from the request payload
+     * @param runAsyncRequestType the request DTO TypeName used for run-async requests
+     * @param runAsyncAcceptedDto the class of the DTO returned when a run is accepted
+     * @param streamingInput true if the handler should accept streaming input
+     * @param streamingOutput true if the pipeline produces streaming output
+     * @return a MethodSpec representing the generated public `service(HttpRequest, HttpResponse)` handler method
+     */
     private MethodSpec buildGcpRunAsyncHandler(String basePackage, ClassName inputDto, TypeName runAsyncRequestType, ClassName runAsyncAcceptedDto, boolean streamingInput, boolean streamingOutput) {
         return MethodSpec.methodBuilder("service")
             .addAnnotation(Override.class)
@@ -141,6 +209,12 @@ public class GcpOrchestratorRenderer extends AbstractOrchestratorFunctionHandler
             .build();
     }
 
+    /**
+     * Handles an HTTP request to retrieve the execution status for a given execution ID.
+     *
+     * @return the execution status DTO for the requested executionId and tenantId
+     * @throws IllegalArgumentException if the "X-Execution-ID" header is missing or blank
+     */
     private MethodSpec buildGcpStatusHandler(TypeName executionLookupRequestType, ClassName executionStatusDto) {
         return MethodSpec.methodBuilder("service")
             .addAnnotation(Override.class)
@@ -158,6 +232,17 @@ public class GcpOrchestratorRenderer extends AbstractOrchestratorFunctionHandler
             .build();
     }
 
+    /**
+     * Handles an HTTP request to retrieve the result of a previously started execution.
+     *
+     * Reads the "X-Execution-ID" header (required) and the optional "X-Tenant-ID" header,
+     * then returns the execution result (a single DTO or a list of DTOs when streaming).
+     *
+     * @param request  the incoming HTTP request carrying headers and payload
+     * @param response the HTTP response object (unused for return value)
+     * @return the execution result DTO, or a List of DTOs when streaming output is enabled
+     * @throws IllegalArgumentException if the "X-Execution-ID" header is missing or blank
+     */
     private MethodSpec buildGcpResultHandler(TypeName executionLookupRequestType, TypeName asyncResultType, ClassName outputDto, boolean streamingOutput) {
         return MethodSpec.methodBuilder("service")
             .addAnnotation(Override.class)

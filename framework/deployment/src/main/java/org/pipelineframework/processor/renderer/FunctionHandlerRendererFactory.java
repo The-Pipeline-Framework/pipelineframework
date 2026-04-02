@@ -46,6 +46,9 @@ public final class FunctionHandlerRendererFactory {
     private static final String EXTENSION_AZURE = "io.quarkus.azure.functions.runtime.AzureFunctionsHandler";
     private static final String EXTENSION_GCP = "com.google.cloud.functions.HttpFunction";
 
+    /**
+     * Private constructor to prevent instantiation of this utility factory class.
+     */
     private FunctionHandlerRendererFactory() {
         // Prevent instantiation
     }
@@ -70,9 +73,12 @@ public final class FunctionHandlerRendererFactory {
     }
 
     /**
-     * Creates an orchestrator renderer based on explicit provider or auto-detection.
+     * Selects and returns an orchestrator renderer for cloud functions using explicit configuration or auto-detection.
      *
-     * @return configured orchestrator function handler renderer
+     * <p>The provider selection follows this precedence: explicit system properties (`pipeline.function.provider`,
+     * legacy `tpf.function.provider`), auto-detection from the classpath, then the default provider ("aws").</p>
+     *
+     * @return the orchestrator function handler renderer for the resolved provider
      */
     public static AbstractOrchestratorFunctionHandlerRenderer createOrchestratorRenderer() {
         String provider = getExplicitProvider();
@@ -89,11 +95,11 @@ public final class FunctionHandlerRendererFactory {
     }
 
     /**
-     * Creates a renderer for a specific provider.
+     * Create a function handler renderer for the specified cloud provider.
      *
-     * @param provider provider name (aws, azure, gcp)
-     * @return configured function handler renderer
-     * @throws IllegalArgumentException if provider is null or not supported
+     * @param provider the provider name; accepted values are "aws", "azure", or "gcp" (case-insensitive, surrounding whitespace is ignored)
+     * @return an AbstractFunctionHandlerRenderer implementation configured for the given provider
+     * @throws IllegalArgumentException if {@code provider} is {@code null} or not one of the supported values
      */
     public static AbstractFunctionHandlerRenderer createRendererForProvider(String provider) {
         if (provider == null) {
@@ -112,11 +118,11 @@ public final class FunctionHandlerRendererFactory {
     }
 
     /**
-     * Creates an orchestrator renderer for a specific provider.
+     * Create an orchestrator renderer for the given cloud provider.
      *
-     * @param provider provider name (aws, azure, gcp)
-     * @return configured orchestrator function handler renderer
-     * @throws IllegalArgumentException if provider is null or not supported
+     * @param provider the provider identifier; accepted values are "aws", "azure", or "gcp"
+     * @return an AbstractOrchestratorFunctionHandlerRenderer implementation for the specified provider
+     * @throws IllegalArgumentException if {@code provider} is null or not one of "aws", "azure", or "gcp"
      */
     public static AbstractOrchestratorFunctionHandlerRenderer createOrchestratorRendererForProvider(String provider) {
         if (provider == null) {
@@ -135,9 +141,11 @@ public final class FunctionHandlerRendererFactory {
     }
 
     /**
-     * Returns the explicitly configured provider from system properties.
+     * Retrieve the explicitly configured function provider from system properties.
      *
-     * @return provider name or null if not configured
+     * Checks "pipeline.function.provider" and falls back to the legacy "tpf.function.provider".
+     *
+     * @return the provider name trimmed, or {@code null} if no explicit provider is configured
      */
     private static String getExplicitProvider() {
         String provider = System.getProperty("pipeline.function.provider");
@@ -155,9 +163,12 @@ public final class FunctionHandlerRendererFactory {
     }
 
     /**
-     * Auto-detects the provider based on Quarkus extensions in the classpath.
+     * Detects the cloud function provider by checking for known Quarkus extension classes on the classpath.
      *
-     * @return detected provider name or null if none detected
+     * <p>If multiple providers are present, selects one with precedence AWS &gt; Azure &gt; GCP and prints a warning
+     * to System.err indicating the chosen provider and how to override it via the system property.</p>
+     *
+     * @return `aws`, `azure`, or `gcp` when detected; `null` if none are detected
      */
     private static String detectProviderFromClasspath() {
         boolean hasAws = isClassAvailable(EXTENSION_AWS);
@@ -201,7 +212,12 @@ public final class FunctionHandlerRendererFactory {
     }
 
     /**
-     * Checks if a class is available on the classpath.
+     * Determines whether the specified fully-qualified class name is present on the classpath.
+     *
+     * This check uses the factory's class loader and does not initialize the class.
+     *
+     * @param className the fully-qualified name of the class to look up
+     * @return `true` if the class can be located by FunctionHandlerRendererFactory's class loader, `false` otherwise
      */
     private static boolean isClassAvailable(String className) {
         try {

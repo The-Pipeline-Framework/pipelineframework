@@ -41,44 +41,116 @@ public class AwsLambdaOrchestratorRenderer extends AbstractOrchestratorFunctionH
     private static final ClassName RUN_ASYNC_ACCEPTED_DTO = ClassName.get("org.pipelineframework.orchestrator.dto", "RunAsyncAcceptedDto");
     private static final ClassName EXECUTION_STATUS_DTO = ClassName.get("org.pipelineframework.orchestrator.dto", "ExecutionStatusDto");
 
-    /** Returns the fully-qualified class name of the main handler. */
+    /**
+     * Build the fully-qualified class name for the orchestrator main handler.
+     *
+     * @param basePackage the base Java package to use as the prefix
+     * @return the fully-qualified class name of the main handler
+     */
     public static String handlerFqcn(String basePackage) {
         return basePackage + ".orchestrator.service." + HANDLER_CLASS;
     }
 
-    /** Returns the fully-qualified class name of the async handler. */
+    /**
+     * Get the fully qualified class name of the run-async handler for the given base package.
+     *
+     * @param basePackage the root package to which the orchestrator service package will be appended
+     * @return the fully qualified class name of the run-async handler
+     */
     public static String runAsyncHandlerFqcn(String basePackage) {
         return basePackage + ".orchestrator.service." + RUN_ASYNC_HANDLER_CLASS;
     }
 
-    /** Returns the fully-qualified class name of the status handler. */
+    /**
+     * Get the fully qualified class name for the status handler.
+     *
+     * @param basePackage the root package to prepend (e.g., "com.example")
+     * @return the fully qualified class name of the status handler
+     */
     public static String statusHandlerFqcn(String basePackage) {
         return basePackage + ".orchestrator.service." + STATUS_HANDLER_CLASS;
     }
 
-    /** Returns the fully-qualified class name of the result handler. */
+    /**
+     * Get the fully-qualified class name for the result handler in the given base package.
+     *
+     * @param basePackage the root package to which the orchestrator service package is appended
+     * @return the fully-qualified class name of the result handler
+     */
     public static String resultHandlerFqcn(String basePackage) {
         return basePackage + ".orchestrator.service." + RESULT_HANDLER_CLASS;
     }
 
+    /**
+     * Specify the cloud provider identifier used by this renderer.
+     *
+     * @return the cloud provider identifier "aws"
+     */
     @Override
     protected String getCloudProvider() { return "aws"; }
 
+    /**
+     * Provides the JavaPoet ClassName for the AWS Lambda Context type used in generated handlers.
+     *
+     * @return the ClassName corresponding to the AWS Lambda `Context`
+     */
     @Override
     protected ClassName getContextClassName() { return LAMBDA_CONTEXT; }
 
+    /**
+     * The ClassName representing the AWS Lambda RequestHandler interface used by generated handlers.
+     *
+     * @return the ClassName for the AWS Lambda `RequestHandler` interface
+     */
     @Override
     protected ClassName getHandlerInterfaceClassName() { return REQUEST_HANDLER; }
 
+    /**
+     * Provides the expression used in generated code to obtain the AWS Lambda request ID from the Lambda Context or a fallback placeholder.
+     *
+     * @return a JavaPoet-ready expression that evaluates to `context.getAwsRequestId()` when `context` is non-null, or to a string placeholder otherwise
+     */
     @Override
     protected String getRequestIdExpression() { return "context != null ? context.getAwsRequestId() : $S"; }
 
+    /**
+     * Supplies the string expression used in generated handlers to obtain the AWS Lambda function name from the Lambda Context.
+     *
+     * @return the expression string that evaluates to the function name or a placeholder when the Context is null
+     */
     @Override
     protected String getFunctionNameExpression() { return "context != null ? context.getFunctionName() : $S"; }
 
+    /**
+     * Provides the Java expression used to obtain an execution identifier from the AWS Lambda context.
+     *
+     * @return a String containing a Java expression that yields the Lambda log stream name when `context` is non-null, or `null` otherwise
+     */
     @Override
     protected String getExecutionIdExpression() { return "context != null ? context.getLogStreamName() : null"; }
 
+    /**
+     * Generates AWS Lambda request DTOs and RequestHandler implementations for async orchestrator operations and writes them into
+     * the `${basePackage}.orchestrator.service` package in the generator output directory.
+     *
+     * <p>Produced types:
+     * <ul>
+     *   <li>RunAsync request DTO (fields: `input`, `inputBatch`, `tenantId`, `idempotencyKey`)</li>
+     *   <li>ExecutionLookup request DTO (fields: `tenantId`, `executionId`)</li>
+     *   <li>RunAsync Lambda handler that accepts the RunAsync request and submits an execution</li>
+     *   <li>Status Lambda handler that validates `executionId` and returns execution status</li>
+     *   <li>Result Lambda handler that validates `executionId` and returns the execution result (single or list depending on streamingOutput)</li>
+     * </ul>
+     *
+     * @param binding the orchestrator binding definition used to drive generation
+     * @param ctx the generation context including output directory
+     * @param basePackage the base Java package under which generated types will be placed
+     * @param inputDto the ClassName representing the input DTO type
+     * @param outputDto the ClassName representing the output DTO type
+     * @param streamingInput true if the orchestrator accepts streaming input (affects RunAsync handler input shape)
+     * @param streamingOutput true if the orchestrator produces streaming output (affects Result handler return type)
+     * @throws IOException if writing the generated Java files to the output directory fails
+     */
     @Override
     protected void renderAsyncHandlers(OrchestratorBinding binding, GenerationContext ctx, String basePackage, ClassName inputDto, ClassName outputDto, boolean streamingInput, boolean streamingOutput) throws IOException {
         ClassName list = ClassName.get(List.class);
@@ -167,6 +239,21 @@ public class AwsLambdaOrchestratorRenderer extends AbstractOrchestratorFunctionH
         JavaFile.builder(basePackage + ".orchestrator.service", resultHandler).build().writeTo(ctx.outputDir());
     }
 
+    /**
+     * Builds the MethodSpec for the generated `handleRequest` method of the run-async AWS Lambda handler.
+     *
+     * The generated method selects the execution input from the request (using `inputBatch` or `input`),
+     * enforces unary constraints when `streamingInput` is false, extracts `tenantId` and `idempotencyKey`
+     * from the request, and invokes `pipelineExecutionService.executePipelineAsync(...)` returning its result.
+     *
+     * @param basePackage         base package used when generating type references
+     * @param inputDto            the DTO ClassName for individual input elements
+     * @param runAsyncRequestType the request type for the handler
+     * @param runAsyncAcceptedDto the accepted response type returned by the handler
+     * @param streamingInput      true when input should be treated as a stream (accepts inputBatch); false for unary input
+     * @param streamingOutput     true when the pipeline returns streaming output (List of outputs); false for single output
+     * @return a MethodSpec that implements the `handleRequest` method for the run-async handler
+     */
     private MethodSpec buildRunAsyncHandler(String basePackage, ClassName inputDto, TypeName runAsyncRequestType, ClassName runAsyncAcceptedDto, boolean streamingInput, boolean streamingOutput) {
         MethodSpec.Builder builder = MethodSpec.methodBuilder("handleRequest")
             .addAnnotation(Override.class)

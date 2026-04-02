@@ -58,6 +58,13 @@ class AzureFunctionsEndToEndIT {
     private static String functionAppUrl;
     private static HttpClient httpClient;
 
+    /**
+     * Initializes shared test configuration for the Azure Functions end-to-end integration tests.
+     *
+     * Reads the `AZURE_FUNCTION_APP_URL` environment variable into `functionAppUrl`, removes a trailing
+     * slash if present, logs the resolved base URL, and builds a reusable `HttpClient` configured to
+     * use HTTP/2 with a 30-second connection timeout.
+     */
     @BeforeAll
     static void setup() {
         functionAppUrl = System.getenv("AZURE_FUNCTION_APP_URL");
@@ -75,6 +82,11 @@ class AzureFunctionsEndToEndIT {
             .build();
     }
 
+    /**
+     * Checks basic HTTP connectivity to the function app health endpoint.
+     *
+     * If the health endpoint cannot be reached, skips dependent tests via a JUnit assumption.
+     */
     @Test
     void testFunctionAppHealthEndpoint() throws Exception {
         // Azure Functions may not expose /q/health directly
@@ -104,6 +116,11 @@ class AzureFunctionsEndToEndIT {
         LOG.infof("Health endpoint response status: %d", response.statusCode());
     }
 
+    /**
+     * Executes a single (one-to-one) pipeline run against the Azure Functions /api/pipeline/run endpoint and validates the response.
+     *
+     * Verifies the HTTP response status is 200 and that the returned JSON contains a `docId` equal to the UUID sent in the request.
+     */
     @Test
     void testPipelineRunUnaryInvocation() throws Exception {
         // Test basic ONE_TO_ONE pipeline invocation through Azure Functions
@@ -142,6 +159,15 @@ class AzureFunctionsEndToEndIT {
             "Response docId should match request");
     }
 
+    /**
+     * Verifies fan-out (tokenization) and fan-in (indexing) behavior of the pipeline using a long content payload.
+     *
+     * Sends a POST to the pipeline run endpoint with a generated document and extended content, asserts HTTP 200,
+     * validates the presence of `docId`, `indexVersion`, `tokenBatchCount`, and `success` in the response, and
+     * ensures `tokenBatchCount` is greater than zero.
+     *
+     * @throws Exception if the HTTP request, serialization, or response processing fails
+     */
     @Test
     void testFanOutFanInCardinality() throws Exception {
         // Test ONE_TO_MANY -> MANY_TO_ONE pipeline path
@@ -192,6 +218,14 @@ class AzureFunctionsEndToEndIT {
         LOG.infof("Processed %d token batches for document %s", tokenBatchCount, testDocId);
     }
 
+    /**
+     * Executes three sequential pipeline run requests against the function app to verify each invocation completes successfully and operates independently.
+     *
+     * For each invocation this test:
+     * - Sends a JSON crawl request to the pipeline run endpoint.
+     * - Asserts the HTTP response status is 200.
+     * - Asserts the response JSON contains a `success` flag set to `true`.
+     */
     @Test
     void testMultipleSequentialInvocations() throws Exception {
         // Test multiple sequential invocations to verify statelessness
@@ -238,6 +272,15 @@ class AzureFunctionsEndToEndIT {
         return sb.toString();
     }
 
+    /**
+     * Builds a JSON crawl request payload for the pipeline.
+     *
+     * The returned object contains the fields: `docId`, `sourceUrl`, `fetchMethod`, `accept`, and `acceptLanguage`.
+     *
+     * @param docId     the UUID to use as the document identifier (as a string)
+     * @param sourceUrl the source URL to fetch for the crawl request
+     * @return          a JsonNode representing the crawl request payload
+     */
     private JsonNode createCrawlRequest(UUID docId, String sourceUrl) {
         return OBJECT_MAPPER.createObjectNode()
             .put("docId", docId.toString())

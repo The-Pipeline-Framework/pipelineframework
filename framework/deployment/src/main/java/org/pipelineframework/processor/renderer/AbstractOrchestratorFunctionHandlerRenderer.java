@@ -74,29 +74,74 @@ public abstract class AbstractOrchestratorFunctionHandlerRenderer implements Pip
     protected static final ClassName COLLECT_LIST_SINK_ADAPTER = ClassName.get("org.pipelineframework.transport.function", "CollectListFunctionSinkAdapter");
     protected static final ClassName UNARY_FUNCTION_TRANSPORT_BRIDGE = ClassName.get("org.pipelineframework.transport.function", "UnaryFunctionTransportBridge");
 
-    protected AbstractOrchestratorFunctionHandlerRenderer() {}
+    /**
+ * Constructs a new AbstractOrchestratorFunctionHandlerRenderer for use by subclasses.
+ */
+protected AbstractOrchestratorFunctionHandlerRenderer() {}
 
+    /**
+     * Indicates the generation target for this renderer.
+     *
+     * @return `GenerationTarget.REST_RESOURCE` when generating REST resource handler classes.
+     */
     @Override
     public GenerationTarget target() { return GenerationTarget.REST_RESOURCE; }
 
-    /** Returns the cloud provider name (e.g., "aws", "azure", "gcp"). */
+    /**
+ * Identify the target cloud provider used for provider-specific rendering (for example, "aws", "azure", or "gcp").
+ *
+ * @return the cloud provider identifier string (e.g., "aws", "azure", "gcp")
+ */
     protected abstract String getCloudProvider();
 
-    /** Returns the cloud provider's context type class name. */
+    /**
+ * Provide the ClassName for the cloud provider's handler context type.
+ *
+ * @return the ClassName representing the handler context type used by generated handlers
+ */
     protected abstract ClassName getContextClassName();
 
-    /** Returns the handler interface class name. */
+    /**
+ * The handler interface that generated orchestrator handler classes must implement.
+ *
+ * @return the ClassName representing the handler interface to implement
+ */
     protected abstract ClassName getHandlerInterfaceClassName();
 
-    /** Returns the request ID extraction expression. */
+    /**
+ * Expression used to extract the request ID from the incoming input or handler context.
+ *
+ * @return a Java expression string that evaluates to the request ID, or null/blank if not available
+ */
     protected abstract String getRequestIdExpression();
 
-    /** Returns the function name extraction expression. */
+    /**
+ * Expression used to obtain the function name from the incoming request or handler context.
+ *
+ * @return a string containing a Java expression that yields the function name when evaluated, or null/empty if not available
+ */
     protected abstract String getFunctionNameExpression();
 
-    /** Returns the execution ID extraction expression. */
+    /**
+ * Provide a Java expression that extracts the execution ID from the incoming request or context.
+ *
+ * <p>If no execution ID can be extracted, the method may return {@code null} or an empty string;
+ * the renderer will fall back to generating a random UUID when no expression is provided.
+ *
+ * @return a Java expression as a {@code String} that evaluates to the execution ID, or {@code null}
+ *         / empty string if no execution ID extraction is available
+ */
     protected abstract String getExecutionIdExpression();
 
+    /**
+     * Generates and writes the orchestrator REST handler class (PipelineRunFunctionHandler) and any provider-specific async handlers and DTOs based on the given binding.
+     *
+     * <p>Reads streaming input/output flags and base package from {@code binding}, computes DTO and transport types, builds a handler type implementing the provider-specific handler interface, writes the generated Java file to the generation context output directory, and delegates generation of async handlers to {@link #renderAsyncHandlers(OrchestratorBinding, GenerationContext, String, ClassName, ClassName, boolean, boolean)}.
+     *
+     * @param binding the orchestrator binding containing type names, base package, and streaming configuration
+     * @param ctx the generation context that provides the output directory for generated files
+     * @throws IOException if writing the generated Java files fails
+     */
     @Override
     public void render(OrchestratorBinding binding, GenerationContext ctx) throws IOException {
         boolean streamingInput = binding.inputStreaming();
@@ -125,6 +170,29 @@ public abstract class AbstractOrchestratorFunctionHandlerRenderer implements Pip
         renderAsyncHandlers(binding, ctx, basePackage, inputDto, outputDto, streamingInput, streamingOutput);
     }
 
+    /**
+     * Builds the generated `handleRequest` method used by the orchestrator handler class.
+     *
+     * Constructs a MethodSpec that:
+     * - declares the method signature (input event and provider-specific context),
+     * - builds a transport context,
+     * - selects and instantiates source, invoke (local/remote routed) and sink adapters based on streaming flags,
+     * - bridges the adapters to the function transport bridge and returns the bridged result,
+     * - wraps runtime failures with a RuntimeException.
+     *
+     * @param basePackage        base Java package used to resolve generated types
+     * @param inputTypeName      simple name of the input DTO type
+     * @param outputTypeName     simple name of the output DTO type
+     * @param inputDto           ClassName of the input DTO
+     * @param outputDto          ClassName of the output DTO
+     * @param inputEventType     event type accepted by the handler (may be a streaming wrapper)
+     * @param handlerOutputType  type returned by the handler (may be a collection wrapper for streaming output)
+     * @param resourceType       ClassName of the orchestrator resource implementation injected into the handler
+     * @param localInvokeDelegate expression or method reference used to invoke the local resource (may include stream-to-list collection)
+     * @param streamingInput     true when input is a streaming/multi-item event (affects adapter selection)
+     * @param streamingOutput    true when output is streaming/multi-item (affects adapter/bridge selection)
+     * @return                   the Javadoc-parsable MethodSpec representing the generated `handleRequest` method
+     */
     protected MethodSpec buildHandlerMethod(String basePackage, String inputTypeName, String outputTypeName, ClassName inputDto, ClassName outputDto, TypeName inputEventType, TypeName handlerOutputType, ClassName resourceType, String localInvokeDelegate, boolean streamingInput, boolean streamingOutput) {
         return MethodSpec.methodBuilder("handleRequest")
             .addAnnotation(Override.class)
@@ -146,24 +214,79 @@ public abstract class AbstractOrchestratorFunctionHandlerRenderer implements Pip
             .build();
     }
 
+    /**
+     * Builds a JavaPoet statement that initializes a `transportContext` via `FunctionTransportContext.of(...)`.
+     *
+     * The returned string is a code template that declares `transportContext` and supplies: the request ID expression, the function name expression, the literal `"unknown-request"`, and a map of request attributes including correlation id, execution id (with fallback), retry attempt read from the context properties, and a dispatch timestamp set to the current system time in milliseconds.
+     *
+     * @return a code-generation statement string that creates the `transportContext` variable
+     */
     protected String buildTransportContextStatement() {
         return "$T transportContext = $T.of(" + getRequestIdExpression() + ", " + getFunctionNameExpression() + ", $S, $T.of(" + "$T.ATTR_CORRELATION_ID, " + getRequestIdExpression() + ", $T.ATTR_EXECUTION_ID, " + buildExecutionIdExpression() + ", $T.ATTR_RETRY_ATTEMPT, $T.getProperty($S, $S), $T.ATTR_DISPATCH_TS_EPOCH_MS, $T.toString($T.currentTimeMillis())))";
     }
 
+    /**
+     * Builds the Java expression used to obtain the execution ID at runtime.
+     *
+     * @return a String containing a Java expression that evaluates to the execution ID: it uses the value from the provider-specific execution ID expression when that expression is present and not blank, otherwise it uses `UUID.randomUUID().toString()`.
+     */
     protected String buildExecutionIdExpression() {
         String expr = getExecutionIdExpression();
         return (expr != null && !expr.isBlank()) ? "(" + expr + " != null && !" + expr + ".isBlank()) ? " + expr + " : $T.randomUUID().toString()" : "$T.randomUUID().toString()";
     }
 
-    /** Generates async handlers (run-async, status, result) and request DTOs. */
+    /**
+ * Generate provider-specific asynchronous orchestrator handlers (run-async, status, result) and any
+ * required request DTO classes.
+ *
+ * Implementations must emit the generated source files into the provided GenerationContext using the
+ * given base package and DTO types. The streaming flags indicate whether input and/or output are
+ * streaming, which affects the handler and DTO shapes.
+ *
+ * @param binding the orchestrator binding containing configuration and declared input/output type names
+ * @param ctx the generation context used to write generated source files
+ * @param basePackage the base Java package under which generated classes should be placed
+ * @param inputDto the ClassName of the input DTO type
+ * @param outputDto the ClassName of the output DTO type
+ * @param streamingInput true if the orchestrator input is streaming
+ * @param streamingOutput true if the orchestrator output is streaming
+ * @throws IOException if writing generated files fails
+ */
     protected abstract void renderAsyncHandlers(OrchestratorBinding binding, GenerationContext ctx, String basePackage, ClassName inputDto, ClassName outputDto, boolean streamingInput, boolean streamingOutput) throws IOException;
 
+    /**
+     * Selects the local invocation delegate expression based on input/output streaming modes.
+     *
+     * @param streamingInput  true if the handler input is a stream
+     * @param streamingOutput true if the handler output is a stream
+     * @return the delegate expression as a string: `"inputStream -> inputStream.collect().asList().onItem().transformToUni(resource::run)"`
+     *         when `streamingInput` is true and `streamingOutput` is false, otherwise `"resource::run"`.
+     */
     private static String localInvokeDelegate(boolean streamingInput, boolean streamingOutput) {
         return (streamingInput && !streamingOutput) ? "inputStream -> inputStream.collect().asList().onItem().transformToUni(resource::run)" : "resource::run";
     }
 
-    protected static ClassName selectSourceAdapter(boolean streaming, ClassName defaultAdapter, ClassName multiAdapter) { return streaming ? multiAdapter : defaultAdapter; }
+    /**
+ * Selects the source adapter class appropriate for the input streaming mode.
+ *
+ * @param streaming     true if the source input is streaming, false for single-value input
+ * @param defaultAdapter the adapter class to use for non-streaming (unary) input
+ * @param multiAdapter   the adapter class to use for streaming (multi) input
+ * @return               `multiAdapter` when `streaming` is true, otherwise `defaultAdapter`
+ */
+protected static ClassName selectSourceAdapter(boolean streaming, ClassName defaultAdapter, ClassName multiAdapter) { return streaming ? multiAdapter : defaultAdapter; }
 
+    /**
+     * Selects the appropriate invoke adapter class based on whether the function input and output are streaming.
+     *
+     * @param streamingInput  true if the function input is a stream, false if unary
+     * @param streamingOutput true if the function output is a stream, false if unary
+     * @param unary           adapter to use when both input and output are unary
+     * @param oneToMany       adapter to use when input is unary and output is streaming
+     * @param manyToOne       adapter to use when input is streaming and output is unary
+     * @param manyToMany      adapter to use when both input and output are streaming
+     * @return                the selected adapter ClassName for the given streaming combination
+     */
     protected static ClassName selectInvokeAdapter(boolean streamingInput, boolean streamingOutput, ClassName unary, ClassName oneToMany, ClassName manyToOne, ClassName manyToMany) {
         if (!streamingInput && !streamingOutput) return unary;
         if (!streamingInput) return oneToMany;
@@ -171,12 +294,34 @@ public abstract class AbstractOrchestratorFunctionHandlerRenderer implements Pip
         return manyToMany;
     }
 
-    protected static ClassName selectSinkAdapter(boolean streaming, ClassName defaultAdapter, ClassName collectAdapter) { return streaming ? collectAdapter : defaultAdapter; }
+    /**
+ * Selects the sink adapter class to use for the function's output based on whether output is streaming.
+ *
+ * @param streaming       true if the function output is streaming; false otherwise
+ * @param defaultAdapter  adapter class to use when output is not streaming
+ * @param collectAdapter  adapter class to use when output is streaming (collect/aggregate semantics)
+ * @return                the chosen adapter class: `collectAdapter` when `streaming` is true, otherwise `defaultAdapter`
+ */
+protected static ClassName selectSinkAdapter(boolean streaming, ClassName defaultAdapter, ClassName collectAdapter) { return streaming ? collectAdapter : defaultAdapter; }
 
+    /**
+     * Selects the appropriate bridge class based on whether the function input or output is streaming.
+     *
+     * @param streamingInput true if the function input is streaming
+     * @param streamingOutput true if the function output is streaming
+     * @param unaryBridge bridge class to use for one-to-one (non-streaming) invocation
+     * @param multiBridge bridge class to use when either input or output is streaming
+     * @return the chosen `ClassName`: `multiBridge` if either streaming flag is true, otherwise `unaryBridge`
+     */
     protected static ClassName bridgeClass(boolean streamingInput, boolean streamingOutput, ClassName unaryBridge, ClassName multiBridge) {
         return (streamingInput || streamingOutput) ? multiBridge : unaryBridge;
     }
 
+    /**
+     * Selects the bridge invocation method name for the given input/output streaming modes.
+     *
+     * @returns `invokeOneToOne` when neither input nor output is streaming; `invokeOneToMany` when input is unary and output is streaming; `invokeManyToOne` when input is streaming and output is unary; `invokeManyToMany` when both input and output are streaming.
+     */
     protected static String bridgeMethodName(boolean streamingInput, boolean streamingOutput) {
         if (!streamingInput && !streamingOutput) return "invokeOneToOne";
         if (!streamingInput) return "invokeOneToMany";
