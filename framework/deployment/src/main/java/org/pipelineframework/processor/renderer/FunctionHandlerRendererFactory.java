@@ -16,6 +16,8 @@
 
 package org.pipelineframework.processor.renderer;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 
 /**
@@ -185,12 +187,12 @@ public final class FunctionHandlerRendererFactory {
             // Multiple providers detected - log warning and use precedence
             // AWS > Azure > GCP
             // Build override list dynamically based on detected providers
-            StringBuilder overrideList = new StringBuilder();
-            if (hasAzure) overrideList.append(overrideList.isEmpty() ? "" : "|").append("azure");
-            if (hasGcp) overrideList.append(overrideList.isEmpty() ? "" : "|").append("gcp");
-            if (hasAws && !overrideList.isEmpty()) overrideList.insert(0, "aws|");
-            else if (hasAws) overrideList.append("aws");
-            
+            List<String> availableProviders = new ArrayList<>();
+            if (hasAws) availableProviders.add(PROVIDER_AWS);
+            if (hasAzure) availableProviders.add(PROVIDER_AZURE);
+            if (hasGcp) availableProviders.add(PROVIDER_GCP);
+            String overrideList = String.join("|", availableProviders);
+
             if (hasAws) {
                 System.err.println("[TPF] Multiple function providers detected. Using AWS Lambda (aws). " +
                     "Set -Dpipeline.function.provider=" + overrideList + " to override.");
@@ -198,7 +200,7 @@ public final class FunctionHandlerRendererFactory {
             }
             if (hasAzure) {
                 System.err.println("[TPF] Multiple function providers detected. Using Azure Functions (azure). " +
-                    "Set -Dpipeline.function.provider=" + overrideList.toString().replaceFirst("azure\\|?", "") + " to override.");
+                    "Set -Dpipeline.function.provider=" + overrideList + " to override.");
                 return PROVIDER_AZURE;
             }
         }

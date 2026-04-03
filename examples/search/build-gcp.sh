@@ -46,5 +46,6 @@ PIPELINE_GCP_DEPENDENCY_SCOPE="${PIPELINE_GCP_DEPENDENCY_SCOPE:-provided}"
   -Dtpf.build.transport="$PIPELINE_TRANSPORT" \
   -Dtpf.build.rest.naming.strategy="$PIPELINE_REST_NAMING_STRATEGY" \
   -Dtpf.build.gcp.scope="$PIPELINE_GCP_DEPENDENCY_SCOPE" \
+  -Dpipeline.function.provider=gcp \
   -Dquarkus.profile=gcp-functions \
   clean install "$@"

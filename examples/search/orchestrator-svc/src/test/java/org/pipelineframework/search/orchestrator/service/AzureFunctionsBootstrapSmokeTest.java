@@ -19,7 +19,6 @@ package org.pipelineframework.search.orchestrator.service;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Smoke test verifying Azure Functions runtime wiring compiles and initializes correctly.

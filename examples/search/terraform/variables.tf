@@ -19,12 +19,22 @@ variable "function_app_name" {
   description = "Name of the Function App (must be globally unique). You must provide a unique value."
   type        = string
   nullable    = false
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9-]{2,60}$", var.function_app_name))
+    error_message = "Function App name must be 2-60 characters long and contain only letters, numbers, and hyphens."
+  }
 }
 
 variable "storage_account_name" {
   description = "Name of the Storage Account (must be globally unique). You must provide a unique value."
   type        = string
   nullable    = false
+
+  validation {
+    condition     = can(regex("^[a-z0-9]{3,24}$", var.storage_account_name))
+    error_message = "Storage account name must be 3-24 characters long and contain only lowercase letters and numbers."
+  }
 }
 
 variable "app_insights_name" {

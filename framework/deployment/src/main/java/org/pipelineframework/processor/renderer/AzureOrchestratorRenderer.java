@@ -59,10 +59,10 @@ public class AzureOrchestratorRenderer extends AbstractOrchestratorFunctionHandl
     /**
      * Handler interface class used for generated Azure orchestrator handlers.
      *
-     * @return the ClassName representing the handler interface; for Azure this is java.lang.Object
+     * @return null because Azure Functions handlers are POJOs without a marker interface
      */
     @Override
-    protected ClassName getHandlerInterfaceClassName() { return ClassName.OBJECT; }
+    protected ClassName getHandlerInterfaceClassName() { return null; }
 
     /**
      * Provides the expression used to extract the request ID from the Azure ExecutionContext.
@@ -142,7 +142,6 @@ public class AzureOrchestratorRenderer extends AbstractOrchestratorFunctionHandl
 
         // Generate Status handler (Azure-specific)
         MethodSpec statusHandleRequest = MethodSpec.methodBuilder("run")
-            .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
             .returns(EXECUTION_STATUS_DTO)
             .addParameter(executionLookupRequestType, "request")
@@ -164,7 +163,6 @@ public class AzureOrchestratorRenderer extends AbstractOrchestratorFunctionHandl
 
         // Generate Result handler (Azure-specific)
         MethodSpec resultHandleRequest = MethodSpec.methodBuilder("run")
-            .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
             .returns(asyncResultType)
             .addParameter(executionLookupRequestType, "request")
@@ -206,7 +204,6 @@ public class AzureOrchestratorRenderer extends AbstractOrchestratorFunctionHandl
      */
     private MethodSpec buildAzureRunAsyncHandler(String basePackage, ClassName inputDto, TypeName runAsyncRequestType, ClassName runAsyncAcceptedDto, boolean streamingInput, boolean streamingOutput) {
         MethodSpec.Builder builder = MethodSpec.methodBuilder("run")
-            .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
             .returns(runAsyncAcceptedDto)
             .addParameter(runAsyncRequestType, "request")

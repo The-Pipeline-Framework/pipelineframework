@@ -158,9 +158,15 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
             .addModifiers(Modifier.PUBLIC)
             .addAnnotation(APPLICATION_SCOPED)
             .addAnnotation(AnnotationSpec.builder(NAMED).addMember("value", "$S", HANDLER_CLASS).build())
-            .addAnnotation(AnnotationSpec.builder(GENERATED_ROLE).addMember("value", "$T.$L", ROLE_ENUM, "REST_SERVER").build())
-            .addSuperinterface(ParameterizedTypeName.get(getHandlerInterfaceClassName(), inputEventType, handlerOutputType))
-            .addField(FieldSpec.builder(resourceType, "resource", Modifier.PRIVATE).addAnnotation(INJECT).build());
+            .addAnnotation(AnnotationSpec.builder(GENERATED_ROLE).addMember("value", "$T.$L", ROLE_ENUM, "REST_SERVER").build());
+        
+        // Only add superinterface if handler interface is defined (Azure Functions handlers are POJOs)
+        ClassName handlerInterface = getHandlerInterfaceClassName();
+        if (handlerInterface != null) {
+            handler.addSuperinterface(ParameterizedTypeName.get(handlerInterface, inputEventType, handlerOutputType));
+        }
+        
+        handler.addField(FieldSpec.builder(resourceType, "resource", Modifier.PRIVATE).addAnnotation(INJECT).build());
 
         String localInvokeDelegate = localInvokeDelegate(streamingInput, streamingOutput);
         MethodSpec handleRequest = buildHandlerMethod(basePackage, binding.inputTypeName(), binding.outputTypeName(), inputDto, outputDto, inputEventType, handlerOutputType, resourceType, localInvokeDelegate, streamingInput, streamingOutput);
@@ -221,7 +227,7 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
             .addStatement("$T<$T, $T> invoke = new $T<>(invokeLocal, invokeRemote)", FUNCTION_INVOKE_ADAPTER, inputDto, outputDto, INVOCATION_MODE_ROUTING_INVOKE_ADAPTER)
             .addStatement("$T<$T, $T> sink = new $T<>()", FUNCTION_SINK_ADAPTER, outputDto, handlerOutputType, selectSinkAdapter(streamingOutput, DEFAULT_UNARY_SINK_ADAPTER, COLLECT_LIST_SINK_ADAPTER))
             .addStatement("return $T.$L(input, transportContext, source, invoke, sink)", bridgeClass(streamingInput, streamingOutput, UNARY_FUNCTION_TRANSPORT_BRIDGE, FUNCTION_TRANSPORT_BRIDGE), bridgeMethodName(streamingInput, streamingOutput))
-            .nextControlFlow("catch (RuntimeException e)")
+            .nextControlFlow("catch (Exception e)")
             .addStatement("throw new RuntimeException(\"Failed handleRequest -> resource.run for input DTO\", e)")
             .endControlFlow()
             .build();

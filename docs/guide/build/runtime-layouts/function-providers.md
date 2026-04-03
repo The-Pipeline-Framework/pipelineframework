@@ -24,13 +24,13 @@ Step-level pipeline handlers (e.g., `CrawlSourceFunctionHandler`, `ParseDocument
 
 ### Orchestrator Handlers
 
-**Current Limitation**: The orchestrator handler (`PipelineRunFunctionHandler`) currently generates **AWS Lambda-specific code only**. For Azure Functions and GCP Cloud Functions deployments, use the **REST transport approach**:
+The orchestrator handler (`PipelineRunFunctionHandler`) generates **provider-specific handlers** for each cloud platform:
 
-- Azure Functions/GCP HTTP triggers route requests to Quarkus REST endpoints
-- Quarkus handles pipeline execution through its REST resources
-- FUNCTION platform semantics (cardinality, failure handling) are preserved
+- **AWS Lambda**: Implements `RequestHandler<I, O>` with Lambda `Context`
+- **Azure Functions**: POJO with `ExecutionContext` parameter
+- **GCP Cloud Functions**: Implements `HttpFunction` with `HttpRequest`/`HttpResponse`
 
-Multi-cloud orchestrator support is planned for a future iteration.
+All providers preserve FUNCTION platform semantics (cardinality, failure handling) and support async handlers (run-async, status, result).
 
 ## Quick Start
 

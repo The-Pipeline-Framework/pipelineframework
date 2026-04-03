@@ -5,22 +5,22 @@ output "resource_group_name" {
 
 output "function_app_name" {
   description = "Name of the Function App"
-  value       = try(azurerm_linux_function_app.search_pipeline.name, azurerm_windows_function_app.search_pipeline.name)
+  value       = azurerm_linux_function_app.search_pipeline.name
 }
 
 output "function_app_default_hostname" {
   description = "Default hostname of the Function App"
-  value       = try(azurerm_linux_function_app.search_pipeline.default_hostname, azurerm_windows_function_app.search_pipeline.default_hostname)
+  value       = azurerm_linux_function_app.search_pipeline.default_hostname
 }
 
 output "function_app_url" {
   description = "Base URL of the Function App"
-  value       = "https://${try(azurerm_linux_function_app.search_pipeline.default_hostname, azurerm_windows_function_app.search_pipeline.default_hostname)}"
+  value       = "https://${azurerm_linux_function_app.search_pipeline.default_hostname}"
 }
 
 output "function_app_identity_principal_id" {
   description = "Principal ID of the Function App's managed identity"
-  value       = try(azurerm_linux_function_app.search_pipeline.identity.0.principal_id, azurerm_windows_function_app.search_pipeline.identity.0.principal_id, null)
+  value       = try(azurerm_linux_function_app.search_pipeline.identity.0.principal_id, null)
 }
 
 output "storage_account_name" {

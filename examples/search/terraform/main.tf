@@ -13,6 +13,7 @@ resource "azurerm_storage_account" "function_storage" {
   account_replication_type = "LRS"
   enable_https_traffic_only = true
   min_tls_version          = "TLS1_2"
+  allow_shared_key_access  = false
 
   # Network security - restrict access to function app only
   network_rules {

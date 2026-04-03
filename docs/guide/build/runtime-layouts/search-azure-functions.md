@@ -9,20 +9,19 @@ Canonical Azure Functions development and operations guidance lives here:
 
 ## Architecture Notes
 
-**Important**: The Pipeline Framework currently generates AWS Lambda-compatible function handlers (`RequestHandler<I, O>` with Lambda `Context`). For Azure Functions deployment, the framework uses the **REST transport** approach:
+**Important**: The Pipeline Framework generates **native Azure Functions handlers** for pipeline steps. The `AzureFunctionsHandlerRenderer` produces handlers that use Azure's `ExecutionContext` for metadata extraction and HTTP triggers for invocation.
 
-1. Azure Functions HTTP triggers route requests to Quarkus
-2. Quarkus Azure Functions extension bootstraps the Quarkus runtime
-3. Quarkus handles HTTP routing through its REST resources
-4. The FUNCTION platform mode still applies for pipeline execution semantics
+For Azure Functions deployment:
+
+1. Step-level handlers are generated as Azure-specific POJOs with `ExecutionContext`
+2. Orchestrator handler generates Azure-specific async handlers (run-async, status, result)
+3. The FUNCTION platform mode applies for pipeline execution semantics (cardinality, failure handling)
+4. Quarkus Azure Functions extension bootstraps the Quarkus runtime for dependency injection
 
 This means:
 - **Local testing**: Use `func host start --java` with the helper script
 - **Cloud deployment**: Use `quarkus:deploy` which configures the HTTP trigger
-- **Pipeline behavior**: Same FUNCTION platform semantics (cardinality, failure handling)
-- **Transport**: REST over HTTP triggers (not Lambda event payloads)
-
-Future work may include native Azure Functions handler generation for direct function-to-pipeline binding.
+- **Pipeline behavior**: Same FUNCTION platform semantics across all cloud providers
 
 ## Scope
 

@@ -46,5 +46,6 @@ PIPELINE_AZURE_DEPENDENCY_SCOPE="${PIPELINE_AZURE_DEPENDENCY_SCOPE:-provided}"
   -Dtpf.build.transport="$PIPELINE_TRANSPORT" \
   -Dtpf.build.rest.naming.strategy="$PIPELINE_REST_NAMING_STRATEGY" \
   -Dtpf.build.azure.scope="$PIPELINE_AZURE_DEPENDENCY_SCOPE" \
+  -Dpipeline.function.provider=azure \
   -Dquarkus.profile=azure-functions \
   clean install "$@"

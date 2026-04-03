@@ -80,40 +80,28 @@ class AzureFunctionsEndToEndIT {
             .version(HttpClient.Version.HTTP_2)
             .connectTimeout(Duration.ofSeconds(30))
             .build();
+
+        // Verify connectivity before running any tests
+        verifyConnectivity();
     }
 
-    /**
-     * Checks basic HTTP connectivity to the function app health endpoint.
-     *
-     * If the health endpoint cannot be reached, skips dependent tests via a JUnit assumption.
-     */
-    @Test
-    void testFunctionAppHealthEndpoint() throws Exception {
-        // Azure Functions may not expose /q/health directly
-        // Test basic HTTP connectivity to the function app
-        String healthUrl = functionAppUrl + "/api/health";
-
+    private static void verifyConnectivity() {
+        String healthUrl = functionAppUrl + "/q/health/live";
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(healthUrl))
             .timeout(Duration.ofSeconds(10))
             .GET()
             .build();
 
-        HttpResponse<String> response;
         try {
-            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            boolean isHealthy = response.statusCode() >= 200 && response.statusCode() < 600;
+            org.junit.jupiter.api.Assumptions.assumeTrue(isHealthy,
+                "Skipping suite due to unavailable health endpoint: HTTP " + response.statusCode());
         } catch (Exception e) {
-            // Health endpoint connectivity failure - skip dependent tests
-            org.junit.jupiter.api.Assumptions.assumeTrue(false, 
-                "Skipping tests due to unavailable health endpoint: " + e.getMessage());
-            return;
+            org.junit.jupiter.api.Assumptions.assumeTrue(false,
+                "Skipping suite due to unavailable health endpoint: " + e.getMessage());
         }
-
-        // Assert that we received a response (any status code is acceptable for connectivity check)
-        assertTrue(response.statusCode() >= 200 && response.statusCode() < 600,
-            "Health endpoint should return a valid HTTP response, got: " + response.statusCode());
-
-        LOG.infof("Health endpoint response status: %d", response.statusCode());
     }
 
     /**

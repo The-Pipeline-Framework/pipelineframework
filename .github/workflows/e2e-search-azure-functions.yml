@@ -29,7 +29,7 @@ env:
   MAVEN_ARGS_BUILD: -B -T 1C -V -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
   TF_VAR_resource_group_name: rg-search-pipeline-${{ github.run_id }}
   TF_VAR_function_app_name: funcsearch${{ github.run_id }}
-  TF_VAR_storage_account_name: stsearch${{ github.run_id }}
+  TF_VAR_storage_account_name: stsr${{ github.run_id }}
   TF_VAR_location: westus
   TF_STATE_CONTAINER: tfstate-search-pipeline
 
@@ -61,7 +61,7 @@ jobs:
           terraform_wrapper: false
 
       - name: Configure Maven
-        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
+        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> "$GITHUB_ENV"
 
       - name: Download framework artifacts
         if: ${{ inputs.download_artifacts }}
@@ -92,20 +92,20 @@ jobs:
         run: |
           RESOURCE_GROUP="tfstate-rg-${{ github.run_id }}"
           STORAGE_ACCOUNT="tfstate${{ github.run_id }}"
-          
+
           az group create --name "$RESOURCE_GROUP" --location westus
           az storage account create \
             --name "$STORAGE_ACCOUNT" \
             --resource-group "$RESOURCE_GROUP" \
             --location westus \
             --sku Standard_LRS
-          
+
           az storage container create \
             --name "$TF_STATE_CONTAINER" \
             --account-name "$STORAGE_ACCOUNT"
-          
-          echo "TF_STATE_RESOURCE_GROUP=$RESOURCE_GROUP" >> $GITHUB_ENV
-          echo "TF_STATE_STORAGE_ACCOUNT=$STORAGE_ACCOUNT" >> $GITHUB_ENV
+
+          echo "TF_STATE_RESOURCE_GROUP=$RESOURCE_GROUP" >> "$GITHUB_ENV"
+          echo "TF_STATE_STORAGE_ACCOUNT=$STORAGE_ACCOUNT" >> "$GITHUB_ENV"
 
       - name: Terraform Init
         working-directory: examples/search/terraform
@@ -130,8 +130,8 @@ jobs:
         id: function_url
         working-directory: examples/search/terraform
         run: |
-          FUNCTION_URL=$(terraform output -raw function_app_url)
-          echo "function_url=$FUNCTION_URL" >> $GITHUB_OUTPUT
+          FUNCTION_URL="$(terraform output -raw function_app_url)"
+          echo "function_url=${FUNCTION_URL}" >> "$GITHUB_OUTPUT"
 
       - name: Build Search Azure Functions topology
         run: |
@@ -156,11 +156,31 @@ jobs:
             -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
             -Dtpf.build.azure.scope=compile \
             -Dquarkus.profile=azure-functions \
-            -Dquarkus.azure-functions.app-name=$TF_VAR_function_app_name \
-            -Dquarkus.azure-functions.region=$TF_VAR_location
+            -Dquarkus.azure-functions.app-name="$TF_VAR_function_app_name" \
+            -Dquarkus.azure-functions.region="$TF_VAR_location"
 
       - name: Wait for Function deployment to propagate
-        run: sleep 60
+        env:
+          FUNCTION_APP_URL: ${{ steps.function_url.outputs.function_url }}
+        run: |
+          echo "Waiting for Azure Function to become ready..."
+          MAX_RETRIES=30
+          RETRY_INTERVAL=10
+          RETRY_COUNT=0
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${FUNCTION_APP_URL}/q/health/live" --max-time 10 || echo "000")
+            if [ "$HTTP_STATUS" = "200" ]; then
+              echo "Function app is ready (HTTP $HTTP_STATUS)"
+              exit 0
+            fi
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo "Attempt $RETRY_COUNT/$MAX_RETRIES: Function not ready yet (HTTP $HTTP_STATUS), retrying in ${RETRY_INTERVAL}s..."
+            sleep $RETRY_INTERVAL
+          done
+          
+          echo "ERROR: Function app did not become ready after $((MAX_RETRIES * RETRY_INTERVAL)) seconds"
+          exit 1
 
       - name: Run Azure Functions End-to-End tests
         env:
@@ -178,14 +198,28 @@ jobs:
             verify
 
       - name: Terraform Destroy
-        if: ${{ always() && inputs.terraform_destroy }}
+        if: ${{ inputs.terraform_destroy }}
         working-directory: examples/search/terraform
         run: |
-          terraform destroy -auto-approve \
-            -var="resource_group_name=$TF_VAR_resource_group_name" \
-            -var="function_app_name=$TF_VAR_function_app_name" \
-            -var="storage_account_name=$TF_VAR_storage_account_name" \
-            -var="location=$TF_VAR_location"
+          # Initialize and refresh before destroying
+          terraform init -input=false -reconfigure
+          terraform refresh -input=false || true
+          
+          # Check if there are resources to destroy
+          terraform plan -destroy -input=false -detailed-exitcode
+          PLAN_EXIT_CODE=$?
+          
+          # Exit code 0: no changes, 2: changes planned
+          if [ $PLAN_EXIT_CODE -eq 0 ] || [ $PLAN_EXIT_CODE -eq 2 ]; then
+            echo "Proceeding with terraform destroy..."
+            terraform destroy -auto-approve \
+              -var="resource_group_name=$TF_VAR_resource_group_name" \
+              -var="function_app_name=$TF_VAR_function_app_name" \
+              -var="storage_account_name=$TF_VAR_storage_account_name" \
+              -var="location=$TF_VAR_location"
+          else
+            echo "No resources to destroy (plan exit code: $PLAN_EXIT_CODE)"
+          fi
 
       - name: Cleanup Terraform state storage
         if: ${{ always() }}

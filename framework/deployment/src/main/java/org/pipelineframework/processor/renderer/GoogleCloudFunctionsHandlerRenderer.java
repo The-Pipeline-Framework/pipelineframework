@@ -83,7 +83,8 @@ public class GoogleCloudFunctionsHandlerRenderer extends AbstractFunctionHandler
         // Extract trace ID from X-Cloud-Trace-Context header if present, otherwise generate UUID
         // Format: "TRACE_ID/SPAN_ID;o=TRACE_TRUE"
         // Use getFirstHeader() which returns Optional<String>
-        return "$T.ofNullable(request.getFirstHeader($S).orElse(null)).orElseGet(() -> $T.randomUUID().toString())";
+        // Note: 'input' is the HttpRequest parameter name in generated HttpFunction.service() method
+        return "$T.ofNullable(input.getFirstHeader($S).orElse(null)).orElseGet(() -> $T.randomUUID().toString())";
     }
 
     /**
@@ -100,13 +101,14 @@ public class GoogleCloudFunctionsHandlerRenderer extends AbstractFunctionHandler
     /**
      * Produce a Java expression that obtains an execution identifier from the incoming request or generates one.
      *
-     * @return a string expression which reads the `X-Cloud-Trace-Context` header via `request.getFirstHeader(...)`
+     * @return a string expression which reads the `X-Cloud-Trace-Context` header via `input.getFirstHeader(...)`
      *         and falls back to `UUID.randomUUID().toString()` when the header is absent
      */
     @Override
     protected String getExecutionIdExpression() {
         // Use request ID from header or generate one
-        return "request.getFirstHeader($S).orElseGet(() -> $T.randomUUID().toString())";
+        // Note: 'input' is the HttpRequest parameter name in generated HttpFunction.service() method
+        return "input.getFirstHeader($S).orElseGet(() -> $T.randomUUID().toString())";
     }
 
     /**

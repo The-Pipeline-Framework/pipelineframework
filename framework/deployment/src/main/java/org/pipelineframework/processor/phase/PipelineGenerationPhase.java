@@ -490,18 +490,25 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                         java.util.Set.of(),
                         cacheKeyGenerator,
                         descriptorSet));
+                    String basePackage = binding.basePackage();
                     roleMetadataGenerator.recordClassWithRole(
-                        AbstractOrchestratorFunctionHandlerRenderer.HANDLER_CLASS,
+                        basePackage + ".orchestrator.service." + AbstractOrchestratorFunctionHandlerRenderer.HANDLER_CLASS,
                         role.name());
                     roleMetadataGenerator.recordClassWithRole(
-                        AbstractOrchestratorFunctionHandlerRenderer.RUN_ASYNC_HANDLER_CLASS,
+                        basePackage + ".orchestrator.service." + AbstractOrchestratorFunctionHandlerRenderer.RUN_ASYNC_HANDLER_CLASS,
                         role.name());
                     roleMetadataGenerator.recordClassWithRole(
-                        AbstractOrchestratorFunctionHandlerRenderer.STATUS_HANDLER_CLASS,
+                        basePackage + ".orchestrator.service." + AbstractOrchestratorFunctionHandlerRenderer.STATUS_HANDLER_CLASS,
                         role.name());
                     roleMetadataGenerator.recordClassWithRole(
-                        AbstractOrchestratorFunctionHandlerRenderer.RESULT_HANDLER_CLASS,
+                        basePackage + ".orchestrator.service." + AbstractOrchestratorFunctionHandlerRenderer.RESULT_HANDLER_CLASS,
                         role.name());
+                } else if (ctx.isPlatformModeFunction()) {
+                    // FUNCTION platform mode requires unary input/output for orchestrator handlers
+                    throw new IllegalStateException(
+                        "Orchestrator function handlers require unary input and output. " +
+                        "Got transport=" + transport + ", platform=FUNCTION, " +
+                        "streamingInput=" + binding.inputStreaming() + ", streamingOutput=" + binding.outputStreaming());
                 }
             }
             
