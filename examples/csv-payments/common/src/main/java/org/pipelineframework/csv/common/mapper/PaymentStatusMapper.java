@@ -66,10 +66,12 @@ public interface PaymentStatusMapper extends org.pipelineframework.mapper.Mapper
     return toGrpc(toDto(domain));
   }
 
+  @Deprecated(since = "26.2.5", forRemoval = true)
   default org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus toDtoToGrpc(PaymentStatus domain) {
     return toExternal(domain);
   }
 
+  @Deprecated(since = "26.2.5", forRemoval = true)
   default PaymentStatus fromGrpcFromDto(org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus grpc) {
     return fromExternal(grpc);
   }

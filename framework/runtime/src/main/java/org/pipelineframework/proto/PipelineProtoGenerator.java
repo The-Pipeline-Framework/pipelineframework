@@ -106,7 +106,7 @@ public class PipelineProtoGenerator {
         Path resolvedOutput = outputDir != null
             ? outputDir
             : resolvedModuleDir.resolve("target").resolve("generated-sources").resolve("proto");
-        String resolvedTypesProtoName = (typesProtoName == null || typesProtoName.isBlank()) ? TYPES_PROTO : typesProtoName;
+        String resolvedTypesProtoName = validateTypesProtoName(typesProtoName);
 
         PipelineTemplateConfigLoader loader = new PipelineTemplateConfigLoader();
         PipelineTemplateConfig config = loader.load(resolvedConfig);
@@ -155,6 +155,16 @@ public class PipelineProtoGenerator {
             Path protoPath = resolvedOutput.resolve(ORCHESTRATOR_PROTO);
             writeProto(protoPath, content);
         }
+    }
+
+    private String validateTypesProtoName(String typesProtoName) {
+        String candidate = (typesProtoName == null || typesProtoName.isBlank()) ? TYPES_PROTO : typesProtoName.trim();
+        if (".".equals(candidate) || "..".equals(candidate)
+            || candidate.contains("/") || candidate.contains("\\")
+            || Path.of(candidate).isAbsolute()) {
+            throw new IllegalArgumentException("--types-proto-name must be a file name, not a path");
+        }
+        return candidate;
     }
 
     /**

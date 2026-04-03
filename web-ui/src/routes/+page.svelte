@@ -458,10 +458,10 @@
   // Check if a type is a Java scalar type (needs protobuf mapping)
   function isJavaScalarType(javaType) {
     const scalarTypes = [
-      'string', 'integer', 'int', 'long', 'double', 'boolean', 
+      'string', 'integer', 'int', 'long', 'float', 'double', 'boolean', 
       'uuid', 'bigdecimal', 'currency', 'path',
       'list<string>', 'localdatetime', 'localdate', 'offsetdatetime', 'zoneddatetime', 'instant', 'duration', 'period',
-      'uri', 'url', 'file', 'biginteger', 'atomicinteger', 'atomic_int', 'atomiclong', 'atomic_long'
+      'uri', 'url', 'file', 'biginteger', 'atomicinteger', 'atomic_int', 'atomiclong', 'atomic_long', 'byte[]', 'bytes'
     ];
     return scalarTypes.includes(javaType.toLowerCase());
   }
@@ -485,7 +485,7 @@
     if (javaType === 'Map') return true;
     
     // Pattern check for generic Map (e.g. Map<String,Integer>, Map<MyKey,MyValue>)
-    return /^Map<.+?, .+>$/.test(javaType);
+    return /^Map<.+?,\s*.+>$/.test(javaType);
   }
 
   function isSemanticScalarType(type) {
@@ -568,9 +568,6 @@
   function uiTypeTokenToSemanticType(type) {
     if (!type || typeof type !== 'string') return 'string';
     const normalized = type.trim();
-    if (/^[A-Z][A-Za-z0-9_]*$/.test(normalized)) {
-      return normalized;
-    }
     switch (normalized.toLowerCase()) {
       case 'string':
         return 'string';
@@ -736,10 +733,15 @@
         return 'int32';
       case 'long':
         return 'int64';
+      case 'float':
+        return 'float';
       case 'double':
         return 'double';
       case 'boolean':
         return 'bool';
+      case 'bytes':
+      case 'byte[]':
+        return 'bytes';
       case 'uuid':
       case 'currency':
       case 'path':

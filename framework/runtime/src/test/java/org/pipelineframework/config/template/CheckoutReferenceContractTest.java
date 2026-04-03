@@ -47,6 +47,8 @@ class CheckoutReferenceContractTest {
             String fieldName = entry.getKey();
             PipelineTemplateField outputField = entry.getValue();
             PipelineTemplateField inputField = consumerValidationInputFields.get(fieldName);
+            assertEquals(outputField.number(), inputField.number(),
+                "Semantic-v2 field number mismatch for handoff field: " + fieldName);
             assertEquals(outputField.type(), inputField.type(),
                 "Java type mismatch for handoff field: " + fieldName);
             assertEquals(outputField.protoType(), inputField.protoType(),

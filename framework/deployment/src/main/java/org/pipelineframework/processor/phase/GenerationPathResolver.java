@@ -58,9 +58,13 @@ public class GenerationPathResolver {
         if (root == null) {
             return;
         }
+        Path normalizedRoot = root.toAbsolutePath().normalize();
+        if (!containsPathSegment(normalizedRoot, "generated-sources")) {
+            throw new IllegalStateException("Refusing to reset non-generated-sources path '" + normalizedRoot + "'");
+        }
         try {
-            if (Files.exists(root)) {
-                try (var stream = Files.walk(root)) {
+            if (Files.exists(normalizedRoot)) {
+                try (var stream = Files.walk(normalizedRoot)) {
                     stream.sorted(Comparator.reverseOrder())
                         .forEach(path -> {
                             try {
@@ -71,18 +75,27 @@ public class GenerationPathResolver {
                         });
                 }
             }
-            Files.createDirectories(root);
+            Files.createDirectories(normalizedRoot);
         } catch (RuntimeException e) {
             Throwable cause = e.getCause();
             if (cause instanceof IOException ioException) {
-                reportResetFailure(ctx, root, ioException);
-                throw new IllegalStateException("Failed to reset generated sources root '" + root + "'", ioException);
+                reportResetFailure(ctx, normalizedRoot, ioException);
+                throw new IllegalStateException("Failed to reset generated sources root '" + normalizedRoot + "'", ioException);
             }
             throw e;
         } catch (IOException e) {
-            reportResetFailure(ctx, root, e);
-            throw new IllegalStateException("Failed to reset generated sources root '" + root + "'", e);
+            reportResetFailure(ctx, normalizedRoot, e);
+            throw new IllegalStateException("Failed to reset generated sources root '" + normalizedRoot + "'", e);
         }
+    }
+
+    private boolean containsPathSegment(Path path, String segment) {
+        for (Path part : path) {
+            if (segment.equals(part.toString())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void reportResetFailure(PipelineCompilationContext ctx, Path root, IOException e) {
