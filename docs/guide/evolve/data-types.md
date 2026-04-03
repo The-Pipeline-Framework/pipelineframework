@@ -191,12 +191,6 @@ Overrides are validated against the canonical type model.
 
 ## Legacy v1 Note
 
-v1 templates still allow:
+Legacy v1 templates that authored Java `type` plus explicit protobuf wire details are still accepted by compatibility loaders.
 
-```yaml
-- name: amount
-  type: BigDecimal
-  protoType: string
-```
-
-That shape is legacy compatibility only. New templates should use semantic v2 fields and top-level `messages`.
+That shape is compatibility-only. Current templates should use semantic v2 fields in top-level `messages`, and let the compiler derive Java and protobuf bindings automatically.

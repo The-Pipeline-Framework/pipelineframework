@@ -22,14 +22,13 @@ import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.dto.AckPaymentSentDto;
-import org.pipelineframework.csv.grpc.ProcessSendPaymentRecordSvc;
 
 @SuppressWarnings("unused")
 @Mapper(
     componentModel = "jakarta",
     uses = {CommonConverters.class, PaymentRecordMapper.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface AckPaymentSentMapper extends org.pipelineframework.mapper.Mapper<AckPaymentSent, ProcessSendPaymentRecordSvc.AckPaymentSent> {
+public interface AckPaymentSentMapper extends org.pipelineframework.mapper.Mapper<AckPaymentSent, org.pipelineframework.csv.grpc.PipelineTypes.AckPaymentSent> {
 
   AckPaymentSentMapper INSTANCE = Mappers.getMapper( AckPaymentSentMapper.class );
 
@@ -57,7 +56,7 @@ public interface AckPaymentSentMapper extends org.pipelineframework.mapper.Mappe
   @Mapping(target = "status", qualifiedByName = "longToString")
   @Mapping(target = "message")
   @Mapping(target = "paymentRecord")
-  ProcessSendPaymentRecordSvc.AckPaymentSent toGrpc(AckPaymentSentDto dto);
+  org.pipelineframework.csv.grpc.PipelineTypes.AckPaymentSent toGrpc(AckPaymentSentDto dto);
 
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
   @Mapping(target = "conversationId", qualifiedByName = "stringToUUID")
@@ -65,23 +64,23 @@ public interface AckPaymentSentMapper extends org.pipelineframework.mapper.Mappe
   @Mapping(target = "status", qualifiedByName = "stringToLong")
   @Mapping(target = "message")
   @Mapping(target = "paymentRecord")
-  AckPaymentSentDto fromGrpc(ProcessSendPaymentRecordSvc.AckPaymentSent grpc);
+  AckPaymentSentDto fromGrpc(org.pipelineframework.csv.grpc.PipelineTypes.AckPaymentSent grpc);
 
   @Override
-  default AckPaymentSent fromExternal(ProcessSendPaymentRecordSvc.AckPaymentSent external) {
+  default AckPaymentSent fromExternal(org.pipelineframework.csv.grpc.PipelineTypes.AckPaymentSent external) {
     return fromDto(fromGrpc(external));
   }
 
   @Override
-  default ProcessSendPaymentRecordSvc.AckPaymentSent toExternal(AckPaymentSent domain) {
+  default org.pipelineframework.csv.grpc.PipelineTypes.AckPaymentSent toExternal(AckPaymentSent domain) {
     return toGrpc(toDto(domain));
   }
 
-  default ProcessSendPaymentRecordSvc.AckPaymentSent toDtoToGrpc(AckPaymentSent domain) {
+  default org.pipelineframework.csv.grpc.PipelineTypes.AckPaymentSent toDtoToGrpc(AckPaymentSent domain) {
     return toExternal(domain);
   }
 
-  default AckPaymentSent fromGrpcFromDto(ProcessSendPaymentRecordSvc.AckPaymentSent grpc) {
+  default AckPaymentSent fromGrpcFromDto(org.pipelineframework.csv.grpc.PipelineTypes.AckPaymentSent grpc) {
     return fromExternal(grpc);
   }
 }

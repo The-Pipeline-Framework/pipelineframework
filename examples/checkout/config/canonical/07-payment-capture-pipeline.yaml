@@ -1,39 +1,80 @@
-appName: "TPFGo Payment Capture Pipeline"
-basePackage: "org.pipelineframework.tpfgo.payment.capture"
-transport: "GRPC"
-platform: "COMPUTE"
+version: 2
+appName: TPFGo Payment Capture Pipeline
+basePackage: org.pipelineframework.tpfgo.payment.capture
+transport: GRPC
+platform: COMPUTE
+messages:
+  OrderDelivered:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: customerId
+        type: uuid
+      - number: 3
+        name: dispatchId
+        type: uuid
+      - number: 4
+        name: courierId
+        type: uuid
+      - number: 5
+        name: restaurantId
+        type: uuid
+      - number: 6
+        name: kitchenTicketId
+        type: uuid
+      - number: 7
+        name: deliveredAt
+        type: timestamp
+      - number: 8
+        name: amount
+        type: decimal
+      - number: 9
+        name: currency
+        type: string
+      - number: 10
+        name: lineageDigest
+        type: string
+  PaymentCaptureResult:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: paymentId
+        type: uuid
+      - number: 3
+        name: processedAt
+        type: timestamp
+      - number: 4
+        name: amount
+        type: decimal
+      - number: 5
+        name: currency
+        type: string
+      - number: 6
+        name: status
+        type: string
+      - number: 7
+        name: failureCode
+        type: string
+      - number: 8
+        name: failureReason
+        type: string
+steps:
+  - name: Payment Capture Order
+    service: org.pipelineframework.tpfgo.payment.capture.payment_capture_order.service.ProcessPaymentCaptureOrderService
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.tpfgo.common.domain.OrderDelivered
+    inputTypeName: OrderDelivered
+    output: org.pipelineframework.tpfgo.common.domain.PaymentCaptureResult
+    outputTypeName: PaymentCaptureResult
 input:
   subscription:
-    publication: "tpfgo.delivery.order-delivered.v1"
-steps:
-  - name: "Payment Capture Order"
-    service: "org.pipelineframework.tpfgo.payment.capture.payment_capture_order.service.ProcessPaymentCaptureOrderService"
-    cardinality: "ONE_TO_ONE"
-    input: "org.pipelineframework.tpfgo.common.domain.OrderDelivered"
-    inputTypeName: "OrderDelivered"
-    inputFields:
-      - { name: "orderId", type: "UUID", protoType: "string" }
-      - { name: "customerId", type: "UUID", protoType: "string" }
-      - { name: "dispatchId", type: "UUID", protoType: "string" }
-      - { name: "courierId", type: "UUID", protoType: "string" }
-      - { name: "restaurantId", type: "UUID", protoType: "string" }
-      - { name: "kitchenTicketId", type: "UUID", protoType: "string" }
-      - { name: "deliveredAt", type: "Instant", protoType: "string" }
-      - { name: "amount", type: "BigDecimal", protoType: "string" }
-      - { name: "currency", type: "String", protoType: "string" }
-      - { name: "lineageDigest", type: "String", protoType: "string" }
-    output: "org.pipelineframework.tpfgo.common.domain.PaymentCaptureResult"
-    outputTypeName: "PaymentCaptureResult"
-    outputFields:
-      - { name: "orderId", type: "UUID", protoType: "string" }
-      - { name: "paymentId", type: "UUID", protoType: "string" }
-      - { name: "processedAt", type: "Instant", protoType: "string" }
-      - { name: "amount", type: "BigDecimal", protoType: "string" }
-      - { name: "currency", type: "String", protoType: "string" }
-      - { name: "status", type: "String", protoType: "string" }
-      - { name: "failureCode", type: "String", protoType: "string" }
-      - { name: "failureReason", type: "String", protoType: "string" }
+    publication: tpfgo.delivery.order-delivered.v1
 output:
   checkpoint:
-    publication: "tpfgo.payment.capture-result.v1"
-    idempotencyKeyFields: [ "orderId" ]
+    publication: tpfgo.payment.capture-result.v1
+    idempotencyKeyFields:
+      - orderId

@@ -34,7 +34,7 @@ import org.pipelineframework.checkpoint.grpc.CheckpointPublishRequest;
 import org.pipelineframework.checkpoint.grpc.CheckpointPublicationServiceGrpc;
 import org.pipelineframework.checkpoint.grpc.MutinyCheckpointPublicationServiceGrpc;
 import org.pipelineframework.config.pipeline.PipelineJson;
-import org.pipelineframework.tpfgo.checkout.grpc.CheckoutValidateRequestSvc;
+import org.pipelineframework.tpfgo.checkout.grpc.PipelineTypes;
 import org.pipelineframework.tpfgo.checkout.grpc.Orchestrator;
 import org.pipelineframework.tpfgo.checkout.grpc.OrchestratorServiceGrpc;
 import org.pipelineframework.tpfgo.common.util.DeterministicIds;
@@ -84,7 +84,7 @@ class TpfgoCheckpointFlowIT {
         ManagedApp checkout = app("checkout-orchestrator-svc");
         Orchestrator.RunAsyncResponse accepted = checkout.orchestrator().runAsync(
             Orchestrator.RunAsyncRequest.newBuilder()
-                .setInput(CheckoutValidateRequestSvc.PlaceOrderRequest.newBuilder()
+                .setInput(PipelineTypes.PlaceOrderRequest.newBuilder()
                     .setRequestId("11111111-1111-1111-1111-111111111111")
                     .setCustomerId("22222222-2222-2222-2222-222222222222")
                     .setRestaurantId("33333333-3333-3333-3333-333333333333")
@@ -115,7 +115,7 @@ class TpfgoCheckpointFlowIT {
         ManagedApp checkout = app("checkout-orchestrator-svc");
         checkout.orchestrator().runAsync(
             Orchestrator.RunAsyncRequest.newBuilder()
-                .setInput(CheckoutValidateRequestSvc.PlaceOrderRequest.newBuilder()
+                .setInput(PipelineTypes.PlaceOrderRequest.newBuilder()
                     .setRequestId("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
                     .setCustomerId("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
                     .setRestaurantId("cccccccc-cccc-cccc-cccc-cccccccccccc")

@@ -22,11 +22,10 @@ import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.csv.common.domain.CsvFolder;
 import org.pipelineframework.csv.common.dto.CsvFolderDto;
-import org.pipelineframework.csv.grpc.ProcessFolderSvc;
 
 @SuppressWarnings("unused")
 @Mapper(componentModel = "jakarta", uses = {CommonConverters.class}, unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface CsvFolderMapper extends org.pipelineframework.mapper.Mapper<CsvFolder, ProcessFolderSvc.CsvFolder> {
+public interface CsvFolderMapper extends org.pipelineframework.mapper.Mapper<CsvFolder, org.pipelineframework.csv.grpc.PipelineTypes.CsvFolder> {
 
     CsvFolderMapper INSTANCE = Mappers.getMapper( CsvFolderMapper.class );
 
@@ -35,18 +34,18 @@ public interface CsvFolderMapper extends org.pipelineframework.mapper.Mapper<Csv
     CsvFolder fromDto(CsvFolderDto dto);
 
     @Mapping(target = "path", qualifiedByName = "stringToPath")
-    CsvFolderDto fromGrpc(ProcessFolderSvc.CsvFolder grpc);
+    CsvFolderDto fromGrpc(org.pipelineframework.csv.grpc.PipelineTypes.CsvFolder grpc);
 
     @Mapping(target = "path", qualifiedByName = "pathToString")
-    ProcessFolderSvc.CsvFolder toGrpc(CsvFolderDto dto);
+    org.pipelineframework.csv.grpc.PipelineTypes.CsvFolder toGrpc(CsvFolderDto dto);
 
     @Override
-    default CsvFolder fromExternal(ProcessFolderSvc.CsvFolder external) {
+    default CsvFolder fromExternal(org.pipelineframework.csv.grpc.PipelineTypes.CsvFolder external) {
         return fromDto(fromGrpc(external));
     }
 
     @Override
-    default ProcessFolderSvc.CsvFolder toExternal(CsvFolder domain) {
+    default org.pipelineframework.csv.grpc.PipelineTypes.CsvFolder toExternal(CsvFolder domain) {
         return toGrpc(toDto(domain));
     }
 }

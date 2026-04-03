@@ -3,15 +3,15 @@ package org.pipelineframework.tpfgo.checkout.checkout_validate_request.service;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import org.pipelineframework.mapper.Mapper;
-import org.pipelineframework.tpfgo.checkout.grpc.CheckoutValidateRequestSvc;
+import org.pipelineframework.tpfgo.checkout.grpc.PipelineTypes;
 import org.pipelineframework.tpfgo.common.domain.PlaceOrderRequest;
 import org.pipelineframework.tpfgo.common.util.GrpcMappingSupport;
 
 @ApplicationScoped
-public class PlaceOrderRequestMapper implements Mapper<PlaceOrderRequest, CheckoutValidateRequestSvc.PlaceOrderRequest> {
+public class PlaceOrderRequestMapper implements Mapper<PlaceOrderRequest, PipelineTypes.PlaceOrderRequest> {
 
     @Override
-    public PlaceOrderRequest fromExternal(CheckoutValidateRequestSvc.PlaceOrderRequest external) {
+    public PlaceOrderRequest fromExternal(PipelineTypes.PlaceOrderRequest external) {
         return new PlaceOrderRequest(
             GrpcMappingSupport.uuid(external.getRequestId(), "requestId"),
             GrpcMappingSupport.uuid(external.getCustomerId(), "customerId"),
@@ -22,8 +22,8 @@ public class PlaceOrderRequestMapper implements Mapper<PlaceOrderRequest, Checko
     }
 
     @Override
-    public CheckoutValidateRequestSvc.PlaceOrderRequest toExternal(PlaceOrderRequest domain) {
-        return CheckoutValidateRequestSvc.PlaceOrderRequest.newBuilder()
+    public PipelineTypes.PlaceOrderRequest toExternal(PlaceOrderRequest domain) {
+        return PipelineTypes.PlaceOrderRequest.newBuilder()
             .setRequestId(GrpcMappingSupport.str(domain.requestId()))
             .setCustomerId(GrpcMappingSupport.str(domain.customerId()))
             .setRestaurantId(GrpcMappingSupport.str(domain.restaurantId()))

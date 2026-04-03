@@ -22,6 +22,7 @@ class PipelineTemplateConfigLoaderTest {
     @Test
     void loadsTemplateConfigWithDefaults() throws Exception {
         String yaml = """
+            version: 2
             appName: "Test App"
             basePackage: "com.example.test"
             transport: "GRPC"
@@ -34,19 +35,22 @@ class PipelineTemplateConfigLoaderTest {
                 config:
                   enabledTargets:
                     - "GRPC_SERVICE"
+            messages:
+              FooInput:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "uuid"
+              FooOutput:
+                fields:
+                  - number: 1
+                    name: "status"
+                    type: "string"
             steps:
               - name: "Process Foo"
                 cardinality: "ONE_TO_ONE"
                 inputTypeName: "FooInput"
-                inputFields:
-                  - name: "id"
-                    type: "UUID"
-                    protoType: "string"
                 outputTypeName: "FooOutput"
-                outputFields:
-                  - name: "status"
-                    type: "String"
-                    protoType: "string"
             """;
         Path configPath = tempDir.resolve("pipeline-config.yaml");
         Files.writeString(configPath, yaml);
@@ -70,6 +74,37 @@ class PipelineTemplateConfigLoaderTest {
         Map<String, PipelineTemplateAspect> aspects = config.aspects();
         assertNotNull(aspects);
         assertTrue(aspects.containsKey("persistence"));
+    }
+
+    @Test
+    void stillLoadsLegacyTemplateFieldDefinitions() throws Exception {
+        String yaml = """
+            appName: "Legacy Test App"
+            basePackage: "com.example.test"
+            transport: "GRPC"
+            steps:
+              - name: "Process Foo"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "FooInput"
+                inputFields:
+                  - name: "id"
+                    type: "UUID"
+                    protoType: "string"
+                outputTypeName: "FooOutput"
+                outputFields:
+                  - name: "status"
+                    type: "String"
+                    protoType: "string"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-legacy.yaml");
+        Files.writeString(configPath, yaml);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+
+        assertEquals("Legacy Test App", config.appName());
+        assertEquals(1, config.steps().size());
+        assertEquals("FooInput", config.steps().getFirst().inputTypeName());
+        assertEquals("FooOutput", config.steps().getFirst().outputTypeName());
     }
 
     @Test

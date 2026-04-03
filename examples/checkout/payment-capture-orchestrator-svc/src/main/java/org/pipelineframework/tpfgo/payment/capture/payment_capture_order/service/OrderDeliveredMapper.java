@@ -5,13 +5,13 @@ import jakarta.enterprise.context.ApplicationScoped;
 import org.pipelineframework.mapper.Mapper;
 import org.pipelineframework.tpfgo.common.domain.OrderDelivered;
 import org.pipelineframework.tpfgo.common.util.GrpcMappingSupport;
-import org.pipelineframework.tpfgo.payment.capture.grpc.PaymentCaptureOrderSvc;
+import org.pipelineframework.tpfgo.payment.capture.grpc.PipelineTypes;
 
 @ApplicationScoped
-public class OrderDeliveredMapper implements Mapper<OrderDelivered, PaymentCaptureOrderSvc.OrderDelivered> {
+public class OrderDeliveredMapper implements Mapper<OrderDelivered, PipelineTypes.OrderDelivered> {
 
     @Override
-    public OrderDelivered fromExternal(PaymentCaptureOrderSvc.OrderDelivered external) {
+    public OrderDelivered fromExternal(PipelineTypes.OrderDelivered external) {
         return new OrderDelivered(
             GrpcMappingSupport.uuid(external.getOrderId(), "orderId"),
             GrpcMappingSupport.uuid(external.getCustomerId(), "customerId"),
@@ -26,8 +26,8 @@ public class OrderDeliveredMapper implements Mapper<OrderDelivered, PaymentCaptu
     }
 
     @Override
-    public PaymentCaptureOrderSvc.OrderDelivered toExternal(OrderDelivered domain) {
-        return PaymentCaptureOrderSvc.OrderDelivered.newBuilder()
+    public PipelineTypes.OrderDelivered toExternal(OrderDelivered domain) {
+        return PipelineTypes.OrderDelivered.newBuilder()
             .setOrderId(GrpcMappingSupport.str(domain.orderId()))
             .setCustomerId(GrpcMappingSupport.str(domain.customerId()))
             .setDispatchId(GrpcMappingSupport.str(domain.dispatchId()))

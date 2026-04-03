@@ -1,43 +1,90 @@
-appName: "TPFGo Delivery Execution Pipeline"
-basePackage: "org.pipelineframework.tpfgo.delivery.execution"
-transport: "GRPC"
-platform: "COMPUTE"
+version: 2
+appName: TPFGo Delivery Execution Pipeline
+basePackage: org.pipelineframework.tpfgo.delivery.execution
+transport: GRPC
+platform: COMPUTE
+messages:
+  DeliveryAssigned:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: customerId
+        type: uuid
+      - number: 3
+        name: restaurantId
+        type: uuid
+      - number: 4
+        name: totalAmount
+        type: decimal
+      - number: 5
+        name: currency
+        type: string
+      - number: 6
+        name: kitchenTicketId
+        type: uuid
+      - number: 7
+        name: dispatchId
+        type: uuid
+      - number: 8
+        name: courierId
+        type: uuid
+      - number: 9
+        name: etaMinutes
+        type: int32
+      - number: 10
+        name: assignedAt
+        type: timestamp
+      - number: 11
+        name: lineageDigest
+        type: string
+  OrderDelivered:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: customerId
+        type: uuid
+      - number: 3
+        name: dispatchId
+        type: uuid
+      - number: 4
+        name: courierId
+        type: uuid
+      - number: 5
+        name: restaurantId
+        type: uuid
+      - number: 6
+        name: kitchenTicketId
+        type: uuid
+      - number: 7
+        name: deliveredAt
+        type: timestamp
+      - number: 8
+        name: amount
+        type: decimal
+      - number: 9
+        name: currency
+        type: string
+      - number: 10
+        name: lineageDigest
+        type: string
+steps:
+  - name: Delivery Execute Order
+    service: org.pipelineframework.tpfgo.delivery.execution.delivery_execute_order.service.ProcessDeliveryExecuteOrderService
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.tpfgo.common.domain.DeliveryAssigned
+    inputTypeName: DeliveryAssigned
+    output: org.pipelineframework.tpfgo.common.domain.OrderDelivered
+    outputTypeName: OrderDelivered
 input:
   subscription:
-    publication: "tpfgo.dispatch.delivery-assigned.v1"
-    mapper: "org.pipelineframework.tpfgo.delivery.execution.delivery_execute_order.service.DeliveryAssignedMapper"
-steps:
-  - name: "Delivery Execute Order"
-    service: "org.pipelineframework.tpfgo.delivery.execution.delivery_execute_order.service.ProcessDeliveryExecuteOrderService"
-    cardinality: "ONE_TO_ONE"
-    input: "org.pipelineframework.tpfgo.common.domain.DeliveryAssigned"
-    inputTypeName: "DeliveryAssigned"
-    inputFields:
-      - { name: "orderId", type: "UUID", protoType: "string" }
-      - { name: "customerId", type: "UUID", protoType: "string" }
-      - { name: "restaurantId", type: "UUID", protoType: "string" }
-      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
-      - { name: "currency", type: "String", protoType: "string" }
-      - { name: "kitchenTicketId", type: "UUID", protoType: "string" }
-      - { name: "dispatchId", type: "UUID", protoType: "string" }
-      - { name: "courierId", type: "UUID", protoType: "string" }
-      - { name: "etaMinutes", type: "Integer", protoType: "int32" }
-      - { name: "assignedAt", type: "Instant", protoType: "string" }
-      - { name: "lineageDigest", type: "String", protoType: "string" }
-    output: "org.pipelineframework.tpfgo.common.domain.OrderDelivered"
-    outputTypeName: "OrderDelivered"
-    outputFields:
-      - { name: "orderId", type: "UUID", protoType: "string" }
-      - { name: "customerId", type: "UUID", protoType: "string" }
-      - { name: "dispatchId", type: "UUID", protoType: "string" }
-      - { name: "courierId", type: "UUID", protoType: "string" }
-      - { name: "restaurantId", type: "UUID", protoType: "string" }
-      - { name: "kitchenTicketId", type: "UUID", protoType: "string" }
-      - { name: "deliveredAt", type: "Instant", protoType: "string" }
-      - { name: "amount", type: "BigDecimal", protoType: "string" }
-      - { name: "currency", type: "String", protoType: "string" }
-      - { name: "lineageDigest", type: "String", protoType: "string" }
+    publication: tpfgo.dispatch.delivery-assigned.v1
+    mapper: org.pipelineframework.tpfgo.delivery.execution.delivery_execute_order.service.DeliveryAssignedMapper
 output:
   checkpoint:
-    publication: "tpfgo.delivery.order-delivered.v1"
-    idempotencyKeyFields: [ "orderId" ]
+    publication: tpfgo.delivery.order-delivered.v1
+    idempotencyKeyFields:
+      - orderId

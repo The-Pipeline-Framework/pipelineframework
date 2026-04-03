@@ -21,9 +21,9 @@ public interface RawDocumentMapper extends org.pipelineframework.mapper.Mapper<R
   RawDocument fromDto(RawDocumentDto dto);
 
   // DTO ↔ gRPC
-  org.pipelineframework.search.grpc.CrawlSourceSvc.RawDocument toGrpc(RawDocumentDto dto);
+  org.pipelineframework.search.grpc.PipelineTypes.RawDocument toGrpc(RawDocumentDto dto);
 
-  RawDocumentDto fromGrpc(org.pipelineframework.search.grpc.CrawlSourceSvc.RawDocument grpc);
+  RawDocumentDto fromGrpc(org.pipelineframework.search.grpc.PipelineTypes.RawDocument grpc);
 
   @Override
   default RawDocument fromExternal(RawDocumentDto external) {
@@ -35,11 +35,11 @@ public interface RawDocumentMapper extends org.pipelineframework.mapper.Mapper<R
     return toDto(domain);
   }
 
-  default org.pipelineframework.search.grpc.CrawlSourceSvc.RawDocument toDtoToGrpc(RawDocument domain) {
+  default org.pipelineframework.search.grpc.PipelineTypes.RawDocument toDtoToGrpc(RawDocument domain) {
     return toGrpc(toDto(domain));
   }
 
-  default RawDocument fromGrpcFromDto(org.pipelineframework.search.grpc.CrawlSourceSvc.RawDocument grpc) {
+  default RawDocument fromGrpcFromDto(org.pipelineframework.search.grpc.PipelineTypes.RawDocument grpc) {
     return fromDto(fromGrpc(grpc));
   }
 }

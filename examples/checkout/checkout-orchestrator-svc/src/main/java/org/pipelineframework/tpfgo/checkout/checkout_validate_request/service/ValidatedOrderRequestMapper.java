@@ -3,16 +3,16 @@ package org.pipelineframework.tpfgo.checkout.checkout_validate_request.service;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import org.pipelineframework.mapper.Mapper;
-import org.pipelineframework.tpfgo.checkout.grpc.CheckoutValidateRequestSvc;
+import org.pipelineframework.tpfgo.checkout.grpc.PipelineTypes;
 import org.pipelineframework.tpfgo.common.domain.ValidatedOrderRequest;
 import org.pipelineframework.tpfgo.common.util.GrpcMappingSupport;
 
 @ApplicationScoped
 public class ValidatedOrderRequestMapper
-    implements Mapper<ValidatedOrderRequest, CheckoutValidateRequestSvc.ValidatedOrderRequest> {
+    implements Mapper<ValidatedOrderRequest, PipelineTypes.ValidatedOrderRequest> {
 
     @Override
-    public ValidatedOrderRequest fromExternal(CheckoutValidateRequestSvc.ValidatedOrderRequest external) {
+    public ValidatedOrderRequest fromExternal(PipelineTypes.ValidatedOrderRequest external) {
         return new ValidatedOrderRequest(
             GrpcMappingSupport.uuid(external.getRequestId(), "requestId"),
             GrpcMappingSupport.uuid(external.getCustomerId(), "customerId"),
@@ -24,8 +24,8 @@ public class ValidatedOrderRequestMapper
     }
 
     @Override
-    public CheckoutValidateRequestSvc.ValidatedOrderRequest toExternal(ValidatedOrderRequest domain) {
-        return CheckoutValidateRequestSvc.ValidatedOrderRequest.newBuilder()
+    public PipelineTypes.ValidatedOrderRequest toExternal(ValidatedOrderRequest domain) {
+        return PipelineTypes.ValidatedOrderRequest.newBuilder()
             .setRequestId(GrpcMappingSupport.str(domain.requestId()))
             .setCustomerId(GrpcMappingSupport.str(domain.customerId()))
             .setRestaurantId(GrpcMappingSupport.str(domain.restaurantId()))
