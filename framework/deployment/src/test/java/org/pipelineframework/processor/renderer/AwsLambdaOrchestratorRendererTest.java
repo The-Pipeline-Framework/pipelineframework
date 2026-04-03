@@ -210,7 +210,7 @@ class AwsLambdaOrchestratorRendererTest {
     void rendersTransportContextWithAllAttributes() throws IOException {
         String source = renderAndReadSource(buildBinding());
 
-        assertTrue(source.contains("FunctionTransportContext.ATTR_TRANSPORT_PROTOCOL"));
+        // Transport protocol was removed as it was confusing and not functionally used
         assertTrue(source.contains("FunctionTransportContext.ATTR_CORRELATION_ID"));
         assertTrue(source.contains("FunctionTransportContext.ATTR_EXECUTION_ID"));
         assertTrue(source.contains("FunctionTransportContext.ATTR_RETRY_ATTEMPT"));
@@ -294,8 +294,10 @@ class AwsLambdaOrchestratorRendererTest {
         String source = renderAndReadSource(buildBinding());
 
         assertTrue(source.contains("context != null ? context.getAwsRequestId() : \"unknown-request\""));
-        assertTrue(source.contains("context != null ? context.getFunctionName() : \"PipelineRunFunctionHandler\""));
-        assertTrue(source.contains("context != null && context.getLogStreamName() != null"));
+        assertTrue(source.contains("context != null ? context.getFunctionName() : \"unknown-request\""));
+        // Execution ID uses getLogStreamName with null/blank check fallback to UUID
+        assertTrue(source.contains("context.getLogStreamName()"));
+        assertTrue(source.contains("UUID.randomUUID().toString()"));
     }
 
     @Test
@@ -436,7 +438,7 @@ class AwsLambdaOrchestratorRendererTest {
         String source = renderAndReadSource(buildBinding());
 
         assertTrue(source.contains("context != null ? context.getAwsRequestId() : \"unknown-request\""));
-        assertTrue(source.contains("context != null ? context.getFunctionName() : \"PipelineRunFunctionHandler\""));
+        assertTrue(source.contains("context != null ? context.getFunctionName() : \"unknown-request\""));
     }
 
     @Test

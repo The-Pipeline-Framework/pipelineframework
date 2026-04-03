@@ -209,9 +209,10 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
                 + "$T.ATTR_RETRY_ATTEMPT, $T.getProperty($S, $S), "
                 + "$T.ATTR_DISPATCH_TS_EPOCH_MS, $T.toString($T.currentTimeMillis())))",
                 FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT,
-                UNKNOWN_REQUEST, FUNCTION_TRANSPORT_CONTEXT,
-                FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT,
-                FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT,
+                UNKNOWN_REQUEST, UNKNOWN_REQUEST, UNKNOWN_REQUEST,
+                ClassName.get("java.util", "Map"),
+                FUNCTION_TRANSPORT_CONTEXT, UNKNOWN_REQUEST,
+                FUNCTION_TRANSPORT_CONTEXT, ClassName.get("java.util", "UUID"),
                 FUNCTION_TRANSPORT_CONTEXT, ClassName.get(System.class), "tpf.transport.retry-attempt", "0",
                 FUNCTION_TRANSPORT_CONTEXT, ClassName.get(Long.class), ClassName.get(System.class))
             .addStatement("$T<$T, $T> source = new $T<>($S, $S)", FUNCTION_SOURCE_ADAPTER, inputEventType, inputDto, selectSourceAdapter(streamingInput, DEFAULT_UNARY_SOURCE_ADAPTER, MULTI_SOURCE_ADAPTER), ORCHESTRATOR_PREFIX + inputTypeName, API_VERSION)
@@ -324,7 +325,7 @@ protected static ClassName selectSinkAdapter(boolean streaming, ClassName defaul
      * @returns `invokeOneToOne` when neither input nor output is streaming; `invokeOneToMany` when input is unary and output is streaming; `invokeManyToOne` when input is streaming and output is unary; `invokeManyToMany` when both input and output are streaming.
      */
     protected static String bridgeMethodName(boolean streamingInput, boolean streamingOutput) {
-        if (!streamingInput && !streamingOutput) return "invokeOneToOne";
+        if (!streamingInput && !streamingOutput) return "invoke";
         if (!streamingInput) return "invokeOneToMany";
         if (!streamingOutput) return "invokeManyToOne";
         return "invokeManyToMany";
