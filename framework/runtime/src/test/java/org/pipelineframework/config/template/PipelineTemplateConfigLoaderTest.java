@@ -103,8 +103,17 @@ class PipelineTemplateConfigLoaderTest {
 
         assertEquals("Legacy Test App", config.appName());
         assertEquals(1, config.steps().size());
-        assertEquals("FooInput", config.steps().getFirst().inputTypeName());
-        assertEquals("FooOutput", config.steps().getFirst().outputTypeName());
+        PipelineTemplateStep step = config.steps().getFirst();
+        assertEquals("FooInput", step.inputTypeName());
+        assertEquals("FooOutput", step.outputTypeName());
+        assertEquals(1, step.inputFields().size());
+        assertEquals("id", step.inputFields().getFirst().name());
+        assertEquals("UUID", step.inputFields().getFirst().type());
+        assertEquals("string", step.inputFields().getFirst().protoType());
+        assertEquals(1, step.outputFields().size());
+        assertEquals("status", step.outputFields().getFirst().name());
+        assertEquals("String", step.outputFields().getFirst().type());
+        assertEquals("string", step.outputFields().getFirst().protoType());
     }
 
     @Test

@@ -633,6 +633,9 @@ class PipelineStepProcessorTest {
                   - number: 2
                     name: "sourceUrl"
                     type: "string"
+                  - number: 3
+                    name: "requestedAt"
+                    type: "timestamp"
               RawDocument:
                 fields:
                   - number: 1

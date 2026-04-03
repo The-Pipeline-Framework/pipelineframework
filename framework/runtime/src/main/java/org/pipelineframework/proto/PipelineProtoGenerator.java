@@ -87,6 +87,19 @@ public class PipelineProtoGenerator {
         generate(moduleDir, configPath, outputDir, TYPES_PROTO);
     }
 
+    /**
+     * Generates protobuf definitions from the pipeline template configuration using an explicit shared types proto name.
+     *
+     * This overload behaves like {@link #generate(Path, Path, Path)} but allows callers to choose
+     * the filename used for the shared version-2 message-types proto. When {@code typesProtoName}
+     * is {@code null} or blank, the generator falls back to {@code pipeline-types.proto}.
+     *
+     * @param moduleDir the module directory used to resolve the configuration and default output; may be null to use the current working directory
+     * @param configPath an explicit path to the pipeline template config, or null to locate the config automatically starting from moduleDir
+     * @param outputDir the directory to write generated .proto files to, or null to use the default target/generated-sources/proto under moduleDir
+     * @param typesProtoName the filename to use for the shared v2 types proto; defaults to {@code pipeline-types.proto} when null or blank
+     * @throws IllegalStateException if the configuration is invalid or missing required values, if the config cannot be located, if output directories cannot be created, or if IDL compatibility checks fail
+     */
     public void generate(Path moduleDir, Path configPath, Path outputDir, String typesProtoName) {
         Path resolvedModuleDir = moduleDir == null ? Path.of("") : moduleDir;
         Path resolvedConfig = resolveConfigPath(resolvedModuleDir, configPath);
