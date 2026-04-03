@@ -252,16 +252,6 @@ Current templates use semantic v2 types. The compiler derives Java bindings and 
 | `duration` | `Duration` | `string` |
 | `uri` | `URI` | `string` |
 | `path` | `Path` | `string` |
-| ZonedDateTime | string | Date and time with zone |
-| Instant | int64 | Timestamp (epoch milliseconds) |
-| Duration | int64 | Time duration (nanoseconds) |
-| Period | string | Date-based period |
-| URI | string | Uniform Resource Identifier |
-| URL | string | Uniform Resource Locator |
-| File | string | File system objects |
-| BigInteger | string | Large integers |
-| AtomicInteger | int32 | Thread-safe counters |
-| AtomicLong | int64 | Thread-safe large counters |
 
 ### Automatic Conversion
 - MapStruct handles automatic conversion between Java and protobuf types for built-in types
