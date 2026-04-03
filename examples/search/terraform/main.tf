@@ -10,6 +10,8 @@ resource "azurerm_storage_account" "function_storage" {
   location                 = azurerm_resource_group.search_pipeline.location
   resource_group_name      = azurerm_resource_group.search_pipeline.name
   account_tier             = "Standard"
+  # LRS is intentional for E2E/test infrastructure (cost-effective, no geo-redundancy required).
+  # For production deployments, consider GRS or RA-GRS for geo-redundancy.
   account_replication_type = "LRS"
   enable_https_traffic_only = true
   min_tls_version          = "TLS1_2"

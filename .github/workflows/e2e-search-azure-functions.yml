@@ -214,11 +214,17 @@ jobs:
             verify
 
       - name: Terraform Destroy
-        if: ${{ inputs.terraform_destroy }}
+        if: ${{ always() && inputs.terraform_destroy }}
         working-directory: examples/search/terraform
         run: |
-          # Initialize and refresh before destroying
-          terraform init -input=false -reconfigure
+          # Reinitialize with the same backend configuration used during creation
+          terraform init -input=false -reconfigure \
+            -backend-config="resource_group_name=$TF_STATE_RESOURCE_GROUP" \
+            -backend-config="storage_account_name=$TF_STATE_STORAGE_ACCOUNT" \
+            -backend-config="container_name=$TF_STATE_CONTAINER" \
+            -backend-config="key=search-pipeline-${{ github.run_id }}.tfstate"
+          
+          # Refresh state
           terraform refresh -input=false || true
           
           # Check if there are resources to destroy

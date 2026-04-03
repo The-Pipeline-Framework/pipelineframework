@@ -182,9 +182,10 @@ public class GcpOrchestratorRenderer extends AbstractOrchestratorFunctionHandler
     /**
      * Builds the GCP HTTP "service" handler method used to submit an orchestrator run request.
      *
-     * The generated method deserializes the request payload into the provided input DTO type,
-     * reads the `X-Tenant-ID` and `Idempotency-Key` headers, invokes `pipelineExecutionService.executePipelineAsync(...)`
-     * with the computed execution input and header values, and writes the accepted execution DTO to the response.
+     * The generated method deserializes the request payload into the PipelineRunAsyncRequest envelope,
+     * extracts input/inputBatch/tenantId/idempotencyKey from the envelope, invokes
+     * `pipelineExecutionService.executePipelineAsync(...)` with the correct execution input and metadata,
+     * and writes the accepted execution DTO to the response.
      *
      * @param basePackage the base Java package for generated types (used for naming/placement)
      * @param inputDto the class of the input DTO to deserialize from the request payload
@@ -195,6 +196,10 @@ public class GcpOrchestratorRenderer extends AbstractOrchestratorFunctionHandler
      * @return a MethodSpec representing the generated public `service(HttpRequest, HttpResponse)` handler method
      */
     private MethodSpec buildGcpRunAsyncHandler(String basePackage, ClassName inputDto, TypeName runAsyncRequestType, ClassName runAsyncAcceptedDto, boolean streamingInput, boolean streamingOutput) {
+        ClassName list = ClassName.get(List.class);
+        ClassName objectMapper = ClassName.get("com.fasterxml.jackson.databind", "ObjectMapper");
+        ClassName duration = ClassName.get("java.time", "Duration");
+
         return MethodSpec.methodBuilder("service")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
@@ -202,11 +207,20 @@ public class GcpOrchestratorRenderer extends AbstractOrchestratorFunctionHandler
             .addParameter(HTTP_REQUEST, "request")
             .addParameter(HTTP_RESPONSE, "response")
             .addException(Exception.class)
-            .addStatement("$T executionInput = new com.fasterxml.jackson.databind.ObjectMapper().readValue(request.getReader(), $T.class)", Object.class, inputDto)
-            .addStatement("String tenantId = request.getFirstHeader($S).orElse(null)", "X-Tenant-ID")
-            .addStatement("String idempotencyKey = request.getFirstHeader($S).orElse(null)", "Idempotency-Key")
-            .addStatement("$T result = pipelineExecutionService.executePipelineAsync(executionInput, tenantId, idempotencyKey, $L).await().atMost($T.ofSeconds(30))", runAsyncAcceptedDto, streamingOutput, ClassName.get("java.time", "Duration"))
-            .addStatement("response.getWriter().write(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(result))")
+            .addStatement("$T mapper = new $T()", objectMapper, objectMapper)
+            .addStatement("$T envelope = mapper.readValue(request.getReader(), $T.class)", runAsyncRequestType, runAsyncRequestType)
+            .addStatement("$T executionInput", Object.class)
+            .beginControlFlow("if (envelope != null && envelope.inputBatch != null && !envelope.inputBatch.isEmpty())")
+            .addStatement("executionInput = $T.createFrom().iterable(envelope.inputBatch)", MULTI)
+            .nextControlFlow("else if (envelope != null && envelope.input != null)")
+            .addStatement("executionInput = $T.createFrom().item(envelope.input)", MULTI)
+            .nextControlFlow("else")
+            .addStatement("executionInput = $T.createFrom().empty()", MULTI)
+            .endControlFlow()
+            .addStatement("String tenantId = envelope == null ? null : envelope.tenantId")
+            .addStatement("String idempotencyKey = envelope == null ? null : envelope.idempotencyKey")
+            .addStatement("$T result = pipelineExecutionService.executePipelineAsync(executionInput, tenantId, idempotencyKey, $L).await().atMost($T.ofSeconds(30))", runAsyncAcceptedDto, streamingOutput, duration)
+            .addStatement("response.getWriter().write(mapper.writeValueAsString(result))")
             .addStatement("response.setStatusCode(200)")
             .build();
     }
@@ -256,7 +270,7 @@ public class GcpOrchestratorRenderer extends AbstractOrchestratorFunctionHandler
             .beginControlFlow("if (executionId == null || executionId.isBlank())")
             .addStatement("throw new IllegalArgumentException($S)", "executionId is required")
             .endControlFlow()
-            .addStatement("$T result = pipelineExecutionService.<$T>getExecutionResult(tenantId, executionId, $T.class, $L).await().atMost($T.ofSeconds(30))", asyncResultType, outputDto, ClassName.get("java.time", "Duration"))
+            .addStatement("$T result = pipelineExecutionService.<$T>getExecutionResult(tenantId, executionId, $T.class, $L).await().atMost($T.ofSeconds(30))", asyncResultType, outputDto, outputDto, streamingOutput, ClassName.get("java.time", "Duration"))
             .addStatement("response.getWriter().write(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(result))")
             .addStatement("response.setStatusCode(200)")
             .build();

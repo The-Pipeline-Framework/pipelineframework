@@ -226,10 +226,11 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
             .addParameter(getContextClassName(), "context")
             .beginControlFlow("try")
             .addStatement("$T transportContext = $T.of("
-                + getRequestIdExpression() + ", "
-                + getFunctionNameExpression() + ", $S, $T.of("
-                + "$T.ATTR_CORRELATION_ID, " + getRequestIdExpression() + ", "
-                + "$T.ATTR_EXECUTION_ID, " + buildExecutionIdExpression() + ", "
+                + "context != null ? context.getAwsRequestId() : $S, "
+                + "context != null ? context.getFunctionName() : $S, "
+                + "$S, $T.of("
+                + "$T.ATTR_CORRELATION_ID, context != null ? context.getAwsRequestId() : $S, "
+                + "$T.ATTR_EXECUTION_ID, (context != null && context.getLogStreamName() != null && !context.getLogStreamName().isBlank()) ? context.getLogStreamName() : $T.randomUUID().toString(), "
                 + "$T.ATTR_RETRY_ATTEMPT, $T.getProperty($S, $S), "
                 + "$T.ATTR_DISPATCH_TS_EPOCH_MS, $T.toString($T.currentTimeMillis())))",
                 FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT,

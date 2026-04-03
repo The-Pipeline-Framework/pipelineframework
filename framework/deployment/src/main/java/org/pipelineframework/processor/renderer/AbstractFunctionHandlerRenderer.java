@@ -386,6 +386,11 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
         ClassName httpResponse = ClassName.get("com.google.cloud.functions", "HttpResponse");
         ClassName objectMapper = ClassName.get("com.fasterxml.jackson.databind", "ObjectMapper");
 
+        // Determine input type for deserialization based on streaming mode
+        TypeName deserializeType = streamingInput ? inputEventType : inputDto;
+        // Determine result type based on streaming mode
+        TypeName resultType = handlerOutputType;
+
         return MethodSpec.methodBuilder("service")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
@@ -393,9 +398,9 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
             .addParameter(httpRequest, "request")
             .addParameter(httpResponse, "response")
             .addException(Exception.class)
-            .beginControlFlow("try")
             .addStatement("$T mapper = new $T()", objectMapper, objectMapper)
-            .addStatement("$T input = mapper.readValue(request.getReader(), $T.class)", inputDto, inputDto)
+            .beginControlFlow("try")
+            .addStatement("$T input = mapper.readValue(request.getReader(), $T.class)", deserializeType, deserializeType)
             .addStatement("$T transportContext = $T.of("
                 + "request.getFirstHeader($S).orElse($T.randomUUID().toString()), "
                 + "$S, $S, $T.of("
@@ -433,7 +438,7 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
                 FUNCTION_SINK_ADAPTER, outputDto, handlerOutputType,
                 streamingOutput ? COLLECT_LIST_SINK_ADAPTER : DEFAULT_UNARY_SINK_ADAPTER)
             .addStatement("$T result = $T.$L(input, transportContext, source, invoke, sink)",
-                shape == StreamingShape.UNARY_UNARY ? outputDto : ParameterizedTypeName.get(ClassName.get(List.class), outputDto),
+                resultType,
                 shape == StreamingShape.UNARY_UNARY ? UNARY_FUNCTION_TRANSPORT_BRIDGE : FUNCTION_TRANSPORT_BRIDGE,
                 bridgeMethodName(shape))
             .addStatement("response.getWriter().write(mapper.writeValueAsString(result))")

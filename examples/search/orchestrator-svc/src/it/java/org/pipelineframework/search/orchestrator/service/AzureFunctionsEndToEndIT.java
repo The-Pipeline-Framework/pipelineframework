@@ -29,7 +29,6 @@ import io.quarkus.test.junit.QuarkusIntegrationTest;
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -45,11 +44,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * Prerequisites:
  * - Azure Functions deployment must be running
- * - AZURE_FUNCTION_APP_URL environment variable must be set
+ * - FUNCTION_APP_URL environment variable or azure.function.app.url system property must be set
  * - Tests run against real Azure infrastructure (not mocked)
  */
 @QuarkusIntegrationTest
-@EnabledIfEnvironmentVariable(named = "FUNCTION_APP_URL", matches = ".+")
 class AzureFunctionsEndToEndIT {
 
     private static final Logger LOG = Logger.getLogger(AzureFunctionsEndToEndIT.class);
@@ -61,9 +59,12 @@ class AzureFunctionsEndToEndIT {
     /**
      * Initializes shared test configuration for the Azure Functions end-to-end integration tests.
      *
-     * Reads the `AZURE_FUNCTION_APP_URL` environment variable into `functionAppUrl`, removes a trailing
-     * slash if present, logs the resolved base URL, and builds a reusable `HttpClient` configured to
-     * use HTTP/2 with a 30-second connection timeout.
+     * Reads the `FUNCTION_APP_URL` environment variable or `azure.function.app.url` system property
+     * into `functionAppUrl`, removes a trailing slash if present, logs the resolved base URL, and
+     * builds a reusable `HttpClient` configured to use HTTP/2 with a 30-second connection timeout.
+     *
+     * If neither the environment variable nor system property is present, the entire test class is
+     * skipped via a JUnit assumption.
      */
     @BeforeAll
     static void setup() {
@@ -71,6 +72,10 @@ class AzureFunctionsEndToEndIT {
         if (functionAppUrl == null) {
             functionAppUrl = System.getProperty("azure.function.app.url");
         }
+
+        // Skip entire test class if URL is not provided
+        org.junit.jupiter.api.Assumptions.assumeTrue(functionAppUrl != null && !functionAppUrl.isBlank(),
+            "Skipping Azure Functions E2E tests: neither FUNCTION_APP_URL env var nor azure.function.app.url system property is set");
 
         // Remove trailing slash if present
         if (functionAppUrl.endsWith("/")) {
