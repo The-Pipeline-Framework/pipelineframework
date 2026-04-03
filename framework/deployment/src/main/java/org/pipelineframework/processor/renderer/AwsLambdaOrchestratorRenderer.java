@@ -17,6 +17,7 @@
 package org.pipelineframework.processor.renderer;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.List;
 import javax.lang.model.element.Modifier;
 
@@ -192,10 +193,14 @@ public class AwsLambdaOrchestratorRenderer extends AbstractOrchestratorFunctionH
             .returns(EXECUTION_STATUS_DTO)
             .addParameter(executionLookupRequestType, "request")
             .addParameter(LAMBDA_CONTEXT, "context")
+            .beginControlFlow("try")
             .beginControlFlow("if (request == null || request.executionId == null || request.executionId.isBlank())")
             .addStatement("throw new IllegalArgumentException($S)", "executionId is required")
             .endControlFlow()
-            .addStatement("return pipelineExecutionService.getExecutionStatus(request.tenantId, request.executionId).await().indefinitely()")
+            .addStatement("return pipelineExecutionService.getExecutionStatus(request.tenantId, request.executionId).await().atMost($T.ofSeconds(30))", ClassName.get("java.time", "Duration"))
+            .nextControlFlow("catch ($T e)", ClassName.get("java.util.concurrent", "TimeoutException"))
+            .addStatement("throw new RuntimeException(\"Status check timed out after 30 seconds for executionId: \" + request.executionId, e)")
+            .endControlFlow()
             .build();
 
         TypeSpec statusHandler = TypeSpec.classBuilder(STATUS_HANDLER_CLASS)
@@ -215,10 +220,14 @@ public class AwsLambdaOrchestratorRenderer extends AbstractOrchestratorFunctionH
             .returns(asyncResultType)
             .addParameter(executionLookupRequestType, "request")
             .addParameter(LAMBDA_CONTEXT, "context")
+            .beginControlFlow("try")
             .beginControlFlow("if (request == null || request.executionId == null || request.executionId.isBlank())")
             .addStatement("throw new IllegalArgumentException($S)", "executionId is required")
             .endControlFlow()
-            .addStatement("return pipelineExecutionService.<$T>getExecutionResult(request.tenantId, request.executionId, $T.class, $L).await().indefinitely()", asyncResultType, outputDto, streamingOutput)
+            .addStatement("return pipelineExecutionService.<$T>getExecutionResult(request.tenantId, request.executionId, $T.class, $L).await().atMost($T.ofSeconds(30))", asyncResultType, outputDto, streamingOutput, ClassName.get("java.time", "Duration"))
+            .nextControlFlow("catch ($T e)", ClassName.get("java.util.concurrent", "TimeoutException"))
+            .addStatement("throw new RuntimeException(\"Result retrieval timed out after 30 seconds for executionId: \" + request.executionId, e)")
+            .endControlFlow()
             .build();
 
         TypeSpec resultHandler = TypeSpec.classBuilder(RESULT_HANDLER_CLASS)

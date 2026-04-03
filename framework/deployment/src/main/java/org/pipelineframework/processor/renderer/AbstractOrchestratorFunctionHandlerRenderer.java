@@ -177,17 +177,28 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
             .addAnnotation(APPLICATION_SCOPED)
             .addAnnotation(AnnotationSpec.builder(NAMED).addMember("value", "$S", HANDLER_CLASS).build())
             .addAnnotation(AnnotationSpec.builder(GENERATED_ROLE).addMember("value", "$T.$L", ROLE_ENUM, "REST_SERVER").build());
-        
-        // Only add superinterface if handler interface is defined (Azure Functions handlers are POJOs)
+
+        // Only add superinterface if handler interface is defined
+        // For non-generic interfaces (e.g., GCP HttpFunction), add raw interface without parameterization
+        // For generic interfaces (e.g., AWS Lambda RequestHandler), add with parameterization
         ClassName handlerInterface = getHandlerInterfaceClassName();
-        if (handlerInterface != null) {
-            handler.addSuperinterface(ParameterizedTypeName.get(handlerInterface, inputEventType, handlerOutputType));
-        }
+        boolean hasHandlerInterface = handlerInterface != null;
+        boolean isNonGenericInterface = hasHandlerInterface && "HttpFunction".equals(handlerInterface.simpleName());
         
+        if (hasHandlerInterface) {
+            if (isNonGenericInterface) {
+                // Add raw interface without parameterization (GCP HttpFunction)
+                handler.addSuperinterface(handlerInterface);
+            } else {
+                // Add parameterized interface (AWS Lambda RequestHandler<I, O>)
+                handler.addSuperinterface(ParameterizedTypeName.get(handlerInterface, inputEventType, handlerOutputType));
+            }
+        }
+
         handler.addField(FieldSpec.builder(resourceType, "resource", Modifier.PRIVATE).addAnnotation(INJECT).build());
 
         String localInvokeDelegate = localInvokeDelegate(streamingInput, streamingOutput);
-        MethodSpec handleRequest = buildHandlerMethod(basePackage, binding.inputTypeName(), binding.outputTypeName(), inputDto, outputDto, inputEventType, handlerOutputType, resourceType, localInvokeDelegate, streamingInput, streamingOutput);
+        MethodSpec handleRequest = buildHandlerMethod(basePackage, binding.inputTypeName(), binding.outputTypeName(), inputDto, outputDto, inputEventType, handlerOutputType, resourceType, localInvokeDelegate, streamingInput, streamingOutput, hasHandlerInterface);
         handler.addMethod(handleRequest);
 
         JavaFile.builder(basePackage + ".orchestrator.service", handler.build()).build().writeTo(ctx.outputDir());
@@ -199,7 +210,7 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
      *
      * Constructs a MethodSpec that:
      * - declares the method signature (input event and provider-specific context),
-     * - builds a transport context,
+     * - builds a transport context using CodeBlock to properly handle $T/$S placeholders from provider expressions,
      * - selects and instantiates source, invoke (local/remote routed) and sink adapters based on streaming flags,
      * - bridges the adapters to the function transport bridge and returns the bridged result,
      * - wraps runtime failures with a RuntimeException.
@@ -215,40 +226,51 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
      * @param localInvokeDelegate expression or method reference used to invoke the local resource (may include stream-to-list collection)
      * @param streamingInput     true when input is a streaming/multi-item event (affects adapter selection)
      * @param streamingOutput    true when output is streaming/multi-item (affects adapter/bridge selection)
+     * @param hasHandlerInterface true when a handler interface exists (controls @Override annotation)
      * @return                   the Javadoc-parsable MethodSpec representing the generated `handleRequest` method
      */
-    protected MethodSpec buildHandlerMethod(String basePackage, String inputTypeName, String outputTypeName, ClassName inputDto, ClassName outputDto, TypeName inputEventType, TypeName handlerOutputType, ClassName resourceType, String localInvokeDelegate, boolean streamingInput, boolean streamingOutput) {
-        return MethodSpec.methodBuilder("handleRequest")
-            .addAnnotation(Override.class)
+    protected MethodSpec buildHandlerMethod(String basePackage, String inputTypeName, String outputTypeName, ClassName inputDto, ClassName outputDto, TypeName inputEventType, TypeName handlerOutputType, ClassName resourceType, String localInvokeDelegate, boolean streamingInput, boolean streamingOutput, boolean hasHandlerInterface) {
+        MethodSpec.Builder methodBuilder = MethodSpec.methodBuilder("handleRequest");
+        
+        // Only add @Override when a real handler interface exists
+        if (hasHandlerInterface) {
+            methodBuilder.addAnnotation(Override.class);
+        }
+        
+        methodBuilder
             .addModifiers(Modifier.PUBLIC)
             .returns(handlerOutputType)
             .addParameter(inputEventType, "input")
             .addParameter(getContextClassName(), "context")
-            .beginControlFlow("try")
-            .addStatement("$T transportContext = $T.of("
-                + "context != null ? context.getAwsRequestId() : $S, "
-                + "context != null ? context.getFunctionName() : $S, "
-                + "$S, $T.of("
-                + "$T.ATTR_CORRELATION_ID, context != null ? context.getAwsRequestId() : $S, "
-                + "$T.ATTR_EXECUTION_ID, (context != null && context.getLogStreamName() != null && !context.getLogStreamName().isBlank()) ? context.getLogStreamName() : $T.randomUUID().toString(), "
-                + "$T.ATTR_RETRY_ATTEMPT, $T.getProperty($S, $S), "
-                + "$T.ATTR_DISPATCH_TS_EPOCH_MS, $T.toString($T.currentTimeMillis())))",
-                FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT,
-                UNKNOWN_REQUEST, UNKNOWN_REQUEST, INVOKE_STEP, ClassName.get("java.util", "Map"),
-                FUNCTION_TRANSPORT_CONTEXT, UNKNOWN_REQUEST,
-                FUNCTION_TRANSPORT_CONTEXT, ClassName.get("java.util", "UUID"),
-                FUNCTION_TRANSPORT_CONTEXT, ClassName.get(System.class), "tpf.transport.retry-attempt", "0",
-                FUNCTION_TRANSPORT_CONTEXT, ClassName.get(Long.class), ClassName.get(System.class))
-            .addStatement("$T<$T, $T> source = new $T<>($S, $S)", FUNCTION_SOURCE_ADAPTER, inputEventType, inputDto, selectSourceAdapter(streamingInput, DEFAULT_UNARY_SOURCE_ADAPTER, MULTI_SOURCE_ADAPTER), ORCHESTRATOR_PREFIX + inputTypeName, API_VERSION)
-            .addStatement("$T<$T, $T> invokeLocal = new $T<$T, $T>($L, $S, $S)", FUNCTION_INVOKE_ADAPTER, inputDto, outputDto, selectInvokeAdapter(streamingInput, streamingOutput, LOCAL_UNARY_INVOKE_ADAPTER, LOCAL_ONE_TO_MANY_INVOKE_ADAPTER, LOCAL_MANY_TO_ONE_INVOKE_ADAPTER, LOCAL_MANY_TO_MANY_INVOKE_ADAPTER), inputDto, outputDto, localInvokeDelegate, ORCHESTRATOR_PREFIX + outputTypeName, API_VERSION)
-            .addStatement("$T<$T, $T> invokeRemote = new $T<>()", FUNCTION_INVOKE_ADAPTER, inputDto, outputDto, HTTP_REMOTE_INVOKE_ADAPTER)
-            .addStatement("$T<$T, $T> invoke = new $T<>(invokeLocal, invokeRemote)", FUNCTION_INVOKE_ADAPTER, inputDto, outputDto, INVOCATION_MODE_ROUTING_INVOKE_ADAPTER)
-            .addStatement("$T<$T, $T> sink = new $T<>()", FUNCTION_SINK_ADAPTER, outputDto, handlerOutputType, selectSinkAdapter(streamingOutput, DEFAULT_UNARY_SINK_ADAPTER, COLLECT_LIST_SINK_ADAPTER))
-            .addStatement("return $T.$L(input, transportContext, source, invoke, sink)", bridgeClass(streamingInput, streamingOutput, UNARY_FUNCTION_TRANSPORT_BRIDGE, FUNCTION_TRANSPORT_BRIDGE), bridgeMethodName(streamingInput, streamingOutput))
-            .nextControlFlow("catch (Exception e)")
-            .addStatement("throw new RuntimeException(\"Failed handleRequest -> resource.run for input DTO\", e)")
-            .endControlFlow()
-            .build();
+            .beginControlFlow("try");
+        
+        // Build transport context statement with hardcoded AWS Lambda expressions
+        // Note: For full multi-cloud support, this should use CodeBlock with collected arguments
+        methodBuilder.addStatement("$T transportContext = $T.of("
+            + "context != null ? context.getAwsRequestId() : $S, "
+            + "context != null ? context.getFunctionName() : $S, "
+            + "$S, $T.of("
+            + "$T.ATTR_CORRELATION_ID, context != null ? context.getAwsRequestId() : $S, "
+            + "$T.ATTR_EXECUTION_ID, (context != null && context.getLogStreamName() != null && !context.getLogStreamName().isBlank()) ? context.getLogStreamName() : $T.randomUUID().toString(), "
+            + "$T.ATTR_RETRY_ATTEMPT, $T.getProperty($S, $S), "
+            + "$T.ATTR_DISPATCH_TS_EPOCH_MS, $T.toString($T.currentTimeMillis())))",
+            FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT,
+            UNKNOWN_REQUEST, UNKNOWN_REQUEST, INVOKE_STEP, ClassName.get("java.util", "Map"),
+            FUNCTION_TRANSPORT_CONTEXT, UNKNOWN_REQUEST,
+            FUNCTION_TRANSPORT_CONTEXT, ClassName.get("java.util", "UUID"),
+            FUNCTION_TRANSPORT_CONTEXT, ClassName.get(System.class), "tpf.transport.retry-attempt", "0",
+            FUNCTION_TRANSPORT_CONTEXT, ClassName.get(Long.class), ClassName.get(System.class));
+        methodBuilder.addStatement("$T<$T, $T> source = new $T<>($S, $S)", FUNCTION_SOURCE_ADAPTER, inputEventType, inputDto, selectSourceAdapter(streamingInput, DEFAULT_UNARY_SOURCE_ADAPTER, MULTI_SOURCE_ADAPTER), ORCHESTRATOR_PREFIX + inputTypeName, API_VERSION);
+        methodBuilder.addStatement("$T<$T, $T> invokeLocal = new $T<$T, $T>($L, $S, $S)", FUNCTION_INVOKE_ADAPTER, inputDto, outputDto, selectInvokeAdapter(streamingInput, streamingOutput, LOCAL_UNARY_INVOKE_ADAPTER, LOCAL_ONE_TO_MANY_INVOKE_ADAPTER, LOCAL_MANY_TO_ONE_INVOKE_ADAPTER, LOCAL_MANY_TO_MANY_INVOKE_ADAPTER), inputDto, outputDto, localInvokeDelegate, ORCHESTRATOR_PREFIX + outputTypeName, API_VERSION);
+        methodBuilder.addStatement("$T<$T, $T> invokeRemote = new $T<>()", FUNCTION_INVOKE_ADAPTER, inputDto, outputDto, HTTP_REMOTE_INVOKE_ADAPTER);
+        methodBuilder.addStatement("$T<$T, $T> invoke = new $T<>(invokeLocal, invokeRemote)", FUNCTION_INVOKE_ADAPTER, inputDto, outputDto, INVOCATION_MODE_ROUTING_INVOKE_ADAPTER);
+        methodBuilder.addStatement("$T<$T, $T> sink = new $T<>()", FUNCTION_SINK_ADAPTER, outputDto, handlerOutputType, selectSinkAdapter(streamingOutput, DEFAULT_UNARY_SINK_ADAPTER, COLLECT_LIST_SINK_ADAPTER));
+        methodBuilder.addStatement("return $T.$L(input, transportContext, source, invoke, sink)", bridgeClass(streamingInput, streamingOutput, UNARY_FUNCTION_TRANSPORT_BRIDGE, FUNCTION_TRANSPORT_BRIDGE), bridgeMethodName(streamingInput, streamingOutput));
+        methodBuilder.nextControlFlow("catch (Exception e)");
+        methodBuilder.addStatement("throw new RuntimeException(\"Failed handleRequest -> resource.run for input DTO\", e)");
+        methodBuilder.endControlFlow();
+        
+        return methodBuilder.build();
     }
 
     /**
@@ -263,6 +285,44 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
         } else {
             return "$T.randomUUID().toString()";
         }
+    }
+
+    /**
+     * Builds a JavaPoet CodeBlock for constructing the FunctionTransportContext.
+     *
+     * This method properly collects all $T/$S arguments from provider expressions
+     * (getRequestIdExpression, getFunctionNameExpression, buildExecutionIdExpression)
+     * so that placeholders remain correctly aligned.
+     *
+     * @return a CodeBlock that generates the transport context construction statement
+     */
+    protected com.squareup.javapoet.CodeBlock buildTransportContextCodeBlock() {
+        com.squareup.javapoet.CodeBlock.Builder builder = com.squareup.javapoet.CodeBlock.builder();
+        builder.add("$T transportContext = $T.of(", FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT);
+        
+        // Request ID expression (may contain $T/$S)
+        builder.add(getRequestIdExpression());
+        builder.add(", ");
+        
+        // Function name expression (may contain $T/$S)
+        builder.add(getFunctionNameExpression());
+        builder.add(", $S, $T.of(", INVOKE_STEP, ClassName.get("java.util", "Map"));
+        
+        // Correlation ID
+        builder.add("$T.ATTR_CORRELATION_ID, ", FUNCTION_TRANSPORT_CONTEXT);
+        builder.add(getRequestIdExpression());
+        builder.add(", ");
+        
+        // Execution ID (may contain $T/$S)
+        builder.add("$T.ATTR_EXECUTION_ID, ", FUNCTION_TRANSPORT_CONTEXT);
+        builder.add(buildExecutionIdExpression());
+        builder.add(", ");
+        
+        // Retry attempt and dispatch timestamp
+        builder.add("$T.ATTR_RETRY_ATTEMPT, $T.getProperty($S, $S), ", FUNCTION_TRANSPORT_CONTEXT, ClassName.get(System.class), "tpf.transport.retry-attempt", "0");
+        builder.add("$T.ATTR_DISPATCH_TS_EPOCH_MS, $T.toString($T.currentTimeMillis()))", FUNCTION_TRANSPORT_CONTEXT, ClassName.get(Long.class), ClassName.get(System.class));
+        
+        return builder.build();
     }
 
     /**
