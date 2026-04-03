@@ -345,7 +345,7 @@ protected static ClassName selectSinkAdapter(boolean streaming, ClassName defaul
     /**
      * Selects the bridge invocation method name for the given input/output streaming modes.
      *
-     * @returns `invokeOneToOne` when neither input nor output is streaming; `invokeOneToMany` when input is unary and output is streaming; `invokeManyToOne` when input is streaming and output is unary; `invokeManyToMany` when both input and output are streaming.
+     * @return `invoke` when neither input nor output is streaming; `invokeOneToMany` when input is unary and output is streaming; `invokeManyToOne` when input is streaming and output is unary; `invokeManyToMany` when both input and output are streaming.
      */
     protected static String bridgeMethodName(boolean streamingInput, boolean streamingOutput) {
         if (!streamingInput && !streamingOutput) return "invoke";
