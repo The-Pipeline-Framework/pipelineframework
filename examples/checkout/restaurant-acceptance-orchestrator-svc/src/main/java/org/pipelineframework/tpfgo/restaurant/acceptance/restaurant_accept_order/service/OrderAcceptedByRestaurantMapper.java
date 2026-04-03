@@ -5,14 +5,14 @@ import jakarta.enterprise.context.ApplicationScoped;
 import org.pipelineframework.mapper.Mapper;
 import org.pipelineframework.tpfgo.common.domain.OrderAcceptedByRestaurant;
 import org.pipelineframework.tpfgo.common.util.GrpcMappingSupport;
-import org.pipelineframework.tpfgo.restaurant.acceptance.grpc.RestaurantAcceptOrderSvc;
+import org.pipelineframework.tpfgo.restaurant.acceptance.grpc.PipelineTypes;
 
 @ApplicationScoped
 public class OrderAcceptedByRestaurantMapper
-    implements Mapper<OrderAcceptedByRestaurant, RestaurantAcceptOrderSvc.OrderAcceptedByRestaurant> {
+    implements Mapper<OrderAcceptedByRestaurant, PipelineTypes.OrderAcceptedByRestaurant> {
 
     @Override
-    public OrderAcceptedByRestaurant fromExternal(RestaurantAcceptOrderSvc.OrderAcceptedByRestaurant external) {
+    public OrderAcceptedByRestaurant fromExternal(PipelineTypes.OrderAcceptedByRestaurant external) {
         return new OrderAcceptedByRestaurant(
             GrpcMappingSupport.uuid(external.getOrderId(), "orderId"),
             GrpcMappingSupport.uuid(external.getRequestId(), "requestId"),
@@ -25,8 +25,8 @@ public class OrderAcceptedByRestaurantMapper
     }
 
     @Override
-    public RestaurantAcceptOrderSvc.OrderAcceptedByRestaurant toExternal(OrderAcceptedByRestaurant domain) {
-        return RestaurantAcceptOrderSvc.OrderAcceptedByRestaurant.newBuilder()
+    public PipelineTypes.OrderAcceptedByRestaurant toExternal(OrderAcceptedByRestaurant domain) {
+        return PipelineTypes.OrderAcceptedByRestaurant.newBuilder()
             .setOrderId(GrpcMappingSupport.str(domain.orderId()))
             .setRequestId(GrpcMappingSupport.str(domain.requestId()))
             .setCustomerId(GrpcMappingSupport.str(domain.customerId()))

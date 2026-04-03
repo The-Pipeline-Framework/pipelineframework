@@ -55,22 +55,26 @@ class PipelineOrchestratorTest {
         Files.createDirectories(configDir);
         Path pipelineConfig = configDir.resolve("pipeline.yaml");
         Files.writeString(pipelineConfig, """
+            version: 2
             appName: "Test Pipeline"
             basePackage: "test.orchestrator"
             transport: "GRPC"
+            messages:
+              TestInput:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "string"
+              TestOutput:
+                fields:
+                  - number: 1
+                    name: "result"
+                    type: "string"
             steps:
               - name: "Process Test"
                 cardinality: "ONE_TO_ONE"
                 inputTypeName: "TestInput"
-                inputFields:
-                  - name: "id"
-                    type: "String"
-                    protoType: "string"
                 outputTypeName: "TestOutput"
-                outputFields:
-                  - name: "result"
-                    type: "String"
-                    protoType: "string"
             """);
 
         // Compile with the PipelineStepProcessor
@@ -126,22 +130,26 @@ class PipelineOrchestratorTest {
         Files.createDirectories(configDir);
         Path pipelineConfig = configDir.resolve("pipeline.yaml");
         Files.writeString(pipelineConfig, """
+            version: 2
             appName: "Test Pipeline"
             basePackage: "test.orchestrator"
             transport: "GRPC"
+            messages:
+              TestInput:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "string"
+              TestOutput:
+                fields:
+                  - number: 1
+                    name: "result"
+                    type: "string"
             steps:
               - name: "Process Test"
                 cardinality: "ONE_TO_ONE"
                 inputTypeName: "TestInput"
-                inputFields:
-                  - name: "id"
-                    type: "String"
-                    protoType: "string"
                 outputTypeName: "TestOutput"
-                outputFields:
-                  - name: "result"
-                    type: "String"
-                    protoType: "string"
             """);
 
         // Compile with the PipelineStepProcessor

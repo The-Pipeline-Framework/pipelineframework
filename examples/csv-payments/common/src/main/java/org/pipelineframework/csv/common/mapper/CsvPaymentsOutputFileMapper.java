@@ -22,13 +22,12 @@ import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.csv.common.domain.CsvPaymentsOutputFile;
 import org.pipelineframework.csv.common.dto.CsvPaymentsOutputFileDto;
-import org.pipelineframework.csv.grpc.ProcessCsvPaymentsOutputFileSvc;
 
 @Mapper(
     componentModel = "jakarta",
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface CsvPaymentsOutputFileMapper extends org.pipelineframework.mapper.Mapper<CsvPaymentsOutputFile, ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile> {
+public interface CsvPaymentsOutputFileMapper extends org.pipelineframework.mapper.Mapper<CsvPaymentsOutputFile, org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsOutputFile> {
 
   CsvPaymentsOutputFileMapper INSTANCE = Mappers.getMapper( CsvPaymentsOutputFileMapper.class );
 
@@ -39,20 +38,20 @@ public interface CsvPaymentsOutputFileMapper extends org.pipelineframework.mappe
   @Mapping(target = "id", qualifiedByName = "uuidToString")
   @Mapping(target = "filepath", qualifiedByName = "pathToString")
   @Mapping(target = "csvFolderPath", qualifiedByName = "pathToString")
-  ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile toGrpc(CsvPaymentsOutputFileDto dto);
+  org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsOutputFile toGrpc(CsvPaymentsOutputFileDto dto);
 
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
   @Mapping(target = "filepath", qualifiedByName = "stringToPath")
   @Mapping(target = "csvFolderPath", qualifiedByName = "stringToPath")
-  CsvPaymentsOutputFileDto fromGrpc(ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile proto);
+  CsvPaymentsOutputFileDto fromGrpc(org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsOutputFile proto);
 
   @Override
-  default CsvPaymentsOutputFile fromExternal(ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile external) {
+  default CsvPaymentsOutputFile fromExternal(org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsOutputFile external) {
     return fromDto(fromGrpc(external));
   }
 
   @Override
-  default ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile toExternal(CsvPaymentsOutputFile domain) {
+  default org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsOutputFile toExternal(CsvPaymentsOutputFile domain) {
     return toGrpc(toDto(domain));
   }
 
@@ -61,16 +60,16 @@ public interface CsvPaymentsOutputFileMapper extends org.pipelineframework.mappe
    *             compatibility and scheduled for removal in a future major release.
    */
   @Deprecated(since = "26.2.5", forRemoval = true)
-  default ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile toDtoToGrpc(CsvPaymentsOutputFile domain) {
+  default org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsOutputFile toDtoToGrpc(CsvPaymentsOutputFile domain) {
     return toExternal(domain);
   }
 
   /**
-   * @deprecated use {@link #fromExternal(ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile)}. Transitional bridge
+   * @deprecated use {@link #fromExternal(org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsOutputFile)}. Transitional bridge
    *             method retained for compatibility and scheduled for removal in a future major release.
    */
   @Deprecated(since = "26.2.5", forRemoval = true)
-  default CsvPaymentsOutputFile fromGrpcFromDto(ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile grpc) {
+  default CsvPaymentsOutputFile fromGrpcFromDto(org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsOutputFile grpc) {
     return fromExternal(grpc);
   }
 }

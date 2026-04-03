@@ -14,6 +14,7 @@ import org.pipelineframework.processor.ir.StreamingShape;
 public class GrpcBindingResolver {
     private static final org.jboss.logging.Logger logger =
         org.jboss.logging.Logger.getLogger(GrpcBindingResolver.class);
+    private static final String EMPTY_PROTO_PATH = "google/protobuf/empty.proto";
 
     /**
      * Default constructor for GrpcBindingResolver.
@@ -99,13 +100,15 @@ public class GrpcBindingResolver {
         // Build all file descriptors with proper dependency resolution
         // This handles complex dependency scenarios including imported files and transitive dependencies
         java.util.Map<String, Descriptors.FileDescriptor> builtFileDescriptors = new java.util.HashMap<>();
+        seedWellKnownDescriptors(builtFileDescriptors);
 
         // Build file descriptors in dependency order using topological sort approach
         boolean allBuilt = false;
         int maxIterations = descriptorSet.getFileCount() * 2; // Prevent infinite loops
         int iterations = 0;
 
-        while (!allBuilt && iterations < maxIterations) {
+        while (!allBuilt && countProjectDescriptors(builtFileDescriptors, descriptorSet) < descriptorSet.getFileCount()
+            && iterations < maxIterations) {
             allBuilt = true;
             iterations++;
 
@@ -148,7 +151,7 @@ public class GrpcBindingResolver {
             }
         }
 
-        if (builtFileDescriptors.size() != descriptorSet.getFileCount()) {
+        if (countProjectDescriptors(builtFileDescriptors, descriptorSet) != descriptorSet.getFileCount()) {
             java.util.Set<String> builtFiles = builtFileDescriptors.keySet();
             java.util.Set<String> allFiles = new java.util.HashSet<>();
             for (DescriptorProtos.FileDescriptorProto fileProto : descriptorSet.getFileList()) {
@@ -159,7 +162,11 @@ public class GrpcBindingResolver {
             String message = String.format(
                 "Build error for step '%s': Could not resolve all file descriptor dependencies after %d iterations. " +
                     "Built: %d, Expected: %d. Unbuilt files: [%s]",
-                stepModel.serviceName(), iterations, builtFileDescriptors.size(), descriptorSet.getFileCount(), unbuiltFiles);
+                stepModel.serviceName(),
+                iterations,
+                countProjectDescriptors(builtFileDescriptors, descriptorSet),
+                descriptorSet.getFileCount(),
+                unbuiltFiles);
             logger.warn(message);
             throw new IllegalStateException(message);
         }
@@ -186,6 +193,22 @@ public class GrpcBindingResolver {
         }
 
         return foundService;
+    }
+
+    private void seedWellKnownDescriptors(java.util.Map<String, Descriptors.FileDescriptor> builtFileDescriptors) {
+        builtFileDescriptors.putIfAbsent(EMPTY_PROTO_PATH, com.google.protobuf.EmptyProto.getDescriptor());
+    }
+
+    private int countProjectDescriptors(
+            java.util.Map<String, Descriptors.FileDescriptor> builtFileDescriptors,
+            DescriptorProtos.FileDescriptorSet descriptorSet) {
+        int count = 0;
+        for (DescriptorProtos.FileDescriptorProto fileProto : descriptorSet.getFileList()) {
+            if (builtFileDescriptors.containsKey(fileProto.getName())) {
+                count++;
+            }
+        }
+        return count;
     }
 
     /**

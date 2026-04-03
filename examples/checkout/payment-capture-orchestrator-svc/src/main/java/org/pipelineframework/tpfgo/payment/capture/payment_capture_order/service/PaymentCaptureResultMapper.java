@@ -5,14 +5,14 @@ import jakarta.enterprise.context.ApplicationScoped;
 import org.pipelineframework.mapper.Mapper;
 import org.pipelineframework.tpfgo.common.domain.PaymentCaptureResult;
 import org.pipelineframework.tpfgo.common.util.GrpcMappingSupport;
-import org.pipelineframework.tpfgo.payment.capture.grpc.PaymentCaptureOrderSvc;
+import org.pipelineframework.tpfgo.payment.capture.grpc.PipelineTypes;
 
 @ApplicationScoped
 public class PaymentCaptureResultMapper
-    implements Mapper<PaymentCaptureResult, PaymentCaptureOrderSvc.PaymentCaptureResult> {
+    implements Mapper<PaymentCaptureResult, PipelineTypes.PaymentCaptureResult> {
 
     @Override
-    public PaymentCaptureResult fromExternal(PaymentCaptureOrderSvc.PaymentCaptureResult external) {
+    public PaymentCaptureResult fromExternal(PipelineTypes.PaymentCaptureResult external) {
         return new PaymentCaptureResult(
             GrpcMappingSupport.uuid(external.getOrderId(), "orderId"),
             GrpcMappingSupport.uuid(external.getPaymentId(), "paymentId"),
@@ -25,8 +25,8 @@ public class PaymentCaptureResultMapper
     }
 
     @Override
-    public PaymentCaptureOrderSvc.PaymentCaptureResult toExternal(PaymentCaptureResult domain) {
-        var builder = PaymentCaptureOrderSvc.PaymentCaptureResult.newBuilder()
+    public PipelineTypes.PaymentCaptureResult toExternal(PaymentCaptureResult domain) {
+        var builder = PipelineTypes.PaymentCaptureResult.newBuilder()
             .setOrderId(GrpcMappingSupport.str(domain.orderId()))
             .setProcessedAt(GrpcMappingSupport.str(domain.processedAt()))
             .setAmount(GrpcMappingSupport.str(domain.amount()))

@@ -22,14 +22,13 @@ import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.dto.PaymentRecordDto;
-import org.pipelineframework.csv.grpc.ProcessCsvPaymentsInputSvc;
 
 @SuppressWarnings("unused")
 @Mapper(
     componentModel = "jakarta",
     uses = {CommonConverters.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface PaymentRecordMapper extends org.pipelineframework.mapper.Mapper<PaymentRecord, ProcessCsvPaymentsInputSvc.PaymentRecord> {
+public interface PaymentRecordMapper extends org.pipelineframework.mapper.Mapper<PaymentRecord, org.pipelineframework.csv.grpc.PipelineTypes.PaymentRecord> {
 
   PaymentRecordMapper INSTANCE = Mappers.getMapper( PaymentRecordMapper.class );
 
@@ -43,29 +42,29 @@ public interface PaymentRecordMapper extends org.pipelineframework.mapper.Mapper
   @Mapping(target = "amount", qualifiedByName = "bigDecimalToString")
   @Mapping(target = "currency", qualifiedByName = "currencyToString")
   @Mapping(target = "csvPaymentsInputFilePath", qualifiedByName = "pathToString")
-  ProcessCsvPaymentsInputSvc.PaymentRecord toGrpc(PaymentRecordDto dto);
+  org.pipelineframework.csv.grpc.PipelineTypes.PaymentRecord toGrpc(PaymentRecordDto dto);
 
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
   @Mapping(target = "amount", qualifiedByName = "stringToBigDecimal")
   @Mapping(target = "currency", qualifiedByName = "stringToCurrency")
   @Mapping(target = "csvPaymentsInputFilePath", qualifiedByName = "stringToPath")
-  PaymentRecordDto fromGrpc(ProcessCsvPaymentsInputSvc.PaymentRecord grpc);
+  PaymentRecordDto fromGrpc(org.pipelineframework.csv.grpc.PipelineTypes.PaymentRecord grpc);
 
   @Override
-  default PaymentRecord fromExternal(ProcessCsvPaymentsInputSvc.PaymentRecord external) {
+  default PaymentRecord fromExternal(org.pipelineframework.csv.grpc.PipelineTypes.PaymentRecord external) {
     return fromDto(fromGrpc(external));
   }
 
   @Override
-  default ProcessCsvPaymentsInputSvc.PaymentRecord toExternal(PaymentRecord domain) {
+  default org.pipelineframework.csv.grpc.PipelineTypes.PaymentRecord toExternal(PaymentRecord domain) {
     return toGrpc(toDto(domain));
   }
 
-  default ProcessCsvPaymentsInputSvc.PaymentRecord toDtoToGrpc(PaymentRecord domain) {
+  default org.pipelineframework.csv.grpc.PipelineTypes.PaymentRecord toDtoToGrpc(PaymentRecord domain) {
     return toExternal(domain);
   }
 
-  default PaymentRecord fromGrpcFromDto(ProcessCsvPaymentsInputSvc.PaymentRecord grpc) {
+  default PaymentRecord fromGrpcFromDto(org.pipelineframework.csv.grpc.PipelineTypes.PaymentRecord grpc) {
     return fromExternal(grpc);
   }
 }
