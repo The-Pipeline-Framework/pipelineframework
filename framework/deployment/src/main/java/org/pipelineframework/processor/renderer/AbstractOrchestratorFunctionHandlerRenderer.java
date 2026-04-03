@@ -201,7 +201,19 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
             .addParameter(inputEventType, "input")
             .addParameter(getContextClassName(), "context")
             .beginControlFlow("try")
-            .addStatement(buildTransportContextStatement())
+            .addStatement("$T transportContext = $T.of("
+                + getRequestIdExpression() + ", "
+                + getFunctionNameExpression() + ", $S, $T.of("
+                + "$T.ATTR_CORRELATION_ID, " + getRequestIdExpression() + ", "
+                + "$T.ATTR_EXECUTION_ID, " + buildExecutionIdExpression() + ", "
+                + "$T.ATTR_RETRY_ATTEMPT, $T.getProperty($S, $S), "
+                + "$T.ATTR_DISPATCH_TS_EPOCH_MS, $T.toString($T.currentTimeMillis())))",
+                FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT,
+                UNKNOWN_REQUEST, FUNCTION_TRANSPORT_CONTEXT,
+                FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT,
+                FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT,
+                FUNCTION_TRANSPORT_CONTEXT, ClassName.get(System.class), "tpf.transport.retry-attempt", "0",
+                FUNCTION_TRANSPORT_CONTEXT, ClassName.get(Long.class), ClassName.get(System.class))
             .addStatement("$T<$T, $T> source = new $T<>($S, $S)", FUNCTION_SOURCE_ADAPTER, inputEventType, inputDto, selectSourceAdapter(streamingInput, DEFAULT_UNARY_SOURCE_ADAPTER, MULTI_SOURCE_ADAPTER), ORCHESTRATOR_PREFIX + inputTypeName, API_VERSION)
             .addStatement("$T<$T, $T> invokeLocal = new $T<$T, $T>($L, $S, $S)", FUNCTION_INVOKE_ADAPTER, inputDto, outputDto, selectInvokeAdapter(streamingInput, streamingOutput, LOCAL_UNARY_INVOKE_ADAPTER, LOCAL_ONE_TO_MANY_INVOKE_ADAPTER, LOCAL_MANY_TO_ONE_INVOKE_ADAPTER, LOCAL_MANY_TO_MANY_INVOKE_ADAPTER), inputDto, outputDto, localInvokeDelegate, ORCHESTRATOR_PREFIX + outputTypeName, API_VERSION)
             .addStatement("$T<$T, $T> invokeRemote = new $T<>()", FUNCTION_INVOKE_ADAPTER, inputDto, outputDto, HTTP_REMOTE_INVOKE_ADAPTER)
@@ -212,17 +224,6 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
             .addStatement("throw new RuntimeException(\"Failed handleRequest -> resource.run for input DTO\", e)")
             .endControlFlow()
             .build();
-    }
-
-    /**
-     * Builds a JavaPoet statement that initializes a `transportContext` via `FunctionTransportContext.of(...)`.
-     *
-     * The returned string is a code template that declares `transportContext` and supplies: the request ID expression, the function name expression, the literal `"unknown-request"`, and a map of request attributes including correlation id, execution id (with fallback), retry attempt read from the context properties, and a dispatch timestamp set to the current system time in milliseconds.
-     *
-     * @return a code-generation statement string that creates the `transportContext` variable
-     */
-    protected String buildTransportContextStatement() {
-        return "$T transportContext = $T.of(" + getRequestIdExpression() + ", " + getFunctionNameExpression() + ", $S, $T.of(" + "$T.ATTR_CORRELATION_ID, " + getRequestIdExpression() + ", $T.ATTR_EXECUTION_ID, " + buildExecutionIdExpression() + ", $T.ATTR_RETRY_ATTEMPT, $T.getProperty($S, $S), $T.ATTR_DISPATCH_TS_EPOCH_MS, $T.toString($T.currentTimeMillis())))";
     }
 
     /**
