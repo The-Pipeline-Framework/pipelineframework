@@ -288,19 +288,23 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
         methodBuilder
             .beginControlFlow("try")
             .addStatement("$T transportContext = $T.of("
-                + "$S, $S, $S, "  // requestId, functionName, stage
-                + "$T.of("
+                + getRequestIdExpression() + ", "
+                + getFunctionNameExpression() + ", $S, $T.of("
                 + "$T.ATTR_CORRELATION_ID, " + getRequestIdExpression() + ", "
                 + "$T.ATTR_EXECUTION_ID, " + buildExecutionIdExpression() + ", "
                 + "$T.ATTR_RETRY_ATTEMPT, $T.getProperty($S, $S), "
                 + "$T.ATTR_DISPATCH_TS_EPOCH_MS, $T.toString($T.currentTimeMillis())))",
-                FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT,
-                UNKNOWN_REQUEST, getHandlerSuffix(), INVOKE_STEP,
-                ClassName.get("java.util", "Map"),
-                FUNCTION_TRANSPORT_CONTEXT,
-                FUNCTION_TRANSPORT_CONTEXT, buildExecutionIdFallbackExpression(),
-                FUNCTION_TRANSPORT_CONTEXT, ClassName.get(System.class), "tpf.transport.retry-attempt", "0",
-                FUNCTION_TRANSPORT_CONTEXT, ClassName.get(Long.class), ClassName.get(System.class))
+                FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT,  // 1, 2
+                UNKNOWN_REQUEST, UNKNOWN_REQUEST, INVOKE_STEP,           // 3, 4, 5
+                ClassName.get("java.util", "Map"),                       // 6
+                FUNCTION_TRANSPORT_CONTEXT, UNKNOWN_REQUEST,             // 7, 8
+                FUNCTION_TRANSPORT_CONTEXT,                              // 9
+                UNKNOWN_REQUEST, UNKNOWN_REQUEST, UNKNOWN_REQUEST,       // 10, 11, 12
+                ClassName.get("java.util", "UUID"),                      // 13
+                FUNCTION_TRANSPORT_CONTEXT, ClassName.get(System.class), // 14, 15
+                "tpf.transport.retry-attempt", "0",                      // 16, 17
+                FUNCTION_TRANSPORT_CONTEXT,                              // 18
+                ClassName.get(Long.class), ClassName.get(System.class))  // 19, 20
             .addStatement("$T<$T, $T> source = new $T<>($S, $S)",
                 FUNCTION_SOURCE_ADAPTER, inputEventType, inputDto,
                 streamingInput ? MULTI_SOURCE_ADAPTER : DEFAULT_UNARY_SOURCE_ADAPTER,
