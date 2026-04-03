@@ -28,7 +28,7 @@ import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
 import org.pipelineframework.csv.common.dto.AckPaymentSentDto;
 import org.pipelineframework.csv.common.dto.PaymentStatusDto;
-import org.pipelineframework.csv.grpc.ProcessAckPaymentSentSvc;
+import org.pipelineframework.csv.grpc.PipelineTypes;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -180,7 +180,7 @@ class PaymentStatusMapperTest {
     //           .build();
 
     //   // When
-    //   ProcessAckPaymentSentSvc.PaymentStatus grpc = mapper.toGrpc(dto);
+    //   PipelineTypes.PaymentStatus grpc = mapper.toGrpc(dto);
 
     //   // Then
     //   assertNotNull(grpc);
@@ -198,8 +198,8 @@ class PaymentStatusMapperTest {
         UUID id = UUID.randomUUID();
         UUID ackPaymentSentId = UUID.randomUUID();
 
-        ProcessAckPaymentSentSvc.PaymentStatus grpc =
-                ProcessAckPaymentSentSvc.PaymentStatus.newBuilder()
+        PipelineTypes.PaymentStatus grpc =
+                PipelineTypes.PaymentStatus.newBuilder()
                         .setId(id.toString())
                         .setReference("test-ref")
                         .setStatus("SUCCESS")
@@ -234,7 +234,7 @@ class PaymentStatusMapperTest {
     //   domain.setAckPaymentSentId(UUID.randomUUID());
 
     //   // When
-    //   ProcessAckPaymentSentSvc.PaymentStatus grpc = mapper.toDtoToGrpc(domain);
+    //   PipelineTypes.PaymentStatus grpc = mapper.toDtoToGrpc(domain);
 
     //   // Then
     //   assertNotNull(grpc);
@@ -252,8 +252,8 @@ class PaymentStatusMapperTest {
         UUID id = UUID.randomUUID();
         UUID ackPaymentSentId = UUID.randomUUID();
 
-        ProcessAckPaymentSentSvc.PaymentStatus grpc =
-                ProcessAckPaymentSentSvc.PaymentStatus.newBuilder()
+        PipelineTypes.PaymentStatus grpc =
+                PipelineTypes.PaymentStatus.newBuilder()
                         .setId(id.toString())
                         .setReference("test-ref")
                         .setStatus("SUCCESS")

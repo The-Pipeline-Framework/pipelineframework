@@ -28,7 +28,7 @@ import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.dto.AckPaymentSentDto;
 import org.pipelineframework.csv.common.dto.PaymentRecordDto;
-import org.pipelineframework.csv.grpc.ProcessSendPaymentRecordSvc;
+import org.pipelineframework.csv.grpc.PipelineTypes;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -159,7 +159,7 @@ class AckPaymentSentMapperTest {
                         .build();
 
         // When
-        ProcessSendPaymentRecordSvc.AckPaymentSent grpc = mapper.toGrpc(dto);
+        PipelineTypes.AckPaymentSent grpc = mapper.toGrpc(dto);
 
         // Then
         assertNotNull(grpc);
@@ -177,8 +177,8 @@ class AckPaymentSentMapperTest {
         UUID conversationId = UUID.randomUUID();
         UUID paymentRecordId = UUID.randomUUID();
 
-        ProcessSendPaymentRecordSvc.AckPaymentSent grpc =
-                ProcessSendPaymentRecordSvc.AckPaymentSent.newBuilder()
+        PipelineTypes.AckPaymentSent grpc =
+                PipelineTypes.AckPaymentSent.newBuilder()
                         .setId(id.toString())
                         .setConversationId(conversationId.toString())
                         .setStatus(200L)
@@ -213,7 +213,7 @@ class AckPaymentSentMapperTest {
         domain.setPaymentRecord(paymentRecord);
 
         // When
-        ProcessSendPaymentRecordSvc.AckPaymentSent grpc = mapper.toDtoToGrpc(domain);
+        PipelineTypes.AckPaymentSent grpc = mapper.toDtoToGrpc(domain);
 
         // Then
         assertNotNull(grpc);
@@ -231,8 +231,8 @@ class AckPaymentSentMapperTest {
         UUID conversationId = UUID.randomUUID();
         UUID paymentRecordId = UUID.randomUUID();
 
-        ProcessSendPaymentRecordSvc.AckPaymentSent grpc =
-                ProcessSendPaymentRecordSvc.AckPaymentSent.newBuilder()
+        PipelineTypes.AckPaymentSent grpc =
+                PipelineTypes.AckPaymentSent.newBuilder()
                         .setId(id.toString())
                         .setConversationId(conversationId.toString())
                         .setStatus(200L)

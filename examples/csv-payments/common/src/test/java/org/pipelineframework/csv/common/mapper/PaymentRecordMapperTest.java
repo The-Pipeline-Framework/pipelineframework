@@ -26,7 +26,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
 import org.pipelineframework.csv.common.dto.PaymentRecordDto;
-import org.pipelineframework.csv.grpc.ProcessCsvPaymentsInputSvc;
+import org.pipelineframework.csv.grpc.PipelineTypes;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -124,7 +124,7 @@ class PaymentRecordMapperTest {
                         .build();
 
         // When
-        ProcessCsvPaymentsInputSvc.PaymentRecord grpc = mapper.toGrpc(dto);
+        PipelineTypes.PaymentRecord grpc = mapper.toGrpc(dto);
 
         // Then
         assertNotNull(grpc);
@@ -142,8 +142,8 @@ class PaymentRecordMapperTest {
         // Given
         UUID id = UUID.randomUUID();
 
-        ProcessCsvPaymentsInputSvc.PaymentRecord grpc =
-                ProcessCsvPaymentsInputSvc.PaymentRecord.newBuilder()
+        PipelineTypes.PaymentRecord grpc =
+                PipelineTypes.PaymentRecord.newBuilder()
                         .setId(id.toString())
                         .setCsvId("test-record")
                         .setRecipient("Test Recipient")
@@ -171,7 +171,7 @@ class PaymentRecordMapperTest {
         PaymentRecord domain = createTestPaymentRecord();
 
         // When
-        ProcessCsvPaymentsInputSvc.PaymentRecord grpc = mapper.toDtoToGrpc(domain);
+        PipelineTypes.PaymentRecord grpc = mapper.toDtoToGrpc(domain);
 
         // Then
         assertNotNull(grpc);
@@ -190,8 +190,8 @@ class PaymentRecordMapperTest {
         // Given
         UUID id = UUID.randomUUID();
 
-        ProcessCsvPaymentsInputSvc.PaymentRecord grpc =
-                ProcessCsvPaymentsInputSvc.PaymentRecord.newBuilder()
+        PipelineTypes.PaymentRecord grpc =
+                PipelineTypes.PaymentRecord.newBuilder()
                         .setId(id.toString())
                         .setCsvId("test-record")
                         .setRecipient("Test Recipient")
