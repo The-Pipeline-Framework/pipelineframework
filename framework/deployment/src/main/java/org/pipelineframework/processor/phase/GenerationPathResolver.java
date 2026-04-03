@@ -59,7 +59,7 @@ public class GenerationPathResolver {
             return;
         }
         Path normalizedRoot = root.toAbsolutePath().normalize();
-        if (!containsPathSegment(normalizedRoot, "generated-sources")) {
+        if (!containsGeneratedSourcesSegment(normalizedRoot)) {
             throw new IllegalStateException("Refusing to reset non-generated-sources path '" + normalizedRoot + "'");
         }
         try {
@@ -89,9 +89,9 @@ public class GenerationPathResolver {
         }
     }
 
-    private boolean containsPathSegment(Path path, String segment) {
+    private boolean containsGeneratedSourcesSegment(Path path) {
         for (Path part : path) {
-            if (segment.equals(part.toString())) {
+            if (part.toString().startsWith("generated-sources")) {
                 return true;
             }
         }
