@@ -1,17 +1,19 @@
 {
   "permissions": {
     "allow": [
-      "Bash(chmod *)",
+      "Bash(chmod +x *)",
       "Bash(./mvnw *)",
-      "Bash(find *)",
-      "Bash(rm *)",
-      "Bash(sed *)",
+      "Bash(find . -name *)",
+      "Bash(rm -rf */target/*)",
+      "Bash(sed -i '' *)",
       "Bash(mv *)",
-      "Bash(git add *)",
-      "Bash(git reset *)",
-      "Bash(git commit *)",
-      "Bash(git push *)",
-      "Bash(gh *)"
+      "Bash(git add -A)",
+      "Bash(git reset HEAD *)",
+      "Bash(git commit -m *)",
+      "Bash(git push origin feat/function-cloud)",
+      "Bash(gh pr create)",
+      "Bash(gh pr view)",
+      "Bash(gh pr edit)"
     ]
   },
   "$version": 3

@@ -30,7 +30,7 @@ The orchestrator handler (`PipelineRunFunctionHandler`) generates **provider-spe
 - **Azure Functions**: POJO with `ExecutionContext` parameter
 - **GCP Cloud Functions**: Implements `HttpFunction` with `HttpRequest`/`HttpResponse`
 
-All providers preserve FUNCTION platform semantics (cardinality, failure handling) and support async handlers (run-async, status, result).
+All providers preserve FUNCTION platform semantics (cardinality, failure handling) and support async handlers (run-async, status, result). Azure and GCP deployments can also use the REST transport approach if desired, where HTTP triggers route requests to Quarkus REST endpoints while preserving FUNCTION semantics.
 
 ## Quick Start
 

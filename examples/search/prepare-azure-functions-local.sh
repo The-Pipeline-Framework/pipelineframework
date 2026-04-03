@@ -4,9 +4,10 @@ set -euo pipefail
 # Script to prepare local Azure Functions testing environment
 # Creates required host.json and local.settings.json files for 'func host start'
 #
-# Note: TPF currently generates AWS Lambda-compatible function handlers.
-# For Azure Functions, we use the HTTP trigger to route requests to Quarkus REST endpoints.
-# The Quarkus Azure Functions extension bootstraps Quarkus which handles HTTP routing.
+# Note: This script uses an HTTP trigger wrapper to bootstrap Quarkus for local testing.
+# The TPF framework generates native Azure Functions handlers for pipeline steps,
+# but local testing requires this HTTP trigger wrapper to route requests to Quarkus REST endpoints.
+# For production deployment, use 'quarkus:deploy' which generates the complete function structure.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ORCHESTRATOR_DIR="$SCRIPT_DIR/orchestrator-svc"
@@ -39,8 +40,9 @@ fi
 
 echo "Preparing Azure Functions local testing environment..."
 echo ""
-echo "Note: TPF generates AWS Lambda-compatible handlers. For Azure Functions,"
-echo "      we use HTTP triggers that route to Quarkus REST endpoints."
+echo "Note: This script uses an HTTP trigger wrapper to bootstrap Quarkus for local testing."
+echo "      TPF generates native Azure Functions handlers, but local testing requires"
+echo "      this HTTP trigger wrapper to route requests to Quarkus REST endpoints."
 echo ""
 
 # Create host.json for Azure Functions Core Tools

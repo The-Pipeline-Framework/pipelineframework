@@ -19,6 +19,22 @@ on:
         default: true
         type: boolean
   workflow_dispatch:
+    inputs:
+      artifact_name:
+        description: 'Name of the Maven artifacts tarball'
+        required: false
+        default: 'framework-m2-cache'
+        type: string
+      download_artifacts:
+        description: 'Whether to download prebuilt framework artifacts instead of bootstrapping locally'
+        required: false
+        default: true
+        type: boolean
+      terraform_destroy:
+        description: 'Whether to destroy Terraform resources after tests'
+        required: false
+        default: true
+        type: boolean
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-e2e-search-azure-functions

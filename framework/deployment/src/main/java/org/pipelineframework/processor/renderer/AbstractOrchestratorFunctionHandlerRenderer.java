@@ -48,6 +48,7 @@ public abstract class AbstractOrchestratorFunctionHandlerRenderer implements Pip
     protected static final String API_VERSION = "v1";
     protected static final String ORCHESTRATOR_PREFIX = "orchestrator.";
     protected static final String UNKNOWN_REQUEST = "unknown-request";
+    protected static final String INVOKE_STEP = "invoke-step";
     protected static final String INGRESS = "ingress";
     protected static final String RESOURCE_CLASS = "PipelineRunResource";
 
@@ -144,9 +145,26 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
      */
     @Override
     public void render(OrchestratorBinding binding, GenerationContext ctx) throws IOException {
+        // Validate binding
+        if (binding == null) {
+            throw new IllegalArgumentException("OrchestratorBinding must not be null");
+        }
+        String basePackage = binding.basePackage();
+        String inputTypeName = binding.inputTypeName();
+        String outputTypeName = binding.outputTypeName();
+        
+        if (basePackage == null || basePackage.isBlank()) {
+            throw new IllegalArgumentException("OrchestratorBinding.basePackage() must not be null or blank");
+        }
+        if (inputTypeName == null || inputTypeName.isBlank()) {
+            throw new IllegalArgumentException("OrchestratorBinding.inputTypeName() must not be null or blank");
+        }
+        if (outputTypeName == null || outputTypeName.isBlank()) {
+            throw new IllegalArgumentException("OrchestratorBinding.outputTypeName() must not be null or blank");
+        }
+        
         boolean streamingInput = binding.inputStreaming();
         boolean streamingOutput = binding.outputStreaming();
-        String basePackage = binding.basePackage();
 
         ClassName inputDto = ClassName.get(basePackage + ".common.dto", binding.inputTypeName() + "Dto");
         ClassName outputDto = ClassName.get(basePackage + ".common.dto", binding.outputTypeName() + "Dto");
@@ -215,8 +233,7 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
                 + "$T.ATTR_RETRY_ATTEMPT, $T.getProperty($S, $S), "
                 + "$T.ATTR_DISPATCH_TS_EPOCH_MS, $T.toString($T.currentTimeMillis())))",
                 FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT,
-                UNKNOWN_REQUEST, UNKNOWN_REQUEST, UNKNOWN_REQUEST,
-                ClassName.get("java.util", "Map"),
+                INVOKE_STEP, ClassName.get("java.util", "Map"),
                 FUNCTION_TRANSPORT_CONTEXT, UNKNOWN_REQUEST,
                 FUNCTION_TRANSPORT_CONTEXT, ClassName.get("java.util", "UUID"),
                 FUNCTION_TRANSPORT_CONTEXT, ClassName.get(System.class), "tpf.transport.retry-attempt", "0",

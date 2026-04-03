@@ -49,7 +49,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * - Tests run against real Azure infrastructure (not mocked)
  */
 @QuarkusIntegrationTest
-@EnabledIfEnvironmentVariable(named = "AZURE_FUNCTION_APP_URL", matches = ".+")
+@EnabledIfEnvironmentVariable(named = "FUNCTION_APP_URL", matches = ".+")
 class AzureFunctionsEndToEndIT {
 
     private static final Logger LOG = Logger.getLogger(AzureFunctionsEndToEndIT.class);
@@ -67,7 +67,10 @@ class AzureFunctionsEndToEndIT {
      */
     @BeforeAll
     static void setup() {
-        functionAppUrl = System.getenv("AZURE_FUNCTION_APP_URL");
+        functionAppUrl = System.getenv("FUNCTION_APP_URL");
+        if (functionAppUrl == null) {
+            functionAppUrl = System.getProperty("azure.function.app.url");
+        }
 
         // Remove trailing slash if present
         if (functionAppUrl.endsWith("/")) {

@@ -184,7 +184,7 @@ public class GcpOrchestratorRenderer extends AbstractOrchestratorFunctionHandler
      *
      * The generated method deserializes the request payload into the provided input DTO type,
      * reads the `X-Tenant-ID` and `Idempotency-Key` headers, invokes `pipelineExecutionService.executePipelineAsync(...)`
-     * with the computed execution input and header values, and returns the accepted execution DTO.
+     * with the computed execution input and header values, and writes the accepted execution DTO to the response.
      *
      * @param basePackage the base Java package for generated types (used for naming/placement)
      * @param inputDto the class of the input DTO to deserialize from the request payload
@@ -198,37 +198,40 @@ public class GcpOrchestratorRenderer extends AbstractOrchestratorFunctionHandler
         return MethodSpec.methodBuilder("service")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
-            .returns(runAsyncAcceptedDto)
+            .returns(TypeName.VOID)
             .addParameter(HTTP_REQUEST, "request")
             .addParameter(HTTP_RESPONSE, "response")
             .addException(Exception.class)
-            .addStatement("$T executionInput = request.getPayload().deserialize($T.class)", Object.class, inputDto)
-            .addStatement("String tenantId = request.getHeaders().getOrDefault($S, null)", "X-Tenant-ID")
-            .addStatement("String idempotencyKey = request.getHeaders().getOrDefault($S, null)", "Idempotency-Key")
-            .addStatement("return pipelineExecutionService.executePipelineAsync(executionInput, tenantId, idempotencyKey, $L).await().indefinitely()", streamingOutput)
+            .addStatement("$T executionInput = new com.fasterxml.jackson.databind.ObjectMapper().readValue(request.getReader(), $T.class)", Object.class, inputDto)
+            .addStatement("String tenantId = request.getFirstHeader($S).orElse(null)", "X-Tenant-ID")
+            .addStatement("String idempotencyKey = request.getFirstHeader($S).orElse(null)", "Idempotency-Key")
+            .addStatement("$T result = pipelineExecutionService.executePipelineAsync(executionInput, tenantId, idempotencyKey, $L).await().atMost($T.ofSeconds(30))", runAsyncAcceptedDto, streamingOutput, ClassName.get("java.time", "Duration"))
+            .addStatement("response.getWriter().write(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(result))")
+            .addStatement("response.setStatusCode(200)")
             .build();
     }
 
     /**
      * Handles an HTTP request to retrieve the execution status for a given execution ID.
      *
-     * @return the execution status DTO for the requested executionId and tenantId
      * @throws IllegalArgumentException if the "X-Execution-ID" header is missing or blank
      */
     private MethodSpec buildGcpStatusHandler(TypeName executionLookupRequestType, ClassName executionStatusDto) {
         return MethodSpec.methodBuilder("service")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
-            .returns(executionStatusDto)
+            .returns(TypeName.VOID)
             .addParameter(HTTP_REQUEST, "request")
             .addParameter(HTTP_RESPONSE, "response")
             .addException(Exception.class)
-            .addStatement("String executionId = request.getHeaders().get($S)", "X-Execution-ID")
-            .addStatement("String tenantId = request.getHeaders().getOrDefault($S, null)", "X-Tenant-ID")
+            .addStatement("String executionId = request.getFirstHeader($S).orElse(null)", "X-Execution-ID")
+            .addStatement("String tenantId = request.getFirstHeader($S).orElse(null)", "X-Tenant-ID")
             .beginControlFlow("if (executionId == null || executionId.isBlank())")
             .addStatement("throw new IllegalArgumentException($S)", "executionId is required")
             .endControlFlow()
-            .addStatement("return pipelineExecutionService.getExecutionStatus(tenantId, executionId).await().indefinitely()")
+            .addStatement("$T result = pipelineExecutionService.getExecutionStatus(tenantId, executionId).await().atMost($T.ofSeconds(30))", executionStatusDto, ClassName.get("java.time", "Duration"))
+            .addStatement("response.getWriter().write(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(result))")
+            .addStatement("response.setStatusCode(200)")
             .build();
     }
 
@@ -238,25 +241,24 @@ public class GcpOrchestratorRenderer extends AbstractOrchestratorFunctionHandler
      * Reads the "X-Execution-ID" header (required) and the optional "X-Tenant-ID" header,
      * then returns the execution result (a single DTO or a list of DTOs when streaming).
      *
-     * @param request  the incoming HTTP request carrying headers and payload
-     * @param response the HTTP response object (unused for return value)
-     * @return the execution result DTO, or a List of DTOs when streaming output is enabled
      * @throws IllegalArgumentException if the "X-Execution-ID" header is missing or blank
      */
     private MethodSpec buildGcpResultHandler(TypeName executionLookupRequestType, TypeName asyncResultType, ClassName outputDto, boolean streamingOutput) {
         return MethodSpec.methodBuilder("service")
             .addAnnotation(Override.class)
             .addModifiers(Modifier.PUBLIC)
-            .returns(asyncResultType)
+            .returns(TypeName.VOID)
             .addParameter(HTTP_REQUEST, "request")
             .addParameter(HTTP_RESPONSE, "response")
             .addException(Exception.class)
-            .addStatement("String executionId = request.getHeaders().get($S)", "X-Execution-ID")
-            .addStatement("String tenantId = request.getHeaders().getOrDefault($S, null)", "X-Tenant-ID")
+            .addStatement("String executionId = request.getFirstHeader($S).orElse(null)", "X-Execution-ID")
+            .addStatement("String tenantId = request.getFirstHeader($S).orElse(null)", "X-Tenant-ID")
             .beginControlFlow("if (executionId == null || executionId.isBlank())")
             .addStatement("throw new IllegalArgumentException($S)", "executionId is required")
             .endControlFlow()
-            .addStatement("return pipelineExecutionService.<$T>getExecutionResult(tenantId, executionId, $T.class, $L).await().indefinitely()", asyncResultType, outputDto, streamingOutput)
+            .addStatement("$T result = pipelineExecutionService.<$T>getExecutionResult(tenantId, executionId, $T.class, $L).await().atMost($T.ofSeconds(30))", asyncResultType, outputDto, ClassName.get("java.time", "Duration"))
+            .addStatement("response.getWriter().write(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(result))")
+            .addStatement("response.setStatusCode(200)")
             .build();
     }
 }
