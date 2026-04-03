@@ -3,6 +3,7 @@ package org.pipelineframework.processor.phase;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.Locale;
 import javax.tools.Diagnostic;
 
@@ -60,12 +61,12 @@ public class GenerationPathResolver {
         try {
             if (Files.exists(root)) {
                 try (var stream = Files.walk(root)) {
-                    stream.sorted(java.util.Comparator.reverseOrder())
+                    stream.sorted(Comparator.reverseOrder())
                         .forEach(path -> {
                             try {
                                 Files.deleteIfExists(path);
                             } catch (IOException e) {
-                                throw new RuntimeException(e);
+                                throw new RuntimeException("Failed to delete path: " + path, e);
                             }
                         });
                 }
