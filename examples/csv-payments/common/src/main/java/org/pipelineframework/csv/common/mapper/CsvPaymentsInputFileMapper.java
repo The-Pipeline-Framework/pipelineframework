@@ -22,10 +22,11 @@ import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.csv.common.domain.CsvPaymentsInputFile;
 import org.pipelineframework.csv.common.dto.CsvPaymentsInputFileDto;
+import org.pipelineframework.csv.grpc.PipelineTypes;
 
 @SuppressWarnings("unused")
 @Mapper(componentModel = "jakarta", uses = {CommonConverters.class}, unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface CsvPaymentsInputFileMapper extends org.pipelineframework.mapper.Mapper<CsvPaymentsInputFile, org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsInputFile> {
+public interface CsvPaymentsInputFileMapper extends org.pipelineframework.mapper.Mapper<CsvPaymentsInputFile, PipelineTypes.CsvPaymentsInputFile> {
 
   CsvPaymentsInputFileMapper INSTANCE = Mappers.getMapper( CsvPaymentsInputFileMapper.class );
 
@@ -36,20 +37,20 @@ public interface CsvPaymentsInputFileMapper extends org.pipelineframework.mapper
   @Mapping(target = "id", qualifiedByName = "uuidToString")
   @Mapping(target = "filepath", qualifiedByName = "pathToString")
   @Mapping(target = "csvFolderPath", qualifiedByName = "pathToString")
-  org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsInputFile toGrpc(CsvPaymentsInputFileDto entity);
+  PipelineTypes.CsvPaymentsInputFile toGrpc(CsvPaymentsInputFileDto entity);
 
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
   @Mapping(target = "filepath", qualifiedByName = "stringToPath")
   @Mapping(target = "csvFolderPath", qualifiedByName = "stringToPath")
-  CsvPaymentsInputFileDto fromGrpc(org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsInputFile proto);
+  CsvPaymentsInputFileDto fromGrpc(PipelineTypes.CsvPaymentsInputFile proto);
 
   @Override
-  default CsvPaymentsInputFile fromExternal(org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsInputFile external) {
+  default CsvPaymentsInputFile fromExternal(PipelineTypes.CsvPaymentsInputFile external) {
     return fromDto(fromGrpc(external));
   }
 
   @Override
-  default org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsInputFile toExternal(CsvPaymentsInputFile domain) {
+  default PipelineTypes.CsvPaymentsInputFile toExternal(CsvPaymentsInputFile domain) {
     return toGrpc(toDto(domain));
   }
 

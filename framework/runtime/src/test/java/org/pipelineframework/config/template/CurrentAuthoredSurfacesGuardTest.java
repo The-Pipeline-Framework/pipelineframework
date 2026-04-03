@@ -1,6 +1,7 @@
 package org.pipelineframework.config.template;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,13 +19,18 @@ class CurrentAuthoredSurfacesGuardTest {
 
     @Test
     void currentAuthoredSurfacesDoNotReintroduceLegacyProtoTypeDeclarations() throws Exception {
-        Path repoRoot = Path.of("").toAbsolutePath().normalize().resolve("..").resolve("..").normalize();
+        Path repoRoot = findRepoRoot();
         List<String> violations = new ArrayList<>();
 
-        scanMarkdown(repoRoot.resolve("docs/guide"), violations);
-        scanYaml(repoRoot.resolve("examples"), violations);
-        scanYaml(repoRoot.resolve("template-generator-node"), violations);
-        scanUiExportSurface(repoRoot.resolve("web-ui/src/routes/+page.svelte"), violations);
+        Path docsGuide = requireDirectory(repoRoot.resolve("docs/guide"));
+        Path examples = requireDirectory(repoRoot.resolve("examples"));
+        Path templateGenerator = requireDirectory(repoRoot.resolve("template-generator-node"));
+        Path uiExportSurface = requireFile(repoRoot.resolve("web-ui/src/routes/+page.svelte"));
+
+        scanMarkdown(docsGuide, violations);
+        scanYaml(examples, violations);
+        scanYaml(templateGenerator, violations);
+        scanUiExportSurface(uiExportSurface, violations);
 
         assertTrue(
             violations.isEmpty(),
@@ -51,8 +57,33 @@ class CurrentAuthoredSurfacesGuardTest {
         }
     }
 
-    private static void scanUiExportSurface(Path uiRoute, List<String> violations) throws IOException {
+    private static void scanUiExportSurface(Path uiRoute, List<String> violations) {
         recordViolations(uiRoute, QUOTED_PROTO_TYPE_LITERAL, violations);
+    }
+
+    private static Path findRepoRoot() {
+        Path current = Path.of("").toAbsolutePath().normalize();
+        while (current != null) {
+            if (Files.exists(current.resolve(".git")) || Files.exists(current.resolve("AGENTS.md"))) {
+                return current;
+            }
+            current = current.getParent();
+        }
+        throw new IllegalStateException("Could not locate repository root from " + Path.of("").toAbsolutePath().normalize());
+    }
+
+    private static Path requireDirectory(Path path) {
+        if (!Files.exists(path) || !Files.isDirectory(path)) {
+            fail("Expected directory to exist: " + path);
+        }
+        return path;
+    }
+
+    private static Path requireFile(Path path) {
+        if (!Files.exists(path) || !Files.isRegularFile(path)) {
+            fail("Expected file to exist: " + path);
+        }
+        return path;
     }
 
     private static void recordViolations(Path path, Pattern pattern, List<String> violations) {
