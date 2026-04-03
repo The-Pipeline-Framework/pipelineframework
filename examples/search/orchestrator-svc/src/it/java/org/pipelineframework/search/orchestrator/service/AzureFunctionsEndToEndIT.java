@@ -98,7 +98,7 @@ class AzureFunctionsEndToEndIT {
 
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            boolean isHealthy = response.statusCode() >= 200 && response.statusCode() < 600;
+            boolean isHealthy = response.statusCode() >= 200 && response.statusCode() < 300;
             org.junit.jupiter.api.Assumptions.assumeTrue(isHealthy,
                 "Skipping suite due to unavailable health endpoint: HTTP " + response.statusCode());
         } catch (Exception e) {

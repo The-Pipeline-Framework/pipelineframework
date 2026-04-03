@@ -221,7 +221,7 @@ class AwsLambdaOrchestratorRendererTest {
     void rendersErrorHandlingInHandleRequest() throws IOException {
         String source = renderAndReadSource(buildBinding());
 
-        assertTrue(source.contains("catch (RuntimeException e)"));
+        assertTrue(source.contains("catch (Exception e)"));
         assertTrue(source.contains("throw new RuntimeException(\"Failed handleRequest -> resource.run for input DTO\", e)"));
     }
 

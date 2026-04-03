@@ -21,8 +21,8 @@ variable "function_app_name" {
   nullable    = false
 
   validation {
-    condition     = can(regex("^[a-zA-Z0-9-]{2,60}$", var.function_app_name))
-    error_message = "Function App name must be 2-60 characters long and contain only letters, numbers, and hyphens."
+    condition     = can(regex("^[a-zA-Z0-9][a-zA-Z0-9-]{0,58}[a-zA-Z0-9]$", var.function_app_name))
+    error_message = "Function App name must be 2-60 characters long, contain only letters, numbers, and hyphens, and cannot start or end with a hyphen."
   }
 }
 

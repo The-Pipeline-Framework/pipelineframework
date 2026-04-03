@@ -195,12 +195,12 @@ public final class FunctionHandlerRendererFactory {
 
             if (hasAws) {
                 System.err.println("[TPF] Multiple function providers detected. Using AWS Lambda (aws). " +
-                    "Set -Dpipeline.function.provider=" + overrideList + " to override.");
+                    "Set -Dpipeline.function.provider to one of: " + overrideList + " to override.");
                 return PROVIDER_AWS;
             }
             if (hasAzure) {
                 System.err.println("[TPF] Multiple function providers detected. Using Azure Functions (azure). " +
-                    "Set -Dpipeline.function.provider=" + overrideList + " to override.");
+                    "Set -Dpipeline.function.provider to one of: " + overrideList + " to override.");
                 return PROVIDER_AZURE;
             }
         }

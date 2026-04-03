@@ -19,6 +19,7 @@ package org.pipelineframework.search.orchestrator.service;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Smoke test verifying Azure Functions runtime wiring compiles and initializes correctly.
@@ -32,14 +33,34 @@ class AzureFunctionsBootstrapSmokeTest {
         // Verify that Azure Functions extension classes are resolvable at runtime
         // This is a basic smoke test; full integration testing requires Azure Functions Core Tools
         String extensionClass = "io.quarkus.azure.functions.runtime.AzureFunctionsHandler";
+        
+        // First check if Azure Functions extension is on classpath at all
+        // by checking for a core Azure SDK class that's always present with the extension
+        boolean azureExtensionPresent = isClassAvailable("com.microsoft.azure.functions.ExecutionContext");
+        
+        if (!azureExtensionPresent) {
+            // Azure Functions extension not on classpath - skip the test
+            org.junit.jupiter.api.Assumptions.assumeTrue(false,
+                "Azure Functions extension not on classpath - expected when not building with azure profile");
+            return;
+        }
+        
+        // Azure Functions extension IS on classpath - the handler class must be loadable
         try {
             Class<?> clazz = Class.forName(extensionClass);
-            assertNotNull(clazz, "Azure Functions handler class should be loadable");
+            assertNotNull(clazz, "Azure Functions handler class should be loadable when azure profile is active");
         } catch (ClassNotFoundException e) {
-            // Extension may not be on classpath if not building with azure profile
-            // This is acceptable for smoke test purposes - skip the test
-            org.junit.jupiter.api.Assumptions.assumeTrue(false, 
-                "Azure Functions extension not on classpath - expected when not building with azure profile");
+            fail("Azure Functions extension is on classpath but handler class '" + extensionClass + 
+                 "' is not found. This indicates a broken azure profile build.");
+        }
+    }
+    
+    private static boolean isClassAvailable(String className) {
+        try {
+            Class.forName(className);
+            return true;
+        } catch (ClassNotFoundException e) {
+            return false;
         }
     }
 }

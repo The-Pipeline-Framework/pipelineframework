@@ -227,21 +227,32 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
                 .build())
             .addAnnotation(AnnotationSpec.builder(GENERATED_ROLE)
                 .addMember("value", "$T.$L", ROLE_ENUM, "REST_SERVER")
-                .build())
-            .addSuperinterface(ParameterizedTypeName.get(getHandlerInterfaceClassName(), inputEventType, handlerOutputType))
-            .addField(FieldSpec.builder(resourceType, "resource", Modifier.PRIVATE)
-                .addAnnotation(INJECT)
                 .build());
+
+        // GCP HttpFunction is not a generic interface - add it raw without parameterization
+        ClassName handlerInterface = getHandlerInterfaceClassName();
+        boolean isGcp = handlerInterface != null && "HttpFunction".equals(handlerInterface.simpleName());
+        if (isGcp) {
+            handler.addSuperinterface(handlerInterface);
+        } else if (handlerInterface != null) {
+            handler.addSuperinterface(ParameterizedTypeName.get(handlerInterface, inputEventType, handlerOutputType));
+        }
+
+        handler.addField(FieldSpec.builder(resourceType, "resource", Modifier.PRIVATE)
+            .addAnnotation(INJECT)
+            .build());
 
         String localInvokeDelegate = localInvokeDelegate(shape);
 
-        MethodSpec handleRequest = buildHandlerMethod(
-            baseName,
-            inputDto, outputDto,
-            inputEventType, handlerOutputType, resourceType,
-            localInvokeDelegate, shape, streamingInput, streamingOutput);
+        MethodSpec handlerMethod = isGcp
+            ? buildGcpServiceMethod(baseName, inputDto, outputDto, inputEventType, handlerOutputType, resourceType, localInvokeDelegate, shape, streamingInput, streamingOutput)
+            : buildHandlerMethod(
+                baseName,
+                inputDto, outputDto,
+                inputEventType, handlerOutputType, resourceType,
+                localInvokeDelegate, shape, streamingInput, streamingOutput);
 
-        handler.addMethod(handleRequest);
+        handler.addMethod(handlerMethod);
 
         JavaFile.builder(binding.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX, handler.build())
             .build()
@@ -345,6 +356,97 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
     }
 
     /**
+     * Constructs the GCP-specific `service` method for HttpFunction handlers.
+     *
+     * @param baseName               base logical name of the function
+     * @param inputDto               DTO type for individual input elements
+     * @param outputDto              DTO type for individual output elements
+     * @param inputEventType         declared type of the incoming event parameter
+     * @param handlerOutputType      declared return type of the handler method
+     * @param resourceType           the injected REST resource class
+     * @param localInvokeDelegate    expression for local delegation
+     * @param shape                  the StreamingShape
+     * @param streamingInput         true for streaming input
+     * @param streamingOutput        true for streaming output
+     * @return                       a JavaPoet MethodSpec for the GCP service method
+     */
+    protected MethodSpec buildGcpServiceMethod(
+            String baseName,
+            TypeName inputDto,
+            TypeName outputDto,
+            TypeName inputEventType,
+            TypeName handlerOutputType,
+            ClassName resourceType,
+            String localInvokeDelegate,
+            StreamingShape shape,
+            boolean streamingInput,
+            boolean streamingOutput) {
+
+        ClassName httpRequest = ClassName.get("com.google.cloud.functions", "HttpRequest");
+        ClassName httpResponse = ClassName.get("com.google.cloud.functions", "HttpResponse");
+        ClassName objectMapper = ClassName.get("com.fasterxml.jackson.databind", "ObjectMapper");
+
+        return MethodSpec.methodBuilder("service")
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(TypeName.VOID)
+            .addParameter(httpRequest, "request")
+            .addParameter(httpResponse, "response")
+            .addException(Exception.class)
+            .beginControlFlow("try")
+            .addStatement("$T mapper = new $T()", objectMapper, objectMapper)
+            .addStatement("$T input = mapper.readValue(request.getReader(), $T.class)", inputDto, inputDto)
+            .addStatement("$T transportContext = $T.of("
+                + "request.getFirstHeader($S).orElse($T.randomUUID().toString()), "
+                + "$S, $S, $T.of("
+                + "$T.ATTR_CORRELATION_ID, request.getFirstHeader($S).orElse($T.randomUUID().toString()), "
+                + "$T.ATTR_EXECUTION_ID, request.getFirstHeader($S).orElse($T.randomUUID().toString()), "
+                + "$T.ATTR_RETRY_ATTEMPT, $T.getProperty($S, $S), "
+                + "$T.ATTR_DISPATCH_TS_EPOCH_MS, $T.toString($T.currentTimeMillis())))",
+                FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT,
+                "X-Cloud-Trace-Context", ClassName.get("java.util", "UUID"),
+                baseName + ".input", INVOKE_STEP,
+                ClassName.get("java.util", "Map"),
+                "X-Cloud-Trace-Context", ClassName.get("java.util", "UUID"),
+                "X-Cloud-Trace-Context", ClassName.get("java.util", "UUID"),
+                FUNCTION_TRANSPORT_CONTEXT, ClassName.get(System.class), "tpf.transport.retry-attempt", "0",
+                FUNCTION_TRANSPORT_CONTEXT, ClassName.get(Long.class), ClassName.get(System.class))
+            .addStatement("$T<$T, $T> source = new $T<>($S, $S)",
+                FUNCTION_SOURCE_ADAPTER, inputEventType, inputDto,
+                streamingInput ? MULTI_SOURCE_ADAPTER : DEFAULT_UNARY_SOURCE_ADAPTER,
+                baseName + ".input", API_VERSION)
+            .addStatement("$T<$T, $T> invokeLocal = new $T<$T, $T>($L, $S, $S)",
+                FUNCTION_INVOKE_ADAPTER, inputDto, outputDto,
+                selectInvokeAdapterForShape(shape,
+                    LOCAL_UNARY_INVOKE_ADAPTER,
+                    LOCAL_ONE_TO_MANY_INVOKE_ADAPTER,
+                    LOCAL_MANY_TO_ONE_INVOKE_ADAPTER,
+                    LOCAL_MANY_TO_MANY_INVOKE_ADAPTER),
+                inputDto, outputDto,
+                localInvokeDelegate,
+                baseName + ".output", API_VERSION)
+            .addStatement("$T<$T, $T> invokeRemote = new $T<>()",
+                FUNCTION_INVOKE_ADAPTER, inputDto, outputDto, HTTP_REMOTE_INVOKE_ADAPTER)
+            .addStatement("$T<$T, $T> invoke = new $T<>(invokeLocal, invokeRemote)",
+                FUNCTION_INVOKE_ADAPTER, inputDto, outputDto, INVOCATION_MODE_ROUTING_INVOKE_ADAPTER)
+            .addStatement("$T<$T, $T> sink = new $T<>()",
+                FUNCTION_SINK_ADAPTER, outputDto, handlerOutputType,
+                streamingOutput ? COLLECT_LIST_SINK_ADAPTER : DEFAULT_UNARY_SINK_ADAPTER)
+            .addStatement("$T result = $T.$L(input, transportContext, source, invoke, sink)",
+                shape == StreamingShape.UNARY_UNARY ? outputDto : ParameterizedTypeName.get(ClassName.get(List.class), outputDto),
+                shape == StreamingShape.UNARY_UNARY ? UNARY_FUNCTION_TRANSPORT_BRIDGE : FUNCTION_TRANSPORT_BRIDGE,
+                bridgeMethodName(shape))
+            .addStatement("response.getWriter().write(mapper.writeValueAsString(result))")
+            .addStatement("response.setStatusCode(200)")
+            .nextControlFlow("catch (Exception e)")
+            .addStatement("response.setStatusCode(500)")
+            .addStatement("response.getWriter().write(mapper.writeValueAsString($T.of(\"error\", e.getMessage())))",
+                ClassName.get("java.util", "Map"))
+            .endControlFlow()
+            .build();
+    }
+
+    /**
      * Produces a Java expression that yields the execution id for FunctionTransportContext, using the subclass-provided execution id expression when non-blank and falling back to java.util.UUID.randomUUID().toString().
      *
      * @return a Java expression string that evaluates to the execution id
@@ -352,7 +454,7 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
     protected String buildExecutionIdExpression() {
         String executionIdExpr = getExecutionIdExpression();
         if (executionIdExpr != null && !executionIdExpr.isBlank()) {
-            return "(" + executionIdExpr + " != null && !" + executionIdExpr + ".isBlank()) ? " + executionIdExpr + " : $T.randomUUID().toString()";
+            return "((" + executionIdExpr + ") != null && !(" + executionIdExpr + ").isBlank()) ? (" + executionIdExpr + ") : $T.randomUUID().toString()";
         } else {
             return "$T.randomUUID().toString()";
         }
@@ -530,6 +632,21 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
             case UNARY_STREAMING -> "return $T.invokeOneToMany(input, transportContext, source, invoke, sink)";
             case STREAMING_UNARY -> "return $T.invokeManyToOne(input, transportContext, source, invoke, sink)";
             case STREAMING_STREAMING -> "return $T.invokeManyToMany(input, transportContext, source, invoke, sink)";
+        };
+    }
+
+    /**
+     * Returns the bridge method name for the given streaming shape.
+     *
+     * @param shape the streaming shape
+     * @return the bridge method name
+     */
+    protected static String bridgeMethodName(StreamingShape shape) {
+        return switch (shape) {
+            case UNARY_UNARY -> "invoke";
+            case UNARY_STREAMING -> "invokeOneToMany";
+            case STREAMING_UNARY -> "invokeManyToOne";
+            case STREAMING_STREAMING -> "invokeManyToMany";
         };
     }
 

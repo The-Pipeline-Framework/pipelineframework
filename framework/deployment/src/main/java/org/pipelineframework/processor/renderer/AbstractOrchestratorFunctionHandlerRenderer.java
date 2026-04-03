@@ -233,7 +233,7 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
                 + "$T.ATTR_RETRY_ATTEMPT, $T.getProperty($S, $S), "
                 + "$T.ATTR_DISPATCH_TS_EPOCH_MS, $T.toString($T.currentTimeMillis())))",
                 FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT,
-                INVOKE_STEP, ClassName.get("java.util", "Map"),
+                UNKNOWN_REQUEST, UNKNOWN_REQUEST, INVOKE_STEP, ClassName.get("java.util", "Map"),
                 FUNCTION_TRANSPORT_CONTEXT, UNKNOWN_REQUEST,
                 FUNCTION_TRANSPORT_CONTEXT, ClassName.get("java.util", "UUID"),
                 FUNCTION_TRANSPORT_CONTEXT, ClassName.get(System.class), "tpf.transport.retry-attempt", "0",
@@ -257,7 +257,11 @@ protected AbstractOrchestratorFunctionHandlerRenderer() {}
      */
     protected String buildExecutionIdExpression() {
         String expr = getExecutionIdExpression();
-        return (expr != null && !expr.isBlank()) ? "(" + expr + " != null && !" + expr + ".isBlank()) ? " + expr + " : $T.randomUUID().toString()" : "$T.randomUUID().toString()";
+        if (expr != null && !expr.isBlank()) {
+            return "((" + expr + ") != null && !(" + expr + ").isBlank()) ? (" + expr + ") : $T.randomUUID().toString()";
+        } else {
+            return "$T.randomUUID().toString()";
+        }
     }
 
     /**

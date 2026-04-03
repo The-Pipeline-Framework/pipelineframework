@@ -269,7 +269,7 @@ Run targeted tests that validate generated non-unary function bridge paths for S
 # Framework deployment tests
 ./mvnw -f framework/pom.xml \
   -pl deployment \
-  -Dtest=RestFunctionHandlerRendererTest,OrchestratorFunctionHandlerRendererTest \
+  -Dtest=RestFunctionHandlerRendererTest,AwsLambdaOrchestratorRendererTest \
   test
 ```
 

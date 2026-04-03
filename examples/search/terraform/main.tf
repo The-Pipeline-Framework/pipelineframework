@@ -129,9 +129,28 @@ resource "azurerm_application_insights" "search_pipeline" {
   tags = var.tags
 }
 
-# Role assignment for Function App to access Storage
+# Role assignments for Function App to access Storage
+# AzureWebJobsStorage requires multiple roles for full functionality
 resource "azurerm_role_assignment" "function_storage_blob_contributor" {
   scope                = azurerm_storage_account.function_storage.id
   role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = azurerm_linux_function_app.search_pipeline.identity.0.principal_id
+}
+
+resource "azurerm_role_assignment" "function_storage_blob_owner" {
+  scope                = azurerm_storage_account.function_storage.id
+  role_definition_name = "Storage Blob Data Owner"
+  principal_id         = azurerm_linux_function_app.search_pipeline.identity.0.principal_id
+}
+
+resource "azurerm_role_assignment" "function_storage_queue_contributor" {
+  scope                = azurerm_storage_account.function_storage.id
+  role_definition_name = "Storage Queue Data Contributor"
+  principal_id         = azurerm_linux_function_app.search_pipeline.identity.0.principal_id
+}
+
+resource "azurerm_role_assignment" "function_storage_account_contributor" {
+  scope                = azurerm_storage_account.function_storage.id
+  role_definition_name = "Storage Account Contributor"
   principal_id         = azurerm_linux_function_app.search_pipeline.identity.0.principal_id
 }

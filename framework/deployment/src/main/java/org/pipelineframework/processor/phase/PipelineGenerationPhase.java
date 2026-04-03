@@ -467,6 +467,22 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             boolean rest = "REST".equalsIgnoreCase(transport);
             boolean local = "LOCAL".equalsIgnoreCase(transport);
             boolean grpc = "GRPC".equalsIgnoreCase(transport);
+
+            // Early validation for FUNCTION platform mode
+            if (ctx.isPlatformModeFunction()) {
+                if (!rest) {
+                    throw new IllegalStateException(
+                        "FUNCTION platform mode requires REST transport for orchestrator. " +
+                        "Got transport=" + transport + ", platform=FUNCTION. " +
+                        "Use pipeline.transport=REST with pipeline.platform=FUNCTION.");
+                }
+                if (binding.inputStreaming() || binding.outputStreaming()) {
+                    throw new IllegalStateException(
+                        "FUNCTION platform mode requires unary input and output for orchestrator. " +
+                        "Got transport=" + transport + ", platform=FUNCTION, " +
+                        "streamingInput=" + binding.inputStreaming() + ", streamingOutput=" + binding.outputStreaming());
+                }
+            }
             
             // Generate REST resource for REST transport
             if (rest) {

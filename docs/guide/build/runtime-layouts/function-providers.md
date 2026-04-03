@@ -177,7 +177,7 @@ This is **cloud-agnostic** and works identically across all providers.
 |----------|-----------|--------------|
 | AWS Lambda | `*-EndToEndIT` | AWS credentials, SAM/CloudFormation |
 | Azure Functions | `AzureFunctionsEndToEndIT` | Azure subscription, Terraform |
-| GCP Cloud Functions | TBD | GCP project, Terraform |
+| GCP Cloud Functions | `GcpFunctionsBootstrapSmokeTest` | GCP project, Functions Framework |
 
 ## Troubleshooting
 
@@ -194,9 +194,6 @@ Solution: Set explicit provider: `-Dpipeline.function.provider=azure`
 ClassNotFoundException: com.google.cloud.functions.HttpFunction
 ```
 Solution: Build with correct scope: `-Dtpf.build.gcp.scope=compile`
-
-**Orchestrator deployment fails on Azure/GCP:**
-Solution: Use REST transport approach - HTTP triggers route to Quarkus REST endpoints
 
 ## Next Steps
 
