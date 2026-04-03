@@ -54,10 +54,12 @@ public interface CsvPaymentsInputFileMapper extends org.pipelineframework.mapper
     return toGrpc(toDto(domain));
   }
 
+  @Deprecated(since = "26.2.5", forRemoval = true)
   default org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsInputFile toDtoToGrpc(CsvPaymentsInputFile domain) {
     return toExternal(domain);
   }
 
+  @Deprecated(since = "26.2.5", forRemoval = true)
   default CsvPaymentsInputFile fromGrpcFromDto(org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsInputFile grpc) {
     return fromExternal(grpc);
   }

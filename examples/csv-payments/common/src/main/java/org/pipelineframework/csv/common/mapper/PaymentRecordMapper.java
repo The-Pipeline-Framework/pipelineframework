@@ -60,10 +60,12 @@ public interface PaymentRecordMapper extends org.pipelineframework.mapper.Mapper
     return toGrpc(toDto(domain));
   }
 
+  @Deprecated(since = "26.2.5", forRemoval = true)
   default org.pipelineframework.csv.grpc.PipelineTypes.PaymentRecord toDtoToGrpc(PaymentRecord domain) {
     return toExternal(domain);
   }
 
+  @Deprecated(since = "26.2.5", forRemoval = true)
   default PaymentRecord fromGrpcFromDto(org.pipelineframework.csv.grpc.PipelineTypes.PaymentRecord grpc) {
     return fromExternal(grpc);
   }

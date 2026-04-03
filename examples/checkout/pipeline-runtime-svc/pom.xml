@@ -319,6 +319,8 @@
                         </goals>
                         <configuration>
                             <target>
+                                <delete dir="${project.build.outputDirectory}"/>
+                                <delete dir="${project.build.testOutputDirectory}"/>
                                 <delete dir="${generated.proto.dir}"/>
                                 <delete dir="${project.build.directory}/generated-sources/grpc"/>
                                 <delete dir="${project.build.directory}/generated-sources/pipeline"/>
