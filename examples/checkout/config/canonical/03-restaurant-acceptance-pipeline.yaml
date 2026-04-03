@@ -1,37 +1,74 @@
-appName: "TPFGo Restaurant Acceptance Pipeline"
-basePackage: "org.pipelineframework.tpfgo.restaurant.acceptance"
-transport: "GRPC"
-platform: "COMPUTE"
+version: 2
+appName: TPFGo Restaurant Acceptance Pipeline
+basePackage: org.pipelineframework.tpfgo.restaurant.acceptance
+transport: GRPC
+platform: COMPUTE
+messages:
+  OrderApproved:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: requestId
+        type: uuid
+      - number: 3
+        name: customerId
+        type: uuid
+      - number: 4
+        name: restaurantId
+        type: uuid
+      - number: 5
+        name: totalAmount
+        type: decimal
+      - number: 6
+        name: currency
+        type: string
+      - number: 7
+        name: approvedAt
+        type: timestamp
+      - number: 8
+        name: riskBand
+        type: string
+  OrderAcceptedByRestaurant:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: requestId
+        type: uuid
+      - number: 3
+        name: customerId
+        type: uuid
+      - number: 4
+        name: restaurantId
+        type: uuid
+      - number: 5
+        name: totalAmount
+        type: decimal
+      - number: 6
+        name: currency
+        type: string
+      - number: 7
+        name: acceptedAt
+        type: timestamp
+      - number: 8
+        name: kitchenTicketId
+        type: uuid
+steps:
+  - name: Restaurant Accept Order
+    service: org.pipelineframework.tpfgo.restaurant.acceptance.restaurant_accept_order.service.ProcessRestaurantAcceptOrderService
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.tpfgo.common.domain.OrderApproved
+    inputTypeName: OrderApproved
+    output: org.pipelineframework.tpfgo.common.domain.OrderAcceptedByRestaurant
+    outputTypeName: OrderAcceptedByRestaurant
 input:
   subscription:
-    publication: "tpfgo.consumer.order-approved.v1"
-steps:
-  - name: "Restaurant Accept Order"
-    service: "org.pipelineframework.tpfgo.restaurant.acceptance.restaurant_accept_order.service.ProcessRestaurantAcceptOrderService"
-    cardinality: "ONE_TO_ONE"
-    input: "org.pipelineframework.tpfgo.common.domain.OrderApproved"
-    inputTypeName: "OrderApproved"
-    inputFields:
-      - { name: "orderId", type: "UUID", protoType: "string" }
-      - { name: "requestId", type: "UUID", protoType: "string" }
-      - { name: "customerId", type: "UUID", protoType: "string" }
-      - { name: "restaurantId", type: "UUID", protoType: "string" }
-      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
-      - { name: "currency", type: "String", protoType: "string" }
-      - { name: "approvedAt", type: "Instant", protoType: "string" }
-      - { name: "riskBand", type: "String", protoType: "string" }
-    output: "org.pipelineframework.tpfgo.common.domain.OrderAcceptedByRestaurant"
-    outputTypeName: "OrderAcceptedByRestaurant"
-    outputFields:
-      - { name: "orderId", type: "UUID", protoType: "string" }
-      - { name: "requestId", type: "UUID", protoType: "string" }
-      - { name: "customerId", type: "UUID", protoType: "string" }
-      - { name: "restaurantId", type: "UUID", protoType: "string" }
-      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
-      - { name: "currency", type: "String", protoType: "string" }
-      - { name: "acceptedAt", type: "Instant", protoType: "string" }
-      - { name: "kitchenTicketId", type: "UUID", protoType: "string" }
+    publication: tpfgo.consumer.order-approved.v1
 output:
   checkpoint:
-    publication: "tpfgo.restaurant.order-accepted.v1"
-    idempotencyKeyFields: [ "orderId" ]
+    publication: tpfgo.restaurant.order-accepted.v1
+    idempotencyKeyFields:
+      - orderId

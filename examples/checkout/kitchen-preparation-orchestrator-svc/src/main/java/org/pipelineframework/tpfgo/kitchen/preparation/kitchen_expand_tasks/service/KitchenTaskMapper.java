@@ -5,13 +5,13 @@ import jakarta.enterprise.context.ApplicationScoped;
 import org.pipelineframework.mapper.Mapper;
 import org.pipelineframework.tpfgo.common.domain.KitchenTask;
 import org.pipelineframework.tpfgo.common.util.GrpcMappingSupport;
-import org.pipelineframework.tpfgo.kitchen.preparation.grpc.KitchenExpandTasksSvc;
+import org.pipelineframework.tpfgo.kitchen.preparation.grpc.PipelineTypes;
 
 @ApplicationScoped
-public class KitchenTaskMapper implements Mapper<KitchenTask, KitchenExpandTasksSvc.KitchenTask> {
+public class KitchenTaskMapper implements Mapper<KitchenTask, PipelineTypes.KitchenTask> {
 
     @Override
-    public KitchenTask fromExternal(KitchenExpandTasksSvc.KitchenTask external) {
+    public KitchenTask fromExternal(PipelineTypes.KitchenTask external) {
         return new KitchenTask(
             GrpcMappingSupport.uuid(external.getOrderId(), "orderId"),
             GrpcMappingSupport.uuid(external.getCustomerId(), "customerId"),
@@ -25,8 +25,8 @@ public class KitchenTaskMapper implements Mapper<KitchenTask, KitchenExpandTasks
     }
 
     @Override
-    public KitchenExpandTasksSvc.KitchenTask toExternal(KitchenTask domain) {
-        return KitchenExpandTasksSvc.KitchenTask.newBuilder()
+    public PipelineTypes.KitchenTask toExternal(KitchenTask domain) {
+        return PipelineTypes.KitchenTask.newBuilder()
             .setOrderId(GrpcMappingSupport.str(domain.orderId()))
             .setCustomerId(GrpcMappingSupport.str(domain.customerId()))
             .setRestaurantId(GrpcMappingSupport.str(domain.restaurantId()))

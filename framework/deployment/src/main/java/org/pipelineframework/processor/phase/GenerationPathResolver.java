@@ -43,4 +43,52 @@ public class GenerationPathResolver {
         }
         return outputDir;
     }
+
+    /**
+     * Deletes and recreates the generated-sources root used for pipeline-rendered Java artifacts.
+     *
+     * @param ctx compilation context containing the generated sources root
+     */
+    public void resetGeneratedSourcesRoot(PipelineCompilationContext ctx) {
+        if (ctx == null) {
+            throw new IllegalArgumentException("ctx must not be null");
+        }
+        Path root = ctx.getGeneratedSourcesRoot();
+        if (root == null) {
+            return;
+        }
+        try {
+            if (Files.exists(root)) {
+                try (var stream = Files.walk(root)) {
+                    stream.sorted(java.util.Comparator.reverseOrder())
+                        .forEach(path -> {
+                            try {
+                                Files.deleteIfExists(path);
+                            } catch (IOException e) {
+                                throw new RuntimeException(e);
+                            }
+                        });
+                }
+            }
+            Files.createDirectories(root);
+        } catch (RuntimeException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof IOException ioException) {
+                reportResetFailure(ctx, root, ioException);
+                throw new IllegalStateException("Failed to reset generated sources root '" + root + "'", ioException);
+            }
+            throw e;
+        } catch (IOException e) {
+            reportResetFailure(ctx, root, e);
+            throw new IllegalStateException("Failed to reset generated sources root '" + root + "'", e);
+        }
+    }
+
+    private void reportResetFailure(PipelineCompilationContext ctx, Path root, IOException e) {
+        if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                Diagnostic.Kind.ERROR,
+                "Failed to reset generated sources root '" + root + "': " + e.getMessage());
+        }
+    }
 }

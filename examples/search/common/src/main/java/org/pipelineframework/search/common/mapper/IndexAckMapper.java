@@ -21,9 +21,9 @@ public interface IndexAckMapper extends org.pipelineframework.mapper.Mapper<Inde
   IndexAck fromDto(IndexAckDto dto);
 
   // DTO ↔ gRPC
-  org.pipelineframework.search.grpc.IndexDocumentSvc.IndexAck toGrpc(IndexAckDto dto);
+  org.pipelineframework.search.grpc.PipelineTypes.IndexAck toGrpc(IndexAckDto dto);
 
-  IndexAckDto fromGrpc(org.pipelineframework.search.grpc.IndexDocumentSvc.IndexAck grpc);
+  IndexAckDto fromGrpc(org.pipelineframework.search.grpc.PipelineTypes.IndexAck grpc);
 
   @Override
   default IndexAck fromExternal(IndexAckDto external) {
@@ -35,11 +35,11 @@ public interface IndexAckMapper extends org.pipelineframework.mapper.Mapper<Inde
     return toDto(domain);
   }
 
-  default org.pipelineframework.search.grpc.IndexDocumentSvc.IndexAck toDtoToGrpc(IndexAck domain) {
+  default org.pipelineframework.search.grpc.PipelineTypes.IndexAck toDtoToGrpc(IndexAck domain) {
     return toGrpc(toDto(domain));
   }
 
-  default IndexAck fromGrpcFromDto(org.pipelineframework.search.grpc.IndexDocumentSvc.IndexAck grpc) {
+  default IndexAck fromGrpcFromDto(org.pipelineframework.search.grpc.PipelineTypes.IndexAck grpc) {
     return fromDto(fromGrpc(grpc));
   }
 }

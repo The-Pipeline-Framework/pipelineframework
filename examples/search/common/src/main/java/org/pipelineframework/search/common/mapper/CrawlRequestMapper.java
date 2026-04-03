@@ -21,9 +21,9 @@ public interface CrawlRequestMapper extends org.pipelineframework.mapper.Mapper<
   CrawlRequest fromDto(CrawlRequestDto dto);
 
   // DTO ↔ gRPC
-  org.pipelineframework.search.grpc.CrawlSourceSvc.CrawlRequest toGrpc(CrawlRequestDto dto);
+  org.pipelineframework.search.grpc.PipelineTypes.CrawlRequest toGrpc(CrawlRequestDto dto);
 
-  CrawlRequestDto fromGrpc(org.pipelineframework.search.grpc.CrawlSourceSvc.CrawlRequest grpc);
+  CrawlRequestDto fromGrpc(org.pipelineframework.search.grpc.PipelineTypes.CrawlRequest grpc);
 
   @Override
   default CrawlRequest fromExternal(CrawlRequestDto external) {
@@ -35,11 +35,11 @@ public interface CrawlRequestMapper extends org.pipelineframework.mapper.Mapper<
     return toDto(domain);
   }
 
-  default org.pipelineframework.search.grpc.CrawlSourceSvc.CrawlRequest toDtoToGrpc(CrawlRequest domain) {
+  default org.pipelineframework.search.grpc.PipelineTypes.CrawlRequest toDtoToGrpc(CrawlRequest domain) {
     return toGrpc(toDto(domain));
   }
 
-  default CrawlRequest fromGrpcFromDto(org.pipelineframework.search.grpc.CrawlSourceSvc.CrawlRequest grpc) {
+  default CrawlRequest fromGrpcFromDto(org.pipelineframework.search.grpc.PipelineTypes.CrawlRequest grpc) {
     return fromDto(fromGrpc(grpc));
   }
 }

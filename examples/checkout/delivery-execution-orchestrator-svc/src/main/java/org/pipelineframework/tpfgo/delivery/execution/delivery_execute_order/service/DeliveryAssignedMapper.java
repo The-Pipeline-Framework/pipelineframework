@@ -5,13 +5,13 @@ import jakarta.enterprise.context.ApplicationScoped;
 import org.pipelineframework.mapper.Mapper;
 import org.pipelineframework.tpfgo.common.domain.DeliveryAssigned;
 import org.pipelineframework.tpfgo.common.util.GrpcMappingSupport;
-import org.pipelineframework.tpfgo.delivery.execution.grpc.DeliveryExecuteOrderSvc;
+import org.pipelineframework.tpfgo.delivery.execution.grpc.PipelineTypes;
 
 @ApplicationScoped
-public class DeliveryAssignedMapper implements Mapper<DeliveryAssigned, DeliveryExecuteOrderSvc.DeliveryAssigned> {
+public class DeliveryAssignedMapper implements Mapper<DeliveryAssigned, PipelineTypes.DeliveryAssigned> {
 
     @Override
-    public DeliveryAssigned fromExternal(DeliveryExecuteOrderSvc.DeliveryAssigned external) {
+    public DeliveryAssigned fromExternal(PipelineTypes.DeliveryAssigned external) {
         return new DeliveryAssigned(
             GrpcMappingSupport.uuid(external.getOrderId(), "orderId"),
             GrpcMappingSupport.uuid(external.getCustomerId(), "customerId"),
@@ -27,8 +27,8 @@ public class DeliveryAssignedMapper implements Mapper<DeliveryAssigned, Delivery
     }
 
     @Override
-    public DeliveryExecuteOrderSvc.DeliveryAssigned toExternal(DeliveryAssigned domain) {
-        return DeliveryExecuteOrderSvc.DeliveryAssigned.newBuilder()
+    public PipelineTypes.DeliveryAssigned toExternal(DeliveryAssigned domain) {
+        return PipelineTypes.DeliveryAssigned.newBuilder()
             .setOrderId(GrpcMappingSupport.str(domain.orderId()))
             .setCustomerId(GrpcMappingSupport.str(domain.customerId()))
             .setRestaurantId(GrpcMappingSupport.str(domain.restaurantId()))

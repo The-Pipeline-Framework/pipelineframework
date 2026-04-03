@@ -3,15 +3,15 @@ package org.pipelineframework.tpfgo.checkout.checkout_create_pending.service;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import org.pipelineframework.mapper.Mapper;
-import org.pipelineframework.tpfgo.checkout.grpc.CheckoutCreatePendingSvc;
+import org.pipelineframework.tpfgo.checkout.grpc.PipelineTypes;
 import org.pipelineframework.tpfgo.common.domain.OrderPending;
 import org.pipelineframework.tpfgo.common.util.GrpcMappingSupport;
 
 @ApplicationScoped
-public class OrderPendingMapper implements Mapper<OrderPending, CheckoutCreatePendingSvc.OrderPending> {
+public class OrderPendingMapper implements Mapper<OrderPending, PipelineTypes.OrderPending> {
 
     @Override
-    public OrderPending fromExternal(CheckoutCreatePendingSvc.OrderPending external) {
+    public OrderPending fromExternal(PipelineTypes.OrderPending external) {
         return new OrderPending(
             GrpcMappingSupport.uuid(external.getOrderId(), "orderId"),
             GrpcMappingSupport.uuid(external.getRequestId(), "requestId"),
@@ -23,8 +23,8 @@ public class OrderPendingMapper implements Mapper<OrderPending, CheckoutCreatePe
     }
 
     @Override
-    public CheckoutCreatePendingSvc.OrderPending toExternal(OrderPending domain) {
-        return CheckoutCreatePendingSvc.OrderPending.newBuilder()
+    public PipelineTypes.OrderPending toExternal(OrderPending domain) {
+        return PipelineTypes.OrderPending.newBuilder()
             .setOrderId(GrpcMappingSupport.str(domain.orderId()))
             .setRequestId(GrpcMappingSupport.str(domain.requestId()))
             .setCustomerId(GrpcMappingSupport.str(domain.customerId()))

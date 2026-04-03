@@ -5,14 +5,14 @@ import jakarta.enterprise.context.ApplicationScoped;
 import org.pipelineframework.mapper.Mapper;
 import org.pipelineframework.tpfgo.common.domain.TerminalOrderState;
 import org.pipelineframework.tpfgo.common.util.GrpcMappingSupport;
-import org.pipelineframework.tpfgo.compensation.failure.grpc.CompensationFinalizeOrderSvc;
+import org.pipelineframework.tpfgo.compensation.failure.grpc.PipelineTypes;
 
 @ApplicationScoped
 public class TerminalOrderStateMapper
-    implements Mapper<TerminalOrderState, CompensationFinalizeOrderSvc.TerminalOrderState> {
+    implements Mapper<TerminalOrderState, PipelineTypes.TerminalOrderState> {
 
     @Override
-    public TerminalOrderState fromExternal(CompensationFinalizeOrderSvc.TerminalOrderState external) {
+    public TerminalOrderState fromExternal(PipelineTypes.TerminalOrderState external) {
         return new TerminalOrderState(
             GrpcMappingSupport.uuid(external.getOrderId(), "orderId"),
             external.getOutcome(),
@@ -24,8 +24,8 @@ public class TerminalOrderStateMapper
     }
 
     @Override
-    public CompensationFinalizeOrderSvc.TerminalOrderState toExternal(TerminalOrderState domain) {
-        var builder = CompensationFinalizeOrderSvc.TerminalOrderState.newBuilder()
+    public PipelineTypes.TerminalOrderState toExternal(TerminalOrderState domain) {
+        var builder = PipelineTypes.TerminalOrderState.newBuilder()
             .setOrderId(GrpcMappingSupport.str(domain.orderId()))
             .setOutcome(domain.outcome())
             .setResolvedAt(GrpcMappingSupport.str(domain.resolvedAt()))
