@@ -116,7 +116,9 @@ public class GrpcBindingResolver {
         for (DescriptorProtos.FileDescriptorProto fileProto : descriptorSet.getFileList()) {
             projectFileNames.add(fileProto.getName());
         }
-        int builtProjectCount = 0;
+        int builtProjectCount = (int) projectFileNames.stream()
+            .filter(builtFileDescriptors::containsKey)
+            .count();
 
         // Build file descriptors in dependency order using topological sort approach
         boolean allBuilt = false;
