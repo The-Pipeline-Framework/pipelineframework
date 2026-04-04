@@ -24,6 +24,8 @@ PIPELINE_LAMBDA_DEPENDENCY_SCOPE="${PIPELINE_LAMBDA_DEPENDENCY_SCOPE:-compile}"
 "$ROOT_DIR/scripts/ci/bootstrap-local-repo-prereqs.sh" search
 
 "$MVN_BIN" -f "$SEARCH_DIR/pom.xml" \
+  -pl orchestrator-svc \
+  -am \
   -Dtpf.build.platform="$PIPELINE_PLATFORM" \
   -Dtpf.build.transport="$PIPELINE_TRANSPORT" \
   -Dtpf.build.rest.naming.strategy="$PIPELINE_REST_NAMING_STRATEGY" \
