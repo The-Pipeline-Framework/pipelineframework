@@ -14,6 +14,8 @@ terraform {
 }
 
 provider "azurerm" {
+  storage_use_azuread = true
+
   features {
     resource_group {
       # Set to true for safe defaults - prevents accidental deletion of resource groups with resources

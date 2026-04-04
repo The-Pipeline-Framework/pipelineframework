@@ -1,0 +1,35 @@
+version: 1
+layout: modular
+validation: strict
+
+defaults:
+  runtime: lambda
+  module: per-step
+  synthetic:
+    module: plugin
+
+runtimes:
+  lambda: {}
+  orchestrator: {}
+
+modules:
+  orchestrator-svc:
+    runtime: orchestrator
+  crawl-source-svc:
+    runtime: lambda
+  parse-document-svc:
+    runtime: lambda
+  tokenize-content-svc:
+    runtime: lambda
+  index-document-svc:
+    runtime: lambda
+
+steps:
+  ProcessCrawlSourceService:
+    module: crawl-source-svc
+  ProcessParseDocumentService:
+    module: parse-document-svc
+  ProcessTokenizeContentService:
+    module: tokenize-content-svc
+  ProcessIndexDocumentService:
+    module: index-document-svc

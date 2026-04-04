@@ -231,7 +231,7 @@ class StepArtifactGenerationService {
                         descriptorSet));
                     roleMetadataGenerator.recordClassWithRole(restClassName, restRole.name());
 
-                    if (ctx.isPlatformModeFunction()) {
+                    if (ctx.isPlatformModeFunction() && !ctx.isFunctionHttpBridgeEnabled()) {
                         String handlerClassName =
                             restFunctionHandlerRenderer.handlerFqcn(model.servicePackage(), model.generatedName());
                         restFunctionHandlerRenderer.render(restBinding, new GenerationContext(

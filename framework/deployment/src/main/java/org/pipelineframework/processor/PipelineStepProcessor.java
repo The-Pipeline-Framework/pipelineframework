@@ -27,6 +27,8 @@ import javax.lang.model.element.TypeElement;
     "pipeline.cache.keyGenerator", // Optional: fully-qualified CacheKeyGenerator class for @CacheResult
     "pipeline.orchestrator.generate", // Optional: enable orchestrator endpoint generation
     "pipeline.module", // Optional: logical module name for runtime mapping
+    "pipeline.moduleDir", // Optional: explicit module directory for runtime mapping/config discovery
+    "pipeline.function.httpBridge", // Optional: prefer HTTP bridge over generated direct function handlers
     "pipeline.platform", // Optional: target deployment platform (COMPUTE|FUNCTION; legacy: STANDARD|LAMBDA)
     "pipeline.transport", // Optional: transport mode (GRPC|REST|LOCAL)
     "pipeline.rest.naming.strategy", // Optional: REST naming strategy (LEGACY|RESOURCEFUL)

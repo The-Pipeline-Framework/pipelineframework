@@ -25,6 +25,9 @@ class ModelContextRoleEnricher {
 
         boolean hasOrchestrator = ctx.getRoundEnv() != null
             && !ctx.getRoundEnv().getElementsAnnotatedWith(PipelineOrchestrator.class).isEmpty();
+        if (isRuntimeMappedStepModule(ctx, hasOrchestrator)) {
+            return handleRuntimeMappedStepModule(baseModels);
+        }
         if (!ctx.isPluginHost() && !hasOrchestrator) {
             return List.of();
         }
@@ -112,9 +115,45 @@ class ModelContextRoleEnricher {
             .build();
     }
 
+    private List<PipelineStepModel> handleRuntimeMappedStepModule(List<PipelineStepModel> baseModels) {
+        return baseModels.stream()
+            .filter(this::isServerCandidate)
+            .map(this::ensureServerRole)
+            .toList();
+    }
+
+    private PipelineStepModel ensureServerRole(PipelineStepModel model) {
+        DeploymentRole role = model.deploymentRole();
+        if (role == null) {
+            return withDeploymentRole(model, DeploymentRole.PIPELINE_SERVER);
+        }
+        if (role == DeploymentRole.ORCHESTRATOR_CLIENT || role == DeploymentRole.PLUGIN_CLIENT) {
+            throw new IllegalStateException(
+                "Runtime-mapped step module cannot retain client deployment role for step " + model.serviceName());
+        }
+        return model;
+    }
+
     private boolean isMonolithLayout(PipelineCompilationContext ctx) {
         PipelineRuntimeMapping mapping = ctx.getRuntimeMapping();
         return mapping != null && mapping.layout() == PipelineRuntimeMapping.Layout.MONOLITH;
+    }
+
+    private boolean isRuntimeMappedStepModule(PipelineCompilationContext ctx, boolean hasOrchestrator) {
+        PipelineRuntimeMapping mapping = ctx.getRuntimeMapping();
+        return mapping != null
+            && mapping.layout() == PipelineRuntimeMapping.Layout.MODULAR
+            && ctx.getModuleName() != null
+            && !ctx.getModuleName().isBlank()
+            && !ctx.isPluginHost()
+            && !hasOrchestrator;
+    }
+
+    private boolean isServerCandidate(PipelineStepModel model) {
+        DeploymentRole role = model.deploymentRole();
+        // A null role means deployment enrichment has not assigned the step yet, so it is still
+        // eligible for server-side generation unless it later becomes an orchestrator or plugin client.
+        return role == null || (role != DeploymentRole.ORCHESTRATOR_CLIENT && role != DeploymentRole.PLUGIN_CLIENT);
     }
 
     private boolean hasPluginImplementation(PipelineAspectModel aspect) {

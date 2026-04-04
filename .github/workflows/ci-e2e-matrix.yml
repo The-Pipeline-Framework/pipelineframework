@@ -82,7 +82,7 @@ jobs:
     secrets: inherit
 
   e2e-search-azure-functions:
-    name: Search Azure Functions E2E
+    name: Search Azure Functions Preview (Optional)
     needs: build-framework
     uses: ./.github/workflows/e2e-search-azure-functions.yml
     with:

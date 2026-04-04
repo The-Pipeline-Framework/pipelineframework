@@ -36,10 +36,10 @@ fi
 PIPELINE_PLATFORM="${PIPELINE_PLATFORM:-FUNCTION}"
 PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT:-REST}"
 PIPELINE_REST_NAMING_STRATEGY="${PIPELINE_REST_NAMING_STRATEGY:-RESOURCEFUL}"
-PIPELINE_AZURE_DEPENDENCY_SCOPE="${PIPELINE_AZURE_DEPENDENCY_SCOPE:-provided}"
+PIPELINE_AZURE_DEPENDENCY_SCOPE="${PIPELINE_AZURE_DEPENDENCY_SCOPE:-compile}"
 
-# Ensure module parent POM and foundational plugin coordinates are resolvable in clean local repositories.
-"$ROOT_DIR/scripts/ci/bootstrap-local-repo-prereqs.sh" search
+# Ensure framework artifacts and foundational plugins are available in clean local repositories.
+"$BOOTSTRAP_SCRIPT" framework
 
 "$MVN_BIN" -f "$SEARCH_DIR/pom.xml" \
   -Dtpf.build.platform="$PIPELINE_PLATFORM" \

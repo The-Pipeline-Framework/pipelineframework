@@ -2,6 +2,14 @@
 
 This page is a reference testing guide for `examples/search` in Function mode (Azure Functions target).
 
+Azure support in `examples/search` is currently:
+
+- preview
+- manual
+- optional for CI
+
+Treat it as an experimental verification path that still requires manual setup. It should not be read as a turnkey required CI workflow.
+
 Canonical Azure Functions development and operations guidance lives here:
 
 - [Quarkus Azure Functions Extension](https://quarkus.io/guides/azure-functions)
@@ -30,7 +38,8 @@ This means:
 - Verifies non-unary FUNCTION bridge paths through targeted runtime/deployment tests
 - Supports both local testing (Azure Functions Core Tools) and cloud deployment (Terraform-provisioned resources)
 - Uses Search pipeline fan-out/fan-in cardinalities (`ONE_TO_MANY`, `MANY_TO_ONE`)
-- Keep Azure Functions timeout and retry budget bounded for this verification lane; do not assume unbounded waits at function boundaries.
+- Remains a preview/manual workflow rather than a default CI requirement
+- Keep Azure Functions timeout and retry budget bounded for this verification workflow; do not assume unbounded waits at function boundaries.
 
 ## Prerequisites
 
@@ -70,6 +79,8 @@ This sets:
 - `tpf.build.azure.scope=compile`
 - `quarkus.profile=azure-functions`
 
+The helper now defaults `tpf.build.azure.scope` to `compile` so local package and deploy flows match the CI lane and the Quarkus Azure Functions deployment path.
+
 ### Manual Build with Maven
 
 ```bash
@@ -90,13 +101,15 @@ This sets:
 Verify that Azure Functions extension compiles and loads correctly:
 
 ```bash
-./mvnw -f examples/search/pom.xml \
-  -pl orchestrator-svc \
+./scripts/ci/bootstrap-local-repo-prereqs.sh framework
+
+./mvnw -f examples/search/orchestrator-svc/pom.xml \
   -Dtpf.build.platform=FUNCTION \
   -Dtpf.build.transport=REST \
   -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
   -Dtpf.build.azure.scope=compile \
   -Dquarkus.profile=azure-functions \
+  -Dsurefire.failIfNoSpecifiedTests=false \
   -Dtest=AzureFunctionsBootstrapSmokeTest \
   test
 ```
@@ -104,7 +117,7 @@ Verify that Azure Functions extension compiles and loads correctly:
 Expected result:
 
 - `BUILD SUCCESS`
-- `AzureFunctionsBootstrapSmokeTest` passes
+- `AzureFunctionsBootstrapSmokeTest` executes without failing classpath/bootstrap validation
 
 ### Local Function Runtime Testing
 
@@ -182,10 +195,8 @@ terraform apply
 After Terraform provisions infrastructure:
 
 ```bash
-cd examples/search/orchestrator-svc
-
-# Deploy using Quarkus Maven plugin
-./mvnw quarkus:deploy \
+# Deploy using the repo Maven wrapper and the orchestrator module POM
+./mvnw -f examples/search/orchestrator-svc/pom.xml quarkus:deploy \
   -Dtpf.build.platform=FUNCTION \
   -Dtpf.build.transport=REST \
   -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
@@ -202,7 +213,9 @@ export AZURE_FUNCTION_APP_URL="https://funcsearchtest.azurewebsites.net"
 
 ./mvnw -f examples/search/pom.xml \
   -pl orchestrator-svc \
+  -am \
   -DskipUnitTests=true \
+  -Dfailsafe.failIfNoSpecifiedTests=false \
   -Dit.test=AzureFunctionsEndToEndIT \
   -Dazure.function.app.url="$AZURE_FUNCTION_APP_URL" \
   verify
@@ -220,9 +233,9 @@ terraform destroy \
   -var="storage_account_name=stsearchtest"
 ```
 
-## GitHub Actions CI/CD
+## GitHub Actions
 
-The Search Azure Functions E2E test runs automatically in CI when triggered:
+The Azure Functions workflow is available for manual preview testing:
 
 ```yaml
 # .github/workflows/e2e-search-azure-functions.yml
@@ -238,7 +251,7 @@ on:
         type: string
 ```
 
-### CI Workflow Steps
+### Workflow Steps
 
 1. **Azure Login** (OIDC authentication)
 2. **Terraform Init/Plan/Apply** (provision infrastructure)
@@ -254,6 +267,16 @@ Configure these secrets in your repository or organization:
 - `AZURE_CLIENT_ID`: Service principal or federated identity client ID
 - `AZURE_TENANT_ID`: Azure AD tenant ID
 - `AZURE_SUBSCRIPTION_ID`: Azure subscription ID
+
+This workflow is optional and should be used for manual verification only.
+
+### Manual GitHub Validation
+
+Prefer manually dispatching `CI — E2E Test Matrix` when validating this lane in GitHub, because it builds the framework artifact once and passes it into the reusable Azure workflow.
+
+If you dispatch `e2e-search-azure-functions.yml` directly, keep `download_artifacts=false` unless a matching `artifact_name` tarball was uploaded by an earlier workflow run. Direct dispatch now defaults to local bootstrap for that reason.
+
+Maintainer-only notes for GitHub OIDC subjects and workflow dispatch details live in [CI Guidelines](/guide/evolve/ci-guidelines#search-cloud-example-workflows).
 
 ## Non-Unary Function Bridge Lane
 

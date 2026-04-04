@@ -100,7 +100,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         Path generatedSourcesRoot = discoveryPathResolver.resolveGeneratedSourcesRoot(options);
         ctx.setGeneratedSourcesRoot(generatedSourcesRoot);
 
-        Path moduleDir = discoveryPathResolver.resolveModuleDir(generatedSourcesRoot);
+        Path moduleDir = discoveryPathResolver.resolveModuleDir(options, generatedSourcesRoot);
         ctx.setModuleDir(moduleDir);
         ctx.setModuleName(discoveryPathResolver.resolveModuleName(options));
 
@@ -109,6 +109,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         // Check if this is a plugin host
         boolean isPluginHost = !pluginElements.isEmpty();
         ctx.setPluginHost(isPluginHost);
+        ctx.setFunctionHttpBridge(parseStrictBooleanOption(options, "pipeline.function.httpBridge", false));
 
         // Load pipeline aspects
         List<PipelineAspectModel> aspects = loadPipelineAspects(configPath, messager);
@@ -136,6 +137,24 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         // Discover orchestrator models if present
         List<PipelineOrchestratorModel> orchestratorModels = discoverOrchestratorModels(ctx, orchestratorElements);
         ctx.setOrchestratorModels(orchestratorModels);
+    }
+
+    private boolean parseStrictBooleanOption(Map<String, String> options, String key, boolean defaultValue) {
+        String rawValue = options.get(key);
+        if (rawValue == null) {
+            return defaultValue;
+        }
+
+        String normalized = rawValue.trim();
+        if ("true".equalsIgnoreCase(normalized)) {
+            return true;
+        }
+        if ("false".equalsIgnoreCase(normalized)) {
+            return false;
+        }
+
+        throw new IllegalArgumentException(
+            "Invalid value for '" + key + "': '" + rawValue + "'. Expected 'true' or 'false'.");
     }
 
     /**

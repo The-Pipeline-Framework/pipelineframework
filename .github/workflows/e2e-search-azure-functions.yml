@@ -1,4 +1,4 @@
-name: Reusable — Search Azure Functions E2E
+name: Reusable — Search Azure Functions Preview E2E
 
 on:
   workflow_call:
@@ -26,9 +26,9 @@ on:
         default: 'framework-m2-cache'
         type: string
       download_artifacts:
-        description: 'Whether to download prebuilt framework artifacts instead of bootstrapping locally'
+        description: 'Whether to download prebuilt framework artifacts instead of bootstrapping locally. Set true only when a matching artifact was uploaded earlier.'
         required: false
-        default: true
+        default: false
         type: boolean
       terraform_destroy:
         description: 'Whether to destroy Terraform resources after tests'
@@ -51,7 +51,7 @@ env:
 
 jobs:
   search-azure-functions-e2e:
-    name: Search Azure Functions E2E
+    name: Search Azure Functions Preview E2E
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
@@ -163,10 +163,9 @@ jobs:
             clean package
 
       - name: Deploy to Azure Functions
-        working-directory: examples/search/orchestrator-svc
         run: |
           read -r -a maven_args <<< "$MAVEN_ARGS"
-          ./mvnw "${maven_args[@]}" quarkus:deploy \
+          ./mvnw "${maven_args[@]}" -f examples/search/orchestrator-svc/pom.xml quarkus:deploy \
             -Dtpf.build.platform=FUNCTION \
             -Dtpf.build.transport=REST \
             -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
@@ -208,6 +207,7 @@ jobs:
             -am \
             -DskipUnitTests=true \
             -DskipNative=true \
+            -Dfailsafe.failIfNoSpecifiedTests=false \
             -Dquarkus.container-image.build=false \
             -Dit.test=AzureFunctionsEndToEndIT \
             -Dazure.function.app.url="$FUNCTION_APP_URL" \

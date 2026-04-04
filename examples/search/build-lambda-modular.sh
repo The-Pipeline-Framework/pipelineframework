@@ -18,17 +18,20 @@ fi
 PIPELINE_PLATFORM="${PIPELINE_PLATFORM:-FUNCTION}"
 PIPELINE_TRANSPORT="${PIPELINE_TRANSPORT:-REST}"
 PIPELINE_REST_NAMING_STRATEGY="${PIPELINE_REST_NAMING_STRATEGY:-RESOURCEFUL}"
-PIPELINE_LAMBDA_DEPENDENCY_SCOPE="${PIPELINE_LAMBDA_DEPENDENCY_SCOPE:-compile}"
+PIPELINE_CONFIG_PATH="${PIPELINE_CONFIG_PATH:-$SEARCH_DIR/config/pipeline.modular-lambda.yaml}"
+MODULES="${MODULES:-common,crawl-source-svc,parse-document-svc,tokenize-content-svc,index-document-svc,orchestrator-svc}"
 
-# Ensure module parent POM and foundational plugin coordinates are resolvable in clean local repositories.
 "$ROOT_DIR/scripts/ci/bootstrap-local-repo-prereqs.sh" search
 
 "$MVN_BIN" -f "$SEARCH_DIR/pom.xml" \
-  -pl orchestrator-svc \
+  -pl "$MODULES" \
   -am \
   -Dtpf.build.platform="$PIPELINE_PLATFORM" \
   -Dtpf.build.transport="$PIPELINE_TRANSPORT" \
   -Dtpf.build.rest.naming.strategy="$PIPELINE_REST_NAMING_STRATEGY" \
-  -Dtpf.build.lambda.scope="$PIPELINE_LAMBDA_DEPENDENCY_SCOPE" \
-  -Dquarkus.profile=lambda \
-  clean install "$@"
+  -Dtpf.build.lambda.scope=test \
+  -Dtpf.build.lambda.http.scope=compile \
+  -Dpipeline.config.arg="-Apipeline.config=$PIPELINE_CONFIG_PATH" \
+  -Dpipeline.function.httpBridge.arg="-Apipeline.function.httpBridge=true" \
+  -Dquarkus.profile=lambda-modular \
+  clean package "$@"
