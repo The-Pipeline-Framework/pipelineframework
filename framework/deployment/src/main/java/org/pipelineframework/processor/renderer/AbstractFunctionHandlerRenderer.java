@@ -22,6 +22,7 @@ import javax.lang.model.element.Modifier;
 
 import com.squareup.javapoet.AnnotationSpec;
 import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.CodeBlock;
 import com.squareup.javapoet.FieldSpec;
 import com.squareup.javapoet.JavaFile;
 import com.squareup.javapoet.MethodSpec;
@@ -145,7 +146,7 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
  *
  * @return a String containing a Java expression which, when evaluated against the handler's context parameter, yields the request ID
  */
-    protected abstract String getRequestIdExpression();
+    protected abstract CodeBlock getRequestIdExpression();
 
     /**
  * Provide the Java expression used to obtain the function name from the provider's execution context.
@@ -154,7 +155,7 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
  *
  * @return a Java expression string that evaluates to the function name from the cloud context
  */
-    protected abstract String getFunctionNameExpression();
+    protected abstract CodeBlock getFunctionNameExpression();
 
     /**
  * Provide a Java expression that yields an execution-scoped identifier from the cloud context.
@@ -165,7 +166,7 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
  * @return a Java expression that evaluates to the execution-scoped identifier, or an empty string
  *         if not applicable
  */
-    protected abstract String getExecutionIdExpression();
+    protected abstract CodeBlock getExecutionIdExpression();
 
     /**
      * Returns additional context attributes as key-value pairs.
@@ -298,24 +299,7 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
 
         methodBuilder
             .beginControlFlow("try")
-            .addStatement("$T transportContext = $T.of("
-                + getRequestIdExpression() + ", "
-                + getFunctionNameExpression() + ", $S, $T.of("
-                + "$T.ATTR_CORRELATION_ID, " + getRequestIdExpression() + ", "
-                + "$T.ATTR_EXECUTION_ID, " + buildExecutionIdExpression() + ", "
-                + "$T.ATTR_RETRY_ATTEMPT, $T.getProperty($S, $S), "
-                + "$T.ATTR_DISPATCH_TS_EPOCH_MS, $T.toString($T.currentTimeMillis())))",
-                FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT,  // 1, 2
-                UNKNOWN_REQUEST, UNKNOWN_REQUEST, INVOKE_STEP,           // 3, 4, 5
-                ClassName.get("java.util", "Map"),                       // 6
-                FUNCTION_TRANSPORT_CONTEXT, UNKNOWN_REQUEST,             // 7, 8
-                FUNCTION_TRANSPORT_CONTEXT,                              // 9
-                UNKNOWN_REQUEST, UNKNOWN_REQUEST, UNKNOWN_REQUEST,       // 10, 11, 12
-                ClassName.get("java.util", "UUID"),                      // 13
-                FUNCTION_TRANSPORT_CONTEXT, ClassName.get(System.class), // 14, 15
-                "tpf.transport.retry-attempt", "0",                      // 16, 17
-                FUNCTION_TRANSPORT_CONTEXT,                              // 18
-                ClassName.get(Long.class), ClassName.get(System.class))  // 19, 20
+            .addStatement("$L", buildTransportContextCodeBlock())
             .addStatement("$T<$T, $T> source = new $T<>($S, $S)",
                 FUNCTION_SOURCE_ADAPTER, inputEventType, inputDto,
                 streamingInput ? MULTI_SOURCE_ADAPTER : DEFAULT_UNARY_SOURCE_ADAPTER,
@@ -456,13 +440,47 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
      *
      * @return a Java expression string that evaluates to the execution id
      */
-    protected String buildExecutionIdExpression() {
-        String executionIdExpr = getExecutionIdExpression();
-        if (executionIdExpr != null && !executionIdExpr.isBlank()) {
-            return "((" + executionIdExpr + ") != null && !(" + executionIdExpr + ").isBlank()) ? (" + executionIdExpr + ") : $T.randomUUID().toString()";
-        } else {
-            return "$T.randomUUID().toString()";
+    protected CodeBlock buildExecutionIdExpression() {
+        CodeBlock executionIdExpr = getExecutionIdExpression();
+        if (executionIdExpr != null && !executionIdExpr.toString().isBlank()) {
+            return CodeBlock.builder()
+                .add("((")
+                .add(executionIdExpr)
+                .add(") != null && !(")
+                .add(executionIdExpr)
+                .add(").isBlank()) ? (")
+                .add(executionIdExpr)
+                .add(") : $T.randomUUID().toString()", ClassName.get("java.util", "UUID"))
+                .build();
         }
+        return CodeBlock.of("$T.randomUUID().toString()", ClassName.get("java.util", "UUID"));
+    }
+
+    protected CodeBlock buildTransportContextCodeBlock() {
+        CodeBlock.Builder builder = CodeBlock.builder();
+        builder.add("$T transportContext = $T.of(", FUNCTION_TRANSPORT_CONTEXT, FUNCTION_TRANSPORT_CONTEXT);
+        builder.add(getRequestIdExpression());
+        builder.add(", ");
+        builder.add(getFunctionNameExpression());
+        builder.add(", $S, $T.of(", INVOKE_STEP, ClassName.get("java.util", "Map"));
+        builder.add("$T.ATTR_CORRELATION_ID, ", FUNCTION_TRANSPORT_CONTEXT);
+        builder.add(getRequestIdExpression());
+        builder.add(", ");
+        builder.add("$T.ATTR_EXECUTION_ID, ", FUNCTION_TRANSPORT_CONTEXT);
+        builder.add(buildExecutionIdExpression());
+        builder.add(", ");
+        builder.add(
+            "$T.ATTR_RETRY_ATTEMPT, $T.getProperty($S, $S), ",
+            FUNCTION_TRANSPORT_CONTEXT,
+            ClassName.get(System.class),
+            "tpf.transport.retry-attempt",
+            "0");
+        builder.add(
+            "$T.ATTR_DISPATCH_TS_EPOCH_MS, $T.toString($T.currentTimeMillis()))",
+            FUNCTION_TRANSPORT_CONTEXT,
+            ClassName.get(Long.class),
+            ClassName.get(System.class));
+        return builder.build();
     }
 
     /**
@@ -482,28 +500,7 @@ public abstract class AbstractFunctionHandlerRenderer implements PipelineRendere
      */
     @Deprecated
     protected String buildTransportContextStatement() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("$T transportContext = $T.of(");
-        sb.append(getRequestIdExpression()).append(", ");
-        sb.append(getFunctionNameExpression()).append(", ");
-        sb.append("$S, ");
-        sb.append("$T.of(");
-        sb.append("$T.ATTR_TRANSPORT_PROTOCOL, $S, ");
-        sb.append("$T.ATTR_CORRELATION_ID, ").append(getRequestIdExpression()).append(", ");
-        sb.append("$T.ATTR_EXECUTION_ID, ");
-
-        String executionIdExpr = getExecutionIdExpression();
-        if (executionIdExpr != null && !executionIdExpr.isBlank()) {
-            sb.append("(").append(executionIdExpr).append(" != null && !").append(executionIdExpr).append(".isBlank()) ? ").append(executionIdExpr).append(" : $T.randomUUID().toString()");
-        } else {
-            sb.append("$T.randomUUID().toString()");
-        }
-
-        sb.append(", ");
-        sb.append("$T.ATTR_RETRY_ATTEMPT, $T.getProperty($S, $S), ");
-        sb.append("$T.ATTR_DISPATCH_TS_EPOCH_MS, $T.toString($T.currentTimeMillis()))");
-
-        return sb.toString();
+        return buildTransportContextCodeBlock().toString();
     }
 
     /**

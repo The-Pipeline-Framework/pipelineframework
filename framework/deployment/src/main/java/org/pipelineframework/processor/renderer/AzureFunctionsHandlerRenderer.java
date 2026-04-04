@@ -17,6 +17,7 @@
 package org.pipelineframework.processor.renderer;
 
 import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.CodeBlock;
 
 /**
  * Generates Azure Functions HTTP trigger handlers for unary REST resources.
@@ -78,9 +79,9 @@ public class AzureFunctionsHandlerRenderer extends AbstractFunctionHandlerRender
      * @return the expression {@code context != null ? context.getInvocationId() : $S} which evaluates to the ExecutionContext invocation id when {@code context} is non-null, or a fallback string otherwise.
      */
     @Override
-    protected String getRequestIdExpression() {
+    protected CodeBlock getRequestIdExpression() {
         // Azure Functions ExecutionContext provides getInvocationId() for unique request identification
-        return "context != null ? context.getInvocationId() : $S";
+        return CodeBlock.of("context != null ? context.getInvocationId() : $S", UNKNOWN_REQUEST);
     }
 
     /**
@@ -89,8 +90,8 @@ public class AzureFunctionsHandlerRenderer extends AbstractFunctionHandlerRender
      * @return a String containing the expression `context != null ? context.getFunctionName() : $S` which evaluates to the function name from the Azure `ExecutionContext` when available, or to the provided fallback placeholder otherwise.
      */
     @Override
-    protected String getFunctionNameExpression() {
-        return "context != null ? context.getFunctionName() : $S";
+    protected CodeBlock getFunctionNameExpression() {
+        return CodeBlock.of("context != null ? context.getFunctionName() : $S", UNKNOWN_REQUEST);
     }
 
     /**
@@ -99,9 +100,9 @@ public class AzureFunctionsHandlerRenderer extends AbstractFunctionHandlerRender
      * @return the Java expression string that evaluates to the execution id via {@code context.getInvocationId()} when {@code context} is non-null, or {@code null} otherwise.
      */
     @Override
-    protected String getExecutionIdExpression() {
+    protected CodeBlock getExecutionIdExpression() {
         // Azure ExecutionContext provides getInvocationId() for unique request identification
-        return "context != null ? context.getInvocationId() : null";
+        return CodeBlock.of("context != null ? context.getInvocationId() : null");
     }
 
     /**

@@ -17,6 +17,7 @@
 package org.pipelineframework.processor.renderer;
 
 import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.CodeBlock;
 
 /**
  * Generates AWS Lambda RequestHandler wrappers for unary REST resources.
@@ -72,8 +73,8 @@ public class AwsLambdaFunctionHandlerRenderer extends AbstractFunctionHandlerRen
      * @return A format string that evaluates to {@code context.getAwsRequestId()} when {@code context != null}, otherwise the {@code $S} placeholder.
      */
     @Override
-    protected String getRequestIdExpression() {
-        return "context != null ? context.getAwsRequestId() : $S";
+    protected CodeBlock getRequestIdExpression() {
+        return CodeBlock.of("context != null ? context.getAwsRequestId() : $S", UNKNOWN_REQUEST);
     }
 
     /**
@@ -82,8 +83,8 @@ public class AwsLambdaFunctionHandlerRenderer extends AbstractFunctionHandlerRen
      * @return a format string that resolves to `context.getFunctionName()` when `context` is non-null, otherwise the string placeholder `$S`
      */
     @Override
-    protected String getFunctionNameExpression() {
-        return "context != null ? context.getFunctionName() : $S";
+    protected CodeBlock getFunctionNameExpression() {
+        return CodeBlock.of("context != null ? context.getFunctionName() : $S", UNKNOWN_REQUEST);
     }
 
     /**
@@ -94,8 +95,8 @@ public class AwsLambdaFunctionHandlerRenderer extends AbstractFunctionHandlerRen
      * @return the JavaPoet format string {@code "context != null ? context.getLogStreamName() : $S"}
      */
     @Override
-    protected String getExecutionIdExpression() {
-        return "context != null ? context.getLogStreamName() : $S";
+    protected CodeBlock getExecutionIdExpression() {
+        return CodeBlock.of("context != null ? context.getLogStreamName() : $S", UNKNOWN_REQUEST);
     }
 
     /**

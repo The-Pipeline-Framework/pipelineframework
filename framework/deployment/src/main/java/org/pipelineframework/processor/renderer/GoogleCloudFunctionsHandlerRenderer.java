@@ -17,6 +17,7 @@
 package org.pipelineframework.processor.renderer;
 
 import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.CodeBlock;
 
 /**
  * Generates Google Cloud Functions HTTP handlers for unary REST resources.
@@ -79,12 +80,16 @@ public class GoogleCloudFunctionsHandlerRenderer extends AbstractFunctionHandler
      * @return a templated Java expression string that resolves to the request ID
      */
     @Override
-    protected String getRequestIdExpression() {
+    protected CodeBlock getRequestIdExpression() {
         // Extract trace ID from X-Cloud-Trace-Context header if present, otherwise generate UUID
         // Format: "TRACE_ID/SPAN_ID;o=TRACE_TRUE"
         // Use getFirstHeader() which returns Optional<String>
         // Note: 'input' is the HttpRequest parameter name in generated HttpFunction.service() method
-        return "$T.ofNullable(input.getFirstHeader($S).orElse(null)).orElseGet(() -> $T.randomUUID().toString())";
+        return CodeBlock.of(
+            "$T.ofNullable(input.getFirstHeader($S).orElse(null)).orElseGet(() -> $T.randomUUID().toString())",
+            ClassName.get("java.util", "Optional"),
+            "X-Cloud-Trace-Context",
+            ClassName.get("java.util", "UUID"));
     }
 
     /**
@@ -93,9 +98,9 @@ public class GoogleCloudFunctionsHandlerRenderer extends AbstractFunctionHandler
      * @return a String containing a Java expression that invokes System.getenv with a string placeholder (`$S`) to obtain the function name
      */
     @Override
-    protected String getFunctionNameExpression() {
+    protected CodeBlock getFunctionNameExpression() {
         // GCP function name is available via environment variable
-        return "System.getenv($S)";
+        return CodeBlock.of("System.getenv($S)", "K_SERVICE");
     }
 
     /**
@@ -105,10 +110,13 @@ public class GoogleCloudFunctionsHandlerRenderer extends AbstractFunctionHandler
      *         and falls back to `UUID.randomUUID().toString()` when the header is absent
      */
     @Override
-    protected String getExecutionIdExpression() {
+    protected CodeBlock getExecutionIdExpression() {
         // Use request ID from header or generate one
         // Note: 'input' is the HttpRequest parameter name in generated HttpFunction.service() method
-        return "input.getFirstHeader($S).orElseGet(() -> $T.randomUUID().toString())";
+        return CodeBlock.of(
+            "input.getFirstHeader($S).orElseGet(() -> $T.randomUUID().toString())",
+            "X-Cloud-Trace-Context",
+            ClassName.get("java.util", "UUID"));
     }
 
     /**
