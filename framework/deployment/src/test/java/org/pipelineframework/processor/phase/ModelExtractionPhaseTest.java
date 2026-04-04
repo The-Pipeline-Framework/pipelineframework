@@ -22,6 +22,8 @@ import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
+import javax.lang.model.element.TypeElement;
+import javax.lang.model.util.Elements;
 
 import com.squareup.javapoet.ClassName;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,14 +62,20 @@ class ModelExtractionPhaseTest {
     @Mock
     private Messager messager;
 
+    @Mock
+    private Elements elementUtils;
+
     @BeforeEach
     void setUp() {
         lenient().when(processingEnv.getMessager()).thenReturn(messager);
-        lenient().when(processingEnv.getElementUtils())
-                .thenReturn(mock(javax.lang.model.util.Elements.class));
+        lenient().when(processingEnv.getElementUtils()).thenReturn(elementUtils);
         lenient().when(processingEnv.getFiler()).thenReturn(mock(javax.annotation.processing.Filer.class));
         lenient().when(processingEnv.getSourceVersion()).thenReturn(SourceVersion.RELEASE_21);
         lenient().when(roundEnv.getElementsAnnotatedWith(PipelineStep.class)).thenReturn(Set.of());
+        lenient().when(elementUtils.getTypeElement("org.pipelineframework.search.common.domain.CrawlRequest"))
+            .thenReturn(mock(TypeElement.class));
+        lenient().when(elementUtils.getTypeElement("org.pipelineframework.search.common.domain.RawDocument"))
+            .thenReturn(mock(TypeElement.class));
     }
 
     @Test

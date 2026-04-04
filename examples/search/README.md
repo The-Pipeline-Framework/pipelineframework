@@ -68,6 +68,9 @@ Build the search pipeline for Azure Functions deployment:
 
 Run the Azure Functions bootstrap smoke test:
 
+Run these commands from the repository root so `./scripts/ci/bootstrap-local-repo-prereqs.sh` and
+`-f examples/search/orchestrator-svc/pom.xml` resolve correctly.
+
 ```bash
 ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
 
@@ -189,6 +192,10 @@ Terraform for the disposable AWS topology lives under `terraform/aws-modular`.
 `./build-lambda.sh` still exists as a local wiring smoke path for the orchestrator module and the generated direct Lambda handler path.
 
 It is not the supported live AWS deployment topology for Search.
+
+When you use that direct `%lambda` path outside the local smoke test, you can override the
+client truststore password with `CLIENT_TRUSTSTORE_PASSWORD`; it defaults to `secret` for the
+packaged dev certificate path.
 
 ### Handler Selection For Modules With Multiple Generated Handlers
 

@@ -39,7 +39,7 @@ PIPELINE_REST_NAMING_STRATEGY="${PIPELINE_REST_NAMING_STRATEGY:-RESOURCEFUL}"
 PIPELINE_AZURE_DEPENDENCY_SCOPE="${PIPELINE_AZURE_DEPENDENCY_SCOPE:-compile}"
 
 # Ensure framework artifacts and foundational plugins are available in clean local repositories.
-"$ROOT_DIR/scripts/ci/bootstrap-local-repo-prereqs.sh" framework
+"$BOOTSTRAP_SCRIPT" framework
 
 "$MVN_BIN" -f "$SEARCH_DIR/pom.xml" \
   -Dtpf.build.platform="$PIPELINE_PLATFORM" \

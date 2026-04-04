@@ -118,7 +118,20 @@ class ModelContextRoleEnricher {
     private List<PipelineStepModel> handleRuntimeMappedStepModule(List<PipelineStepModel> baseModels) {
         return baseModels.stream()
             .filter(this::isServerCandidate)
+            .map(this::ensureServerRole)
             .toList();
+    }
+
+    private PipelineStepModel ensureServerRole(PipelineStepModel model) {
+        DeploymentRole role = model.deploymentRole();
+        if (role == null) {
+            return withDeploymentRole(model, DeploymentRole.PIPELINE_SERVER);
+        }
+        if (role == DeploymentRole.ORCHESTRATOR_CLIENT || role == DeploymentRole.PLUGIN_CLIENT) {
+            throw new IllegalStateException(
+                "Runtime-mapped step module cannot retain client deployment role for step " + model.serviceName());
+        }
+        return model;
     }
 
     private boolean isMonolithLayout(PipelineCompilationContext ctx) {

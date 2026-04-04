@@ -43,6 +43,9 @@ public class CacheInvalidationFunctionHandler implements RequestHandler<Object, 
             return namedHandlers.get();
         }
 
-        return (input, context) -> input;
+        throw new IllegalStateException(
+            "Missing RequestHandler bean named '" + DELEGATE_HANDLER_NAME
+                + "' for " + CacheInvalidationFunctionHandler.class.getSimpleName()
+                + "; expected generated delegate based on CacheRawDocumentSideEffectFunctionHandler");
     }
 }

@@ -86,10 +86,21 @@ resource "aws_lambda_permission" "step_function_url_invoke" {
   for_each = aws_lambda_function.step
 
   # Keep the explicit invoke permission for the public Function URL example path.
-  statement_id  = "AllowPublicFunctionInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = each.value.function_name
-  principal     = "*"
+  statement_id            = "AllowPublicFunctionInvoke"
+  action                  = "lambda:InvokeFunction"
+  function_name           = each.value.function_name
+  principal               = "*"
+  invoked_via_function_url = true
+}
+
+resource "aws_lambda_permission" "step_function_url_public_access" {
+  for_each = aws_lambda_function.step
+
+  statement_id           = "AllowPublicFunctionUrlInvoke"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = each.value.function_name
+  principal              = "*"
+  function_url_auth_type = "NONE"
 }
 
 resource "aws_lambda_function" "orchestrator" {
@@ -126,8 +137,17 @@ resource "aws_lambda_function_url" "orchestrator" {
 
 resource "aws_lambda_permission" "orchestrator_function_url_invoke" {
   # Keep the explicit invoke permission for the public Function URL example path.
-  statement_id  = "AllowPublicFunctionInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.orchestrator.function_name
-  principal     = "*"
+  statement_id            = "AllowPublicFunctionInvoke"
+  action                  = "lambda:InvokeFunction"
+  function_name           = aws_lambda_function.orchestrator.function_name
+  principal               = "*"
+  invoked_via_function_url = true
+}
+
+resource "aws_lambda_permission" "orchestrator_function_url_public_access" {
+  statement_id           = "AllowPublicFunctionUrlInvoke"
+  action                 = "lambda:InvokeFunctionUrl"
+  function_name          = aws_lambda_function.orchestrator.function_name
+  principal              = "*"
+  function_url_auth_type = "NONE"
 }

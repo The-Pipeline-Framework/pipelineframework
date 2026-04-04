@@ -31,6 +31,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -103,6 +104,7 @@ class AwsLambdaModularEndToEndIT {
         assertTrue(responseJson.has("indexVersion"), "Response should contain indexVersion");
         assertTrue(responseJson.has("tokenBatchCount"), "Response should contain tokenBatchCount");
         assertTrue(responseJson.has("success"), "Response should contain success flag");
+        assertTrue(responseJson.get("success").asBoolean(), "Success flag should be true");
         assertTrue(responseJson.get("tokenBatchCount").asInt() > 0,
             "Should have processed at least one token batch");
     }
@@ -122,6 +124,9 @@ class AwsLambdaModularEndToEndIT {
     }
 
     private static void verifyConnectivity() {
+        org.junit.jupiter.api.Assumptions.assumeTrue(orchestratorUrl != null && !orchestratorUrl.isBlank(),
+            "Skipping modular AWS suite because AWS_LAMBDA_ORCHESTRATOR_URL not configured");
+
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(orchestratorUrl + "/q/health/live"))
             .timeout(Duration.ofSeconds(15))
@@ -131,11 +136,10 @@ class AwsLambdaModularEndToEndIT {
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             boolean isHealthy = response.statusCode() >= 200 && response.statusCode() < 300;
-            org.junit.jupiter.api.Assumptions.assumeTrue(isHealthy,
-                "Skipping modular AWS suite due to unavailable health endpoint: HTTP " + response.statusCode());
+            assertTrue(isHealthy,
+                "Modular AWS suite failed: health endpoint returned HTTP " + response.statusCode());
         } catch (Exception e) {
-            org.junit.jupiter.api.Assumptions.assumeTrue(false,
-                "Skipping modular AWS suite due to unavailable health endpoint: " + e.getMessage());
+            fail("Modular AWS suite failed: health endpoint unreachable: " + e.getMessage(), e);
         }
     }
 

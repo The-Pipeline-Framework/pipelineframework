@@ -37,9 +37,11 @@ public class RedisHostsValidator {
     /**
      * Validates that the `quarkus.redis.hosts` configuration is provided when running in production.
      *
-     * Throws an exception if the active profile equals "prod" (case-insensitive) and the Redis hosts value is missing or blank.
+     * Redis host validation only runs when `pipeline.cache.provider=redis`. If the cache provider is absent or blank,
+     * this validator treats Redis as unselected and skips the check, so production deployments that rely on Redis must
+     * set `pipeline.cache.provider=redis` explicitly.
      *
-     * @throws IllegalStateException if the active profile is "prod" and `quarkus.redis.hosts` is absent or empty
+     * @throws IllegalStateException if the active profile is "prod", Redis is selected, and `quarkus.redis.hosts` is absent or empty
      */
     @PostConstruct
     void validate() {

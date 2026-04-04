@@ -104,4 +104,8 @@ This workflow uses GitHub OIDC and must be triggered manually with `workflow_dis
 
 The older `./examples/search/build-lambda.sh` path remains useful as a local wiring smoke test for the orchestrator module and the generated direct-handler path.
 
+If you use that direct `%lambda` path outside the local smoke test, the client truststore password
+can be overridden with `CLIENT_TRUSTSTORE_PASSWORD`; it keeps the `secret` default for the packaged
+dev certificate path.
+
 It is not the supported live AWS deployment topology for Search. The supported live AWS lane is the modular 5-Lambda topology described above.

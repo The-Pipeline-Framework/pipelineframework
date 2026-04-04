@@ -89,7 +89,7 @@ jobs:
         run: |
           retries=30
           for i in $(seq 1 "$retries"); do
-            status="$(curl -s -o /dev/null -w "%{http_code}" "${ORCHESTRATOR_URL}/q/health/live" || true)"
+            status="$(curl --connect-timeout 5 --max-time 10 -s -o /dev/null -w "%{http_code}" "${ORCHESTRATOR_URL}/q/health/live" || true)"
             if [ "$status" = "200" ]; then
               exit 0
             fi
@@ -97,7 +97,7 @@ jobs:
             sleep 10
           done
           final_response="$(mktemp)"
-          final_status="$(curl -s -o "${final_response}" -w "%{http_code}" "${ORCHESTRATOR_URL}/q/health/live" || true)"
+          final_status="$(curl --connect-timeout 5 --max-time 10 -s -o "${final_response}" -w "%{http_code}" "${ORCHESTRATOR_URL}/q/health/live" || true)"
           echo "Orchestrator health endpoint did not become ready in time (HTTP ${final_status:-000})"
           echo "Final response body:"
           cat "${final_response}" || true
