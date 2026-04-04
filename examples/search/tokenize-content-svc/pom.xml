@@ -56,6 +56,21 @@
             <scope>${tpf.build.lambda.scope}</scope>
         </dependency>
         <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-amazon-lambda-http</artifactId>
+            <scope>${tpf.build.lambda.http.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-azure-functions</artifactId>
+            <scope>${tpf.build.azure.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-google-cloud-functions</artifactId>
+            <scope>${tpf.build.gcp.scope}</scope>
+        </dependency>
+        <dependency>
             <groupId>org.jboss.slf4j</groupId>
             <artifactId>slf4j-jboss-logmanager</artifactId>
             <scope>runtime</scope>

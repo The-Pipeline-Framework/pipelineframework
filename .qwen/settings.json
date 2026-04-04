@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod +x examples/search/*.sh)",
+      "Bash(./mvnw clean compile)",
+      "Bash(./mvnw clean install)",
+      "Bash(./mvnw test)",
+      "Bash(./mvnw -pl framework/deployment compile)",
+      "Bash(./mvnw -pl framework/deployment test)",
+      "Bash(./mvnw -pl framework compile)",
+      "Bash(./mvnw -pl framework test)",
+      "Bash(find . -name *.java)",
+      "Bash(find examples/search -path */target/failsafe-reports/*.txt)",
+      "Bash(sed -i '' *.java)",
+      "Bash(mv *.java *.java)",
+      "Bash(git add -A)",
+      "Bash(git reset HEAD *.java)",
+      "Bash(git commit -m *)",
+      "Bash(git push origin feat/function-cloud)",
+      "Bash(gh pr create)",
+      "Bash(gh pr view)",
+      "Bash(gh pr edit)"
+    ]
+  },
+  "$version": 3
+}

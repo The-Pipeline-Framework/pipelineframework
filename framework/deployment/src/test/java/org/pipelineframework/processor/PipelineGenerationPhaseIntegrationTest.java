@@ -158,6 +158,169 @@ class PipelineGenerationPhaseIntegrationTest {
         assertTrue(compilation.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/pipeline", "roles.json").isPresent());
     }
 
+    @Test
+    void generatesRestServerArtifactsForRuntimeMappedModularFunctionStepModule() throws IOException {
+        Path projectRoot = tempDir;
+        Files.writeString(projectRoot.resolve("pom.xml"), """
+            <project>
+              <modelVersion>4.0.0</modelVersion>
+              <groupId>com.example</groupId>
+              <artifactId>test</artifactId>
+              <version>1.0.0</version>
+              <packaging>pom</packaging>
+            </project>
+            """);
+
+        Path configDir = projectRoot.resolve("config");
+        Files.createDirectories(configDir);
+        Files.writeString(configDir.resolve("pipeline.modular-lambda.yaml"), """
+            appName: "Search Pipeline"
+            basePackage: "org.pipelineframework.search"
+            transport: "REST"
+            platform: "FUNCTION"
+            steps:
+              - name: "Crawl Source"
+                service: "org.pipelineframework.search.crawl_source.service.ProcessCrawlSourceService"
+                inputTypeName: "CrawlRequest"
+                outputTypeName: "RawDocument"
+            """);
+        Files.writeString(configDir.resolve("pipeline.runtime.yaml"), """
+            version: 1
+            layout: modular
+            validation: strict
+            defaults:
+              runtime: lambda
+              module: per-step
+            runtimes:
+              lambda: {}
+            modules:
+              crawl-source-svc:
+                runtime: lambda
+            steps:
+              ProcessCrawlSourceService:
+                module: crawl-source-svc
+            """);
+
+        Path moduleDir = projectRoot.resolve("crawl-source-svc");
+        Path generatedSourcesDir = moduleDir.resolve("target/generated-sources/pipeline");
+        Files.createDirectories(generatedSourcesDir);
+
+        Compilation compilation = Compiler.javac()
+            .withProcessors(new PipelineStepProcessor())
+            .withOptions(
+                "-Apipeline.generatedSourcesDir=" + generatedSourcesDir.toString().replace('\\', '/'),
+                "-Apipeline.config=" + configDir.resolve("pipeline.modular-lambda.yaml").toString().replace('\\', '/'),
+                "-Apipeline.module=crawl-source-svc",
+                "-Apipeline.moduleDir=" + moduleDir.toString().replace('\\', '/'),
+                "-Apipeline.transport=REST",
+                "-Apipeline.platform=FUNCTION",
+                "-Aprotobuf.descriptor.file="
+                    + resourcePath("descriptor_set_search.dsc").toString().replace('\\', '/'))
+            .compile(
+                JavaFileObjects.forSourceString(
+                    "org.pipelineframework.search.crawl_source.service.ProcessCrawlSourceService",
+                    """
+                        package org.pipelineframework.search.crawl_source.service;
+
+                        import io.smallrye.mutiny.Uni;
+                        import org.pipelineframework.annotation.PipelineStep;
+                        import org.pipelineframework.service.ReactiveService;
+                        import org.pipelineframework.step.StepOneToOne;
+
+                        @PipelineStep(
+                            inputType = org.pipelineframework.search.common.domain.CrawlRequest.class,
+                            outputType = org.pipelineframework.search.common.domain.RawDocument.class,
+                            stepType = StepOneToOne.class,
+                            inboundMapper = org.pipelineframework.search.crawl_source.mapper.CrawlRequestMapper.class,
+                            outboundMapper = org.pipelineframework.search.crawl_source.mapper.RawDocumentMapper.class
+                        )
+                        public class ProcessCrawlSourceService implements ReactiveService<
+                                org.pipelineframework.search.common.domain.CrawlRequest,
+                                org.pipelineframework.search.common.domain.RawDocument> {
+                            @Override
+                            public Uni<org.pipelineframework.search.common.domain.RawDocument> process(
+                                    org.pipelineframework.search.common.domain.CrawlRequest input) {
+                                return Uni.createFrom().item(new org.pipelineframework.search.common.domain.RawDocument());
+                            }
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "org.pipelineframework.search.common.domain.CrawlRequest",
+                    """
+                        package org.pipelineframework.search.common.domain;
+
+                        public class CrawlRequest {
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "org.pipelineframework.search.common.domain.RawDocument",
+                    """
+                        package org.pipelineframework.search.common.domain;
+
+                        public class RawDocument {
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "org.pipelineframework.search.crawl_source.dto.CrawlRequestDto",
+                    """
+                        package org.pipelineframework.search.crawl_source.dto;
+
+                        public class CrawlRequestDto {
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "org.pipelineframework.search.crawl_source.dto.RawDocumentDto",
+                    """
+                        package org.pipelineframework.search.crawl_source.dto;
+
+                        public class RawDocumentDto {
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "org.pipelineframework.search.crawl_source.mapper.CrawlRequestMapper",
+                    """
+                        package org.pipelineframework.search.crawl_source.mapper;
+
+                        import org.pipelineframework.search.common.domain.CrawlRequest;
+                        import org.pipelineframework.search.crawl_source.dto.CrawlRequestDto;
+
+                        public class CrawlRequestMapper {
+                            public CrawlRequest fromDto(CrawlRequestDto dto) {
+                                return new CrawlRequest();
+                            }
+
+                            public CrawlRequestDto toDto(CrawlRequest domain) {
+                                return new CrawlRequestDto();
+                            }
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "org.pipelineframework.search.crawl_source.mapper.RawDocumentMapper",
+                    """
+                        package org.pipelineframework.search.crawl_source.mapper;
+
+                        import org.pipelineframework.search.common.domain.RawDocument;
+                        import org.pipelineframework.search.crawl_source.dto.RawDocumentDto;
+
+                        public class RawDocumentMapper {
+                            public RawDocument fromDto(RawDocumentDto dto) {
+                                return new RawDocument();
+                            }
+
+                            public RawDocumentDto toDto(RawDocument domain) {
+                                return new RawDocumentDto();
+                            }
+                        }
+                        """));
+
+        assertThat(compilation).succeeded();
+
+        Path restServerDir = generatedSourcesDir.resolve("rest-server");
+        assertTrue(hasGeneratedClass(restServerDir, "ProcessCrawlSourceResource"));
+        assertTrue(hasGeneratedClass(restServerDir, "ProcessCrawlSourceFunctionHandler"));
+        assertTrue(compilation.generatedFile(StandardLocation.CLASS_OUTPUT, "META-INF/pipeline", "roles.json").isPresent());
+    }
+
     private Path resourcePath(String name) {
         URL resource = getClass().getClassLoader().getResource(name);
         if (resource == null) {

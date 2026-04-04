@@ -78,7 +78,9 @@ pom.xml.releaseBackup
 /release.properties
 
 # Terraform CLI
-/examples/csv-payments/terraform/.terraform/
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*
 /examples/csv-payments/config/pipeline.runtime.yaml
 
 # flatten plugin
