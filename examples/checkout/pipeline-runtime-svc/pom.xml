@@ -35,6 +35,14 @@
         <pipeline.runtime.pipeline.delivery>${project.basedir}/../delivery-execution-orchestrator-svc/pipeline.yaml</pipeline.runtime.pipeline.delivery>
         <pipeline.runtime.pipeline.payment>${project.basedir}/../payment-capture-orchestrator-svc/pipeline.yaml</pipeline.runtime.pipeline.payment>
         <pipeline.runtime.pipeline.compensation>${project.basedir}/../compensation-failure-orchestrator-svc/pipeline.yaml</pipeline.runtime.pipeline.compensation>
+        <pipeline.runtime.types.checkout>checkout-pipeline-types.proto</pipeline.runtime.types.checkout>
+        <pipeline.runtime.types.consumer>consumer-validation-pipeline-types.proto</pipeline.runtime.types.consumer>
+        <pipeline.runtime.types.restaurant>restaurant-acceptance-pipeline-types.proto</pipeline.runtime.types.restaurant>
+        <pipeline.runtime.types.kitchen>kitchen-preparation-pipeline-types.proto</pipeline.runtime.types.kitchen>
+        <pipeline.runtime.types.dispatch>dispatch-pipeline-types.proto</pipeline.runtime.types.dispatch>
+        <pipeline.runtime.types.delivery>delivery-execution-pipeline-types.proto</pipeline.runtime.types.delivery>
+        <pipeline.runtime.types.payment>payment-capture-pipeline-types.proto</pipeline.runtime.types.payment>
+        <pipeline.runtime.types.compensation>compensation-failure-pipeline-types.proto</pipeline.runtime.types.compensation>
         <pipeline.runtime.duplicate.check.script>${pipeline.runtime.source.root}/build-tools/check-duplicate-sources.sh</pipeline.runtime.duplicate.check.script>
         <pipeline.runtime.source.exclude.orchestrator>**/orchestrator/**/*.java</pipeline.runtime.source.exclude.orchestrator>
     </properties>
@@ -168,6 +176,7 @@
                                 <argument>--module-dir=${project.basedir}</argument>
                                 <argument>--config=${pipeline.runtime.pipeline.checkout}</argument>
                                 <argument>--output-dir=${generated.proto.dir}</argument>
+                                <argument>--types-proto-name=${pipeline.runtime.types.checkout}</argument>
                             </arguments>
                             <addOutputToClasspath>true</addOutputToClasspath>
                             <classpathScope>compile</classpathScope>
@@ -183,6 +192,7 @@
                                 <argument>--module-dir=${project.basedir}</argument>
                                 <argument>--config=${pipeline.runtime.pipeline.consumer}</argument>
                                 <argument>--output-dir=${generated.proto.dir}</argument>
+                                <argument>--types-proto-name=${pipeline.runtime.types.consumer}</argument>
                             </arguments>
                             <addOutputToClasspath>true</addOutputToClasspath>
                             <classpathScope>compile</classpathScope>
@@ -198,6 +208,7 @@
                                 <argument>--module-dir=${project.basedir}</argument>
                                 <argument>--config=${pipeline.runtime.pipeline.restaurant}</argument>
                                 <argument>--output-dir=${generated.proto.dir}</argument>
+                                <argument>--types-proto-name=${pipeline.runtime.types.restaurant}</argument>
                             </arguments>
                             <addOutputToClasspath>true</addOutputToClasspath>
                             <classpathScope>compile</classpathScope>
@@ -213,6 +224,7 @@
                                 <argument>--module-dir=${project.basedir}</argument>
                                 <argument>--config=${pipeline.runtime.pipeline.kitchen}</argument>
                                 <argument>--output-dir=${generated.proto.dir}</argument>
+                                <argument>--types-proto-name=${pipeline.runtime.types.kitchen}</argument>
                             </arguments>
                             <addOutputToClasspath>true</addOutputToClasspath>
                             <classpathScope>compile</classpathScope>
@@ -228,6 +240,7 @@
                                 <argument>--module-dir=${project.basedir}</argument>
                                 <argument>--config=${pipeline.runtime.pipeline.dispatch}</argument>
                                 <argument>--output-dir=${generated.proto.dir}</argument>
+                                <argument>--types-proto-name=${pipeline.runtime.types.dispatch}</argument>
                             </arguments>
                             <addOutputToClasspath>true</addOutputToClasspath>
                             <classpathScope>compile</classpathScope>
@@ -243,6 +256,7 @@
                                 <argument>--module-dir=${project.basedir}</argument>
                                 <argument>--config=${pipeline.runtime.pipeline.delivery}</argument>
                                 <argument>--output-dir=${generated.proto.dir}</argument>
+                                <argument>--types-proto-name=${pipeline.runtime.types.delivery}</argument>
                             </arguments>
                             <addOutputToClasspath>true</addOutputToClasspath>
                             <classpathScope>compile</classpathScope>
@@ -258,6 +272,7 @@
                                 <argument>--module-dir=${project.basedir}</argument>
                                 <argument>--config=${pipeline.runtime.pipeline.payment}</argument>
                                 <argument>--output-dir=${generated.proto.dir}</argument>
+                                <argument>--types-proto-name=${pipeline.runtime.types.payment}</argument>
                             </arguments>
                             <addOutputToClasspath>true</addOutputToClasspath>
                             <classpathScope>compile</classpathScope>
@@ -273,6 +288,7 @@
                                 <argument>--module-dir=${project.basedir}</argument>
                                 <argument>--config=${pipeline.runtime.pipeline.compensation}</argument>
                                 <argument>--output-dir=${generated.proto.dir}</argument>
+                                <argument>--types-proto-name=${pipeline.runtime.types.compensation}</argument>
                             </arguments>
                             <addOutputToClasspath>true</addOutputToClasspath>
                             <classpathScope>compile</classpathScope>
@@ -296,6 +312,25 @@
                 <version>3.2.0</version>
                 <executions>
                     <execution>
+                        <id>reset-generated-proto-and-grpc</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <delete dir="${project.build.outputDirectory}"/>
+                                <delete dir="${project.build.testOutputDirectory}"/>
+                                <delete dir="${generated.proto.dir}"/>
+                                <delete dir="${project.build.directory}/generated-sources/grpc"/>
+                                <delete dir="${project.build.directory}/generated-sources/pipeline"/>
+                                <delete dir="${project.build.directory}/generated-sources/role-compile"/>
+                                <delete dir="${project.build.directory}/generated-test-sources"/>
+                                <mkdir dir="${generated.proto.dir}"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                    <execution>
                         <id>collect-pipeline-runtime-sources</id>
                         <phase>generate-sources</phase>
                         <goals>
@@ -303,6 +338,7 @@
                         </goals>
                         <configuration>
                             <target>
+                                <delete file="${generated.proto.dir}/orchestrator.proto"/>
                                 <delete dir="${project.build.directory}/pipeline-runtime-sources"/>
                                 <mkdir dir="${project.build.directory}/pipeline-runtime-sources"/>
                                 <condition property="is.windows">

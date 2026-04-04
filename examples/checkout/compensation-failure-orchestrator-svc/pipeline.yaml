@@ -1,37 +1,72 @@
-appName: "TPFGo Compensation Pipeline"
-basePackage: "org.pipelineframework.tpfgo.compensation.failure"
-transport: "GRPC"
-platform: "COMPUTE"
+version: 2
+appName: TPFGo Compensation Pipeline
+basePackage: org.pipelineframework.tpfgo.compensation.failure
+transport: GRPC
+platform: COMPUTE
+messages:
+  PaymentCaptureResult:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: paymentId
+        type: uuid
+      - number: 3
+        name: processedAt
+        type: timestamp
+      - number: 4
+        name: amount
+        type: decimal
+      - number: 5
+        name: currency
+        type: string
+      - number: 6
+        name: status
+        type: string
+      - number: 7
+        name: failureCode
+        type: string
+      - number: 8
+        name: failureReason
+        type: string
+  TerminalOrderState:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: outcome
+        type: string
+      - number: 3
+        name: resolvedAt
+        type: timestamp
+      - number: 4
+        name: resolutionAction
+        type: string
+      - number: 5
+        name: paymentStatus
+        type: string
+      - number: 6
+        name: paymentId
+        type: uuid
+      - number: 7
+        name: failureCode
+        type: string
+steps:
+  - name: Compensation Finalize Order
+    service: org.pipelineframework.tpfgo.compensation.failure.compensation_finalize_order.service.ProcessCompensationFinalizeOrderService
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.tpfgo.common.domain.PaymentCaptureResult
+    inputTypeName: PaymentCaptureResult
+    output: org.pipelineframework.tpfgo.common.domain.TerminalOrderState
+    outputTypeName: TerminalOrderState
 input:
   subscription:
-    publication: "tpfgo.payment.capture-result.v1"
-    mapper: "org.pipelineframework.tpfgo.compensation.failure.compensation_finalize_order.service.PaymentCaptureResultMapper"
-steps:
-  - name: "Compensation Finalize Order"
-    service: "org.pipelineframework.tpfgo.compensation.failure.compensation_finalize_order.service.ProcessCompensationFinalizeOrderService"
-    cardinality: "ONE_TO_ONE"
-    input: "org.pipelineframework.tpfgo.common.domain.PaymentCaptureResult"
-    inputTypeName: "PaymentCaptureResult"
-    inputFields:
-      - { name: "orderId", type: "UUID", protoType: "string" }
-      - { name: "paymentId", type: "UUID", protoType: "string" }
-      - { name: "processedAt", type: "Instant", protoType: "string" }
-      - { name: "amount", type: "BigDecimal", protoType: "string" }
-      - { name: "currency", type: "String", protoType: "string" }
-      - { name: "status", type: "String", protoType: "string" }
-      - { name: "failureCode", type: "String", protoType: "string" }
-      - { name: "failureReason", type: "String", protoType: "string" }
-    output: "org.pipelineframework.tpfgo.common.domain.TerminalOrderState"
-    outputTypeName: "TerminalOrderState"
-    outputFields:
-      - { name: "orderId", type: "UUID", protoType: "string" }
-      - { name: "outcome", type: "String", protoType: "string" }
-      - { name: "resolvedAt", type: "Instant", protoType: "string" }
-      - { name: "resolutionAction", type: "String", protoType: "string" }
-      - { name: "paymentStatus", type: "String", protoType: "string" }
-      - { name: "paymentId", type: "UUID", protoType: "string" }
-      - { name: "failureCode", type: "String", protoType: "string" }
+    publication: tpfgo.payment.capture-result.v1
+    mapper: org.pipelineframework.tpfgo.compensation.failure.compensation_finalize_order.service.PaymentCaptureResultMapper
 output:
   checkpoint:
-    publication: "tpfgo.compensation.terminal-state.v1"
-    idempotencyKeyFields: [ "orderId" ]
+    publication: tpfgo.compensation.terminal-state.v1
+    idempotencyKeyFields:
+      - orderId

@@ -620,34 +620,41 @@ class PipelineStepProcessorTest {
         Files.createDirectories(configDir);
         Path pipelineConfig = configDir.resolve("pipeline.yaml");
         Files.writeString(pipelineConfig, """
+            version: 2
             appName: "Test Search Pipeline"
             basePackage: "test.step"
             transport: "GRPC"
+            messages:
+              CrawlRequest:
+                fields:
+                  - number: 1
+                    name: "docId"
+                    type: "uuid"
+                  - number: 2
+                    name: "sourceUrl"
+                    type: "string"
+                  - number: 3
+                    name: "requestedAt"
+                    type: "timestamp"
+              RawDocument:
+                fields:
+                  - number: 1
+                    name: "docId"
+                    type: "uuid"
+                  - number: 2
+                    name: "sourceUrl"
+                    type: "string"
+                  - number: 3
+                    name: "rawContent"
+                    type: "string"
+                  - number: 4
+                    name: "fetchedAt"
+                    type: "timestamp"
             steps:
               - name: "Crawl Source"
                 cardinality: "ONE_TO_ONE"
                 inputTypeName: "CrawlRequest"
-                inputFields:
-                  - name: "docId"
-                    type: "UUID"
-                    protoType: "string"
-                  - name: "sourceUrl"
-                    type: "String"
-                    protoType: "string"
                 outputTypeName: "RawDocument"
-                outputFields:
-                  - name: "docId"
-                    type: "UUID"
-                    protoType: "string"
-                  - name: "sourceUrl"
-                    type: "String"
-                    protoType: "string"
-                  - name: "rawContent"
-                    type: "String"
-                    protoType: "string"
-                  - name: "fetchedAt"
-                    type: "Instant"
-                    protoType: "string"
             """);
 
         // Compile with the PipelineStepProcessor
@@ -719,40 +726,44 @@ class PipelineStepProcessorTest {
         Files.createDirectories(configDir);
         Path pipelineConfig = configDir.resolve("pipeline.yaml");
         Files.writeString(pipelineConfig, """
+            version: 2
             appName: "Test Search Pipeline"
             basePackage: "test.step"
             transport: "REST"
+            messages:
+              RawDocument:
+                fields:
+                  - number: 1
+                    name: "docId"
+                    type: "uuid"
+                  - number: 2
+                    name: "sourceUrl"
+                    type: "string"
+                  - number: 3
+                    name: "rawContent"
+                    type: "string"
+                  - number: 4
+                    name: "fetchedAt"
+                    type: "timestamp"
+              ParsedDocument:
+                fields:
+                  - number: 1
+                    name: "docId"
+                    type: "uuid"
+                  - number: 2
+                    name: "title"
+                    type: "string"
+                  - number: 3
+                    name: "content"
+                    type: "string"
+                  - number: 4
+                    name: "extractedAt"
+                    type: "timestamp"
             steps:
               - name: "Parse Document"
                 cardinality: "ONE_TO_ONE"
                 inputTypeName: "RawDocument"
-                inputFields:
-                  - name: "docId"
-                    type: "UUID"
-                    protoType: "string"
-                  - name: "sourceUrl"
-                    type: "String"
-                    protoType: "string"
-                  - name: "rawContent"
-                    type: "String"
-                    protoType: "string"
-                  - name: "fetchedAt"
-                    type: "Instant"
-                    protoType: "string"
                 outputTypeName: "ParsedDocument"
-                outputFields:
-                  - name: "docId"
-                    type: "UUID"
-                    protoType: "string"
-                  - name: "title"
-                    type: "String"
-                    protoType: "string"
-                  - name: "content"
-                    type: "String"
-                    protoType: "string"
-                  - name: "extractedAt"
-                    type: "Instant"
-                    protoType: "string"
             """);
 
         // Compile with the PipelineStepProcessor

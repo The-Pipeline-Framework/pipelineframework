@@ -22,14 +22,13 @@ import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
 import org.pipelineframework.csv.common.dto.PaymentStatusDto;
-import org.pipelineframework.csv.grpc.ProcessAckPaymentSentSvc;
 
 @SuppressWarnings("unused")
 @Mapper(
     componentModel = "jakarta",
     uses = {CommonConverters.class, AckPaymentSentMapper.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface PaymentStatusMapper extends org.pipelineframework.mapper.Mapper<PaymentStatus, ProcessAckPaymentSentSvc.PaymentStatus> {
+public interface PaymentStatusMapper extends org.pipelineframework.mapper.Mapper<PaymentStatus, org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus> {
 
   PaymentStatusMapper INSTANCE = Mappers.getMapper( PaymentStatusMapper.class );
 
@@ -43,10 +42,10 @@ public interface PaymentStatusMapper extends org.pipelineframework.mapper.Mapper
   @Mapping(target = "fee", qualifiedByName = "bigDecimalToString")
   @Mapping(target = "ackPaymentSentId", qualifiedByName = "uuidToString")
   @Mapping(target = "ackPaymentSent")
-  ProcessAckPaymentSentSvc.PaymentStatus toGrpc(PaymentStatusDto dto);
+  org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus toGrpc(PaymentStatusDto dto);
 
   /**
-   * Converts a gRPC ProcessAckPaymentSentSvc.PaymentStatus message into a PaymentStatusDto.
+   * Converts a gRPC org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus message into a PaymentStatusDto.
    *
    * @param grpcRequest the gRPC PaymentStatus message to convert
    * @return the DTO representation of the provided gRPC PaymentStatus
@@ -55,23 +54,25 @@ public interface PaymentStatusMapper extends org.pipelineframework.mapper.Mapper
   @Mapping(target = "fee", qualifiedByName = "stringToBigDecimal")
   @Mapping(target = "ackPaymentSentId", qualifiedByName = "stringToUUID")
   @Mapping(target = "ackPaymentSent")
-  PaymentStatusDto fromGrpc(ProcessAckPaymentSentSvc.PaymentStatus grpcRequest);
+  PaymentStatusDto fromGrpc(org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus grpcRequest);
 
   @Override
-  default PaymentStatus fromExternal(ProcessAckPaymentSentSvc.PaymentStatus external) {
+  default PaymentStatus fromExternal(org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus external) {
     return fromDto(fromGrpc(external));
   }
 
   @Override
-  default ProcessAckPaymentSentSvc.PaymentStatus toExternal(PaymentStatus domain) {
+  default org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus toExternal(PaymentStatus domain) {
     return toGrpc(toDto(domain));
   }
 
-  default ProcessAckPaymentSentSvc.PaymentStatus toDtoToGrpc(PaymentStatus domain) {
+  @Deprecated(since = "26.2.5", forRemoval = true)
+  default org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus toDtoToGrpc(PaymentStatus domain) {
     return toExternal(domain);
   }
 
-  default PaymentStatus fromGrpcFromDto(ProcessAckPaymentSentSvc.PaymentStatus grpc) {
+  @Deprecated(since = "26.2.5", forRemoval = true)
+  default PaymentStatus fromGrpcFromDto(org.pipelineframework.csv.grpc.PipelineTypes.PaymentStatus grpc) {
     return fromExternal(grpc);
   }
 }

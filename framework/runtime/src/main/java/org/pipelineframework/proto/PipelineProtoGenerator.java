@@ -67,7 +67,7 @@ public class PipelineProtoGenerator {
     public static void main(String[] args) {
         Arguments arguments = Arguments.parse(args);
         PipelineProtoGenerator generator = new PipelineProtoGenerator();
-        generator.generate(arguments.moduleDir(), arguments.configPath(), arguments.outputDir());
+        generator.generate(arguments.moduleDir(), arguments.configPath(), arguments.outputDir(), arguments.typesProtoName());
     }
 
     /**
@@ -84,11 +84,29 @@ public class PipelineProtoGenerator {
      * @throws IllegalStateException if the configuration is invalid or missing required values (for example missing basePackage), if the config cannot be located, if output directories cannot be created, or if IDL compatibility checks fail
      */
     public void generate(Path moduleDir, Path configPath, Path outputDir) {
+        generate(moduleDir, configPath, outputDir, TYPES_PROTO);
+    }
+
+    /**
+     * Generates protobuf definitions from the pipeline template configuration using an explicit shared types proto name.
+     *
+     * This overload behaves like {@link #generate(Path, Path, Path)} but allows callers to choose
+     * the filename used for the shared version-2 message-types proto. When {@code typesProtoName}
+     * is {@code null} or blank, the generator falls back to {@code pipeline-types.proto}.
+     *
+     * @param moduleDir the module directory used to resolve the configuration and default output; may be null to use the current working directory
+     * @param configPath an explicit path to the pipeline template config, or null to locate the config automatically starting from moduleDir
+     * @param outputDir the directory to write generated .proto files to, or null to use the default target/generated-sources/proto under moduleDir
+     * @param typesProtoName the filename to use for the shared v2 types proto; defaults to {@code pipeline-types.proto} when null or blank
+     * @throws IllegalStateException if the configuration is invalid or missing required values, if the config cannot be located, if output directories cannot be created, or if IDL compatibility checks fail
+     */
+    public void generate(Path moduleDir, Path configPath, Path outputDir, String typesProtoName) {
         Path resolvedModuleDir = moduleDir == null ? Path.of("") : moduleDir;
         Path resolvedConfig = resolveConfigPath(resolvedModuleDir, configPath);
         Path resolvedOutput = outputDir != null
             ? outputDir
             : resolvedModuleDir.resolve("target").resolve("generated-sources").resolve("proto");
+        String resolvedTypesProtoName = validateTypesProtoName(typesProtoName);
 
         PipelineTemplateConfigLoader loader = new PipelineTemplateConfigLoader();
         PipelineTemplateConfig config = loader.load(resolvedConfig);
@@ -112,24 +130,41 @@ public class PipelineProtoGenerator {
         List<AspectDefinition> aspectDefinitions = toAspectDefinitions(config.aspects());
 
         if (v2) {
-            Path typesProtoPath = resolvedOutput.resolve(TYPES_PROTO);
+            Path typesProtoPath = resolvedOutput.resolve(resolvedTypesProtoName);
             writeProto(typesProtoPath, renderTypesProto(config.basePackage(), config.messages()));
         }
 
         for (int i = 0; i < resolvedSteps.size(); i++) {
             ResolvedStep step = resolvedSteps.get(i);
             ResolvedStep previous = i > 0 ? resolvedSteps.get(i - 1) : null;
-            String content = renderStepProto(config.basePackage(), step, previous, i == 0, aspectDefinitions, v2);
+            String content = renderStepProto(
+                config.basePackage(),
+                step,
+                previous,
+                i == 0,
+                aspectDefinitions,
+                v2,
+                resolvedTypesProtoName);
             Path protoPath = resolvedOutput.resolve(step.serviceName() + ".proto");
             writeProto(protoPath, content);
         }
 
         String transport = config.transport();
         if (transport == null || transport.isBlank() || "GRPC".equalsIgnoreCase(transport)) {
-            String content = renderOrchestratorProto(config.basePackage(), resolvedSteps, v2);
+            String content = renderOrchestratorProto(config.basePackage(), resolvedSteps, v2, resolvedTypesProtoName);
             Path protoPath = resolvedOutput.resolve(ORCHESTRATOR_PROTO);
             writeProto(protoPath, content);
         }
+    }
+
+    private String validateTypesProtoName(String typesProtoName) {
+        String candidate = (typesProtoName == null || typesProtoName.isBlank()) ? TYPES_PROTO : typesProtoName.trim();
+        if (".".equals(candidate) || "..".equals(candidate)
+            || candidate.contains("/") || candidate.contains("\\")
+            || Path.of(candidate).isAbsolute()) {
+            throw new IllegalArgumentException("--types-proto-name must be a file name, not a path");
+        }
+        return candidate;
     }
 
     /**
@@ -272,6 +307,7 @@ public class PipelineProtoGenerator {
         builder.append("option java_package = \"")
             .append(basePackage)
             .append(".grpc\";\n\n");
+        builder.append("option java_outer_classname = \"PipelineTypes\";\n\n");
         boolean first = true;
         List<String> messageNames = new ArrayList<>(safeMessages.keySet());
         Collections.sort(messageNames);
@@ -303,7 +339,8 @@ public class PipelineProtoGenerator {
         ResolvedStep previous,
         boolean firstStep,
         List<AspectDefinition> aspects,
-        boolean v2
+        boolean v2,
+        String typesProtoName
     ) {
         StringBuilder builder = new StringBuilder();
         builder.append("syntax = \"proto3\";\n\n");
@@ -313,7 +350,7 @@ public class PipelineProtoGenerator {
             .append(".grpc\";\n\n");
 
         if (v2) {
-            builder.append("import \"").append(TYPES_PROTO).append("\";\n\n");
+            builder.append("import \"").append(typesProtoName).append("\";\n\n");
         } else if (!firstStep && previous != null) {
             builder.append("import \"")
                 .append(previous.serviceName())
@@ -608,7 +645,7 @@ public class PipelineProtoGenerator {
      * @param v2 if true, import and reference the shared types proto instead of per-step protos
      * @return the complete orchestrator .proto file content as a String
      */
-    private String renderOrchestratorProto(String basePackage, List<ResolvedStep> steps, boolean v2) {
+    private String renderOrchestratorProto(String basePackage, List<ResolvedStep> steps, boolean v2, String typesProtoName) {
         if (steps == null || steps.isEmpty()) {
             return "";
         }
@@ -623,7 +660,7 @@ public class PipelineProtoGenerator {
             .append(basePackage)
             .append(".grpc\";\n\n");
         if (v2) {
-            builder.append("import \"").append(TYPES_PROTO).append("\";\n");
+            builder.append("import \"").append(typesProtoName).append("\";\n");
         } else {
             builder.append("import \"")
                 .append(first.serviceName())
@@ -856,7 +893,7 @@ public class PipelineProtoGenerator {
     private record AspectDefinition(String name, String position, List<String> enabledTargets) {
     }
 
-    private record Arguments(Path moduleDir, Path configPath, Path outputDir) {
+    private record Arguments(Path moduleDir, Path configPath, Path outputDir, String typesProtoName) {
         /**
          * Parse command-line options and produce an Arguments instance with the resolved paths.
          *
@@ -864,6 +901,7 @@ public class PipelineProtoGenerator {
          * - --module-dir <path> or --module-dir=<path>
          * - --config <path> or --config=<path>
          * - --output-dir <path> or --output-dir=<path>
+         * - --types-proto-name <file> or --types-proto-name=<file>
          * - --help or -h (prints usage and exits)
          *
          * @param args the raw CLI arguments (may be null)
@@ -873,6 +911,7 @@ public class PipelineProtoGenerator {
             Path moduleDir = null;
             Path configPath = null;
             Path outputDir = null;
+            String typesProtoName = TYPES_PROTO;
             if (args != null) {
                 for (int i = 0; i < args.length; i++) {
                     String arg = args[i];
@@ -888,13 +927,17 @@ public class PipelineProtoGenerator {
                         outputDir = Path.of(arg.substring("--output-dir=".length()));
                     } else if ("--output-dir".equals(arg) && i + 1 < args.length) {
                         outputDir = Path.of(args[++i]);
+                    } else if (arg.startsWith("--types-proto-name=")) {
+                        typesProtoName = arg.substring("--types-proto-name=".length());
+                    } else if ("--types-proto-name".equals(arg) && i + 1 < args.length) {
+                        typesProtoName = args[++i];
                     } else if ("--help".equals(arg) || "-h".equals(arg)) {
                         printUsage();
                         System.exit(0);
                     }
                 }
             }
-            return new Arguments(moduleDir, configPath, outputDir);
+            return new Arguments(moduleDir, configPath, outputDir, typesProtoName);
         }
 
         /**
@@ -903,7 +946,8 @@ public class PipelineProtoGenerator {
          * Writes a single-line usage message to standard output describing the accepted options: --module-dir, --config, and --output-dir.
          */
         static void printUsage() {
-            System.out.println("Usage: PipelineProtoGenerator [--module-dir DIR] [--config PATH] [--output-dir DIR]");
+            System.out.println(
+                "Usage: PipelineProtoGenerator [--module-dir DIR] [--config PATH] [--output-dir DIR] [--types-proto-name FILE]");
         }
     }
 }

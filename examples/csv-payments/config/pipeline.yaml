@@ -1,293 +1,165 @@
-appName: "csv-payments"
-basePackage: "org.pipelineframework.csv"
-transport: "GRPC"
+version: 2
+appName: csv-payments
+basePackage: org.pipelineframework.csv
+transport: GRPC
 aspects:
   persistence:
     enabled: true
-    scope: "GLOBAL"
-    position: "AFTER_STEP"
+    scope: GLOBAL
+    position: AFTER_STEP
     config:
-      pluginImplementationClass: "org.pipelineframework.plugin.persistence.PersistenceService"
+      pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService
       enabledTargets:
-        - "GRPC_SERVICE"
-        - "CLIENT_STEP"
+        - GRPC_SERVICE
+        - CLIENT_STEP
+messages:
+  CsvFolder:
+    fields:
+      - number: 1
+        name: path
+        type: path
+  CsvPaymentsInputFile:
+    fields:
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: filepath
+        type: path
+      - number: 3
+        name: csvFolderPath
+        type: path
+  PaymentRecord:
+    fields:
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: csvId
+        type: string
+      - number: 3
+        name: recipient
+        type: string
+      - number: 4
+        name: amount
+        type: decimal
+      - number: 5
+        name: currency
+        type: currency
+      - number: 6
+        name: csvPaymentsInputFilePath
+        type: path
+  AckPaymentSent:
+    fields:
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: conversationId
+        type: uuid
+      - number: 3
+        name: status
+        type: int64
+      - number: 4
+        name: message
+        type: string
+      - number: 5
+        name: paymentRecordId
+        type: uuid
+      - number: 6
+        name: paymentRecord
+        type: PaymentRecord
+  PaymentStatus:
+    fields:
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: reference
+        type: string
+      - number: 3
+        name: status
+        type: string
+      - number: 4
+        name: message
+        type: string
+      - number: 5
+        name: fee
+        type: decimal
+      - number: 6
+        name: ackPaymentSentId
+        type: uuid
+      - number: 7
+        name: ackPaymentSent
+        type: AckPaymentSent
+  PaymentOutput:
+    fields:
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: csvPaymentsOutputFilename
+        type: string
+      - number: 3
+        name: csvId
+        type: string
+      - number: 4
+        name: recipient
+        type: string
+      - number: 5
+        name: amount
+        type: decimal
+      - number: 6
+        name: currency
+        type: currency
+      - number: 7
+        name: conversationId
+        type: uuid
+      - number: 8
+        name: status
+        type: int64
+      - number: 9
+        name: message
+        type: string
+      - number: 10
+        name: fee
+        type: decimal
+      - number: 11
+        name: paymentStatus
+        type: PaymentStatus
+  CsvPaymentsOutputFile:
+    fields:
+      - number: 1
+        name: id
+        type: uuid
+      - number: 2
+        name: filepath
+        type: path
+      - number: 3
+        name: csvFolderPath
+        type: path
 steps:
-  - name: "Process Folder"
-    cardinality: "EXPANSION"
-    inputTypeName: "CsvFolder"
-    inputFields:
-      - name: "path"
-        type: "Path"
-        protoType: "string"
-    outputTypeName: "CsvPaymentsInputFile"
-    outputFields:
-      - name: "id"
-        type: "UUID"
-        protoType: "string"
-      - name: "filepath"
-        type: "Path"
-        protoType: "string"
-      - name: "csvFolderPath"
-        type: "Path"
-        protoType: "string"
-
-  - name: "Process Csv Payments Input"
-    cardinality: "EXPANSION"
-    inputTypeName: "CsvPaymentsInputFile"
-    inputFields:
-      - name: "id"
-        type: "UUID"
-        protoType: "string"
-      - name: "filepath"
-        type: "Path"
-        protoType: "string"
-      - name: "csvFolderPath"
-        type: "Path"
-        protoType: "string"
-    outputTypeName: "PaymentRecord"
-    outputFields:
-      - name: "id"
-        type: "UUID"
-        protoType: "string"
-      - name: "csvId"
-        type: "String"
-        protoType: "string"
-      - name: "recipient"
-        type: "String"
-        protoType: "string"
-      - name: "amount"
-        type: "BigDecimal"
-        protoType: "string"
-      - name: "currency"
-        type: "Currency"
-        protoType: "string"
-      - name: "csvPaymentsInputFilePath"
-        type: "Path"
-        protoType: "string"
-
-#  - name: "Process Csv Payments Input Stream"
-#    cardinality: "EXPANSION"
-#    inputTypeName: "CsvPaymentsInputStream"
-#    inputFields:
-#      - name: "source"
-#        type: "String"
-#        protoType: "string"
-#    outputTypeName: "PaymentRecord"
-#    outputFields:
-#      - name: "id"
-#        type: "UUID"
-#        protoType: "string"
-#      - name: "csvId"
-#        type: "String"
-#        protoType: "string"
-#      - name: "recipient"
-#        type: "String"
-#        protoType: "string"
-#      - name: "amount"
-#        type: "BigDecimal"
-#        protoType: "string"
-#      - name: "currency"
-#        type: "Currency"
-#        protoType: "string"
-#      - name: "csvPaymentsInputFilePath"
-#        type: "Path"
-#        protoType: "string"
-
-  - name: "Process Send Payment Record"
-    cardinality: "ONE_TO_ONE"
-    inputTypeName: "PaymentRecord"
-    inputFields:
-      - name: "id"
-        type: "UUID"
-        protoType: "string"
-      - name: "csvId"
-        type: "String"
-        protoType: "string"
-      - name: "recipient"
-        type: "String"
-        protoType: "string"
-      - name: "amount"
-        type: "BigDecimal"
-        protoType: "string"
-      - name: "currency"
-        type: "Currency"
-        protoType: "string"
-      - name: "csvPaymentsInputFilePath"
-        type: "Path"
-        protoType: "string"
-    outputTypeName: "AckPaymentSent"
-    outputFields:
-      - name: "id"
-        type: "UUID"
-        protoType: "string"
-      - name: "conversationId"
-        type: "UUID"
-        protoType: "string"
-      - name: "status"
-        type: "Long"
-        protoType: "int64"
-      - name: "message"
-        type: "String"
-        protoType: "string"
-      - name: "paymentRecordId"
-        type: "UUID"
-        protoType: "string"
-      - name: "paymentRecord"
-        type: "PaymentRecord"
-        protoType: "PaymentRecord"
-
-  - name: "Process Ack Payment Sent"
-    cardinality: "ONE_TO_ONE"
-    inputTypeName: "AckPaymentSent"
-    inputFields:
-      - name: "id"
-        type: "UUID"
-        protoType: "string"
-      - name: "conversationId"
-        type: "UUID"
-        protoType: "string"
-      - name: "status"
-        type: "Long"
-        protoType: "int64"
-      - name: "message"
-        type: "String"
-        protoType: "string"
-      - name: "paymentRecordId"
-        type: "UUID"
-        protoType: "string"
-      - name: "paymentRecord"
-        type: "PaymentRecord"
-        protoType: "PaymentRecord"
-    outputTypeName: "PaymentStatus"
-    outputFields:
-      - name: "id"
-        type: "UUID"
-        protoType: "string"
-      - name: "reference"
-        type: "String"
-        protoType: "string"
-      - name: "status"
-        type: "String"
-        protoType: "string"
-      - name: "message"
-        type: "String"
-        protoType: "string"
-      - name: "fee"
-        type: "BigDecimal"
-        protoType: "string"
-      - name: "ackPaymentSentId"
-        type: "UUID"
-        protoType: "string"
-      - name: "ackPaymentSent"
-        type: "AckPaymentSent"
-        protoType: "AckPaymentSent"
-
-  - name: "Process Payment Status"
-    cardinality: "ONE_TO_ONE"
-    inputTypeName: "PaymentStatus"
-    inputFields:
-      - name: "id"
-        type: "UUID"
-        protoType: "string"
-      - name: "reference"
-        type: "String"
-        protoType: "string"
-      - name: "status"
-        type: "String"
-        protoType: "string"
-      - name: "message"
-        type: "String"
-        protoType: "string"
-      - name: "fee"
-        type: "BigDecimal"
-        protoType: "string"
-      - name: "ackPaymentSentId"
-        type: "UUID"
-        protoType: "string"
-      - name: "ackPaymentSent"
-        type: "AckPaymentSent"
-        protoType: "AckPaymentSent"
-    outputTypeName: "PaymentOutput"
-    outputFields:
-      - name: "id"
-        type: "UUID"
-        protoType: "string"
-      - name: "csvPaymentsOutputFilename"
-        type: "String"
-        protoType: "string"
-      - name: "csvId"
-        type: "String"
-        protoType: "string"
-      - name: "recipient"
-        type: "String"
-        protoType: "string"
-      - name: "amount"
-        type: "BigDecimal"
-        protoType: "string"
-      - name: "currency"
-        type: "Currency"
-        protoType: "string"
-      - name: "conversationId"
-        type: "UUID"
-        protoType: "string"
-      - name: "status"
-        type: "Long"
-        protoType: "int64"
-      - name: "message"
-        type: "String"
-        protoType: "string"
-      - name: "fee"
-        type: "BigDecimal"
-        protoType: "string"
-      - name: "paymentStatus"
-        type: "PaymentStatus"
-        protoType: "PaymentStatus"
-
-  - name: "Process Csv Payments Output File"
-    cardinality: "MANY_TO_MANY"
-    inputTypeName: "PaymentOutput"
-    inputFields:
-      - name: "id"
-        type: "UUID"
-        protoType: "string"
-      - name: "csvPaymentsOutputFilename"
-        type: "String"
-        protoType: "string"
-      - name: "csvId"
-        type: "String"
-        protoType: "string"
-      - name: "recipient"
-        type: "String"
-        protoType: "string"
-      - name: "amount"
-        type: "BigDecimal"
-        protoType: "string"
-      - name: "currency"
-        type: "Currency"
-        protoType: "string"
-      - name: "conversationId"
-        type: "UUID"
-        protoType: "string"
-      - name: "status"
-        type: "Long"
-        protoType: "int64"
-      - name: "message"
-        type: "String"
-        protoType: "string"
-      - name: "fee"
-        type: "BigDecimal"
-        protoType: "string"
-      - name: "paymentStatus"
-        type: "PaymentStatus"
-        protoType: "PaymentStatus"
-    outputTypeName: "CsvPaymentsOutputFile"
-    outputFields:
-      - name: "id"
-        type: "UUID"
-        protoType: "string"
-      - name: "filepath"
-        type: "Path"
-        protoType: "string"
-      - name: "csvFolderPath"
-        type: "Path"
-        protoType: "string"
+  - name: Process Folder
+    cardinality: EXPANSION
+    inputTypeName: CsvFolder
+    outputTypeName: CsvPaymentsInputFile
+  - name: Process Csv Payments Input
+    cardinality: EXPANSION
+    inputTypeName: CsvPaymentsInputFile
+    outputTypeName: PaymentRecord
+  - name: Process Send Payment Record
+    cardinality: ONE_TO_ONE
+    inputTypeName: PaymentRecord
+    outputTypeName: AckPaymentSent
+  - name: Process Ack Payment Sent
+    cardinality: ONE_TO_ONE
+    inputTypeName: AckPaymentSent
+    outputTypeName: PaymentStatus
+  - name: Process Payment Status
+    cardinality: ONE_TO_ONE
+    inputTypeName: PaymentStatus
+    outputTypeName: PaymentOutput
+  - name: Process Csv Payments Output File
+    cardinality: MANY_TO_MANY
+    inputTypeName: PaymentOutput
+    outputTypeName: CsvPaymentsOutputFile

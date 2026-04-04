@@ -13,37 +13,42 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class CheckoutReferenceContractTest {
 
-    private static final String CREATE_ORDER_CONFIG = "examples/checkout/config/create-order-pipeline.yaml";
-    private static final String DELIVER_ORDER_CONFIG = "examples/checkout/deliver-order-orchestrator-svc/pipeline.yaml";
+    private static final String CHECKOUT_CONFIG = "examples/checkout/checkout-orchestrator-svc/pipeline.yaml";
+    private static final String CONSUMER_VALIDATION_CONFIG =
+        "examples/checkout/consumer-validation-orchestrator-svc/pipeline.yaml";
 
     @Test
     void checkpointOutputMatchesNextPipelineInputContract() {
         PipelineTemplateConfigLoader loader = new PipelineTemplateConfigLoader();
 
-        PipelineTemplateConfig createOrder = loader.load(resolveFromWorkspaceRoot(CREATE_ORDER_CONFIG));
-        PipelineTemplateConfig deliverOrder = loader.load(resolveFromWorkspaceRoot(DELIVER_ORDER_CONFIG));
+        PipelineTemplateConfig checkout = loader.load(resolveFromWorkspaceRoot(CHECKOUT_CONFIG));
+        PipelineTemplateConfig consumerValidation =
+            loader.load(resolveFromWorkspaceRoot(CONSUMER_VALIDATION_CONFIG));
 
-        assertEquals("GRPC", createOrder.transport(), "Create-order transport should be GRPC.");
-        assertEquals("GRPC", deliverOrder.transport(), "Deliver-order transport should be GRPC.");
-        assertFalse(createOrder.steps().isEmpty(), "Create-order pipeline must define steps.");
-        assertFalse(deliverOrder.steps().isEmpty(), "Deliver-order pipeline must define steps.");
+        assertEquals("GRPC", checkout.transport(), "Checkout transport should be GRPC.");
+        assertEquals("GRPC", consumerValidation.transport(), "Consumer-validation transport should be GRPC.");
+        assertFalse(checkout.steps().isEmpty(), "Checkout pipeline must define steps.");
+        assertFalse(consumerValidation.steps().isEmpty(), "Consumer-validation pipeline must define steps.");
 
-        PipelineTemplateStep createOrderTerminalStep = createOrder.steps().getLast();
-        PipelineTemplateStep deliverOrderEntryStep = deliverOrder.steps().getFirst();
+        PipelineTemplateStep checkoutTerminalStep = checkout.steps().getLast();
+        PipelineTemplateStep consumerValidationEntryStep = consumerValidation.steps().getFirst();
 
-        assertEquals(createOrderTerminalStep.outputTypeName(), deliverOrderEntryStep.inputTypeName(),
-            "Pipeline handoff type mismatch between create-order output and deliver-order input.");
+        assertEquals(checkoutTerminalStep.outputTypeName(), consumerValidationEntryStep.inputTypeName(),
+            "Pipeline handoff type mismatch between checkout output and consumer-validation input.");
 
-        Map<String, PipelineTemplateField> createOrderOutputFields = byFieldName(createOrderTerminalStep.outputFields());
-        Map<String, PipelineTemplateField> deliverOrderInputFields = byFieldName(deliverOrderEntryStep.inputFields());
+        Map<String, PipelineTemplateField> checkoutOutputFields = byFieldName(checkoutTerminalStep.outputFields());
+        Map<String, PipelineTemplateField> consumerValidationInputFields =
+            byFieldName(consumerValidationEntryStep.inputFields());
 
-        assertEquals(createOrderOutputFields.keySet(), deliverOrderInputFields.keySet(),
-            "Pipeline handoff fields mismatch between create-order output and deliver-order input.");
+        assertEquals(checkoutOutputFields.keySet(), consumerValidationInputFields.keySet(),
+            "Pipeline handoff fields mismatch between checkout output and consumer-validation input.");
 
-        for (Map.Entry<String, PipelineTemplateField> entry : createOrderOutputFields.entrySet()) {
+        for (Map.Entry<String, PipelineTemplateField> entry : checkoutOutputFields.entrySet()) {
             String fieldName = entry.getKey();
             PipelineTemplateField outputField = entry.getValue();
-            PipelineTemplateField inputField = deliverOrderInputFields.get(fieldName);
+            PipelineTemplateField inputField = consumerValidationInputFields.get(fieldName);
+            assertEquals(outputField.number(), inputField.number(),
+                "Semantic-v2 field number mismatch for handoff field: " + fieldName);
             assertEquals(outputField.type(), inputField.type(),
                 "Java type mismatch for handoff field: " + fieldName);
             assertEquals(outputField.protoType(), inputField.protoType(),

@@ -22,9 +22,9 @@ public interface TokenBatchMapper extends org.pipelineframework.mapper.Mapper<To
   TokenBatch fromDto(TokenBatchDto dto);
 
   // DTO ↔ gRPC
-  org.pipelineframework.search.grpc.TokenizeContentSvc.TokenBatch toGrpc(TokenBatchDto dto);
+  org.pipelineframework.search.grpc.PipelineTypes.TokenBatch toGrpc(TokenBatchDto dto);
 
-  TokenBatchDto fromGrpc(org.pipelineframework.search.grpc.TokenizeContentSvc.TokenBatch grpc);
+  TokenBatchDto fromGrpc(org.pipelineframework.search.grpc.PipelineTypes.TokenBatch grpc);
 
   @BeforeMapping
   default void validateTokenBatchDto(TokenBatchDto dto) {
@@ -55,11 +55,11 @@ public interface TokenBatchMapper extends org.pipelineframework.mapper.Mapper<To
     return toDto(domain);
   }
 
-  default org.pipelineframework.search.grpc.TokenizeContentSvc.TokenBatch toDtoToGrpc(TokenBatch domain) {
+  default org.pipelineframework.search.grpc.PipelineTypes.TokenBatch toDtoToGrpc(TokenBatch domain) {
     return toGrpc(toDto(domain));
   }
 
-  default TokenBatch fromGrpcFromDto(org.pipelineframework.search.grpc.TokenizeContentSvc.TokenBatch grpc) {
+  default TokenBatch fromGrpcFromDto(org.pipelineframework.search.grpc.PipelineTypes.TokenBatch grpc) {
     return fromDto(fromGrpc(grpc));
   }
 }

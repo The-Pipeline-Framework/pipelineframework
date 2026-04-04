@@ -458,10 +458,10 @@
   // Check if a type is a Java scalar type (needs protobuf mapping)
   function isJavaScalarType(javaType) {
     const scalarTypes = [
-      'string', 'integer', 'int', 'long', 'double', 'boolean', 
+      'string', 'integer', 'int', 'long', 'float', 'double', 'boolean', 
       'uuid', 'bigdecimal', 'currency', 'path',
       'list<string>', 'localdatetime', 'localdate', 'offsetdatetime', 'zoneddatetime', 'instant', 'duration', 'period',
-      'uri', 'url', 'file', 'biginteger', 'atomicinteger', 'atomic_int', 'atomiclong', 'atomic_long'
+      'uri', 'url', 'file', 'biginteger', 'atomicinteger', 'atomic_int', 'atomiclong', 'atomic_long', 'byte[]', 'bytes'
     ];
     return scalarTypes.includes(javaType.toLowerCase());
   }
@@ -485,7 +485,236 @@
     if (javaType === 'Map') return true;
     
     // Pattern check for generic Map (e.g. Map<String,Integer>, Map<MyKey,MyValue>)
-    return /^Map<.+?, .+>$/.test(javaType);
+    return /^Map<.+?,\s*.+>$/.test(javaType);
+  }
+
+  function isSemanticScalarType(type) {
+    if (!type || typeof type !== 'string') return false;
+    return [
+      'string', 'bool', 'int32', 'int64', 'float32', 'float64', 'decimal',
+      'uuid', 'timestamp', 'datetime', 'date', 'duration', 'bytes',
+      'currency', 'uri', 'path'
+    ].includes(type.trim().toLowerCase());
+  }
+
+  function splitTopLevelGenericArgs(typeBody) {
+    const parts = [];
+    let current = '';
+    let depth = 0;
+    for (const char of typeBody) {
+      if (char === '<') {
+        depth += 1;
+        current += char;
+      } else if (char === '>') {
+        depth -= 1;
+        current += char;
+      } else if (char === ',' && depth === 0) {
+        parts.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    if (current.trim()) {
+      parts.push(current.trim());
+    }
+    return parts;
+  }
+
+  function semanticTypeToJavaType(type) {
+    if (!type || typeof type !== 'string') return 'String';
+    const normalized = type.trim();
+    if (/^[A-Z][A-Za-z0-9_]*$/.test(normalized)) {
+      return normalized;
+    }
+    switch (normalized.toLowerCase()) {
+      case 'string':
+        return 'String';
+      case 'bool':
+        return 'Boolean';
+      case 'int32':
+        return 'Integer';
+      case 'int64':
+        return 'Long';
+      case 'float32':
+        return 'Float';
+      case 'float64':
+        return 'Double';
+      case 'decimal':
+        return 'BigDecimal';
+      case 'uuid':
+        return 'UUID';
+      case 'timestamp':
+        return 'Instant';
+      case 'datetime':
+        return 'LocalDateTime';
+      case 'date':
+        return 'LocalDate';
+      case 'duration':
+        return 'Duration';
+      case 'bytes':
+        return 'byte[]';
+      case 'currency':
+        return 'Currency';
+      case 'uri':
+        return 'URI';
+      case 'path':
+        return 'Path';
+      default:
+        return normalized;
+    }
+  }
+
+  function uiTypeTokenToSemanticType(type) {
+    if (!type || typeof type !== 'string') return 'string';
+    const normalized = type.trim();
+    switch (normalized.toLowerCase()) {
+      case 'string':
+        return 'string';
+      case 'boolean':
+        return 'bool';
+      case 'integer':
+      case 'int':
+      case 'atomicinteger':
+      case 'atomic_int':
+        return 'int32';
+      case 'long':
+      case 'atomiclong':
+      case 'atomic_long':
+        return 'int64';
+      case 'float':
+        return 'float32';
+      case 'double':
+        return 'float64';
+      case 'bigdecimal':
+        return 'decimal';
+      case 'uuid':
+        return 'uuid';
+      case 'instant':
+      case 'offsetdatetime':
+      case 'zoneddatetime':
+        return 'timestamp';
+      case 'localdatetime':
+        return 'datetime';
+      case 'localdate':
+        return 'date';
+      case 'duration':
+      case 'period':
+        return 'duration';
+      case 'currency':
+        return 'currency';
+      case 'uri':
+      case 'url':
+        return 'uri';
+      case 'path':
+      case 'file':
+        return 'path';
+      case 'biginteger':
+      case 'enum':
+        return 'string';
+      case 'bytes':
+      case 'byte[]':
+        return 'bytes';
+      default:
+        if (isSemanticScalarType(normalized)) {
+          return normalized.toLowerCase();
+        }
+        return normalized;
+    }
+  }
+
+  function semanticFieldToUiField(field) {
+    const semanticType = field.type;
+    if (semanticType === 'map') {
+      const keySemantic = field.keyType;
+      const valueSemantic = field.valueType;
+      const javaType = `Map<${semanticTypeToJavaType(keySemantic)}, ${semanticTypeToJavaType(valueSemantic)}>`;
+      return {
+        name: field.name,
+        type: javaType,
+        protoType: `map<${uiTypeTokenToSemanticType(keySemantic)}, ${uiTypeTokenToSemanticType(valueSemantic)}>`
+      };
+    }
+
+    const baseJavaType = semanticTypeToJavaType(semanticType);
+    return {
+      name: field.name,
+      type: field.repeated ? `List<${baseJavaType}>` : baseJavaType,
+      protoType: /^[A-Z][A-Za-z0-9_]*$/.test(String(semanticType)) ? semanticType : javaTypeToProtoType(baseJavaType)
+    };
+  }
+
+  function authoredFieldToUiField(field) {
+    if (field && Object.prototype.hasOwnProperty.call(field, 'protoType')) {
+      return {
+        ...field,
+        protoType: field.protoType || javaTypeToProtoType(field.type)
+      };
+    }
+    return semanticFieldToUiField(field);
+  }
+
+  function uiFieldToSemanticField(field, number) {
+    const rawType = String(field.type || '').trim();
+    if (!field.name || !rawType) {
+      throw new Error('All exported fields require a non-empty name and type');
+    }
+
+    if (isListType(rawType)) {
+      const inner = rawType.slice(rawType.indexOf('<') + 1, rawType.lastIndexOf('>')).trim();
+      return {
+        number,
+        name: field.name,
+        type: uiTypeTokenToSemanticType(inner),
+        repeated: true
+      };
+    }
+
+    if (isMapType(rawType)) {
+      const inner = rawType.slice(rawType.indexOf('<') + 1, rawType.lastIndexOf('>'));
+      const [keyType, valueType] = splitTopLevelGenericArgs(inner);
+      const semanticKey = uiTypeTokenToSemanticType(keyType);
+      if (/^[A-Z][A-Za-z0-9_]*$/.test(semanticKey)) {
+        throw new Error(`Map field '${field.name}' uses unsupported message key type '${keyType}'`);
+      }
+      return {
+        number,
+        name: field.name,
+        type: 'map',
+        keyType: semanticKey,
+        valueType: uiTypeTokenToSemanticType(valueType)
+      };
+    }
+
+    return {
+      number,
+      name: field.name,
+      type: uiTypeTokenToSemanticType(rawType)
+    };
+  }
+
+  function buildSemanticMessages(steps) {
+    const messages = {};
+    const rememberMessage = (typeName, fields) => {
+      if (!typeName) return;
+      const semanticFields = fields.map((field, index) => uiFieldToSemanticField(field, index + 1));
+      const existing = messages[typeName];
+      if (existing) {
+        const existingJson = JSON.stringify(existing.fields);
+        const nextJson = JSON.stringify(semanticFields);
+        if (existingJson !== nextJson) {
+          throw new Error(`Type '${typeName}' is defined with conflicting fields across steps`);
+        }
+        return;
+      }
+      messages[typeName] = { fields: semanticFields };
+    };
+
+    for (const step of steps) {
+      rememberMessage(step.inputTypeName, step.inputFields || []);
+      rememberMessage(step.outputTypeName, step.outputFields || []);
+    }
+    return messages;
   }
 
   // Java to protobuf type mapping - only for scalar types
@@ -504,10 +733,15 @@
         return 'int32';
       case 'long':
         return 'int64';
+      case 'float':
+        return 'float';
       case 'double':
         return 'double';
       case 'boolean':
         return 'bool';
+      case 'bytes':
+      case 'byte[]':
+        return 'bytes';
       case 'uuid':
       case 'currency':
       case 'path':
@@ -572,70 +806,34 @@
 
   // Generate YAML and download
   function downloadYaml() {
-    // For now, create a simple YAML string to avoid complex escaping issues
-    let yamlContent = '---\n';
-    yamlContent += 'appName: \"' + config.appName + '\"\n';
-    yamlContent += 'basePackage: \"' + config.basePackage + '\"\n';
-    yamlContent += 'steps:\n';
-
-    for (let i = 0; i < config.steps.length; i++) {
-      const step = config.steps[i];
-      yamlContent += '  - stepType: \"' + step.stepType + '\"\n';
-      yamlContent += '    serviceNameCamel: \"' + step.serviceNameCamel + '\"\n';
-      yamlContent += '    serviceName: \"' + step.serviceName + '\"\n';
-      yamlContent += '    cardinality: \"' + step.cardinality + '\"\n';
-      yamlContent += '    inputFields:\n';
-
-      for (let j = 0; j < step.inputFields.length; j++) {
-        const field = step.inputFields[j];
-        yamlContent += '    - protoType: \"' + field.protoType + '\"\n';
-        yamlContent += '      name: \"' + field.name + '\"\n';
-        yamlContent += '      type: \"' + field.type + '\"\n';
-      }
-
-      yamlContent += '    outputFields:\n';
-
-      for (let k = 0; k < step.outputFields.length; k++) {
-        const field = step.outputFields[k];
-        yamlContent += '    - protoType: \"' + field.protoType + '\"\n';
-        yamlContent += '      name: \"' + field.name + '\"\n';
-        yamlContent += '      type: \"' + field.type + '\"\n';
-      }
-
-      yamlContent += '    outputTypeName: \"' + step.outputTypeName + '\"\n';
-      yamlContent += '    inputTypeName: \"' + step.inputTypeName + '\"\n';
-      yamlContent += '    outputTypeSimpleName: \"' + step.outputTypeSimpleName + '\"\n';
-      yamlContent += '    grpcClientName: \"' + step.grpcClientName + '\"\n';
-      yamlContent += '    name: \"' + step.name + '\"\n';
-      yamlContent += '    inputTypeSimpleName: \"' + step.inputTypeSimpleName + '\"\n';
-      yamlContent += '    order: ' + step.order + '\n';
-    }
+    return generateYamlConfig();
   }
 
   // Generate YAML configuration content
   function generateYamlConfig() {
     const normalizedLayout = normalizeRuntimeLayout(config.runtimeLayout);
     const normalizedTransport = normalizeTransport(config.transport, normalizedLayout);
+    const steps = config.steps.map((s) => ({
+      stepType: s.stepType,
+      serviceNameCamel: s.serviceNameCamel,
+      serviceName: s.serviceName,
+      cardinality: s.cardinality,
+      outputTypeName: s.outputTypeName,
+      inputTypeName: s.inputTypeName,
+      outputTypeSimpleName: s.outputTypeSimpleName,
+      grpcClientName: s.grpcClientName,
+      name: s.name,
+      inputTypeSimpleName: s.inputTypeSimpleName,
+      order: s.order
+    }));
     const minimal = {
+      version: 2,
       appName: config.appName,
       basePackage: config.basePackage,
       transport: normalizedTransport,
       runtimeLayout: normalizedLayout,
-      steps: config.steps.map((s) => ({
-        stepType: s.stepType,
-        serviceNameCamel: s.serviceNameCamel,
-        serviceName: s.serviceName,
-        cardinality: s.cardinality,
-        inputFields: s.inputFields,
-        outputFields: s.outputFields,
-        outputTypeName: s.outputTypeName,
-        inputTypeName: s.inputTypeName,
-        outputTypeSimpleName: s.outputTypeSimpleName,
-        grpcClientName: s.grpcClientName,
-        name: s.name,
-        inputTypeSimpleName: s.inputTypeSimpleName,
-        order: s.order
-      }))
+      messages: buildSemanticMessages(config.steps),
+      steps
     };
     if (config.aspects && Object.keys(config.aspects).length > 0) {
       minimal.aspects = config.aspects;
@@ -804,6 +1002,7 @@
       }
       
       // Validate each step has required user-provided fields
+      const messages = data.messages || {};
       for (let i = 0; i < data.steps.length; i++) {
         const step = data.steps[i];
         
@@ -824,16 +1023,24 @@
           throw new Error(`Invalid configuration file: step ${i+1} is missing required field (outputTypeName)`);
         }
         
-        if (!step.inputFields) {
+        if (!step.inputFields && step.inputTypeName && messages[step.inputTypeName]?.fields) {
+          step.inputFields = messages[step.inputTypeName].fields.map((field) => authoredFieldToUiField(field));
+        } else if (!step.inputFields) {
           step.inputFields = [];
         } else if (!Array.isArray(step.inputFields)) {
           throw new Error(`Invalid configuration file: step ${i+1} inputFields must be an array`);
+        } else {
+          step.inputFields = step.inputFields.map((field) => authoredFieldToUiField(field));
         }
         
-        if (!step.outputFields) {
+        if (!step.outputFields && step.outputTypeName && messages[step.outputTypeName]?.fields) {
+          step.outputFields = messages[step.outputTypeName].fields.map((field) => authoredFieldToUiField(field));
+        } else if (!step.outputFields) {
           step.outputFields = [];
         } else if (!Array.isArray(step.outputFields)) {
           throw new Error(`Invalid configuration file: step ${i+1} outputFields must be an array`);
+        } else {
+          step.outputFields = step.outputFields.map((field) => authoredFieldToUiField(field));
         }
         
         // Compute missing computed fields if not present in the uploaded config
@@ -865,8 +1072,8 @@
         // Validate fields have required properties and valid types
         for (let j = 0; j < step.inputFields.length; j++) {
           const field = step.inputFields[j];
-          if (!field.name || !field.type || !field.protoType) {
-            throw new Error(`Invalid configuration file: input field ${j+1} in step ${i+1} is missing required properties (name, type, protoType)`);
+          if (!field.name || !field.type) {
+            throw new Error(`Invalid configuration file: input field ${j+1} in step ${i+1} is missing required properties (name, type)`);
           }
           // Validate that field.type is a valid Java scalar type or custom message type from a previous step
           if (!isValidFieldType(field.type, i, data.steps)) {
@@ -879,8 +1086,8 @@
         
         for (let j = 0; j < step.outputFields.length; j++) {
           const field = step.outputFields[j];
-          if (!field.name || !field.type || !field.protoType) {
-            throw new Error(`Invalid configuration file: output field ${j+1} in step ${i+1} is missing required properties (name, type, protoType)`);
+          if (!field.name || !field.type) {
+            throw new Error(`Invalid configuration file: output field ${j+1} in step ${i+1} is missing required properties (name, type)`);
           }
           // Validate that field.type is a valid Java scalar type or custom message type from a previous step
           if (!isValidFieldType(field.type, i, data.steps)) {

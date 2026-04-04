@@ -50,6 +50,31 @@
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.2.0</version>
+                <executions>
+                    <execution>
+                        <id>reset-generated-sources</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <delete dir="${project.build.outputDirectory}"/>
+                                <delete dir="${project.build.testOutputDirectory}"/>
+                                <delete dir="${project.build.directory}/generated-sources/proto"/>
+                                <delete dir="${project.build.directory}/generated-sources/grpc"/>
+                                <delete dir="${project.build.directory}/generated-sources/pipeline"/>
+                                <delete dir="${project.build.directory}/generated-sources/role-compile"/>
+                                <mkdir dir="${generated.proto.dir}"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
                     <excludes>

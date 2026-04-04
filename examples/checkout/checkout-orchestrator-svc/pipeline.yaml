@@ -1,54 +1,92 @@
-appName: "TPFGo Checkout Pipeline"
-basePackage: "org.pipelineframework.tpfgo.checkout"
-transport: "GRPC"
-platform: "COMPUTE"
+version: 2
+appName: TPFGo Checkout Pipeline
+basePackage: org.pipelineframework.tpfgo.checkout
+transport: GRPC
+platform: COMPUTE
+messages:
+  PlaceOrderRequest:
+    fields:
+      - number: 1
+        name: requestId
+        type: uuid
+      - number: 2
+        name: customerId
+        type: uuid
+      - number: 3
+        name: restaurantId
+        type: uuid
+      - number: 4
+        name: items
+        type: string
+      - number: 5
+        name: totalAmount
+        type: decimal
+      - number: 6
+        name: currency
+        type: string
+  ValidatedOrderRequest:
+    fields:
+      - number: 1
+        name: requestId
+        type: uuid
+      - number: 2
+        name: customerId
+        type: uuid
+      - number: 3
+        name: restaurantId
+        type: uuid
+      - number: 4
+        name: items
+        type: string
+      - number: 5
+        name: totalAmount
+        type: decimal
+      - number: 6
+        name: currency
+        type: string
+      - number: 7
+        name: validatedAt
+        type: timestamp
+  OrderPending:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: requestId
+        type: uuid
+      - number: 3
+        name: customerId
+        type: uuid
+      - number: 4
+        name: restaurantId
+        type: uuid
+      - number: 5
+        name: totalAmount
+        type: decimal
+      - number: 6
+        name: currency
+        type: string
+      - number: 7
+        name: createdAt
+        type: timestamp
 steps:
-  - name: "Checkout Validate Request"
-    service: "org.pipelineframework.tpfgo.checkout.checkout_validate_request.service.ProcessCheckoutValidateRequestService"
-    cardinality: "ONE_TO_ONE"
-    input: "org.pipelineframework.tpfgo.common.domain.PlaceOrderRequest"
-    inputTypeName: "PlaceOrderRequest"
-    inputFields:
-      - { name: "requestId", type: "UUID", protoType: "string" }
-      - { name: "customerId", type: "UUID", protoType: "string" }
-      - { name: "restaurantId", type: "UUID", protoType: "string" }
-      - { name: "items", type: "String", protoType: "string" }
-      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
-      - { name: "currency", type: "String", protoType: "string" }
-    output: "org.pipelineframework.tpfgo.common.domain.ValidatedOrderRequest"
-    outputTypeName: "ValidatedOrderRequest"
-    outputFields:
-      - { name: "requestId", type: "UUID", protoType: "string" }
-      - { name: "customerId", type: "UUID", protoType: "string" }
-      - { name: "restaurantId", type: "UUID", protoType: "string" }
-      - { name: "items", type: "String", protoType: "string" }
-      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
-      - { name: "currency", type: "String", protoType: "string" }
-      - { name: "validatedAt", type: "Instant", protoType: "string" }
-  - name: "Checkout Create Pending"
-    service: "org.pipelineframework.tpfgo.checkout.checkout_create_pending.service.ProcessCheckoutCreatePendingService"
-    cardinality: "ONE_TO_ONE"
-    input: "org.pipelineframework.tpfgo.common.domain.ValidatedOrderRequest"
-    inputTypeName: "ValidatedOrderRequest"
-    inputFields:
-      - { name: "requestId", type: "UUID", protoType: "string" }
-      - { name: "customerId", type: "UUID", protoType: "string" }
-      - { name: "restaurantId", type: "UUID", protoType: "string" }
-      - { name: "items", type: "String", protoType: "string" }
-      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
-      - { name: "currency", type: "String", protoType: "string" }
-      - { name: "validatedAt", type: "Instant", protoType: "string" }
-    output: "org.pipelineframework.tpfgo.common.domain.OrderPending"
-    outputTypeName: "OrderPending"
-    outputFields:
-      - { name: "orderId", type: "UUID", protoType: "string" }
-      - { name: "requestId", type: "UUID", protoType: "string" }
-      - { name: "customerId", type: "UUID", protoType: "string" }
-      - { name: "restaurantId", type: "UUID", protoType: "string" }
-      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
-      - { name: "currency", type: "String", protoType: "string" }
-      - { name: "createdAt", type: "Instant", protoType: "string" }
+  - name: Checkout Validate Request
+    service: org.pipelineframework.tpfgo.checkout.checkout_validate_request.service.ProcessCheckoutValidateRequestService
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.tpfgo.common.domain.PlaceOrderRequest
+    inputTypeName: PlaceOrderRequest
+    output: org.pipelineframework.tpfgo.common.domain.ValidatedOrderRequest
+    outputTypeName: ValidatedOrderRequest
+  - name: Checkout Create Pending
+    service: org.pipelineframework.tpfgo.checkout.checkout_create_pending.service.ProcessCheckoutCreatePendingService
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.tpfgo.common.domain.ValidatedOrderRequest
+    inputTypeName: ValidatedOrderRequest
+    output: org.pipelineframework.tpfgo.common.domain.OrderPending
+    outputTypeName: OrderPending
 output:
   checkpoint:
-    publication: "tpfgo.checkout.order-pending.v1"
-    idempotencyKeyFields: [ "orderId" ]
+    publication: tpfgo.checkout.order-pending.v1
+    idempotencyKeyFields:
+      - orderId

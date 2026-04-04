@@ -22,14 +22,13 @@ import org.mapstruct.ReportingPolicy;
 import org.mapstruct.factory.Mappers;
 import org.pipelineframework.csv.common.domain.PaymentOutput;
 import org.pipelineframework.csv.common.dto.PaymentOutputDto;
-import org.pipelineframework.csv.grpc.ProcessPaymentStatusSvc;
 
 @SuppressWarnings("unused")
 @Mapper(
     componentModel = "jakarta",
     uses = {CommonConverters.class, PaymentStatusMapper.class},
     unmappedTargetPolicy = ReportingPolicy.WARN)
-public interface PaymentOutputMapper extends org.pipelineframework.mapper.Mapper<PaymentOutput, ProcessPaymentStatusSvc.PaymentOutput> {
+public interface PaymentOutputMapper extends org.pipelineframework.mapper.Mapper<PaymentOutput, org.pipelineframework.csv.grpc.PipelineTypes.PaymentOutput> {
 
   PaymentOutputMapper INSTANCE = Mappers.getMapper( PaymentOutputMapper.class );
 
@@ -42,30 +41,32 @@ public interface PaymentOutputMapper extends org.pipelineframework.mapper.Mapper
   @Mapping(target = "currency", qualifiedByName = "currencyToString")
   @Mapping(target = "fee", qualifiedByName = "bigDecimalToString")
   @Mapping(target = "paymentStatus")
-  ProcessPaymentStatusSvc.PaymentOutput toGrpc(PaymentOutputDto dto);
+  org.pipelineframework.csv.grpc.PipelineTypes.PaymentOutput toGrpc(PaymentOutputDto dto);
 
   @Mapping(target = "id", qualifiedByName = "stringToUUID")
   @Mapping(target = "amount", qualifiedByName = "stringToBigDecimal")
   @Mapping(target = "currency", qualifiedByName = "stringToCurrency")
   @Mapping(target = "fee", qualifiedByName = "stringToBigDecimal")
   @Mapping(target = "paymentStatus")
-  PaymentOutputDto fromGrpc(ProcessPaymentStatusSvc.PaymentOutput grpc);
+  PaymentOutputDto fromGrpc(org.pipelineframework.csv.grpc.PipelineTypes.PaymentOutput grpc);
 
   @Override
-  default PaymentOutput fromExternal(ProcessPaymentStatusSvc.PaymentOutput external) {
+  default PaymentOutput fromExternal(org.pipelineframework.csv.grpc.PipelineTypes.PaymentOutput external) {
     return fromDto(fromGrpc(external));
   }
 
   @Override
-  default ProcessPaymentStatusSvc.PaymentOutput toExternal(PaymentOutput domain) {
+  default org.pipelineframework.csv.grpc.PipelineTypes.PaymentOutput toExternal(PaymentOutput domain) {
     return toGrpc(toDto(domain));
   }
 
-  default ProcessPaymentStatusSvc.PaymentOutput toDtoToGrpc(PaymentOutput domain) {
+  @Deprecated(since = "26.2.5", forRemoval = true)
+  default org.pipelineframework.csv.grpc.PipelineTypes.PaymentOutput toDtoToGrpc(PaymentOutput domain) {
     return toExternal(domain);
   }
 
-  default PaymentOutput fromGrpcFromDto(ProcessPaymentStatusSvc.PaymentOutput grpc) {
+  @Deprecated(since = "26.2.5", forRemoval = true)
+  default PaymentOutput fromGrpcFromDto(org.pipelineframework.csv.grpc.PipelineTypes.PaymentOutput grpc) {
     return fromExternal(grpc);
   }
 }

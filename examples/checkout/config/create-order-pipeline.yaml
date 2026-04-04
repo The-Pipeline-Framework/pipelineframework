@@ -1,82 +1,65 @@
-appName: "Checkout Create Order Pipeline"
-basePackage: "org.pipelineframework.checkout.createorder"
-transport: "GRPC"
+version: 2
+appName: Checkout Create Order Pipeline
+basePackage: org.pipelineframework.checkout.createorder
+transport: GRPC
+messages:
+  OrderRequest:
+    fields:
+      - number: 1
+        name: requestId
+        type: uuid
+      - number: 2
+        name: customerId
+        type: uuid
+      - number: 3
+        name: items
+        type: string
+  OrderLineItem:
+    fields:
+      - number: 1
+        name: requestId
+        type: uuid
+      - number: 2
+        name: customerId
+        type: uuid
+      - number: 3
+        name: sku
+        type: string
+      - number: 4
+        name: quantity
+        type: int32
+  InitialOrder:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: customerId
+        type: uuid
+      - number: 3
+        name: itemCount
+        type: int32
+  ReadyOrder:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: customerId
+        type: uuid
+      - number: 3
+        name: readyAt
+        type: timestamp
 steps:
-  - name: "Order Request Process"
-    cardinality: "ONE_TO_MANY"
-    inputTypeName: "OrderRequest"
-    inputFields:
-      - name: "requestId"
-        type: "UUID"
-        protoType: "string"
-      - name: "customerId"
-        type: "UUID"
-        protoType: "string"
-      - name: "items"
-        type: "String"
-        protoType: "string"
-    outputTypeName: "OrderLineItem"
-    outputFields:
-      - name: "requestId"
-        type: "UUID"
-        protoType: "string"
-      - name: "customerId"
-        type: "UUID"
-        protoType: "string"
-      - name: "sku"
-        type: "String"
-        protoType: "string"
-      - name: "quantity"
-        type: "Integer"
-        protoType: "int32"
-  - name: "Order Create"
-    cardinality: "MANY_TO_ONE"
-    inputTypeName: "OrderLineItem"
-    inputFields:
-      - name: "requestId"
-        type: "UUID"
-        protoType: "string"
-      - name: "customerId"
-        type: "UUID"
-        protoType: "string"
-      - name: "sku"
-        type: "String"
-        protoType: "string"
-      - name: "quantity"
-        type: "Integer"
-        protoType: "int32"
-    outputTypeName: "InitialOrder"
-    outputFields:
-      - name: "orderId"
-        type: "UUID"
-        protoType: "string"
-      - name: "customerId"
-        type: "UUID"
-        protoType: "string"
-      - name: "itemCount"
-        type: "Integer"
-        protoType: "int32"
-  - name: "Order Ready"
-    cardinality: "ONE_TO_ONE"
-    inputTypeName: "InitialOrder"
-    inputFields:
-      - name: "orderId"
-        type: "UUID"
-        protoType: "string"
-      - name: "customerId"
-        type: "UUID"
-        protoType: "string"
-      - name: "itemCount"
-        type: "Integer"
-        protoType: "int32"
-    outputTypeName: "ReadyOrder"
-    outputFields:
-      - name: "orderId"
-        type: "UUID"
-        protoType: "string"
-      - name: "customerId"
-        type: "UUID"
-        protoType: "string"
-      - name: "readyAt"
-        type: "Instant"
-        protoType: "string"
+  - name: Order Request Process
+    cardinality: ONE_TO_MANY
+    inputTypeName: OrderRequest
+    outputTypeName: OrderLineItem
+  - name: Order Create
+    cardinality: MANY_TO_ONE
+    inputTypeName: OrderLineItem
+    outputTypeName: InitialOrder
+  - name: Order Ready
+    cardinality: ONE_TO_ONE
+    inputTypeName: InitialOrder
+    outputTypeName: ReadyOrder

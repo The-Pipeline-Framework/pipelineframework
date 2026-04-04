@@ -23,6 +23,29 @@ import static com.google.testing.compile.CompilationSubject.assertThat;
  */
 class PipelineOrchestratorTest {
 
+    private static final String TEST_PIPELINE_YAML = """
+        version: 2
+        appName: "Test Pipeline"
+        basePackage: "test.orchestrator"
+        transport: "GRPC"
+        messages:
+          TestInput:
+            fields:
+              - number: 1
+                name: "id"
+                type: "string"
+          TestOutput:
+            fields:
+              - number: 1
+                name: "result"
+                type: "string"
+        steps:
+          - name: "Process Test"
+            cardinality: "ONE_TO_ONE"
+            inputTypeName: "TestInput"
+            outputTypeName: "TestOutput"
+        """;
+
     @TempDir
     Path tempDir;
 
@@ -54,24 +77,7 @@ class PipelineOrchestratorTest {
         Path configDir = tempDir.resolve("config");
         Files.createDirectories(configDir);
         Path pipelineConfig = configDir.resolve("pipeline.yaml");
-        Files.writeString(pipelineConfig, """
-            appName: "Test Pipeline"
-            basePackage: "test.orchestrator"
-            transport: "GRPC"
-            steps:
-              - name: "Process Test"
-                cardinality: "ONE_TO_ONE"
-                inputTypeName: "TestInput"
-                inputFields:
-                  - name: "id"
-                    type: "String"
-                    protoType: "string"
-                outputTypeName: "TestOutput"
-                outputFields:
-                  - name: "result"
-                    type: "String"
-                    protoType: "string"
-            """);
+        Files.writeString(pipelineConfig, TEST_PIPELINE_YAML);
 
         // Compile with the PipelineStepProcessor
         Compilation compilation = Compiler.javac()
@@ -125,24 +131,7 @@ class PipelineOrchestratorTest {
         Path configDir = tempDir.resolve("config");
         Files.createDirectories(configDir);
         Path pipelineConfig = configDir.resolve("pipeline.yaml");
-        Files.writeString(pipelineConfig, """
-            appName: "Test Pipeline"
-            basePackage: "test.orchestrator"
-            transport: "GRPC"
-            steps:
-              - name: "Process Test"
-                cardinality: "ONE_TO_ONE"
-                inputTypeName: "TestInput"
-                inputFields:
-                  - name: "id"
-                    type: "String"
-                    protoType: "string"
-                outputTypeName: "TestOutput"
-                outputFields:
-                  - name: "result"
-                    type: "String"
-                    protoType: "string"
-            """);
+        Files.writeString(pipelineConfig, TEST_PIPELINE_YAML);
 
         // Compile with the PipelineStepProcessor
         Compilation compilation = Compiler.javac()

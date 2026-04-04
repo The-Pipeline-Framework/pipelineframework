@@ -72,6 +72,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
          */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
+        generationPathResolver.resetGeneratedSourcesRoot(ctx);
+
         // Get the bindings map from the context
         Map<String, Object> bindingsMap = ctx.getRendererBindings();
 

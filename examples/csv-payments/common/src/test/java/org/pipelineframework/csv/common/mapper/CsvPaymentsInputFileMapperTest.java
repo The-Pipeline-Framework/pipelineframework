@@ -24,7 +24,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.csv.common.domain.CsvPaymentsInputFile;
 import org.pipelineframework.csv.common.dto.CsvPaymentsInputFileDto;
-import org.pipelineframework.csv.grpc.ProcessFolderSvc;
+import org.pipelineframework.csv.grpc.PipelineTypes;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -102,7 +102,7 @@ class CsvPaymentsInputFileMapperTest {
                         .build();
 
         // When
-        ProcessFolderSvc.CsvPaymentsInputFile grpc = mapper.toGrpc(dto);
+        PipelineTypes.CsvPaymentsInputFile grpc = mapper.toGrpc(dto);
 
         // Then
         assertNotNull(grpc);
@@ -116,8 +116,8 @@ class CsvPaymentsInputFileMapperTest {
         // Given
         UUID id = UUID.randomUUID();
 
-        ProcessFolderSvc.CsvPaymentsInputFile grpc =
-                ProcessFolderSvc.CsvPaymentsInputFile.newBuilder()
+        PipelineTypes.CsvPaymentsInputFile grpc =
+                PipelineTypes.CsvPaymentsInputFile.newBuilder()
                         .setId(id.toString())
                         .setFilepath("/test/input/file.csv")
                         .setCsvFolderPath("/test/input")
@@ -142,7 +142,7 @@ class CsvPaymentsInputFileMapperTest {
         domain.setCsvFolderPath(Path.of("/test/input"));
 
         // When
-        ProcessFolderSvc.CsvPaymentsInputFile grpc = mapper.toDtoToGrpc(domain);
+        PipelineTypes.CsvPaymentsInputFile grpc = mapper.toDtoToGrpc(domain);
 
         // Then
         assertNotNull(grpc);
@@ -156,8 +156,8 @@ class CsvPaymentsInputFileMapperTest {
         // Given
         UUID id = UUID.randomUUID();
 
-        ProcessFolderSvc.CsvPaymentsInputFile grpc =
-                ProcessFolderSvc.CsvPaymentsInputFile.newBuilder()
+        PipelineTypes.CsvPaymentsInputFile grpc =
+                PipelineTypes.CsvPaymentsInputFile.newBuilder()
                         .setId(id.toString())
                         .setFilepath("/test/input/file.csv")
                         .setCsvFolderPath("/test/input")
