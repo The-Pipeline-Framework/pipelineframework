@@ -34,10 +34,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
@@ -46,14 +46,27 @@ jobs:
       - name: Configure Maven
         run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> "$GITHUB_ENV"
 
+      - name: Validate AWS workflow configuration
+        env:
+          AWS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+          AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+        run: |
+          if [ -z "$AWS_ROLE_ARN" ]; then
+            echo "::error::Missing repo secret AWS_ROLE_ARN for Search AWS Modular Lambda E2E."
+            exit 1
+          fi
+          echo "Using AWS region ${AWS_REGION}"
+
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        id: configure_aws
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        id: setup_terraform
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: 1.9.0
           terraform_wrapper: false
@@ -65,10 +78,12 @@ jobs:
         run: ./examples/search/build-lambda-modular.sh -DskipTests -Dquarkus.container-image.build=false
 
       - name: Terraform Init
+        id: terraform_init
         working-directory: examples/search/terraform/aws-modular
         run: terraform init
 
       - name: Terraform Apply
+        id: terraform_apply
         working-directory: examples/search/terraform/aws-modular
         env:
           TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
@@ -119,7 +134,7 @@ jobs:
             verify
 
       - name: Terraform Destroy
-        if: ${{ always() && inputs.terraform_destroy }}
+        if: ${{ always() && inputs.terraform_destroy && steps.setup_terraform.outcome == 'success' && steps.terraform_init.outcome == 'success' }}
         working-directory: examples/search/terraform/aws-modular
         env:
           TF_VAR_aws_region: ${{ vars.AWS_REGION || 'us-east-1' }}
