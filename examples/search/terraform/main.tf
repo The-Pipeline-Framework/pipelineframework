@@ -13,9 +13,9 @@ resource "azurerm_storage_account" "function_storage" {
   # LRS is intentional for E2E/test infrastructure (cost-effective, no geo-redundancy required).
   # For production deployments, consider GRS or RA-GRS for geo-redundancy.
   account_replication_type = "LRS"
-  enable_https_traffic_only = true
+  https_traffic_only_enabled = true
   min_tls_version          = "TLS1_2"
-  allow_shared_key_access  = false
+  shared_access_key_enabled = false
 
   # Network security - restrict access to function app only
   network_rules {
@@ -61,9 +61,12 @@ resource "azurerm_linux_function_app" "search_pipeline" {
     health_check_path              = "/q/health/live"
     health_check_eviction_time_in_min = 10
 
-    cors {
-      allowed_origins     = var.allowed_cors_origins
-      support_credentials = false
+    dynamic "cors" {
+      for_each = length(var.allowed_cors_origins) > 0 ? [1] : []
+      content {
+        allowed_origins     = var.allowed_cors_origins
+        support_credentials = false
+      }
     }
   }
 

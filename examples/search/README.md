@@ -69,21 +69,15 @@ Build the search pipeline for Azure Functions deployment:
 Run the Azure Functions bootstrap smoke test:
 
 ```bash
-./mvnw -pl orchestrator-svc -am \
-  -Dtpf.build.platform=FUNCTION \
-  -Dtpf.build.transport=REST \
-  -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
-  -Dtpf.build.azure.scope=compile \
-  -Dquarkus.profile=azure-functions \
-  -DskipTests \
-  compile
+./scripts/ci/bootstrap-local-repo-prereqs.sh framework
 
-./mvnw -pl orchestrator-svc \
+./mvnw -f examples/search/orchestrator-svc/pom.xml \
   -Dtpf.build.platform=FUNCTION \
   -Dtpf.build.transport=REST \
   -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
   -Dtpf.build.azure.scope=compile \
   -Dquarkus.profile=azure-functions \
+  -Dsurefire.failIfNoSpecifiedTests=false \
   -Dtest=AzureFunctionsBootstrapSmokeTest \
   test
 ```
@@ -166,25 +160,55 @@ The reduced `IndexAck` now carries aggregate document signals:
 
 This keeps the lane business-relevant (document-level indexing summary), not just structural fan-out/fan-in.
 
+### Modular AWS Lambda Lane
+
+The supported live AWS lane for Search is now the modular 5-Lambda topology:
+
+- `orchestrator-svc`
+- `crawl-source-svc`
+- `parse-document-svc`
+- `tokenize-content-svc`
+- `index-document-svc`
+
+Build it with:
+
+```bash
+./build-lambda-modular.sh -DskipTests -Dquarkus.container-image.build=false
+```
+
+This build uses:
+
+- `config/pipeline.runtime.yaml` for runtime placement
+- `config/pipeline.modular-lambda.yaml` for the dedicated aspect-free AWS topology
+- `quarkus-amazon-lambda-http` for the Lambda HTTP bridge path
+
+Terraform for the disposable AWS topology lives under `terraform/aws-modular`.
+
+### Historical Single-Lambda Smoke Boundary
+
+`./build-lambda.sh` still exists as a local wiring smoke path for the orchestrator module and the generated direct Lambda handler path.
+
+It is not the supported live AWS deployment topology for Search.
+
 ### Handler Selection For Modules With Multiple Generated Handlers
 
 Some modules can contain more than one generated function handler (for example, step handlers plus side effect handlers).
 In those cases, always select the deployed entrypoint explicitly via:
 
 ```properties
-%lambda.quarkus.lambda.handler=<fully.qualified.HandlerClassName>
+%lambda.quarkus.lambda.handler=<handlerBeanName>
 ```
 
 Current examples:
 
 - Orchestrator entrypoint:
-  - `%lambda.quarkus.lambda.handler=org.pipelineframework.search.orchestrator.service.PipelineRunFunctionHandler`
+  - `%lambda.quarkus.lambda.handler=PipelineRunFunctionHandler`
 - Persistence side effect entrypoint:
-  - `%lambda.quarkus.lambda.handler=org.pipelineframework.search.crawl_source.service.pipeline.PersistenceRawDocumentSideEffectFunctionHandler`
+  - `%lambda.quarkus.lambda.handler=PersistenceRawDocumentSideEffectFunctionHandler`
 - Cache invalidation entrypoint:
-  - `%lambda.quarkus.lambda.handler=org.pipelineframework.search.cache_invalidation.service.pipeline.CacheInvalidationFunctionHandler`
+  - `%lambda.quarkus.lambda.handler=CacheInvalidationFunctionHandler`
 
-If handler generation changes, keep this value pinned to the intended runtime entrypoint per module.
+This value must match the generated handler's `@Named` bean name, not its fully qualified class name.
 
 ## Constructing Crawl Requests
 

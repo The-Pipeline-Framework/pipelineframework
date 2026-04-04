@@ -476,7 +476,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                         "Got transport=" + transport + ", platform=FUNCTION. " +
                         "Use pipeline.transport=REST with pipeline.platform=FUNCTION.");
                 }
-                if (binding.inputStreaming() || binding.outputStreaming()) {
+                if (!ctx.isFunctionHttpBridgeEnabled() && (binding.inputStreaming() || binding.outputStreaming())) {
                     throw new IllegalStateException(
                         "FUNCTION platform mode requires unary input and output for orchestrator. " +
                         "Got transport=" + transport + ", platform=FUNCTION, " +
@@ -498,7 +498,10 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     descriptorSet));
                 
                 // Generate function handlers for FUNCTION platform mode (unary only)
-                if (ctx.isPlatformModeFunction() && !binding.inputStreaming() && !binding.outputStreaming()) {
+                if (ctx.isPlatformModeFunction()
+                    && !ctx.isFunctionHttpBridgeEnabled()
+                    && !binding.inputStreaming()
+                    && !binding.outputStreaming()) {
                     orchestratorFunctionHandlerRenderer.render(binding, new GenerationContext(
                         ctx.getProcessingEnv(),
                         resolveRoleOutputDir(ctx, role),
@@ -519,7 +522,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     roleMetadataGenerator.recordClassWithRole(
                         basePackage + ".orchestrator.service." + AbstractOrchestratorFunctionHandlerRenderer.RESULT_HANDLER_CLASS,
                         role.name());
-                } else if (ctx.isPlatformModeFunction()) {
+                } else if (ctx.isPlatformModeFunction() && !ctx.isFunctionHttpBridgeEnabled()) {
                     // FUNCTION platform mode requires unary input/output for orchestrator handlers
                     throw new IllegalStateException(
                         "Orchestrator function handlers require unary input and output. " +

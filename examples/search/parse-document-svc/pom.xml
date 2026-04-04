@@ -57,6 +57,11 @@
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-amazon-lambda-http</artifactId>
+            <scope>${tpf.build.lambda.http.scope}</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
             <artifactId>quarkus-azure-functions</artifactId>
             <scope>${tpf.build.azure.scope}</scope>
         </dependency>

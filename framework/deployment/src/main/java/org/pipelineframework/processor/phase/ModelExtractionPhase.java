@@ -19,6 +19,7 @@ import javax.lang.model.util.Types;
 
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.TypeName;
+import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
@@ -300,8 +301,11 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         if (stepDef.inputType() == null || stepDef.outputType() == null) {
             return null;
         }
-        TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), stepDef.executionClass());
-        TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), stepDef.executionClass());
+        String templateBasePackage = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+            ? config.basePackage()
+            : null;
+        TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), stepDef.executionClass(), templateBasePackage);
+        TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), stepDef.executionClass(), templateBasePackage);
         StreamingShape streamingShape = stepDef.streamingShapeHint() != null
             ? stepDef.streamingShapeHint()
             : StreamingShape.UNARY_UNARY;
@@ -349,9 +353,12 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .build();
     }
 
-    private TypeName normalizeLegacyDomainType(TypeName declaredType, ClassName executionClass) {
+    private TypeName normalizeLegacyDomainType(TypeName declaredType, ClassName executionClass, String basePackageHint) {
         if (!(declaredType instanceof ClassName className) || !className.packageName().isEmpty()) {
             return declaredType;
+        }
+        if (basePackageHint != null && !basePackageHint.isBlank()) {
+            return ClassName.bestGuess(basePackageHint + ".common.domain." + className.simpleName());
         }
         String executionPkg = executionClass.packageName();
         if (executionPkg == null || executionPkg.isBlank()) {

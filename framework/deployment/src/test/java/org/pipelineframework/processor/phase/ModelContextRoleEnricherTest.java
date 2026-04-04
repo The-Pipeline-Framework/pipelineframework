@@ -20,6 +20,7 @@ import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TransportMode;
 import org.pipelineframework.processor.ir.TypeMapping;
+import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -74,6 +75,32 @@ class ModelContextRoleEnricherTest {
 
         List<PipelineStepModel> result = enricher.enrich(ctx, List.of(step("ProcessAService", true)));
         assertTrue(result.isEmpty());
+    }
+
+    @Test
+    void enrichKeepsServerModelsForRuntimeMappedModularStepModule() {
+        PipelineCompilationContext ctx = new PipelineCompilationContext(null, null);
+        ctx.setModuleName("crawl-source-svc");
+        ctx.setRuntimeMapping(new PipelineRuntimeMapping(
+            PipelineRuntimeMapping.Layout.MODULAR,
+            PipelineRuntimeMapping.Validation.STRICT,
+            PipelineRuntimeMapping.Defaults.defaultValues(),
+            Map.of("lambda", "lambda"),
+            Map.of("crawl-source-svc", "lambda"),
+            Map.of("ProcessAService", "crawl-source-svc"),
+            Map.of()));
+
+        List<PipelineStepModel> result = enricher.enrich(
+            ctx,
+            List.of(
+                step("ProcessAService", false),
+                step("ProcessBService", false).toBuilder()
+                    .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+                    .build()));
+
+        assertEquals(1, result.size());
+        assertEquals("ProcessAService", result.get(0).serviceName());
+        assertEquals(DeploymentRole.PIPELINE_SERVER, result.get(0).deploymentRole());
     }
 
     private PipelineStepModel step(String serviceName, boolean sideEffect) {

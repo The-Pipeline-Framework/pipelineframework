@@ -31,6 +31,9 @@ public class RedisHostsValidator {
     @ConfigProperty(name = "quarkus.redis.hosts")
     Optional<String> redisHosts;
 
+    @ConfigProperty(name = "pipeline.cache.provider")
+    Optional<String> cacheProvider;
+
     /**
      * Validates that the `quarkus.redis.hosts` configuration is provided when running in production.
      *
@@ -43,7 +46,11 @@ public class RedisHostsValidator {
         java.util.List<String> profiles = ConfigUtils.getProfiles();
         boolean isProd = profiles.stream().anyMatch(profile -> "prod".equalsIgnoreCase(profile));
         boolean isBlankOrMissing = redisHosts.map(String::isBlank).orElse(true);
-        if (isProd && isBlankOrMissing) {
+        boolean redisSelected = cacheProvider
+            .map(String::trim)
+            .map("redis"::equalsIgnoreCase)
+            .orElse(false);
+        if (isProd && redisSelected && isBlankOrMissing) {
             throw new IllegalStateException(
                 "Missing required config: quarkus.redis.hosts (set REDIS_HOSTS in production).");
         }

@@ -302,4 +302,38 @@ class ModelExtractionPhaseTest {
         assertNotNull(model);
         assertEquals(DeploymentRole.ORCHESTRATOR_CLIENT, model.deploymentRole());
     }
+
+    @Test
+    void crossModuleInternalModelUsesTemplateBasePackageForShortYamlTypes() {
+        ModelExtractionPhase phase = new ModelExtractionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+        context.setPipelineTemplateConfig(new org.pipelineframework.config.template.PipelineTemplateConfig(
+            "search-pipeline",
+            "org.pipelineframework.search",
+            "REST",
+            List.of(),
+            java.util.Map.of()));
+
+        StepDefinition stepDefinition = new StepDefinition(
+            "Crawl Source",
+            StepKind.INTERNAL,
+            ClassName.get("org.pipelineframework.search.crawl_source.service", "ProcessCrawlSourceService"),
+            null,
+            null,
+            MapperFallbackMode.NONE,
+            ClassName.get("", "CrawlRequest"),
+            ClassName.get("", "RawDocument"),
+            StreamingShape.UNARY_UNARY
+        );
+
+        PipelineStepModel model = phase.createCrossModuleInternalModel(stepDefinition, context);
+
+        assertNotNull(model);
+        assertEquals(
+            ClassName.get("org.pipelineframework.search.common.domain", "CrawlRequest"),
+            model.inboundDomainType());
+        assertEquals(
+            ClassName.get("org.pipelineframework.search.common.domain", "RawDocument"),
+            model.outboundDomainType());
+    }
 }
