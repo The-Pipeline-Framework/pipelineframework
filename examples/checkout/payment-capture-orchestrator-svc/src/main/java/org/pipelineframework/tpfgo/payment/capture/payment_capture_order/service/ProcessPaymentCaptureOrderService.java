@@ -14,14 +14,7 @@ import org.pipelineframework.service.ReactiveService;
 import org.pipelineframework.tpfgo.common.domain.OrderDelivered;
 import org.pipelineframework.tpfgo.common.domain.PaymentCaptureResult;
 
-@PipelineStep(
-    inputType = OrderDelivered.class,
-    outputType = PaymentCaptureResult.class,
-    stepType = org.pipelineframework.step.StepOneToOne.class,
-    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-    inboundMapper = org.pipelineframework.tpfgo.payment.capture.payment_capture_order.service.OrderDeliveredMapper.class,
-    outboundMapper = org.pipelineframework.tpfgo.payment.capture.payment_capture_order.service.PaymentCaptureResultMapper.class
-)
+@PipelineStep
 @ApplicationScoped
 public class ProcessPaymentCaptureOrderService implements ReactiveService<OrderDelivered, PaymentCaptureResult> {
 

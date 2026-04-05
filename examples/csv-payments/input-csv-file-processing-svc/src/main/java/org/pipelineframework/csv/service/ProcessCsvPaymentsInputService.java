@@ -38,14 +38,7 @@ import org.pipelineframework.csv.common.mapper.PaymentRecordMapper;
 import org.pipelineframework.csv.util.DemandPacerConfig;
 import org.pipelineframework.service.ReactiveStreamingService;
 
-@PipelineStep(
-    inputType = CsvPaymentsInputFile.class,
-    outputType = PaymentRecord.class,
-    stepType = org.pipelineframework.step.StepOneToMany.class,
-    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-    inboundMapper = CsvPaymentsInputFileMapper.class,
-    outboundMapper = PaymentRecordMapper.class
-)
+@PipelineStep
 @ApplicationScoped
 @Getter
 public class ProcessCsvPaymentsInputService

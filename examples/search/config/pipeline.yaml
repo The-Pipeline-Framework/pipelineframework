@@ -157,26 +157,34 @@ steps:
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.search.common.domain.CrawlRequest
     inputTypeName: CrawlRequest
+    inboundMapper: org.pipelineframework.search.common.mapper.CrawlRequestMapper
     output: org.pipelineframework.search.common.domain.RawDocument
     outputTypeName: RawDocument
+    outboundMapper: org.pipelineframework.search.common.mapper.RawDocumentMapper
   - name: Parse Document
     service: org.pipelineframework.search.parse_document.service.ProcessParseDocumentService
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.search.common.domain.RawDocument
     inputTypeName: RawDocument
+    inboundMapper: org.pipelineframework.search.common.mapper.RawDocumentMapper
     output: org.pipelineframework.search.common.domain.ParsedDocument
     outputTypeName: ParsedDocument
+    outboundMapper: org.pipelineframework.search.common.mapper.ParsedDocumentMapper
   - name: Tokenize Content
     service: org.pipelineframework.search.tokenize_content.service.ProcessTokenizeContentService
     cardinality: ONE_TO_MANY
     input: org.pipelineframework.search.common.domain.ParsedDocument
     inputTypeName: ParsedDocument
+    inboundMapper: org.pipelineframework.search.common.mapper.ParsedDocumentMapper
     output: org.pipelineframework.search.common.domain.TokenBatch
     outputTypeName: TokenBatch
+    outboundMapper: org.pipelineframework.search.common.mapper.TokenBatchMapper
   - name: Index Document
     service: org.pipelineframework.search.index_document.service.ProcessIndexDocumentService
     cardinality: MANY_TO_ONE
     input: org.pipelineframework.search.common.domain.TokenBatch
     inputTypeName: TokenBatch
+    inboundMapper: org.pipelineframework.search.common.mapper.TokenBatchMapper
     output: org.pipelineframework.search.common.domain.IndexAck
     outputTypeName: IndexAck
+    outboundMapper: org.pipelineframework.search.common.mapper.IndexAckMapper

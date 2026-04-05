@@ -91,15 +91,19 @@ steps:
     cardinality: ONE_TO_MANY
     input: org.pipelineframework.tpfgo.common.domain.OrderAcceptedByRestaurant
     inputTypeName: OrderAcceptedByRestaurant
+    inboundMapper: org.pipelineframework.tpfgo.kitchen.preparation.kitchen_expand_tasks.service.OrderAcceptedByRestaurantMapper
     output: org.pipelineframework.tpfgo.common.domain.KitchenTask
     outputTypeName: KitchenTask
+    outboundMapper: org.pipelineframework.tpfgo.kitchen.preparation.kitchen_expand_tasks.service.KitchenTaskMapper
   - name: Kitchen Reduce Completion
     service: org.pipelineframework.tpfgo.kitchen.preparation.kitchen_reduce_completion.service.ProcessKitchenReduceCompletionService
     cardinality: MANY_TO_ONE
     input: org.pipelineframework.tpfgo.common.domain.KitchenTask
     inputTypeName: KitchenTask
+    inboundMapper: org.pipelineframework.tpfgo.kitchen.preparation.kitchen_expand_tasks.service.KitchenTaskMapper
     output: org.pipelineframework.tpfgo.common.domain.OrderReadyForDispatch
     outputTypeName: OrderReadyForDispatch
+    outboundMapper: org.pipelineframework.tpfgo.kitchen.preparation.kitchen_reduce_completion.service.OrderReadyForDispatchMapper
 input:
   subscription:
     publication: tpfgo.restaurant.order-accepted.v1

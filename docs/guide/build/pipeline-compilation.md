@@ -21,12 +21,15 @@ For runtime layout usage and build migration, see:
 
 ## Overview
 
-The Pipeline Framework uses annotation processing to automatically generate the necessary infrastructure for pipeline execution. When you annotate your services with `@PipelineStep`, the framework's annotation processor:
+The Pipeline Framework uses YAML-first compilation to automatically generate the necessary infrastructure for pipeline execution.
+For internal `service:` steps:
 
-1. Discovers all annotated services at build time
-2. Generates transport adapters and client steps for the configured transport (gRPC or REST)
-3. Expands configured aspects into synthetic side-effect steps when a plugin host is present
-4. Registers all generated components with the dependency injection container
+1. `pipeline.yaml` declares the service class, cardinality, domain input/output types, and optional inbound/outbound mappers
+2. `@PipelineStep` marks the Java service class so the compiler can discover it
+3. The compiler validates the YAML contract against the implemented reactive service interface
+4. It generates transport adapters and client steps for the configured transport (gRPC or REST)
+5. It expands configured aspects into synthetic side-effect steps when a plugin host is present
+6. It registers all generated components with the dependency injection container
 
 This eliminates the need for manual configuration and ensures consistency across your pipeline.
 
@@ -56,17 +59,21 @@ CDI registration
 ```
 
 ### 1. Build-Time Discovery
-During the Maven build process, the annotation processor scans for `@PipelineStep` annotations:
+During the Maven build process, the compiler reads `pipeline.yaml` and resolves each internal `service:` step against a class annotated with `@PipelineStep`:
+
+```yaml
+steps:
+  - name: process-payment
+    service: com.app.payment.ProcessPaymentService
+    cardinality: ONE_TO_ONE
+    input: com.app.domain.PaymentRecord
+    output: com.app.domain.PaymentStatus
+    inboundMapper: com.app.payment.PaymentRecordMapper
+    outboundMapper: com.app.payment.PaymentStatusMapper
+```
 
 ```java
-// At build time, the processor finds this annotation
-@PipelineStep(
-    inputType = PaymentRecord.class,
-    outputType = PaymentStatus.class,
-    stepType = StepOneToOne.class,
-    inboundMapper = PaymentRecordInboundMapper.class,
-    outboundMapper = PaymentStatusOutboundMapper.class
-)
+@PipelineStep
 @ApplicationScoped
 public class ProcessPaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
     @Override
@@ -75,6 +82,8 @@ public class ProcessPaymentService implements ReactiveService<PaymentRecord, Pay
     }
 }
 ```
+
+The annotation is the marker plus Java-local execution hints. Current internal-step contract metadata belongs in YAML.
 
 ### 1.1 Orchestrator and Plugin Annotations
 The processor also reacts to:
@@ -374,18 +383,18 @@ mvn clean compile
 
 ### Development Workflow
 
-1. **Annotate Services**: Add `@PipelineStep` to your service classes
+1. **Author Internal Step Contracts in YAML**: Define `service`, `cardinality`, `input`, `output`, and optional `inboundMapper` / `outboundMapper` in `pipeline.yaml`.
 2. **Build Project**: Run `mvn compile` to trigger generation
-3. **Verify Generation**: Check that generated classes are created
+3. **Verify Generation**: Check that generated classes are created and the service interface matches the YAML cardinality
 4. **Test Integration**: Run integration tests to verify the pipeline works
 5. **Deploy**: Deploy the complete application with generated components
 
 ### Maintenance
 
-1. **Keep Annotations Updated**: Update `@PipelineStep` when changing service interfaces
+1. **Keep YAML and Service Signatures in Sync**: Update `pipeline.yaml` whenever an internal service interface changes
 2. **Review Generated Code**: Periodically review generated code for correctness
 3. **Monitor Build Logs**: Watch for generation warnings or errors
-4. **Test Changes**: Thoroughly test after making changes to annotated services
+4. **Test Changes**: Thoroughly test after making changes to YAML-defined steps or service implementations
 
 ### Performance Considerations
 

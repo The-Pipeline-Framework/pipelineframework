@@ -50,7 +50,9 @@ class PipelineTemplateConfigLoaderTest {
               - name: "Process Foo"
                 cardinality: "ONE_TO_ONE"
                 inputTypeName: "FooInput"
+                inboundMapper: "com.example.test.mapper.FooInputMapper"
                 outputTypeName: "FooOutput"
+                outboundMapper: "com.example.test.mapper.FooOutputMapper"
             """;
         Path configPath = tempDir.resolve("pipeline-config.yaml");
         Files.writeString(configPath, yaml);
@@ -70,6 +72,8 @@ class PipelineTemplateConfigLoaderTest {
         assertEquals("ONE_TO_ONE", step.cardinality());
         assertEquals("FooInput", step.inputTypeName());
         assertEquals("FooOutput", step.outputTypeName());
+        assertEquals("com.example.test.mapper.FooInputMapper", step.inboundMapper());
+        assertEquals("com.example.test.mapper.FooOutputMapper", step.outboundMapper());
 
         Map<String, PipelineTemplateAspect> aspects = config.aspects();
         assertNotNull(aspects);

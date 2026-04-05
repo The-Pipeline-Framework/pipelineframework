@@ -140,26 +140,56 @@ messages:
         type: path
 steps:
   - name: Process Folder
+    service: org.pipelineframework.csv.service.ProcessFolderService
     cardinality: EXPANSION
+    input: org.pipelineframework.csv.common.domain.CsvFolder
     inputTypeName: CsvFolder
+    inboundMapper: org.pipelineframework.csv.common.mapper.CsvFolderMapper
+    output: org.pipelineframework.csv.common.domain.CsvPaymentsInputFile
     outputTypeName: CsvPaymentsInputFile
+    outboundMapper: org.pipelineframework.csv.common.mapper.CsvPaymentsInputFileMapper
   - name: Process Csv Payments Input
+    service: org.pipelineframework.csv.service.ProcessCsvPaymentsInputService
     cardinality: EXPANSION
+    input: org.pipelineframework.csv.common.domain.CsvPaymentsInputFile
     inputTypeName: CsvPaymentsInputFile
+    inboundMapper: org.pipelineframework.csv.common.mapper.CsvPaymentsInputFileMapper
+    output: org.pipelineframework.csv.common.domain.PaymentRecord
     outputTypeName: PaymentRecord
+    outboundMapper: org.pipelineframework.csv.common.mapper.PaymentRecordMapper
   - name: Process Send Payment Record
+    service: org.pipelineframework.csv.service.ProcessSendPaymentRecordService
     cardinality: ONE_TO_ONE
+    input: org.pipelineframework.csv.common.domain.PaymentRecord
     inputTypeName: PaymentRecord
+    inboundMapper: org.pipelineframework.csv.common.mapper.PaymentRecordMapper
+    output: org.pipelineframework.csv.common.domain.AckPaymentSent
     outputTypeName: AckPaymentSent
+    outboundMapper: org.pipelineframework.csv.common.mapper.AckPaymentSentMapper
   - name: Process Ack Payment Sent
+    service: org.pipelineframework.csv.service.ProcessAckPaymentSentService
     cardinality: ONE_TO_ONE
+    input: org.pipelineframework.csv.common.domain.AckPaymentSent
     inputTypeName: AckPaymentSent
+    inboundMapper: org.pipelineframework.csv.common.mapper.AckPaymentSentMapper
+    output: org.pipelineframework.csv.common.domain.PaymentStatus
     outputTypeName: PaymentStatus
+    outboundMapper: org.pipelineframework.csv.common.mapper.PaymentStatusMapper
   - name: Process Payment Status
+    service: org.pipelineframework.csv.service.ProcessPaymentStatusService
     cardinality: ONE_TO_ONE
+    input: org.pipelineframework.csv.common.domain.PaymentStatus
     inputTypeName: PaymentStatus
+    inboundMapper: org.pipelineframework.csv.common.mapper.PaymentStatusMapper
+    output: org.pipelineframework.csv.common.domain.PaymentOutput
     outputTypeName: PaymentOutput
+    outboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputMapper
   - name: Process Csv Payments Output File
+    service: org.pipelineframework.csv.service.ProcessCsvPaymentsOutputFileService
     cardinality: MANY_TO_MANY
+    input: org.pipelineframework.csv.common.domain.PaymentOutput
     inputTypeName: PaymentOutput
+    inboundMapper: org.pipelineframework.csv.common.mapper.PaymentOutputMapper
+    output: org.pipelineframework.csv.common.domain.CsvPaymentsOutputFile
     outputTypeName: CsvPaymentsOutputFile
+    outboundMapper: org.pipelineframework.csv.common.mapper.CsvPaymentsOutputFileMapper

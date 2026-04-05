@@ -50,14 +50,7 @@ import org.pipelineframework.service.ReactiveBidirectionalStreamingService;
  * The service uses the iterator-based write method from OpenCSV which provides better
  * streaming characteristics than list-based writing.
  */
-@PipelineStep(
-  inputType = PaymentOutput.class,
-  outputType = CsvPaymentsOutputFile.class,
-  stepType = org.pipelineframework.step.StepManyToMany.class,
-  backendType = org.pipelineframework.grpc.GrpcServiceBidirectionalStreamingAdapter.class,
-  inboundMapper = PaymentOutputMapper.class,
-  outboundMapper = CsvPaymentsOutputFileMapper.class
-)
+@PipelineStep
 @ApplicationScoped
 public class ProcessCsvPaymentsOutputFileService
     implements ReactiveBidirectionalStreamingService<PaymentOutput, CsvPaymentsOutputFile> {

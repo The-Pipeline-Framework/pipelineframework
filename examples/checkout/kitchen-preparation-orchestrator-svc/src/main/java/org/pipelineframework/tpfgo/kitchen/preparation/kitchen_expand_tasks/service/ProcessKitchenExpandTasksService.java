@@ -11,14 +11,7 @@ import org.pipelineframework.tpfgo.common.domain.KitchenTask;
 import org.pipelineframework.tpfgo.common.domain.OrderAcceptedByRestaurant;
 import org.pipelineframework.tpfgo.common.util.DeterministicIds;
 
-@PipelineStep(
-    inputType = OrderAcceptedByRestaurant.class,
-    outputType = KitchenTask.class,
-    stepType = org.pipelineframework.step.StepOneToMany.class,
-    backendType = org.pipelineframework.grpc.GrpcServiceStreamingAdapter.class,
-    inboundMapper = org.pipelineframework.tpfgo.kitchen.preparation.kitchen_expand_tasks.service.OrderAcceptedByRestaurantMapper.class,
-    outboundMapper = org.pipelineframework.tpfgo.kitchen.preparation.kitchen_expand_tasks.service.KitchenTaskMapper.class
-)
+@PipelineStep
 @ApplicationScoped
 public class ProcessKitchenExpandTasksService implements ReactiveStreamingService<OrderAcceptedByRestaurant, KitchenTask> {
 

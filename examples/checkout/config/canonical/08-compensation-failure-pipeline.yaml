@@ -59,8 +59,10 @@ steps:
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.tpfgo.common.domain.PaymentCaptureResult
     inputTypeName: PaymentCaptureResult
+    inboundMapper: org.pipelineframework.tpfgo.compensation.failure.compensation_finalize_order.service.PaymentCaptureResultMapper
     output: org.pipelineframework.tpfgo.common.domain.TerminalOrderState
     outputTypeName: TerminalOrderState
+    outboundMapper: org.pipelineframework.tpfgo.compensation.failure.compensation_finalize_order.service.TerminalOrderStateMapper
 input:
   subscription:
     publication: tpfgo.payment.capture-result.v1

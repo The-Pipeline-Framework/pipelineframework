@@ -25,8 +25,10 @@ import java.util.List;
  * @param cardinality the step cardinality (for example ONE_TO_ONE, EXPANSION)
  * @param inputTypeName the declared input type name
  * @param inputFields the input field definitions
+ * @param inboundMapper optional inbound mapper for internal service steps
  * @param outputTypeName the declared output type name
  * @param outputFields the output field definitions
+ * @param outboundMapper optional outbound mapper for internal service steps
  * @param execution optional execution metadata for local/remote step invocation
  */
 public record PipelineTemplateStep(
@@ -34,8 +36,10 @@ public record PipelineTemplateStep(
     String cardinality,
     String inputTypeName,
     List<PipelineTemplateField> inputFields,
+    String inboundMapper,
     String outputTypeName,
     List<PipelineTemplateField> outputFields,
+    String outboundMapper,
     PipelineTemplateStepExecution execution
 ) {
     public PipelineTemplateStep(
@@ -46,6 +50,31 @@ public record PipelineTemplateStep(
         String outputTypeName,
         List<PipelineTemplateField> outputFields
     ) {
-        this(name, cardinality, inputTypeName, inputFields, outputTypeName, outputFields, null);
+        this(name, cardinality, inputTypeName, inputFields, null, outputTypeName, outputFields, null, null);
+    }
+
+    public PipelineTemplateStep(
+        String name,
+        String cardinality,
+        String inputTypeName,
+        List<PipelineTemplateField> inputFields,
+        String outputTypeName,
+        List<PipelineTemplateField> outputFields,
+        PipelineTemplateStepExecution execution
+    ) {
+        this(name, cardinality, inputTypeName, inputFields, null, outputTypeName, outputFields, null, execution);
+    }
+
+    public PipelineTemplateStep(
+        String name,
+        String cardinality,
+        String inputTypeName,
+        List<PipelineTemplateField> inputFields,
+        String inboundMapper,
+        String outputTypeName,
+        List<PipelineTemplateField> outputFields,
+        String outboundMapper
+    ) {
+        this(name, cardinality, inputTypeName, inputFields, inboundMapper, outputTypeName, outputFields, outboundMapper, null);
     }
 }

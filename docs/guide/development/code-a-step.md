@@ -14,18 +14,28 @@ Choose the reactive interface that matches your data flow:
 - `ReactiveStreamingService<I, O>`: one input → stream of outputs
 - `ReactiveStreamingClientService<I, O>`: stream of inputs → one output
 
-## 2) Implement the Service
+## 2) Define the Step Contract in YAML
 
-Annotate the class with `@PipelineStep` so build-time generation can produce adapters.
+For internal `service:` steps, declare the contract in `pipeline.yaml`:
+
+```yaml
+steps:
+  - name: process-payment
+    service: com.app.payment.ProcessPaymentService
+    cardinality: ONE_TO_ONE
+    input: com.app.domain.PaymentRecord
+    output: com.app.domain.PaymentStatus
+    inboundMapper: com.app.payment.PaymentRecordMapper
+    outboundMapper: com.app.payment.PaymentStatusMapper
+```
+
+## 3) Implement the Service
+
+Annotate the class with `@PipelineStep` so build-time generation can discover it.
+Keep Java-local concerns such as ordering, thread safety, cache keys, and side effects on the annotation.
 
 ```java
-@PipelineStep(
-    inputType = PaymentRecord.class,
-    outputType = PaymentStatus.class,
-    stepType = StepOneToOne.class,
-    inboundMapper = PaymentRecordMapper.class,
-    outboundMapper = PaymentStatusMapper.class
-)
+@PipelineStep
 @ApplicationScoped
 public class ProcessPaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
 
@@ -36,7 +46,7 @@ public class ProcessPaymentService implements ReactiveService<PaymentRecord, Pay
 }
 ```
 
-## 3) Add Mappers
+## 4) Add Mappers
 
 Create pair-based MapStruct mappers using TPF's `Mapper<Domain, External>` interface.
 Use one mapper per boundary.
@@ -59,7 +69,7 @@ public interface PaymentRecordMapper extends Mapper<PaymentRecord, PaymentRecord
 }
 ```
 
-## 4) Handle Errors
+## 5) Handle Errors
 
 Use Mutiny error handling in your reactive chain:
 
@@ -82,7 +92,7 @@ return processBatch(batchItem)
 that must be tracked and re-driven without failing the full execution.
 See [Item Reject Sink](/guide/development/item-reject-sink) for the canonical model and wiring.
 
-## 5) Test in Isolation
+## 6) Test in Isolation
 
 ```java
 @QuarkusTest

@@ -16,6 +16,9 @@ class CurrentAuthoredSurfacesGuardTest {
 
     private static final Pattern LEGACY_AUTHORED_PROTO_TYPE = Pattern.compile("(?m)^\\s*protoType:");
     private static final Pattern QUOTED_PROTO_TYPE_LITERAL = Pattern.compile("['\"]protoType:");
+    private static final Pattern LEGACY_INTERNAL_STEP_ANNOTATION_METADATA = Pattern.compile(
+        "@PipelineStep\\s*\\([^)]*(inputType\\s*=|outputType\\s*=|inboundMapper\\s*=|outboundMapper\\s*=|stepType\\s*=|backendType\\s*=)",
+        Pattern.DOTALL);
 
     @Test
     void currentAuthoredSurfacesDoNotReintroduceLegacyProtoTypeDeclarations() throws Exception {
@@ -31,6 +34,9 @@ class CurrentAuthoredSurfacesGuardTest {
         scanYaml(examples, violations);
         scanYaml(templateGenerator, violations);
         scanUiExportSurface(uiExportSurface, violations);
+        scanCurrentExampleInternalStepClasses(requireDirectory(repoRoot.resolve("examples/checkout")), violations);
+        scanCurrentExampleInternalStepClasses(requireDirectory(repoRoot.resolve("examples/search")), violations);
+        scanCurrentExampleInternalStepClasses(requireDirectory(repoRoot.resolve("examples/csv-payments")), violations);
 
         assertTrue(
             violations.isEmpty(),
@@ -59,6 +65,15 @@ class CurrentAuthoredSurfacesGuardTest {
 
     private static void scanUiExportSurface(Path uiRoute, List<String> violations) {
         recordViolations(uiRoute, QUOTED_PROTO_TYPE_LITERAL, violations);
+    }
+
+    private static void scanCurrentExampleInternalStepClasses(Path root, List<String> violations) throws IOException {
+        try (Stream<Path> stream = Files.walk(root)) {
+            stream.filter(Files::isRegularFile)
+                .filter(path -> path.toString().contains("/src/main/java/"))
+                .filter(path -> path.toString().endsWith(".java"))
+                .forEach(path -> recordViolations(path, LEGACY_INTERNAL_STEP_ANNOTATION_METADATA, violations));
+        }
     }
 
     private static Path findRepoRoot() {

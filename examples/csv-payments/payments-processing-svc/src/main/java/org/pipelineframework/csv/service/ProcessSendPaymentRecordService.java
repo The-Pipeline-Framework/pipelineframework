@@ -32,14 +32,7 @@ import org.pipelineframework.csv.common.mapper.AckPaymentSentMapper;
 import org.pipelineframework.csv.common.mapper.PaymentRecordMapper;
 import org.pipelineframework.service.ReactiveService;
 
-@PipelineStep(
-  inputType = PaymentRecord.class,
-  outputType = AckPaymentSent.class,
-  stepType = org.pipelineframework.step.StepOneToOne.class,
-  backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-  inboundMapper = PaymentRecordMapper.class,
-  outboundMapper = AckPaymentSentMapper.class
-)
+@PipelineStep
 @ApplicationScoped
 @Getter
 public class ProcessSendPaymentRecordService

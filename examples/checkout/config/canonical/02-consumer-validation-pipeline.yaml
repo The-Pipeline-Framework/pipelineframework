@@ -59,8 +59,10 @@ steps:
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.tpfgo.common.domain.OrderPending
     inputTypeName: OrderPending
+    inboundMapper: org.pipelineframework.tpfgo.consumer.validation.consumer_validate_order.service.OrderPendingMapper
     output: org.pipelineframework.tpfgo.common.domain.OrderApproved
     outputTypeName: OrderApproved
+    outboundMapper: org.pipelineframework.tpfgo.consumer.validation.consumer_validate_order.service.OrderApprovedMapper
 input:
   subscription:
     publication: tpfgo.checkout.order-pending.v1

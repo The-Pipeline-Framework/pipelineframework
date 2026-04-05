@@ -12,14 +12,7 @@ import org.pipelineframework.service.ReactiveService;
 import org.pipelineframework.tpfgo.common.domain.PlaceOrderRequest;
 import org.pipelineframework.tpfgo.common.domain.ValidatedOrderRequest;
 
-@PipelineStep(
-    inputType = PlaceOrderRequest.class,
-    outputType = ValidatedOrderRequest.class,
-    stepType = org.pipelineframework.step.StepOneToOne.class,
-    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-    inboundMapper = org.pipelineframework.tpfgo.checkout.checkout_validate_request.service.PlaceOrderRequestMapper.class,
-    outboundMapper = org.pipelineframework.tpfgo.checkout.checkout_validate_request.service.ValidatedOrderRequestMapper.class
-)
+@PipelineStep
 @ApplicationScoped
 public class ProcessCheckoutValidateRequestService implements ReactiveService<PlaceOrderRequest, ValidatedOrderRequest> {
 

@@ -31,14 +31,7 @@ import org.pipelineframework.csv.common.mapper.PaymentOutputMapper;
 import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
 import org.pipelineframework.service.ReactiveService;
 
-@PipelineStep(
-    inputType = PaymentStatus.class,
-    outputType = PaymentOutput.class,
-    stepType = org.pipelineframework.step.StepOneToOne.class,
-    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-    inboundMapper = PaymentStatusMapper.class,
-    outboundMapper = PaymentOutputMapper.class
-)
+@PipelineStep
 @ApplicationScoped
 @Getter
 public class ProcessPaymentStatusService
