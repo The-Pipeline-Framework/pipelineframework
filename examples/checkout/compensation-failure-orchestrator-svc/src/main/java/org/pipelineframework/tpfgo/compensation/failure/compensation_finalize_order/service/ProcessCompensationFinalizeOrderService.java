@@ -12,14 +12,7 @@ import org.pipelineframework.service.ReactiveService;
 import org.pipelineframework.tpfgo.common.domain.PaymentCaptureResult;
 import org.pipelineframework.tpfgo.common.domain.TerminalOrderState;
 
-@PipelineStep(
-    inputType = PaymentCaptureResult.class,
-    outputType = TerminalOrderState.class,
-    stepType = org.pipelineframework.step.StepOneToOne.class,
-    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-    inboundMapper = org.pipelineframework.tpfgo.compensation.failure.compensation_finalize_order.service.PaymentCaptureResultMapper.class,
-    outboundMapper = org.pipelineframework.tpfgo.compensation.failure.compensation_finalize_order.service.TerminalOrderStateMapper.class
-)
+@PipelineStep
 @ApplicationScoped
 public class ProcessCompensationFinalizeOrderService
     implements ReactiveService<PaymentCaptureResult, TerminalOrderState> {

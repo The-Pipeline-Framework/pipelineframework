@@ -197,38 +197,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         // Determine if this is an internal or delegated step using switch for exhaustiveness
         return switch (stepDef.kind()) {
             case INTERNAL -> {
-                // For internal steps, verify that the service class is annotated with @PipelineStep
-                TypeElement serviceClass = ctx.getProcessingEnv().getElementUtils()
-                    .getTypeElement(stepDef.executionClass().canonicalName());
-
-                if (serviceClass == null) {
-                    PipelineStepModel syntheticModel = createCrossModuleInternalModel(stepDef, ctx);
-                    if (syntheticModel != null) {
-                        yield syntheticModel;
-                    }
-                    ctx.getProcessingEnv().getMessager().printMessage(
-                        javax.tools.Diagnostic.Kind.ERROR,
-                        "Internal step service class '" + stepDef.executionClass().canonicalName() +
-                        "' not found for step '" + stepDef.name() + "'");
-                    yield null;
-                }
-
-                if (serviceClass.getAnnotation(PipelineStep.class) == null) {
-                    ctx.getProcessingEnv().getMessager().printMessage(
-                        javax.tools.Diagnostic.Kind.ERROR,
-                        "Internal step service class '" + stepDef.executionClass().canonicalName() +
-                        "' must be annotated with @PipelineStep for step '" + stepDef.name() + "'");
-                    yield null;
-                }
-
-                // Extract semantic information from the annotated class
-                var result = irExtractor.extract(serviceClass);
-                if (result == null) {
-                    yield null;
-                }
-
-                // Keep semantic details from the annotation, but force YAML-driven step identity.
-                yield applyYamlIdentityToInternalModel(stepDef, result.model());
+                yield createInternalStepModel(ctx, stepDef, irExtractor);
             }
             case DELEGATED -> {
                 // For delegated steps, create a model based on the delegate service
@@ -291,6 +260,113 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .orderingRequirement(OrderingRequirement.RELAXED)
             .threadSafety(ThreadSafety.SAFE)
             .remoteExecution(stepDef.remoteExecution())
+            .build();
+    }
+
+    private PipelineStepModel createInternalStepModel(
+            PipelineCompilationContext ctx,
+            org.pipelineframework.processor.ir.StepDefinition stepDef,
+            PipelineStepIRExtractor irExtractor) {
+        TypeElement serviceClass = ctx.getProcessingEnv().getElementUtils()
+            .getTypeElement(stepDef.executionClass().canonicalName());
+
+        if (serviceClass == null) {
+            PipelineStepModel syntheticModel = createCrossModuleInternalModel(stepDef, ctx);
+            if (syntheticModel != null) {
+                return syntheticModel;
+            }
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Internal step service class '" + stepDef.executionClass().canonicalName() +
+                    "' not found for step '" + stepDef.name() + "'");
+            return null;
+        }
+
+        if (serviceClass.getAnnotation(PipelineStep.class) == null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Internal step service class '" + stepDef.executionClass().canonicalName() +
+                    "' must be annotated with @PipelineStep for step '" + stepDef.name() + "'");
+            return null;
+        }
+
+        var extracted = irExtractor.extract(serviceClass);
+        if (extracted == null) {
+            return null;
+        }
+        PipelineStepModel extractedModel = extracted.model();
+
+        ReactiveSignature reactiveSignature = resolveReactiveSignature(
+            serviceClass,
+            ctx.getProcessingEnv().getTypeUtils(),
+            ctx.getProcessingEnv().getMessager());
+        if (reactiveSignature == null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Internal step service '" + stepDef.executionClass().canonicalName()
+                    + "' must implement exactly one supported reactive service interface for step '" + stepDef.name() + "'");
+            return null;
+        }
+
+        StreamingShape yamlShape = stepDef.streamingShapeHint();
+        if (yamlShape != null && yamlShape != reactiveSignature.shape()) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Internal step '" + stepDef.name() + "' declares cardinality "
+                    + yamlShape + " in YAML, but service '" + stepDef.executionClass().canonicalName()
+                    + "' implements " + reactiveSignature.shape() + " semantics.");
+            return null;
+        }
+
+        TypeName inputType = resolveInternalDomainType(
+            ctx,
+            stepDef.name(),
+            "input",
+            stepDef.inputType(),
+            extractedModel.inboundDomainType(),
+            reactiveSignature.inputType());
+        if (inputType == null) {
+            return null;
+        }
+        TypeName outputType = resolveInternalDomainType(
+            ctx,
+            stepDef.name(),
+            "output",
+            stepDef.outputType(),
+            extractedModel.outboundDomainType(),
+            reactiveSignature.outputType());
+        if (outputType == null) {
+            return null;
+        }
+
+        ClassName inboundMapper = resolveInternalMapper(
+            ctx,
+            stepDef.name(),
+            "inboundMapper",
+            stepDef.inboundMapper(),
+            extractedModel.inputMapping() == null ? null : castToClassName(extractedModel.inputMapping().mapperType()),
+            inputType);
+        if (inboundMapper == INVALID_CLASS_NAME) {
+            return null;
+        }
+        ClassName outboundMapper = resolveInternalMapper(
+            ctx,
+            stepDef.name(),
+            "outboundMapper",
+            stepDef.outboundMapper(),
+            extractedModel.outputMapping() == null ? null : castToClassName(extractedModel.outputMapping().mapperType()),
+            outputType);
+        if (outboundMapper == INVALID_CLASS_NAME) {
+            return null;
+        }
+
+        String serviceName = toYamlServiceName(stepDef.name());
+        return extractedModel.toBuilder()
+            .serviceName(serviceName)
+            .generatedName(serviceName)
+            .inputMapping(new TypeMapping(inputType, inboundMapper, inboundMapper != null, inputType))
+            .outputMapping(new TypeMapping(outputType, outboundMapper, outboundMapper != null, outputType))
+            .streamingShape(reactiveSignature.shape())
             .build();
     }
 
@@ -851,6 +927,109 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return null;
         }
         return matches.isEmpty() ? null : matches.get(0);
+    }
+
+    private static final ClassName INVALID_CLASS_NAME = ClassName.get("java.lang", "Void");
+
+    private TypeName resolveInternalDomainType(
+            PipelineCompilationContext ctx,
+            String stepName,
+            String direction,
+            TypeName yamlType,
+            TypeName annotationType,
+            TypeName reactiveType) {
+        if (yamlType != null) {
+            if (annotationType != null && !yamlType.equals(annotationType)) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.ERROR,
+                    "Internal step '" + stepName + "' declares " + direction + " type '" + yamlType
+                        + "' in YAML, but deprecated @PipelineStep metadata still declares '" + annotationType + "'.");
+                return null;
+            }
+            return yamlType;
+        }
+        if (annotationType != null) {
+            return annotationType;
+        }
+        return reactiveType;
+    }
+
+    private ClassName resolveInternalMapper(
+            PipelineCompilationContext ctx,
+            String stepName,
+            String fieldName,
+            ClassName yamlMapper,
+            ClassName annotationMapper,
+            TypeName expectedDomainType) {
+        if (yamlMapper != null && annotationMapper != null && !yamlMapper.equals(annotationMapper)) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Internal step '" + stepName + "' declares " + fieldName + " '" + yamlMapper.canonicalName()
+                    + "' in YAML, but deprecated @PipelineStep metadata still declares '"
+                    + annotationMapper.canonicalName() + "'.");
+            return INVALID_CLASS_NAME;
+        }
+        ClassName effective = yamlMapper != null ? yamlMapper : annotationMapper;
+        if (effective == null) {
+            return null;
+        }
+        boolean yamlOwned = yamlMapper != null;
+        if (!validateInternalMapper(ctx, stepName, fieldName, effective, expectedDomainType, yamlOwned)) {
+            return INVALID_CLASS_NAME;
+        }
+        return effective;
+    }
+
+    private boolean validateInternalMapper(
+            PipelineCompilationContext ctx,
+            String stepName,
+            String fieldName,
+            ClassName mapperClass,
+            TypeName expectedDomainType,
+            boolean yamlOwned) {
+        TypeElement mapperElement = ctx.getProcessingEnv().getElementUtils().getTypeElement(mapperClass.canonicalName());
+        if (mapperElement == null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Internal step '" + stepName + "' references " + fieldName + " '" + mapperClass.canonicalName()
+                    + "', but the mapper class could not be resolved.");
+            return false;
+        }
+
+        if (!yamlOwned) {
+            return true;
+        }
+
+        DeclaredType mapperType = findReactiveSupertype(
+            ctx.getProcessingEnv().getTypeUtils(),
+            mapperElement.asType(),
+            "org.pipelineframework.mapper.Mapper");
+        if (mapperType == null || mapperType.getTypeArguments().size() != 2) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Internal step '" + stepName + "' " + fieldName + " '" + mapperClass.canonicalName()
+                    + "' must implement Mapper<Domain, External>.");
+            return false;
+        }
+
+        TypeName mapperDomainType = TypeName.get(mapperType.getTypeArguments().getFirst());
+        if (expectedDomainType != null && !expectedDomainType.equals(mapperDomainType)) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Internal step '" + stepName + "' " + fieldName + " '" + mapperClass.canonicalName()
+                    + "' must declare Mapper<" + expectedDomainType + ", External>, but found Mapper<"
+                    + mapperDomainType + ", External>.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private ClassName castToClassName(TypeName typeName) {
+        if (typeName instanceof ClassName className) {
+            return className;
+        }
+        return null;
     }
 
     /**

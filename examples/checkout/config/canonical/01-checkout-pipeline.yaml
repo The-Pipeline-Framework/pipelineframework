@@ -76,15 +76,19 @@ steps:
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.tpfgo.common.domain.PlaceOrderRequest
     inputTypeName: PlaceOrderRequest
+    inboundMapper: org.pipelineframework.tpfgo.checkout.checkout_validate_request.service.PlaceOrderRequestMapper
     output: org.pipelineframework.tpfgo.common.domain.ValidatedOrderRequest
     outputTypeName: ValidatedOrderRequest
+    outboundMapper: org.pipelineframework.tpfgo.checkout.checkout_validate_request.service.ValidatedOrderRequestMapper
   - name: Checkout Create Pending
     service: org.pipelineframework.tpfgo.checkout.checkout_create_pending.service.ProcessCheckoutCreatePendingService
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.tpfgo.common.domain.ValidatedOrderRequest
     inputTypeName: ValidatedOrderRequest
+    inboundMapper: org.pipelineframework.tpfgo.checkout.checkout_validate_request.service.ValidatedOrderRequestMapper
     output: org.pipelineframework.tpfgo.common.domain.OrderPending
     outputTypeName: OrderPending
+    outboundMapper: org.pipelineframework.tpfgo.checkout.checkout_create_pending.service.OrderPendingMapper
 output:
   checkpoint:
     publication: tpfgo.checkout.order-pending.v1

@@ -13,6 +13,12 @@ import org.pipelineframework.processor.ir.PipelineStepModel;
  * Resolves gRPC bindings for the orchestrator service using compiled protobuf descriptors.
  */
 public class OrchestratorGrpcBindingResolver {
+    private static final String ANY_PROTO_PATH = "google/protobuf/any.proto";
+    private static final String DURATION_PROTO_PATH = "google/protobuf/duration.proto";
+    private static final String EMPTY_PROTO_PATH = "google/protobuf/empty.proto";
+    private static final String STRUCT_PROTO_PATH = "google/protobuf/struct.proto";
+    private static final String TIMESTAMP_PROTO_PATH = "google/protobuf/timestamp.proto";
+    private static final String WRAPPERS_PROTO_PATH = "google/protobuf/wrappers.proto";
     private static final Set<String> ALLOWED_METHODS = Set.of(
         OrchestratorRpcConstants.RUN_METHOD,
         OrchestratorRpcConstants.RUN_ASYNC_METHOD,
@@ -95,12 +101,19 @@ public class OrchestratorGrpcBindingResolver {
         String serviceName
     ) {
         Map<String, Descriptors.FileDescriptor> builtFileDescriptors = new HashMap<>();
-        boolean allBuilt = false;
+        seedWellKnownDescriptors(builtFileDescriptors);
+        Set<String> projectFileNames = new HashSet<>();
+        for (DescriptorProtos.FileDescriptorProto fileProto : descriptorSet.getFileList()) {
+            projectFileNames.add(fileProto.getName());
+        }
+        int builtProjectCount = (int) projectFileNames.stream()
+            .filter(builtFileDescriptors::containsKey)
+            .count();
         int maxIterations = descriptorSet.getFileCount() * 2;
         int iterations = 0;
 
-        while (!allBuilt && iterations < maxIterations) {
-            allBuilt = true;
+        while (builtProjectCount < projectFileNames.size() && iterations < maxIterations) {
+            boolean allBuilt = true;
             iterations++;
 
             for (DescriptorProtos.FileDescriptorProto fileProto : descriptorSet.getFileList()) {
@@ -131,21 +144,24 @@ public class OrchestratorGrpcBindingResolver {
                     Descriptors.FileDescriptor[] depsArray = dependencies.toArray(new Descriptors.FileDescriptor[0]);
                     Descriptors.FileDescriptor fileDescriptor = Descriptors.FileDescriptor.buildFrom(fileProto, depsArray);
                     builtFileDescriptors.put(fileName, fileDescriptor);
+                    if (projectFileNames.contains(fileName)) {
+                        builtProjectCount++;
+                    }
                 } catch (Exception e) {
                     throw new IllegalStateException(
                         "Failed to build file descriptor for '" + fileName + "' while resolving " + serviceName,
                         e);
                 }
             }
+
+            if (allBuilt) {
+                break;
+            }
         }
 
-        if (builtFileDescriptors.size() != descriptorSet.getFileCount()) {
-            Set<String> builtFiles = builtFileDescriptors.keySet();
-            Set<String> allFiles = new HashSet<>();
-            for (DescriptorProtos.FileDescriptorProto fileProto : descriptorSet.getFileList()) {
-                allFiles.add(fileProto.getName());
-            }
-            allFiles.removeAll(builtFiles);
+        if (builtProjectCount != projectFileNames.size()) {
+            Set<String> allFiles = new HashSet<>(projectFileNames);
+            allFiles.removeAll(builtFileDescriptors.keySet());
             String unbuiltFiles = String.join(", ", allFiles);
             throw new IllegalStateException(
                 "Could not resolve all file descriptor dependencies after " + iterations +
@@ -153,6 +169,15 @@ public class OrchestratorGrpcBindingResolver {
         }
 
         return builtFileDescriptors;
+    }
+
+    private void seedWellKnownDescriptors(Map<String, Descriptors.FileDescriptor> builtFileDescriptors) {
+        builtFileDescriptors.putIfAbsent(ANY_PROTO_PATH, com.google.protobuf.AnyProto.getDescriptor());
+        builtFileDescriptors.putIfAbsent(DURATION_PROTO_PATH, com.google.protobuf.DurationProto.getDescriptor());
+        builtFileDescriptors.putIfAbsent(EMPTY_PROTO_PATH, com.google.protobuf.EmptyProto.getDescriptor());
+        builtFileDescriptors.putIfAbsent(STRUCT_PROTO_PATH, com.google.protobuf.StructProto.getDescriptor());
+        builtFileDescriptors.putIfAbsent(TIMESTAMP_PROTO_PATH, com.google.protobuf.TimestampProto.getDescriptor());
+        builtFileDescriptors.putIfAbsent(WRAPPERS_PROTO_PATH, com.google.protobuf.WrappersProto.getDescriptor());
     }
 
     /**

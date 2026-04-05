@@ -34,31 +34,47 @@ import org.pipelineframework.parallelism.ThreadSafety;
 @Retention(RetentionPolicy.RUNTIME)
 public @interface PipelineStep {
     /**
-     * The input type for this pipeline step.
+     * Legacy compatibility input type for internal service steps.
+     * Current authored internal steps should declare input types in YAML.
+     *
      * @return the input type for this pipeline step
      */
+    @Deprecated
     Class<?> inputType() default Void.class;
 
     /**
-     * The output type for this pipeline step.
+     * Legacy compatibility output type for internal service steps.
+     * Current authored internal steps should declare output types in YAML.
+     *
      * @return the output type for this pipeline step
      */
+    @Deprecated
     Class<?> outputType() default Void.class;
 
     /**
-     * Optional inbound mapper class for this pipeline step.
+     * Legacy compatibility inbound mapper for internal service steps.
+     * Current authored internal steps should declare inbound mappers in YAML.
+     *
      * @return the inbound mapper class, or Void.class when not specified
      */
+    @Deprecated
     Class<?> inboundMapper() default Void.class;
 
     /**
-     * Optional outbound mapper class for this pipeline step.
+     * Legacy compatibility outbound mapper for internal service steps.
+     * Current authored internal steps should declare outbound mappers in YAML.
+     *
      * @return the outbound mapper class, or Void.class when not specified
      */
+    @Deprecated
     Class<?> outboundMapper() default Void.class;
 
     /**
-     * The step type class for this pipeline step. This can be any of the following
+     * Legacy compatibility step type for internal service steps.
+     * Current authored internal steps should declare cardinality in YAML and let the compiler
+     * validate it against the implemented reactive service interface.
+     *
+     * This can be any of the following
      * <p>
      * StepOneToOne
      * StepOneToMany
@@ -69,9 +85,13 @@ public @interface PipelineStep {
      *
      * @return the step type class
      */
+    @Deprecated
     Class<?> stepType() default Void.class;
 
     /**
+     * Legacy compatibility backend adapter hint for internal service steps.
+     * Current authored internal steps do not need to declare backend adapters.
+     *
      * The backend adapter type class for this pipeline step.
      * <p>
      * This can be any of the following:
@@ -81,6 +101,7 @@ public @interface PipelineStep {
      *
      * @return the backend adapter type class
      */
+    @Deprecated
     Class<?> backendType() default Void.class;
 
     /**

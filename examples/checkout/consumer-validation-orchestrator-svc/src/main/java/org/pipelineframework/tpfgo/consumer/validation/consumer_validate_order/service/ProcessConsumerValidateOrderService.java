@@ -13,14 +13,7 @@ import org.pipelineframework.service.ReactiveService;
 import org.pipelineframework.tpfgo.common.domain.OrderApproved;
 import org.pipelineframework.tpfgo.common.domain.OrderPending;
 
-@PipelineStep(
-    inputType = OrderPending.class,
-    outputType = OrderApproved.class,
-    stepType = org.pipelineframework.step.StepOneToOne.class,
-    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-    inboundMapper = org.pipelineframework.tpfgo.consumer.validation.consumer_validate_order.service.OrderPendingMapper.class,
-    outboundMapper = org.pipelineframework.tpfgo.consumer.validation.consumer_validate_order.service.OrderApprovedMapper.class
-)
+@PipelineStep
 @ApplicationScoped
 public class ProcessConsumerValidateOrderService implements ReactiveService<OrderPending, OrderApproved> {
 

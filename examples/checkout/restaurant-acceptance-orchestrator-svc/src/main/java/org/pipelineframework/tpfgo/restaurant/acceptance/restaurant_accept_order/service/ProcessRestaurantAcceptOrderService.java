@@ -13,14 +13,7 @@ import org.pipelineframework.tpfgo.common.domain.OrderAcceptedByRestaurant;
 import org.pipelineframework.tpfgo.common.domain.OrderApproved;
 import org.pipelineframework.tpfgo.common.util.DeterministicIds;
 
-@PipelineStep(
-    inputType = OrderApproved.class,
-    outputType = OrderAcceptedByRestaurant.class,
-    stepType = org.pipelineframework.step.StepOneToOne.class,
-    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-    inboundMapper = org.pipelineframework.tpfgo.restaurant.acceptance.restaurant_accept_order.service.OrderApprovedMapper.class,
-    outboundMapper = org.pipelineframework.tpfgo.restaurant.acceptance.restaurant_accept_order.service.OrderAcceptedByRestaurantMapper.class
-)
+@PipelineStep
 @ApplicationScoped
 public class ProcessRestaurantAcceptOrderService
     implements ReactiveService<OrderApproved, OrderAcceptedByRestaurant> {

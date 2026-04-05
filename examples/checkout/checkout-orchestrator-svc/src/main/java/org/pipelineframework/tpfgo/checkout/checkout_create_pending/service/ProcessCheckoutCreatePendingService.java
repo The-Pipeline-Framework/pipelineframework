@@ -14,14 +14,7 @@ import org.pipelineframework.tpfgo.common.domain.OrderPending;
 import org.pipelineframework.tpfgo.common.domain.ValidatedOrderRequest;
 import org.pipelineframework.tpfgo.common.util.DeterministicIds;
 
-@PipelineStep(
-    inputType = ValidatedOrderRequest.class,
-    outputType = OrderPending.class,
-    stepType = org.pipelineframework.step.StepOneToOne.class,
-    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-    inboundMapper = org.pipelineframework.tpfgo.checkout.checkout_validate_request.service.ValidatedOrderRequestMapper.class,
-    outboundMapper = org.pipelineframework.tpfgo.checkout.checkout_create_pending.service.OrderPendingMapper.class
-)
+@PipelineStep
 @ApplicationScoped
 public class ProcessCheckoutCreatePendingService implements ReactiveService<ValidatedOrderRequest, OrderPending> {
 

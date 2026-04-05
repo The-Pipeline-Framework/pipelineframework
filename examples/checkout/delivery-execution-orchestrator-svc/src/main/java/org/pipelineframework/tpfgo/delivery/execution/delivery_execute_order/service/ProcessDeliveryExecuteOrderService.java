@@ -12,14 +12,7 @@ import org.pipelineframework.service.ReactiveService;
 import org.pipelineframework.tpfgo.common.domain.DeliveryAssigned;
 import org.pipelineframework.tpfgo.common.domain.OrderDelivered;
 
-@PipelineStep(
-    inputType = DeliveryAssigned.class,
-    outputType = OrderDelivered.class,
-    stepType = org.pipelineframework.step.StepOneToOne.class,
-    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-    inboundMapper = org.pipelineframework.tpfgo.delivery.execution.delivery_execute_order.service.DeliveryAssignedMapper.class,
-    outboundMapper = org.pipelineframework.tpfgo.delivery.execution.delivery_execute_order.service.OrderDeliveredMapper.class
-)
+@PipelineStep
 @ApplicationScoped
 public class ProcessDeliveryExecuteOrderService implements ReactiveService<DeliveryAssigned, OrderDelivered> {
 

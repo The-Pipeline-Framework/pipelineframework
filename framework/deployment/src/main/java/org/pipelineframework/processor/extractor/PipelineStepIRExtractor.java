@@ -6,7 +6,9 @@ import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.Types;
 
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.TypeName;
@@ -59,9 +61,12 @@ public class PipelineStepIRExtractor {
             return null;
         }
 
+        ReactiveSignature reactiveSignature = resolveReactiveSignature(serviceClass);
+
         // Determine semantic configuration
         StreamingShape streamingShape = determineStreamingShape(
-            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "stepType"));
+            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "stepType"),
+            reactiveSignature);
 
         Set<GenerationTarget> targets = EnumSet.noneOf(GenerationTarget.class);
         targets.add(GenerationTarget.GRPC_SERVICE);
@@ -77,11 +82,13 @@ public class PipelineStepIRExtractor {
         // fallback while build-time inference can still populate missing mappings in later phases.
         TypeMapping inputMapping = extractTypeMapping(
             AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "inputType"),
-            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "inboundMapper"));
+            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "inboundMapper"),
+            reactiveSignature == null ? null : reactiveSignature.inputType());
 
         TypeMapping outputMapping = extractTypeMapping(
             AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "outputType"),
-            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "outboundMapper"));
+            AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "outboundMapper"),
+            reactiveSignature == null ? null : reactiveSignature.outputType());
 
         ClassName cacheKeyGenerator = resolveCacheKeyGenerator(annotationMirror);
         
@@ -137,18 +144,19 @@ public class PipelineStepIRExtractor {
          * @param mapperTypeMirror an optional mapper type mirror from the annotation; may be null or the `void`/`java.lang.Void` type
          * @return a `TypeMapping` containing the resolved domain type, the mapper `ClassName` if provided, a boolean indicating mapper presence, and the inferred target type; returns a disabled mapping (no domain, no mapper, mapper-present=false) if `domainType` is null or void
          */
-    private TypeMapping extractTypeMapping(TypeMirror domainType, TypeMirror mapperTypeMirror) {
-        if (isNullOrVoid(domainType)) {
+    private TypeMapping extractTypeMapping(TypeMirror domainType, TypeMirror mapperTypeMirror, TypeName inferredDomainType) {
+        TypeName effectiveDomainType = isNullOrVoid(domainType) ? inferredDomainType : TypeName.get(domainType);
+        if (effectiveDomainType == null) {
             return new TypeMapping(null, null, false, null);
         }
 
         ClassName mapperType = resolveOptionalMapperType(mapperTypeMirror);
 
         return new TypeMapping(
-            TypeName.get(domainType),
+            effectiveDomainType,
             mapperType,
-            mapperType != null,
-            TypeName.get(domainType)
+            mapperType != null || inferredDomainType != null,
+            effectiveDomainType
         );
     }
 
@@ -173,7 +181,7 @@ public class PipelineStepIRExtractor {
      *         - `org.pipelineframework.step.StepManyToMany` → `STREAMING_STREAMING`
      *         - `org.pipelineframework.step.StepOneToOne` → `UNARY_UNARY`
      */
-    private StreamingShape determineStreamingShape(TypeMirror stepType) {
+    private StreamingShape determineStreamingShape(TypeMirror stepType, ReactiveSignature reactiveSignature) {
         if (stepType != null) {
             String stepTypeStr = stepType.toString();
             switch (stepTypeStr) {
@@ -191,8 +199,7 @@ public class PipelineStepIRExtractor {
                 }
             }
         }
-        // Default to UNARY_UNARY for OneToOne
-        return StreamingShape.UNARY_UNARY;
+        return reactiveSignature != null ? reactiveSignature.shape() : StreamingShape.UNARY_UNARY;
     }
 
     /**
@@ -262,6 +269,45 @@ public class PipelineStepIRExtractor {
             || typeMirror.toString().equals("java.lang.Void");
     }
 
+    private ReactiveSignature resolveReactiveSignature(TypeElement serviceClass) {
+        Types typeUtils = processingEnv.getTypeUtils();
+        for (ReactiveContract contract : ReactiveContract.values()) {
+            DeclaredType declared = findReactiveSupertype(typeUtils, serviceClass.asType(), contract.interfaceName);
+            if (declared == null || declared.getTypeArguments().size() < 2) {
+                continue;
+            }
+            return new ReactiveSignature(
+                contract.shape,
+                TypeName.get(declared.getTypeArguments().get(0)),
+                TypeName.get(declared.getTypeArguments().get(1)));
+        }
+        return null;
+    }
+
+    private DeclaredType findReactiveSupertype(Types typeUtils, TypeMirror type, String erasureName) {
+        if (!(type instanceof DeclaredType declaredType)) {
+            return null;
+        }
+        Element element = typeUtils.asElement(declaredType);
+        if (!(element instanceof TypeElement typeElement)) {
+            return null;
+        }
+        if (typeElement.getQualifiedName().contentEquals(erasureName)) {
+            return declaredType;
+        }
+        for (TypeMirror iface : typeElement.getInterfaces()) {
+            DeclaredType match = findReactiveSupertype(typeUtils, iface, erasureName);
+            if (match != null) {
+                return match;
+            }
+        }
+        TypeMirror superclass = typeElement.getSuperclass();
+        if (superclass == null || superclass.getKind() == javax.lang.model.type.TypeKind.NONE) {
+            return null;
+        }
+        return findReactiveSupertype(typeUtils, superclass, erasureName);
+    }
+
     /**
      * Resolve the delegate service class referenced in the PipelineStep annotation.
      *
@@ -305,5 +351,23 @@ public class PipelineStepIRExtractor {
             return operatorMapper;
         }
         return operatorMapper != null ? operatorMapper : externalMapper;
+    }
+
+    private record ReactiveSignature(StreamingShape shape, TypeName inputType, TypeName outputType) {
+    }
+
+    private enum ReactiveContract {
+        UNARY("org.pipelineframework.service.ReactiveService", StreamingShape.UNARY_UNARY),
+        SERVER_STREAMING("org.pipelineframework.service.ReactiveStreamingService", StreamingShape.UNARY_STREAMING),
+        CLIENT_STREAMING("org.pipelineframework.service.ReactiveStreamingClientService", StreamingShape.STREAMING_UNARY),
+        BIDI_STREAMING("org.pipelineframework.service.ReactiveBidirectionalStreamingService", StreamingShape.STREAMING_STREAMING);
+
+        private final String interfaceName;
+        private final StreamingShape shape;
+
+        ReactiveContract(String interfaceName, StreamingShape shape) {
+            this.interfaceName = interfaceName;
+            this.shape = shape;
+        }
     }
 }

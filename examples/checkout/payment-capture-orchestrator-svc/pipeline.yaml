@@ -68,8 +68,10 @@ steps:
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.tpfgo.common.domain.OrderDelivered
     inputTypeName: OrderDelivered
+    inboundMapper: org.pipelineframework.tpfgo.payment.capture.payment_capture_order.service.OrderDeliveredMapper
     output: org.pipelineframework.tpfgo.common.domain.PaymentCaptureResult
     outputTypeName: PaymentCaptureResult
+    outboundMapper: org.pipelineframework.tpfgo.payment.capture.payment_capture_order.service.PaymentCaptureResultMapper
 input:
   subscription:
     publication: tpfgo.delivery.order-delivered.v1

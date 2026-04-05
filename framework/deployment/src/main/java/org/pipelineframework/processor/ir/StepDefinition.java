@@ -29,6 +29,8 @@ import org.pipelineframework.config.template.PipelineTemplateStepExecution;
  * @param kind The kind of step (INTERNAL, DELEGATED, or REMOTE)
  * @param executionClass The class that provides the execution implementation
  * @param remoteExecution remote execution metadata for REMOTE steps
+ * @param inboundMapper The inbound mapper class for internal service steps (nullable)
+ * @param outboundMapper The outbound mapper class for internal service steps (nullable)
  * @param externalMapper The operator mapper class for mapping between domain and operator types (nullable)
  * @param mapperFallback mapper fallback strategy when no mapper matches (never null)
  * @param inputType The input type for the step
@@ -40,6 +42,8 @@ public record StepDefinition(
         StepKind kind,
         @Nullable ClassName executionClass,
         @Nullable PipelineTemplateStepExecution remoteExecution,
+        @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper,
         @Nullable ClassName externalMapper,
         MapperFallbackMode mapperFallback,
         @Nullable ClassName inputType,
@@ -56,7 +60,66 @@ public record StepDefinition(
         @Nullable ClassName outputType,
         @Nullable StreamingShape streamingShapeHint
     ) {
-        this(name, requireNonRemoteKind(kind), executionClass, null, externalMapper, mapperFallback, inputType, outputType,
+        this(
+            name,
+            kind,
+            executionClass,
+            null,
+            null,
+            externalMapper,
+            mapperFallback,
+            inputType,
+            outputType,
+            streamingShapeHint);
+    }
+
+    public StepDefinition(
+        String name,
+        StepKind kind,
+        ClassName executionClass,
+        @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper,
+        MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType,
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint
+    ) {
+        this(
+            name,
+            kind,
+            executionClass,
+            inboundMapper,
+            outboundMapper,
+            null,
+            mapperFallback,
+            inputType,
+            outputType,
+            streamingShapeHint);
+    }
+
+    public StepDefinition(
+        String name,
+        StepKind kind,
+        ClassName executionClass,
+        @Nullable ClassName inboundMapper,
+        @Nullable ClassName outboundMapper,
+        @Nullable ClassName externalMapper,
+        MapperFallbackMode mapperFallback,
+        @Nullable ClassName inputType,
+        @Nullable ClassName outputType,
+        @Nullable StreamingShape streamingShapeHint
+    ) {
+        this(
+            name,
+            requireNonRemoteKind(kind),
+            executionClass,
+            null,
+            inboundMapper,
+            outboundMapper,
+            externalMapper,
+            mapperFallback,
+            inputType,
+            outputType,
             streamingShapeHint);
     }
 

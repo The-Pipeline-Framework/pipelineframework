@@ -71,8 +71,10 @@ steps:
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.tpfgo.common.domain.OrderReadyForDispatch
     inputTypeName: OrderReadyForDispatch
+    inboundMapper: org.pipelineframework.tpfgo.dispatch.dispatch_assign_courier.service.OrderReadyForDispatchMapper
     output: org.pipelineframework.tpfgo.common.domain.DeliveryAssigned
     outputTypeName: DeliveryAssigned
+    outboundMapper: org.pipelineframework.tpfgo.dispatch.dispatch_assign_courier.service.DeliveryAssignedMapper
 input:
   subscription:
     publication: tpfgo.kitchen.order-ready.v1

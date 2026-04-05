@@ -357,8 +357,10 @@ public class PipelineTemplateConfigLoader {
                 step.cardinality(),
                 step.inputTypeName(),
                 inputFields,
+                step.inboundMapper(),
                 step.outputTypeName(),
                 outputFields,
+                step.outboundMapper(),
                 step.execution()));
         }
         return resolved;
@@ -445,14 +447,18 @@ public class PipelineTemplateConfigLoader {
             String outputType = readString(stepMap, "outputTypeName");
             List<PipelineTemplateField> inputFields = readFields(stepMap.get("inputFields"), version);
             List<PipelineTemplateField> outputFields = readFields(stepMap.get("outputFields"), version);
+            String inboundMapper = readString(stepMap, "inboundMapper");
+            String outboundMapper = readString(stepMap, "outboundMapper");
             PipelineTemplateStepExecution execution = readExecution(stepMap.get("execution"), version, name);
             stepInfos.add(new PipelineTemplateStep(
                 name,
                 cardinality,
                 inputType,
                 inputFields,
+                inboundMapper,
                 outputType,
                 outputFields,
+                outboundMapper,
                 execution));
         }
         return stepInfos;

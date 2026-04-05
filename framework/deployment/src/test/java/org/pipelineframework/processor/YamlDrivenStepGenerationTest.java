@@ -224,6 +224,238 @@ class YamlDrivenStepGenerationTest {
     }
 
     @Test
+    void generatesInternalStepFromYamlOwnedTypesAndMappers() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-yaml-owned.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                cardinality: "ONE_TO_ONE"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+                inboundMapper: "com.example.app.PaymentRecordMapper"
+                outboundMapper: "com.example.app.PaymentStatusMapper"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import io.smallrye.mutiny.Uni;
+            import org.pipelineframework.annotation.PipelineStep;
+            import org.pipelineframework.service.ReactiveService;
+
+            @PipelineStep
+            public class PaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
+                @Override
+                public Uni<PaymentStatus> process(PaymentRecord input) {
+                    return Uni.createFrom().item(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path recordDto = writeSource("PaymentRecordDto.java", """
+            package com.example.app;
+
+            public class PaymentRecordDto {
+            }
+            """);
+        Path statusDto = writeSource("PaymentStatusDto.java", """
+            package com.example.app;
+
+            public class PaymentStatusDto {
+            }
+            """);
+        Path inboundMapper = writeSource("PaymentRecordMapper.java", """
+            package com.example.app;
+
+            import org.pipelineframework.mapper.Mapper;
+
+            public class PaymentRecordMapper implements Mapper<PaymentRecord, PaymentRecordDto> {
+                @Override
+                public PaymentRecord fromExternal(PaymentRecordDto external) {
+                    return new PaymentRecord();
+                }
+
+                @Override
+                public PaymentRecordDto toExternal(PaymentRecord domain) {
+                    return new PaymentRecordDto();
+                }
+            }
+            """);
+        Path outboundMapper = writeSource("PaymentStatusMapper.java", """
+            package com.example.app;
+
+            import org.pipelineframework.mapper.Mapper;
+
+            public class PaymentStatusMapper implements Mapper<PaymentStatus, PaymentStatusDto> {
+                @Override
+                public PaymentStatus fromExternal(PaymentStatusDto external) {
+                    return new PaymentStatus();
+                }
+
+                @Override
+                public PaymentStatusDto toExternal(PaymentStatus domain) {
+                    return new PaymentStatusDto();
+                }
+            }
+            """);
+        Path uniStub = writeUniStub();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, paymentStatus, recordDto, statusDto, inboundMapper, outboundMapper, uniStub));
+        assertTrue(result.success(), "Expected YAML-owned internal service compilation to succeed: " + result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenCardinalityConflictsWithReactiveInterface() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-bad-cardinality.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "expand"
+                service: "com.example.app.PaymentService"
+                cardinality: "ONE_TO_MANY"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import io.smallrye.mutiny.Uni;
+            import org.pipelineframework.annotation.PipelineStep;
+            import org.pipelineframework.service.ReactiveService;
+
+            @PipelineStep
+            public class PaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
+                @Override
+                public Uni<PaymentStatus> process(PaymentRecord input) {
+                    return Uni.createFrom().item(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path uniStub = writeUniStub();
+
+        CompilationResult result = compile(yamlFile, List.of(paymentService, paymentRecord, paymentStatus, uniStub));
+        assertFalse(result.success(), "Expected cardinality mismatch to fail");
+        assertTrue(
+            result.errorSummary().contains("declares cardinality"),
+            "Expected cardinality diagnostic: " + result.errorSummary());
+    }
+
+    @Test
+    void failsYamlInternalStepWhenMapperDomainTypeDoesNotMatchYamlType() throws IOException {
+        Path yamlFile = tempDir.resolve("pipeline-internal-bad-mapper.yaml");
+        Files.writeString(yamlFile, """
+            appName: "Test App"
+            basePackage: "com.example"
+            transport: "LOCAL"
+            steps:
+              - name: "pay"
+                service: "com.example.app.PaymentService"
+                cardinality: "ONE_TO_ONE"
+                input: "com.example.app.PaymentRecord"
+                output: "com.example.app.PaymentStatus"
+                inboundMapper: "com.example.app.WrongMapper"
+            """);
+
+        Path paymentService = writeSource("PaymentService.java", """
+            package com.example.app;
+
+            import io.smallrye.mutiny.Uni;
+            import org.pipelineframework.annotation.PipelineStep;
+            import org.pipelineframework.service.ReactiveService;
+
+            @PipelineStep
+            public class PaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
+                @Override
+                public Uni<PaymentStatus> process(PaymentRecord input) {
+                    return Uni.createFrom().item(new PaymentStatus());
+                }
+            }
+            """);
+        Path paymentRecord = writeSource("PaymentRecord.java", """
+            package com.example.app;
+
+            public class PaymentRecord {
+            }
+            """);
+        Path paymentStatus = writeSource("PaymentStatus.java", """
+            package com.example.app;
+
+            public class PaymentStatus {
+            }
+            """);
+        Path wrongDomain = writeSource("WrongDomain.java", """
+            package com.example.app;
+
+            public class WrongDomain {
+            }
+            """);
+        Path recordDto = writeSource("PaymentRecordDto.java", """
+            package com.example.app;
+
+            public class PaymentRecordDto {
+            }
+            """);
+        Path wrongMapper = writeSource("WrongMapper.java", """
+            package com.example.app;
+
+            import org.pipelineframework.mapper.Mapper;
+
+            public class WrongMapper implements Mapper<WrongDomain, PaymentRecordDto> {
+                @Override
+                public WrongDomain fromExternal(PaymentRecordDto external) {
+                    return new WrongDomain();
+                }
+
+                @Override
+                public PaymentRecordDto toExternal(WrongDomain domain) {
+                    return new PaymentRecordDto();
+                }
+            }
+            """);
+        Path uniStub = writeUniStub();
+
+        CompilationResult result = compile(
+            yamlFile,
+            List.of(paymentService, paymentRecord, paymentStatus, wrongDomain, recordDto, wrongMapper, uniStub));
+        assertFalse(result.success(), "Expected mapper domain mismatch to fail");
+        assertTrue(
+            result.errorSummary().contains("must declare Mapper<"),
+            "Expected mapper mismatch diagnostic: " + result.errorSummary());
+    }
+
+    @Test
     void doesNotGenerateArtifactsForAnnotatedServicesNotReferencedInYaml() throws IOException {
         Path yamlFile = tempDir.resolve("pipeline-referenced-only.yaml");
         Files.writeString(yamlFile, """

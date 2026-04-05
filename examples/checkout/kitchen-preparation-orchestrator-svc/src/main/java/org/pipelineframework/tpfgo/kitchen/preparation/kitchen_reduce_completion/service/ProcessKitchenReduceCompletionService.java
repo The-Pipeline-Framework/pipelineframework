@@ -15,14 +15,7 @@ import org.pipelineframework.service.ReactiveStreamingClientService;
 import org.pipelineframework.tpfgo.common.domain.KitchenTask;
 import org.pipelineframework.tpfgo.common.domain.OrderReadyForDispatch;
 
-@PipelineStep(
-    inputType = KitchenTask.class,
-    outputType = OrderReadyForDispatch.class,
-    stepType = org.pipelineframework.step.StepManyToOne.class,
-    backendType = org.pipelineframework.grpc.GrpcServiceClientStreamingAdapter.class,
-    inboundMapper = org.pipelineframework.tpfgo.kitchen.preparation.kitchen_expand_tasks.service.KitchenTaskMapper.class,
-    outboundMapper = org.pipelineframework.tpfgo.kitchen.preparation.kitchen_reduce_completion.service.OrderReadyForDispatchMapper.class
-)
+@PipelineStep
 @ApplicationScoped
 public class ProcessKitchenReduceCompletionService
     implements ReactiveStreamingClientService<KitchenTask, OrderReadyForDispatch> {

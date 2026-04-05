@@ -16,15 +16,7 @@ import org.pipelineframework.search.common.domain.TokenBatch;
 import org.pipelineframework.search.common.util.HashingUtils;
 import org.pipelineframework.service.ReactiveStreamingService;
 
-@PipelineStep(
-    inputType = org.pipelineframework.search.common.domain.ParsedDocument.class,
-    outputType = org.pipelineframework.search.common.domain.TokenBatch.class,
-    stepType = org.pipelineframework.step.StepOneToMany.class,
-    backendType = org.pipelineframework.grpc.GrpcServiceStreamingAdapter.class,
-    inboundMapper = org.pipelineframework.search.common.mapper.ParsedDocumentMapper.class,
-    outboundMapper = org.pipelineframework.search.common.mapper.TokenBatchMapper.class,
-    cacheKeyGenerator = org.pipelineframework.search.tokenize_content.cache.TokenizeContentCacheKeyGenerator.class
-)
+@PipelineStep(cacheKeyGenerator = org.pipelineframework.search.tokenize_content.cache.TokenizeContentCacheKeyGenerator.class)
 @ApplicationScoped
 @Getter
 public class ProcessTokenizeContentService
