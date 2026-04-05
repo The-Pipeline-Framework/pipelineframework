@@ -19,6 +19,7 @@ package org.pipelineframework.csv.service;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Iterator;
+import java.util.List;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -80,56 +81,63 @@ public class ProcessCsvPaymentsInputService
    */
   @Override
   public Multi<PaymentRecord> process(CsvPaymentsInputFile input) {
-    return Multi.createFrom()
-        .deferred(
-            Unchecked.supplier(
-                () -> {
-                  try {
-                    var reader = input.openReader();
-                    var csvReader =
-                        new CsvToBeanBuilder<PaymentRecord>(reader)
-                            .withType(PaymentRecord.class)
-                            .withMappingStrategy(input.veryOwnStrategy())
-                            .withSeparator(',')
-                            .withIgnoreLeadingWhiteSpace(true)
-                            .withIgnoreEmptyLine(true)
-                            .build();
+    try {
+      var reader = input.openReader();
+      var csvReader =
+          new CsvToBeanBuilder<PaymentRecord>(reader)
+              .withType(PaymentRecord.class)
+              .withMappingStrategy(input.veryOwnStrategy())
+              .withSeparator(',')
+              .withIgnoreLeadingWhiteSpace(true)
+              .withIgnoreEmptyLine(true)
+              .build();
 
-                    String serviceId = this.getClass().toString();
+      String serviceId = this.getClass().toString();
 
-                    // Lazy + typed
-                    Iterator<PaymentRecord> iterator = csvReader.iterator();
-                    Iterable<PaymentRecord> iterable = () -> iterator;
+      // Eagerly parse CSV into a list to catch errors early
+      List<PaymentRecord> records;
+      try {
+          records = csvReader.parse();
+      } catch (Exception e) {
+          try {
+              reader.close();
+          } catch (IOException closeEx) {
+              LOG.warnf(closeEx, "Failed to close CSV reader after parse error for: %s", input.getSourceName());
+          }
+          LOG.errorf(e, "CSV parsing failed for file: %s", input.getSourceName());
+          // Return a failing Multi instead of throwing from deferred
+          return Multi.createFrom().<PaymentRecord>failure(new RuntimeException("Error parsing CSV: " + e.getMessage(), e));
+      }
 
-                    // rate limiter
-                    FixedDemandPacer pacer =
-                        new FixedDemandPacer(rowsPerPeriod, Duration.ofMillis(millisPeriod));
+      // Emit parsed records with demand pacing
+      FixedDemandPacer pacer =
+          new FixedDemandPacer(rowsPerPeriod, Duration.ofMillis(millisPeriod));
 
-                    return Multi.createFrom()
-                        .iterable(iterable)
-                        .paceDemand()
-                        .on(Infrastructure.getDefaultWorkerPool())
-                        .using(pacer)
-                        .onItem()
-                        .invoke(
-                            rec -> {
-                              MDC.put("serviceId", serviceId);
-                              LOG.infof(
-                                  "Executed command on %s --> %s", input.getSourceName(), rec);
-                              MDC.remove("serviceId");
-                            })
-                        .onTermination()
-                        .invoke(
-                            () -> {
-                              try {
-                                reader.close();
-                              } catch (IOException e) {
-                                LOG.warn("Failed to close CSV reader", e);
-                              }
-                            });
-                  } catch (IOException e) {
-                    throw new RuntimeException("CSV processing error", e);
-                  }
-                }));
+      return Multi.createFrom()
+          .iterable(records)
+          .paceDemand()
+          .on(Infrastructure.getDefaultWorkerPool())
+          .using(pacer)
+          .onItem()
+          .invoke(
+              rec -> {
+                MDC.put("serviceId", serviceId);
+                LOG.infof(
+                    "Executed command on %s --> %s", input.getSourceName(), rec);
+                MDC.remove("serviceId");
+              })
+          .onTermination()
+          .invoke(
+              () -> {
+                try {
+                  reader.close();
+                  LOG.infof("Closed CSV reader for: %s", input.getSourceName());
+                } catch (IOException e) {
+                  LOG.warnf(e, "Failed to close CSV reader for: %s", input.getSourceName());
+                }
+              });
+    } catch (IOException e) {
+      throw new RuntimeException("CSV processing error", e);
+    }
   }
 }
