@@ -126,6 +126,8 @@ const mainSidebar = [
                     {text: 'Logging', link: '/guide/operations/observability/logging'},
                     {text: 'Health Checks', link: '/guide/operations/observability/health-checks'},
                     {text: 'Alerting', link: '/guide/operations/observability/alerting'},
+                    {text: 'NewRelic OTel', link: '/guide/operations/observability/newrelic'},
+                    {text: 'Using Quarkus LGTM', link: '/guide/operations/observability/lgtm'},
                     {text: 'Security Notes', link: '/guide/operations/observability/security'}
                 ]
             }
