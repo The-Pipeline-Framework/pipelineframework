@@ -18,6 +18,7 @@ Enabled settings (defaults):
 - `quarkus.observability.lgtm.enabled=false`
 
 Usage:
+
 ```bash
 export NEW_RELIC_LICENSE_KEY=...
 export NEW_RELIC_OTLP_ENDPOINT=https://otlp.nr-data.net:443
@@ -36,6 +37,11 @@ pipeline.telemetry.tracing.client-spans.allowlist=ProcessCsvPaymentsInputService
 
 When enabled, the orchestrator will always emit client spans for the allowlisted
 services (using a sampled parent context) even if the global sampler is low.
+
+**Important runtime behavior:**
+- When `pipeline.telemetry.tracing.client-spans.force=true` is set with an empty `allowlist`, forcing applies to ALL services (not none), which can greatly increase span volume.
+- Entries in `pipeline.telemetry.tracing.client-spans.allowlist` are matched by exact service-name equality (no wildcards or prefix matching supported).
+- **Recommendation:** Always populate the allowlist with exact service names to limit the impact and avoid excessive span volume.
 
 ## Optional: OTel Java Agent for JVM Runtime UI
 
