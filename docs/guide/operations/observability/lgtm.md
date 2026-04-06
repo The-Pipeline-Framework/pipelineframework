@@ -1,10 +1,11 @@
 # Dev Mode Behavior (New Relic vs LGTM)
 
-TPF keeps observability lightweight by default in dev. You opt in to external collectors via env vars.
+The Pipeline Framework (TPF) keeps observability lightweight by default in dev. You opt in to external collectors via env vars.
 
 ## LGTM (explicit opt-in)
 
 LGTM Dev Services are off by default. Enable them explicitly:
+
 ```bash
 export QUARKUS_OBSERVABILITY_LGTM_ENABLED=true
 export QUARKUS_MICROMETER_EXPORT_PROMETHEUS_ENABLED=true
@@ -19,7 +20,9 @@ for dev convenience (for example `quarkus.otel.metric.export.interval=10s`).
 ## Prometheus/Micrometer Defaults
 
 Templates and example services default to:
+
 ```properties
 quarkus.micrometer.export.prometheus.enabled=${QUARKUS_MICROMETER_EXPORT_PROMETHEUS_ENABLED:false}
 ```
+
 so Prometheus/LGTM are opt-in and do not slow down normal dev runs.
