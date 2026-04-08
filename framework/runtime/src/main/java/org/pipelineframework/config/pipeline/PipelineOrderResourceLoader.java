@@ -85,7 +85,7 @@ public final class PipelineOrderResourceLoader {
     }
 
     private static List<String> selectBestOrderCandidate(List<List<String>> candidates, ClassLoader classLoader) {
-        List<String> best = candidates.getFirst();
+        List<String> best = candidates.get(0);
         int bestLoadableCount = countLoadableSteps(best, classLoader);
         boolean bestAllLoadable = bestLoadableCount == best.size();
 

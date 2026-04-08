@@ -34,13 +34,22 @@ class CurrentAuthoredSurfacesGuardTest {
         scanYaml(examples, violations);
         scanYaml(templateGenerator, violations);
         scanUiExportSurface(uiExportSurface, violations);
-        scanCurrentExampleInternalStepClasses(requireDirectory(repoRoot.resolve("examples/checkout")), violations);
-        scanCurrentExampleInternalStepClasses(requireDirectory(repoRoot.resolve("examples/search")), violations);
-        scanCurrentExampleInternalStepClasses(requireDirectory(repoRoot.resolve("examples/csv-payments")), violations);
+
+        // Scan all example directories dynamically
+        try (Stream<Path> exampleDirs = Files.list(examples)) {
+            exampleDirs.filter(Files::isDirectory)
+                .forEach(exampleDir -> {
+                    try {
+                        scanCurrentExampleInternalStepClasses(exampleDir, violations);
+                    } catch (IOException ex) {
+                        throw new IllegalStateException("Failed to scan example directory: " + exampleDir, ex);
+                    }
+                });
+        }
 
         assertTrue(
             violations.isEmpty(),
-            "Current authored surfaces must not contain legacy protoType declarations:\n" + String.join("\n", violations));
+            "Current authored surfaces must not contain LEGACY_INTERNAL_STEP_ANNOTATION_METADATA:\n" + String.join("\n", violations));
     }
 
     private static void scanMarkdown(Path root, List<String> violations) throws IOException {
@@ -68,10 +77,13 @@ class CurrentAuthoredSurfacesGuardTest {
     }
 
     private static void scanCurrentExampleInternalStepClasses(Path root, List<String> violations) throws IOException {
-        try (Stream<Path> stream = Files.walk(root)) {
+        Path srcMainJava = root.resolve("src").resolve("main").resolve("java");
+        if (!Files.exists(srcMainJava)) {
+            return;
+        }
+        try (Stream<Path> stream = Files.walk(srcMainJava)) {
             stream.filter(Files::isRegularFile)
-                .filter(path -> path.toString().contains("/src/main/java/"))
-                .filter(path -> path.toString().endsWith(".java"))
+                .filter(path -> path.getFileName().toString().endsWith(".java"))
                 .forEach(path -> recordViolations(path, LEGACY_INTERNAL_STEP_ANNOTATION_METADATA, violations));
         }
     }

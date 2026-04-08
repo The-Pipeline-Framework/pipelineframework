@@ -312,7 +312,7 @@ class QueueAsyncCoordinator {
     if (items == null || items.isEmpty()) {
       return null;
     }
-    return items.getFirst();
+    return items.get(0);
   }
 
   private ExecutionStateStore selectExecutionStateStore(String providerName) {

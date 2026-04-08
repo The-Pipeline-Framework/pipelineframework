@@ -29,6 +29,8 @@ steps:
     outboundMapper: com.app.payment.PaymentStatusMapper
 ```
 
+The YAML `input` and `output` fields refer to your service's domain types and must match the generic parameters of your reactive service interface (e.g., `ReactiveService<I, O>`). The `inboundMapper` and `outboundMapper` are mappers that translate between Domain ↔ External representation. Provide mappers as paired `Mapper<Domain, External>` implementations to validate boundaries and avoid build-time type mismatches.
+
 ## 3) Implement the Service
 
 Annotate the class with `@PipelineStep` so build-time generation can discover it.

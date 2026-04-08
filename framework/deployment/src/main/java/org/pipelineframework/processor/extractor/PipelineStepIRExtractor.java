@@ -295,17 +295,16 @@ public class PipelineStepIRExtractor {
         if (typeElement.getQualifiedName().contentEquals(erasureName)) {
             return declaredType;
         }
-        for (TypeMirror iface : typeElement.getInterfaces()) {
-            DeclaredType match = findReactiveSupertype(typeUtils, iface, erasureName);
-            if (match != null) {
-                return match;
+        // Preserve instantiated DeclaredType when recursing to maintain concrete type arguments
+        for (TypeMirror ifaceMirror : typeUtils.directSupertypes(declaredType)) {
+            if (ifaceMirror instanceof DeclaredType ifaceDeclared) {
+                DeclaredType match = findReactiveSupertype(typeUtils, ifaceDeclared, erasureName);
+                if (match != null) {
+                    return match;
+                }
             }
         }
-        TypeMirror superclass = typeElement.getSuperclass();
-        if (superclass == null || superclass.getKind() == javax.lang.model.type.TypeKind.NONE) {
-            return null;
-        }
-        return findReactiveSupertype(typeUtils, superclass, erasureName);
+        return null;
     }
 
     /**

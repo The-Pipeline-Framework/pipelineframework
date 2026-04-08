@@ -403,7 +403,10 @@ public class StepDefinitionParser {
         }
         ClassName mapper = parseClassName(mapperName);
         if (mapper == null) {
-            LOG.warnf("Skipping step '%s': invalid %s class name '%s'", stepName, fieldName, mapperName);
+            String message = String.format("Invalid %s mapper class name for step '%s': %s = '%s'",
+                fieldName, stepName, fieldName, mapperName);
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
         }
         return mapper;
     }
