@@ -51,7 +51,7 @@ Use `@PipelineStep` for Java-local execution concerns:
 - `ordering`
 - `threadSafety`
 - `sideEffect`
-- delegated/operator-only fields such as `operator`, `delegate`, `operatorMapper`, and `externalMapper`
+- `delegate` (for operator steps only)
 
 ### Compatibility-Only Members
 
@@ -65,6 +65,16 @@ The following `@PipelineStep` members remain supported for legacy internal servi
 - `backendType`
 
 New internal services should not author those members.
+
+### Operator-Specific YAML Fields (Legacy)
+
+For operator/delegated steps, the following fields were previously supported on the `@PipelineStep` annotation but are now configured exclusively in YAML:
+
+- `operator` (use fully-qualified class name, e.g., `operator: com.example.OperatorClass::method`)
+- `operatorMapper`
+- `externalMapper`
+
+These operator-specific fields must use fully-qualified class::method references in YAML and are resolved/validated at build time. They are not part of the current `@PipelineStep` authoring surface for internal services.
 
 ## Usage
 

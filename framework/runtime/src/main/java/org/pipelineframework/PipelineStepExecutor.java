@@ -54,36 +54,35 @@ class PipelineStepExecutor {
         PipelineTelemetry.RunContext telemetryContext,
         PipelineCacheReadSupport cacheReadSupport,
         PipelineContext contextSnapshot) {
-        return switch (step) {
-            case StepOneToOne<?, ?> stepOneToOne -> {
-                boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
-                    stepOneToOne,
-                    parallelismPolicy,
-                    PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_ONE);
-                yield applyOneToOneUnchecked(stepOneToOne, current, parallel, maxConcurrency, telemetry, telemetryContext, cacheReadSupport,
-                    contextSnapshot);
-            }
-            case StepOneToOneCompletableFuture<?, ?> stepFuture -> {
-                boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
-                    stepFuture,
-                    parallelismPolicy,
-                    PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_ONE_FUTURE);
-                yield applyOneToOneFutureUnchecked(stepFuture, current, parallel, maxConcurrency, telemetry, telemetryContext,
-                    contextSnapshot);
-            }
-            case StepOneToMany<?, ?> stepOneToMany -> {
-                boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
-                    stepOneToMany,
-                    parallelismPolicy,
-                    PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_MANY);
-                yield applyOneToManyUnchecked(stepOneToMany, current, parallel, maxConcurrency, telemetry, telemetryContext,
-                    contextSnapshot);
-            }
-            case ManyToOne<?, ?> manyToOne -> applyManyToOneUnchecked(manyToOne, current, telemetry, telemetryContext, contextSnapshot);
-            case StepManyToMany<?, ?> manyToMany -> applyManyToManyUnchecked(manyToMany, current, telemetry, telemetryContext,
+        if (step instanceof StepOneToOne<?, ?> stepOneToOne) {
+            boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
+                stepOneToOne,
+                parallelismPolicy,
+                PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_ONE);
+            return applyOneToOneUnchecked(stepOneToOne, current, parallel, maxConcurrency, telemetry, telemetryContext, cacheReadSupport,
                 contextSnapshot);
-            default -> throw new IllegalArgumentException("Step not recognised: " + step.getClass().getName());
-        };
+        } else if (step instanceof StepOneToOneCompletableFuture<?, ?> stepFuture) {
+            boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
+                stepFuture,
+                parallelismPolicy,
+                PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_ONE_FUTURE);
+            return applyOneToOneFutureUnchecked(stepFuture, current, parallel, maxConcurrency, telemetry, telemetryContext,
+                contextSnapshot);
+        } else if (step instanceof StepOneToMany<?, ?> stepOneToMany) {
+            boolean parallel = PipelineParallelismPolicyResolver.shouldParallelize(
+                stepOneToMany,
+                parallelismPolicy,
+                PipelineParallelismPolicyResolver.StepParallelismType.ONE_TO_MANY);
+            return applyOneToManyUnchecked(stepOneToMany, current, parallel, maxConcurrency, telemetry, telemetryContext,
+                contextSnapshot);
+        } else if (step instanceof ManyToOne<?, ?> manyToOne) {
+            return applyManyToOneUnchecked(manyToOne, current, telemetry, telemetryContext, contextSnapshot);
+        } else if (step instanceof StepManyToMany<?, ?> manyToMany) {
+            return applyManyToManyUnchecked(manyToMany, current, telemetry, telemetryContext,
+                contextSnapshot);
+        } else {
+            throw new IllegalArgumentException("Step not recognised: " + step.getClass().getName());
+        }
     }
 
     @SuppressWarnings({"unchecked"})

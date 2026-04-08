@@ -295,17 +295,35 @@ public class PipelineStepIRExtractor {
         if (typeElement.getQualifiedName().contentEquals(erasureName)) {
             return declaredType;
         }
-        for (TypeMirror iface : typeElement.getInterfaces()) {
-            DeclaredType match = findReactiveSupertype(typeUtils, iface, erasureName);
-            if (match != null) {
-                return match;
+        // Preserve type substitutions when recursing through interfaces
+        for (TypeMirror ifaceMirror : declaredType.getTypeArguments().isEmpty()
+                ? typeElement.getInterfaces()
+                : typeUtils.directSupertypes(declaredType)) {
+            if (ifaceMirror instanceof DeclaredType) {
+                Element ifaceElement = typeUtils.asElement(ifaceMirror);
+                if (ifaceElement instanceof TypeElement && ((TypeElement) ifaceElement).getKind() == javax.lang.model.element.ElementKind.INTERFACE) {
+                    DeclaredType match = findReactiveSupertype(typeUtils, ifaceMirror, erasureName);
+                    if (match != null) {
+                        return match;
+                    }
+                }
             }
         }
-        TypeMirror superclass = typeElement.getSuperclass();
-        if (superclass == null || superclass.getKind() == javax.lang.model.type.TypeKind.NONE) {
+        // Preserve type substitutions when recursing through superclass
+        TypeMirror superclassMirror = declaredType.getTypeArguments().isEmpty()
+            ? typeElement.getSuperclass()
+            : typeUtils.directSupertypes(declaredType).stream()
+                .filter(t -> t instanceof DeclaredType)
+                .filter(t -> {
+                    Element e = typeUtils.asElement(t);
+                    return e instanceof TypeElement && ((TypeElement) e).getKind() == javax.lang.model.element.ElementKind.CLASS;
+                })
+                .findFirst()
+                .orElse(null);
+        if (superclassMirror == null || superclassMirror.getKind() == javax.lang.model.type.TypeKind.NONE) {
             return null;
         }
-        return findReactiveSupertype(typeUtils, superclass, erasureName);
+        return findReactiveSupertype(typeUtils, superclassMirror, erasureName);
     }
 
     /**
