@@ -949,6 +949,14 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return yamlType;
         }
         if (annotationType != null) {
+            if (reactiveType != null && !annotationType.equals(reactiveType)) {
+                ctx.getProcessingEnv().getMessager().printMessage(
+                    javax.tools.Diagnostic.Kind.ERROR,
+                    "Internal step '" + stepName + "' has deprecated @PipelineStep " + direction + "Type '"
+                        + annotationType + "' that does not match the reactive service interface " + direction + " type '"
+                        + reactiveType + "'.");
+                return null;
+            }
             return annotationType;
         }
         return reactiveType;
