@@ -136,6 +136,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
     private TypeSpec buildRestClientStepClass(RestBinding binding, GenerationContext ctx, String restClientInterfaceName) {
         PipelineStepModel model = binding.model();
         DeploymentRole role = ctx.role();
+        boolean cachePluginSideEffect = isCachePluginSideEffect(model);
         String clientStepClassName = ResourceNameUtils.normalizeBaseName(model.generatedName())
             + PipelineStepProcessor.REST_CLIENT_STEP_SUFFIX;
 
@@ -214,7 +215,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                         ClassName.get("org.pipelineframework.context", "PipelineContextHolder"))
                     .addStatement("String versionTag = context != null ? context.versionTag() : null")
                     .addStatement("String replayMode = context != null ? context.replayMode() : null")
-                    .addStatement("String cachePolicy = context != null ? context.cachePolicy() : null");
+                    .addStatement("String cachePolicy = $L", resolveOutboundCachePolicyExpression(cachePluginSideEffect));
                 applyOneToOneMethod.addStatement(
                     "return $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, input))",
                     ClassName.get("org.pipelineframework.telemetry", "HttpMetrics"),
@@ -235,7 +236,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                         ClassName.get("org.pipelineframework.context", "PipelineContextHolder"))
                     .addStatement("String versionTag = context != null ? context.versionTag() : null")
                     .addStatement("String replayMode = context != null ? context.replayMode() : null")
-                    .addStatement("String cachePolicy = context != null ? context.cachePolicy() : null")
+                    .addStatement("String cachePolicy = $L", resolveOutboundCachePolicyExpression(cachePluginSideEffect))
                     .addStatement(
                         "return $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, input))",
                         ClassName.get("org.pipelineframework.telemetry", "HttpMetrics"),
@@ -257,7 +258,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                         ClassName.get("org.pipelineframework.context", "PipelineContextHolder"))
                     .addStatement("String versionTag = context != null ? context.versionTag() : null")
                     .addStatement("String replayMode = context != null ? context.replayMode() : null")
-                    .addStatement("String cachePolicy = context != null ? context.cachePolicy() : null")
+                    .addStatement("String cachePolicy = $L", resolveOutboundCachePolicyExpression(cachePluginSideEffect))
                     .addStatement(
                         "return inputs.collect().asList().onItem().transformToUni(inputDtos -> $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, inputDtos)))",
                         ClassName.get("org.pipelineframework.telemetry", "HttpMetrics"),
@@ -279,7 +280,7 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
                         ClassName.get("org.pipelineframework.context", "PipelineContextHolder"))
                     .addStatement("String versionTag = context != null ? context.versionTag() : null")
                     .addStatement("String replayMode = context != null ? context.replayMode() : null")
-                    .addStatement("String cachePolicy = context != null ? context.cachePolicy() : null")
+                    .addStatement("String cachePolicy = $L", resolveOutboundCachePolicyExpression(cachePluginSideEffect))
                     .addStatement(
                         "return $T.instrumentClient($S, $S, this.restClient.process(versionTag, replayMode, cachePolicy, inputs))",
                         ClassName.get("org.pipelineframework.telemetry", "HttpMetrics"),
@@ -314,6 +315,31 @@ public class RestClientStepRenderer implements PipelineRenderer<RestBinding> {
             .addParameter(headerParam("cachePolicy"))
             .addParameter(inputDto, "inputDto");
         return methodBuilder.build();
+    }
+
+    private String resolveOutboundCachePolicyExpression(boolean cachePluginSideEffect) {
+        if (cachePluginSideEffect) {
+            return "context != null && \"require-cache\".equals(context.cachePolicy()) ? \"prefer-cache\" : "
+                + "(context != null ? context.cachePolicy() : null)";
+        }
+        return "context != null ? context.cachePolicy() : null";
+    }
+
+    private boolean isCachePluginSideEffect(PipelineStepModel model) {
+        if (model == null || !model.sideEffect()) {
+            return false;
+        }
+        String canonicalName = model.serviceClassName() == null ? null : model.serviceClassName().canonicalName();
+        boolean isCacheService = "org.pipelineframework.plugin.cache.CacheService".equals(canonicalName);
+        String serviceName = model.serviceName();
+        if (!isCacheService
+            && serviceName != null
+            && serviceName.startsWith("ObserveCache")
+            && !serviceName.startsWith("ObserveCacheInvalidate")) {
+            throw new IllegalStateException(
+                "Cache side-effect naming requires CacheService binding for '" + serviceName + "'");
+        }
+        return isCacheService;
     }
 
     /**

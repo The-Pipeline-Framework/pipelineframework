@@ -118,7 +118,7 @@ class PipelineStepExecutor {
                 .onItem()
                 .transformToUni(item -> applyOneToOneWithCache(step, item, cacheReadSupport, contextSnapshot))
                 .onItem()
-                .transformToUni(item -> withPipelineContext(contextSnapshot, () -> CachePolicyEnforcer.enforce(item)));
+                .transformToUni(item -> applyCachePolicy(step, item, contextSnapshot));
             if (telemetry == null) {
                 return result;
             }
@@ -136,7 +136,7 @@ class PipelineStepExecutor {
                     .transformToUni(item -> {
                         Uni<O> result = applyOneToOneWithCache(step, item, cacheReadSupport, contextSnapshot)
                             .onItem().transformToUni(enforced ->
-                                withPipelineContext(contextSnapshot, () -> CachePolicyEnforcer.enforce(enforced)));
+                                applyCachePolicy(step, enforced, contextSnapshot));
                         if (telemetry == null) {
                             return result;
                         }
@@ -151,7 +151,7 @@ class PipelineStepExecutor {
                 .transformToUni(item -> {
                     Uni<O> result = applyOneToOneWithCache(step, item, cacheReadSupport, contextSnapshot)
                         .onItem().transformToUni(enforced ->
-                            withPipelineContext(contextSnapshot, () -> CachePolicyEnforcer.enforce(enforced)));
+                            applyCachePolicy(step, enforced, contextSnapshot));
                     if (telemetry == null) {
                         return result;
                     }
@@ -163,6 +163,17 @@ class PipelineStepExecutor {
         throw new IllegalArgumentException(MessageFormat.format(
             "Unsupported current type for StepOneToOne: {0}",
             current == null ? "null" : current.getClass().getName()));
+    }
+
+    private static <O> Uni<O> applyCachePolicy(
+        StepOneToOne<?, O> step,
+        O item,
+        PipelineContext contextSnapshot) {
+        if (step instanceof CacheReadBypass) {
+            PipelineCacheStatusHolder.clear();
+            return Uni.createFrom().item(item);
+        }
+        return withPipelineContext(contextSnapshot, () -> CachePolicyEnforcer.enforce(item));
     }
 
     private static <I, O> Uni<O> applyOneToOneWithCache(

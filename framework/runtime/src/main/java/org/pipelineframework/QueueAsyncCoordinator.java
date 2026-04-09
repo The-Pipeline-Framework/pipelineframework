@@ -21,6 +21,7 @@ import jakarta.ws.rs.NotFoundException;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
+import org.pipelineframework.checkpoint.CheckpointPublicationService;
 import org.pipelineframework.orchestrator.CreateExecutionResult;
 import org.pipelineframework.orchestrator.DeadLetterPublisher;
 import org.pipelineframework.orchestrator.ExecutionCreateCommand;
@@ -60,6 +61,9 @@ class QueueAsyncCoordinator {
 
   @Inject
   ExecutionFailureHandler executionFailureHandler;
+
+  @Inject
+  CheckpointPublicationService checkpointPublicationService;
 
   private final ScheduledExecutorService queueSweepExecutor = Executors.newSingleThreadScheduledExecutor(
       runnable -> {
@@ -242,13 +246,16 @@ class QueueAsyncCoordinator {
           ExecutionRecord<Object, Object> record = claimed.get();
           String transitionKey = transitionKey(record.executionId(), record.currentStepIndex(), record.attempt());
           return runAsyncExecution(record.inputPayload(), executeStreaming)
+              .onItem().transformToUni(resultPayload -> checkpointPublicationService
+                  .publishIfConfigured(record, singleResult(resultPayload))
+                  .replaceWith(resultPayload))
               .onItem().transformToUni(resultPayload -> executionStateStore.markSucceeded(
-                  record.tenantId(),
-                  record.executionId(),
-                  record.version(),
-                  transitionKey,
-                  resultPayload,
-                  System.currentTimeMillis()))
+                      record.tenantId(),
+                      record.executionId(),
+                      record.version(),
+                      transitionKey,
+                      resultPayload,
+                      System.currentTimeMillis()))
               .onItem().transformToUni(updated -> Uni.createFrom().voidItem())
               .onFailure().recoverWithUni(
                   failure -> executionFailureHandler.handleExecutionFailure(
@@ -299,6 +306,13 @@ class QueueAsyncCoordinator {
           }
           return Uni.createFrom().item((List<?>) List.copyOf(items));
         });
+  }
+
+  private Object singleResult(List<?> items) {
+    if (items == null || items.isEmpty()) {
+      return null;
+    }
+    return items.getFirst();
   }
 
   private ExecutionStateStore selectExecutionStateStore(String providerName) {

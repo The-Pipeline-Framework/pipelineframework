@@ -10,13 +10,15 @@ Developer implementation guidance lives in [Item Reject Sink](/guide/development
 
 | Channel | Scope | Trigger | Primary operational signal |
 |---|---|---|---|
+| Checkpoint Publication Backlog | pre-execution handoff | checkpoint publication cannot admit work into downstream orchestration quickly enough | publication lag/backlog and handoff latency |
 | Item Reject Sink | individual items/streams | step-level recover-and-continue path | reject sink throughput/backlog trends |
 | Execution DLQ | full async execution | terminal orchestration failure | execution DLQ backlog growth |
 
 Triage rule:
 
-1. Rising item rejects with stable execution success usually indicates data quality or business-rule drift.
-2. Rising execution DLQ indicates control-plane, dependency, or systemic execution failure.
+1. An increase in item rejects with stable execution success usually indicates data quality or business-rule drift.
+2. A growing execution DLQ indicates control-plane, dependency, or systemic execution failure.
+3. When checkpoint publication backlog rises, it indicates throughput or admission pressure before downstream execution has started.
 
 ## Execution DLQ Configuration (Queue-Async)
 
@@ -77,8 +79,11 @@ For at-least-once boundaries (queue delivery, operator invocation, re-drive), en
 ## Operations Runbook
 
 1. Classify incident scope first: item reject trend vs execution DLQ growth.
-2. For item reject incidents, check fingerprint concentration and dominant error classes; route to business-data remediation and selective re-drive.
-3. Treat item reject re-drive as application-owned: default reject envelopes are metadata-only, so replay payload reconstruction is not provided by framework runtime.
-4. For execution DLQ incidents, triage terminal execution causes (`FAILED` vs `DLQ`) and validate idempotency before replay.
-5. If due executions stall, verify sweeper health and dispatcher lag.
-6. Re-drive in bounded batches and monitor duplicate suppression plus retry saturation.
+2. For checkpoint publication incidents, inspect publication lag, handoff latency, duplicate suppression (records intentionally skipped because a checkpoint handoff key was already seen), and delivery failure logs (publication log events emitted when downstream admission fails) before treating the incident as downstream execution failure.
+3. Checkpoint publication rejects and downstream admission failures occur before downstream execution admission.
+4. They are not execution DLQ events, and they do not use Item Reject Sink by default.
+5. For item reject incidents, check fingerprint concentration and dominant error classes; route to business-data remediation and selective re-drive.
+6. Treat item reject re-drive as application-owned: default reject envelopes are metadata-only, so replay payload reconstruction is not provided by framework runtime.
+7. For execution DLQ incidents, triage terminal execution causes (`FAILED` vs `DLQ`) and validate idempotency before replay.
+8. If due executions stall, verify sweeper health and dispatcher lag.
+9. Re-drive in bounded batches and monitor duplicate suppression plus retry saturation (retry attempts approaching the configured retry limit).

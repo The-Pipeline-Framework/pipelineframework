@@ -242,9 +242,9 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 - **Status**: OPEN
 
 4) **Idempotency / duplicate handoff**
-- **Problem**: Connector retries can duplicate downstream processing.
-- **Stance**: Function runtime now carries deterministic idempotency keys in envelopes and adapters, but connector-level de-dup policy is not yet fully formalized for all pipeline-to-pipeline handoffs. Action: define connector-level retry keys and de-dup semantics.
-- **Status**: PARTIAL
+- **Problem**: Checkpoint publication retries can duplicate downstream processing.
+- **Stance**: Orchestrator-owned checkpoint publication preserves incoming idempotency metadata when present and otherwise derives a deterministic handoff key from declared checkpoint key fields. The public model does not expose publication-local dedupe modes.
+- **Status**: RESOLVED
 
 5) **Traceability / lineage**
 - **Problem**: Track the lineage of items through steps and pipelines.
@@ -253,13 +253,13 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 
 6) **Type compatibility between pipelines**
 - **Problem**: Pipeline B should not depend on Pipeline A internals.
-- **Stance**: Use Pipeline B input DTO as the handoff contract; build-time checks exist for operator/mapping compatibility, with full cross-pipeline handoff contract governance still maturing.
-- **Status**: PARTIAL
+- **Stance**: Checkpoint publication/subscription declarations validate published output type, subscriber ingress type, and mapper compatibility at build time. Cross-pipeline handoff remains explicit through checkpoint boundary contracts instead of hidden pipeline internals.
+- **Status**: RESOLVED
 
-7) **Backpressure across pipelines**
+1. **Backpressure across pipelines**
 - **Problem**: Piping should preserve backpressure end-to-end.
-- **Stance**: Step/runtime backpressure controls are in place (buffer strategy/capacity), but connector-level end-to-end demand signalling and limits are still not a closed contract. Action: specify end-to-end demand signalling and buffer limits.
-- **Status**: PARTIAL
+- **Stance**: Reliable checkpoint publication inherits orchestrator queue-async admission behavior instead of exposing publication-local backpressure policies. Live subscribe/tap remains a weaker observation surface and does not define reliable handoff semantics.
+- **Status**: RESOLVED
 
 8) **Branching outputs (multi-out steps)**
 - **Problem**: A step may need to emit different output types based on business decisions.
@@ -287,8 +287,8 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 - **Schema drift**: handoff DTO versioning can break compatibility without strict rules. (See Pain-point matrix #6; Addressed in Near-Term Design Work: Build-Time Checks)
 - **Temporal coupling**: downstream slowness collapses upstream throughput. (See Pain-point matrix #7)
 - **Hotspot steps**: a single heavy step can dominate latency and throughput.
-- **Backpressure deadlocks**: mismatched demand signalling can stall a chain. (See Pain-point matrix #7; Addressed in Near-Term Design Work: Connector Policy)
-- **Implicit retries**: connector retries can trigger duplicate side effects. (See Pain-point matrix #4; Addressed in Near-Term Design Work: Connector Policy)
+- **Backpressure deadlocks**: mismatched demand signaling can stall a chain. (See Pain-point matrix #7)
+- **Implicit retries**: checkpoint publication retries can trigger duplicate side effects. (See Pain-point matrix #4)
 - **Observability blind spots**: reference-based tracing needs reliable lookup. (See Pain-point matrix #5; Addressed in Near-Term Design Work: TraceEnvelope)
 - **Fan-out/fan-in complexity**: ordering and timeout handling become tricky. (See Pain-point matrix #8)
 - **Distributed time assumptions**: ordering based on timestamps becomes ambiguous.
@@ -297,14 +297,11 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 ## Near-Term Design Work
 
 - **Error Sink**: define a runtime error sink interface with a default StdErrSink and optional gRPC/REST sink service.
-- **Connector Backpressure Policy**: define demand propagation, buffer limits, and flow control. (Pain-point #7, Owner: TBD, Acceptance: documented policy + tests)
-- **Connector Idempotency Policy**: define de-duplication, retry keys, and exactly-once semantics. (Pain-point #4, Owner: TBD, Acceptance: documented policy + tests)
-- **Build-Time Checks**: existing operator/mapping compatibility checks are in place; extend to explicit pipeline-to-pipeline handoff contracts.
+- **Checkpoint Publication Contract**: define topic publication/subscription rules, queue-async-only support, and orchestrator-owned handoff behavior. (Pain-point #3, #4, #7)
+- **Build-Time Checks**: existing operator/mapping compatibility checks are extended to explicit checkpoint publication/subscription contracts.
 
 ## Open Questions
 
-- Should the connector enforce strict backpressure by default?
-- Should connector idempotency be mandatory or opt-in?
 - How should the tracing store be configured (inline vs reference)?
 - Should the pipeline definition expose a formal "checkpoint contract"?
 - How should multi-out decisions be modeled (discriminated envelopes vs explicit pipelines)?

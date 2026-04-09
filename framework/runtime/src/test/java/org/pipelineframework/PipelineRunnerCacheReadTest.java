@@ -341,6 +341,30 @@ class PipelineRunnerCacheReadTest {
         }
     }
 
+    @Test
+    void cacheReadBypassSkipsCachePolicyEnforcement() {
+        CountingBypassStep step = new CountingBypassStep();
+        PipelineContext context = new PipelineContext("v1", null, "require-cache");
+        PipelineCacheStatusHolder.set(CacheStatus.MISS);
+        try {
+            Object result = PipelineRunner.applyOneToOneUnchecked(
+                step,
+                Uni.createFrom().item("input"),
+                false,
+                128,
+                null,
+                null,
+                null,
+                context);
+
+            String value = ((Uni<String>) result).await().indefinitely();
+            assertEquals("computed-input", value);
+            assertEquals(1, step.calls.get());
+        } finally {
+            PipelineCacheStatusHolder.clear();
+        }
+    }
+
     static class CountingStep extends ConfigurableStep implements StepOneToOne<String, String> {
         final AtomicInteger calls = new AtomicInteger();
 

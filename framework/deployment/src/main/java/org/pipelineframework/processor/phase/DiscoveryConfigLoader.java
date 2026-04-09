@@ -93,8 +93,8 @@ class DiscoveryConfigLoader {
      * Load the pipeline template configuration from the config file.
      *
      * @param configPath the pipeline config file path
-     * @param messager the messager for warning reporting, may be null
-     * @return the loaded template config, or null if loading fails
+     * @param messager the messager for error reporting, may be null
+     * @return the loaded template config
      */
     PipelineTemplateConfig loadTemplateConfig(Path configPath, Messager messager) {
         if (configPath == null) {
@@ -109,9 +109,9 @@ class DiscoveryConfigLoader {
                 StringWriter sw = new StringWriter();
                 PrintWriter pw = new PrintWriter(sw);
                 e.printStackTrace(pw);
-                messager.printMessage(Diagnostic.Kind.WARNING, errorMessage + "\n" + sw.toString());
+                messager.printMessage(Diagnostic.Kind.ERROR, errorMessage + "\n" + sw.toString());
             }
-            return null;
+            throw e;
         }
     }
 

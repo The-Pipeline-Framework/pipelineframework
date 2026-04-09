@@ -1,26 +1,13 @@
-/*
- * Copyright (c) 2023-2025 Mariano Barcia
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package org.pipelineframework.config.pipeline;
 
-import java.util.List;
-
-import org.junit.jupiter.api.Test;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
+
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.pipelineframework.config.boundary.PipelineCheckpointConfig;
+import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
+import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
+import org.pipelineframework.config.boundary.PipelineSubscriptionConfig;
 
 class PipelineYamlConfigPlatformTest {
 
@@ -59,5 +46,23 @@ class PipelineYamlConfigPlatformTest {
             List.of(),
             List.of());
         assertEquals("COMPUTE", config.platform());
+    }
+
+    @Test
+    void withTransportPreservesCheckpointBoundaries() {
+        PipelineYamlConfig config = new PipelineYamlConfig(
+            "org.example",
+            "REST",
+            "FUNCTION",
+            List.of(),
+            List.of(),
+            new PipelineInputBoundaryConfig(new PipelineSubscriptionConfig("orders-ready", "com.example.Mapper")),
+            new PipelineOutputBoundaryConfig(new PipelineCheckpointConfig("orders-dispatched", List.of("orderId"))));
+
+        PipelineYamlConfig updated = config.withTransport("GRPC");
+
+        assertEquals("GRPC", updated.transport());
+        assertEquals(config.input(), updated.input());
+        assertEquals(config.output(), updated.output());
     }
 }

@@ -10,10 +10,11 @@ import io.quarkus.runtime.StartupEvent;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.subscription.Cancellable;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.jboss.logging.Logger;
 import org.pipelineframework.checkout.common.connector.ConnectorUtils;
 import org.pipelineframework.PipelineOutputBus;
-import org.pipelineframework.checkout.common.connector.IdempotencyGuard;
 import org.pipelineframework.checkout.createorder.grpc.OrderReadySvc;
 import org.pipelineframework.checkout.deliverorder.grpc.OrderDispatchSvc;
 
@@ -28,21 +29,23 @@ public class CreateToDeliverIngestBridge {
     private final PipelineOutputBus outputBus;
     private final DeliverOrderIngestClient deliverOrderIngestClient;
     private final boolean idempotencyEnabled;
-    private final IdempotencyGuard idempotencyGuard;
     private final String backpressureStrategy;
     private final int backpressureBufferCapacity;
+    private final Set<String> acceptedKeys;
 
     private Cancellable forwardingSubscription;
 
     /**
-     * Creates a bridge that forwards checkpoint outputs from the CreateOrder pipeline to the DeliverOrder ingest client.
+     * Constructs a bridge that forwards CreateOrder pipeline checkpoint outputs to the DeliverOrder ingest client.
+     *
+     * Initializes optional in-memory idempotency tracking and normalizes backpressure strategy and buffer capacity.
      *
      * @param outputBus the source of pipeline checkpoint outputs; must not be null
      * @param deliverOrderIngestClient the gRPC client used to forward ready orders; must not be null
-     * @param idempotencyEnabled whether duplicate order ids should be filtered before forwarding
-     * @param idempotencyMaxKeys max in-memory keys retained for duplicate filtering
-     * @param backpressureStrategy overflow strategy for connector handoff (`BUFFER` or `DROP`)
-     * @param backpressureBufferCapacity overflow buffer capacity when strategy is `BUFFER`
+     * @param idempotencyEnabled if true, enables in-memory idempotency tracking to filter duplicate order IDs
+     * @param idempotencyMaxKeys maximum number of order ID keys retained by the idempotency tracker; if non-positive, 10000 is used
+     * @param backpressureStrategy overflow strategy for connector handoff (normalized; common values include {@code BUFFER} or {@code DROP})
+     * @param backpressureBufferCapacity buffer capacity used when the backpressure strategy is {@code BUFFER}; if non-positive, 256 is used
      * @throws NullPointerException if {@code outputBus} or {@code deliverOrderIngestClient} is null
      */
     public CreateToDeliverIngestBridge(
@@ -62,7 +65,9 @@ public class CreateToDeliverIngestBridge {
             Objects.requireNonNull(deliverOrderIngestClient, "deliverOrderIngestClient must not be null");
         this.idempotencyEnabled = idempotencyEnabled;
         int normalizedIdempotencyMaxKeys = idempotencyMaxKeys > 0 ? idempotencyMaxKeys : 10000;
-        this.idempotencyGuard = idempotencyEnabled ? new IdempotencyGuard(normalizedIdempotencyMaxKeys) : null;
+        this.acceptedKeys = idempotencyEnabled
+            ? ConcurrentHashMap.newKeySet(normalizedIdempotencyMaxKeys)
+            : Set.of();
         this.backpressureStrategy = ConnectorUtils.normalizeBackpressureStrategy(backpressureStrategy);
         this.backpressureBufferCapacity = backpressureBufferCapacity > 0 ? backpressureBufferCapacity : 256;
     }
@@ -70,21 +75,22 @@ public class CreateToDeliverIngestBridge {
     /**
      * Start forwarding ReadyOrder events from the pipeline output bus to the DeliverOrder ingest client.
      *
-     * <p>Subscribes to the application PipelineOutputBus, maps emitted items to
-     * OrderDispatchSvc.ReadyOrder when possible, forwards the resulting stream to
-     * the DeliverOrderIngestClient, stores the resulting cancellable subscription, and
-     * logs the bridge startup.</p>
-     *
-     * @param ignored the startup event (unused)
+     * Initializes and starts the connector runtime, stores the resulting cancellable subscription,
+     * and logs bridge startup.
      */
     void onStartup(@Observes StartupEvent ignored) {
-        Multi<Object> sourceStream =
-            ConnectorUtils.applyBackpressure(outputBus.stream(Object.class), backpressureStrategy, backpressureBufferCapacity);
-        Multi<OrderDispatchSvc.ReadyOrder> readyOrderStream = sourceStream
+        Multi<OrderDispatchSvc.ReadyOrder> readyOrderStream = ConnectorUtils.applyBackpressure(
+            outputBus.stream(Object.class),
+            backpressureStrategy,
+            backpressureBufferCapacity)
             .onItem().transformToMulti(item -> {
                 OrderDispatchSvc.ReadyOrder mapped = toDeliverReadyOrder(item);
-                return mapped == null ? Multi.createFrom().empty() : Multi.createFrom().item(mapped);
-            }).concatenate();
+                return mapped == null
+                    ? Multi.createFrom().empty()
+                    : Multi.createFrom().item(mapped);
+            }).concatenate()
+            .select().where(this::shouldForward)
+            .onFailure().invoke(failure -> LOG.error("Create->Deliver bridge failed", failure));
 
         forwardingSubscription = deliverOrderIngestClient.forward(readyOrderStream);
 
@@ -105,16 +111,14 @@ public class CreateToDeliverIngestBridge {
     }
 
     /**
-     * Convert a pipeline output item into an OrderDispatchSvc.ReadyOrder suitable for the DeliverOrder pipeline.
+     * Map a pipeline output item to an OrderDispatchSvc.ReadyOrder for the DeliverOrder pipeline.
      *
-     * <p>Supports two input shapes:
-     * <ul>
-     *   <li>OrderReadySvc.ReadyOrder — mapped directly to the dispatch ReadyOrder.</li>
-     *   <li>com.google.protobuf.Message — reads string fields "order_id", "customer_id", and "ready_at" and maps them when all are present and non-blank.</li>
-     * </ul>
+     * <p>Supports two input shapes: an OrderReadySvc.ReadyOrder (mapped directly) or a
+     * com.google.protobuf.Message from which the string fields "order_id", "customer_id", and
+     * "ready_at" are read and required to be non-blank.
      *
-     * @param item the pipeline output item to map; may be an OrderReadySvc.ReadyOrder, a protobuf Message, or any other type
-     * @return the mapped OrderDispatchSvc.ReadyOrder if mapping succeeds; `null` if the item type is unsupported or required fields are missing
+     * @param item the pipeline output item to map; may be an OrderReadySvc.ReadyOrder, a protobuf Message, or another type
+     * @return the mapped OrderDispatchSvc.ReadyOrder if all required fields are present and non-blank; {@code null} otherwise
      */
     private OrderDispatchSvc.ReadyOrder toDeliverReadyOrder(Object item) {
         if (item instanceof OrderReadySvc.ReadyOrder readyOrder) {
@@ -133,9 +137,6 @@ public class CreateToDeliverIngestBridge {
                     readyOrder.getClass().getName());
                 return null;
             }
-            if (isDuplicateHandoff(orderId, customerId, readyAt)) {
-                return null;
-            }
             return OrderDispatchSvc.ReadyOrder.newBuilder()
                 .setOrderId(orderId)
                 .setCustomerId(customerId)
@@ -147,9 +148,6 @@ public class CreateToDeliverIngestBridge {
             String customerId = ConnectorUtils.readField(message, "customer_id");
             String readyAt = ConnectorUtils.readField(message, "ready_at");
             if (!orderId.isBlank() && !customerId.isBlank() && !readyAt.isBlank()) {
-                if (isDuplicateHandoff(orderId, customerId, readyAt)) {
-                    return null;
-                }
                 LOG.debugf(
                     "Mapped Message -> ReadyOrder messageType=%s orderId=%s customerId=%s readyAt=%s",
                     message.getClass().getName(), orderId, customerId, readyAt);
@@ -182,30 +180,19 @@ public class CreateToDeliverIngestBridge {
         return null;
     }
 
-    /**
-     * Determines whether a create->deliver handoff for the specified order has already been seen.
-     *
-     * The check is performed only when idempotency is enabled; otherwise this always returns `false`.
-     *
-     * @param orderId    the order identifier used in the handoff key
-     * @param customerId the customer identifier used in the handoff key
-     * @param readyAt    the ready timestamp used in the handoff key
-     * @return           `true` if the handoff has been observed before (duplicate) and should be dropped, `false` otherwise
-     */
-    private boolean isDuplicateHandoff(String orderId, String customerId, String readyAt) {
-        if (!idempotencyEnabled || orderId == null || orderId.isBlank() || idempotencyGuard == null) {
-            return false;
+    private boolean shouldForward(OrderDispatchSvc.ReadyOrder readyOrder) {
+        if (!idempotencyEnabled) {
+            return true;
         }
-        String handoffKey = ConnectorUtils.deterministicHandoffKey(
+        String key = ConnectorUtils.deterministicHandoffKey(
             "create-to-deliver",
-            orderId,
-            customerId,
-            readyAt);
-        boolean firstOccurrence = idempotencyGuard.markIfNew(handoffKey);
-        if (!firstOccurrence) {
-            LOG.debugf("Dropped duplicate create->deliver handoff orderId=%s handoffKey=%s", orderId, handoffKey);
+            readyOrder.getOrderId(),
+            readyOrder.getCustomerId(),
+            readyOrder.getReadyAt());
+        boolean firstSeen = acceptedKeys.add(key);
+        if (!firstSeen) {
+            LOG.debugf("Dropped duplicate create-to-deliver handoff idempotencyKey=%s", key);
         }
-        return !firstOccurrence;
+        return firstSeen;
     }
-
 }

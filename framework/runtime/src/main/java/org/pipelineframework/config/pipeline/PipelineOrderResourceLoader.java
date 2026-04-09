@@ -31,7 +31,7 @@ import org.jboss.logging.Logger;
 public final class PipelineOrderResourceLoader {
 
     private static final String RESOURCE = "META-INF/pipeline/order.json";
-    private static final String ROLES_RESOURCE = "META-INF/pipeline/roles.json";
+    private static final String ORCHESTRATOR_CLIENTS_RESOURCE = "META-INF/pipeline/orchestrator-clients.properties";
     private static final Logger LOG = Logger.getLogger(PipelineOrderResourceLoader.class);
 
     private PipelineOrderResourceLoader() {
@@ -145,20 +145,11 @@ public final class PipelineOrderResourceLoader {
      */
     public static boolean requiresOrder() {
         ClassLoader classLoader = PipelineResources.resolveClassLoader();
-        InputStream stream = PipelineResources.openResource(classLoader, ROLES_RESOURCE);
-        try (InputStream streamToRead = stream) {
-            if (stream == null) {
-                return false;
-            }
-            Map<?, ?> data = PipelineJson.mapper().readValue(streamToRead, Map.class);
-            Object roles = data.get("roles");
-            if (!(roles instanceof Map<?, ?> rolesMap)) {
-                return false;
-            }
-            Object orchestrator = rolesMap.get("ORCHESTRATOR_CLIENT");
-            return orchestrator instanceof List<?> list && !list.isEmpty();
+        InputStream orchestratorClients = PipelineResources.openResource(classLoader, ORCHESTRATOR_CLIENTS_RESOURCE);
+        try (InputStream orchestratorClientsStream = orchestratorClients) {
+            return orchestratorClientsStream != null;
         } catch (Exception e) {
-            throw new IllegalStateException("Failed to read pipeline roles resource.", e);
+            throw new IllegalStateException("Failed to read orchestrator client metadata resource.", e);
         }
     }
 

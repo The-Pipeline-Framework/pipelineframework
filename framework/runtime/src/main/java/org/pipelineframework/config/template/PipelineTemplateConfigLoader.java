@@ -32,6 +32,10 @@ import java.util.logging.Logger;
 
 import org.pipelineframework.config.PlatformOverrideResolver;
 import org.pipelineframework.config.TransportOverrideResolver;
+import org.pipelineframework.config.boundary.PipelineCheckpointConfig;
+import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
+import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
+import org.pipelineframework.config.boundary.PipelineSubscriptionConfig;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
@@ -54,10 +58,12 @@ public class PipelineTemplateConfigLoader {
     }
 
     /**
-     * Creates a loader with custom property/environment lookup functions.
+     * Creates a loader that uses the provided functions to resolve system property and environment variable lookups.
      *
-     * @param propertyLookup lookup used for system properties
-     * @param envLookup lookup used for environment variables
+     * If either function is null, it will be replaced with a lookup that always returns null.
+     *
+     * @param propertyLookup function that returns a property value for a given key, or null to disable property lookups
+     * @param envLookup function that returns an environment value for a given key, or null to disable environment lookups
      */
     public PipelineTemplateConfigLoader(Function<String, String> propertyLookup, Function<String, String> envLookup) {
         this.propertyLookup = propertyLookup == null ? key -> null : propertyLookup;
@@ -65,11 +71,15 @@ public class PipelineTemplateConfigLoader {
     }
 
     /**
-     * Load and parse the pipeline template configuration from the specified file path.
+     * Load a pipeline template YAML file and construct a PipelineTemplateConfig.
+     *
+     * <p>Parses the YAML at the given path and builds a configuration object. For version 2 and
+     * later, top-level and inline message definitions are collected and normalized and step inputs/
+     * outputs are resolved; for version 1, the returned config contains no messages.
      *
      * @param configPath the path to the pipeline template YAML file
      * @return a PipelineTemplateConfig built from the file's contents
-     * @throws IllegalStateException if the YAML root is not a map or the file cannot be read/parsed
+     * @throws IllegalStateException if the YAML root is not a map or the file cannot be read or parsed
      */
     public PipelineTemplateConfig load(Path configPath) {
         Object root = loadYaml(configPath);
@@ -88,6 +98,9 @@ public class PipelineTemplateConfigLoader {
             : new LinkedHashMap<>();
         List<PipelineTemplateStep> steps = readSteps(rootMap, version);
         Map<String, PipelineTemplateAspect> aspects = readAspects(rootMap);
+        rejectLegacyConnectors(rootMap);
+        PipelineInputBoundaryConfig input = readInputBoundary(rootMap);
+        PipelineOutputBoundaryConfig output = readOutputBoundary(rootMap);
 
         if (version >= 2) {
             collectInlineMessages(rawMessages, steps);
@@ -101,10 +114,22 @@ public class PipelineTemplateConfigLoader {
                 resolvedPlatform,
                 normalizedMessages,
                 steps,
-                aspects);
+                aspects,
+                input,
+                output);
         }
 
-        return new PipelineTemplateConfig(version, appName, basePackage, transport, resolvedPlatform, Map.of(), steps, aspects);
+        return new PipelineTemplateConfig(
+            version,
+            appName,
+            basePackage,
+            transport,
+            resolvedPlatform,
+            Map.of(),
+            steps,
+            aspects,
+            input,
+            output);
     }
 
     /**
@@ -704,17 +729,20 @@ public class PipelineTemplateConfigLoader {
     }
 
     /**
-     * Parse the "aspects" section from the root configuration map into a map of PipelineTemplateAspect instances.
+     * Parse the optional top-level "aspects" section of the YAML into a map of PipelineTemplateAspect instances.
      *
-     * @param rootMap the top-level YAML-derived map containing an optional "aspects" entry
-     * @return a map keyed by aspect name with the corresponding PipelineTemplateAspect; empty if no valid "aspects" map is present
+     * The method reads an "aspects" map from the provided YAML root and constructs a LinkedHashMap
+     * keyed by aspect name. If the "aspects" entry is missing or not a map, an empty map is returned.
      *
-     * Defaults applied when fields are missing or blank:
+     * Defaults applied when an aspect's fields are missing or blank:
      * - enabled: true
      * - position: "AFTER_STEP"
      * - scope: "GLOBAL"
      * - order: 0
      * - config: empty map
+     *
+     * @param rootMap the YAML-derived root map that may contain an "aspects" entry
+     * @return a map keyed by aspect name to its PipelineTemplateAspect; empty if no valid "aspects" map is present
      */
     private Map<String, PipelineTemplateAspect> readAspects(Map<?, ?> rootMap) {
         Object aspectsObj = rootMap.get("aspects");
@@ -743,6 +771,65 @@ public class PipelineTemplateConfigLoader {
             aspects.put(name, new PipelineTemplateAspect(enabled, scope, position, order, config));
         }
         return aspects;
+    }
+
+    private PipelineInputBoundaryConfig readInputBoundary(Map<?, ?> rootMap) {
+        Object inputObj = rootMap.get("input");
+        if (inputObj == null) {
+            return null;
+        }
+        if (!(inputObj instanceof Map<?, ?> inputMap)) {
+            throw new IllegalArgumentException("pipeline input boundary must be defined as a YAML map");
+        }
+        Object subscriptionObj = inputMap.get("subscription");
+        if (subscriptionObj == null) {
+            return null;
+        }
+        if (!(subscriptionObj instanceof Map<?, ?> subscriptionMap)) {
+            throw new IllegalArgumentException("input.subscription must be declared as a YAML map");
+        }
+        return new PipelineInputBoundaryConfig(new PipelineSubscriptionConfig(
+            readRequiredString(subscriptionMap, "publication", "input.subscription"),
+            readString(subscriptionMap, "mapper")));
+    }
+
+    private PipelineOutputBoundaryConfig readOutputBoundary(Map<?, ?> rootMap) {
+        Object outputObj = rootMap.get("output");
+        if (outputObj == null) {
+            return null;
+        }
+        if (!(outputObj instanceof Map<?, ?> outputMap)) {
+            throw new IllegalArgumentException("pipeline output boundary must be defined as a YAML map");
+        }
+        Object checkpointObj = outputMap.get("checkpoint");
+        if (checkpointObj == null) {
+            return null;
+        }
+        if (!(checkpointObj instanceof Map<?, ?> checkpointMap)) {
+            throw new IllegalArgumentException("output.checkpoint must be declared as a YAML map");
+        }
+        Object idempotencyKeyFields = checkpointMap.get("idempotencyKeyFields");
+        if (idempotencyKeyFields != null && !(idempotencyKeyFields instanceof Iterable<?>)) {
+            throw new IllegalArgumentException("output.checkpoint.idempotencyKeyFields must be declared as a YAML list");
+        }
+        return new PipelineOutputBoundaryConfig(new PipelineCheckpointConfig(
+            readRequiredString(checkpointMap, "publication", "output.checkpoint"),
+            readStringList(checkpointMap, "idempotencyKeyFields")));
+    }
+
+    private void rejectLegacyConnectors(Map<?, ?> rootMap) {
+        if (rootMap.get("connectors") != null) {
+            throw new IllegalArgumentException(
+                "Top-level connectors are no longer supported; use input.subscription and output.checkpoint");
+        }
+    }
+
+    private String readRequiredString(Map<?, ?> map, String key, String context) {
+        String value = readString(map, key);
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(context + "." + key + " must not be blank");
+        }
+        return value.trim();
     }
 
     /**
@@ -877,6 +964,28 @@ public class PipelineTemplateConfigLoader {
             return flag;
         }
         return Boolean.parseBoolean(value.toString());
+    }
+
+    /**
+     * Read a list of strings from the map entry at the given key by converting each iterable element to a trimmed string and omitting null or blank results.
+     *
+     * @param map the source map to read from; may contain any object at {@code key}
+     * @param key the key whose associated value is expected to be an iterable of elements to convert
+     * @return a list of trimmed, non-null strings produced from the iterable at {@code key}, or an empty list if the entry is missing or not iterable
+     */
+    private List<String> readStringList(Map<?, ?> map, String key) {
+        Object value = map.get(key);
+        if (!(value instanceof Iterable<?> values)) {
+            return List.of();
+        }
+        List<String> items = new ArrayList<>();
+        for (Object element : values) {
+            String text = stringify(element);
+            if (text != null) {
+                items.add(text);
+            }
+        }
+        return items;
     }
 
     /**

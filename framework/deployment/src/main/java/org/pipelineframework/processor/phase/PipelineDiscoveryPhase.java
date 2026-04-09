@@ -39,14 +39,43 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     private final DiscoveryPathResolver discoveryPathResolver;
     private final DiscoveryConfigLoader discoveryConfigLoader;
     private final TransportPlatformResolver transportPlatformResolver;
+    private final CheckpointBoundaryValidator checkpointBoundaryValidator;
 
     /**
-     * Create a PipelineDiscoveryPhase initialized with default collaborators.
+     * Creates a PipelineDiscoveryPhase configured with the default collaborators.
      *
-     * <p>Uses a new DiscoveryPathResolver, DiscoveryConfigLoader, and TransportPlatformResolver.
+     * <p>The default collaborators are DiscoveryPathResolver, DiscoveryConfigLoader,
+     * TransportPlatformResolver, and CheckpointBoundaryValidator.
      */
     public PipelineDiscoveryPhase() {
-        this(new DiscoveryPathResolver(), new DiscoveryConfigLoader(), new TransportPlatformResolver());
+        this(
+            new DiscoveryPathResolver(),
+            new DiscoveryConfigLoader(),
+            new TransportPlatformResolver(),
+            new CheckpointBoundaryValidator());
+    }
+
+    /**
+     * Create a PipelineDiscoveryPhase using the provided collaborators and a default CheckpointBoundaryValidator.
+     *
+     * @param discoveryPathResolver resolver for locating pipeline-related paths
+     * @param discoveryConfigLoader loader for discovery configuration
+     * @param transportPlatformResolver resolver for transport and platform modes
+     * @throws NullPointerException if any argument is null
+     * @deprecated prefer {@link #PipelineDiscoveryPhase(DiscoveryPathResolver, DiscoveryConfigLoader,
+     * TransportPlatformResolver, CheckpointBoundaryValidator)} so tests and callers can provide an explicit
+     * checkpoint-boundary validator
+     */
+    @Deprecated
+    public PipelineDiscoveryPhase(
+            DiscoveryPathResolver discoveryPathResolver,
+            DiscoveryConfigLoader discoveryConfigLoader,
+            TransportPlatformResolver transportPlatformResolver) {
+        this(
+            discoveryPathResolver,
+            discoveryConfigLoader,
+            transportPlatformResolver,
+            new CheckpointBoundaryValidator());
     }
 
     /**
@@ -55,15 +84,19 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
      * @param discoveryPathResolver resolver for locating pipeline-related paths
      * @param discoveryConfigLoader loader for discovery configuration
      * @param transportPlatformResolver resolver for transport and platform modes
+     * @param checkpointBoundaryValidator validator for checkpoint publication/subscription declarations
      * @throws NullPointerException if any argument is null
      */
     public PipelineDiscoveryPhase(
             DiscoveryPathResolver discoveryPathResolver,
             DiscoveryConfigLoader discoveryConfigLoader,
-            TransportPlatformResolver transportPlatformResolver) {
+            TransportPlatformResolver transportPlatformResolver,
+            CheckpointBoundaryValidator checkpointBoundaryValidator) {
         this.discoveryPathResolver = Objects.requireNonNull(discoveryPathResolver, "discoveryPathResolver");
         this.discoveryConfigLoader = Objects.requireNonNull(discoveryConfigLoader, "discoveryConfigLoader");
         this.transportPlatformResolver = Objects.requireNonNull(transportPlatformResolver, "transportPlatformResolver");
+        this.checkpointBoundaryValidator = Objects.requireNonNull(
+            checkpointBoundaryValidator, "checkpointBoundaryValidator");
     }
 
     /**
@@ -122,6 +155,7 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
         // Parse step definitions from YAML
         List<StepDefinition> stepDefinitions = parseStepDefinitions(configPath, messager);
         ctx.setStepDefinitions(stepDefinitions);
+        validateCheckpointBoundaries(templateConfig, ctx, messager);
 
         // Load runtime mapping config (optional)
         PipelineRuntimeMapping runtimeMapping = loadRuntimeMapping(moduleDir, messager);
@@ -172,17 +206,48 @@ public class PipelineDiscoveryPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Locates and loads the pipeline template configuration from the module directory.
+     * Loads the pipeline template configuration from the given config path.
      *
-     * @param configPath the optional resolved pipeline configuration path
-     * @param messager the messager used to report warnings, may be null
-     * @return the loaded PipelineTemplateConfig, or `null` if no configuration is present or if loading fails (a warning is emitted via the processing environment when available)
+     * @param configPath an Optional containing the resolved pipeline configuration path, or empty if none was found
+     * @param messager used to report diagnostics; may be null
+     * @return the loaded PipelineTemplateConfig, or `null` if no configuration path was provided or if loading fails; when loading fails a diagnostic is reported via `messager` if available
      */
     private PipelineTemplateConfig loadPipelineTemplateConfig(Optional<Path> configPath, Messager messager) {
         if (configPath.isEmpty()) {
             return null;
         }
         return discoveryConfigLoader.loadTemplateConfig(configPath.get(), messager);
+    }
+
+    /**
+     * Validate checkpoint publication/subscription declarations from the pipeline template.
+     *
+     * @param templateConfig   the pipeline template configuration; if null no validation is performed
+     * @param ctx              the compilation context providing the processing environment
+     * @param messager         optional Messager for reporting diagnostics
+     * @throws RuntimeException if validation fails; an ERROR diagnostic is emitted via {@code messager} before the exception is rethrown
+     */
+    private void validateCheckpointBoundaries(
+        PipelineTemplateConfig templateConfig,
+        PipelineCompilationContext ctx,
+        Messager messager
+    ) {
+        if (templateConfig == null) {
+            return;
+        }
+        try {
+            checkpointBoundaryValidator.validate(
+                templateConfig,
+                ctx.getModuleDir(),
+                ctx.getProcessingEnv(),
+                messager);
+        } catch (RuntimeException e) {
+            if (messager != null) {
+                messager.printMessage(Diagnostic.Kind.ERROR,
+                    "Failed to validate checkpoint boundary declarations: " + e.getMessage());
+            }
+            throw e;
+        }
     }
 
     /**

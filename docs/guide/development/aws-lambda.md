@@ -190,7 +190,7 @@ Operators should configure bounded waits and clear timeout ownership at function
 - Startup/dependency waits should stay bounded (`pipeline.health.startup-timeout`).
 - Function adapters are boundary adapters, not infinite buffers.
   Retry/backoff should stay bounded (`pipeline.defaults.retry-limit`, `pipeline.defaults.retry-wait-ms`, `pipeline.defaults.max-backoff`).
-- Backpressure behavior inside a runtime remains controlled by step/connector overflow strategy and capacity settings.
+- Backpressure behavior inside a runtime remains controlled by step/runtime overflow strategy and capacity settings.
 - Adapters preserve reactive semantics inside a runtime; cross-runtime pacing is bounded by Lambda concurrency, event source behavior, and configured batching/overflow policy.
 
 ## Quarkus Integrations You Can Leverage in TPF Apps

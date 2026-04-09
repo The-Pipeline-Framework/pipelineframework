@@ -34,7 +34,7 @@
         <quarkus.platform.version>3.31.3</quarkus.platform.version>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
-        <protobuf.version>4.28.2</protobuf.version>
+        <protobuf.version>4.32.1</protobuf.version>
         <grpc.version>1.63.0</grpc.version>
         <version.jandex>3.5.0</version.jandex>
         <mockito.version>5.21.0</mockito.version>

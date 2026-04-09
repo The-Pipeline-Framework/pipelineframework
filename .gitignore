@@ -89,3 +89,6 @@ pom.xml.releaseBackup
 # Local classpath dumps
 *-cp.txt
 *deliver-cp.txt
+
+# Qwen Code local config
+.qwen/

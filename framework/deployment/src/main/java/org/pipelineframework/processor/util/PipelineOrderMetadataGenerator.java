@@ -49,24 +49,17 @@ public class PipelineOrderMetadataGenerator {
      * @throws IOException if creating or writing the resource file fails
      */
     public void writeOrderMetadata(PipelineCompilationContext ctx) throws IOException {
-        if (!ctx.isOrchestratorGenerated()) {
-            return;
-        }
-
         PipelineYamlConfig config = loadPipelineConfig(ctx);
         if (config == null || config.steps() == null || config.steps().isEmpty()) {
             return;
         }
         if (ctx.getTransportMode() != null) {
-            config = new PipelineYamlConfig(
-                config.basePackage(),
-                ctx.getTransportMode().name(),
-                config.platform(),
-                config.steps(),
-                config.aspects());
+            config = config.withTransport(ctx.getTransportMode().name());
         }
 
-        List<String> baseSteps = resolveBaseClientSteps(ctx);
+        List<String> baseSteps = ctx.isOrchestratorGenerated()
+            ? resolveBaseClientSteps(ctx)
+            : resolveLocalExecutionSteps(ctx);
         if (baseSteps.isEmpty()) {
             return;
         }
@@ -87,10 +80,10 @@ public class PipelineOrderMetadataGenerator {
         if (expanded == null || expanded.isEmpty()) {
             return;
         }
-        Set<String> generatedClientSteps = resolveGeneratedClientSteps(ctx);
-        if (!generatedClientSteps.isEmpty()) {
+        Set<String> generatedOrderSteps = resolveGeneratedOrderSteps(ctx);
+        if (!generatedOrderSteps.isEmpty()) {
             expanded = expanded.stream()
-                .filter(step -> isSideEffectClientStep(step) || generatedClientSteps.contains(step))
+                .filter(step -> isSideEffectClientStep(step) || generatedOrderSteps.contains(step))
                 .toList();
         }
         if (expanded.isEmpty()) {
@@ -194,7 +187,26 @@ public class PipelineOrderMetadataGenerator {
         return new ArrayList<>(ordered);
     }
 
-    private Set<String> resolveGeneratedClientSteps(PipelineCompilationContext ctx) {
+    private List<String> resolveLocalExecutionSteps(PipelineCompilationContext ctx) {
+        List<PipelineStepModel> models = ctx.getStepModels();
+        if (models == null || models.isEmpty()) {
+            return List.of();
+        }
+        Set<String> ordered = new LinkedHashSet<>();
+        for (PipelineStepModel model : models) {
+            if (model.sideEffect() || model.serviceClassName() == null) {
+                continue;
+            }
+            ordered.add(model.serviceClassName().canonicalName());
+        }
+        return new ArrayList<>(ordered);
+    }
+
+    private Set<String> resolveGeneratedOrderSteps(PipelineCompilationContext ctx) {
+        if (!ctx.isOrchestratorGenerated()) {
+            return resolveLocalExecutionSteps(ctx).stream()
+                .collect(java.util.stream.Collectors.toCollection(LinkedHashSet::new));
+        }
         List<PipelineStepModel> models = ctx.getStepModels();
         if (models == null || models.isEmpty()) {
             return Set.of();

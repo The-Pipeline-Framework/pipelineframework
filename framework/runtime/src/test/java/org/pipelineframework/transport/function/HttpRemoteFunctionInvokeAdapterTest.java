@@ -23,6 +23,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -322,9 +324,11 @@ class HttpRemoteFunctionInvokeAdapterTest {
 
     private static ServerHandle startServer(HttpHandler handler) throws IOException {
         HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        ExecutorService executor = Executors.newCachedThreadPool();
+        server.setExecutor(executor);
         server.createContext("/", handler);
         server.start();
-        return new ServerHandle(server);
+        return new ServerHandle(server, executor);
     }
 
     private static void respondJson(HttpExchange exchange, String body) throws IOException {
@@ -424,7 +428,7 @@ class HttpRemoteFunctionInvokeAdapterTest {
         assertThrows(NullPointerException.class, () -> adapter.invokeOneToOne(input, null));
     }
 
-    private record ServerHandle(HttpServer server) implements AutoCloseable {
+    private record ServerHandle(HttpServer server, ExecutorService executor) implements AutoCloseable {
         private String url() {
             return "http://127.0.0.1:" + server.getAddress().getPort() + "/";
         }
@@ -432,6 +436,12 @@ class HttpRemoteFunctionInvokeAdapterTest {
         @Override
         public void close() {
             server.stop(0);
+            executor.shutdownNow();
+            try {
+                executor.awaitTermination(2, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 }

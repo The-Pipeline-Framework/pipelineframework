@@ -20,6 +20,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import org.pipelineframework.config.boundary.PipelineInputBoundaryConfig;
+import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
 
 /**
  * Full pipeline template configuration loaded from the pipeline template YAML file.
@@ -32,6 +34,8 @@ import java.util.Map;
  * @param messages top-level named messages
  * @param steps pipeline steps
  * @param aspects aspect configurations keyed by aspect name
+ * @param input reliable pipeline input boundary
+ * @param output reliable pipeline output boundary
  */
 public record PipelineTemplateConfig(
     int version,
@@ -41,7 +45,9 @@ public record PipelineTemplateConfig(
     PipelinePlatform platform,
     Map<String, PipelineTemplateMessage> messages,
     List<PipelineTemplateStep> steps,
-    Map<String, PipelineTemplateAspect> aspects
+    Map<String, PipelineTemplateAspect> aspects,
+    PipelineInputBoundaryConfig input,
+    PipelineOutputBoundaryConfig output
 ) {
     public PipelineTemplateConfig {
         if (version <= 0) {
@@ -61,12 +67,27 @@ public record PipelineTemplateConfig(
         aspects = aspects == null ? Map.of() : Map.copyOf(aspects);
     }
 
+    /**
+     * Validates that the provided text is not null, empty, or only whitespace.
+     *
+     * @param value the string to validate
+     * @param fieldName the name of the field used in the exception message
+     * @throws IllegalArgumentException if {@code value} is null or blank
+     */
     private static void requireText(String value, String fieldName) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(fieldName + " must not be blank");
         }
     }
 
+    /**
+     * Validates that the provided map contains no null keys or values.
+     *
+     * @param values the map to validate; may be {@code null}, in which case no validation is performed
+     * @param fieldName the logical name of the field used in exception messages
+     * @throws IllegalArgumentException if any key is {@code null} (message: "<fieldName> must not contain null keys")
+     *                                  or any value is {@code null} (message: "<fieldName> must not contain null values")
+     */
     private static void validateMap(Map<?, ?> values, String fieldName) {
         if (values == null) {
             return;
@@ -82,7 +103,15 @@ public record PipelineTemplateConfig(
     }
 
     /**
-     * Constructs a PipelineTemplateConfig for existing call sites, supplying defaults for new fields (version = 1, platform = PipelinePlatform.COMPUTE, empty messages).
+     * Constructs a PipelineTemplateConfig with backward-compatible defaults for newly added fields.
+     *
+     * Defaults applied: version = 1, platform = PipelinePlatform.COMPUTE, messages = empty map, no input/output boundaries.
+     *
+     * @param appName the application name
+     * @param basePackage the base Java package
+     * @param transport the global transport identifier
+     * @param steps the pipeline steps (may contain null placeholders to preserve positions)
+     * @param aspects aspect configurations keyed by aspect name
      */
     public PipelineTemplateConfig(
         String appName,
@@ -91,14 +120,14 @@ public record PipelineTemplateConfig(
         List<PipelineTemplateStep> steps,
         Map<String, PipelineTemplateAspect> aspects
     ) {
-        this(1, appName, basePackage, transport, PipelinePlatform.COMPUTE, Map.of(), steps, aspects);
+        this(1, appName, basePackage, transport, PipelinePlatform.COMPUTE, Map.of(), steps, aspects, null, null);
     }
 
     /**
-     * Create a pipeline template configuration preset to version 1 with no messages.
+     * Create a pipeline template configuration preset to version 1 with no messages and no input/output boundaries.
      *
-     * @param appName     the application name for the generated pipeline artifacts
-     * @param basePackage the root package name for generated code
+     * @param appName     the application name for generated pipeline artifacts
+     * @param basePackage the root Java package for generated code
      * @param transport   the transport identifier to use for the pipeline
      * @param platform    the target pipeline platform
      * @param steps       the ordered list of template steps; may contain null placeholders to indicate skipped positions
@@ -112,6 +141,6 @@ public record PipelineTemplateConfig(
         List<PipelineTemplateStep> steps,
         Map<String, PipelineTemplateAspect> aspects
     ) {
-        this(1, appName, basePackage, transport, platform, Map.of(), steps, aspects);
+        this(1, appName, basePackage, transport, platform, Map.of(), steps, aspects, null, null);
     }
 }

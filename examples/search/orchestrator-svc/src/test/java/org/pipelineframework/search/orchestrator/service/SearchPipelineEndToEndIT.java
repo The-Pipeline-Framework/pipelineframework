@@ -602,11 +602,11 @@ class SearchPipelineEndToEndIT {
     }
 
     private void assertExitSuccess(ProcessResult result, String message) {
-        assertTrue(result.exitCode == 0, message + ": " + result.output);
+        assertTrue(result.exitCode == 0, () -> message + ": " + result.output + diagnosticLogTail());
     }
 
     private void assertExitFailure(ProcessResult result, String message) {
-        assertTrue(result.exitCode != 0, message + ": " + result.output);
+        assertTrue(result.exitCode != 0, () -> message + ": " + result.output + diagnosticLogTail());
     }
 
     private void invalidateParsedDocument(UUID docId, String rawContentHash, String versionTag) throws Exception {
@@ -666,6 +666,26 @@ class SearchPipelineEndToEndIT {
         return "Title: Example content for " + sourceUrl + "\n"
             + "DocId: " + docId + "\n"
             + "Body: This is a simulated crawl result with headers, metadata, and content.";
+    }
+
+    private String diagnosticLogTail() {
+        return "\n\nContainer log tails:"
+            + "\n- orchestrator-svc:\n" + tailLogs(orchestratorService.getLogs(), 40)
+            + "\n- crawl-source-svc:\n" + tailLogs(crawlService.getLogs(), 25)
+            + "\n- parse-document-svc:\n" + tailLogs(parseService.getLogs(), 25)
+            + "\n- tokenize-content-svc:\n" + tailLogs(tokenizeService.getLogs(), 25)
+            + "\n- index-document-svc:\n" + tailLogs(indexService.getLogs(), 25)
+            + "\n- persistence-svc:\n" + tailLogs(persistenceService.getLogs(), 25)
+            + "\n- cache-invalidation-svc:\n" + tailLogs(cacheInvalidationService.getLogs(), 25);
+    }
+
+    private String tailLogs(String logs, int lines) {
+        if (logs == null || logs.isBlank()) {
+            return "<no logs>";
+        }
+        String[] split = logs.split("\\R");
+        int start = Math.max(0, split.length - lines);
+        return String.join(System.lineSeparator(), java.util.Arrays.copyOfRange(split, start, split.length));
     }
 
     /**
