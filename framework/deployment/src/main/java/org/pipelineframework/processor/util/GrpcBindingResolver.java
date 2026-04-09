@@ -20,11 +20,16 @@ import org.pipelineframework.processor.ir.StreamingShape;
 public class GrpcBindingResolver {
     private static final org.jboss.logging.Logger logger =
         org.jboss.logging.Logger.getLogger(GrpcBindingResolver.class);
+    private static final String API_PROTO_PATH = "google/protobuf/api.proto";
     private static final String ANY_PROTO_PATH = "google/protobuf/any.proto";
+    private static final String DESCRIPTOR_PROTO_PATH = "google/protobuf/descriptor.proto";
     private static final String DURATION_PROTO_PATH = "google/protobuf/duration.proto";
     private static final String EMPTY_PROTO_PATH = "google/protobuf/empty.proto";
+    private static final String FIELD_MASK_PROTO_PATH = "google/protobuf/field_mask.proto";
+    private static final String SOURCE_CONTEXT_PROTO_PATH = "google/protobuf/source_context.proto";
     private static final String STRUCT_PROTO_PATH = "google/protobuf/struct.proto";
     private static final String TIMESTAMP_PROTO_PATH = "google/protobuf/timestamp.proto";
+    private static final String TYPE_PROTO_PATH = "google/protobuf/type.proto";
     private static final String WRAPPERS_PROTO_PATH = "google/protobuf/wrappers.proto";
 
     /**
@@ -213,11 +218,16 @@ public class GrpcBindingResolver {
     }
 
     private void seedWellKnownDescriptors(Map<String, Descriptors.FileDescriptor> builtFileDescriptors) {
+        builtFileDescriptors.putIfAbsent(API_PROTO_PATH, com.google.protobuf.ApiProto.getDescriptor());
         builtFileDescriptors.putIfAbsent(ANY_PROTO_PATH, com.google.protobuf.AnyProto.getDescriptor());
+        builtFileDescriptors.putIfAbsent(DESCRIPTOR_PROTO_PATH, DescriptorProtos.getDescriptor());
         builtFileDescriptors.putIfAbsent(DURATION_PROTO_PATH, com.google.protobuf.DurationProto.getDescriptor());
         builtFileDescriptors.putIfAbsent(EMPTY_PROTO_PATH, com.google.protobuf.EmptyProto.getDescriptor());
+        builtFileDescriptors.putIfAbsent(FIELD_MASK_PROTO_PATH, com.google.protobuf.FieldMaskProto.getDescriptor());
+        builtFileDescriptors.putIfAbsent(SOURCE_CONTEXT_PROTO_PATH, com.google.protobuf.SourceContextProto.getDescriptor());
         builtFileDescriptors.putIfAbsent(STRUCT_PROTO_PATH, com.google.protobuf.StructProto.getDescriptor());
         builtFileDescriptors.putIfAbsent(TIMESTAMP_PROTO_PATH, com.google.protobuf.TimestampProto.getDescriptor());
+        builtFileDescriptors.putIfAbsent(TYPE_PROTO_PATH, com.google.protobuf.TypeProto.getDescriptor());
         builtFileDescriptors.putIfAbsent(WRAPPERS_PROTO_PATH, com.google.protobuf.WrappersProto.getDescriptor());
     }
 

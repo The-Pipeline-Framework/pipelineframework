@@ -274,7 +274,11 @@ public class StepDefinitionParser {
         if (!isBlank(effectiveMapperName)) {
             externalMapper = parseClassName(effectiveMapperName);
             if (externalMapper == null) {
-                LOG.warnf("Skipping step '%s': invalid operator mapper class name '%s'", name, effectiveMapperName);
+                String message = "Skipping step '" + name + "': invalid "
+                    + (!isBlank(operatorMapperName) ? "operatorMapper" : "externalMapper")
+                    + " class name '" + effectiveMapperName + "'";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
                 return null;
             }
         }
