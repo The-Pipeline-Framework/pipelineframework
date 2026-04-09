@@ -45,15 +45,18 @@ public class GrpcCheckpointPublicationTargetDispatcher implements CheckpointPubl
         } catch (IOException e) {
             return Uni.createFrom().failure(e);
         }
-        return Uni.createFrom().emitter(emitter ->
-            Context.ROOT.run(() ->
-                GrpcClientTracing.traceUnary(
-                    CheckpointPublicationGrpcService.SERVICE,
-                    CheckpointPublicationGrpcService.METHOD,
-                    stubFor(target).publish(protoRequest))
-                    .subscribe().with(
-                        response -> emitter.complete(null),
-                        emitter::fail)));
+        // Attach gRPC context and run the call within it.
+        // The emitter runs on subscription, ensuring context is active during the gRPC call.
+        return Uni.createFrom().emitter(
+            (io.smallrye.mutiny.subscription.UniEmitter<? super Void> emitter) ->
+                Context.ROOT.run(() ->
+                    GrpcClientTracing.traceUnary(
+                        CheckpointPublicationGrpcService.SERVICE,
+                        CheckpointPublicationGrpcService.METHOD,
+                        stubFor(target).publish(protoRequest))
+                        .subscribe().with(
+                            ignored -> emitter.complete(null),
+                            emitter::fail)));
     }
 
     @PreDestroy
