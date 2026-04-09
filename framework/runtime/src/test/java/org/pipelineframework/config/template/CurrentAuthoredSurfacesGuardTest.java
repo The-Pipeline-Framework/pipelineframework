@@ -42,6 +42,7 @@ class CurrentAuthoredSurfacesGuardTest {
             stream.filter(Files::isRegularFile)
                 .filter(path -> path.toString().endsWith(".md"))
                 .filter(path -> !path.toString().contains("/docs/versions/"))
+                .filter(path -> !shouldExcludePath(path))
                 .forEach(path -> recordViolations(path, LEGACY_AUTHORED_PROTO_TYPE, violations));
         }
     }
@@ -53,8 +54,18 @@ class CurrentAuthoredSurfacesGuardTest {
                     String fileName = path.getFileName().toString();
                     return fileName.endsWith(".yaml") || fileName.endsWith(".yml");
                 })
+                .filter(path -> !shouldExcludePath(path))
                 .forEach(path -> recordViolations(path, LEGACY_AUTHORED_PROTO_TYPE, violations));
         }
+    }
+
+    private static boolean shouldExcludePath(Path path) {
+        String pathStr = path.toString();
+        return pathStr.contains("/target/") ||
+               pathStr.contains("/node_modules/") ||
+               pathStr.contains("/dist/") ||
+               pathStr.contains("/build/") ||
+               pathStr.contains("/vendor/");
     }
 
     private static void scanUiExportSurface(Path uiRoute, List<String> violations) {

@@ -54,6 +54,10 @@ public class CheckpointPublicationDescriptorRenderer {
             .addMethod(keyFieldsMethod);
 
         if (publicationPayloadType != null) {
+            TypeName classLiteralType = publicationPayloadType;
+            if (publicationPayloadType instanceof ParameterizedTypeName parameterized) {
+                classLiteralType = parameterized.rawType;
+            }
             descriptor
                 .addMethod(MethodSpec.methodBuilder("normalizePayload")
                     .addAnnotation(Override.class)
@@ -62,7 +66,7 @@ public class CheckpointPublicationDescriptorRenderer {
                     .addParameter(TypeName.OBJECT, "resultPayload")
                     .addStatement("return $T.normalizePayload(resultPayload, $T.class)",
                         publicationSupportType,
-                        publicationPayloadType)
+                        classLiteralType)
                     .build());
         }
 
