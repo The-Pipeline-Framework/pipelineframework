@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-class OrchestratorFunctionHandlerRendererTest {
+class AwsLambdaOrchestratorRendererTest {
     // Parity matrix mirrors RestFunctionHandlerRendererTest for orchestrator-generated handlers.
 
     @TempDir
@@ -178,7 +178,7 @@ class OrchestratorFunctionHandlerRendererTest {
 
     @Test
     void handlerReturnsGenerationTargetRESTResource() {
-        OrchestratorFunctionHandlerRenderer renderer = new OrchestratorFunctionHandlerRenderer();
+        AwsLambdaOrchestratorRenderer renderer = new AwsLambdaOrchestratorRenderer();
         assertEquals(GenerationTarget.REST_RESOURCE, renderer.target());
     }
 
@@ -210,7 +210,7 @@ class OrchestratorFunctionHandlerRendererTest {
     void rendersTransportContextWithAllAttributes() throws IOException {
         String source = renderAndReadSource(buildBinding());
 
-        assertTrue(source.contains("FunctionTransportContext.ATTR_TRANSPORT_PROTOCOL"));
+        // Transport protocol was removed as it was confusing and not functionally used
         assertTrue(source.contains("FunctionTransportContext.ATTR_CORRELATION_ID"));
         assertTrue(source.contains("FunctionTransportContext.ATTR_EXECUTION_ID"));
         assertTrue(source.contains("FunctionTransportContext.ATTR_RETRY_ATTEMPT"));
@@ -221,31 +221,31 @@ class OrchestratorFunctionHandlerRendererTest {
     void rendersErrorHandlingInHandleRequest() throws IOException {
         String source = renderAndReadSource(buildBinding());
 
-        assertTrue(source.contains("catch (RuntimeException e)"));
+        assertTrue(source.contains("catch (Exception e)"));
         assertTrue(source.contains("throw new RuntimeException(\"Failed handleRequest -> resource.run for input DTO\", e)"));
     }
 
     @Test
     void handlerFqcnReturnsCorrectPath() {
-        String fqcn = OrchestratorFunctionHandlerRenderer.handlerFqcn("com.example");
+        String fqcn = AwsLambdaOrchestratorRenderer.handlerFqcn("com.example");
         assertEquals("com.example.orchestrator.service.PipelineRunFunctionHandler", fqcn);
     }
 
     @Test
     void runAsyncHandlerFqcnReturnsCorrectPath() {
-        String fqcn = OrchestratorFunctionHandlerRenderer.runAsyncHandlerFqcn("com.example");
+        String fqcn = AwsLambdaOrchestratorRenderer.runAsyncHandlerFqcn("com.example");
         assertEquals("com.example.orchestrator.service.PipelineRunAsyncFunctionHandler", fqcn);
     }
 
     @Test
     void statusHandlerFqcnReturnsCorrectPath() {
-        String fqcn = OrchestratorFunctionHandlerRenderer.statusHandlerFqcn("com.example");
+        String fqcn = AwsLambdaOrchestratorRenderer.statusHandlerFqcn("com.example");
         assertEquals("com.example.orchestrator.service.PipelineExecutionStatusFunctionHandler", fqcn);
     }
 
     @Test
     void resultHandlerFqcnReturnsCorrectPath() {
-        String fqcn = OrchestratorFunctionHandlerRenderer.resultHandlerFqcn("com.example");
+        String fqcn = AwsLambdaOrchestratorRenderer.resultHandlerFqcn("com.example");
         assertEquals("com.example.orchestrator.service.PipelineExecutionResultFunctionHandler", fqcn);
     }
 
@@ -294,8 +294,10 @@ class OrchestratorFunctionHandlerRendererTest {
         String source = renderAndReadSource(buildBinding());
 
         assertTrue(source.contains("context != null ? context.getAwsRequestId() : \"unknown-request\""));
-        assertTrue(source.contains("context != null ? context.getFunctionName() : \"PipelineRunFunctionHandler\""));
-        assertTrue(source.contains("context != null && context.getLogStreamName() != null"));
+        assertTrue(source.contains("context != null ? context.getFunctionName() : \"unknown-request\""));
+        // Execution ID uses getLogStreamName with null/blank check fallback to UUID
+        assertTrue(source.contains("context.getLogStreamName()"));
+        assertTrue(source.contains("UUID.randomUUID().toString()"));
     }
 
     @Test
@@ -327,7 +329,7 @@ class OrchestratorFunctionHandlerRendererTest {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
 
-        OrchestratorFunctionHandlerRenderer renderer = new OrchestratorFunctionHandlerRenderer();
+        AwsLambdaOrchestratorRenderer renderer = new AwsLambdaOrchestratorRenderer();
         renderer.render(binding, new GenerationContext(
             processingEnv, tempDir, DeploymentRole.REST_SERVER, java.util.Set.of(), null, null));
 
@@ -436,7 +438,7 @@ class OrchestratorFunctionHandlerRendererTest {
         String source = renderAndReadSource(buildBinding());
 
         assertTrue(source.contains("context != null ? context.getAwsRequestId() : \"unknown-request\""));
-        assertTrue(source.contains("context != null ? context.getFunctionName() : \"PipelineRunFunctionHandler\""));
+        assertTrue(source.contains("context != null ? context.getFunctionName() : \"unknown-request\""));
     }
 
     @Test

@@ -1,5 +1,6 @@
 package org.pipelineframework.processor.phase;
 
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
@@ -38,12 +39,24 @@ class DiscoveryPathResolver {
 
         String configured = options.get("pipeline.generatedSourcesDir");
         if (configured != null && !configured.isBlank()) {
-            return Paths.get(configured);
+            try {
+                return Paths.get(configured);
+            } catch (InvalidPathException e) {
+                throw new IllegalArgumentException(
+                    "Invalid value for 'pipeline.generatedSourcesDir': '" + configured + "'",
+                    e);
+            }
         }
 
         String fallback = options.get("pipeline.generatedSourcesRoot");
         if (fallback != null && !fallback.isBlank()) {
-            return Paths.get(fallback);
+            try {
+                return Paths.get(fallback);
+            } catch (InvalidPathException e) {
+                throw new IllegalArgumentException(
+                    "Invalid value for 'pipeline.generatedSourcesRoot': '" + fallback + "'",
+                    e);
+            }
         }
 
         return getDefaultGeneratedSourcesRoot();
@@ -56,7 +69,19 @@ class DiscoveryPathResolver {
      * @param generatedSourcesRoot the path inside the module's generated-sources tree, or null
      * @return the resolved module directory path
      */
-    Path resolveModuleDir(Path generatedSourcesRoot) {
+    Path resolveModuleDir(Map<String, String> options, Path generatedSourcesRoot) {
+        if (options != null) {
+            String configured = options.get("pipeline.moduleDir");
+            if (configured != null && !configured.isBlank()) {
+                try {
+                    return Paths.get(configured);
+                } catch (InvalidPathException e) {
+                    throw new IllegalArgumentException(
+                        "Invalid value for 'pipeline.moduleDir': '" + configured + "'",
+                        e);
+                }
+            }
+        }
         if (generatedSourcesRoot != null) {
             Path candidate = generatedSourcesRoot;
             for (int i = 0; i < GENERATED_SOURCES_DEPTH && candidate != null; i++) {

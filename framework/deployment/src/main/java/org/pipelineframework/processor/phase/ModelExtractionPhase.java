@@ -19,6 +19,7 @@ import javax.lang.model.util.Types;
 
 import com.squareup.javapoet.ClassName;
 import com.squareup.javapoet.TypeName;
+import org.pipelineframework.config.template.PipelineTemplateConfig;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.parallelism.OrderingRequirement;
 import org.pipelineframework.parallelism.ThreadSafety;
@@ -300,11 +301,11 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         if (stepDef.inputType() == null || stepDef.outputType() == null) {
             return null;
         }
-        String templateBasePackage = ctx.getPipelineTemplateConfig() instanceof org.pipelineframework.config.template.PipelineTemplateConfig templateConfig
-            ? templateConfig.basePackage()
+        String templateBasePackage = ctx.getPipelineTemplateConfig() instanceof PipelineTemplateConfig config
+            ? config.basePackage()
             : null;
-        TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), stepDef.executionClass(), templateBasePackage);
-        TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), stepDef.executionClass(), templateBasePackage);
+        TypeName inputType = normalizeLegacyDomainType(stepDef.inputType(), stepDef.executionClass(), templateBasePackage, ctx);
+        TypeName outputType = normalizeLegacyDomainType(stepDef.outputType(), stepDef.executionClass(), templateBasePackage, ctx);
         StreamingShape streamingShape = stepDef.streamingShapeHint() != null
             ? stepDef.streamingShapeHint()
             : StreamingShape.UNARY_UNARY;
@@ -352,21 +353,39 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .build();
     }
 
-    private TypeName normalizeLegacyDomainType(TypeName declaredType, ClassName executionClass, String templateBasePackage) {
+    private TypeName normalizeLegacyDomainType(
+        TypeName declaredType,
+        ClassName executionClass,
+        String basePackageHint,
+        PipelineCompilationContext ctx
+    ) {
         if (!(declaredType instanceof ClassName className) || !className.packageName().isEmpty()) {
             return declaredType;
         }
-        if (templateBasePackage != null && !templateBasePackage.isBlank()) {
-            return ClassName.bestGuess(templateBasePackage + ".common.domain." + className.simpleName());
+        TypeName resolvedType;
+        if (basePackageHint != null && !basePackageHint.isBlank()) {
+            resolvedType = ClassName.bestGuess(basePackageHint + ".common.domain." + className.simpleName());
+        } else {
+            String executionPkg = executionClass.packageName();
+            if (executionPkg == null || executionPkg.isBlank()) {
+                return declaredType;
+            }
+            String basePackage = executionPkg.endsWith(".service")
+                ? executionPkg.substring(0, executionPkg.length() - ".service".length())
+                : executionPkg;
+            resolvedType = ClassName.bestGuess(basePackage + ".common.domain." + className.simpleName());
         }
-        String executionPkg = executionClass.packageName();
-        if (executionPkg == null || executionPkg.isBlank()) {
-            return declaredType;
+        if (!isResolvable(resolvedType, ctx)) {
+            throw new IllegalStateException("Unresolved inferred domain type: " + resolvedType);
         }
-        String basePackage = executionPkg.endsWith(".service")
-            ? executionPkg.substring(0, executionPkg.length() - ".service".length())
-            : executionPkg;
-        return ClassName.bestGuess(basePackage + ".common.domain." + className.simpleName());
+        return resolvedType;
+    }
+
+    private boolean isResolvable(TypeName type, PipelineCompilationContext ctx) {
+        if (!(type instanceof ClassName className) || ctx == null || ctx.getProcessingEnv() == null) {
+            return true;
+        }
+        return ctx.getProcessingEnv().getElementUtils().getTypeElement(className.canonicalName()) != null;
     }
 
     private String deriveYamlServicePackage(TypeName domainType, Consumer<String> warningLogger) {

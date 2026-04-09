@@ -98,6 +98,31 @@ class PipelineDiscoveryPhaseTest {
     }
 
     @Test
+    void testDiscoveryPhaseExecution_trimsFunctionHttpBridgeOption() throws Exception {
+        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.function.httpBridge", " true "));
+
+        PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
+        phase.execute(context);
+
+        assertTrue(context.isFunctionHttpBridgeEnabled());
+    }
+
+    @Test
+    void testDiscoveryPhaseExecution_rejectsInvalidFunctionHttpBridgeOption() {
+        when(processingEnv.getOptions()).thenReturn(Map.of("pipeline.function.httpBridge", "enabled"));
+
+        PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
+        IllegalArgumentException error =
+            assertThrows(IllegalArgumentException.class, () -> phase.execute(context));
+
+        assertTrue(error.getMessage().contains("pipeline.function.httpBridge"));
+    }
+
+    @Test
     void testDiscoveryPhaseExecution_nullRoundEnv() throws Exception {
         PipelineDiscoveryPhase phase = new PipelineDiscoveryPhase();
         PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, null);
@@ -178,7 +203,7 @@ class PipelineDiscoveryPhaseTest {
         Files.writeString(pipelineConfig, "appName: test");
 
         when(pathResolver.resolveGeneratedSourcesRoot(Map.of())).thenReturn(generatedSourcesRoot);
-        when(pathResolver.resolveModuleDir(generatedSourcesRoot)).thenReturn(moduleDir);
+        when(pathResolver.resolveModuleDir(Map.of(), generatedSourcesRoot)).thenReturn(moduleDir);
         when(pathResolver.resolveModuleName(Map.of())).thenReturn("test-module");
 
         when(configLoader.resolvePipelineConfigPath(Map.of(), moduleDir, messager))
@@ -242,7 +267,7 @@ class PipelineDiscoveryPhaseTest {
         Map<String, String> processorOptions = Map.of("pipeline.transport", "LOCAL");
         when(processingEnv.getOptions()).thenReturn(processorOptions);
         when(pathResolver.resolveGeneratedSourcesRoot(processorOptions)).thenReturn(generatedSourcesRoot);
-        when(pathResolver.resolveModuleDir(generatedSourcesRoot)).thenReturn(moduleDir);
+        when(pathResolver.resolveModuleDir(processorOptions, generatedSourcesRoot)).thenReturn(moduleDir);
         when(pathResolver.resolveModuleName(processorOptions)).thenReturn("test-module");
 
         when(configLoader.resolvePipelineConfigPath(processorOptions, moduleDir, messager))

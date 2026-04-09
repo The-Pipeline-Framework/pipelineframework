@@ -36,6 +36,11 @@ class TemplateExpansionOrchestrator {
 
         boolean hasOrchestrator = ctx.getRoundEnv() != null
             && !ctx.getRoundEnv().getElementsAnnotatedWith(PipelineOrchestrator.class).isEmpty();
+        if (isRuntimeMappedStepModule(ctx, hasOrchestrator)) {
+            return baseModels.stream()
+                .filter(this::isServerCandidate)
+                .toList();
+        }
         if (!ctx.isPluginHost() && !hasOrchestrator) {
             return List.of();
         }
@@ -114,6 +119,21 @@ class TemplateExpansionOrchestrator {
     private boolean isMonolithLayout(PipelineCompilationContext ctx) {
         PipelineRuntimeMapping mapping = ctx.getRuntimeMapping();
         return mapping != null && mapping.layout() == PipelineRuntimeMapping.Layout.MONOLITH;
+    }
+
+    private boolean isRuntimeMappedStepModule(PipelineCompilationContext ctx, boolean hasOrchestrator) {
+        PipelineRuntimeMapping mapping = ctx.getRuntimeMapping();
+        return mapping != null
+            && mapping.layout() == PipelineRuntimeMapping.Layout.MODULAR
+            && ctx.getModuleName() != null
+            && !ctx.getModuleName().isBlank()
+            && !ctx.isPluginHost()
+            && !hasOrchestrator;
+    }
+
+    private boolean isServerCandidate(PipelineStepModel model) {
+        DeploymentRole role = model.deploymentRole();
+        return role == null || (role != DeploymentRole.ORCHESTRATOR_CLIENT && role != DeploymentRole.PLUGIN_CLIENT);
     }
 
     private boolean hasPluginImplementation(PipelineAspectModel aspect) {

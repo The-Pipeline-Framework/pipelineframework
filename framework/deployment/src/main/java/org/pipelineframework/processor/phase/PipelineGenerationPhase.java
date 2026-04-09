@@ -62,14 +62,14 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
     }
 
     /**
-         * Generates pipeline source artifacts and metadata for all configured step models and the orchestrator.
-         *
-         * <p>Produces per-step artifacts (gRPC services, REST resources, client classes, side-effect beans), optionally
-         * generates protobuf parsers when applicable, and writes role, platform, and orchestrator-related metadata.</p>
-         *
-         * @param ctx the compilation context containing step models, renderer bindings, descriptor set, environment, and settings
-         * @throws Exception if an unrecoverable generation error occurs that cannot be handled locally
-         */
+     * Generate pipeline source artifacts and metadata for all configured step models and the orchestrator.
+     *
+     * <p>Produces per-step artifacts (gRPC services, REST resources, client classes, side-effect beans), optionally
+     * generates protobuf parsers when applicable, and writes role, platform, and orchestrator-related metadata.</p>
+     *
+     * @param ctx the compilation context containing step models, renderer bindings, descriptor set, processing environment, and generation settings
+     * @throws Exception if an unrecoverable generation error occurs that cannot be handled locally
+     */
     @Override
     public void execute(PipelineCompilationContext ctx) throws Exception {
         // Get the bindings map from the context
@@ -87,8 +87,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer = new RemoteOperatorAdapterRenderer();
         OrchestratorGrpcRenderer orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
         OrchestratorRestResourceRenderer orchestratorRestRenderer = new OrchestratorRestResourceRenderer();
-        OrchestratorFunctionHandlerRenderer orchestratorFunctionHandlerRenderer =
-            new OrchestratorFunctionHandlerRenderer();
+        AbstractOrchestratorFunctionHandlerRenderer orchestratorFunctionHandlerRenderer =
+            FunctionHandlerRendererFactory.createOrchestratorRenderer();
         OrchestratorCliRenderer orchestratorCliRenderer = new OrchestratorCliRenderer();
         OrchestratorIngestClientRenderer orchestratorIngestClientRenderer = new OrchestratorIngestClientRenderer();
         CheckpointPublicationDescriptorRenderer checkpointPublicationDescriptorRenderer =
@@ -246,12 +246,8 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 generateOrchestratorServer(
                     ctx,
                     descriptorSet,
-                    orchestratorBinding.cliName() != null, // Using cliName as indicator for CLI generation
-                    orchestratorGrpcRenderer,
-                    orchestratorRestRenderer,
+                    orchestratorBinding.cliName() != null,
                     orchestratorFunctionHandlerRenderer,
-                    orchestratorCliRenderer,
-                    orchestratorIngestClientRenderer,
                     roleMetadataGenerator,
                     cacheKeyGenerator
                 );
@@ -443,28 +439,26 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Generate all source and metadata artifacts for a single pipeline step according to its enabled generation targets.
+     * Generate all source and metadata artifacts for a single pipeline step.
      *
-     * This will invoke the appropriate renderers to produce gRPC services, client steps (gRPC, local, REST),
-     * REST resources, record generated classes with their deployment roles, and generate side-effect CDI beans
-     * when required and permitted by the compilation context.
-     *
-     * @param ctx the compilation context containing processing environment, aspect models, transport and hosting configuration
+     * @param ctx the compilation context with environment, options, and models
      * @param model the pipeline step model to generate artifacts for
-     * @param grpcBinding gRPC binding information for rendering gRPC-related artifacts; may be null
-     * @param restBinding REST binding information for rendering REST-related artifacts; may be null
-     * @param localBinding local-transport binding information for rendering local client artifacts; may be null
-     * @param generatedSideEffectBeans a set used to track already-generated side-effect bean keys to avoid duplicates
+     * @param grpcBinding gRPC binding for the step; may be null when gRPC is not targeted
+     * @param restBinding REST binding for the step; may be null when REST is not targeted
+     * @param localBinding local-transport binding for the step; may be null when local transport is not targeted
+     * @param generatedSideEffectBeans set tracking keys of already-generated side-effect CDI beans to avoid duplicates
+     * @param enabledAspects set of enabled aspect names (lowercased)
      * @param descriptorSet protobuf descriptor set used for protobuf-related generation; may be null
-     * @param cacheKeyGenerator optional cache key generator class to include in generation contexts; may be null
-     * @param roleMetadataGenerator generator used to record generated class names and their deployment roles
-     * @param grpcRenderer renderer responsible for producing gRPC service classes
-     * @param clientRenderer renderer responsible for producing gRPC client step classes
-     * @param localClientRenderer renderer responsible for producing local-transport client step classes
-     * @param restClientRenderer renderer responsible for producing REST client step classes
-     * @param restRenderer renderer responsible for producing REST resource classes
-     * @param restFunctionHandlerRenderer renderer responsible for producing native function handlers for unary REST resources
-     * @throws IOException if an I/O error occurs while writing generated sources or renderers perform IO
+     * @param cacheKeyGenerator optional ClassName of a cache key generator to include in generation contexts; may be null
+     * @param roleMetadataGenerator recorder used to register generated class names with their deployment roles
+     * @param grpcRenderer renderer for producing gRPC service classes
+     * @param clientRenderer renderer for producing gRPC client step classes
+     * @param localClientRenderer renderer for producing local-transport client step classes
+     * @param restClientRenderer renderer for producing REST client step classes
+     * @param restRenderer renderer for producing REST resource classes
+     * @param restFunctionHandlerRenderer renderer for producing function handlers for unary REST resources
+     * @param remoteOperatorAdapterRenderer renderer for producing remote operator adapter classes
+     * @throws IOException if an I/O error occurs while writing generated sources
      */
     private void generateArtifacts(
             PipelineCompilationContext ctx,
@@ -482,7 +476,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             org.pipelineframework.processor.renderer.LocalClientStepRenderer localClientRenderer,
             RestClientStepRenderer restClientRenderer,
             RestResourceRenderer restRenderer,
-            RestFunctionHandlerRenderer restFunctionHandlerRenderer,
+            AbstractFunctionHandlerRenderer restFunctionHandlerRenderer,
             RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer) throws IOException {
         stepArtifactGenerationService.generateArtifactsForModel(
             ctx,
@@ -547,22 +541,18 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
     }
 
     /**
-     * Generate orchestrator server and client source artifacts based on the configured orchestrator binding.
+     * Generate orchestrator server and client source artifacts according to the configured orchestrator binding.
      *
-     * When the binding transport is REST, emits REST server sources and, if platform-function mode applies and the
-     * binding is non-streaming, also emits native function handlers and records their handler classes in role metadata.
-     * When the transport is gRPC or unspecified, emits a gRPC server. Server generation is skipped for LOCAL transport.
-     * Additionally emits a CLI client when {@code generateCli} is true and emits an ingest client when the transport is
-     * neither REST nor LOCAL. Generation I/O failures are reported to the processing environment messager.
+     * When the binding transport is REST, emits a REST resource and, if running in function platform mode with
+     * non-streaming input/output, emits native function handlers and records their handler classes in role metadata.
+     * When the transport is GRPC (and not LOCAL), emits a gRPC server. Server generation is skipped for LOCAL transport.
+     * Emits a CLI client when {@code generateCli} is true and emits an ingest client when the transport is neither REST
+     * nor LOCAL. I/O failures during generation are reported to the processing environment messager.
      *
      * @param ctx the pipeline compilation context
      * @param descriptorSet protobuf descriptor set used during generation; may be {@code null}
      * @param generateCli whether to generate the CLI orchestrator client
-     * @param orchestratorGrpcRenderer renderer for gRPC orchestrator server artifacts
-     * @param orchestratorRestRenderer renderer for REST orchestrator server artifacts
      * @param orchestratorFunctionHandlerRenderer renderer for native function orchestrator handlers
-     * @param orchestratorCliRenderer renderer for CLI orchestrator client artifacts
-     * @param orchestratorIngestClientRenderer renderer for orchestrator ingest client artifacts
      * @param roleMetadataGenerator generator that records generated classes by deployment role
      * @param cacheKeyGenerator optional cache key generator class; may be {@code null}
      */
@@ -570,11 +560,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             PipelineCompilationContext ctx,
             DescriptorProtos.FileDescriptorSet descriptorSet,
             boolean generateCli,
-            OrchestratorGrpcRenderer orchestratorGrpcRenderer,
-            OrchestratorRestResourceRenderer orchestratorRestRenderer,
-            OrchestratorFunctionHandlerRenderer orchestratorFunctionHandlerRenderer,
-            OrchestratorCliRenderer orchestratorCliRenderer,
-            OrchestratorIngestClientRenderer orchestratorIngestClientRenderer,
+            AbstractOrchestratorFunctionHandlerRenderer orchestratorFunctionHandlerRenderer,
             RoleMetadataGenerator roleMetadataGenerator,
             ClassName cacheKeyGenerator) {
         // Get orchestrator binding from context
@@ -587,8 +573,29 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             String transport = binding.normalizedTransport();
             boolean rest = "REST".equalsIgnoreCase(transport);
             boolean local = "LOCAL".equalsIgnoreCase(transport);
+            boolean grpc = "GRPC".equalsIgnoreCase(transport);
+
+            // Early validation for FUNCTION platform mode
+            if (ctx.isPlatformModeFunction()) {
+                if (!rest) {
+                    throw new IllegalStateException(
+                        "FUNCTION platform mode requires REST transport for orchestrator. " +
+                        "Got transport=" + transport + ", platform=FUNCTION. " +
+                        "Use pipeline.transport=REST with pipeline.platform=FUNCTION.");
+                }
+                if (!ctx.isFunctionHttpBridgeEnabled() && (binding.inputStreaming() || binding.outputStreaming())) {
+                    throw new IllegalStateException(
+                        "FUNCTION platform mode requires unary input and output for orchestrator. " +
+                        "Got transport=" + transport + ", platform=FUNCTION, " +
+                        "streamingInput=" + binding.inputStreaming() + ", streamingOutput=" + binding.outputStreaming());
+                }
+            }
+            
+            // Generate REST resource for REST transport
             if (rest) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.REST_SERVER;
+                org.pipelineframework.processor.renderer.OrchestratorRestResourceRenderer orchestratorRestRenderer = 
+                    new org.pipelineframework.processor.renderer.OrchestratorRestResourceRenderer();
                 orchestratorRestRenderer.render(binding, new GenerationContext(
                     ctx.getProcessingEnv(),
                     resolveRoleOutputDir(ctx, role),
@@ -596,7 +603,12 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     java.util.Set.of(),
                     cacheKeyGenerator,
                     descriptorSet));
-                if (ctx.isPlatformModeFunction() && !binding.inputStreaming() && !binding.outputStreaming()) {
+                
+                // Generate function handlers for FUNCTION platform mode (unary only)
+                if (ctx.isPlatformModeFunction()
+                    && !ctx.isFunctionHttpBridgeEnabled()
+                    && !binding.inputStreaming()
+                    && !binding.outputStreaming()) {
                     orchestratorFunctionHandlerRenderer.render(binding, new GenerationContext(
                         ctx.getProcessingEnv(),
                         resolveRoleOutputDir(ctx, role),
@@ -604,21 +616,33 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                         java.util.Set.of(),
                         cacheKeyGenerator,
                         descriptorSet));
+                    String basePackage = binding.basePackage();
                     roleMetadataGenerator.recordClassWithRole(
-                        OrchestratorFunctionHandlerRenderer.handlerFqcn(binding.basePackage()),
+                        basePackage + ".orchestrator.service." + AbstractOrchestratorFunctionHandlerRenderer.HANDLER_CLASS,
                         role.name());
                     roleMetadataGenerator.recordClassWithRole(
-                        OrchestratorFunctionHandlerRenderer.runAsyncHandlerFqcn(binding.basePackage()),
+                        basePackage + ".orchestrator.service." + AbstractOrchestratorFunctionHandlerRenderer.RUN_ASYNC_HANDLER_CLASS,
                         role.name());
                     roleMetadataGenerator.recordClassWithRole(
-                        OrchestratorFunctionHandlerRenderer.statusHandlerFqcn(binding.basePackage()),
+                        basePackage + ".orchestrator.service." + AbstractOrchestratorFunctionHandlerRenderer.STATUS_HANDLER_CLASS,
                         role.name());
                     roleMetadataGenerator.recordClassWithRole(
-                        OrchestratorFunctionHandlerRenderer.resultHandlerFqcn(binding.basePackage()),
+                        basePackage + ".orchestrator.service." + AbstractOrchestratorFunctionHandlerRenderer.RESULT_HANDLER_CLASS,
                         role.name());
+                } else if (ctx.isPlatformModeFunction() && !ctx.isFunctionHttpBridgeEnabled()) {
+                    // FUNCTION platform mode requires unary input/output for orchestrator handlers
+                    throw new IllegalStateException(
+                        "Orchestrator function handlers require unary input and output. " +
+                        "Got transport=" + transport + ", platform=FUNCTION, " +
+                        "streamingInput=" + binding.inputStreaming() + ", streamingOutput=" + binding.outputStreaming());
                 }
-            } else if (!local) {
+            }
+            
+            // Generate gRPC service for GRPC transport (non-LOCAL)
+            if (grpc && !local) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.PIPELINE_SERVER;
+                org.pipelineframework.processor.renderer.OrchestratorGrpcRenderer orchestratorGrpcRenderer = 
+                    new org.pipelineframework.processor.renderer.OrchestratorGrpcRenderer();
                 orchestratorGrpcRenderer.render(binding, new GenerationContext(
                     ctx.getProcessingEnv(),
                     resolveRoleOutputDir(ctx, role),
@@ -628,8 +652,11 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     descriptorSet));
             }
 
+            // Generate CLI client if requested
             if (generateCli) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT;
+                org.pipelineframework.processor.renderer.OrchestratorCliRenderer orchestratorCliRenderer = 
+                    new org.pipelineframework.processor.renderer.OrchestratorCliRenderer();
                 orchestratorCliRenderer.render(binding, new GenerationContext(
                     ctx.getProcessingEnv(),
                     resolveRoleOutputDir(ctx, role),
@@ -639,8 +666,11 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                     descriptorSet));
             }
 
+            // Generate ingest client for GRPC transport (non-LOCAL, non-REST)
             if (!rest && !local) {
                 org.pipelineframework.processor.ir.DeploymentRole role = org.pipelineframework.processor.ir.DeploymentRole.ORCHESTRATOR_CLIENT;
+                org.pipelineframework.processor.renderer.OrchestratorIngestClientRenderer orchestratorIngestClientRenderer = 
+                    new org.pipelineframework.processor.renderer.OrchestratorIngestClientRenderer();
                 orchestratorIngestClientRenderer.render(binding, new GenerationContext(
                     ctx.getProcessingEnv(),
                     resolveRoleOutputDir(ctx, role),

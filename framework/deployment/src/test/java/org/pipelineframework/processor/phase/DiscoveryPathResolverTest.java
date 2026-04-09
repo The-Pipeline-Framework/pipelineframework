@@ -69,17 +69,45 @@ class DiscoveryPathResolverTest {
     }
 
     @Test
+    void resolveGeneratedSourcesRoot_invalidConfiguredPathFailsClearly() {
+        IllegalArgumentException error = assertThrows(
+            IllegalArgumentException.class,
+            () -> resolver.resolveGeneratedSourcesRoot(Map.of("pipeline.generatedSourcesDir", "bad\0path")));
+
+        assertTrue(error.getMessage().contains("pipeline.generatedSourcesDir"));
+    }
+
+    @Test
     void resolveModuleDir_fromGeneratedSourcesRoot() {
         // Simulates .../target/generated-sources/pipeline -> module root
         Path genRoot = tempDir.resolve("target/generated-sources/pipeline");
-        Path result = resolver.resolveModuleDir(genRoot);
+        Path result = resolver.resolveModuleDir(Map.of(), genRoot);
         assertEquals(tempDir, result);
     }
 
     @Test
     void resolveModuleDir_nullFallsBackToCwd() {
-        Path result = resolver.resolveModuleDir(null);
+        Path result = resolver.resolveModuleDir(Map.of(), null);
         assertEquals(Paths.get(System.getProperty("user.dir")), result);
+    }
+
+    @Test
+    void resolveModuleDir_explicitModuleDirTakesPrecedence() {
+        Path explicit = tempDir.resolve("module-explicit");
+        Path genRoot = tempDir.resolve("target/generated-sources/pipeline");
+
+        Path result = resolver.resolveModuleDir(Map.of("pipeline.moduleDir", explicit.toString()), genRoot);
+
+        assertEquals(explicit, result);
+    }
+
+    @Test
+    void resolveModuleDir_invalidConfiguredPathFailsClearly() {
+        IllegalArgumentException error = assertThrows(
+            IllegalArgumentException.class,
+            () -> resolver.resolveModuleDir(Map.of("pipeline.moduleDir", "bad\0path"), tempDir));
+
+        assertTrue(error.getMessage().contains("pipeline.moduleDir"));
     }
 
     @Test

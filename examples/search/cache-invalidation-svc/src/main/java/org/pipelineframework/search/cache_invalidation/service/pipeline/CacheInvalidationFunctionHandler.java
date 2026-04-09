@@ -22,7 +22,6 @@ import jakarta.enterprise.inject.spi.CDI;
 import jakarta.inject.Named;
 import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
-import org.pipelineframework.search.lambda.NoopLambdaHandler;
 
 /**
  * Default cache invalidation Lambda entrypoint that delegates to the generated raw-document side-effect handler.
@@ -44,11 +43,9 @@ public class CacheInvalidationFunctionHandler implements RequestHandler<Object, 
             return namedHandlers.get();
         }
 
-        Instance<NoopLambdaHandler> noopHandlers = CDI.current().select(NoopLambdaHandler.class);
-        if (noopHandlers.isResolvable()) {
-            return noopHandlers.get();
-        }
-
-        return new NoopLambdaHandler();
+        throw new IllegalStateException(
+            "Missing RequestHandler bean named '" + DELEGATE_HANDLER_NAME
+                + "' for " + CacheInvalidationFunctionHandler.class.getSimpleName()
+                + "; expected generated delegate based on CacheRawDocumentSideEffectFunctionHandler");
     }
 }

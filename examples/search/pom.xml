@@ -46,7 +46,14 @@
         <tpf.build.transport>REST</tpf.build.transport>
         <tpf.build.platform>COMPUTE</tpf.build.platform>
         <tpf.build.lambda.scope>provided</tpf.build.lambda.scope>
+        <tpf.build.lambda.http.scope>test</tpf.build.lambda.http.scope>
+        <tpf.build.azure.scope>provided</tpf.build.azure.scope>
+        <tpf.build.gcp.scope>provided</tpf.build.gcp.scope>
         <tpf.build.rest.naming.strategy>RESOURCEFUL</tpf.build.rest.naming.strategy>
+        <pipeline.config.arg />
+        <pipeline.module.arg>-Apipeline.module=${project.artifactId}</pipeline.module.arg>
+        <pipeline.moduleDir.arg>-Apipeline.moduleDir=${project.basedir}</pipeline.moduleDir.arg>
+        <pipeline.function.httpBridge.arg />
         <pipeline.parallelism>PARALLEL</pipeline.parallelism>
         <quarkus.container-image.build>true</quarkus.container-image.build>
         <quarkus.container-image.registry>localhost</quarkus.container-image.registry>
@@ -293,6 +300,10 @@
                                 <compilerArgs>
                                     <arg>${pipeline.generatedSourcesArg}</arg>
                                     <arg>${protobuf.descriptor.fileArg}</arg>
+                                    <arg>${pipeline.config.arg}</arg>
+                                    <arg>${pipeline.module.arg}</arg>
+                                    <arg>${pipeline.moduleDir.arg}</arg>
+                                    <arg>${pipeline.function.httpBridge.arg}</arg>
                                     <arg>-Apipeline.transport=${tpf.build.transport}</arg>
                                     <arg>-Apipeline.platform=${tpf.build.platform}</arg>
                                     <arg>-Apipeline.rest.naming.strategy=${tpf.build.rest.naming.strategy}</arg>

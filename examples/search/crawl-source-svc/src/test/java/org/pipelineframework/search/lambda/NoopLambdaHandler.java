@@ -20,7 +20,7 @@ import com.amazonaws.services.lambda.runtime.Context;
 import com.amazonaws.services.lambda.runtime.RequestHandler;
 
 /**
- * Shared fallback handler used by search service modules during non-function test runs.
+ * Test-only fallback handler used when the direct Lambda profile is selected in module tests.
  */
 public class NoopLambdaHandler implements RequestHandler<Object, Object> {
     @Override

@@ -81,6 +81,15 @@ jobs:
       artifact_name: framework-m2-cache
     secrets: inherit
 
+  e2e-search-azure-functions:
+    name: Search Azure Functions Preview (Optional)
+    needs: build-framework
+    uses: ./.github/workflows/e2e-search-azure-functions.yml
+    with:
+      artifact_name: framework-m2-cache
+      terraform_destroy: true
+    secrets: inherit
+
   e2e-search-resource-it:
     name: Search Resource IT
     needs: build-framework

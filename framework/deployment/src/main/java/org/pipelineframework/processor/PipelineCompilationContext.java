@@ -8,6 +8,7 @@ import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 
 import com.google.protobuf.DescriptorProtos;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import org.pipelineframework.config.PlatformMode;
@@ -69,6 +70,9 @@ public class PipelineCompilationContext {
     private boolean pluginHost;
     @Setter
     private boolean orchestratorGenerated;
+    @Setter
+    @Getter(AccessLevel.NONE)
+    private boolean functionHttpBridge;
     private TransportMode transportMode;
     private PlatformMode platformMode;
 
@@ -97,6 +101,7 @@ public class PipelineCompilationContext {
         this.rendererBindings = Map.of();
         this.pluginHost = false;
         this.orchestratorGenerated = false;
+        this.functionHttpBridge = false;
         this.transportMode = TransportMode.GRPC;
         this.platformMode = PlatformMode.COMPUTE;
     }
@@ -244,6 +249,15 @@ public class PipelineCompilationContext {
      */
     public boolean isPlatformModeCompute() {
         return platformMode == PlatformMode.COMPUTE;
+    }
+
+    /**
+     * Indicates whether generated FUNCTION handlers should be suppressed in favor of an HTTP bridge runtime.
+     *
+     * @return true when the modular build opts into the HTTP bridge entrypoint
+     */
+    public boolean isFunctionHttpBridgeEnabled() {
+        return functionHttpBridge;
     }
 
     /**

@@ -1,0 +1,283 @@
+name: Reusable — Search Azure Functions Preview E2E
+
+on:
+  workflow_call:
+    inputs:
+      artifact_name:
+        description: 'Name of the Maven artifacts tarball'
+        required: false
+        default: 'framework-m2-cache'
+        type: string
+      download_artifacts:
+        description: 'Whether to download prebuilt framework artifacts instead of bootstrapping locally'
+        required: false
+        default: true
+        type: boolean
+      terraform_destroy:
+        description: 'Whether to destroy Terraform resources after tests'
+        required: false
+        default: true
+        type: boolean
+  workflow_dispatch:
+    inputs:
+      artifact_name:
+        description: 'Name of the Maven artifacts tarball'
+        required: false
+        default: 'framework-m2-cache'
+        type: string
+      download_artifacts:
+        description: 'Whether to download prebuilt framework artifacts instead of bootstrapping locally. Set true only when a matching artifact was uploaded earlier.'
+        required: false
+        default: false
+        type: boolean
+      terraform_destroy:
+        description: 'Whether to destroy Terraform resources after tests'
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-e2e-search-azure-functions
+  cancel-in-progress: true
+
+env:
+  MAVEN_OPTS: -Xmx2g -Xms512m
+  MAVEN_ARGS_BUILD: -B -T 1C -V -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
+  TF_VAR_resource_group_name: rg-search-pipeline-${{ github.run_id }}
+  TF_VAR_function_app_name: funcsearch${{ github.run_id }}
+  TF_VAR_storage_account_name: stsr${{ github.run_id }}
+  TF_VAR_location: westus
+  TF_STATE_CONTAINER: tfstate-search-pipeline
+
+jobs:
+  search-azure-functions-e2e:
+    name: Search Azure Functions Preview E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+          terraform_wrapper: false
+
+      - name: Configure Maven
+        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> "$GITHUB_ENV"
+
+      - name: Download framework artifacts
+        if: ${{ inputs.download_artifacts }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: /tmp/m2-artifacts
+
+      - name: Extract framework artifacts
+        if: ${{ inputs.download_artifacts }}
+        run: |
+          mkdir -p ~/.m2/repository
+          tar -xzf "/tmp/m2-artifacts/${{ inputs.artifact_name }}.tar.gz" -C ~/.m2/repository
+
+      - name: Bootstrap framework artifacts locally
+        if: ${{ !inputs.download_artifacts }}
+        run: ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          enable-AzPSSession: false
+
+      - name: Create Terraform state storage
+        run: |
+          RESOURCE_GROUP="tfstate-rg-${{ github.run_id }}"
+          STORAGE_ACCOUNT="tfstate${{ github.run_id }}"
+
+          az group create --name "$RESOURCE_GROUP" --location westus
+          az storage account create \
+            --name "$STORAGE_ACCOUNT" \
+            --resource-group "$RESOURCE_GROUP" \
+            --location westus \
+            --sku Standard_LRS
+
+          az storage container create \
+            --name "$TF_STATE_CONTAINER" \
+            --account-name "$STORAGE_ACCOUNT"
+
+          echo "TF_STATE_RESOURCE_GROUP=$RESOURCE_GROUP" >> "$GITHUB_ENV"
+          echo "TF_STATE_STORAGE_ACCOUNT=$STORAGE_ACCOUNT" >> "$GITHUB_ENV"
+
+      - name: Terraform Init
+        working-directory: examples/search/terraform
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=$TF_STATE_RESOURCE_GROUP" \
+            -backend-config="storage_account_name=$TF_STATE_STORAGE_ACCOUNT" \
+            -backend-config="container_name=$TF_STATE_CONTAINER" \
+            -backend-config="key=search-pipeline-${{ github.run_id }}.tfstate"
+
+      - name: Terraform Plan
+        working-directory: examples/search/terraform
+        run: |
+          terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        working-directory: examples/search/terraform
+        run: |
+          terraform apply -auto-approve tfplan
+
+      - name: Get Function App URL
+        id: function_url
+        working-directory: examples/search/terraform
+        run: |
+          FUNCTION_URL="$(terraform output -raw function_app_url)"
+          echo "function_url=${FUNCTION_URL}" >> "$GITHUB_OUTPUT"
+
+      - name: Build Search Azure Functions topology
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f examples/search/pom.xml \
+            -Dtpf.build.platform=FUNCTION \
+            -Dtpf.build.transport=REST \
+            -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
+            -Dtpf.build.azure.scope=compile \
+            -Dquarkus.profile=azure-functions \
+            -DskipTests \
+            -Dquarkus.container-image.build=false \
+            clean package
+
+      - name: Deploy to Azure Functions
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f examples/search/orchestrator-svc/pom.xml quarkus:deploy \
+            -Dtpf.build.platform=FUNCTION \
+            -Dtpf.build.transport=REST \
+            -Dtpf.build.rest.naming.strategy=RESOURCEFUL \
+            -Dtpf.build.azure.scope=compile \
+            -Dquarkus.profile=azure-functions \
+            -Dquarkus.azure-functions.app-name="$TF_VAR_function_app_name" \
+            -Dquarkus.azure-functions.region="$TF_VAR_location"
+
+      - name: Wait for Function deployment to propagate
+        env:
+          FUNCTION_APP_URL: ${{ steps.function_url.outputs.function_url }}
+        run: |
+          echo "Waiting for Azure Function to become ready..."
+          MAX_RETRIES=30
+          RETRY_INTERVAL=10
+          RETRY_COUNT=0
+          
+          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${FUNCTION_APP_URL}/q/health/live" --max-time 10 || echo "000")
+            if [ "$HTTP_STATUS" = "200" ]; then
+              echo "Function app is ready (HTTP $HTTP_STATUS)"
+              exit 0
+            fi
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            echo "Attempt $RETRY_COUNT/$MAX_RETRIES: Function not ready yet (HTTP $HTTP_STATUS), retrying in ${RETRY_INTERVAL}s..."
+            sleep $RETRY_INTERVAL
+          done
+          
+          echo "ERROR: Function app did not become ready after $((MAX_RETRIES * RETRY_INTERVAL)) seconds"
+          exit 1
+
+      - name: Run Azure Functions End-to-End tests
+        env:
+          FUNCTION_APP_URL: ${{ steps.function_url.outputs.function_url }}
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f examples/search/pom.xml \
+            -pl orchestrator-svc \
+            -am \
+            -DskipUnitTests=true \
+            -DskipNative=true \
+            -Dfailsafe.failIfNoSpecifiedTests=false \
+            -Dquarkus.container-image.build=false \
+            -Dit.test=AzureFunctionsEndToEndIT \
+            -Dazure.function.app.url="$FUNCTION_APP_URL" \
+            verify
+
+      - name: Terraform Destroy
+        if: ${{ always() && inputs.terraform_destroy }}
+        working-directory: examples/search/terraform
+        run: |
+          # Reinitialize with the same backend configuration used during creation
+          terraform init -input=false -reconfigure \
+            -backend-config="resource_group_name=$TF_STATE_RESOURCE_GROUP" \
+            -backend-config="storage_account_name=$TF_STATE_STORAGE_ACCOUNT" \
+            -backend-config="container_name=$TF_STATE_CONTAINER" \
+            -backend-config="key=search-pipeline-${{ github.run_id }}.tfstate"
+          
+          # Refresh state
+          terraform refresh -input=false || true
+          
+          # Check if there are resources to destroy
+          # Capture exit code without aborting on non-zero (set +e temporarily)
+          set +e
+          terraform plan -destroy -input=false -detailed-exitcode
+          PLAN_EXIT_CODE=$?
+          set -e
+          
+          # Exit code 0: no changes, 2: changes planned
+          if [ $PLAN_EXIT_CODE -eq 0 ] || [ $PLAN_EXIT_CODE -eq 2 ]; then
+            echo "Proceeding with terraform destroy..."
+            terraform destroy -auto-approve \
+              -var="resource_group_name=$TF_VAR_resource_group_name" \
+              -var="function_app_name=$TF_VAR_function_app_name" \
+              -var="storage_account_name=$TF_VAR_storage_account_name" \
+              -var="location=$TF_VAR_location"
+          else
+            echo "No resources to destroy (plan exit code: $PLAN_EXIT_CODE)"
+          fi
+
+      - name: Cleanup Terraform state storage
+        if: ${{ always() }}
+        run: |
+          az storage container delete \
+            --name "$TF_STATE_CONTAINER" \
+            --account-name "$TF_STATE_STORAGE_ACCOUNT" \
+            --yes || true
+          
+          az group delete \
+            --name "$TF_STATE_RESOURCE_GROUP" \
+            --yes \
+            --no-wait || true
+
+      - name: Dump reports on failure
+        if: failure()
+        run: |
+          find examples/search -path "*/target/failsafe-reports/*.txt" -print -exec tail -n 200 {} \;
+          find examples/search -path "*/target/failsafe-reports/*.dumpstream" -print -exec tail -n 400 {} \;
+          find examples/search -path "*/target/failsafe-reports/*.dump" -print -exec tail -n 200 {} \;
+          find examples/search -path "*/target/surefire-reports/*.txt" -print -exec tail -n 200 {} \;
+
+      - name: Upload reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: search-azure-functions-e2e-reports
+          path: |
+            examples/search/**/target/surefire-reports/*.txt
+            examples/search/**/target/surefire-reports/*.xml
+            examples/search/**/target/failsafe-reports/*.txt
+            examples/search/**/target/failsafe-reports/*.xml
+            examples/search/**/target/failsafe-reports/*.dumpstream
+            examples/search/**/target/failsafe-reports/*.dump
+          retention-days: 7
+          if-no-files-found: warn

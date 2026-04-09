@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import javax.annotation.processing.ProcessingEnvironment;
 
 import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.CodeBlock;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.pipelineframework.processor.ir.DeploymentRole;
@@ -131,6 +132,27 @@ class RestFunctionHandlerRendererTest {
         assertTrue(source.contains("return FunctionTransportBridge.invokeManyToMany(input, transportContext, source, invoke, sink)"));
     }
 
+    @Test
+    void preservesProviderExpressionPlaceholdersWhenBuildingTransportContext() throws IOException {
+        ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
+        when(processingEnv.getFiler()).thenReturn(new TestFiler(tempDir));
+
+        PlaceholderAwareRenderer renderer = new PlaceholderAwareRenderer();
+        renderer.render(new RestBinding(unaryModel(), null),
+            new GenerationContext(processingEnv, tempDir, DeploymentRole.REST_SERVER,
+                java.util.Set.of(), null, null));
+
+        Path generatedSource =
+            tempDir.resolve("org/example/search/parse/service/pipeline/ParsedDocumentFunctionHandler.java");
+        String source = Files.readString(generatedSource);
+
+        assertTrue(source.contains("Optional.ofNullable(context != null ? context.getAwsRequestId() : null).orElse(\"missing-request\")"));
+        assertTrue(source.contains("Optional.ofNullable(context != null ? context.getFunctionName() : null).orElse(\"missing-function\")"));
+        assertTrue(source.contains("Optional.ofNullable(context != null ? context.getLogStreamName() : null).orElse(\"missing-execution\")"));
+        assertTrue(source.contains("FunctionTransportContext.ATTR_RETRY_ATTEMPT, System.getProperty(\"tpf.transport.retry-attempt\", \"0\")"));
+        assertTrue(source.contains("FunctionTransportContext.ATTR_DISPATCH_TS_EPOCH_MS, Long.toString(System.currentTimeMillis())"));
+    }
+
     private PipelineStepModel unaryModel() {
         return buildModel(StreamingShape.UNARY_UNARY);
     }
@@ -166,5 +188,31 @@ class RestFunctionHandlerRendererTest {
                 ClassName.get("org.example.search.common.mapper", "IndexAckMapper"),
                 true))
             .build();
+    }
+
+    private static final class PlaceholderAwareRenderer extends AwsLambdaFunctionHandlerRenderer {
+        @Override
+        protected CodeBlock getRequestIdExpression() {
+            return CodeBlock.of(
+                "$T.ofNullable(context != null ? context.getAwsRequestId() : null).orElse($S)",
+                ClassName.get("java.util", "Optional"),
+                "missing-request");
+        }
+
+        @Override
+        protected CodeBlock getFunctionNameExpression() {
+            return CodeBlock.of(
+                "$T.ofNullable(context != null ? context.getFunctionName() : null).orElse($S)",
+                ClassName.get("java.util", "Optional"),
+                "missing-function");
+        }
+
+        @Override
+        protected CodeBlock getExecutionIdExpression() {
+            return CodeBlock.of(
+                "$T.ofNullable(context != null ? context.getLogStreamName() : null).orElse($S)",
+                ClassName.get("java.util", "Optional"),
+                "missing-execution");
+        }
     }
 }

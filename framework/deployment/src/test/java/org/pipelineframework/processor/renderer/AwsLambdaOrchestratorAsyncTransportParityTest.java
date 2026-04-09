@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-class OrchestratorAsyncTransportParityTest {
+class AwsLambdaOrchestratorAsyncTransportParityTest {
 
     @TempDir
     Path tempDir;
@@ -51,7 +51,7 @@ class OrchestratorAsyncTransportParityTest {
         String grpcSource = Files.readString(tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java"));
 
         OrchestratorBinding functionBinding = buildBinding("REST", false, false);
-        OrchestratorFunctionHandlerRenderer functionRenderer = new OrchestratorFunctionHandlerRenderer();
+        AwsLambdaOrchestratorRenderer functionRenderer = new AwsLambdaOrchestratorRenderer();
         functionRenderer.render(functionBinding, new GenerationContext(
             processingEnv, tempDir, DeploymentRole.REST_SERVER, java.util.Set.of(), null, null));
         String functionRunAsync = Files.readString(
@@ -95,7 +95,7 @@ class OrchestratorAsyncTransportParityTest {
         String grpcSource = Files.readString(tempDir.resolve("com/example/orchestrator/service/OrchestratorGrpcService.java"));
 
         OrchestratorBinding functionBinding = buildBinding("REST", false, true);
-        new OrchestratorFunctionHandlerRenderer().render(functionBinding, new GenerationContext(
+        new AwsLambdaOrchestratorRenderer().render(functionBinding, new GenerationContext(
             processingEnv, tempDir, DeploymentRole.REST_SERVER, java.util.Set.of(), null, null));
         String functionResult = Files.readString(
             tempDir.resolve("com/example/orchestrator/service/PipelineExecutionResultFunctionHandler.java"));
