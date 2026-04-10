@@ -32,24 +32,9 @@ public class CheckpointPublicationGrpcService
     @Inject
     CheckpointPublicationAdmissionService admissionService;
 
-    /**
-     * Handles a checkpoint publication gRPC request by decoding it, invoking admission logic, and producing a publish acceptance response.
-     *
-     * If the request payload cannot be decoded, the call is converted to a gRPC `INVALID_ARGUMENT` status.
-     *
-     * @param request the gRPC publish request containing publication name, payloadJson, tenantId, and idempotencyKey
-     * @return the checkpoint publish acceptance response containing the execution id and a duplicate indicator
-     */
     @Override
     public Uni<CheckpointPublishAcceptedResponse> publish(CheckpointPublishRequest request) {
         long startTime = System.nanoTime();
-        LOG.infof("Checkpoint gRPC publish received publication=%s payloadBytes=%d",
-            request.getPublication(),
-            request.getPayloadJson().size());
-        LOG.debugf("Checkpoint gRPC publish metadata publication=%s tenant=%s idempotencyKey=%s",
-            request.getPublication(),
-            request.getTenantId(),
-            request.getIdempotencyKey());
         CheckpointPublicationRequest decoded;
         try {
             decoded = CheckpointPublicationProtoSupport.fromProtoRequest(request);
@@ -62,13 +47,8 @@ public class CheckpointPublicationGrpcService
         return Uni.createFrom().deferred(
                 () -> admissionService.admit(decoded, request.getTenantId(), request.getIdempotencyKey()))
             .onItem().transform(CheckpointPublicationProtoSupport::toProtoResponse)
-            .onItem().invoke(response -> {
-                LOG.infof("Checkpoint gRPC publish accepted publication=%s executionId=%s duplicate=%s",
-                    request.getPublication(),
-                    response.getExecutionId(),
-                    response.getDuplicate());
-                RpcMetrics.recordGrpcServer(SERVICE, METHOD, Status.OK, System.nanoTime() - startTime);
-            })
+            .onItem().invoke(response ->
+                RpcMetrics.recordGrpcServer(SERVICE, METHOD, Status.OK, System.nanoTime() - startTime))
             .onFailure().transform(this::mapFailure)
             .onFailure().invoke(failure ->
                 RpcMetrics.recordGrpcServer(SERVICE, METHOD, Status.fromThrowable(failure),
