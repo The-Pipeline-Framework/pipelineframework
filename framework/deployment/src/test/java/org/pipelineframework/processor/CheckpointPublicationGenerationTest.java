@@ -81,7 +81,7 @@ class CheckpointPublicationGenerationTest {
         String subscription = subscriptionSource.getCharContent(true).toString();
         assertTrue(subscription.contains("class PipelineCheckpointSubscriptionHandler"));
         assertTrue(subscription.contains("return \"orders-ready\";"));
-        assertTrue(subscription.contains("Object mapped = mapper.fromExternal(external)"));
+        assertTrue(subscription.contains("Object mapped = mapper.toExternal(domain)"));
         assertTrue(subscription.contains("pipelineExecutionService.executePipelineAsync(mapped, tenantId, idempotencyKey)"));
 
         JavaFileObject handoffMetadata = compilation.generatedFile(

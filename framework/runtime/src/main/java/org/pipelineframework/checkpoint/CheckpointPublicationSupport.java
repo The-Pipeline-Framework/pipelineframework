@@ -6,7 +6,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+import com.google.protobuf.MessageOrBuilder;
+import com.google.protobuf.util.JsonFormat;
 import org.jboss.logging.Logger;
+import org.pipelineframework.config.pipeline.PipelineJson;
 
 /**
  * Helpers for checkpoint publication metadata and idempotency-key derivation.
@@ -14,6 +17,7 @@ import org.jboss.logging.Logger;
 public final class CheckpointPublicationSupport {
 
     private static final Logger LOG = Logger.getLogger(CheckpointPublicationSupport.class);
+    private static final JsonFormat.Printer PROTO_JSON = JsonFormat.printer().omittingInsignificantWhitespace();
 
     private CheckpointPublicationSupport() {
     }
@@ -34,6 +38,27 @@ public final class CheckpointPublicationSupport {
             parts.add(value.trim());
         }
         return String.join(":", parts);
+    }
+
+    public static <T> T normalizePayload(Object payload, Class<T> expectedType) {
+        if (payload == null || expectedType == null) {
+            return null;
+        }
+        if (expectedType.isInstance(payload)) {
+            return expectedType.cast(payload);
+        }
+        try {
+            var json = PipelineJson.mapper();
+            var tree = payload instanceof MessageOrBuilder protobuf
+                ? json.readTree(PROTO_JSON.print(protobuf))
+                : json.valueToTree(payload);
+            return json.treeToValue(tree, expectedType);
+        } catch (Exception e) {
+            throw new IllegalStateException(
+                "Failed to normalize checkpoint publication payload to " + expectedType.getName()
+                    + " from " + payload.getClass().getName(),
+                e);
+        }
     }
 
     private static String readProperty(Object payload, String field) {

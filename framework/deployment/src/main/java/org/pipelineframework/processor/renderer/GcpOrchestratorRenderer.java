@@ -92,7 +92,8 @@ public class GcpOrchestratorRenderer extends AbstractOrchestratorFunctionHandler
      * header (placeholder supplied as a format argument) and, if absent, falls back to a newly
      * generated UUID string.
      *
-     * @return a format string that resolves to `request.getFirstHeader(<headerName>).orElseGet(() -> UUID.randomUUID().toString())`
+     * @return a format string that resolves to
+     *         {@code request.getFirstHeader(headerName).orElseGet(() -> UUID.randomUUID().toString())}
      */
     @Override
     protected String getExecutionIdExpression() { return "request.getFirstHeader($S).orElseGet(() -> $T.randomUUID().toString())"; }

@@ -47,7 +47,7 @@ class PlaceOrderRequestMapperTest {
     }
 
     @Test
-    void fromExternalEmptyUuidStringsYieldNullUuids() {
+    void fromExternalEmptyUuidStringsFailFast() {
         CheckoutValidateRequestSvc.PlaceOrderRequest grpc =
             CheckoutValidateRequestSvc.PlaceOrderRequest.newBuilder()
                 .setRequestId("")
@@ -58,15 +58,7 @@ class PlaceOrderRequestMapperTest {
                 .setCurrency("EUR")
                 .build();
 
-        PlaceOrderRequest domain = mapper.fromExternal(grpc);
-
-        assertNotNull(domain);
-        assertNull(domain.requestId());
-        assertNull(domain.customerId());
-        assertNull(domain.restaurantId());
-        assertEquals("some items", domain.items());
-        assertNull(domain.totalAmount());
-        assertEquals("EUR", domain.currency());
+        assertThrows(NullPointerException.class, () -> mapper.fromExternal(grpc));
     }
 
     @Test
@@ -108,7 +100,7 @@ class PlaceOrderRequestMapperTest {
 
         PlaceOrderRequest domain = mapper.fromExternal(grpc);
 
-        assertEquals("  item with spaces & commas,  more items  ", domain.items());
+        assertEquals("item with spaces & commas,  more items", domain.items());
     }
 
     // --- toExternal ---
@@ -136,19 +128,9 @@ class PlaceOrderRequestMapperTest {
     }
 
     @Test
-    void toExternalNullUuidFieldsYieldEmptyStrings() {
-        PlaceOrderRequest domain = new PlaceOrderRequest(
-            null, null, null, "items", null, "USD");
-
-        CheckoutValidateRequestSvc.PlaceOrderRequest grpc = mapper.toExternal(domain);
-
-        assertNotNull(grpc);
-        assertEquals("", grpc.getRequestId());
-        assertEquals("", grpc.getCustomerId());
-        assertEquals("", grpc.getRestaurantId());
-        assertEquals("items", grpc.getItems());
-        assertEquals("", grpc.getTotalAmount());
-        assertEquals("USD", grpc.getCurrency());
+    void placeOrderRequestRejectsNullRequiredFields() {
+        assertThrows(NullPointerException.class, () -> new PlaceOrderRequest(
+            null, null, null, "items", null, "USD"));
     }
 
     // --- round-trip ---

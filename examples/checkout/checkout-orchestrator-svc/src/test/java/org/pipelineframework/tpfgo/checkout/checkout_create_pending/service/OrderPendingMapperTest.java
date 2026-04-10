@@ -51,7 +51,7 @@ class OrderPendingMapperTest {
     }
 
     @Test
-    void fromExternalEmptyUuidStringsYieldNullFields() {
+    void fromExternalEmptyUuidStringsFailFast() {
         CheckoutCreatePendingSvc.OrderPending grpc = CheckoutCreatePendingSvc.OrderPending.newBuilder()
             .setOrderId("")
             .setRequestId("")
@@ -62,16 +62,7 @@ class OrderPendingMapperTest {
             .setCreatedAt("")
             .build();
 
-        OrderPending domain = mapper.fromExternal(grpc);
-
-        assertNotNull(domain);
-        assertNull(domain.orderId());
-        assertNull(domain.requestId());
-        assertNull(domain.customerId());
-        assertNull(domain.restaurantId());
-        assertNull(domain.totalAmount());
-        assertEquals("EUR", domain.currency());
-        assertNull(domain.createdAt());
+        assertThrows(NullPointerException.class, () -> mapper.fromExternal(grpc));
     }
 
     @Test
@@ -141,21 +132,10 @@ class OrderPendingMapperTest {
     }
 
     @Test
-    void toExternalNullUuidFieldsYieldEmptyStrings() {
-        OrderPending domain = new OrderPending(
+    void orderPendingRejectsNullRequiredFields() {
+        assertThrows(NullPointerException.class, () -> new OrderPending(
             null, null, null, null,
-            null, "USD", null);
-
-        CheckoutCreatePendingSvc.OrderPending grpc = mapper.toExternal(domain);
-
-        assertNotNull(grpc);
-        assertEquals("", grpc.getOrderId());
-        assertEquals("", grpc.getRequestId());
-        assertEquals("", grpc.getCustomerId());
-        assertEquals("", grpc.getRestaurantId());
-        assertEquals("", grpc.getTotalAmount());
-        assertEquals("USD", grpc.getCurrency());
-        assertEquals("", grpc.getCreatedAt());
+            null, "USD", null));
     }
 
     // --- round-trip ---

@@ -65,7 +65,13 @@ public class CheckpointPublicationService {
     }
 
     public Uni<Void> publishIfConfigured(ExecutionRecord<Object, Object> record, Object resultPayload) {
-        if (descriptor == null || resultPayload == null) {
+        if (descriptor == null) {
+            return Uni.createFrom().voidItem();
+        }
+        if (resultPayload == null) {
+            LOG.warnf("Skipping checkpoint publication publication=%s execution=%s because result payload is null",
+                descriptor.publication(),
+                record == null ? "<unknown>" : record.executionId());
             return Uni.createFrom().voidItem();
         }
         if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
@@ -73,13 +79,20 @@ public class CheckpointPublicationService {
                 "Checkpoint publication requires pipeline.orchestrator.mode=QUEUE_ASYNC"));
         }
 
+        Object normalizedPayload = descriptor.normalizePayload(resultPayload);
+        if (normalizedPayload == null) {
+            LOG.warnf("Skipping checkpoint publication publication=%s execution=%s because normalized payload is null",
+                descriptor.publication(),
+                record == null ? "<unknown>" : record.executionId());
+            return Uni.createFrom().voidItem();
+        }
         String idempotencyKey = CheckpointPublicationSupport.deriveIdempotencyKey(
             record.executionKey(),
             descriptor.idempotencyKeyFields(),
-            resultPayload);
+            normalizedPayload);
         CheckpointPublicationRequest request = new CheckpointPublicationRequest(
             descriptor.publication(),
-            org.pipelineframework.config.pipeline.PipelineJson.mapper().valueToTree(resultPayload));
+            org.pipelineframework.config.pipeline.PipelineJson.mapper().valueToTree(normalizedPayload));
         return Uni.join().all(
             resolvedTargets.stream()
                 .map(target -> dispatch(target, request, record, idempotencyKey))
