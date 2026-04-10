@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
@@ -9,19 +11,28 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <groupId>org.pipelineframework.checkout</groupId>
-    <artifactId>checkout-reference</artifactId>
+    <groupId>org.pipelineframework.tpfgo</groupId>
+    <artifactId>tpfgo-example</artifactId>
     <packaging>pom</packaging>
-    <name>Checkout Reference (TPFGo)</name>
+    <name>TPFGo Example</name>
 
     <modules>
         <module>common</module>
-        <module>deliver-order-orchestrator-svc</module>
-        <module>create-order-orchestrator-svc</module>
+        <module>pipeline-runtime-svc</module>
+        <module>checkout-orchestrator-svc</module>
+        <module>consumer-validation-orchestrator-svc</module>
+        <module>restaurant-acceptance-orchestrator-svc</module>
+        <module>kitchen-preparation-orchestrator-svc</module>
+        <module>dispatch-orchestrator-svc</module>
+        <module>delivery-execution-orchestrator-svc</module>
+        <module>payment-capture-orchestrator-svc</module>
+        <module>compensation-failure-orchestrator-svc</module>
+        <module>tpfgo-e2e-tests</module>
     </modules>
 
     <properties>
         <protobuf.version>3.25.8</protobuf.version>
+        <pipeline.moduleArg>-Apipeline.module=${project.artifactId}</pipeline.moduleArg>
     </properties>
 
     <dependencyManagement>

@@ -297,7 +297,17 @@ class PipelineTelemetryTest {
 
         @Override
         public HealthConfig health() {
-            return () -> Duration.ofMinutes(5);
+            return new HealthConfig() {
+                @Override
+                public Boolean enabled() {
+                    return true;
+                }
+
+                @Override
+                public Duration startupTimeout() {
+                    return Duration.ofMinutes(5);
+                }
+            };
         }
 
         @Override

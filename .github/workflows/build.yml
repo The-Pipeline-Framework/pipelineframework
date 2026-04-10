@@ -17,7 +17,7 @@ on:
       - '.github/actions/setup-testcontainers/**'
       - '.github/workflows/build.yml'
       - '.github/workflows/e2e-csv-monolith.yml'
-      - '.github/workflows/e2e-checkout-ftgo-smoke.yml'
+      - '.github/workflows/e2e-checkout-tpfgo-smoke.yml'
       - '.github/workflows/e2e-search-pipeline-e2e.yml'
       - '.github/workflows/e2e-search-resource-it.yml'
       - '.github/workflows/e2e-search-lambda-smoke.yml'
@@ -181,10 +181,10 @@ jobs:
       artifact_name: ${{ needs.bootstrap.outputs.artifact_name }}
     secrets: inherit
 
-  e2e-checkout-ftgo:
-    name: Checkout FTGo Smoke
+  e2e-checkout-tpfgo:
+    name: Checkout TPFGo Smoke
     needs: bootstrap
-    uses: ./.github/workflows/e2e-checkout-ftgo-smoke.yml
+    uses: ./.github/workflows/e2e-checkout-tpfgo-smoke.yml
     with:
       artifact_name: ${{ needs.bootstrap.outputs.artifact_name }}
     secrets: inherit

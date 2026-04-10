@@ -1,55 +1,36 @@
-appName: "FTGo Consumer Validation Pipeline"
-basePackage: "org.pipelineframework.checkout.ftgo.consumer"
+appName: "TPFGo Consumer Validation Pipeline"
+basePackage: "org.pipelineframework.tpfgo.consumer.validation"
 transport: "GRPC"
+platform: "COMPUTE"
+input:
+  subscription:
+    publication: "tpfgo.checkout.order-pending.v1"
 steps:
   - name: "Consumer Validate Order"
+    service: "org.pipelineframework.tpfgo.consumer.validation.consumer_validate_order.service.ProcessConsumerValidateOrderService"
     cardinality: "ONE_TO_ONE"
+    input: "org.pipelineframework.tpfgo.common.domain.OrderPending"
     inputTypeName: "OrderPending"
     inputFields:
-      - name: "orderId"
-        type: "UUID"
-        protoType: "string"
-      - name: "requestId"
-        type: "UUID"
-        protoType: "string"
-      - name: "customerId"
-        type: "UUID"
-        protoType: "string"
-      - name: "restaurantId"
-        type: "UUID"
-        protoType: "string"
-      - name: "totalAmount"
-        type: "BigDecimal"
-        protoType: "string"
-      - name: "currency"
-        type: "String"
-        protoType: "string"
-      - name: "createdAt"
-        type: "Instant"
-        protoType: "string"
+      - { name: "orderId", type: "UUID", protoType: "string" }
+      - { name: "requestId", type: "UUID", protoType: "string" }
+      - { name: "customerId", type: "UUID", protoType: "string" }
+      - { name: "restaurantId", type: "UUID", protoType: "string" }
+      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
+      - { name: "currency", type: "String", protoType: "string" }
+      - { name: "createdAt", type: "Instant", protoType: "string" }
+    output: "org.pipelineframework.tpfgo.common.domain.OrderApproved"
     outputTypeName: "OrderApproved"
     outputFields:
-      - name: "orderId"
-        type: "UUID"
-        protoType: "string"
-      - name: "requestId"
-        type: "UUID"
-        protoType: "string"
-      - name: "customerId"
-        type: "UUID"
-        protoType: "string"
-      - name: "restaurantId"
-        type: "UUID"
-        protoType: "string"
-      - name: "totalAmount"
-        type: "BigDecimal"
-        protoType: "string"
-      - name: "currency"
-        type: "String"
-        protoType: "string"
-      - name: "approvedAt"
-        type: "Instant"
-        protoType: "string"
-      - name: "riskBand"
-        type: "String"
-        protoType: "string"
+      - { name: "orderId", type: "UUID", protoType: "string" }
+      - { name: "requestId", type: "UUID", protoType: "string" }
+      - { name: "customerId", type: "UUID", protoType: "string" }
+      - { name: "restaurantId", type: "UUID", protoType: "string" }
+      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
+      - { name: "currency", type: "String", protoType: "string" }
+      - { name: "approvedAt", type: "Instant", protoType: "string" }
+      - { name: "riskBand", type: "String", protoType: "string" }
+output:
+  checkpoint:
+    publication: "tpfgo.consumer.order-approved.v1"
+    idempotencyKeyFields: [ "orderId" ]

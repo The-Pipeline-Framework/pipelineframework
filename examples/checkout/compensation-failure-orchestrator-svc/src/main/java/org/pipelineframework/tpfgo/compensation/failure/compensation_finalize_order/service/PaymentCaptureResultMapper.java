@@ -1,0 +1,46 @@
+package org.pipelineframework.tpfgo.compensation.failure.compensation_finalize_order.service;
+
+import jakarta.enterprise.context.ApplicationScoped;
+
+import org.pipelineframework.mapper.Mapper;
+import org.pipelineframework.tpfgo.common.domain.PaymentCaptureResult;
+import org.pipelineframework.tpfgo.common.util.GrpcMappingSupport;
+import org.pipelineframework.tpfgo.compensation.failure.grpc.CompensationFinalizeOrderSvc;
+
+@ApplicationScoped
+public class PaymentCaptureResultMapper
+    implements Mapper<PaymentCaptureResult, CompensationFinalizeOrderSvc.PaymentCaptureResult> {
+
+    @Override
+    public PaymentCaptureResult fromExternal(CompensationFinalizeOrderSvc.PaymentCaptureResult external) {
+        return new PaymentCaptureResult(
+            GrpcMappingSupport.uuid(external.getOrderId(), "orderId"),
+            GrpcMappingSupport.uuid(external.getPaymentId(), "paymentId"),
+            GrpcMappingSupport.instant(external.getProcessedAt(), "processedAt"),
+            GrpcMappingSupport.decimal(external.getAmount(), "amount"),
+            external.getCurrency(),
+            external.getStatus(),
+            org.pipelineframework.tpfgo.common.domain.CommonDomainValidation.blankToNull(external.getFailureCode()),
+            org.pipelineframework.tpfgo.common.domain.CommonDomainValidation.blankToNull(external.getFailureReason()));
+    }
+
+    @Override
+    public CompensationFinalizeOrderSvc.PaymentCaptureResult toExternal(PaymentCaptureResult domain) {
+        var builder = CompensationFinalizeOrderSvc.PaymentCaptureResult.newBuilder()
+            .setOrderId(GrpcMappingSupport.str(domain.orderId()))
+            .setProcessedAt(GrpcMappingSupport.str(domain.processedAt()))
+            .setAmount(GrpcMappingSupport.str(domain.amount()))
+            .setCurrency(domain.currency())
+            .setStatus(domain.status());
+        if (domain.paymentId() != null) {
+            builder.setPaymentId(GrpcMappingSupport.str(domain.paymentId()));
+        }
+        if (domain.failureCode() != null) {
+            builder.setFailureCode(domain.failureCode());
+        }
+        if (domain.failureReason() != null) {
+            builder.setFailureReason(domain.failureReason());
+        }
+        return builder.build();
+    }
+}

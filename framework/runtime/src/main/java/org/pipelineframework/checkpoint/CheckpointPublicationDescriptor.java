@@ -20,4 +20,17 @@ public interface CheckpointPublicationDescriptor {
      * @return ordered field names
      */
     List<String> idempotencyKeyFields();
+
+    /**
+     * Normalize the final pipeline result into the stable checkpoint contract payload.
+     *
+     * <p>Implementations may override this when the final runtime result needs to be converted into
+     * the checkpoint contract that should be published. Returning {@code null} skips publication.</p>
+     *
+     * @param resultPayload raw pipeline result payload
+     * @return normalized checkpoint payload, or {@code null} to skip publication
+     */
+    default Object normalizePayload(Object resultPayload) {
+        return resultPayload;
+    }
 }

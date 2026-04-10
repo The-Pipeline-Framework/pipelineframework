@@ -51,7 +51,7 @@ class ValidatedOrderRequestMapperTest {
     }
 
     @Test
-    void fromExternalEmptyStringFieldsYieldNullTypedFields() {
+    void fromExternalEmptyStringFieldsFailFast() {
         CheckoutValidateRequestSvc.ValidatedOrderRequest grpc =
             CheckoutValidateRequestSvc.ValidatedOrderRequest.newBuilder()
                 .setRequestId("")
@@ -63,16 +63,7 @@ class ValidatedOrderRequestMapperTest {
                 .setValidatedAt("")
                 .build();
 
-        ValidatedOrderRequest domain = mapper.fromExternal(grpc);
-
-        assertNotNull(domain);
-        assertNull(domain.requestId());
-        assertNull(domain.customerId());
-        assertNull(domain.restaurantId());
-        assertEquals("item", domain.items());
-        assertNull(domain.totalAmount());
-        assertEquals("EUR", domain.currency());
-        assertNull(domain.validatedAt());
+        assertThrows(NullPointerException.class, () -> mapper.fromExternal(grpc));
     }
 
     @Test
@@ -144,20 +135,9 @@ class ValidatedOrderRequestMapperTest {
     }
 
     @Test
-    void toExternalNullUuidAndInstantFieldsYieldEmptyStrings() {
-        ValidatedOrderRequest domain = new ValidatedOrderRequest(
-            null, null, null, "item", null, "USD", null);
-
-        CheckoutValidateRequestSvc.ValidatedOrderRequest grpc = mapper.toExternal(domain);
-
-        assertNotNull(grpc);
-        assertEquals("", grpc.getRequestId());
-        assertEquals("", grpc.getCustomerId());
-        assertEquals("", grpc.getRestaurantId());
-        assertEquals("item", grpc.getItems());
-        assertEquals("", grpc.getTotalAmount());
-        assertEquals("USD", grpc.getCurrency());
-        assertEquals("", grpc.getValidatedAt());
+    void validatedOrderRequestRejectsNullRequiredFields() {
+        assertThrows(NullPointerException.class, () -> new ValidatedOrderRequest(
+            null, null, null, "item", null, "USD", null));
     }
 
     // --- round-trip ---

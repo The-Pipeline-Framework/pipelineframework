@@ -99,6 +99,7 @@ const mainSidebar = [
             {text: 'Handling File Operations', link: '/guide/development/handling-file-operations'},
             {text: 'Testing with Testcontainers', link: '/guide/development/testing'},
             {text: 'Orchestrator Runtime', link: '/guide/development/orchestrator-runtime'},
+            {text: 'TPFGo Example', link: '/guide/development/tpfgo-example'},
             {text: 'AWS Lambda Platform', link: '/guide/development/aws-lambda'},
             {text: 'Performance', link: '/guide/development/performance'},
             {text: 'Customization Points', link: '/guide/development/customization-points'}

@@ -1,0 +1,31 @@
+version: 1
+layout: pipeline-runtime
+validation: strict
+
+defaults:
+  runtime: pipeline
+  module: pipeline-runtime-svc
+
+runtimes:
+  pipeline: {}
+  orchestrator: {}
+
+modules:
+  pipeline-runtime-svc:
+    runtime: pipeline
+  checkout-orchestrator-svc:
+    runtime: orchestrator
+  consumer-validation-orchestrator-svc:
+    runtime: orchestrator
+  restaurant-acceptance-orchestrator-svc:
+    runtime: orchestrator
+  kitchen-preparation-orchestrator-svc:
+    runtime: orchestrator
+  dispatch-orchestrator-svc:
+    runtime: orchestrator
+  delivery-execution-orchestrator-svc:
+    runtime: orchestrator
+  payment-capture-orchestrator-svc:
+    runtime: orchestrator
+  compensation-failure-orchestrator-svc:
+    runtime: orchestrator

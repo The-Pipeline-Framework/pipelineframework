@@ -7,6 +7,7 @@ import java.util.stream.Collectors;
 import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
 import com.squareup.javapoet.ClassName;
+import com.squareup.javapoet.TypeName;
 import org.jboss.logging.Logger;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.PipelineCompilationPhase;
@@ -338,9 +339,13 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 cacheKeyGenerator,
                 descriptorSet);
             try {
+                TypeName publicationPayloadType = ctx.getStepModels().isEmpty()
+                    ? null
+                    : ctx.getStepModels().getLast().outputMapping().domainType();
                 ClassName generatedClass = checkpointPublicationDescriptorRenderer.render(
                     templateConfig.basePackage(),
                     templateConfig.output().checkpoint(),
+                    publicationPayloadType,
                     publicationContext);
                 roleMetadataGenerator.recordClassWithRole(generatedClass, DeploymentRole.PIPELINE_SERVER.name());
             } catch (IOException | RuntimeException e) {

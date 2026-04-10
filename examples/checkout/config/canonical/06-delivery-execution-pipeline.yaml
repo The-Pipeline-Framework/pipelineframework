@@ -1,73 +1,42 @@
-appName: "FTGo Delivery Execution Pipeline"
-basePackage: "org.pipelineframework.checkout.ftgo.delivery"
+appName: "TPFGo Delivery Execution Pipeline"
+basePackage: "org.pipelineframework.tpfgo.delivery.execution"
 transport: "GRPC"
+platform: "COMPUTE"
+input:
+  subscription:
+    publication: "tpfgo.dispatch.delivery-assigned.v1"
 steps:
-  - name: "Delivery Execute"
+  - name: "Delivery Execute Order"
+    service: "org.pipelineframework.tpfgo.delivery.execution.delivery_execute_order.service.ProcessDeliveryExecuteOrderService"
     cardinality: "ONE_TO_ONE"
+    input: "org.pipelineframework.tpfgo.common.domain.DeliveryAssigned"
     inputTypeName: "DeliveryAssigned"
     inputFields:
-      - name: "orderId"
-        type: "UUID"
-        protoType: "string"
-      - name: "customerId"
-        type: "UUID"
-        protoType: "string"
-      - name: "restaurantId"
-        type: "UUID"
-        protoType: "string"
-      - name: "totalAmount"
-        type: "BigDecimal"
-        protoType: "string"
-      - name: "currency"
-        type: "String"
-        protoType: "string"
-      - name: "kitchenTicketId"
-        type: "UUID"
-        protoType: "string"
-      - name: "dispatchId"
-        type: "UUID"
-        protoType: "string"
-      - name: "courierId"
-        type: "UUID"
-        protoType: "string"
-      - name: "etaMinutes"
-        type: "Integer"
-        protoType: "int32"
-      - name: "assignedAt"
-        type: "Instant"
-        protoType: "string"
-      - name: "lineageDigest"
-        type: "String"
-        protoType: "string"
+      - { name: "orderId", type: "UUID", protoType: "string" }
+      - { name: "customerId", type: "UUID", protoType: "string" }
+      - { name: "restaurantId", type: "UUID", protoType: "string" }
+      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
+      - { name: "currency", type: "String", protoType: "string" }
+      - { name: "kitchenTicketId", type: "UUID", protoType: "string" }
+      - { name: "dispatchId", type: "UUID", protoType: "string" }
+      - { name: "courierId", type: "UUID", protoType: "string" }
+      - { name: "etaMinutes", type: "Integer", protoType: "int32" }
+      - { name: "assignedAt", type: "Instant", protoType: "string" }
+      - { name: "lineageDigest", type: "String", protoType: "string" }
+    output: "org.pipelineframework.tpfgo.common.domain.OrderDelivered"
     outputTypeName: "OrderDelivered"
     outputFields:
-      - name: "orderId"
-        type: "UUID"
-        protoType: "string"
-      - name: "customerId"
-        type: "UUID"
-        protoType: "string"
-      - name: "dispatchId"
-        type: "UUID"
-        protoType: "string"
-      - name: "courierId"
-        type: "UUID"
-        protoType: "string"
-      - name: "restaurantId"
-        type: "UUID"
-        protoType: "string"
-      - name: "kitchenTicketId"
-        type: "UUID"
-        protoType: "string"
-      - name: "deliveredAt"
-        type: "Instant"
-        protoType: "string"
-      - name: "amount"
-        type: "BigDecimal"
-        protoType: "string"
-      - name: "currency"
-        type: "String"
-        protoType: "string"
-      - name: "lineageDigest"
-        type: "String"
-        protoType: "string"
+      - { name: "orderId", type: "UUID", protoType: "string" }
+      - { name: "customerId", type: "UUID", protoType: "string" }
+      - { name: "dispatchId", type: "UUID", protoType: "string" }
+      - { name: "courierId", type: "UUID", protoType: "string" }
+      - { name: "restaurantId", type: "UUID", protoType: "string" }
+      - { name: "kitchenTicketId", type: "UUID", protoType: "string" }
+      - { name: "deliveredAt", type: "Instant", protoType: "string" }
+      - { name: "amount", type: "BigDecimal", protoType: "string" }
+      - { name: "currency", type: "String", protoType: "string" }
+      - { name: "lineageDigest", type: "String", protoType: "string" }
+output:
+  checkpoint:
+    publication: "tpfgo.delivery.order-delivered.v1"
+    idempotencyKeyFields: [ "orderId" ]
