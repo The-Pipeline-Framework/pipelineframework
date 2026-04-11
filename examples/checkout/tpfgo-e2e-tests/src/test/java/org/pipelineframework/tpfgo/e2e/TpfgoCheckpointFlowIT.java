@@ -721,12 +721,32 @@ class TpfgoCheckpointFlowIT {
 
         /**
          * Waits until a checkpoint with the given publication name is received and returns its decoded payload.
+         * Uses a short timeout with no diagnostics collection for fast failure.
          *
          * @param publication the checkpoint publication name to wait for
          * @return the decoded JSON payload of the most recently received checkpoint with the specified publication name
          */
         JsonNode awaitPayload(String publication) {
-            return awaitPayload(publication, null, null);
+            return awaitPayloadFast(publication);
+        }
+
+        /**
+         * Waits for a checkpoint with the given publication name using a short timeout and no diagnostics.
+         * Intended for tests that need fast failure behavior.
+         *
+         * @param publication the checkpoint publication name to wait for
+         * @return the decoded JSON payload of the most recently received checkpoint with the specified publication name
+         */
+        private JsonNode awaitPayloadFast(String publication) {
+            Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .pollInterval(Duration.ofMillis(200))
+                .until(() -> countFor(publication), count -> count > 0);
+            return received.stream()
+                .filter(request -> Objects.equals(publication, request.getPublication()))
+                .reduce((ignored, latest) -> latest)
+                .map(this::toPayload)
+                .orElseThrow();
         }
 
         /**
