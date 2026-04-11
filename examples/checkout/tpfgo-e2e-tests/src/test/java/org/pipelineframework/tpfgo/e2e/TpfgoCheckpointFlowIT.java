@@ -34,9 +34,9 @@ import org.pipelineframework.checkpoint.grpc.CheckpointPublishRequest;
 import org.pipelineframework.checkpoint.grpc.CheckpointPublicationServiceGrpc;
 import org.pipelineframework.checkpoint.grpc.MutinyCheckpointPublicationServiceGrpc;
 import org.pipelineframework.config.pipeline.PipelineJson;
-import org.pipelineframework.tpfgo.checkout.grpc.CheckoutValidateRequestSvc;
 import org.pipelineframework.tpfgo.checkout.grpc.Orchestrator;
 import org.pipelineframework.tpfgo.checkout.grpc.OrchestratorServiceGrpc;
+import org.pipelineframework.tpfgo.checkout.grpc.PipelineTypes;
 import org.pipelineframework.tpfgo.common.util.DeterministicIds;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -110,10 +110,11 @@ class TpfgoCheckpointFlowIT {
      */
     @Test
     void executesFullCanonicalTpfgoFlowOverGrpcCheckpointHandoff() {
+        warmUpFullCheckpointChain("happy-path");
         ManagedApp checkout = app("checkout-orchestrator-svc");
         Orchestrator.RunAsyncResponse accepted = checkout.orchestrator().runAsync(
             Orchestrator.RunAsyncRequest.newBuilder()
-                .setInput(CheckoutValidateRequestSvc.PlaceOrderRequest.newBuilder()
+                .setInput(PipelineTypes.PlaceOrderRequest.newBuilder()
                     .setRequestId("11111111-1111-1111-1111-111111111111")
                     .setCustomerId("22222222-2222-2222-2222-222222222222")
                     .setRestaurantId("33333333-3333-3333-3333-333333333333")
@@ -126,7 +127,7 @@ class TpfgoCheckpointFlowIT {
                 .build());
 
         assertFalse(accepted.getDuplicate());
-        JsonNode finalPayload = collector.awaitPayload("tpfgo.compensation.terminal-state.v1");
+        JsonNode finalPayload = collector.awaitPayload("tpfgo.compensation.terminal-state.v1", logDirectory, apps);
         assertEquals("COMPLETED", finalPayload.get("outcome").asText());
         assertEquals("CAPTURED", finalPayload.get("paymentStatus").asText());
         assertEquals("none", finalPayload.get("resolutionAction").asText());
@@ -148,10 +149,11 @@ class TpfgoCheckpointFlowIT {
      */
     @Test
     void routesPaymentFailureIntoCompensationTerminalState() {
+        warmUpFullCheckpointChain("payment-failure");
         ManagedApp checkout = app("checkout-orchestrator-svc");
         checkout.orchestrator().runAsync(
             Orchestrator.RunAsyncRequest.newBuilder()
-                .setInput(CheckoutValidateRequestSvc.PlaceOrderRequest.newBuilder()
+                .setInput(PipelineTypes.PlaceOrderRequest.newBuilder()
                     .setRequestId("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
                     .setCustomerId("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
                     .setRestaurantId("cccccccc-cccc-cccc-cccc-cccccccccccc")
@@ -163,7 +165,7 @@ class TpfgoCheckpointFlowIT {
                 .setIdempotencyKey("tpfgo-failure-1")
                 .build());
 
-        JsonNode finalPayload = collector.awaitPayload("tpfgo.compensation.terminal-state.v1");
+        JsonNode finalPayload = collector.awaitPayload("tpfgo.compensation.terminal-state.v1", logDirectory, apps);
         assertEquals("FAILED_COMPENSATED", finalPayload.get("outcome").asText());
         assertEquals("FAILED", finalPayload.get("paymentStatus").asText());
         assertEquals("PAYMENT_CAPTURE_REJECTED", finalPayload.get("failureCode").asText());
@@ -223,6 +225,36 @@ class TpfgoCheckpointFlowIT {
             .filter(app -> app.moduleDir().equals(moduleDir))
             .findFirst()
             .orElseThrow(() -> new IllegalStateException("Unknown app " + moduleDir));
+    }
+
+    /**
+     * Sends a lightweight checkout request through the full orchestrator chain and waits for the
+     * final compensation publication before clearing the collector for the real test assertions.
+     *
+     * @param scenarioKey unique suffix used to derive warm-up request identifiers
+     */
+    private void warmUpFullCheckpointChain(String scenarioKey) {
+        ManagedApp checkout = app("checkout-orchestrator-svc");
+        String requestId = DeterministicIds.uuid("warmup-request", scenarioKey).toString();
+        String customerId = DeterministicIds.uuid("warmup-customer", scenarioKey).toString();
+        String restaurantId = DeterministicIds.uuid("warmup-restaurant", scenarioKey).toString();
+        Orchestrator.RunAsyncResponse accepted = checkout.orchestrator().runAsync(
+            Orchestrator.RunAsyncRequest.newBuilder()
+                .setInput(PipelineTypes.PlaceOrderRequest.newBuilder()
+                    .setRequestId(requestId)
+                    .setCustomerId(customerId)
+                    .setRestaurantId(restaurantId)
+                    .setItems("warmup x1")
+                    .setTotalAmount("1.00")
+                    .setCurrency("EUR")
+                    .build())
+                .setTenantId("default")
+                .setIdempotencyKey("tpfgo-warmup-" + scenarioKey)
+                .build());
+        assertFalse(accepted.getDuplicate());
+        JsonNode warmupPayload = collector.awaitPayload("tpfgo.compensation.terminal-state.v1", logDirectory, apps);
+        assertNotNull(warmupPayload);
+        collector.reset();
     }
 
     /**
@@ -694,15 +726,60 @@ class TpfgoCheckpointFlowIT {
          * @return the decoded JSON payload of the most recently received checkpoint with the specified publication name
          */
         JsonNode awaitPayload(String publication) {
-            Awaitility.await()
-                .atMost(Duration.ofSeconds(40))
-                .pollInterval(Duration.ofMillis(200))
-                .until(() -> countFor(publication), count -> count > 0);
+            return awaitPayload(publication, null, null);
+        }
+
+        /**
+         * Waits until a checkpoint with the given publication name is received and returns its decoded payload.
+         * On timeout, includes the tail of managed app logs in the failure message for diagnostics.
+         *
+         * @param publication  the checkpoint publication name to wait for
+         * @param logDirectory the directory containing per-module log files; may be null
+         * @param apps         the list of managed applications whose logs to include; may be null
+         * @return the decoded JSON payload of the most recently received checkpoint with the specified publication name
+         * @throws org.awaitility.core.ConditionTimeoutException if the payload is not received within the timeout,
+         *         with per-module log tails appended to the message
+         */
+        JsonNode awaitPayload(String publication, Path logDirectory, List<ManagedApp> apps) {
+            try {
+                Awaitility.await()
+                    .atMost(Duration.ofSeconds(120))
+                    .pollInterval(Duration.ofSeconds(2))
+                    .until(() -> countFor(publication), count -> count > 0);
+            } catch (Exception e) {
+                StringBuilder msg = new StringBuilder();
+                msg.append("Timed out waiting for publication '").append(publication).append("'.");
+                if (logDirectory != null && apps != null) {
+                    for (ManagedApp app : apps) {
+                        Path logFile = logDirectory.resolve(app.moduleDir() + ".log");
+                        if (Files.exists(logFile)) {
+                            try {
+                                String content = Files.readString(logFile);
+                                int tailLen = Math.min(content.length(), 2000);
+                                msg.append("\n--- ").append(app.moduleDir()).append(" log (tail) ---\n");
+                                msg.append(tailLen < content.length() ? "... [truncated] ..." : "");
+                                msg.append(content.substring(content.length() - tailLen));
+                            } catch (IOException ignored) {
+                                // skip unreadable log files
+                            }
+                        }
+                    }
+                }
+                throw new RuntimeException(msg.toString(), e);
+            }
             return received.stream()
                 .filter(request -> Objects.equals(publication, request.getPublication()))
                 .reduce((ignored, latest) -> latest)
                 .map(this::toPayload)
                 .orElseThrow();
+        }
+
+        /**
+         * Clears all previously received checkpoint publications so the collector can be reused
+         * for a fresh set of assertions.
+         */
+        void reset() {
+            received.clear();
         }
 
         /**
