@@ -757,8 +757,8 @@ class TpfgoCheckpointFlowIT {
          * @param logDirectory the directory containing per-module log files; may be null
          * @param apps         the list of managed applications whose logs to include; may be null
          * @return the decoded JSON payload of the most recently received checkpoint with the specified publication name
-         * @throws org.awaitility.core.ConditionTimeoutException if the payload is not received within the timeout,
-         *         with per-module log tails appended to the message
+         * @throws RuntimeException if the payload is not received within the timeout,
+         *         wrapping the underlying timeout exception with per-module log tails appended to the message
          */
         JsonNode awaitPayload(String publication, Path logDirectory, List<ManagedApp> apps) {
             try {
