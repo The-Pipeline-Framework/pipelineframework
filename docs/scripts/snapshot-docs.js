@@ -199,21 +199,48 @@ export function updateVersionsPageContent(content, versionValue) {
   const nextHeadingIndex = content.indexOf('\n## ', sectionStart)
   const sectionEnd = nextHeadingIndex === -1 ? content.length : nextHeadingIndex
   const section = content.slice(sectionStart, sectionEnd)
-  const versions = Array.from(
-    section.matchAll(/^- \[([^\]]+)\]\(\/versions\/[^)]+\/\) - Snapshot of the .+ docs$/gm),
-    match => match[1]
-  )
+  const versionLinePattern = /^- \[([^\]]+)\]\(\/versions\/[^)]+\/\) - Snapshot of the .+ docs$/
+  const sectionLines = section.split('\n')
 
-  if (versions.includes(normalizedVersion)) {
+  const existingVersions = []
+  for (const line of sectionLines) {
+    const match = line.match(versionLinePattern)
+    if (match) {
+      existingVersions.push(match[1])
+    }
+  }
+
+  if (existingVersions.includes(normalizedVersion)) {
     return content
   }
 
-  const sortedVersions = [...versions, normalizedVersion].sort(compareVersionsDesc)
-  const entries = sortedVersions
-    .map(name => `- [${name}](/versions/${name}/) - Snapshot of the ${name} docs`)
-    .join('\n')
+  const sortedVersions = [...existingVersions, normalizedVersion].sort(compareVersionsDesc)
+  const newVersionLine = `- [${normalizedVersion}](/versions/${normalizedVersion}/) - Snapshot of the ${normalizedVersion} docs`
+  const insertPosition = sortedVersions.indexOf(normalizedVersion)
 
-  return content.slice(0, sectionStart) + `${entries}\n` + content.slice(sectionEnd)
+  let versionCount = 0
+  const updatedSectionLines = []
+  let inserted = false
+
+  for (const line of sectionLines) {
+    const match = line.match(versionLinePattern)
+    if (match) {
+      if (!inserted && versionCount === insertPosition) {
+        updatedSectionLines.push(newVersionLine)
+        inserted = true
+      }
+      versionCount++
+    }
+    updatedSectionLines.push(line)
+  }
+
+  if (!inserted) {
+    updatedSectionLines.push(newVersionLine)
+  }
+
+  const result = updatedSectionLines.join('\n')
+  const needsTrailingNewline = section.endsWith('\n') && !result.endsWith('\n')
+  return content.slice(0, sectionStart) + result + (needsTrailingNewline ? '\n' : '') + content.slice(sectionEnd)
 }
 
 export function updateVersionSelectorContent(content, versionValue) {
@@ -224,23 +251,26 @@ export function updateVersionSelectorContent(content, versionValue) {
     return content
   }
 
-  const endIndex = lines.findIndex((line, index) => index > startIndex && line.trim() === ']')
+  const endIndex = lines.findIndex((line, index) => index > startIndex && /^\],?$/.test(line.trim()))
   if (endIndex === -1) {
     return content
   }
 
   const entryPattern = /^(\s*)\{ name: '([^']+)', url: '([^']+)', current: (true|false) }[,]?$/
-  const entries = lines
+  const parsedLines = lines
     .slice(startIndex + 1, endIndex)
-    .map(line => {
-      const match = line.match(entryPattern)
+    .map(rawLine => {
+      const match = rawLine.match(entryPattern)
       if (!match) {
-        return null
+        return {rawLine, parsedEntry: null}
       }
       const [, indent, name, url, current] = match
-      return {indent, name, url, current: current === 'true'}
+      return {rawLine, parsedEntry: {indent, name, url, current: current === 'true'}}
     })
-    .filter(Boolean)
+
+  const entries = parsedLines
+    .filter(item => item.parsedEntry !== null)
+    .map(item => item.parsedEntry)
 
   if (entries.some(entry => entry.name === normalizedVersion && entry.url === `/versions/${normalizedVersion}/`)) {
     return content
@@ -260,14 +290,46 @@ export function updateVersionSelectorContent(content, versionValue) {
     new Map(snapshotEntries.map(entry => [entry.url, entry])).values()
   ).sort((left, right) => compareVersionsDesc(left.name, right.name))
 
-  const rebuiltEntries = [...currentEntries, ...dedupedSnapshots].map((entry, index, allEntries) => {
-    const suffix = index === allEntries.length - 1 ? '' : ','
-    return `${indent}{ name: '${entry.name}', url: '${entry.url}', current: ${entry.current} }${suffix}`
-  })
+  const sortedEntries = [...currentEntries, ...dedupedSnapshots]
+
+  const rebuiltLines = []
+  let entryIndex = 0
+  let inserted = false
+
+  for (const item of parsedLines) {
+    if (item.parsedEntry === null) {
+      rebuiltLines.push(item.rawLine)
+      continue
+    }
+
+    const expectedEntry = sortedEntries[entryIndex]
+    const insertPosition = sortedEntries.indexOf(expectedEntry)
+    const shouldInsertBefore = !inserted && expectedEntry.name !== item.parsedEntry.name
+
+    if (shouldInsertBefore) {
+      const nextEntry = sortedEntries[entryIndex + 1]
+      const hasMore = entryIndex + 1 < sortedEntries.length
+      const suffix = hasMore ? ',' : ''
+      rebuiltLines.push(`${expectedEntry.indent}{ name: '${expectedEntry.name}', url: '${expectedEntry.url}', current: ${expectedEntry.current} }${suffix}`)
+      inserted = true
+      entryIndex++
+    }
+
+    const currentEntry = sortedEntries[entryIndex]
+    const hasMore = entryIndex + 1 < sortedEntries.length
+    const suffix = hasMore ? ',' : ''
+    rebuiltLines.push(`${currentEntry.indent}{ name: '${currentEntry.name}', url: '${currentEntry.url}', current: ${currentEntry.current} }${suffix}`)
+    entryIndex++
+  }
+
+  if (!inserted && entryIndex < sortedEntries.length) {
+    const lastEntry = sortedEntries[entryIndex]
+    rebuiltLines.push(`${lastEntry.indent}{ name: '${lastEntry.name}', url: '${lastEntry.url}', current: ${lastEntry.current} }`)
+  }
 
   const updatedLines = [
     ...lines.slice(0, startIndex + 1),
-    ...rebuiltEntries,
+    ...rebuiltLines,
     ...lines.slice(endIndex)
   ]
   return updatedLines.join('\n')
