@@ -41,6 +41,7 @@ features:
 The Pipeline Framework includes a visual canvas designer at <a href="https://app.pipelineframework.org" target="_blank">https://app.pipelineframework.org</a> that allows you to create and configure your pipelines using an intuitive drag-and-drop interface. Simply design your pipeline visually, click "Download Application", and you'll get a complete ZIP file with all the generated source code - no command-line tools needed!
 </Callout>
 
+<FeaturedArticles />
 <LatestReleases />
 
 ## Key Features

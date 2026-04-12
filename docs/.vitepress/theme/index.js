@@ -19,6 +19,7 @@ import DefaultTheme from 'vitepress/theme'
 import {h} from 'vue'
 import './custom.css'
 import Callout from './components/Callout.vue'
+import FeaturedArticles from './components/FeaturedArticles.vue'
 import HeroSection from './components/HeroSection.vue'
 import VersionBadge from './components/VersionBadge.vue'
 import LatestReleases from './components/LatestReleases.vue'
@@ -33,6 +34,7 @@ export default {
   enhanceApp({ app }) {
     // Register custom components
     app.component('Callout', Callout)
+    app.component('FeaturedArticles', FeaturedArticles)
     app.component('HeroSection', HeroSection)
     app.component('LatestReleases', LatestReleases)
   }
