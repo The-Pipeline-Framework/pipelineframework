@@ -522,7 +522,9 @@
   }
 
   function semanticTypeToJavaType(type) {
-    if (!type || typeof type !== 'string') return 'String';
+    if (!type || typeof type !== 'string' || type.trim() === '') {
+      return null; // Return null for invalid/blank values instead of defaulting to 'String'
+    }
     const normalized = type.trim();
     if (/^[A-Z][A-Za-z0-9_]*$/.test(normalized)) {
       return normalized;
@@ -632,7 +634,18 @@
       }
       const keySemantic = field.keyType;
       const valueSemantic = field.valueType;
-      const javaType = `Map<${semanticTypeToJavaType(keySemantic)}, ${semanticTypeToJavaType(valueSemantic)}>`;
+      const keyJavaType = semanticTypeToJavaType(keySemantic);
+      const valueJavaType = semanticTypeToJavaType(valueSemantic);
+
+      // Validate that conversion succeeded
+      if (keyJavaType === null) {
+        throw new Error(`Map field '${field.name || 'unnamed'}' has invalid or blank keyType: '${keySemantic}'`);
+      }
+      if (valueJavaType === null) {
+        throw new Error(`Map field '${field.name || 'unnamed'}' has invalid or blank valueType: '${valueSemantic}'`);
+      }
+
+      const javaType = `Map<${keyJavaType}, ${valueJavaType}>`;
       return {
         name: field.name,
         type: javaType,
@@ -650,6 +663,12 @@
     }
 
     const baseJavaType = semanticTypeToJavaType(semanticType);
+
+    // Validate that conversion succeeded
+    if (baseJavaType === null) {
+      throw new Error(`Field '${field.name || 'unnamed'}' has invalid or blank type: '${semanticType}'`);
+    }
+
     return {
       name: field.name,
       type: field.repeated ? `List<${baseJavaType}>` : baseJavaType,
@@ -684,21 +703,38 @@
 
     if (isListType(rawType)) {
       const inner = rawType.slice(rawType.indexOf('<') + 1, rawType.lastIndexOf('>')).trim();
-      if (isListType(inner) || isMapType(inner)) {
+      // Parse the inner generic args to validate arity
+      const genericArgs = splitTopLevelGenericArgs(inner);
+
+      // Verify List has exactly one top-level generic argument
+      if (genericArgs.length !== 1) {
+        throw new Error(`Field '${field.name}' has malformed List type '${rawType}' - List must have exactly one generic argument, found ${genericArgs.length}`);
+      }
+
+      const elementType = genericArgs[0];
+      if (isListType(elementType) || isMapType(elementType)) {
         throw new Error(`Field '${field.name}' uses unsupported nested collection type '${rawType}'`);
       }
       return {
         number,
         name: field.name,
-        type: uiTypeTokenToSemanticType(inner),
+        type: uiTypeTokenToSemanticType(elementType),
         repeated: true
       };
     }
 
     if (isMapType(rawType)) {
       const inner = rawType.slice(rawType.indexOf('<') + 1, rawType.lastIndexOf('>'));
-      const [keyType, valueType] = splitTopLevelGenericArgs(inner);
+      const genericArgs = splitTopLevelGenericArgs(inner);
+
+      // Verify Map has exactly two top-level generic arguments
+      if (genericArgs.length !== 2) {
+        throw new Error(`Field '${field.name}' has malformed Map type '${rawType}' - Map must have exactly two generic arguments (key, value), found ${genericArgs.length}`);
+      }
+
+      const [keyType, valueType] = genericArgs;
       const semanticKey = uiTypeTokenToSemanticType(keyType);
+
       // Expand supported keys to include all canonical semantic types that map to string/bool/int32/int64
       // This includes UUID, BigDecimal, Instant, Currency, Path, AtomicInteger, AtomicLong, etc.
       const supportedMapKeys = new Set([
@@ -708,6 +744,12 @@
       if (!supportedMapKeys.has(semanticKey)) {
         throw new Error(`Map field '${field.name}' uses unsupported canonical key type '${semanticKey}' (from '${keyType}'). Supported canonical keys: ${Array.from(supportedMapKeys).join(', ')}`);
       }
+
+      // Reject collection-typed map values (check raw token before conversion)
+      if (isListType(valueType) || isMapType(valueType)) {
+        throw new Error(`Field '${field.name}' has malformed Map type '${rawType}' - Map value type cannot be a collection (found '${valueType}')`);
+      }
+
       return {
         number,
         name: field.name,

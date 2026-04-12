@@ -34,7 +34,7 @@ export default defineConfig({
         entryFileNames: 'assets/[name]-[hash].js',
       },
     },
-    // Reduce memory usage
+    // Set output JS language level / browser compatibility (ES2020)
     target: 'es2020',
     assetsInlineLimit: 0 // prevents embedding large assets in JS bundles
   }
