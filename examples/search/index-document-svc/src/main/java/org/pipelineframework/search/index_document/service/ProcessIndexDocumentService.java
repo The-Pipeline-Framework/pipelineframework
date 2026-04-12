@@ -28,15 +28,7 @@ import org.pipelineframework.search.common.util.HashingUtils;
 import org.pipelineframework.service.ReactiveStreamingClientService;
 import org.pipelineframework.step.NonRetryableException;
 
-@PipelineStep(
-    inputType = org.pipelineframework.search.common.domain.TokenBatch.class,
-    outputType = org.pipelineframework.search.common.domain.IndexAck.class,
-    stepType = org.pipelineframework.step.StepManyToOne.class,
-    backendType = org.pipelineframework.grpc.GrpcServiceClientStreamingAdapter.class,
-    inboundMapper = org.pipelineframework.search.common.mapper.TokenBatchMapper.class,
-    outboundMapper = org.pipelineframework.search.common.mapper.IndexAckMapper.class,
-    cacheKeyGenerator = org.pipelineframework.search.index_document.cache.IndexDocumentCacheKeyGenerator.class
-)
+@PipelineStep(cacheKeyGenerator = org.pipelineframework.search.index_document.cache.IndexDocumentCacheKeyGenerator.class)
 /**
  * MANY_TO_ONE indexing reducer with explicit reliability semantics.
  *

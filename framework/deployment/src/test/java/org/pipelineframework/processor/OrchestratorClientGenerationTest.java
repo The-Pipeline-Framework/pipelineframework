@@ -50,10 +50,10 @@ class OrchestratorClientGenerationTest {
                         public class OrchestratorMarker {
                         }
                         """),
-                searchServiceStub("CrawlSourceService", "CrawlRequest", "RawDocument"),
-                searchServiceStub("ParseDocumentService", "RawDocument", "ParsedDocument"),
-                searchServiceStub("TokenizeContentService", "ParsedDocument", "TokenBatch"),
-                searchServiceStub("IndexDocumentService", "TokenBatch", "IndexAck"),
+                searchServiceStub("ProcessCrawlSourceService", "CrawlRequest", "RawDocument"),
+                searchServiceStub("ProcessParseDocumentService", "RawDocument", "ParsedDocument"),
+                searchServiceStub("ProcessTokenizeContentService", "ParsedDocument", "TokenBatch"),
+                searchServiceStub("ProcessIndexDocumentService", "TokenBatch", "IndexAck"),
                 // Domain type stubs
                 domainStub("CrawlRequest"),
                 domainStub("RawDocument"),
@@ -102,10 +102,10 @@ class OrchestratorClientGenerationTest {
                         public class OrchestratorMarker {
                         }
                         """),
-                searchServiceStub("CrawlSourceService", "CrawlRequest", "RawDocument"),
-                searchServiceStub("ParseDocumentService", "RawDocument", "ParsedDocument"),
-                searchServiceStub("TokenizeContentService", "ParsedDocument", "TokenBatch"),
-                searchServiceStub("IndexDocumentService", "TokenBatch", "IndexAck"),
+                searchServiceStub("ProcessCrawlSourceService", "CrawlRequest", "RawDocument"),
+                searchServiceStub("ProcessParseDocumentService", "RawDocument", "ParsedDocument"),
+                searchServiceStub("ProcessTokenizeContentService", "ParsedDocument", "TokenBatch"),
+                searchServiceStub("ProcessIndexDocumentService", "TokenBatch", "IndexAck"),
                 domainStub("CrawlRequest"),
                 domainStub("RawDocument"),
                 domainStub("ParsedDocument"),
@@ -166,10 +166,10 @@ class OrchestratorClientGenerationTest {
                         public class OrchestratorMarker {
                         }
                         """),
-                searchServiceStub("CrawlSourceService", "CrawlRequest", "RawDocument"),
-                searchServiceStub("ParseDocumentService", "RawDocument", "ParsedDocument"),
-                searchServiceStub("TokenizeContentService", "ParsedDocument", "TokenBatch"),
-                searchServiceStub("IndexDocumentService", "TokenBatch", "IndexAck"),
+                searchServiceStub("ProcessCrawlSourceService", "CrawlRequest", "RawDocument"),
+                searchServiceStub("ProcessParseDocumentService", "RawDocument", "ParsedDocument"),
+                searchServiceStub("ProcessTokenizeContentService", "ParsedDocument", "TokenBatch"),
+                searchServiceStub("ProcessIndexDocumentService", "TokenBatch", "IndexAck"),
                 domainStub("CrawlRequest"),
                 domainStub("RawDocument"),
                 domainStub("ParsedDocument"),
@@ -265,19 +265,33 @@ class OrchestratorClientGenerationTest {
         String source = """
             package org.pipelineframework.search.mapper;
 
+            import org.pipelineframework.mapper.Mapper;
             import org.pipelineframework.search.domain.%s;
             import org.pipelineframework.search.dto.%s;
 
-            public class %s {
-                public %s fromDto(%s dto) {
+            public class %s implements Mapper<%s, %s> {
+                @Override
+                public %s fromExternal(%s dto) {
                     return new %s();
                 }
 
-                public %s toDto(%s domain) {
+                @Override
+                public %s toExternal(%s domain) {
                     return new %s();
                 }
             }
-            """.formatted(domainType, dtoType, mapperName, domainType, dtoType, domainType, dtoType, domainType, dtoType);
+            """.formatted(
+            domainType,
+            dtoType,
+            mapperName,
+            domainType,
+            dtoType,
+            domainType,
+            dtoType,
+            domainType,
+            dtoType,
+            domainType,
+            dtoType);
         return JavaFileObjects.forSourceString(fqcn, source);
     }
 

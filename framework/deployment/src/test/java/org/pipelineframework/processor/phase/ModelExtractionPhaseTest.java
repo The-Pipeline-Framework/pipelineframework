@@ -344,4 +344,34 @@ class ModelExtractionPhaseTest {
             ClassName.get("org.pipelineframework.search.common.domain", "RawDocument"),
             model.outboundDomainType());
     }
+
+    @Test
+    void crossModuleInternalModelPreservesYamlMapperBindings() {
+        ModelExtractionPhase phase = new ModelExtractionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(processingEnv, roundEnv);
+
+        StepDefinition stepDefinition = new StepDefinition(
+            "Crawl Source",
+            StepKind.INTERNAL,
+            ClassName.get("org.pipelineframework.search.crawl_source.service", "ProcessCrawlSourceService"),
+            ClassName.get("org.pipelineframework.search.crawl_source.mapper", "CrawlRequestMapper"),
+            ClassName.get("org.pipelineframework.search.crawl_source.mapper", "RawDocumentMapper"),
+            MapperFallbackMode.NONE,
+            ClassName.get("org.pipelineframework.search.common.domain", "CrawlRequest"),
+            ClassName.get("org.pipelineframework.search.common.domain", "RawDocument"),
+            StreamingShape.UNARY_UNARY
+        );
+
+        PipelineStepModel model = phase.createCrossModuleInternalModel(stepDefinition, context);
+
+        assertNotNull(model);
+        assertEquals(
+            ClassName.get("org.pipelineframework.search.crawl_source.mapper", "CrawlRequestMapper"),
+            model.inputMapping().mapperType());
+        assertEquals(
+            ClassName.get("org.pipelineframework.search.crawl_source.mapper", "RawDocumentMapper"),
+            model.outputMapping().mapperType());
+        assertTrue(model.inputMapping().hasMapper());
+        assertTrue(model.outputMapping().hasMapper());
+    }
 }

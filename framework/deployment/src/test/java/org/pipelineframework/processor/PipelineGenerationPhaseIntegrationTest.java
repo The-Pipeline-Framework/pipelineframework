@@ -119,15 +119,18 @@ class PipelineGenerationPhaseIntegrationTest {
                     """
                         package org.pipelineframework.search.mapper;
 
+                        import org.pipelineframework.mapper.Mapper;
                         import org.pipelineframework.search.domain.CrawlRequest;
                         import org.pipelineframework.search.dto.CrawlRequestDto;
 
-                        public class CrawlRequestMapper {
-                            public CrawlRequest fromDto(CrawlRequestDto dto) {
+                        public class CrawlRequestMapper implements Mapper<CrawlRequest, CrawlRequestDto> {
+                            @Override
+                            public CrawlRequest fromExternal(CrawlRequestDto dto) {
                                 return new CrawlRequest();
                             }
 
-                            public CrawlRequestDto toDto(CrawlRequest domain) {
+                            @Override
+                            public CrawlRequestDto toExternal(CrawlRequest domain) {
                                 return new CrawlRequestDto();
                             }
                         }
@@ -137,17 +140,31 @@ class PipelineGenerationPhaseIntegrationTest {
                     """
                         package org.pipelineframework.search.mapper;
 
+                        import org.pipelineframework.mapper.Mapper;
                         import org.pipelineframework.search.domain.RawDocument;
                         import org.pipelineframework.search.dto.RawDocumentDto;
 
-                        public class RawDocumentMapper {
-                            public RawDocument fromDto(RawDocumentDto dto) {
+                        public class RawDocumentMapper implements Mapper<RawDocument, RawDocumentDto> {
+                            @Override
+                            public RawDocument fromExternal(RawDocumentDto dto) {
                                 return new RawDocument();
                             }
 
-                            public RawDocumentDto toDto(RawDocument domain) {
+                            @Override
+                            public RawDocumentDto toExternal(RawDocument domain) {
                                 return new RawDocumentDto();
                             }
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "org.pipelineframework.mapper.Mapper",
+                    """
+                        package org.pipelineframework.mapper;
+
+                        public interface Mapper<TDomain, TExternal> {
+                            TDomain fromExternal(TExternal external);
+
+                            TExternal toExternal(TDomain domain);
                         }
                         """));
 
@@ -181,8 +198,12 @@ class PipelineGenerationPhaseIntegrationTest {
             steps:
               - name: "Crawl Source"
                 service: "org.pipelineframework.search.crawl_source.service.ProcessCrawlSourceService"
+                input: "org.pipelineframework.search.common.domain.CrawlRequest"
                 inputTypeName: "CrawlRequest"
+                inboundMapper: "org.pipelineframework.search.crawl_source.mapper.CrawlRequestMapper"
+                output: "org.pipelineframework.search.common.domain.RawDocument"
                 outputTypeName: "RawDocument"
+                outboundMapper: "org.pipelineframework.search.crawl_source.mapper.RawDocumentMapper"
             """);
         Files.writeString(configDir.resolve("pipeline.runtime.yaml"), """
             version: 1
@@ -225,15 +246,8 @@ class PipelineGenerationPhaseIntegrationTest {
                         import io.smallrye.mutiny.Uni;
                         import org.pipelineframework.annotation.PipelineStep;
                         import org.pipelineframework.service.ReactiveService;
-                        import org.pipelineframework.step.StepOneToOne;
 
-                        @PipelineStep(
-                            inputType = org.pipelineframework.search.common.domain.CrawlRequest.class,
-                            outputType = org.pipelineframework.search.common.domain.RawDocument.class,
-                            stepType = StepOneToOne.class,
-                            inboundMapper = org.pipelineframework.search.crawl_source.mapper.CrawlRequestMapper.class,
-                            outboundMapper = org.pipelineframework.search.crawl_source.mapper.RawDocumentMapper.class
-                        )
+                        @PipelineStep
                         public class ProcessCrawlSourceService implements ReactiveService<
                                 org.pipelineframework.search.common.domain.CrawlRequest,
                                 org.pipelineframework.search.common.domain.RawDocument> {
@@ -281,15 +295,18 @@ class PipelineGenerationPhaseIntegrationTest {
                     """
                         package org.pipelineframework.search.crawl_source.mapper;
 
+                        import org.pipelineframework.mapper.Mapper;
                         import org.pipelineframework.search.common.domain.CrawlRequest;
                         import org.pipelineframework.search.crawl_source.dto.CrawlRequestDto;
 
-                        public class CrawlRequestMapper {
-                            public CrawlRequest fromDto(CrawlRequestDto dto) {
+                        public class CrawlRequestMapper implements Mapper<CrawlRequest, CrawlRequestDto> {
+                            @Override
+                            public CrawlRequest fromExternal(CrawlRequestDto dto) {
                                 return new CrawlRequest();
                             }
 
-                            public CrawlRequestDto toDto(CrawlRequest domain) {
+                            @Override
+                            public CrawlRequestDto toExternal(CrawlRequest domain) {
                                 return new CrawlRequestDto();
                             }
                         }
@@ -299,15 +316,18 @@ class PipelineGenerationPhaseIntegrationTest {
                     """
                         package org.pipelineframework.search.crawl_source.mapper;
 
+                        import org.pipelineframework.mapper.Mapper;
                         import org.pipelineframework.search.common.domain.RawDocument;
                         import org.pipelineframework.search.crawl_source.dto.RawDocumentDto;
 
-                        public class RawDocumentMapper {
-                            public RawDocument fromDto(RawDocumentDto dto) {
+                        public class RawDocumentMapper implements Mapper<RawDocument, RawDocumentDto> {
+                            @Override
+                            public RawDocument fromExternal(RawDocumentDto dto) {
                                 return new RawDocument();
                             }
 
-                            public RawDocumentDto toDto(RawDocument domain) {
+                            @Override
+                            public RawDocumentDto toExternal(RawDocument domain) {
                                 return new RawDocumentDto();
                             }
                         }

@@ -231,9 +231,11 @@ public class PipelineYamlConfigLoader {
             }
             String name = readString(stepMap, "name");
             String inputType = readString(stepMap, "inputTypeName");
+            String inboundMapper = readString(stepMap, "inboundMapper");
             String outputType = readString(stepMap, "outputTypeName");
+            String outboundMapper = readString(stepMap, "outboundMapper");
             if (name != null && !name.isBlank() && outputType != null && !outputType.isBlank()) {
-                stepInfos.add(new PipelineYamlStep(name, inputType, outputType));
+                stepInfos.add(new PipelineYamlStep(name, inputType, inboundMapper, outputType, outboundMapper));
             }
         }
         return stepInfos;

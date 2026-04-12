@@ -268,13 +268,16 @@ public class PipelineExecutionService {
       }
 
       Object result = pipelineRunner.run(input, steps);
-      return switch (result) {
-        case null -> Multi.createFrom().failure(new IllegalStateException("PipelineRunner returned null"));
-        case Multi<?> multi -> executionHooks.attachMultiHooks(multi, watch);
-        case Uni<?> uni -> executionHooks.attachMultiHooks(uni.toMulti(), watch);
-        default -> Multi.createFrom().failure(new IllegalStateException(
+      if (result == null) {
+        return Multi.createFrom().failure(new IllegalStateException("PipelineRunner returned null"));
+      } else if (result instanceof Multi<?> multi) {
+        return executionHooks.attachMultiHooks(multi, watch);
+      } else if (result instanceof Uni<?> uni) {
+        return executionHooks.attachMultiHooks(uni.toMulti(), watch);
+      } else {
+        return Multi.createFrom().failure(new IllegalStateException(
             MessageFormat.format("PipelineRunner returned unexpected type: {0}", result.getClass().getName())));
-      };
+      }
     });
   }
 

@@ -14,15 +14,7 @@ import org.pipelineframework.search.common.util.FetchOptionsNormalizer;
 import org.pipelineframework.search.common.util.HashingUtils;
 import org.pipelineframework.service.ReactiveService;
 
-@PipelineStep(
-    inputType = org.pipelineframework.search.common.domain.CrawlRequest.class,
-    outputType = org.pipelineframework.search.common.domain.RawDocument.class,
-    stepType = org.pipelineframework.step.StepOneToOne.class,
-    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-    inboundMapper = org.pipelineframework.search.common.mapper.CrawlRequestMapper.class,
-    outboundMapper = org.pipelineframework.search.common.mapper.RawDocumentMapper.class,
-    cacheKeyGenerator = org.pipelineframework.search.crawl_source.cache.CrawlRequestCacheKeyGenerator.class
-)
+@PipelineStep(cacheKeyGenerator = org.pipelineframework.search.crawl_source.cache.CrawlRequestCacheKeyGenerator.class)
 @ApplicationScoped
 @Getter
 public class ProcessCrawlSourceService

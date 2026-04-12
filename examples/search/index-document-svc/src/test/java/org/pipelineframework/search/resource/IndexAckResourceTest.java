@@ -73,6 +73,8 @@ class IndexAckResourceTest {
                 [
                   {
                     "docId": "%s",
+                    "batchIndex": 0,
+                    "tokenCount": 4,
                     "tokens": "search pipeline tokens",
                     "tokensHash": "seed-hash"
                   }
@@ -140,11 +142,15 @@ class IndexAckResourceTest {
                 [
                   {
                     "docId": "%s",
+                    "batchIndex": 0,
+                    "tokenCount": 5,
                     "tokens": "search pipeline tokens one",
                     "tokensHash": "seed-hash-1"
                   },
                   {
                     "docId": "%s",
+                    "batchIndex": 0,
+                    "tokenCount": 5,
                     "tokens": "search pipeline tokens two",
                     "tokensHash": "seed-hash-2"
                   }

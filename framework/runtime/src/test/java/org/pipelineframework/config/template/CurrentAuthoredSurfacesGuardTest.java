@@ -16,6 +16,9 @@ class CurrentAuthoredSurfacesGuardTest {
 
     private static final Pattern LEGACY_AUTHORED_PROTO_TYPE = Pattern.compile("(?m)^\\s*protoType:");
     private static final Pattern QUOTED_PROTO_TYPE_LITERAL = Pattern.compile("['\"]protoType:");
+    private static final Pattern LEGACY_INTERNAL_STEP_ANNOTATION_METADATA = Pattern.compile(
+        "@PipelineStep\\s*\\([^)]*(inputType\\s*=|outputType\\s*=|inboundMapper\\s*=|outboundMapper\\s*=|stepType\\s*=|backendType\\s*=)",
+        Pattern.DOTALL);
 
     @Test
     void currentAuthoredSurfacesDoNotReintroduceLegacyProtoTypeDeclarations() throws Exception {
@@ -32,9 +35,21 @@ class CurrentAuthoredSurfacesGuardTest {
         scanYaml(templateGenerator, violations);
         scanUiExportSurface(uiExportSurface, violations);
 
+        // Scan all example directories for internal step classes
+        try (Stream<Path> exampleDirs = Files.list(examples)) {
+            exampleDirs.filter(Files::isDirectory)
+                .forEach(exampleDir -> {
+                    try {
+                        scanCurrentExampleInternalStepClasses(exampleDir, violations);
+                    } catch (IOException e) {
+                        throw new RuntimeException("Failed to scan example directory: " + exampleDir, e);
+                    }
+                });
+        }
+
         assertTrue(
             violations.isEmpty(),
-            "Current authored surfaces must not contain legacy protoType declarations:\n" + String.join("\n", violations));
+            "Current authored surfaces must not contain LEGACY_INTERNAL_STEP_ANNOTATION_METADATA:\n" + String.join("\n", violations));
     }
 
     private static void scanMarkdown(Path root, List<String> violations) throws IOException {
@@ -59,6 +74,19 @@ class CurrentAuthoredSurfacesGuardTest {
 
     private static void scanUiExportSurface(Path uiRoute, List<String> violations) {
         recordViolations(uiRoute, QUOTED_PROTO_TYPE_LITERAL, violations);
+    }
+
+    private static void scanCurrentExampleInternalStepClasses(Path root, List<String> violations) throws IOException {
+        Path srcMainJava = root.resolve("src/main/java");
+        if (!Files.exists(srcMainJava) || !Files.isDirectory(srcMainJava)) {
+            return;
+        }
+        try (Stream<Path> stream = Files.walk(root)) {
+            stream.filter(Files::isRegularFile)
+                .filter(path -> path.startsWith(srcMainJava))
+                .filter(path -> path.toString().endsWith(".java"))
+                .forEach(path -> recordViolations(path, LEGACY_INTERNAL_STEP_ANNOTATION_METADATA, violations));
+        }
     }
 
     private static Path findRepoRoot() {

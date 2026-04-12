@@ -62,8 +62,10 @@ steps:
     cardinality: ONE_TO_ONE
     input: org.pipelineframework.tpfgo.common.domain.OrderApproved
     inputTypeName: OrderApproved
+    inboundMapper: org.pipelineframework.tpfgo.restaurant.acceptance.restaurant_accept_order.service.OrderApprovedMapper
     output: org.pipelineframework.tpfgo.common.domain.OrderAcceptedByRestaurant
     outputTypeName: OrderAcceptedByRestaurant
+    outboundMapper: org.pipelineframework.tpfgo.restaurant.acceptance.restaurant_accept_order.service.OrderAcceptedByRestaurantMapper
 input:
   subscription:
     publication: tpfgo.consumer.order-approved.v1

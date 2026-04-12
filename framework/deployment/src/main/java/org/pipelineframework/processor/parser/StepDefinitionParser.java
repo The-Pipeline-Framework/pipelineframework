@@ -58,6 +58,8 @@ public class StepDefinitionParser {
         "delegate",
         "input",
         "output",
+        "inboundMapper",
+        "outboundMapper",
         "operatorMapper",
         "externalMapper",
         "mapperFallback",
@@ -254,6 +256,17 @@ public class StepDefinitionParser {
             return null;
         }
 
+        String inboundMapperName = getStringValue(stepData, "inboundMapper");
+        String outboundMapperName = getStringValue(stepData, "outboundMapper");
+        ClassName inboundMapper = parseOptionalStepMapper(inboundMapperName, name, "inboundMapper");
+        if (!isBlank(inboundMapperName) && inboundMapper == null) {
+            return null;
+        }
+        ClassName outboundMapper = parseOptionalStepMapper(outboundMapperName, name, "outboundMapper");
+        if (!isBlank(outboundMapperName) && outboundMapper == null) {
+            return null;
+        }
+
         // Parse operator mapper / legacy external mapper if present
         String operatorMapperName = getStringValue(stepData, "operatorMapper");
         String externalMapperName = getStringValue(stepData, "externalMapper");
@@ -274,7 +287,11 @@ public class StepDefinitionParser {
         if (!isBlank(effectiveMapperName)) {
             externalMapper = parseClassName(effectiveMapperName);
             if (externalMapper == null) {
-                LOG.warnf("Skipping step '%s': invalid operator mapper class name '%s'", name, effectiveMapperName);
+                String message = "Skipping step '" + name + "': invalid "
+                    + (!isBlank(operatorMapperName) ? "operatorMapper" : "externalMapper")
+                    + " class name '" + effectiveMapperName + "'";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
                 return null;
             }
         }
@@ -286,17 +303,11 @@ public class StepDefinitionParser {
 
         if (kind == StepKind.INTERNAL && !inferredLegacyInternal) {
             if (externalMapper != null) {
-                String message = "Ignoring 'operatorMapper'/'externalMapper' on internal step '" + name
-                    + "'; mapper override is only used for delegated steps";
+                String message = "Skipping step '" + name
+                    + "': 'operatorMapper'/'externalMapper' are only valid for delegated steps; use 'inboundMapper'/'outboundMapper' for internal service steps";
                 LOG.warn(message);
-                report(Diagnostic.Kind.WARNING, message);
-                externalMapper = null;
-            }
-            if (!isBlank(inputTypeName) || !isBlank(outputTypeName)) {
-                String message = "Ignoring 'input'/'output' on internal step '" + name
-                    + "' unless the service is not resolvable in this module; keeping YAML types as cross-module fallback metadata";
-                LOG.warn(message);
-                report(Diagnostic.Kind.WARNING, message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
             }
             if (mapperFallback != MapperFallbackMode.NONE) {
                 String message = "Ignoring 'mapperFallback' on internal step '" + name
@@ -308,6 +319,13 @@ public class StepDefinitionParser {
         }
 
         if (kind == StepKind.DELEGATED) {
+            if (inboundMapper != null || outboundMapper != null) {
+                String message = "Skipping step '" + name
+                    + "': delegated steps cannot declare 'inboundMapper'/'outboundMapper'; use 'operatorMapper' for delegated mapping";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
             boolean hasInput = !isBlank(inputTypeName);
             boolean hasOutput = !isBlank(outputTypeName);
             if (hasInput != hasOutput) {
@@ -320,6 +338,13 @@ public class StepDefinitionParser {
         }
 
         if (kind == StepKind.REMOTE) {
+            if (inboundMapper != null || outboundMapper != null) {
+                String message = "Skipping step '" + name
+                    + "': remote execution cannot be combined with inboundMapper/outboundMapper";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
             if (inputType == null || outputType == null) {
                 String message = "Skipping step '" + name
                     + "': remote steps must provide inputTypeName and outputTypeName";
@@ -348,6 +373,8 @@ public class StepDefinitionParser {
                 null,
                 remoteExecution,
                 null,
+                null,
+                null,
                 MapperFallbackMode.NONE,
                 inputType,
                 outputType,
@@ -365,12 +392,26 @@ public class StepDefinitionParser {
             name,
             kind,
             executionClass,
-            null,
+            inboundMapper,
+            outboundMapper,
             externalMapper,
             mapperFallback,
             inputType,
             outputType,
             parseStreamingShapeHint(stepData, name));
+    }
+
+    private ClassName parseOptionalStepMapper(String mapperName, String stepName, String fieldName) {
+        if (isBlank(mapperName)) {
+            return null;
+        }
+        ClassName mapper = parseClassName(mapperName);
+        if (mapper == null) {
+            String message = "Invalid " + fieldName + " class name for step '" + stepName + "': " + fieldName + " = '" + mapperName + "'";
+            LOG.warnf("Skipping step '%s': invalid %s class name '%s'", stepName, fieldName, mapperName);
+            report(Diagnostic.Kind.ERROR, message);
+        }
+        return mapper;
     }
 
     private PipelineTemplateStepExecution parseRemoteExecution(Map<String, Object> stepData, String stepName, int version) {

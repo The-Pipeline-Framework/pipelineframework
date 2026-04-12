@@ -1,37 +1,38 @@
 # Annotations
 
-The Pipeline Framework uses annotations to describe internal step service metadata used by YAML-driven generation.
+The Pipeline Framework uses `@PipelineStep` to mark internal execution services that are referenced from YAML.
 
-## @PipelineStep
+## `@PipelineStep`
 
-The `@PipelineStep` annotation marks an internal execution service and provides compile-time metadata. Step generation is driven by `pipeline.yaml`; `@PipelineStep` alone does not create a generated step.
+`@PipelineStep` is the discovery marker for internal `service:` steps. It does not define the step contract by itself.
+Current internal-step contract metadata belongs in `pipeline.yaml`.
 
-### Parameters
+For internal services, YAML is the canonical source of truth for:
 
-- `inputType`: The input type for this step (domain type)
-- `outputType`: The output type for this step (domain type)
-- `stepType`: The step type (StepOneToOne, StepOneToMany, StepManyToOne, StepManyToMany, StepSideEffect)
-- `inboundMapper`: The inbound mapper class for this pipeline service/step - handles conversion from gRPC to domain types (using MapStruct-based unified Mapper interface). **Not required when `operatorMapper` is provided.**
-- `outboundMapper`: The outbound mapper class for this pipeline service/step - handles conversion from domain to gRPC types (using MapStruct-based unified Mapper interface). **Not required when `operatorMapper` is provided.**
-- `sideEffect`: Optional plugin service type used to generate side-effect client/server adapters
-- `ordering`: Ordering requirement for the generated client step
-- `threadSafety`: Thread safety declaration for the generated client step
-- `operator`: Specifies the delegated operator service class used for delegated execution when `operator() != Void.class` (legacy alias: `delegate()`).
-- `operatorMapper`: Specifies the operator mapper class that maps between application and operator types. `operatorMapper()` is only considered when a delegated operator is configured (`operator()` or legacy `delegate()`).
+- `service`
+- `cardinality`
+- `input`
+- `output`
+- `inboundMapper`
+- `outboundMapper`
 
-`backendType` is a legacy annotation field and is ignored by the current processor.
+### Current Usage
 
-### Example
+```yaml
+steps:
+  - name: process-payment
+    service: com.app.payment.ProcessPaymentService
+    cardinality: ONE_TO_ONE
+    input: com.app.domain.PaymentRecord
+    output: com.app.domain.PaymentStatus
+    inboundMapper: com.app.payment.PaymentRecordMapper
+    outboundMapper: com.app.payment.PaymentStatusMapper
+```
 
 ```java
 @PipelineStep(
-   inputType = PaymentRecord.class,
-   outputType = PaymentStatus.class,
-   stepType = StepOneToOne.class,
-   inboundMapper = PaymentRecordMapper.class,
-   outboundMapper = PaymentStatusMapper.class,
-   ordering = OrderingRequirement.RELAXED,
-   threadSafety = ThreadSafety.SAFE
+    ordering = OrderingRequirement.RELAXED,
+    threadSafety = ThreadSafety.SAFE
 )
 @ApplicationScoped
 public class ProcessPaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
@@ -40,50 +41,54 @@ public class ProcessPaymentService implements ReactiveService<PaymentRecord, Pay
         // Implementation
     }
 }
-
-// Example with delegation to an operator service
-// Use delegation when integrating with external libraries or services that already provide the required functionality
-@PipelineStep(
-   inputType = PaymentRecord.class,
-   outputType = PaymentStatus.class,
-   stepType = StepOneToOne.class,
-   operator = ExternalPaymentService.class,  // Delegates to operator service (must implement a supported Reactive*Service interface)
-   operatorMapper = PaymentExternalMapper.class  // Maps between domain and operator types
-)
-@ApplicationScoped
-public class DelegatedPaymentService {
-    // This service delegates to ExternalPaymentService
-    // and uses PaymentExternalMapper to convert between types
-}
-
-// Example with delegation but without operatorMapper (when types already match)
-@PipelineStep(
-   inputType = PaymentRecord.class,
-   outputType = PaymentStatus.class,
-   stepType = StepOneToOne.class,
-   operator = ExternalPaymentService.class  // Delegates to operator service with matching types
-   // No operatorMapper needed when input/output types match the delegate's types
-)
-@ApplicationScoped
-public class SimpleDelegatedPaymentService {
-    // This service delegates to ExternalPaymentService directly
-    // because the input/output types already match
-}
 ```
+
+### Keep on the Annotation
+
+Use `@PipelineStep` for Java-local execution concerns:
+
+- `cacheKeyGenerator`
+- `ordering`
+- `threadSafety`
+- `sideEffect`
+- `delegate` (for operator steps only)
+
+### Compatibility-Only Members
+
+The following `@PipelineStep` members remain supported for legacy internal services, but are deprecated for current authoring:
+
+- `inputType`
+- `outputType`
+- `inboundMapper`
+- `outboundMapper`
+- `stepType`
+- `backendType`
+
+New internal services should not author those members.
+
+### Operator-Specific YAML Fields (Legacy)
+
+For operator/delegated steps, the following fields were previously supported on the `@PipelineStep` annotation but are now configured exclusively in YAML:
+
+- `operator` (use fully-qualified class name, e.g., `operator: com.example.OperatorClass::method`)
+- `operatorMapper`
+- `externalMapper`
+
+These operator-specific fields must use fully-qualified class::method references in YAML and are resolved/validated at build time. They are not part of the current `@PipelineStep` authoring surface for internal services.
 
 ## Usage
 
-Developers only need to:
-
-1. Define steps in `pipeline.yaml` (`service` for internal, `operator` for delegated; legacy alias: `delegate`)
-2. For internal services, annotate the execution class with `@PipelineStep`
-3. Create MapStruct-based mapper interfaces that extend the `Mapper<Grpc, Dto, Domain>` interface
-4. Implement the service interface (`ReactiveService`, `ReactiveStreamingService`, `ReactiveStreamingClientService`, or `ReactiveBidirectionalStreamingService`)
+1. Define the internal step contract in `pipeline.yaml`.
+2. Annotate the implementation class with `@PipelineStep`.
+3. Implement the matching reactive service interface:
+   - `ReactiveService<I, O>`
+   - `ReactiveStreamingService<I, O>`
+   - `ReactiveStreamingClientService<I, O>`
+   - `ReactiveBidirectionalStreamingService<I, O>`
+4. Keep YAML cardinality aligned with the implemented reactive interface.
 
 Parallelism is configured at the pipeline level (`pipeline.parallelism` and `pipeline.max-concurrency`).
 The `ordering` and `threadSafety` values on `@PipelineStep` are propagated to the generated client step,
 which the runtime uses to decide parallelism under `AUTO`.
 
-Transport selection (gRPC vs REST) is configured globally in `pipeline.yaml`, not on the annotation.
-
-The framework automatically generates and registers the adapter beans at build time.
+Transport selection (gRPC vs REST) is configured in `pipeline.yaml`, not on the annotation.

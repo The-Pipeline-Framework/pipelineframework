@@ -54,7 +54,8 @@ class StepDefinitionParserTest {
     }
 
     @Test
-    void ignoresExternalMapperForInternalStep() throws IOException {
+    void rejectsOperatorMappersForInternalStep() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""
             appName: "Test"
             basePackage: "com.example"
@@ -62,14 +63,15 @@ class StepDefinitionParserTest {
               - name: "bad-internal"
                 service: "com.example.app.InternalService"
                 operatorMapper: "com.example.app.SomeMapper"
-            """);
+            """, diagnostics);
 
-        assertEquals(1, steps.size());
-        assertNull(steps.getFirst().externalMapper());
+        assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()), errorSummary);
     }
 
     @Test
-    void warnsAndIgnoresInputOutputForInternalStep() throws IOException {
+    void parsesYamlOwnedTypesAndMappersForInternalStep() throws IOException {
         Path file = tempDir.resolve("pipeline.yaml");
         Files.writeString(file, """
             appName: "Test"
@@ -78,7 +80,9 @@ class StepDefinitionParserTest {
               - name: "internal-with-types"
                 service: "com.example.app.InternalService"
                 input: "com.example.app.InputType"
+                inboundMapper: "com.example.app.InputMapper"
                 output: "com.example.app.OutputType"
+                outboundMapper: "com.example.app.OutputMapper"
             """);
 
         List<String> diagnostics = new ArrayList<>();
@@ -91,9 +95,11 @@ class StepDefinitionParserTest {
         assertEquals(StepKind.INTERNAL, step.kind());
         assertEquals(ClassName.get("com.example.app", "InputType"), step.inputType());
         assertEquals(ClassName.get("com.example.app", "OutputType"), step.outputType());
-        String warningSummary = diagnostics.stream().collect(Collectors.joining(" | "));
-        assertTrue(warningSummary.contains(Diagnostic.Kind.WARNING.name()));
-        assertTrue(warningSummary.contains("Ignoring 'input'/'output' on internal step"));
+        assertEquals(ClassName.get("com.example.app", "InputMapper"), step.inboundMapper());
+        assertEquals(ClassName.get("com.example.app", "OutputMapper"), step.outboundMapper());
+        String diagnosticSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertFalse(diagnosticSummary.contains(Diagnostic.Kind.ERROR.name()), diagnosticSummary);
+        assertFalse(diagnosticSummary.contains(Diagnostic.Kind.WARNING.name()), diagnosticSummary);
     }
 
     @Test
@@ -130,6 +136,25 @@ class StepDefinitionParserTest {
         assertEquals("com.example.lib.ExternalService", step.executionClass().canonicalName());
         assertEquals("com.example.app.ExternalMapperImpl", step.externalMapper().canonicalName());
         assertEquals(MapperFallbackMode.NONE, step.mapperFallback());
+    }
+
+    @Test
+    void rejectsInternalMapperFieldsForDelegatedStep() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "bad-delegated"
+                operator: "com.example.lib.ExternalService"
+                input: "com.example.app.InputType"
+                output: "com.example.app.OutputType"
+                inboundMapper: "com.example.app.InputMapper"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()), errorSummary);
     }
 
     @Test
@@ -596,8 +621,15 @@ class StepDefinitionParserTest {
     }
 
     private List<StepDefinition> parse(String yaml) throws IOException {
+        return parse(yaml, null);
+    }
+
+    private List<StepDefinition> parse(String yaml, List<String> diagnostics) throws IOException {
         Path file = tempDir.resolve("pipeline.yaml");
         Files.writeString(file, yaml);
-        return new StepDefinitionParser().parseStepDefinitions(file);
+        StepDefinitionParser parser = diagnostics == null
+            ? new StepDefinitionParser()
+            : new StepDefinitionParser((kind, message) -> diagnostics.add(kind + ":" + message));
+        return parser.parseStepDefinitions(file);
     }
 }
