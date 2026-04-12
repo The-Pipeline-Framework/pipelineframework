@@ -35,10 +35,11 @@ function readTemplates() {
   try {
     templateFiles = fs.readdirSync(templatesDir);
   } catch (error) {
-    console.error(`Error reading templates directory '${templatesDir}': ${error.message}`);
+    console.error(`Error reading templates directory '${templatesDir}': ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);
   }
 
+  /** @type {Record<string, string>} */
   const templates = {};
   for (const file of templateFiles) {
     if (!file.endsWith('.hbs')) {
@@ -49,7 +50,7 @@ function readTemplates() {
       const templateContent = fs.readFileSync(path.join(templatesDir, file), 'utf8');
       templates[templateName] = templateContent;
     } catch (error) {
-      console.error(`Error reading template file ${file}: ${error.message}`);
+      console.error(`Error reading template file ${file}: ${error instanceof Error ? error.message : String(error)}`);
       process.exit(1);
     }
   }
@@ -66,7 +67,7 @@ function readBrowserEngine() {
   try {
     return fs.readFileSync(browserEnginePath, 'utf8');
   } catch (error) {
-    console.error(`Error reading browser engine file '${browserEnginePath}': ${error.message}`);
+    console.error(`Error reading browser engine file '${browserEnginePath}': ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);
   }
 }
@@ -76,7 +77,7 @@ function readRuntimeMappingBuilder() {
   try {
     code = fs.readFileSync(runtimeBuilderPath, 'utf8');
   } catch (error) {
-    console.error(`Error reading runtime mapping builder file '${runtimeBuilderPath}': ${error.message}`);
+    console.error(`Error reading runtime mapping builder file '${runtimeBuilderPath}': ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);
   }
 
@@ -87,6 +88,10 @@ function readRuntimeMappingBuilder() {
   );
 }
 
+/**
+ * @param {string} engineCode
+ * @returns {string}
+ */
 function patchEngineTemplates(engineCode) {
   const templateDefaultRegex = /this\.templates\s*=\s*templates\s*\|\|\s*\{\};/;
   if (templateDefaultRegex.test(engineCode)) {
@@ -147,7 +152,7 @@ ${engineCode}
 try {
   fs.writeFileSync(webUiBundlePath, bundleContent);
 } catch (error) {
-  console.error(`Error writing browser bundle file '${webUiBundlePath}': ${error.message}`);
+  console.error(`Error writing browser bundle file '${webUiBundlePath}': ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
 }
 

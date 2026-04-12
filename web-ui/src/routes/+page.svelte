@@ -626,13 +626,26 @@
   function semanticFieldToUiField(field) {
     const semanticType = field.type;
     if (semanticType === 'map') {
+      // Validate that map fields have both keyType and valueType
+      if (!field.keyType || !field.valueType) {
+        throw new Error(`Map field '${field.name || 'unnamed'}' is missing keyType or valueType`);
+      }
       const keySemantic = field.keyType;
       const valueSemantic = field.valueType;
       const javaType = `Map<${semanticTypeToJavaType(keySemantic)}, ${semanticTypeToJavaType(valueSemantic)}>`;
       return {
         name: field.name,
         type: javaType,
-        protoType: `map<${uiTypeTokenToSemanticType(keySemantic)}, ${uiTypeTokenToSemanticType(valueSemantic)}>`
+        protoType: `map<${uiTypeTokenToSemanticType(keySemantic)}, ${uiTypeTokenToSemanticType(valueSemantic)}>`,
+        // Preserve v2 schema metadata
+        ...(field.number != null && { number: field.number }),
+        ...(field.optional != null && { optional: field.optional }),
+        ...(field.deprecated != null && { deprecated: field.deprecated }),
+        ...(field.since != null && { since: field.since }),
+        ...(field.deprecatedSince != null && { deprecatedSince: field.deprecatedSince }),
+        ...(field.comment != null && { comment: field.comment }),
+        ...(field.overrides != null && { overrides: field.overrides }),
+        ...(field.repeated != null && { repeated: field.repeated })
       };
     }
 
@@ -640,7 +653,16 @@
     return {
       name: field.name,
       type: field.repeated ? `List<${baseJavaType}>` : baseJavaType,
-      protoType: /^[A-Z][A-Za-z0-9_]*$/.test(String(semanticType)) ? semanticType : javaTypeToProtoType(baseJavaType)
+      protoType: /^[A-Z][A-Za-z0-9_]*$/.test(String(semanticType)) ? semanticType : javaTypeToProtoType(baseJavaType),
+      // Preserve v2 schema metadata
+      ...(field.number != null && { number: field.number }),
+      ...(field.optional != null && { optional: field.optional }),
+      ...(field.deprecated != null && { deprecated: field.deprecated }),
+      ...(field.since != null && { since: field.since }),
+      ...(field.deprecatedSince != null && { deprecatedSince: field.deprecatedSince }),
+      ...(field.comment != null && { comment: field.comment }),
+      ...(field.overrides != null && { overrides: field.overrides }),
+      ...(field.repeated != null && { repeated: field.repeated })
     };
   }
 
@@ -677,9 +699,14 @@
       const inner = rawType.slice(rawType.indexOf('<') + 1, rawType.lastIndexOf('>'));
       const [keyType, valueType] = splitTopLevelGenericArgs(inner);
       const semanticKey = uiTypeTokenToSemanticType(keyType);
-      const supportedMapKeys = new Set(['string', 'bool', 'int32', 'int64']);
+      // Expand supported keys to include all canonical semantic types that map to string/bool/int32/int64
+      // This includes UUID, BigDecimal, Instant, Currency, Path, AtomicInteger, AtomicLong, etc.
+      const supportedMapKeys = new Set([
+        'string', 'bool', 'int32', 'int64',
+        'uuid', 'timestamp', 'datetime', 'date', 'duration', 'currency', 'uri', 'path', 'decimal'
+      ]);
       if (!supportedMapKeys.has(semanticKey)) {
-        throw new Error(`Map field '${field.name}' uses unsupported key type '${keyType}'`);
+        throw new Error(`Map field '${field.name}' uses unsupported canonical key type '${semanticKey}' (from '${keyType}'). Supported canonical keys: ${Array.from(supportedMapKeys).join(', ')}`);
       }
       return {
         number,
@@ -699,9 +726,21 @@
 
   function buildSemanticMessages(steps) {
     const messages = {};
-    const rememberMessage = (typeName, fields) => {
+    const rememberMessage = (typeName, fields, messageMetadata) => {
       if (!typeName) return;
-      const semanticFields = fields.map((field, index) => uiFieldToSemanticField(field, index + 1));
+      // Use preserved field numbers if available, otherwise generate sequential numbers
+      const semanticFields = fields.map((field, index) => {
+        const fieldNumber = field.number != null ? field.number : index + 1;
+        const semanticField = uiFieldToSemanticField(field, fieldNumber);
+        // Preserve additional v2 metadata from the field
+        if (field.optional != null) semanticField.optional = field.optional;
+        if (field.deprecated != null) semanticField.deprecated = field.deprecated;
+        if (field.since != null) semanticField.since = field.since;
+        if (field.deprecatedSince != null) semanticField.deprecatedSince = field.deprecatedSince;
+        if (field.comment != null) semanticField.comment = field.comment;
+        if (field.overrides != null) semanticField.overrides = field.overrides;
+        return semanticField;
+      });
       const existing = messages[typeName];
       if (existing) {
         const existingJson = JSON.stringify(existing.fields);
@@ -711,12 +750,20 @@
         }
         return;
       }
-      messages[typeName] = { fields: semanticFields };
+      const message = { fields: semanticFields };
+      // Preserve message-level metadata (e.g., reserved)
+      if (messageMetadata?.reserved != null) {
+        message.reserved = messageMetadata.reserved;
+      }
+      messages[typeName] = message;
     };
 
     for (const step of steps) {
-      rememberMessage(step.inputTypeName, step.inputFields || []);
-      rememberMessage(step.outputTypeName, step.outputFields || []);
+      // Pass message-level metadata if available
+      const inputMessageMeta = step.inputMessageMetadata || {};
+      const outputMessageMeta = step.outputMessageMetadata || {};
+      rememberMessage(step.inputTypeName, step.inputFields || [], inputMessageMeta);
+      rememberMessage(step.outputTypeName, step.outputFields || [], outputMessageMeta);
     }
     return messages;
   }
@@ -1029,6 +1076,11 @@
         
         if (!step.inputFields && step.inputTypeName && messages[step.inputTypeName]?.fields) {
           step.inputFields = messages[step.inputTypeName].fields.map((field) => authoredFieldToUiField(field));
+          // Preserve message-level metadata
+          const inputMessage = messages[step.inputTypeName];
+          if (inputMessage.reserved != null) {
+            step.inputMessageMetadata = { reserved: inputMessage.reserved };
+          }
         } else if (!step.inputFields) {
           step.inputFields = [];
         } else if (!Array.isArray(step.inputFields)) {
@@ -1036,9 +1088,14 @@
         } else {
           step.inputFields = step.inputFields.map((field) => authoredFieldToUiField(field));
         }
-        
+
         if (!step.outputFields && step.outputTypeName && messages[step.outputTypeName]?.fields) {
           step.outputFields = messages[step.outputTypeName].fields.map((field) => authoredFieldToUiField(field));
+          // Preserve message-level metadata
+          const outputMessage = messages[step.outputTypeName];
+          if (outputMessage.reserved != null) {
+            step.outputMessageMetadata = { reserved: outputMessage.reserved };
+          }
         } else if (!step.outputFields) {
           step.outputFields = [];
         } else if (!Array.isArray(step.outputFields)) {
