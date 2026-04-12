@@ -445,7 +445,7 @@
                     <version>3.5.1</version>
                     <configuration>
                         <!--suppress UnresolvedMavenProperty -->
-                        <argLine>${surefireArgLine} --enable-preview</argLine>
+                        <argLine>@{argLine} ${surefireArgLine} --enable-preview</argLine>
                     </configuration>
                     <executions>
                         <execution>
