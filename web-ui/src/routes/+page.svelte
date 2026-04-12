@@ -662,6 +662,9 @@
 
     if (isListType(rawType)) {
       const inner = rawType.slice(rawType.indexOf('<') + 1, rawType.lastIndexOf('>')).trim();
+      if (isListType(inner) || isMapType(inner)) {
+        throw new Error(`Field '${field.name}' uses unsupported nested collection type '${rawType}'`);
+      }
       return {
         number,
         name: field.name,
@@ -674,8 +677,9 @@
       const inner = rawType.slice(rawType.indexOf('<') + 1, rawType.lastIndexOf('>'));
       const [keyType, valueType] = splitTopLevelGenericArgs(inner);
       const semanticKey = uiTypeTokenToSemanticType(keyType);
-      if (/^[A-Z][A-Za-z0-9_]*$/.test(semanticKey)) {
-        throw new Error(`Map field '${field.name}' uses unsupported message key type '${keyType}'`);
+      const supportedMapKeys = new Set(['string', 'bool', 'int32', 'int64']);
+      if (!supportedMapKeys.has(semanticKey)) {
+        throw new Error(`Map field '${field.name}' uses unsupported key type '${keyType}'`);
       }
       return {
         number,
