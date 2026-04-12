@@ -67,6 +67,7 @@ test('normalizeDevToFeed strips HTML and truncates excerpts cleanly', () => {
 
   assert.match(article.excerpt, /^First paragraph with markup\./)
   assert.ok(article.excerpt.endsWith('...'))
+  // EXCERPT_MAX_LENGTH (180) + ellipsis (3)
   assert.ok(article.excerpt.length <= 183)
 })
 
