@@ -81,7 +81,8 @@ class PipelineStepExecutor {
             return applyManyToManyUnchecked(manyToMany, current, telemetry, telemetryContext,
                 contextSnapshot);
         } else {
-            throw new IllegalArgumentException("Step not recognised: " + step.getClass().getName());
+            String stepType = step == null ? "null" : step.getClass().getName();
+            throw new IllegalArgumentException("Step not recognised: " + stepType);
         }
     }
 

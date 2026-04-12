@@ -155,7 +155,7 @@ public class PipelineStepIRExtractor {
         return new TypeMapping(
             effectiveDomainType,
             mapperType,
-            mapperType != null || inferredDomainType != null,
+            mapperType != null,
             effectiveDomainType
         );
     }

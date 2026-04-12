@@ -101,17 +101,20 @@ Keep both the generated resource for standard operations and create custom resou
 2. **Create a separate resource class** for specialized file operations
 3. **Re-use the same service instance** to avoid duplication of business logic
 
-```java
-// In pipeline.yaml
-// steps:
-//   - name: process-file-reactive
-//     service: com.app.file.ProcessFileReactiveService
-//     cardinality: MANY_TO_ONE
-//     input: com.app.file.InputType
-//     output: com.app.file.OutputFileType
-//     inboundMapper: com.app.file.InputTypeMapper
-//     outboundMapper: com.app.file.OutputFileTypeMapper
+```yaml
+steps:
+  - name: process-file-reactive
+    service: com.app.file.ProcessFileReactiveService
+    cardinality: MANY_TO_ONE
+    input: com.app.file.InputType
+    inputTypeName: InputType
+    inboundMapper: com.app.file.InputTypeMapper
+    output: com.app.file.OutputFileType
+    outputTypeName: OutputFileType
+    outboundMapper: com.app.file.OutputFileTypeMapper
+```
 
+```java
 // In your service class - marker only
 @PipelineStep
 public class ProcessFileReactiveService implements ReactiveStreamingClientService<InputType, OutputFileType> {

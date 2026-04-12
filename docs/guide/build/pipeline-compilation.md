@@ -25,10 +25,10 @@ The Pipeline Framework uses YAML-first compilation to automatically generate the
 For internal `service:` steps:
 
 1. `pipeline.yaml` declares the service class, cardinality, domain input/output types, and optional inbound/outbound mappers
-2. `@PipelineStep` marks the Java service class so the compiler can discover it
+2. `@PipelineStep` marks the Java service class, so the compiler can discover it
 3. The compiler validates the YAML contract against the implemented reactive service interface
 4. It generates transport adapters and client steps for the configured transport (gRPC or REST)
-5. It expands configured aspects into synthetic side-effect steps when a plugin host is present
+5. It expands configured aspects into synthetic side effect steps when a plugin host is present
 6. It registers all generated components with the dependency injection container
 
 This eliminates the need for manual configuration and ensures consistency across your pipeline.

@@ -80,6 +80,11 @@ steps:
   # Internal step referencing a service annotated with @PipelineStep
   - name: process-payment
     service: com.app.payment.ProcessPaymentService
+    cardinality: ONE_TO_ONE
+    input: com.app.domain.PaymentRecord
+    output: com.app.domain.PaymentStatus
+    inboundMapper: com.app.payment.PaymentRecordMapper
+    outboundMapper: com.app.payment.PaymentStatusMapper
     
   # Delegated step referencing an external operator service
   - name: embed-text

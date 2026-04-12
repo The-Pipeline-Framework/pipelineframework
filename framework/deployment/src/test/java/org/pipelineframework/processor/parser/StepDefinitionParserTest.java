@@ -55,6 +55,7 @@ class StepDefinitionParserTest {
 
     @Test
     void rejectsOperatorMappersForInternalStep() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""
             appName: "Test"
             basePackage: "com.example"
@@ -62,9 +63,11 @@ class StepDefinitionParserTest {
               - name: "bad-internal"
                 service: "com.example.app.InternalService"
                 operatorMapper: "com.example.app.SomeMapper"
-            """);
+            """, diagnostics);
 
         assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()), errorSummary);
     }
 
     @Test
@@ -137,6 +140,7 @@ class StepDefinitionParserTest {
 
     @Test
     void rejectsInternalMapperFieldsForDelegatedStep() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""
             appName: "Test"
             basePackage: "com.example"
@@ -146,9 +150,11 @@ class StepDefinitionParserTest {
                 input: "com.example.app.InputType"
                 output: "com.example.app.OutputType"
                 inboundMapper: "com.example.app.InputMapper"
-            """);
+            """, diagnostics);
 
         assertTrue(steps.isEmpty());
+        String errorSummary = diagnostics.stream().collect(Collectors.joining(" | "));
+        assertTrue(errorSummary.contains(Diagnostic.Kind.ERROR.name()), errorSummary);
     }
 
     @Test
@@ -615,8 +621,15 @@ class StepDefinitionParserTest {
     }
 
     private List<StepDefinition> parse(String yaml) throws IOException {
+        return parse(yaml, null);
+    }
+
+    private List<StepDefinition> parse(String yaml, List<String> diagnostics) throws IOException {
         Path file = tempDir.resolve("pipeline.yaml");
         Files.writeString(file, yaml);
-        return new StepDefinitionParser().parseStepDefinitions(file);
+        StepDefinitionParser parser = diagnostics == null
+            ? new StepDefinitionParser()
+            : new StepDefinitionParser((kind, message) -> diagnostics.add(kind + ":" + message));
+        return parser.parseStepDefinitions(file);
     }
 }

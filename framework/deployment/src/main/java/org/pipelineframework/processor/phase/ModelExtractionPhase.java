@@ -416,8 +416,16 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .generatedName(serviceName)
             .servicePackage(servicePackage)
             .serviceClassName(stepDef.executionClass())
-            .inputMapping(new TypeMapping(inputType, null, false, inputType))
-            .outputMapping(new TypeMapping(outputType, null, false, outputType))
+            .inputMapping(new TypeMapping(
+                inputType,
+                stepDef.inboundMapper(),
+                stepDef.inboundMapper() != null,
+                inputType))
+            .outputMapping(new TypeMapping(
+                outputType,
+                stepDef.outboundMapper(),
+                stepDef.outboundMapper() != null,
+                outputType))
             .streamingShape(streamingShape)
             .enabledTargets(targets)
             .executionMode(ExecutionMode.DEFAULT)
@@ -1023,10 +1031,6 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             return false;
         }
 
-        if (!yamlOwned) {
-            return true;
-        }
-
         DeclaredType mapperType = findReactiveSupertype(
             ctx.getProcessingEnv().getTypeUtils(),
             mapperElement.asType(),
@@ -1035,7 +1039,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Internal step '" + stepName + "' " + fieldName + " '" + mapperClass.canonicalName()
-                    + "' must implement Mapper<Domain, External>.");
+                    + "' must implement Mapper<Domain, External>."
+                    + (yamlOwned ? "" : " Deprecated annotation-sourced mappers are validated the same way."));
             return false;
         }
 
@@ -1045,7 +1050,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Internal step '" + stepName + "' " + fieldName + " '" + mapperClass.canonicalName()
                     + "' must declare Mapper<" + expectedDomainType + ", External>, but found Mapper<"
-                    + mapperDomainType + ", External>.");
+                    + mapperDomainType + ", External>."
+                    + (yamlOwned ? "" : " Deprecated annotation-sourced mappers must also match the reactive domain type."));
             return false;
         }
 

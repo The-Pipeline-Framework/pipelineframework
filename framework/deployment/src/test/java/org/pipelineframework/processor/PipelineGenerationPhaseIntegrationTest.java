@@ -119,15 +119,18 @@ class PipelineGenerationPhaseIntegrationTest {
                     """
                         package org.pipelineframework.search.mapper;
 
+                        import org.pipelineframework.mapper.Mapper;
                         import org.pipelineframework.search.domain.CrawlRequest;
                         import org.pipelineframework.search.dto.CrawlRequestDto;
 
-                        public class CrawlRequestMapper {
-                            public CrawlRequest fromDto(CrawlRequestDto dto) {
+                        public class CrawlRequestMapper implements Mapper<CrawlRequest, CrawlRequestDto> {
+                            @Override
+                            public CrawlRequest fromExternal(CrawlRequestDto dto) {
                                 return new CrawlRequest();
                             }
 
-                            public CrawlRequestDto toDto(CrawlRequest domain) {
+                            @Override
+                            public CrawlRequestDto toExternal(CrawlRequest domain) {
                                 return new CrawlRequestDto();
                             }
                         }
@@ -137,17 +140,31 @@ class PipelineGenerationPhaseIntegrationTest {
                     """
                         package org.pipelineframework.search.mapper;
 
+                        import org.pipelineframework.mapper.Mapper;
                         import org.pipelineframework.search.domain.RawDocument;
                         import org.pipelineframework.search.dto.RawDocumentDto;
 
-                        public class RawDocumentMapper {
-                            public RawDocument fromDto(RawDocumentDto dto) {
+                        public class RawDocumentMapper implements Mapper<RawDocument, RawDocumentDto> {
+                            @Override
+                            public RawDocument fromExternal(RawDocumentDto dto) {
                                 return new RawDocument();
                             }
 
-                            public RawDocumentDto toDto(RawDocument domain) {
+                            @Override
+                            public RawDocumentDto toExternal(RawDocument domain) {
                                 return new RawDocumentDto();
                             }
+                        }
+                        """),
+                JavaFileObjects.forSourceString(
+                    "org.pipelineframework.mapper.Mapper",
+                    """
+                        package org.pipelineframework.mapper;
+
+                        public interface Mapper<TDomain, TExternal> {
+                            TDomain fromExternal(TExternal external);
+
+                            TExternal toExternal(TDomain domain);
                         }
                         """));
 

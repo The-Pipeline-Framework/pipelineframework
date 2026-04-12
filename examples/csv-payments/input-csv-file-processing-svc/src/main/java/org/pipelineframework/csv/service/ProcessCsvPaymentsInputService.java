@@ -80,22 +80,22 @@ public class ProcessCsvPaymentsInputService
     return Multi.createFrom().deferred(
         Unchecked.supplier(
             () -> {
-              var reader = input.openReader();
               try {
-                var csvReader =
-                    new CsvToBeanBuilder<PaymentRecord>(reader)
+                List<PaymentRecord> records;
+                try (var reader = input.openReader()) {
+                    var csvReader =
+                        new CsvToBeanBuilder<PaymentRecord>(reader)
                         .withType(PaymentRecord.class)
                         .withMappingStrategy(input.veryOwnStrategy())
                         .withSeparator(',')
                         .withIgnoreLeadingWhiteSpace(true)
                         .withIgnoreEmptyLine(true)
                         .build();
+                    records = csvReader.parse();
+                    LOG.infof("Closed CSV reader for: %s", input.getSourceName());
+                }
 
                 String serviceId = this.getClass().toString();
-
-                // Eagerly parse CSV into a list to catch errors before emitting
-                List<PaymentRecord> records = csvReader.parse();
-
                 FixedDemandPacer pacer =
                     new FixedDemandPacer(rowsPerPeriod, Duration.ofMillis(millisPeriod));
 
@@ -111,23 +111,8 @@ public class ProcessCsvPaymentsInputService
                           LOG.infof(
                               "Executed command on %s --> %s", input.getSourceName(), rec);
                           MDC.remove("serviceId");
-                        })
-                    .onTermination()
-                    .invoke(
-                        () -> {
-                          try {
-                            reader.close();
-                            LOG.infof("Closed CSV reader for: %s", input.getSourceName());
-                          } catch (IOException e) {
-                            LOG.warnf(e, "Failed to close CSV reader for: %s", input.getSourceName());
-                          }
                         });
               } catch (Exception e) {
-                try {
-                  reader.close();
-                } catch (IOException closeEx) {
-                  LOG.warnf(closeEx, "Failed to close CSV reader after error for: %s", input.getSourceName());
-                }
                 LOG.errorf(e, "CSV processing failed for file: %s", input.getSourceName());
                 return Multi.createFrom().failure(new RuntimeException("CSV processing error: " + e.getMessage(), e));
               }
