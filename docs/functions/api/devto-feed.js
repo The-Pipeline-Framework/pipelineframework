@@ -23,10 +23,10 @@ const XML_ENTITY_MAP = {
   mdash: '—',
   ndash: '–',
   hellip: '…',
-  rsquo: ''',
-  lsquo: ''',
-  rdquo: '"',
-  ldquo: '"'
+  rsquo: '’',
+  lsquo: '‘',
+  rdquo: '”',
+  ldquo: '“'
 }
 
 const parseLimit = (value) => {
