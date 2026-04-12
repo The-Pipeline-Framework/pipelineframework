@@ -101,12 +101,16 @@ class PluginProducerGenerationTest {
                     """
                         package com.example;
 
-                        public class StringInputMapper {
-                            public String fromDto(String dto) {
+                        import org.pipelineframework.mapper.Mapper;
+
+                        public class StringInputMapper implements Mapper<String, String> {
+                            @Override
+                            public String fromExternal(String dto) {
                                 return dto;
                             }
 
-                            public String toDto(String domain) {
+                            @Override
+                            public String toExternal(String domain) {
                                 return domain;
                             }
                         }
@@ -116,12 +120,16 @@ class PluginProducerGenerationTest {
                     """
                         package com.example;
 
-                        public class StringOutputMapper {
-                            public String fromDto(String dto) {
+                        import org.pipelineframework.mapper.Mapper;
+
+                        public class StringOutputMapper implements Mapper<String, String> {
+                            @Override
+                            public String fromExternal(String dto) {
                                 return dto;
                             }
 
-                            public String toDto(String domain) {
+                            @Override
+                            public String toExternal(String domain) {
                                 return domain;
                             }
                         }
