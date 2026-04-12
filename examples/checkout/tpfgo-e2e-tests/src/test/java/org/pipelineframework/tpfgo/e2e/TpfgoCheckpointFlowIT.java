@@ -721,12 +721,32 @@ class TpfgoCheckpointFlowIT {
 
         /**
          * Waits until a checkpoint with the given publication name is received and returns its decoded payload.
+         * Uses a short timeout with no diagnostics collection for fast failure.
          *
          * @param publication the checkpoint publication name to wait for
          * @return the decoded JSON payload of the most recently received checkpoint with the specified publication name
          */
         JsonNode awaitPayload(String publication) {
-            return awaitPayload(publication, null, null);
+            return awaitPayloadFast(publication);
+        }
+
+        /**
+         * Waits for a checkpoint with the given publication name using a short timeout and no diagnostics.
+         * Intended for tests that need fast failure behavior.
+         *
+         * @param publication the checkpoint publication name to wait for
+         * @return the decoded JSON payload of the most recently received checkpoint with the specified publication name
+         */
+        private JsonNode awaitPayloadFast(String publication) {
+            Awaitility.await()
+                .atMost(Duration.ofSeconds(10))
+                .pollInterval(Duration.ofMillis(200))
+                .until(() -> countFor(publication), count -> count > 0);
+            return received.stream()
+                .filter(request -> Objects.equals(publication, request.getPublication()))
+                .reduce((ignored, latest) -> latest)
+                .map(this::toPayload)
+                .orElseThrow();
         }
 
         /**
@@ -737,9 +757,44 @@ class TpfgoCheckpointFlowIT {
          * @param logDirectory the directory containing per-module log files; may be null
          * @param apps         the list of managed applications whose logs to include; may be null
          * @return the decoded JSON payload of the most recently received checkpoint with the specified publication name
-         * @throws org.awaitility.core.ConditionTimeoutException if the payload is not received within the timeout,
-         *         with per-module log tails appended to the message
+         * @throws RuntimeException if the payload is not received within the timeout,
+         *         wrapping the underlying timeout exception with per-module log tails appended to the message
          */
+        JsonNode awaitPayload(String publication, Path logDirectory, List<ManagedApp> apps) {
+            try {
+                Awaitility.await()
+                    .atMost(Duration.ofSeconds(120))
+                    .pollInterval(Duration.ofSeconds(2))
+                    .until(() -> countFor(publication), count -> count > 0);
+            } catch (Exception e) {
+                StringBuilder msg = new StringBuilder();
+                msg.append("Timed out waiting for publication '").append(publication).append("'.");
+                if (logDirectory != null && apps != null) {
+                    for (ManagedApp app : apps) {
+                        Path logFile = logDirectory.resolve(app.moduleDir() + ".log");
+                        if (Files.exists(logFile)) {
+                            try {
+                                String content = Files.readString(logFile);
+                                int tailLen = Math.min(content.length(), 2000);
+                                msg.append("\n--- ").append(app.moduleDir()).append(" log (tail) ---\n");
+                                msg.append(tailLen < content.length() ? "... [truncated] ..." : "");
+                                msg.append(content.substring(content.length() - tailLen));
+                            } catch (IOException ignored) {
+                                // skip unreadable log files
+                            }
+                        }
+                    }
+                }
+                throw new RuntimeException(msg.toString(), e);
+            }
+            return received.stream()
+                .filter(request -> Objects.equals(publication, request.getPublication()))
+                .reduce((ignored, latest) -> latest)
+                .map(this::toPayload)
+                .orElseThrow();
+        }
+
+        /**
         JsonNode awaitPayload(String publication, Path logDirectory, List<ManagedApp> apps) {
             try {
                 Awaitility.await()

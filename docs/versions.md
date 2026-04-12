@@ -20,10 +20,10 @@ The Pipeline Framework follows semantic versioning:
 
 ## Documentation Snapshot Policy
 
-This site keeps snapshots for major/minor releases and points the latest docs to the root.
+This site keeps snapshots for released docs versions and points the latest docs to the root.
 When cutting a new release, create a docs snapshot and update the version list:
 
 ```bash
 cd docs
-npm run snapshot -- --version vX.Y
+npm run snapshot -- --version vX.Y[.Z]
 ```

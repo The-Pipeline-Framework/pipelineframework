@@ -69,7 +69,7 @@ This ensures that all modules in the multimodule project are updated consistentl
 
 ### Documentation Snapshot (Hybrid Versioning)
 
-For major/minor releases, snapshot the docs into `docs/versions/`:
+For released docs versions, snapshot the docs into `docs/versions/`:
 
 ```bash
 cd docs
