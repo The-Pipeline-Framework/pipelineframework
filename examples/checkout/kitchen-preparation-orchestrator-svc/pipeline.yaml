@@ -1,65 +1,115 @@
-appName: "TPFGo Kitchen Preparation Pipeline"
-basePackage: "org.pipelineframework.tpfgo.kitchen.preparation"
-transport: "GRPC"
-platform: "COMPUTE"
+version: 2
+appName: TPFGo Kitchen Preparation Pipeline
+basePackage: org.pipelineframework.tpfgo.kitchen.preparation
+transport: GRPC
+platform: COMPUTE
+messages:
+  OrderAcceptedByRestaurant:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: requestId
+        type: uuid
+      - number: 3
+        name: customerId
+        type: uuid
+      - number: 4
+        name: restaurantId
+        type: uuid
+      - number: 5
+        name: totalAmount
+        type: decimal
+      - number: 6
+        name: currency
+        type: string
+      - number: 7
+        name: acceptedAt
+        type: timestamp
+      - number: 8
+        name: kitchenTicketId
+        type: uuid
+  KitchenTask:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: customerId
+        type: uuid
+      - number: 3
+        name: restaurantId
+        type: uuid
+      - number: 4
+        name: totalAmount
+        type: decimal
+      - number: 5
+        name: currency
+        type: string
+      - number: 6
+        name: kitchenTicketId
+        type: uuid
+      - number: 7
+        name: taskId
+        type: uuid
+      - number: 8
+        name: taskName
+        type: string
+      - number: 9
+        name: taskStatus
+        type: string
+  OrderReadyForDispatch:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: customerId
+        type: uuid
+      - number: 3
+        name: restaurantId
+        type: uuid
+      - number: 4
+        name: totalAmount
+        type: decimal
+      - number: 5
+        name: currency
+        type: string
+      - number: 6
+        name: readyAt
+        type: timestamp
+      - number: 7
+        name: kitchenTicketId
+        type: uuid
+      - number: 8
+        name: lineageDigest
+        type: string
+steps:
+  - name: Kitchen Expand Tasks
+    service: org.pipelineframework.tpfgo.kitchen.preparation.kitchen_expand_tasks.service.ProcessKitchenExpandTasksService
+    cardinality: ONE_TO_MANY
+    input: org.pipelineframework.tpfgo.common.domain.OrderAcceptedByRestaurant
+    inputTypeName: OrderAcceptedByRestaurant
+    inboundMapper: org.pipelineframework.tpfgo.kitchen.preparation.kitchen_expand_tasks.service.OrderAcceptedByRestaurantMapper
+    output: org.pipelineframework.tpfgo.common.domain.KitchenTask
+    outputTypeName: KitchenTask
+    outboundMapper: org.pipelineframework.tpfgo.kitchen.preparation.kitchen_expand_tasks.service.KitchenTaskMapper
+  - name: Kitchen Reduce Completion
+    service: org.pipelineframework.tpfgo.kitchen.preparation.kitchen_reduce_completion.service.ProcessKitchenReduceCompletionService
+    cardinality: MANY_TO_ONE
+    input: org.pipelineframework.tpfgo.common.domain.KitchenTask
+    inputTypeName: KitchenTask
+    inboundMapper: org.pipelineframework.tpfgo.kitchen.preparation.kitchen_expand_tasks.service.KitchenTaskMapper
+    output: org.pipelineframework.tpfgo.common.domain.OrderReadyForDispatch
+    outputTypeName: OrderReadyForDispatch
+    outboundMapper: org.pipelineframework.tpfgo.kitchen.preparation.kitchen_reduce_completion.service.OrderReadyForDispatchMapper
 input:
   subscription:
-    publication: "tpfgo.restaurant.order-accepted.v1"
-    mapper: "org.pipelineframework.tpfgo.kitchen.preparation.kitchen_expand_tasks.service.OrderAcceptedByRestaurantMapper"
-steps:
-  - name: "Kitchen Expand Tasks"
-    service: "org.pipelineframework.tpfgo.kitchen.preparation.kitchen_expand_tasks.service.ProcessKitchenExpandTasksService"
-    cardinality: "ONE_TO_MANY"
-    input: "org.pipelineframework.tpfgo.common.domain.OrderAcceptedByRestaurant"
-    inputTypeName: "OrderAcceptedByRestaurant"
-    inputFields:
-      - { name: "orderId", type: "UUID", protoType: "string" }
-      - { name: "requestId", type: "UUID", protoType: "string" }
-      - { name: "customerId", type: "UUID", protoType: "string" }
-      - { name: "restaurantId", type: "UUID", protoType: "string" }
-      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
-      - { name: "currency", type: "String", protoType: "string" }
-      - { name: "acceptedAt", type: "Instant", protoType: "string" }
-      - { name: "kitchenTicketId", type: "UUID", protoType: "string" }
-    output: "org.pipelineframework.tpfgo.common.domain.KitchenTask"
-    outputTypeName: "KitchenTask"
-    outputFields:
-      - { name: "orderId", type: "UUID", protoType: "string" }
-      - { name: "customerId", type: "UUID", protoType: "string" }
-      - { name: "restaurantId", type: "UUID", protoType: "string" }
-      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
-      - { name: "currency", type: "String", protoType: "string" }
-      - { name: "kitchenTicketId", type: "UUID", protoType: "string" }
-      - { name: "taskId", type: "UUID", protoType: "string" }
-      - { name: "taskName", type: "String", protoType: "string" }
-      - { name: "taskStatus", type: "String", protoType: "string" }
-  - name: "Kitchen Reduce Completion"
-    service: "org.pipelineframework.tpfgo.kitchen.preparation.kitchen_reduce_completion.service.ProcessKitchenReduceCompletionService"
-    cardinality: "MANY_TO_ONE"
-    input: "org.pipelineframework.tpfgo.common.domain.KitchenTask"
-    inputTypeName: "KitchenTask"
-    inputFields:
-      - { name: "orderId", type: "UUID", protoType: "string" }
-      - { name: "customerId", type: "UUID", protoType: "string" }
-      - { name: "restaurantId", type: "UUID", protoType: "string" }
-      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
-      - { name: "currency", type: "String", protoType: "string" }
-      - { name: "kitchenTicketId", type: "UUID", protoType: "string" }
-      - { name: "taskId", type: "UUID", protoType: "string" }
-      - { name: "taskName", type: "String", protoType: "string" }
-      - { name: "taskStatus", type: "String", protoType: "string" }
-    output: "org.pipelineframework.tpfgo.common.domain.OrderReadyForDispatch"
-    outputTypeName: "OrderReadyForDispatch"
-    outputFields:
-      - { name: "orderId", type: "UUID", protoType: "string" }
-      - { name: "customerId", type: "UUID", protoType: "string" }
-      - { name: "restaurantId", type: "UUID", protoType: "string" }
-      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
-      - { name: "currency", type: "String", protoType: "string" }
-      - { name: "readyAt", type: "Instant", protoType: "string" }
-      - { name: "kitchenTicketId", type: "UUID", protoType: "string" }
-      - { name: "lineageDigest", type: "String", protoType: "string" }
+    publication: tpfgo.restaurant.order-accepted.v1
+    mapper: org.pipelineframework.tpfgo.kitchen.preparation.kitchen_expand_tasks.service.OrderAcceptedByRestaurantMapper
 output:
   checkpoint:
-    publication: "tpfgo.kitchen.order-ready.v1"
-    idempotencyKeyFields: [ "orderId" ]
+    publication: tpfgo.kitchen.order-ready.v1
+    idempotencyKeyFields:
+      - orderId

@@ -2,7 +2,6 @@ package org.pipelineframework.tpfgo.checkout.checkout_validate_request.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.math.BigDecimal;
@@ -10,7 +9,7 @@ import java.time.Instant;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.tpfgo.checkout.grpc.CheckoutValidateRequestSvc;
+import org.pipelineframework.tpfgo.checkout.grpc.PipelineTypes;
 import org.pipelineframework.tpfgo.common.domain.ValidatedOrderRequest;
 
 class ValidatedOrderRequestMapperTest {
@@ -27,8 +26,8 @@ class ValidatedOrderRequestMapperTest {
         BigDecimal totalAmount = new BigDecimal("55.00");
         Instant validatedAt = Instant.parse("2026-02-28T16:45:00Z");
 
-        CheckoutValidateRequestSvc.ValidatedOrderRequest grpc =
-            CheckoutValidateRequestSvc.ValidatedOrderRequest.newBuilder()
+        PipelineTypes.ValidatedOrderRequest grpc =
+            PipelineTypes.ValidatedOrderRequest.newBuilder()
                 .setRequestId(requestId.toString())
                 .setCustomerId(customerId.toString())
                 .setRestaurantId(restaurantId.toString())
@@ -52,8 +51,8 @@ class ValidatedOrderRequestMapperTest {
 
     @Test
     void fromExternalEmptyStringFieldsFailFast() {
-        CheckoutValidateRequestSvc.ValidatedOrderRequest grpc =
-            CheckoutValidateRequestSvc.ValidatedOrderRequest.newBuilder()
+        PipelineTypes.ValidatedOrderRequest grpc =
+            PipelineTypes.ValidatedOrderRequest.newBuilder()
                 .setRequestId("")
                 .setCustomerId("")
                 .setRestaurantId("")
@@ -68,8 +67,8 @@ class ValidatedOrderRequestMapperTest {
 
     @Test
     void fromExternalThrowsOnInvalidUuidInRequestId() {
-        CheckoutValidateRequestSvc.ValidatedOrderRequest grpc =
-            CheckoutValidateRequestSvc.ValidatedOrderRequest.newBuilder()
+        PipelineTypes.ValidatedOrderRequest grpc =
+            PipelineTypes.ValidatedOrderRequest.newBuilder()
                 .setRequestId("not-a-uuid")
                 .build();
 
@@ -78,8 +77,8 @@ class ValidatedOrderRequestMapperTest {
 
     @Test
     void fromExternalThrowsOnInvalidInstantString() {
-        CheckoutValidateRequestSvc.ValidatedOrderRequest grpc =
-            CheckoutValidateRequestSvc.ValidatedOrderRequest.newBuilder()
+        PipelineTypes.ValidatedOrderRequest grpc =
+            PipelineTypes.ValidatedOrderRequest.newBuilder()
                 .setRequestId(UUID.randomUUID().toString())
                 .setCustomerId(UUID.randomUUID().toString())
                 .setRestaurantId(UUID.randomUUID().toString())
@@ -94,8 +93,8 @@ class ValidatedOrderRequestMapperTest {
 
     @Test
     void fromExternalThrowsOnInvalidDecimalString() {
-        CheckoutValidateRequestSvc.ValidatedOrderRequest grpc =
-            CheckoutValidateRequestSvc.ValidatedOrderRequest.newBuilder()
+        PipelineTypes.ValidatedOrderRequest grpc =
+            PipelineTypes.ValidatedOrderRequest.newBuilder()
                 .setRequestId(UUID.randomUUID().toString())
                 .setCustomerId(UUID.randomUUID().toString())
                 .setRestaurantId(UUID.randomUUID().toString())
@@ -122,7 +121,7 @@ class ValidatedOrderRequestMapperTest {
             requestId, customerId, restaurantId,
             "salad x1", totalAmount, "GBP", validatedAt);
 
-        CheckoutValidateRequestSvc.ValidatedOrderRequest grpc = mapper.toExternal(domain);
+        PipelineTypes.ValidatedOrderRequest grpc = mapper.toExternal(domain);
 
         assertNotNull(grpc);
         assertEquals(requestId.toString(), grpc.getRequestId());
@@ -172,8 +171,8 @@ class ValidatedOrderRequestMapperTest {
         UUID restaurantId = UUID.randomUUID();
         Instant validatedAt = Instant.parse("2026-06-10T13:00:00Z");
 
-        CheckoutValidateRequestSvc.ValidatedOrderRequest original =
-            CheckoutValidateRequestSvc.ValidatedOrderRequest.newBuilder()
+        PipelineTypes.ValidatedOrderRequest original =
+            PipelineTypes.ValidatedOrderRequest.newBuilder()
                 .setRequestId(requestId.toString())
                 .setCustomerId(customerId.toString())
                 .setRestaurantId(restaurantId.toString())
@@ -183,7 +182,7 @@ class ValidatedOrderRequestMapperTest {
                 .setValidatedAt(validatedAt.toString())
                 .build();
 
-        CheckoutValidateRequestSvc.ValidatedOrderRequest roundTripped =
+        PipelineTypes.ValidatedOrderRequest roundTripped =
             mapper.toExternal(mapper.fromExternal(original));
 
         assertEquals(original.getRequestId(), roundTripped.getRequestId());

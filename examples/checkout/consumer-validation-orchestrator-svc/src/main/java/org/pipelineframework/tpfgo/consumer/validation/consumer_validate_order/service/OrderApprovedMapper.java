@@ -5,13 +5,13 @@ import jakarta.enterprise.context.ApplicationScoped;
 import org.pipelineframework.mapper.Mapper;
 import org.pipelineframework.tpfgo.common.domain.OrderApproved;
 import org.pipelineframework.tpfgo.common.util.GrpcMappingSupport;
-import org.pipelineframework.tpfgo.consumer.validation.grpc.ConsumerValidateOrderSvc;
+import org.pipelineframework.tpfgo.consumer.validation.grpc.PipelineTypes;
 
 @ApplicationScoped
-public class OrderApprovedMapper implements Mapper<OrderApproved, ConsumerValidateOrderSvc.OrderApproved> {
+public class OrderApprovedMapper implements Mapper<OrderApproved, PipelineTypes.OrderApproved> {
 
     @Override
-    public OrderApproved fromExternal(ConsumerValidateOrderSvc.OrderApproved external) {
+    public OrderApproved fromExternal(PipelineTypes.OrderApproved external) {
         return new OrderApproved(
             GrpcMappingSupport.uuid(external.getOrderId(), "orderId"),
             GrpcMappingSupport.uuid(external.getRequestId(), "requestId"),
@@ -24,8 +24,8 @@ public class OrderApprovedMapper implements Mapper<OrderApproved, ConsumerValida
     }
 
     @Override
-    public ConsumerValidateOrderSvc.OrderApproved toExternal(OrderApproved domain) {
-        return ConsumerValidateOrderSvc.OrderApproved.newBuilder()
+    public PipelineTypes.OrderApproved toExternal(OrderApproved domain) {
+        return PipelineTypes.OrderApproved.newBuilder()
             .setOrderId(GrpcMappingSupport.str(domain.orderId()))
             .setRequestId(GrpcMappingSupport.str(domain.requestId()))
             .setCustomerId(GrpcMappingSupport.str(domain.customerId()))

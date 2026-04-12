@@ -2,14 +2,13 @@ package org.pipelineframework.tpfgo.checkout.checkout_validate_request.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.math.BigDecimal;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.tpfgo.checkout.grpc.CheckoutValidateRequestSvc;
+import org.pipelineframework.tpfgo.checkout.grpc.PipelineTypes;
 import org.pipelineframework.tpfgo.common.domain.PlaceOrderRequest;
 
 class PlaceOrderRequestMapperTest {
@@ -25,8 +24,8 @@ class PlaceOrderRequestMapperTest {
         UUID restaurantId = UUID.randomUUID();
         BigDecimal totalAmount = new BigDecimal("18.50");
 
-        CheckoutValidateRequestSvc.PlaceOrderRequest grpc =
-            CheckoutValidateRequestSvc.PlaceOrderRequest.newBuilder()
+        PipelineTypes.PlaceOrderRequest grpc =
+            PipelineTypes.PlaceOrderRequest.newBuilder()
                 .setRequestId(requestId.toString())
                 .setCustomerId(customerId.toString())
                 .setRestaurantId(restaurantId.toString())
@@ -48,8 +47,8 @@ class PlaceOrderRequestMapperTest {
 
     @Test
     void fromExternalEmptyUuidStringsFailFast() {
-        CheckoutValidateRequestSvc.PlaceOrderRequest grpc =
-            CheckoutValidateRequestSvc.PlaceOrderRequest.newBuilder()
+        PipelineTypes.PlaceOrderRequest grpc =
+            PipelineTypes.PlaceOrderRequest.newBuilder()
                 .setRequestId("")
                 .setCustomerId("")
                 .setRestaurantId("")
@@ -63,8 +62,8 @@ class PlaceOrderRequestMapperTest {
 
     @Test
     void fromExternalThrowsOnInvalidUuidString() {
-        CheckoutValidateRequestSvc.PlaceOrderRequest grpc =
-            CheckoutValidateRequestSvc.PlaceOrderRequest.newBuilder()
+        PipelineTypes.PlaceOrderRequest grpc =
+            PipelineTypes.PlaceOrderRequest.newBuilder()
                 .setRequestId("bad-uuid-value")
                 .build();
 
@@ -73,8 +72,8 @@ class PlaceOrderRequestMapperTest {
 
     @Test
     void fromExternalThrowsOnInvalidDecimalString() {
-        CheckoutValidateRequestSvc.PlaceOrderRequest grpc =
-            CheckoutValidateRequestSvc.PlaceOrderRequest.newBuilder()
+        PipelineTypes.PlaceOrderRequest grpc =
+            PipelineTypes.PlaceOrderRequest.newBuilder()
                 .setRequestId(UUID.randomUUID().toString())
                 .setCustomerId(UUID.randomUUID().toString())
                 .setRestaurantId(UUID.randomUUID().toString())
@@ -88,8 +87,8 @@ class PlaceOrderRequestMapperTest {
 
     @Test
     void fromExternalPreservesItemsStringWithSpecialCharacters() {
-        CheckoutValidateRequestSvc.PlaceOrderRequest grpc =
-            CheckoutValidateRequestSvc.PlaceOrderRequest.newBuilder()
+        PipelineTypes.PlaceOrderRequest grpc =
+            PipelineTypes.PlaceOrderRequest.newBuilder()
                 .setRequestId(UUID.randomUUID().toString())
                 .setCustomerId(UUID.randomUUID().toString())
                 .setRestaurantId(UUID.randomUUID().toString())
@@ -116,7 +115,7 @@ class PlaceOrderRequestMapperTest {
             requestId, customerId, restaurantId,
             "pizza x2", totalAmount, "GBP");
 
-        CheckoutValidateRequestSvc.PlaceOrderRequest grpc = mapper.toExternal(domain);
+        PipelineTypes.PlaceOrderRequest grpc = mapper.toExternal(domain);
 
         assertNotNull(grpc);
         assertEquals(requestId.toString(), grpc.getRequestId());
@@ -162,8 +161,8 @@ class PlaceOrderRequestMapperTest {
         UUID customerId = UUID.randomUUID();
         UUID restaurantId = UUID.randomUUID();
 
-        CheckoutValidateRequestSvc.PlaceOrderRequest original =
-            CheckoutValidateRequestSvc.PlaceOrderRequest.newBuilder()
+        PipelineTypes.PlaceOrderRequest original =
+            PipelineTypes.PlaceOrderRequest.newBuilder()
                 .setRequestId(requestId.toString())
                 .setCustomerId(customerId.toString())
                 .setRestaurantId(restaurantId.toString())
@@ -172,7 +171,7 @@ class PlaceOrderRequestMapperTest {
                 .setCurrency("EUR")
                 .build();
 
-        CheckoutValidateRequestSvc.PlaceOrderRequest roundTripped =
+        PipelineTypes.PlaceOrderRequest roundTripped =
             mapper.toExternal(mapper.fromExternal(original));
 
         assertEquals(original.getRequestId(), roundTripped.getRequestId());

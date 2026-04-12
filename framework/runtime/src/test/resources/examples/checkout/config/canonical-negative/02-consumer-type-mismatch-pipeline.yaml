@@ -1,19 +1,23 @@
+version: 2
 appName: "Canonical Negative Consumer Type Mismatch"
 basePackage: "org.pipelineframework.checkout.canonical.negative.consumer.type"
 transport: "GRPC"
+messages:
+  OrderApproved:
+    fields:
+      - number: 1
+        name: "orderId"
+        type: "uuid"
+      - number: 2
+        name: "customerId"
+        type: "uuid"
+  OrderReady:
+    fields:
+      - number: 1
+        name: "orderId"
+        type: "uuid"
 steps:
   - name: "Consumer Entry Type Mismatch"
     cardinality: "ONE_TO_ONE"
     inputTypeName: "OrderApproved"
-    inputFields:
-      - name: "orderId"
-        type: "UUID"
-        protoType: "string"
-      - name: "customerId"
-        type: "UUID"
-        protoType: "string"
     outputTypeName: "OrderReady"
-    outputFields:
-      - name: "orderId"
-        type: "UUID"
-        protoType: "string"

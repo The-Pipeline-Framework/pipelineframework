@@ -14,27 +14,10 @@
  * limitations under the License.
  */
 
-import {sveltekit} from '@sveltejs/kit/vite';
-import {defineConfig} from 'vite';
 import adapter from '@sveltejs/adapter-static';
 
-export default defineConfig({
-	plugins: [sveltekit()],
-	build: {
-		minify: 'esbuild', // fast and low memory
-		rollupOptions: {
-			output: {
-				// Reduce memory usage during build
-				chunkFileNames: 'assets/[name]-[hash].js',
-				entryFileNames: 'assets/[name]-[hash].js',
-			},
-		},
-		// Reduce memory usage
-		target: 'es2020',
-		// Limit memory usage during build
-		ssr: false,
-		assetsInlineLimit: 0 // prevents embedding large assets in JS bundles
-	},
+/** @type {import('@sveltejs/kit').Config} */
+const config = {
 	kit: {
 		adapter: adapter({
 			pages: 'build',
@@ -55,4 +38,6 @@ export default defineConfig({
 			}
 		}
 	}
-});
+};
+
+export default config;

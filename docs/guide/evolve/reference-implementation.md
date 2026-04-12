@@ -27,61 +27,53 @@ java -jar template-generator-1.0.0.jar --generate-config
 Edit the generated YAML file to define your pipeline:
 
 ```yaml
----
+version: 2
 appName: "My Pipeline App"
 basePackage: "com.example.mypipeline"
+transport: "GRPC"
+messages:
+  CustomerInput:
+    fields:
+      - number: 1
+        name: "id"
+        type: "uuid"
+      - number: 2
+        name: "name"
+        type: "string"
+      - number: 3
+        name: "email"
+        type: "string"
+  CustomerOutput:
+    fields:
+      - number: 1
+        name: "id"
+        type: "uuid"
+      - number: 2
+        name: "name"
+        type: "string"
+      - number: 3
+        name: "status"
+        type: "string"
+      - number: 4
+        name: "processedAt"
+        type: "timestamp"
+  ValidationOutput:
+    fields:
+      - number: 1
+        name: "id"
+        type: "uuid"
+      - number: 2
+        name: "isValid"
+        type: "bool"
 steps:
-- name: "Process Customer"
-  cardinality: "ONE_TO_ONE"
-  inputTypeName: "CustomerInput"
-  inputFields:
-  - name: "id"
-    type: "UUID"
-    protoType: "string"
-  - name: "name" 
-    type: "String"
-    protoType: "string"
-  - name: "email"
-    type: "String"
-    protoType: "string"
-  outputTypeName: "CustomerOutput"
-  outputFields:
-  - name: "id"
-    type: "UUID"
-    protoType: "string"
-  - name: "name"
-    type: "String"
-    protoType: "string"
-  - name: "status"
-    type: "String"
-    protoType: "string"
-  - name: "processedAt"
-    type: "String"
-    protoType: "string"
-- name: "Validate Order"
-  cardinality: "ONE_TO_ONE"
-  inputTypeName: "CustomerOutput"  # Automatically uses output of previous step
-  inputFields:  # Automatically inherits fields from CustomerOutput
-  - name: "id"
-    type: "UUID"
-    protoType: "string"
-  - name: "name"
-    type: "String"
-    protoType: "string"
-  - name: "status"
-    type: "String"
-    protoType: "string"
-  - name: "processedAt"
-    type: "String"
-    protoType: "string"
-  outputTypeName: "ValidationOutput"
-  outputFields:
-  - name: "id"
-    type: "UUID"
-    protoType: "string"
-  - name: "isValid"
-    type: "Boolean"
-    protoType: "bool"
+  - name: "Process Customer"
+    cardinality: "ONE_TO_ONE"
+    inputTypeName: "CustomerInput"
+    outputTypeName: "CustomerOutput"
+  - name: "Validate Order"
+    cardinality: "ONE_TO_ONE"
+    inputTypeName: "CustomerOutput"
+    outputTypeName: "ValidationOutput"
 ```
 
 ### 3. Generate Application
@@ -241,33 +233,25 @@ my-pipeline-app/
 
 ## Field Type Mapping
 
-The framework supports a rich Java-centered type system with automatic protobuf conversion:
+Current templates use semantic v2 types. The compiler derives Java bindings and protobuf wire types from the semantic declaration:
 
-| Java Type | Protobuf Equivalent | Use Case |
-|-----------|-------------------|----------|
-| String | string | Text fields |
-| Integer | int32 | Small integer values |
-| Long | int64 | Large integer values |
-| Double | double | Floating-point numbers |
-| Boolean | bool | True/false values |
-| UUID | string | Unique identifiers |
-| BigDecimal | string | Precise decimal numbers |
-| Currency | string | Currency codes |
-| Path | string | File system paths |
-| `List<String>` | repeated string | String collections |
-| LocalDateTime | string | Date and time without zone |
-| LocalDate | string | Date only |
-| OffsetDateTime | string | Date and time with offset |
-| ZonedDateTime | string | Date and time with zone |
-| Instant | int64 | Timestamp (epoch milliseconds) |
-| Duration | int64 | Time duration (nanoseconds) |
-| Period | string | Date-based period |
-| URI | string | Uniform Resource Identifier |
-| URL | string | Uniform Resource Locator |
-| File | string | File system objects |
-| BigInteger | string | Large integers |
-| AtomicInteger | int32 | Thread-safe counters |
-| AtomicLong | int64 | Thread-safe large counters |
+| Semantic Type | Default Java Binding | Default Protobuf Binding |
+|---------------|----------------------|--------------------------|
+| `string` | `String` | `string` |
+| `bool` | `Boolean` | `bool` |
+| `int32` | `Integer` | `int32` |
+| `int64` | `Long` | `int64` |
+| `float32` | `Float` | `float` |
+| `float64` | `Double` | `double` |
+| `uuid` | `UUID` | `string` |
+| `decimal` | `BigDecimal` | `string` |
+| `currency` | `Currency` | `string` |
+| `timestamp` | `Instant` | `string` |
+| `datetime` | `LocalDateTime` | `string` |
+| `date` | `LocalDate` | `string` |
+| `duration` | `Duration` | `string` |
+| `uri` | `URI` | `string` |
+| `path` | `Path` | `string` |
 
 ### Automatic Conversion
 - MapStruct handles automatic conversion between Java and protobuf types for built-in types

@@ -2,6 +2,12 @@ package org.pipelineframework.processor.util;
 
 import com.google.protobuf.DescriptorProtos;
 import com.google.protobuf.Descriptors;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import org.pipelineframework.processor.ir.GrpcBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
@@ -14,6 +20,12 @@ import org.pipelineframework.processor.ir.StreamingShape;
 public class GrpcBindingResolver {
     private static final org.jboss.logging.Logger logger =
         org.jboss.logging.Logger.getLogger(GrpcBindingResolver.class);
+    private static final String ANY_PROTO_PATH = "google/protobuf/any.proto";
+    private static final String DURATION_PROTO_PATH = "google/protobuf/duration.proto";
+    private static final String EMPTY_PROTO_PATH = "google/protobuf/empty.proto";
+    private static final String STRUCT_PROTO_PATH = "google/protobuf/struct.proto";
+    private static final String TIMESTAMP_PROTO_PATH = "google/protobuf/timestamp.proto";
+    private static final String WRAPPERS_PROTO_PATH = "google/protobuf/wrappers.proto";
 
     /**
      * Default constructor for GrpcBindingResolver.
@@ -98,14 +110,22 @@ public class GrpcBindingResolver {
 
         // Build all file descriptors with proper dependency resolution
         // This handles complex dependency scenarios including imported files and transitive dependencies
-        java.util.Map<String, Descriptors.FileDescriptor> builtFileDescriptors = new java.util.HashMap<>();
+        Map<String, Descriptors.FileDescriptor> builtFileDescriptors = new HashMap<>();
+        seedWellKnownDescriptors(builtFileDescriptors);
+        Set<String> projectFileNames = new HashSet<>();
+        for (DescriptorProtos.FileDescriptorProto fileProto : descriptorSet.getFileList()) {
+            projectFileNames.add(fileProto.getName());
+        }
+        int builtProjectCount = (int) projectFileNames.stream()
+            .filter(builtFileDescriptors::containsKey)
+            .count();
 
         // Build file descriptors in dependency order using topological sort approach
         boolean allBuilt = false;
         int maxIterations = descriptorSet.getFileCount() * 2; // Prevent infinite loops
         int iterations = 0;
 
-        while (!allBuilt && iterations < maxIterations) {
+        while (!allBuilt && builtProjectCount < projectFileNames.size() && iterations < maxIterations) {
             allBuilt = true;
             iterations++;
 
@@ -128,7 +148,7 @@ public class GrpcBindingResolver {
 
                 if (allDependenciesBuilt) {
                     // Build this file descriptor with its dependencies
-                    java.util.List<Descriptors.FileDescriptor> dependencies = new java.util.ArrayList<>();
+                    List<Descriptors.FileDescriptor> dependencies = new ArrayList<>();
                     for (String dependencyName : fileProto.getDependencyList()) {
                         dependencies.add(builtFileDescriptors.get(dependencyName));
                     }
@@ -137,6 +157,9 @@ public class GrpcBindingResolver {
                         Descriptors.FileDescriptor[] depsArray = dependencies.toArray(new Descriptors.FileDescriptor[0]);
                         Descriptors.FileDescriptor fileDescriptor = Descriptors.FileDescriptor.buildFrom(fileProto, depsArray);
                         builtFileDescriptors.put(fileName, fileDescriptor);
+                        if (projectFileNames.contains(fileName)) {
+                            builtProjectCount++;
+                        }
                     } catch (Exception e) {
                         throw new IllegalStateException(
                             String.format("Build error for step '%s': Failed to build file descriptor for '%s': %s",
@@ -148,18 +171,19 @@ public class GrpcBindingResolver {
             }
         }
 
-        if (builtFileDescriptors.size() != descriptorSet.getFileCount()) {
-            java.util.Set<String> builtFiles = builtFileDescriptors.keySet();
-            java.util.Set<String> allFiles = new java.util.HashSet<>();
-            for (DescriptorProtos.FileDescriptorProto fileProto : descriptorSet.getFileList()) {
-                allFiles.add(fileProto.getName());
-            }
+        if (builtProjectCount != projectFileNames.size()) {
+            Set<String> builtFiles = builtFileDescriptors.keySet();
+            Set<String> allFiles = new HashSet<>(projectFileNames);
             allFiles.removeAll(builtFiles);
             String unbuiltFiles = String.join(", ", allFiles);
             String message = String.format(
                 "Build error for step '%s': Could not resolve all file descriptor dependencies after %d iterations. " +
                     "Built: %d, Expected: %d. Unbuilt files: [%s]",
-                stepModel.serviceName(), iterations, builtFileDescriptors.size(), descriptorSet.getFileCount(), unbuiltFiles);
+                stepModel.serviceName(),
+                iterations,
+                builtProjectCount,
+                projectFileNames.size(),
+                unbuiltFiles);
             logger.warn(message);
             throw new IllegalStateException(message);
         }
@@ -186,6 +210,15 @@ public class GrpcBindingResolver {
         }
 
         return foundService;
+    }
+
+    private void seedWellKnownDescriptors(Map<String, Descriptors.FileDescriptor> builtFileDescriptors) {
+        builtFileDescriptors.putIfAbsent(ANY_PROTO_PATH, com.google.protobuf.AnyProto.getDescriptor());
+        builtFileDescriptors.putIfAbsent(DURATION_PROTO_PATH, com.google.protobuf.DurationProto.getDescriptor());
+        builtFileDescriptors.putIfAbsent(EMPTY_PROTO_PATH, com.google.protobuf.EmptyProto.getDescriptor());
+        builtFileDescriptors.putIfAbsent(STRUCT_PROTO_PATH, com.google.protobuf.StructProto.getDescriptor());
+        builtFileDescriptors.putIfAbsent(TIMESTAMP_PROTO_PATH, com.google.protobuf.TimestampProto.getDescriptor());
+        builtFileDescriptors.putIfAbsent(WRAPPERS_PROTO_PATH, com.google.protobuf.WrappersProto.getDescriptor());
     }
 
     /**

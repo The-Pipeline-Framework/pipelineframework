@@ -1,41 +1,86 @@
-appName: "TPFGo Dispatch Pipeline"
-basePackage: "org.pipelineframework.tpfgo.dispatch"
-transport: "GRPC"
-platform: "COMPUTE"
+version: 2
+appName: TPFGo Dispatch Pipeline
+basePackage: org.pipelineframework.tpfgo.dispatch
+transport: GRPC
+platform: COMPUTE
+messages:
+  OrderReadyForDispatch:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: customerId
+        type: uuid
+      - number: 3
+        name: restaurantId
+        type: uuid
+      - number: 4
+        name: totalAmount
+        type: decimal
+      - number: 5
+        name: currency
+        type: string
+      - number: 6
+        name: readyAt
+        type: timestamp
+      - number: 7
+        name: kitchenTicketId
+        type: uuid
+      - number: 8
+        name: lineageDigest
+        type: string
+  DeliveryAssigned:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: customerId
+        type: uuid
+      - number: 3
+        name: restaurantId
+        type: uuid
+      - number: 4
+        name: totalAmount
+        type: decimal
+      - number: 5
+        name: currency
+        type: string
+      - number: 6
+        name: kitchenTicketId
+        type: uuid
+      - number: 7
+        name: dispatchId
+        type: uuid
+      - number: 8
+        name: courierId
+        type: uuid
+      - number: 9
+        name: etaMinutes
+        type: int32
+      - number: 10
+        name: assignedAt
+        type: timestamp
+      - number: 11
+        name: lineageDigest
+        type: string
+steps:
+  - name: Dispatch Assign Courier
+    service: org.pipelineframework.tpfgo.dispatch.dispatch_assign_courier.service.ProcessDispatchAssignCourierService
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.tpfgo.common.domain.OrderReadyForDispatch
+    inputTypeName: OrderReadyForDispatch
+    inboundMapper: org.pipelineframework.tpfgo.dispatch.dispatch_assign_courier.service.OrderReadyForDispatchMapper
+    output: org.pipelineframework.tpfgo.common.domain.DeliveryAssigned
+    outputTypeName: DeliveryAssigned
+    outboundMapper: org.pipelineframework.tpfgo.dispatch.dispatch_assign_courier.service.DeliveryAssignedMapper
 input:
   subscription:
-    publication: "tpfgo.kitchen.order-ready.v1"
-    mapper: "org.pipelineframework.tpfgo.dispatch.dispatch_assign_courier.service.OrderReadyForDispatchMapper"
-steps:
-  - name: "Dispatch Assign Courier"
-    service: "org.pipelineframework.tpfgo.dispatch.dispatch_assign_courier.service.ProcessDispatchAssignCourierService"
-    cardinality: "ONE_TO_ONE"
-    input: "org.pipelineframework.tpfgo.common.domain.OrderReadyForDispatch"
-    inputTypeName: "OrderReadyForDispatch"
-    inputFields:
-      - { name: "orderId", type: "UUID", protoType: "string" }
-      - { name: "customerId", type: "UUID", protoType: "string" }
-      - { name: "restaurantId", type: "UUID", protoType: "string" }
-      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
-      - { name: "currency", type: "String", protoType: "string" }
-      - { name: "readyAt", type: "Instant", protoType: "string" }
-      - { name: "kitchenTicketId", type: "UUID", protoType: "string" }
-      - { name: "lineageDigest", type: "String", protoType: "string" }
-    output: "org.pipelineframework.tpfgo.common.domain.DeliveryAssigned"
-    outputTypeName: "DeliveryAssigned"
-    outputFields:
-      - { name: "orderId", type: "UUID", protoType: "string" }
-      - { name: "customerId", type: "UUID", protoType: "string" }
-      - { name: "restaurantId", type: "UUID", protoType: "string" }
-      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
-      - { name: "currency", type: "String", protoType: "string" }
-      - { name: "kitchenTicketId", type: "UUID", protoType: "string" }
-      - { name: "dispatchId", type: "UUID", protoType: "string" }
-      - { name: "courierId", type: "UUID", protoType: "string" }
-      - { name: "etaMinutes", type: "Integer", protoType: "int32" }
-      - { name: "assignedAt", type: "Instant", protoType: "string" }
-      - { name: "lineageDigest", type: "String", protoType: "string" }
+    publication: tpfgo.kitchen.order-ready.v1
+    mapper: org.pipelineframework.tpfgo.dispatch.dispatch_assign_courier.service.OrderReadyForDispatchMapper
 output:
   checkpoint:
-    publication: "tpfgo.dispatch.delivery-assigned.v1"
-    idempotencyKeyFields: [ "orderId" ]
+    publication: tpfgo.dispatch.delivery-assigned.v1
+    idempotencyKeyFields:
+      - orderId

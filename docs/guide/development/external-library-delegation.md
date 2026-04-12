@@ -41,12 +41,17 @@ Transport Layer (grpc/http/etc.)
 
 ### Internal Steps
 
-To define an internal step that references a service annotated with @PipelineStep:
+To define an internal step that references a service annotated with `@PipelineStep`, keep the contract in YAML:
 
 ```yaml
 steps:
   - name: process-payment
     service: com.app.payment.ProcessPaymentService
+    cardinality: ONE_TO_ONE
+    input: com.app.domain.PaymentRecord
+    output: com.app.domain.PaymentStatus
+    inboundMapper: com.app.payment.PaymentRecordMapper
+    outboundMapper: com.app.payment.PaymentStatusMapper
 ```
 
 ### Delegated Steps
@@ -75,6 +80,11 @@ steps:
   # Internal step referencing a service annotated with @PipelineStep
   - name: process-payment
     service: com.app.payment.ProcessPaymentService
+    cardinality: ONE_TO_ONE
+    input: com.app.domain.PaymentRecord
+    output: com.app.domain.PaymentStatus
+    inboundMapper: com.app.payment.PaymentRecordMapper
+    outboundMapper: com.app.payment.PaymentStatusMapper
     
   # Delegated step referencing an external operator service
   - name: embed-text
@@ -99,16 +109,10 @@ steps:
 
 ## Creating Internal Services
 
-For internal steps, you still need to create services annotated with @PipelineStep:
+For internal steps, you still need to create services annotated with `@PipelineStep`:
 
 ```java
-@PipelineStep(
-   inputType = PaymentRecord.class,
-   outputType = PaymentStatus.class,
-   stepType = StepOneToOne.class,
-   inboundMapper = PaymentRecordMapper.class,
-   outboundMapper = PaymentStatusMapper.class
-)
+@PipelineStep
 @ApplicationScoped
 public class ProcessPaymentService implements ReactiveService<PaymentRecord, PaymentStatus> {
     @Override
@@ -117,6 +121,8 @@ public class ProcessPaymentService implements ReactiveService<PaymentRecord, Pay
     }
 }
 ```
+
+The annotation is the marker plus Java-local execution hints. Current internal-step contract metadata belongs in YAML.
 
 ## Using Operator Delegation
 
@@ -309,6 +315,9 @@ public class ProcessPaymentService implements ReactiveService<PaymentRecord, Pay
 steps:
   - name: process-payment
     service: com.app.payment.ProcessPaymentService
+    cardinality: ONE_TO_ONE
+    input: com.app.domain.PaymentRecord
+    output: com.app.domain.PaymentStatus
 ```
 
 ## Example
@@ -324,6 +333,9 @@ steps:
   # Internal step
   - name: validate-payment
     service: com.app.payment.ValidatePaymentService
+    cardinality: ONE_TO_ONE
+    input: com.app.domain.PaymentRequest
+    output: com.app.domain.PaymentRequest
     
   # Delegated step to external fraud detection service (using domain types with operator mapper)
   - name: detect-fraud
@@ -341,10 +353,7 @@ steps:
 
 **ValidatePaymentService.java**:
 ```java
-@PipelineStep(
-   inputType = PaymentRequest.class,
-   outputType = PaymentRequest.class
-)
+@PipelineStep
 public class ValidatePaymentService implements ReactiveService<PaymentRequest, PaymentRequest> {
     @Override
     public Uni<PaymentRequest> process(PaymentRequest input) {

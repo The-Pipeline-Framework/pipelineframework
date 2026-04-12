@@ -33,6 +33,7 @@ class PipelineProtoGeneratorTest {
     @Test
     void generatesStepAndOrchestratorProtos() throws Exception {
         String yaml = """
+            version: 2
             appName: "Test App"
             basePackage: "com.example.test"
             transport: "GRPC"
@@ -44,31 +45,31 @@ class PipelineProtoGeneratorTest {
                 config:
                   enabledTargets:
                     - "GRPC_SERVICE"
+            messages:
+              FooInput:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "uuid"
+              FooOutput:
+                fields:
+                  - number: 2
+                    name: "status"
+                    type: "string"
+              BarOutput:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "uuid"
             steps:
               - name: "Process Foo"
                 cardinality: "ONE_TO_ONE"
                 inputTypeName: "FooInput"
-                inputFields:
-                  - name: "id"
-                    type: "UUID"
-                    protoType: "string"
                 outputTypeName: "FooOutput"
-                outputFields:
-                  - name: "status"
-                    type: "String"
-                    protoType: "string"
               - name: "Process Bar"
                 cardinality: "EXPANSION"
                 inputTypeName: "FooOutput"
-                inputFields:
-                  - name: "status"
-                    type: "String"
-                    protoType: "string"
                 outputTypeName: "BarOutput"
-                outputFields:
-                  - name: "id"
-                    type: "UUID"
-                    protoType: "string"
             """;
         Path configPath = tempDir.resolve("pipeline-config.yaml");
         Files.writeString(configPath, yaml);
@@ -80,33 +81,36 @@ class PipelineProtoGeneratorTest {
         Path fooProtoPath = outputDir.resolve("process-foo-svc.proto");
         Path barProtoPath = outputDir.resolve("process-bar-svc.proto");
         Path orchestratorProtoPath = outputDir.resolve("orchestrator.proto");
+        Path typesProtoPath = outputDir.resolve("pipeline-types.proto");
 
         assertTrue(Files.exists(fooProtoPath));
         assertTrue(Files.exists(barProtoPath));
         assertTrue(Files.exists(orchestratorProtoPath));
+        assertTrue(Files.exists(typesProtoPath));
 
         String fooProto = Files.readString(fooProtoPath);
+        String typesProto = Files.readString(typesProtoPath);
         assertTrue(fooProto.contains("package com.example.test;"));
         assertTrue(fooProto.contains("option java_package = \"com.example.test.grpc\";"));
-        assertTrue(fooProto.contains("message FooInput"));
-        assertTrue(fooProto.contains("string id = 1;"));
-        assertTrue(fooProto.contains("message FooOutput"));
-        assertTrue(fooProto.contains("string status = 2;"));
+        assertTrue(fooProto.contains("import \"pipeline-types.proto\";"));
         assertTrue(fooProto.contains("service ProcessFooService"));
         assertTrue(fooProto.contains("rpc remoteProcess(FooInput) returns (FooOutput);"));
         assertTrue(fooProto.contains("service ObservePersistenceFooOutputSideEffectService"));
+        assertTrue(typesProto.contains("message FooInput"));
+        assertTrue(typesProto.contains("string id = 1;"));
+        assertTrue(typesProto.contains("message FooOutput"));
+        assertTrue(typesProto.contains("string status = 2;"));
 
         String barProto = Files.readString(barProtoPath);
-        assertTrue(barProto.contains("import \"process-foo-svc.proto\";"));
-        assertTrue(barProto.contains("message BarOutput"));
+        assertTrue(barProto.contains("import \"pipeline-types.proto\";"));
         assertTrue(barProto.contains("service ProcessBarService"));
         assertTrue(barProto.contains("rpc remoteProcess(FooOutput) returns (stream BarOutput);"));
         assertTrue(barProto.contains("service ObservePersistenceBarOutputSideEffectService"));
+        assertTrue(typesProto.contains("message BarOutput"));
 
         String orchestratorProto = Files.readString(orchestratorProtoPath);
         assertTrue(orchestratorProto.contains("package com.example.test;"));
-        assertTrue(orchestratorProto.contains("import \"process-foo-svc.proto\";"));
-        assertTrue(orchestratorProto.contains("import \"process-bar-svc.proto\";"));
+        assertTrue(orchestratorProto.contains("import \"pipeline-types.proto\";"));
         assertTrue(orchestratorProto.contains("service OrchestratorService"));
         assertTrue(orchestratorProto.contains("rpc Run (FooInput) returns (stream BarOutput);"));
         assertTrue(orchestratorProto.contains("rpc Ingest (stream FooInput) returns (stream BarOutput);"));
@@ -127,19 +131,23 @@ class PipelineProtoGeneratorTest {
     @Test
     void generatesProtoWithEmptyInputFields() throws Exception {
         String yaml = """
+            version: 2
             appName: "Empty Fields Test"
             basePackage: "com.example.empty"
             transport: "GRPC"
+            messages:
+              ItemInput:
+                fields: []
+              ItemOutput:
+                fields:
+                  - number: 1
+                    name: "result"
+                    type: "string"
             steps:
               - name: "Process Item"
                 cardinality: "ONE_TO_ONE"
                 inputTypeName: "ItemInput"
-                inputFields: []
                 outputTypeName: "ItemOutput"
-                outputFields:
-                  - name: "result"
-                    type: "String"
-                    protoType: "string"
             """;
         Path configPath = tempDir.resolve("empty-fields-config.yaml");
         Files.writeString(configPath, yaml);
@@ -150,32 +158,40 @@ class PipelineProtoGeneratorTest {
 
         Path itemProtoPath = outputDir.resolve("process-item-svc.proto");
         assertTrue(Files.exists(itemProtoPath));
+        Path typesProtoPath = outputDir.resolve("pipeline-types.proto");
+        assertTrue(Files.exists(typesProtoPath));
 
         String itemProto = Files.readString(itemProtoPath);
-        assertTrue(itemProto.contains("message ItemInput"));
-        assertTrue(itemProto.contains("message ItemOutput"));
-        assertTrue(itemProto.contains("string result = 1;"));
+        String typesProto = Files.readString(typesProtoPath);
+        assertTrue(itemProto.contains("import \"pipeline-types.proto\";"));
+        assertTrue(typesProto.contains("message ItemInput"));
+        assertTrue(typesProto.contains("message ItemOutput"));
+        assertTrue(typesProto.contains("string result = 1;"));
     }
 
     @Test
     void handlesRestTransportWithoutGeneratingOrchestratorProto() throws Exception {
         String yaml = """
+            version: 2
             appName: "REST Test"
             basePackage: "com.example.rest"
             transport: "REST"
+            messages:
+              DataInput:
+                fields:
+                  - number: 1
+                    name: "data"
+                    type: "string"
+              DataOutput:
+                fields:
+                  - number: 1
+                    name: "result"
+                    type: "string"
             steps:
               - name: "Process Data"
                 cardinality: "ONE_TO_ONE"
                 inputTypeName: "DataInput"
-                inputFields:
-                  - name: "data"
-                    type: "String"
-                    protoType: "string"
                 outputTypeName: "DataOutput"
-                outputFields:
-                  - name: "result"
-                    type: "String"
-                    protoType: "string"
             """;
         Path configPath = tempDir.resolve("rest-config.yaml");
         Files.writeString(configPath, yaml);
@@ -194,22 +210,28 @@ class PipelineProtoGeneratorTest {
     @Test
     void generatesProtoForListFields() throws Exception {
         String yaml = """
+            version: 2
             appName: "List Fields Test"
             basePackage: "com.example.list"
             transport: "GRPC"
+            messages:
+              TagsInput:
+                fields:
+                  - number: 1
+                    name: "tags"
+                    type: "string"
+                    repeated: true
+              TagsOutput:
+                fields:
+                  - number: 2
+                    name: "processedTags"
+                    type: "string"
+                    repeated: true
             steps:
               - name: "Process Tags"
                 cardinality: "ONE_TO_ONE"
                 inputTypeName: "TagsInput"
-                inputFields:
-                  - name: "tags"
-                    type: "List<String>"
-                    protoType: "string"
                 outputTypeName: "TagsOutput"
-                outputFields:
-                  - name: "processedTags"
-                    type: "List<String>"
-                    protoType: "string"
             """;
         Path configPath = tempDir.resolve("list-config.yaml");
         Files.writeString(configPath, yaml);
@@ -220,31 +242,39 @@ class PipelineProtoGeneratorTest {
 
         Path tagsProtoPath = outputDir.resolve("process-tags-svc.proto");
         assertTrue(Files.exists(tagsProtoPath));
+        Path typesProtoPath = outputDir.resolve("pipeline-types.proto");
+        assertTrue(Files.exists(typesProtoPath));
 
-        String tagsProto = Files.readString(tagsProtoPath);
-        assertTrue(tagsProto.contains("repeated string tags = 1;"));
-        assertTrue(tagsProto.contains("repeated string processedTags = 2;"));
+        String typesProto = Files.readString(typesProtoPath);
+        assertTrue(typesProto.contains("repeated string tags = 1;"));
+        assertTrue(typesProto.contains("repeated string processedTags = 2;"));
     }
 
     @Test
     void generatesProtoForMapFields() throws Exception {
         String yaml = """
+            version: 2
             appName: "Map Fields Test"
             basePackage: "com.example.map"
             transport: "GRPC"
+            messages:
+              MetadataInput:
+                fields:
+                  - number: 1
+                    name: "metadata"
+                    type: "map"
+                    keyType: "string"
+                    valueType: "string"
+              MetadataOutput:
+                fields:
+                  - number: 1
+                    name: "processed"
+                    type: "string"
             steps:
               - name: "Process Metadata"
                 cardinality: "ONE_TO_ONE"
                 inputTypeName: "MetadataInput"
-                inputFields:
-                  - name: "metadata"
-                    type: "Map<String, String>"
-                    protoType: "string"
                 outputTypeName: "MetadataOutput"
-                outputFields:
-                  - name: "processed"
-                    type: "String"
-                    protoType: "string"
             """;
         Path configPath = tempDir.resolve("map-config.yaml");
         Files.writeString(configPath, yaml);
@@ -255,14 +285,17 @@ class PipelineProtoGeneratorTest {
 
         Path metadataProtoPath = outputDir.resolve("process-metadata-svc.proto");
         assertTrue(Files.exists(metadataProtoPath));
+        Path typesProtoPath = outputDir.resolve("pipeline-types.proto");
+        assertTrue(Files.exists(typesProtoPath));
 
-        String metadataProto = Files.readString(metadataProtoPath);
-        assertTrue(metadataProto.contains("map<string, string> metadata = 1;"));
+        String typesProto = Files.readString(typesProtoPath);
+        assertTrue(typesProto.contains("map<string, string> metadata = 1;"));
     }
 
     @Test
     void generatesAspectServicesForBeforeStepAspects() throws Exception {
         String yaml = """
+            version: 2
             appName: "Before Aspect Test"
             basePackage: "com.example.before"
             transport: "GRPC"
@@ -274,19 +307,22 @@ class PipelineProtoGeneratorTest {
                 config:
                   enabledTargets:
                     - "GRPC_SERVICE"
+            messages:
+              ItemInput:
+                fields:
+                  - number: 1
+                    name: "value"
+                    type: "string"
+              ItemOutput:
+                fields:
+                  - number: 1
+                    name: "result"
+                    type: "string"
             steps:
               - name: "Process Item"
                 cardinality: "ONE_TO_ONE"
                 inputTypeName: "ItemInput"
-                inputFields:
-                  - name: "value"
-                    type: "String"
-                    protoType: "string"
                 outputTypeName: "ItemOutput"
-                outputFields:
-                  - name: "result"
-                    type: "String"
-                    protoType: "string"
             """;
         Path configPath = tempDir.resolve("before-aspect-config.yaml");
         Files.writeString(configPath, yaml);
@@ -305,22 +341,26 @@ class PipelineProtoGeneratorTest {
     @Test
     void generatesManyToManyServiceSignature() throws Exception {
         String yaml = """
+            version: 2
             appName: "Many to Many Test"
             basePackage: "com.example.m2m"
             transport: "GRPC"
+            messages:
+              BatchInput:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "string"
+              BatchOutput:
+                fields:
+                  - number: 1
+                    name: "result"
+                    type: "string"
             steps:
               - name: "Process Batch"
                 cardinality: "MANY_TO_MANY"
                 inputTypeName: "BatchInput"
-                inputFields:
-                  - name: "id"
-                    type: "String"
-                    protoType: "string"
                 outputTypeName: "BatchOutput"
-                outputFields:
-                  - name: "result"
-                    type: "String"
-                    protoType: "string"
             """;
         Path configPath = tempDir.resolve("m2m-config.yaml");
         Files.writeString(configPath, yaml);
@@ -380,34 +420,35 @@ class PipelineProtoGeneratorTest {
     @Test
     void supportsOneToManyAndManyToOneRelationships() throws Exception {
         String yaml = """
+            version: 2
             appName: "Alias Test"
             basePackage: "com.example.alias"
             transport: "GRPC"
+            messages:
+              DocInput:
+                fields:
+                  - number: 1
+                    name: "docId"
+                    type: "uuid"
+              TokenBatch:
+                fields:
+                  - number: 2
+                    name: "tokens"
+                    type: "string"
+              IndexAck:
+                fields:
+                  - number: 2
+                    name: "status"
+                    type: "string"
             steps:
               - name: "Tokenize"
                 cardinality: "ONE_TO_MANY"
                 inputTypeName: "DocInput"
-                inputFields:
-                  - name: "docId"
-                    type: "UUID"
-                    protoType: "string"
                 outputTypeName: "TokenBatch"
-                outputFields:
-                  - name: "tokens"
-                    type: "String"
-                    protoType: "string"
               - name: "Index"
                 cardinality: "MANY_TO_ONE"
                 inputTypeName: "TokenBatch"
-                inputFields:
-                  - name: "tokens"
-                    type: "String"
-                    protoType: "string"
                 outputTypeName: "IndexAck"
-                outputFields:
-                  - name: "status"
-                    type: "String"
-                    protoType: "string"
             """;
         Path configPath = tempDir.resolve("pipeline-alias-config.yaml");
         Files.writeString(configPath, yaml);
@@ -422,27 +463,30 @@ class PipelineProtoGeneratorTest {
         assertTrue(Files.exists(tokenizeProtoPath));
         assertTrue(Files.exists(indexProtoPath));
         assertTrue(Files.exists(orchestratorProtoPath));
+        Path typesProtoPath = outputDir.resolve("pipeline-types.proto");
+        assertTrue(Files.exists(typesProtoPath));
 
         String tokenizeProto = Files.readString(tokenizeProtoPath);
         String indexProto = Files.readString(indexProtoPath);
         String orchestratorProto = Files.readString(orchestratorProtoPath);
+        String typesProto = Files.readString(typesProtoPath);
 
         assertTrue(tokenizeProto.contains("package com.example.alias;"));
-        assertTrue(tokenizeProto.contains("message DocInput"));
-        assertTrue(tokenizeProto.contains("string docId = 1;"));
-        assertTrue(tokenizeProto.contains("message TokenBatch"));
-        assertTrue(tokenizeProto.contains("string tokens = 2;"));
+        assertTrue(tokenizeProto.contains("import \"pipeline-types.proto\";"));
         assertTrue(tokenizeProto.contains("rpc remoteProcess(DocInput) returns (stream TokenBatch);"));
+        assertTrue(typesProto.contains("message DocInput"));
+        assertTrue(typesProto.contains("string docId = 1;"));
+        assertTrue(typesProto.contains("message TokenBatch"));
+        assertTrue(typesProto.contains("string tokens = 2;"));
 
         assertTrue(indexProto.contains("package com.example.alias;"));
-        assertTrue(indexProto.contains("import \"tokenize-svc.proto\";"));
-        assertTrue(indexProto.contains("message IndexAck"));
-        assertTrue(indexProto.contains("string status = 2;"));
+        assertTrue(indexProto.contains("import \"pipeline-types.proto\";"));
         assertTrue(indexProto.contains("rpc remoteProcess(stream TokenBatch) returns (IndexAck);"));
+        assertTrue(typesProto.contains("message IndexAck"));
+        assertTrue(typesProto.contains("string status = 2;"));
 
         assertTrue(orchestratorProto.contains("package com.example.alias;"));
-        assertTrue(orchestratorProto.contains("import \"tokenize-svc.proto\";"));
-        assertTrue(orchestratorProto.contains("import \"index-svc.proto\";"));
+        assertTrue(orchestratorProto.contains("import \"pipeline-types.proto\";"));
         assertTrue(orchestratorProto.contains("service OrchestratorService"));
         assertTrue(orchestratorProto.contains("rpc Run (DocInput) returns (IndexAck);"));
         assertTrue(orchestratorProto.contains("rpc RunAsync (RunAsyncRequest) returns (RunAsyncResponse);"));

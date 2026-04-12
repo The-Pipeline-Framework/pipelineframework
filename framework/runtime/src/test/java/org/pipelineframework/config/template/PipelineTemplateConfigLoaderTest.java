@@ -22,6 +22,7 @@ class PipelineTemplateConfigLoaderTest {
     @Test
     void loadsTemplateConfigWithDefaults() throws Exception {
         String yaml = """
+            version: 2
             appName: "Test App"
             basePackage: "com.example.test"
             transport: "GRPC"
@@ -34,19 +35,24 @@ class PipelineTemplateConfigLoaderTest {
                 config:
                   enabledTargets:
                     - "GRPC_SERVICE"
+            messages:
+              FooInput:
+                fields:
+                  - number: 1
+                    name: "id"
+                    type: "uuid"
+              FooOutput:
+                fields:
+                  - number: 1
+                    name: "status"
+                    type: "string"
             steps:
               - name: "Process Foo"
                 cardinality: "ONE_TO_ONE"
                 inputTypeName: "FooInput"
-                inputFields:
-                  - name: "id"
-                    type: "UUID"
-                    protoType: "string"
+                inboundMapper: "com.example.test.mapper.FooInputMapper"
                 outputTypeName: "FooOutput"
-                outputFields:
-                  - name: "status"
-                    type: "String"
-                    protoType: "string"
+                outboundMapper: "com.example.test.mapper.FooOutputMapper"
             """;
         Path configPath = tempDir.resolve("pipeline-config.yaml");
         Files.writeString(configPath, yaml);
@@ -66,10 +72,52 @@ class PipelineTemplateConfigLoaderTest {
         assertEquals("ONE_TO_ONE", step.cardinality());
         assertEquals("FooInput", step.inputTypeName());
         assertEquals("FooOutput", step.outputTypeName());
+        assertEquals("com.example.test.mapper.FooInputMapper", step.inboundMapper());
+        assertEquals("com.example.test.mapper.FooOutputMapper", step.outboundMapper());
 
         Map<String, PipelineTemplateAspect> aspects = config.aspects();
         assertNotNull(aspects);
         assertTrue(aspects.containsKey("persistence"));
+    }
+
+    @Test
+    void stillLoadsLegacyTemplateFieldDefinitions() throws Exception {
+        String yaml = """
+            appName: "Legacy Test App"
+            basePackage: "com.example.test"
+            transport: "GRPC"
+            steps:
+              - name: "Process Foo"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "FooInput"
+                inputFields:
+                  - name: "id"
+                    type: "UUID"
+                    protoType: "string"
+                outputTypeName: "FooOutput"
+                outputFields:
+                  - name: "status"
+                    type: "String"
+                    protoType: "string"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-legacy.yaml");
+        Files.writeString(configPath, yaml);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+
+        assertEquals("Legacy Test App", config.appName());
+        assertEquals(1, config.steps().size());
+        PipelineTemplateStep step = config.steps().getFirst();
+        assertEquals("FooInput", step.inputTypeName());
+        assertEquals("FooOutput", step.outputTypeName());
+        assertEquals(1, step.inputFields().size());
+        assertEquals("id", step.inputFields().getFirst().name());
+        assertEquals("UUID", step.inputFields().getFirst().type());
+        assertEquals("string", step.inputFields().getFirst().protoType());
+        assertEquals(1, step.outputFields().size());
+        assertEquals("status", step.outputFields().getFirst().name());
+        assertEquals("String", step.outputFields().getFirst().type());
+        assertEquals("string", step.outputFields().getFirst().protoType());
     }
 
     @Test

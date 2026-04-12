@@ -17,7 +17,12 @@ class PipelineYamlConfigLoaderTest {
             basePackage: "com.example"
             transport: "GRPC"
             platform: "COMPUTE"
-            steps: []
+            steps:
+              - name: "Process Foo"
+                inputTypeName: "com.example.domain.FooInput"
+                inboundMapper: "com.example.mapper.FooInputMapper"
+                outputTypeName: "com.example.domain.FooOutput"
+                outboundMapper: "com.example.mapper.FooOutputMapper"
             input:
               subscription:
                 publication: "orders-ready"
@@ -34,6 +39,12 @@ class PipelineYamlConfigLoaderTest {
         assertNotNull(config.output());
         assertEquals("orders-dispatched", config.output().checkpoint().publication());
         assertEquals(List.of("orderId", "customerId"), config.output().checkpoint().idempotencyKeyFields());
+        assertEquals(1, config.steps().size());
+        PipelineYamlStep step = config.steps().getFirst();
+        assertEquals("com.example.domain.FooInput", step.inputType());
+        assertEquals("com.example.mapper.FooInputMapper", step.inboundMapper());
+        assertEquals("com.example.domain.FooOutput", step.outputType());
+        assertEquals("com.example.mapper.FooOutputMapper", step.outboundMapper());
     }
 
     @Test

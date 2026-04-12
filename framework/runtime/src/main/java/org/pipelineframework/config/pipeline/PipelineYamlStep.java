@@ -21,11 +21,18 @@ package org.pipelineframework.config.pipeline;
  *
  * @param name the step name
  * @param inputType the input type name
+ * @param inboundMapper the optional inbound mapper class name
  * @param outputType the output type name
+ * @param outboundMapper the optional outbound mapper class name
  */
 public record PipelineYamlStep(
     String name,
     String inputType,
-    String outputType
+    String inboundMapper,
+    String outputType,
+    String outboundMapper
 ) {
+    public PipelineYamlStep(String name, String inputType, String outputType) {
+        this(name, inputType, null, outputType, null);
+    }
 }

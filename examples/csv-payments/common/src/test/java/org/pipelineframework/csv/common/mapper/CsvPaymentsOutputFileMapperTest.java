@@ -22,7 +22,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.csv.common.domain.CsvPaymentsOutputFile;
-import org.pipelineframework.csv.grpc.ProcessCsvPaymentsOutputFileSvc;
+import org.pipelineframework.csv.grpc.PipelineTypes;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -60,7 +60,7 @@ class CsvPaymentsOutputFileMapperTest {
         domain.setCsvFolderPath(Path.of("/test/output"));
 
         // When
-        ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile grpc = mapper.toDtoToGrpc(domain);
+        PipelineTypes.CsvPaymentsOutputFile grpc = mapper.toDtoToGrpc(domain);
 
         // Then
         assertNotNull(grpc);
@@ -74,8 +74,8 @@ class CsvPaymentsOutputFileMapperTest {
         // Given
         UUID id = UUID.randomUUID();
 
-        ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile grpc =
-                ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile.newBuilder()
+        PipelineTypes.CsvPaymentsOutputFile grpc =
+                PipelineTypes.CsvPaymentsOutputFile.newBuilder()
                         .setId(id.toString())
                         .setFilepath("/test/output/file.csv")
                         .setCsvFolderPath("/test/output")
@@ -94,13 +94,13 @@ class CsvPaymentsOutputFileMapperTest {
     // @Test
     // void testSerializeDeserialize() throws Exception {
     //   // Build a simple DTO-like object for testing
-    //   ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile.Builder builder =
-    //       ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile.newBuilder()
+    //   PipelineTypes.CsvPaymentsOutputFile.Builder builder =
+    //       PipelineTypes.CsvPaymentsOutputFile.newBuilder()
     //           .setId(UUID.randomUUID().toString())
     //           .setFilepath("/test/output/file.csv")
     //           .setCsvFolderPath("/test/output");
     //
-    //   ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile file = builder.build();
+    //   PipelineTypes.CsvPaymentsOutputFile file = builder.build();
 
     //   ObjectMapper mapper = new ObjectMapper();
     //
@@ -108,8 +108,8 @@ class CsvPaymentsOutputFileMapperTest {
     //   String json = mapper.writeValueAsString(file);
 
     //   // Deserialize back
-    //   ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile deserialized = mapper.readValue(json,
-    // ProcessCsvPaymentsOutputFileSvc.CsvPaymentsOutputFile.class);
+    //   PipelineTypes.CsvPaymentsOutputFile deserialized = mapper.readValue(json,
+    // PipelineTypes.CsvPaymentsOutputFile.class);
 
     //   // Assert equality
     //   assertEquals(file, deserialized);

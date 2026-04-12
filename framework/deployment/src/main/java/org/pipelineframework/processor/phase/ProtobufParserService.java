@@ -8,6 +8,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -31,6 +32,7 @@ public class ProtobufParserService {
 
     private static final Logger LOG = Logger.getLogger(ProtobufParserService.class);
     private static final int HASH_SUFFIX_LENGTH = 12;
+    private static final String EMPTY_PROTO_PATH = "google/protobuf/empty.proto";
 
     private final GenerationPathResolver pathResolver;
 
@@ -57,54 +59,76 @@ public class ProtobufParserService {
         }
         DeploymentRole role = ctx.isPluginHost() ? DeploymentRole.PLUGIN_SERVER : DeploymentRole.PIPELINE_SERVER;
         Path outputDir = pathResolver.resolveRoleOutputDir(ctx, role);
-        Set<String> generated = new HashSet<>();
+        Map<String, ParserCandidate> parserCandidates = new LinkedHashMap<>();
 
         for (Descriptors.FileDescriptor fileDescriptor : fileDescriptors.values()) {
             for (Descriptors.Descriptor descriptor : fileDescriptor.getMessageTypes()) {
-                collectAndGenerateParser(ctx, descriptor, outputDir, generated);
+                collectParserCandidates(descriptor, parserCandidates);
+            }
+        }
+
+        Set<String> generated = new HashSet<>();
+        for (ParserCandidate candidate : parserCandidates.values()) {
+            String parserPackage = candidate.messageType().packageName().isBlank()
+                ? "pipeline"
+                : candidate.messageType().packageName() + ".pipeline";
+            String parserName = "Proto" + String.join("_", candidate.messageType().simpleNames()) + "Parser";
+            String fqcn = parserPackage + "." + parserName;
+            if (!generated.add(fqcn)) {
+                continue;
+            }
+            TypeSpec parserClass = buildParserClass(candidate.messageType(), candidate.schemaFullName(), parserName);
+            try {
+                JavaFile.builder(parserPackage, parserClass).build().writeTo(outputDir);
+            } catch (IOException e) {
+                if (ctx.getProcessingEnv() != null) {
+                    ctx.getProcessingEnv().getMessager().printMessage(
+                        javax.tools.Diagnostic.Kind.WARNING,
+                        "Failed to generate protobuf parser for '" + candidate.messageType() + "': " + e.getMessage());
+                } else {
+                    LOG.warnf(e,
+                        "Failed to generate protobuf parser for '%s' in package '%s' at '%s'",
+                        candidate.messageType(),
+                        parserPackage,
+                        outputDir);
+                }
             }
         }
     }
 
-    private void collectAndGenerateParser(
-            PipelineCompilationContext ctx,
+    private void collectParserCandidates(
             Descriptors.Descriptor descriptor,
-            Path outputDir,
-            Set<String> generated) {
+            Map<String, ParserCandidate> parserCandidates) {
         if (descriptor == null) {
             return;
         }
         if (!descriptor.getOptions().getMapEntry()) {
             ClassName messageType = resolveMessageClassName(descriptor);
             if (messageType != null) {
-                String parserPackage = messageType.packageName().isBlank()
-                    ? "pipeline"
-                    : messageType.packageName() + ".pipeline";
-                String parserName = "Proto" + String.join("_", messageType.simpleNames()) + "Parser";
-                String fqcn = parserPackage + "." + parserName;
-                if (generated.add(fqcn)) {
-                    TypeSpec parserClass = buildParserClass(messageType, descriptor.getFullName(), parserName);
-                    try {
-                        JavaFile.builder(parserPackage, parserClass).build().writeTo(outputDir);
-                    } catch (IOException e) {
-                        if (ctx.getProcessingEnv() != null) {
-                            ctx.getProcessingEnv().getMessager().printMessage(
-                                javax.tools.Diagnostic.Kind.WARNING,
-                                "Failed to generate protobuf parser for '" + messageType + "': " + e.getMessage());
-                        } else {
-                            LOG.warnf(e,
-                                "Failed to generate protobuf parser for '%s' in package '%s' at '%s'",
-                                messageType,
-                                parserPackage,
-                                outputDir);
-                        }
-                    }
+                String schemaFullName = descriptor.getFullName();
+                ParserCandidate existing = parserCandidates.get(schemaFullName);
+                ParserCandidate candidate = new ParserCandidate(schemaFullName, messageType);
+                if (existing == null || isPreferredCandidate(candidate, existing)) {
+                    parserCandidates.put(schemaFullName, candidate);
                 }
             }
         }
         for (Descriptors.Descriptor nested : descriptor.getNestedTypes()) {
-            collectAndGenerateParser(ctx, nested, outputDir, generated);
+            collectParserCandidates(nested, parserCandidates);
         }
+    }
+
+    private boolean isPreferredCandidate(ParserCandidate candidate, ParserCandidate existing) {
+        boolean candidateUsesPipelineTypes = usesPipelineTypes(candidate.messageType());
+        boolean existingUsesPipelineTypes = usesPipelineTypes(existing.messageType());
+        if (candidateUsesPipelineTypes != existingUsesPipelineTypes) {
+            return candidateUsesPipelineTypes;
+        }
+        return false;
+    }
+
+    private boolean usesPipelineTypes(ClassName messageType) {
+        return messageType.simpleNames().contains("PipelineTypes");
     }
 
     private TypeSpec buildParserClass(ClassName messageType, String schemaFullName, String parserName) {
@@ -145,8 +169,9 @@ public class ProtobufParserService {
 
     private Map<String, Descriptors.FileDescriptor> buildFileDescriptors(DescriptorProtos.FileDescriptorSet descriptorSet) {
         Map<String, Descriptors.FileDescriptor> built = new HashMap<>();
+        built.putIfAbsent(EMPTY_PROTO_PATH, com.google.protobuf.EmptyProto.getDescriptor());
         boolean progress = true;
-        while (built.size() < descriptorSet.getFileCount() && progress) {
+        while (countProjectDescriptors(built, descriptorSet) < descriptorSet.getFileCount() && progress) {
             progress = false;
             for (DescriptorProtos.FileDescriptorProto fileProto : descriptorSet.getFileList()) {
                 String fileName = fileProto.getName();
@@ -178,7 +203,7 @@ public class ProtobufParserService {
             }
         }
 
-        if (built.size() < descriptorSet.getFileCount()) {
+        if (countProjectDescriptors(built, descriptorSet) < descriptorSet.getFileCount()) {
             List<String> unresolved = new ArrayList<>();
             for (DescriptorProtos.FileDescriptorProto fileProto : descriptorSet.getFileList()) {
                 if (!built.containsKey(fileProto.getName())) {
@@ -188,6 +213,18 @@ public class ProtobufParserService {
             LOG.warnf("Protobuf descriptor resolution incomplete; unresolved files: %s", unresolved);
         }
         return built;
+    }
+
+    private int countProjectDescriptors(
+            Map<String, Descriptors.FileDescriptor> built,
+            DescriptorProtos.FileDescriptorSet descriptorSet) {
+        int count = 0;
+        for (DescriptorProtos.FileDescriptorProto fileProto : descriptorSet.getFileList()) {
+            if (built.containsKey(fileProto.getName())) {
+                count++;
+            }
+        }
+        return count;
     }
 
     private ClassName resolveMessageClassName(Descriptors.Descriptor descriptor) {
@@ -265,5 +302,8 @@ public class ProtobufParserService {
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 algorithm is not available", e);
         }
+    }
+
+    private record ParserCandidate(String schemaFullName, ClassName messageType) {
     }
 }

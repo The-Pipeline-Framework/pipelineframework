@@ -24,5 +24,18 @@ export default defineConfig({
   server: {
     port: 3000,
     strictPort: false
+  },
+  build: {
+    minify: 'esbuild', // fast and low memory
+    rollupOptions: {
+      output: {
+        // Reduce memory usage during build
+        chunkFileNames: 'assets/[name]-[hash].js',
+        entryFileNames: 'assets/[name]-[hash].js',
+      },
+    },
+    // Set output JS language level / browser compatibility (ES2020)
+    target: 'es2020',
+    assetsInlineLimit: 0 // prevents embedding large assets in JS bundles
   }
 });

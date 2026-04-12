@@ -1,37 +1,74 @@
-appName: "TPFGo Consumer Validation Pipeline"
-basePackage: "org.pipelineframework.tpfgo.consumer.validation"
-transport: "GRPC"
-platform: "COMPUTE"
+version: 2
+appName: TPFGo Consumer Validation Pipeline
+basePackage: org.pipelineframework.tpfgo.consumer.validation
+transport: GRPC
+platform: COMPUTE
+messages:
+  OrderPending:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: requestId
+        type: uuid
+      - number: 3
+        name: customerId
+        type: uuid
+      - number: 4
+        name: restaurantId
+        type: uuid
+      - number: 5
+        name: totalAmount
+        type: decimal
+      - number: 6
+        name: currency
+        type: string
+      - number: 7
+        name: createdAt
+        type: timestamp
+  OrderApproved:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: requestId
+        type: uuid
+      - number: 3
+        name: customerId
+        type: uuid
+      - number: 4
+        name: restaurantId
+        type: uuid
+      - number: 5
+        name: totalAmount
+        type: decimal
+      - number: 6
+        name: currency
+        type: string
+      - number: 7
+        name: approvedAt
+        type: timestamp
+      - number: 8
+        name: riskBand
+        type: string
+steps:
+  - name: Consumer Validate Order
+    service: org.pipelineframework.tpfgo.consumer.validation.consumer_validate_order.service.ProcessConsumerValidateOrderService
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.tpfgo.common.domain.OrderPending
+    inputTypeName: OrderPending
+    inboundMapper: org.pipelineframework.tpfgo.consumer.validation.consumer_validate_order.service.OrderPendingMapper
+    output: org.pipelineframework.tpfgo.common.domain.OrderApproved
+    outputTypeName: OrderApproved
+    outboundMapper: org.pipelineframework.tpfgo.consumer.validation.consumer_validate_order.service.OrderApprovedMapper
 input:
   subscription:
-    publication: "tpfgo.checkout.order-pending.v1"
-    mapper: "org.pipelineframework.tpfgo.consumer.validation.consumer_validate_order.service.OrderPendingMapper"
-steps:
-  - name: "Consumer Validate Order"
-    service: "org.pipelineframework.tpfgo.consumer.validation.consumer_validate_order.service.ProcessConsumerValidateOrderService"
-    cardinality: "ONE_TO_ONE"
-    input: "org.pipelineframework.tpfgo.common.domain.OrderPending"
-    inputTypeName: "OrderPending"
-    inputFields:
-      - { name: "orderId", type: "UUID", protoType: "string" }
-      - { name: "requestId", type: "UUID", protoType: "string" }
-      - { name: "customerId", type: "UUID", protoType: "string" }
-      - { name: "restaurantId", type: "UUID", protoType: "string" }
-      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
-      - { name: "currency", type: "String", protoType: "string" }
-      - { name: "createdAt", type: "Instant", protoType: "string" }
-    output: "org.pipelineframework.tpfgo.common.domain.OrderApproved"
-    outputTypeName: "OrderApproved"
-    outputFields:
-      - { name: "orderId", type: "UUID", protoType: "string" }
-      - { name: "requestId", type: "UUID", protoType: "string" }
-      - { name: "customerId", type: "UUID", protoType: "string" }
-      - { name: "restaurantId", type: "UUID", protoType: "string" }
-      - { name: "totalAmount", type: "BigDecimal", protoType: "string" }
-      - { name: "currency", type: "String", protoType: "string" }
-      - { name: "approvedAt", type: "Instant", protoType: "string" }
-      - { name: "riskBand", type: "String", protoType: "string" }
+    publication: tpfgo.checkout.order-pending.v1
+    mapper: org.pipelineframework.tpfgo.consumer.validation.consumer_validate_order.service.OrderPendingMapper
 output:
   checkpoint:
-    publication: "tpfgo.consumer.order-approved.v1"
-    idempotencyKeyFields: [ "orderId" ]
+    publication: tpfgo.consumer.order-approved.v1
+    idempotencyKeyFields:
+      - orderId

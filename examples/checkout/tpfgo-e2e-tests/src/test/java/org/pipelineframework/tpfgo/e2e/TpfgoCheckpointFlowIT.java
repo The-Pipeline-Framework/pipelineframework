@@ -23,6 +23,8 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,9 +36,9 @@ import org.pipelineframework.checkpoint.grpc.CheckpointPublishRequest;
 import org.pipelineframework.checkpoint.grpc.CheckpointPublicationServiceGrpc;
 import org.pipelineframework.checkpoint.grpc.MutinyCheckpointPublicationServiceGrpc;
 import org.pipelineframework.config.pipeline.PipelineJson;
-import org.pipelineframework.tpfgo.checkout.grpc.CheckoutValidateRequestSvc;
 import org.pipelineframework.tpfgo.checkout.grpc.Orchestrator;
 import org.pipelineframework.tpfgo.checkout.grpc.OrchestratorServiceGrpc;
+import org.pipelineframework.tpfgo.checkout.grpc.PipelineTypes;
 import org.pipelineframework.tpfgo.common.util.DeterministicIds;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -114,7 +116,7 @@ class TpfgoCheckpointFlowIT {
         ManagedApp checkout = app("checkout-orchestrator-svc");
         Orchestrator.RunAsyncResponse accepted = checkout.orchestrator().runAsync(
             Orchestrator.RunAsyncRequest.newBuilder()
-                .setInput(CheckoutValidateRequestSvc.PlaceOrderRequest.newBuilder()
+                .setInput(PipelineTypes.PlaceOrderRequest.newBuilder()
                     .setRequestId("11111111-1111-1111-1111-111111111111")
                     .setCustomerId("22222222-2222-2222-2222-222222222222")
                     .setRestaurantId("33333333-3333-3333-3333-333333333333")
@@ -153,7 +155,7 @@ class TpfgoCheckpointFlowIT {
         ManagedApp checkout = app("checkout-orchestrator-svc");
         checkout.orchestrator().runAsync(
             Orchestrator.RunAsyncRequest.newBuilder()
-                .setInput(CheckoutValidateRequestSvc.PlaceOrderRequest.newBuilder()
+                .setInput(PipelineTypes.PlaceOrderRequest.newBuilder()
                     .setRequestId("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
                     .setCustomerId("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
                     .setRestaurantId("cccccccc-cccc-cccc-cccc-cccccccccccc")
@@ -179,9 +181,11 @@ class TpfgoCheckpointFlowIT {
             .usePlaintext()
             .build();
         try {
+            CheckpointPublicationServiceGrpc.CheckpointPublicationServiceBlockingStub serviceStub =
+                CheckpointPublicationServiceGrpc.newBlockingStub(channel);
+            warmUpCompensationBoundary(serviceStub);
             CheckpointPublicationServiceGrpc.CheckpointPublicationServiceBlockingStub stub =
-                CheckpointPublicationServiceGrpc.newBlockingStub(channel)
-                    .withDeadlineAfter(10, TimeUnit.SECONDS);
+                serviceStub.withDeadlineAfter(10, TimeUnit.SECONDS);
 
             JsonNode payload = PipelineJson.mapper().valueToTree(Map.of(
                 "orderId", "dddddddd-dddd-dddd-dddd-dddddddddddd",
@@ -205,7 +209,7 @@ class TpfgoCheckpointFlowIT {
 
             assertFalse(first.getDuplicate());
             assertTrue(duplicate.getDuplicate());
-            JsonNode finalPayload = collector.awaitPayload("tpfgo.compensation.terminal-state.v1");
+            JsonNode finalPayload = collector.awaitPayload("tpfgo.compensation.terminal-state.v1", logDirectory, apps);
             assertEquals("FAILED_COMPENSATED", finalPayload.get("outcome").asText());
             assertEquals(1, collector.countFor("tpfgo.compensation.terminal-state.v1"));
         } finally {
@@ -240,7 +244,7 @@ class TpfgoCheckpointFlowIT {
         String restaurantId = DeterministicIds.uuid("warmup-restaurant", scenarioKey).toString();
         Orchestrator.RunAsyncResponse accepted = checkout.orchestrator().runAsync(
             Orchestrator.RunAsyncRequest.newBuilder()
-                .setInput(CheckoutValidateRequestSvc.PlaceOrderRequest.newBuilder()
+                .setInput(PipelineTypes.PlaceOrderRequest.newBuilder()
                     .setRequestId(requestId)
                     .setCustomerId(customerId)
                     .setRestaurantId(restaurantId)
@@ -255,6 +259,54 @@ class TpfgoCheckpointFlowIT {
         JsonNode warmupPayload = collector.awaitPayload("tpfgo.compensation.terminal-state.v1", logDirectory, apps);
         assertNotNull(warmupPayload);
         collector.reset();
+    }
+
+    private void warmUpCompensationBoundary(
+        CheckpointPublicationServiceGrpc.CheckpointPublicationServiceBlockingStub stub
+    ) throws IOException {
+        Awaitility.await()
+            .atMost(Duration.ofSeconds(20))
+            .pollInterval(Duration.ofMillis(250))
+            .until(() -> checkpointAdmissionReady(stub));
+
+        JsonNode warmupPayload = PipelineJson.mapper().valueToTree(Map.of(
+            "orderId", DeterministicIds.uuid("warmup-compensation-order", "duplicate-boundary").toString(),
+            "paymentId", "",
+            "processedAt", "2026-03-27T12:00:00Z",
+            "amount", "0",
+            "currency", "EUR",
+            "status", "FAILED",
+            "failureCode", "PAYMENT_CAPTURE_REJECTED",
+            "failureReason", "warmup"));
+
+        CheckpointPublishAcceptedResponse accepted = stub.publish(
+            CheckpointPublishRequest.newBuilder()
+                .setPublication("tpfgo.payment.capture-result.v1")
+                .setPayloadJson(ByteString.copyFrom(PipelineJson.mapper().writeValueAsBytes(warmupPayload)))
+                .setTenantId("default")
+                .setIdempotencyKey("payment-boundary-warmup")
+                .build());
+        assertFalse(accepted.getDuplicate());
+        JsonNode terminal = collector.awaitPayload("tpfgo.compensation.terminal-state.v1", logDirectory, apps);
+        assertEquals("FAILED_COMPENSATED", terminal.get("outcome").asText());
+        collector.reset();
+    }
+
+    private boolean checkpointAdmissionReady(
+        CheckpointPublicationServiceGrpc.CheckpointPublicationServiceBlockingStub stub
+    ) {
+        try {
+            stub.withDeadlineAfter(2, TimeUnit.SECONDS).publish(
+                CheckpointPublishRequest.newBuilder()
+                    .setPublication("")
+                    .setPayloadJson(ByteString.EMPTY)
+                    .setTenantId("")
+                    .setIdempotencyKey("")
+                    .build());
+            return true;
+        } catch (StatusRuntimeException e) {
+            return e.getStatus().getCode() == Status.Code.INVALID_ARGUMENT;
+        }
     }
 
     /**
@@ -760,6 +812,41 @@ class TpfgoCheckpointFlowIT {
          * @throws RuntimeException if the payload is not received within the timeout,
          *         wrapping the underlying timeout exception with per-module log tails appended to the message
          */
+        JsonNode awaitPayload(String publication, Path logDirectory, List<ManagedApp> apps) {
+            try {
+                Awaitility.await()
+                    .atMost(Duration.ofSeconds(120))
+                    .pollInterval(Duration.ofSeconds(2))
+                    .until(() -> countFor(publication), count -> count > 0);
+            } catch (Exception e) {
+                StringBuilder msg = new StringBuilder();
+                msg.append("Timed out waiting for publication '").append(publication).append("'.");
+                if (logDirectory != null && apps != null) {
+                    for (ManagedApp app : apps) {
+                        Path logFile = logDirectory.resolve(app.moduleDir() + ".log");
+                        if (Files.exists(logFile)) {
+                            try {
+                                String content = Files.readString(logFile);
+                                int tailLen = Math.min(content.length(), 2000);
+                                msg.append("\n--- ").append(app.moduleDir()).append(" log (tail) ---\n");
+                                msg.append(tailLen < content.length() ? "... [truncated] ..." : "");
+                                msg.append(content.substring(content.length() - tailLen));
+                            } catch (IOException ignored) {
+                                // skip unreadable log files
+                            }
+                        }
+                    }
+                }
+                throw new RuntimeException(msg.toString(), e);
+            }
+            return received.stream()
+                .filter(request -> Objects.equals(publication, request.getPublication()))
+                .reduce((ignored, latest) -> latest)
+                .map(this::toPayload)
+                .orElseThrow();
+        }
+
+        /**
         JsonNode awaitPayload(String publication, Path logDirectory, List<ManagedApp> apps) {
             try {
                 Awaitility.await()

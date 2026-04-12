@@ -1,7 +1,6 @@
 version: 2
 appName: DigestivePipeline
 basePackage: com.example.digestive
-
 messages:
   FoodItem:
     fields:
@@ -85,26 +84,22 @@ messages:
       - number: 3
         name: emoji
         type: string
-
 steps:
   - name: MouthStage
     cardinality: ONE_TO_ONE
     inputTypeName: FoodItem
     outputTypeName: Bolus
     parallel: false
-
   - name: StomachStage
     cardinality: ONE_TO_ONE
     inputTypeName: Bolus
     outputTypeName: Chyme
     parallel: false
-
   - name: SmallIntestineStage
     cardinality: EXPANSION
     inputTypeName: Chyme
     outputTypeName: Nutrients
     parallel: true
-
   - name: LargeIntestineStage
     cardinality: REDUCTION
     inputTypeName: Nutrients
@@ -112,7 +107,6 @@ steps:
     batchSize: 20
     batchTimeoutMs: 1500
     parallel: false
-
   - name: RectumStage
     cardinality: ONE_TO_ONE
     inputTypeName: Residue

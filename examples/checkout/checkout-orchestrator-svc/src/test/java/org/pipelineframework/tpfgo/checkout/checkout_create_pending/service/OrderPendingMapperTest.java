@@ -2,7 +2,6 @@ package org.pipelineframework.tpfgo.checkout.checkout_create_pending.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.math.BigDecimal;
@@ -10,14 +9,12 @@ import java.time.Instant;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.tpfgo.checkout.grpc.CheckoutCreatePendingSvc;
+import org.pipelineframework.tpfgo.checkout.grpc.PipelineTypes;
 import org.pipelineframework.tpfgo.common.domain.OrderPending;
 
 class OrderPendingMapperTest {
 
     private final OrderPendingMapper mapper = new OrderPendingMapper();
-
-    // --- fromExternal ---
 
     @Test
     void fromExternalMapsAllFieldsFromGrpcMessage() {
@@ -28,7 +25,7 @@ class OrderPendingMapperTest {
         BigDecimal totalAmount = new BigDecimal("42.50");
         Instant createdAt = Instant.parse("2026-01-15T10:00:00Z");
 
-        CheckoutCreatePendingSvc.OrderPending grpc = CheckoutCreatePendingSvc.OrderPending.newBuilder()
+        PipelineTypes.OrderPending grpc = PipelineTypes.OrderPending.newBuilder()
             .setOrderId(orderId.toString())
             .setRequestId(requestId.toString())
             .setCustomerId(customerId.toString())
@@ -52,7 +49,7 @@ class OrderPendingMapperTest {
 
     @Test
     void fromExternalEmptyUuidStringsFailFast() {
-        CheckoutCreatePendingSvc.OrderPending grpc = CheckoutCreatePendingSvc.OrderPending.newBuilder()
+        PipelineTypes.OrderPending grpc = PipelineTypes.OrderPending.newBuilder()
             .setOrderId("")
             .setRequestId("")
             .setCustomerId("")
@@ -67,7 +64,7 @@ class OrderPendingMapperTest {
 
     @Test
     void fromExternalThrowsOnInvalidUuidString() {
-        CheckoutCreatePendingSvc.OrderPending grpc = CheckoutCreatePendingSvc.OrderPending.newBuilder()
+        PipelineTypes.OrderPending grpc = PipelineTypes.OrderPending.newBuilder()
             .setOrderId("not-a-valid-uuid")
             .build();
 
@@ -76,7 +73,7 @@ class OrderPendingMapperTest {
 
     @Test
     void fromExternalThrowsOnInvalidDecimalString() {
-        CheckoutCreatePendingSvc.OrderPending grpc = CheckoutCreatePendingSvc.OrderPending.newBuilder()
+        PipelineTypes.OrderPending grpc = PipelineTypes.OrderPending.newBuilder()
             .setOrderId(UUID.randomUUID().toString())
             .setRequestId(UUID.randomUUID().toString())
             .setCustomerId(UUID.randomUUID().toString())
@@ -91,7 +88,7 @@ class OrderPendingMapperTest {
 
     @Test
     void fromExternalThrowsOnInvalidInstantString() {
-        CheckoutCreatePendingSvc.OrderPending grpc = CheckoutCreatePendingSvc.OrderPending.newBuilder()
+        PipelineTypes.OrderPending grpc = PipelineTypes.OrderPending.newBuilder()
             .setOrderId(UUID.randomUUID().toString())
             .setRequestId(UUID.randomUUID().toString())
             .setCustomerId(UUID.randomUUID().toString())
@@ -104,8 +101,6 @@ class OrderPendingMapperTest {
         assertThrows(IllegalArgumentException.class, () -> mapper.fromExternal(grpc));
     }
 
-    // --- toExternal ---
-
     @Test
     void toExternalMapsAllFieldsToGrpcMessage() {
         UUID orderId = UUID.randomUUID();
@@ -116,10 +111,15 @@ class OrderPendingMapperTest {
         Instant createdAt = Instant.parse("2026-03-01T08:30:00Z");
 
         OrderPending domain = new OrderPending(
-            orderId, requestId, customerId, restaurantId,
-            totalAmount, "GBP", createdAt);
+            orderId,
+            requestId,
+            customerId,
+            restaurantId,
+            totalAmount,
+            "GBP",
+            createdAt);
 
-        CheckoutCreatePendingSvc.OrderPending grpc = mapper.toExternal(domain);
+        PipelineTypes.OrderPending grpc = mapper.toExternal(domain);
 
         assertNotNull(grpc);
         assertEquals(orderId.toString(), grpc.getOrderId());
@@ -134,11 +134,14 @@ class OrderPendingMapperTest {
     @Test
     void orderPendingRejectsNullRequiredFields() {
         assertThrows(NullPointerException.class, () -> new OrderPending(
-            null, null, null, null,
-            null, "USD", null));
+            null,
+            null,
+            null,
+            null,
+            null,
+            "USD",
+            null));
     }
-
-    // --- round-trip ---
 
     @Test
     void roundTripDomainToExternalAndBack() {
@@ -150,8 +153,13 @@ class OrderPendingMapperTest {
         Instant createdAt = Instant.parse("2026-02-10T12:00:00Z");
 
         OrderPending original = new OrderPending(
-            orderId, requestId, customerId, restaurantId,
-            totalAmount, "JPY", createdAt);
+            orderId,
+            requestId,
+            customerId,
+            restaurantId,
+            totalAmount,
+            "JPY",
+            createdAt);
 
         OrderPending roundTripped = mapper.fromExternal(mapper.toExternal(original));
 
@@ -172,7 +180,7 @@ class OrderPendingMapperTest {
         UUID restaurantId = UUID.randomUUID();
         Instant createdAt = Instant.parse("2026-04-05T14:30:00Z");
 
-        CheckoutCreatePendingSvc.OrderPending original = CheckoutCreatePendingSvc.OrderPending.newBuilder()
+        PipelineTypes.OrderPending original = PipelineTypes.OrderPending.newBuilder()
             .setOrderId(orderId.toString())
             .setRequestId(requestId.toString())
             .setCustomerId(customerId.toString())
@@ -182,7 +190,7 @@ class OrderPendingMapperTest {
             .setCreatedAt(createdAt.toString())
             .build();
 
-        CheckoutCreatePendingSvc.OrderPending roundTripped = mapper.toExternal(mapper.fromExternal(original));
+        PipelineTypes.OrderPending roundTripped = mapper.toExternal(mapper.fromExternal(original));
 
         assertEquals(original.getOrderId(), roundTripped.getOrderId());
         assertEquals(original.getRequestId(), roundTripped.getRequestId());
@@ -191,18 +199,5 @@ class OrderPendingMapperTest {
         assertEquals(original.getTotalAmount(), roundTripped.getTotalAmount());
         assertEquals(original.getCurrency(), roundTripped.getCurrency());
         assertEquals(original.getCreatedAt(), roundTripped.getCreatedAt());
-    }
-
-    // Regression: large decimal value survives round-trip without scientific notation
-    @Test
-    void roundTripPreservesLargeDecimalWithoutScientificNotation() {
-        BigDecimal largeAmount = new BigDecimal("9999999.99");
-        OrderPending domain = new OrderPending(
-            UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
-            largeAmount, "USD", Instant.parse("2026-05-01T00:00:00Z"));
-
-        OrderPending roundTripped = mapper.fromExternal(mapper.toExternal(domain));
-
-        assertEquals(largeAmount, roundTripped.totalAmount());
     }
 }

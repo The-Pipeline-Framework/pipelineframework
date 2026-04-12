@@ -3,6 +3,7 @@ package org.pipelineframework.processor.phase;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.Locale;
 import javax.tools.Diagnostic;
 
@@ -42,5 +43,66 @@ public class GenerationPathResolver {
             throw new IllegalStateException("Failed to create output directory '" + outputDir + "'", e);
         }
         return outputDir;
+    }
+
+    /**
+     * Deletes and recreates the generated-sources root used for pipeline-rendered Java artifacts.
+     *
+     * @param ctx compilation context containing the generated sources root
+     */
+    public void resetGeneratedSourcesRoot(PipelineCompilationContext ctx) {
+        if (ctx == null) {
+            throw new IllegalArgumentException("ctx must not be null");
+        }
+        Path root = ctx.getGeneratedSourcesRoot();
+        if (root == null) {
+            return;
+        }
+        Path normalizedRoot = root.toAbsolutePath().normalize();
+        if (!containsGeneratedSourcesSegment(normalizedRoot)) {
+            throw new IllegalStateException("Refusing to reset non-generated-sources path '" + normalizedRoot + "'");
+        }
+        try {
+            if (Files.exists(normalizedRoot)) {
+                try (var stream = Files.walk(normalizedRoot)) {
+                    stream.sorted(Comparator.reverseOrder())
+                        .forEach(path -> {
+                            try {
+                                Files.deleteIfExists(path);
+                            } catch (IOException e) {
+                                throw new RuntimeException("Failed to delete path: " + path, e);
+                            }
+                        });
+                }
+            }
+            Files.createDirectories(normalizedRoot);
+        } catch (RuntimeException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof IOException ioException) {
+                reportResetFailure(ctx, normalizedRoot, ioException);
+                throw new IllegalStateException("Failed to reset generated sources root '" + normalizedRoot + "'", ioException);
+            }
+            throw e;
+        } catch (IOException e) {
+            reportResetFailure(ctx, normalizedRoot, e);
+            throw new IllegalStateException("Failed to reset generated sources root '" + normalizedRoot + "'", e);
+        }
+    }
+
+    private boolean containsGeneratedSourcesSegment(Path path) {
+        for (Path part : path) {
+            if (part.toString().startsWith("generated-sources")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void reportResetFailure(PipelineCompilationContext ctx, Path root, IOException e) {
+        if (ctx.getProcessingEnv() != null && ctx.getProcessingEnv().getMessager() != null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                Diagnostic.Kind.ERROR,
+                "Failed to reset generated sources root '" + root + "': " + e.getMessage());
+        }
     }
 }

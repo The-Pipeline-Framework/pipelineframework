@@ -1,234 +1,190 @@
-appName: "Search Pipeline"
-basePackage: "org.pipelineframework.search"
-transport: "REST"
-platform: "COMPUTE"
-steps:
-  - name: "Crawl Source"
-    service: "org.pipelineframework.search.crawl_source.service.ProcessCrawlSourceService"
-    cardinality: "ONE_TO_ONE"
-    input: "org.pipelineframework.search.common.domain.CrawlRequest"
-    inputTypeName: "CrawlRequest"
-    inputFields:
-      - name: "docId"
-        type: "UUID"
-        protoType: "string"
-      - name: "sourceUrl"
-        type: "String"
-        protoType: "string"
-      - name: "fetchMethod"
-        type: "String"
-        protoType: "string"
-      - name: "accept"
-        type: "String"
-        protoType: "string"
-      - name: "acceptLanguage"
-        type: "String"
-        protoType: "string"
-      - name: "authScope"
-        type: "String"
-        protoType: "string"
-      - name: "fetchHeaders"
-        type: "Map<String, String>"
-        protoType: "map<string, string>"
-    output: "org.pipelineframework.search.common.domain.RawDocument"
-    outputTypeName: "RawDocument"
-    outputFields:
-      - name: "docId"
-        type: "UUID"
-        protoType: "string"
-      - name: "sourceUrl"
-        type: "String"
-        protoType: "string"
-      - name: "fetchOptions"
-        type: "String"
-        protoType: "string"
-      - name: "rawContent"
-        type: "String"
-        protoType: "string"
-      - name: "rawContentHash"
-        type: "String"
-        protoType: "string"
-      - name: "fetchedAt"
-        type: "Instant"
-        protoType: "string"
-  - name: "Parse Document"
-    service: "org.pipelineframework.search.parse_document.service.ProcessParseDocumentService"
-    cardinality: "ONE_TO_ONE"
-    input: "org.pipelineframework.search.common.domain.RawDocument"
-    inputTypeName: "RawDocument"
-    inputFields:
-      - name: "docId"
-        type: "UUID"
-        protoType: "string"
-      - name: "sourceUrl"
-        type: "String"
-        protoType: "string"
-      - name: "fetchOptions"
-        type: "String"
-        protoType: "string"
-      - name: "rawContent"
-        type: "String"
-        protoType: "string"
-      - name: "rawContentHash"
-        type: "String"
-        protoType: "string"
-      - name: "fetchedAt"
-        type: "Instant"
-        protoType: "string"
-    output: "org.pipelineframework.search.common.domain.ParsedDocument"
-    outputTypeName: "ParsedDocument"
-    outputFields:
-      - name: "docId"
-        type: "UUID"
-        protoType: "string"
-      - name: "title"
-        type: "String"
-        protoType: "string"
-      - name: "content"
-        type: "String"
-        protoType: "string"
-      - name: "contentHash"
-        type: "String"
-        protoType: "string"
-      - name: "rawContentHash"
-        type: "String"
-        protoType: "string"
-      - name: "extractedAt"
-        type: "Instant"
-        protoType: "string"
-  - name: "Tokenize Content"
-    service: "org.pipelineframework.search.tokenize_content.service.ProcessTokenizeContentService"
-    cardinality: "ONE_TO_MANY"
-    input: "org.pipelineframework.search.common.domain.ParsedDocument"
-    inputTypeName: "ParsedDocument"
-    inputFields:
-      - name: "docId"
-        type: "UUID"
-        protoType: "string"
-      - name: "title"
-        type: "String"
-        protoType: "string"
-      - name: "content"
-        type: "String"
-        protoType: "string"
-      - name: "contentHash"
-        type: "String"
-        protoType: "string"
-      - name: "rawContentHash"
-        type: "String"
-        protoType: "string"
-      - name: "extractedAt"
-        type: "Instant"
-        protoType: "string"
-    output: "org.pipelineframework.search.common.domain.TokenBatch"
-    outputTypeName: "TokenBatch"
-    outputFields:
-      - name: "docId"
-        type: "UUID"
-        protoType: "string"
-      - name: "batchIndex"
-        type: "Integer"
-        protoType: "int32"
-      - name: "tokenCount"
-        type: "Integer"
-        protoType: "int32"
-      - name: "tokens"
-        type: "String"
-        protoType: "string"
-      - name: "tokensHash"
-        type: "String"
-        protoType: "string"
-      - name: "contentHash"
-        type: "String"
-        protoType: "string"
-      - name: "tokenizedAt"
-        type: "Instant"
-        protoType: "string"
-  - name: "Index Document"
-    service: "org.pipelineframework.search.index_document.service.ProcessIndexDocumentService"
-    cardinality: "MANY_TO_ONE"
-    input: "org.pipelineframework.search.common.domain.TokenBatch"
-    inputTypeName: "TokenBatch"
-    inputFields:
-      - name: "docId"
-        type: "UUID"
-        protoType: "string"
-      - name: "batchIndex"
-        type: "Integer"
-        protoType: "int32"
-      - name: "tokenCount"
-        type: "Integer"
-        protoType: "int32"
-      - name: "tokens"
-        type: "String"
-        protoType: "string"
-      - name: "tokensHash"
-        type: "String"
-        protoType: "string"
-      - name: "contentHash"
-        type: "String"
-        protoType: "string"
-      - name: "tokenizedAt"
-        type: "Instant"
-        protoType: "string"
-    output: "org.pipelineframework.search.common.domain.IndexAck"
-    outputTypeName: "IndexAck"
-    outputFields:
-      - name: "docId"
-        type: "UUID"
-        protoType: "string"
-      - name: "indexVersion"
-        type: "String"
-        protoType: "string"
-      - name: "tokensHash"
-        type: "String"
-        protoType: "string"
-      - name: "tokenBatchCount"
-        type: "Integer"
-        protoType: "int32"
-      - name: "uniqueTokenCount"
-        type: "Integer"
-        protoType: "int32"
-      - name: "topToken"
-        type: "String"
-        protoType: "string"
-      - name: "indexedAt"
-        type: "Instant"
-        protoType: "string"
-      - name: "success"
-        type: "Boolean"
-        protoType: "bool"
-
+version: 2
+appName: Search Pipeline
+basePackage: org.pipelineframework.search
+transport: REST
+platform: COMPUTE
 aspects:
   persistence:
     enabled: true
-    scope: "GLOBAL"
-    position: "AFTER_STEP"
+    scope: GLOBAL
+    position: AFTER_STEP
     order: 0
     config:
-      pluginImplementationClass: "org.pipelineframework.plugin.persistence.PersistenceService"
+      pluginImplementationClass: org.pipelineframework.plugin.persistence.PersistenceService
   cache:
     enabled: true
-    scope: "GLOBAL"
-    position: "AFTER_STEP"
+    scope: GLOBAL
+    position: AFTER_STEP
     order: 5
     config:
-      pluginImplementationClass: "org.pipelineframework.plugin.cache.CacheService"
+      pluginImplementationClass: org.pipelineframework.plugin.cache.CacheService
   cache-invalidate:
     enabled: true
-    scope: "STEPS"
-    position: "BEFORE_STEP"
+    scope: STEPS
+    position: BEFORE_STEP
     order: -4
     config:
       targetSteps:
-        - "ProcessTokenizeContentService"
-      pluginImplementationClass: "org.pipelineframework.plugin.cache.CacheInvalidationService"
+        - ProcessTokenizeContentService
+      pluginImplementationClass: org.pipelineframework.plugin.cache.CacheInvalidationService
   cache-invalidate-all:
     enabled: true
-    scope: "STEPS"
-    position: "BEFORE_STEP"
+    scope: STEPS
+    position: BEFORE_STEP
     order: -5
     config:
       targetSteps:
-        - "ProcessParseDocumentService"
-      pluginImplementationClass: "org.pipelineframework.plugin.cache.CacheInvalidationAllService"
+        - ProcessParseDocumentService
+      pluginImplementationClass: org.pipelineframework.plugin.cache.CacheInvalidationAllService
+messages:
+  CrawlRequest:
+    fields:
+      - number: 1
+        name: docId
+        type: uuid
+      - number: 2
+        name: sourceUrl
+        type: string
+      - number: 3
+        name: fetchMethod
+        type: string
+      - number: 4
+        name: accept
+        type: string
+      - number: 5
+        name: acceptLanguage
+        type: string
+      - number: 6
+        name: authScope
+        type: string
+      - number: 7
+        name: fetchHeaders
+        type: map
+        keyType: string
+        valueType: string
+  RawDocument:
+    fields:
+      - number: 1
+        name: docId
+        type: uuid
+      - number: 2
+        name: sourceUrl
+        type: string
+      - number: 3
+        name: fetchOptions
+        type: string
+      - number: 4
+        name: rawContent
+        type: string
+      - number: 5
+        name: rawContentHash
+        type: string
+      - number: 6
+        name: fetchedAt
+        type: timestamp
+  ParsedDocument:
+    fields:
+      - number: 1
+        name: docId
+        type: uuid
+      - number: 2
+        name: title
+        type: string
+      - number: 3
+        name: content
+        type: string
+      - number: 4
+        name: contentHash
+        type: string
+      - number: 5
+        name: rawContentHash
+        type: string
+      - number: 6
+        name: extractedAt
+        type: timestamp
+  TokenBatch:
+    fields:
+      - number: 1
+        name: docId
+        type: uuid
+      - number: 2
+        name: batchIndex
+        type: int32
+      - number: 3
+        name: tokenCount
+        type: int32
+      - number: 4
+        name: tokens
+        type: string
+      - number: 5
+        name: tokensHash
+        type: string
+      - number: 6
+        name: contentHash
+        type: string
+      - number: 7
+        name: tokenizedAt
+        type: timestamp
+  IndexAck:
+    fields:
+      - number: 1
+        name: docId
+        type: uuid
+      - number: 2
+        name: indexVersion
+        type: string
+      - number: 3
+        name: tokensHash
+        type: string
+      - number: 4
+        name: tokenBatchCount
+        type: int32
+      - number: 5
+        name: uniqueTokenCount
+        type: int32
+      - number: 6
+        name: topToken
+        type: string
+      - number: 7
+        name: indexedAt
+        type: timestamp
+      - number: 8
+        name: success
+        type: bool
+steps:
+  - name: Crawl Source
+    service: org.pipelineframework.search.crawl_source.service.ProcessCrawlSourceService
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.search.common.domain.CrawlRequest
+    inputTypeName: CrawlRequest
+    inboundMapper: org.pipelineframework.search.common.mapper.CrawlRequestMapper
+    output: org.pipelineframework.search.common.domain.RawDocument
+    outputTypeName: RawDocument
+    outboundMapper: org.pipelineframework.search.common.mapper.RawDocumentMapper
+  - name: Parse Document
+    service: org.pipelineframework.search.parse_document.service.ProcessParseDocumentService
+    cardinality: ONE_TO_ONE
+    input: org.pipelineframework.search.common.domain.RawDocument
+    inputTypeName: RawDocument
+    inboundMapper: org.pipelineframework.search.common.mapper.RawDocumentMapper
+    output: org.pipelineframework.search.common.domain.ParsedDocument
+    outputTypeName: ParsedDocument
+    outboundMapper: org.pipelineframework.search.common.mapper.ParsedDocumentMapper
+  - name: Tokenize Content
+    service: org.pipelineframework.search.tokenize_content.service.ProcessTokenizeContentService
+    cardinality: ONE_TO_MANY
+    input: org.pipelineframework.search.common.domain.ParsedDocument
+    inputTypeName: ParsedDocument
+    inboundMapper: org.pipelineframework.search.common.mapper.ParsedDocumentMapper
+    output: org.pipelineframework.search.common.domain.TokenBatch
+    outputTypeName: TokenBatch
+    outboundMapper: org.pipelineframework.search.common.mapper.TokenBatchMapper
+  - name: Index Document
+    service: org.pipelineframework.search.index_document.service.ProcessIndexDocumentService
+    cardinality: MANY_TO_ONE
+    input: org.pipelineframework.search.common.domain.TokenBatch
+    inputTypeName: TokenBatch
+    inboundMapper: org.pipelineframework.search.common.mapper.TokenBatchMapper
+    output: org.pipelineframework.search.common.domain.IndexAck
+    outputTypeName: IndexAck
+    outboundMapper: org.pipelineframework.search.common.mapper.IndexAckMapper

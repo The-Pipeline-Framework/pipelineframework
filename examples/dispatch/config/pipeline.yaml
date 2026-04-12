@@ -1,52 +1,47 @@
-appName: "Dispatch Pipeline"
-basePackage: "org.pipelineframework.dispatch"
-transport: "GRPC"
+version: 2
+appName: Dispatch Pipeline
+basePackage: org.pipelineframework.dispatch
+transport: GRPC
+messages:
+  ReadyOrder:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: customerId
+        type: uuid
+      - number: 3
+        name: readyAt
+        type: timestamp
+  DispatchRequest:
+    fields:
+      - number: 1
+        name: dispatchId
+        type: uuid
+      - number: 2
+        name: orderId
+        type: uuid
+      - number: 3
+        name: priority
+        type: string
+  DispatchReady:
+    fields:
+      - number: 1
+        name: dispatchId
+        type: uuid
+      - number: 2
+        name: orderId
+        type: uuid
+      - number: 3
+        name: scheduledAt
+        type: timestamp
 steps:
-  - name: "Dispatch Prepare"
-    cardinality: "ONE_TO_ONE"
-    inputTypeName: "ReadyOrder"
-    inputFields:
-      - name: "orderId"
-        type: "UUID"
-        protoType: "string"
-      - name: "customerId"
-        type: "UUID"
-        protoType: "string"
-      - name: "readyAt"
-        type: "Instant"
-        protoType: "string"
-    outputTypeName: "DispatchRequest"
-    outputFields:
-      - name: "dispatchId"
-        type: "UUID"
-        protoType: "string"
-      - name: "orderId"
-        type: "UUID"
-        protoType: "string"
-      - name: "priority"
-        type: "String"
-        protoType: "string"
-  - name: "Dispatch Confirm"
-    cardinality: "ONE_TO_ONE"
-    inputTypeName: "DispatchRequest"
-    inputFields:
-      - name: "dispatchId"
-        type: "UUID"
-        protoType: "string"
-      - name: "orderId"
-        type: "UUID"
-        protoType: "string"
-      - name: "priority"
-        type: "String"
-        protoType: "string"
-    outputTypeName: "DispatchReady"
-    outputFields:
-      - name: "dispatchId"
-        type: "UUID"
-        protoType: "string"
-      - name: "orderId"
-        type: "UUID"
-        protoType: "string"
-      - name: "scheduledAt"
-        type: "Instant"
-        protoType: "string"
+  - name: Dispatch Prepare
+    cardinality: ONE_TO_ONE
+    inputTypeName: ReadyOrder
+    outputTypeName: DispatchRequest
+  - name: Dispatch Confirm
+    cardinality: ONE_TO_ONE
+    inputTypeName: DispatchRequest
+    outputTypeName: DispatchReady

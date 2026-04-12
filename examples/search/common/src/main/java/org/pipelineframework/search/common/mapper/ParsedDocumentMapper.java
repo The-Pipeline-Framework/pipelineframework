@@ -21,9 +21,9 @@ public interface ParsedDocumentMapper extends org.pipelineframework.mapper.Mappe
   ParsedDocument fromDto(ParsedDocumentDto dto);
 
   // DTO ↔ gRPC
-  org.pipelineframework.search.grpc.ParseDocumentSvc.ParsedDocument toGrpc(ParsedDocumentDto dto);
+  org.pipelineframework.search.grpc.PipelineTypes.ParsedDocument toGrpc(ParsedDocumentDto dto);
 
-  ParsedDocumentDto fromGrpc(org.pipelineframework.search.grpc.ParseDocumentSvc.ParsedDocument grpc);
+  ParsedDocumentDto fromGrpc(org.pipelineframework.search.grpc.PipelineTypes.ParsedDocument grpc);
 
   @Override
   default ParsedDocument fromExternal(ParsedDocumentDto external) {
@@ -35,11 +35,11 @@ public interface ParsedDocumentMapper extends org.pipelineframework.mapper.Mappe
     return toDto(domain);
   }
 
-  default org.pipelineframework.search.grpc.ParseDocumentSvc.ParsedDocument toDtoToGrpc(ParsedDocument domain) {
+  default org.pipelineframework.search.grpc.PipelineTypes.ParsedDocument toDtoToGrpc(ParsedDocument domain) {
     return toGrpc(toDto(domain));
   }
 
-  default ParsedDocument fromGrpcFromDto(org.pipelineframework.search.grpc.ParseDocumentSvc.ParsedDocument grpc) {
+  default ParsedDocument fromGrpcFromDto(org.pipelineframework.search.grpc.PipelineTypes.ParsedDocument grpc) {
     return fromDto(fromGrpc(grpc));
   }
 }

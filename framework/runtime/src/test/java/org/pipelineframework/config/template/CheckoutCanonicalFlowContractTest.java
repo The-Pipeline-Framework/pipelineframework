@@ -95,9 +95,9 @@ class CheckoutCanonicalFlowContractTest {
 
         PipelineTemplateStep terminal = compensation.steps().getFirst();
         assertEquals("PaymentCaptureResult", terminal.inputTypeName(),
-            "Compensation input must remain explicit failure checkpoint type.");
+            "Compensation input must remain the stable payment-capture result type used for success or failure outcomes.");
         assertEquals("TerminalOrderState", terminal.outputTypeName(),
-            "Compensation output must be stable terminal failure type.");
+            "Compensation output must remain the stable terminal state type.");
 
         Map<String, PipelineTemplateField> input = byFieldName(terminal.inputFields());
         Map<String, PipelineTemplateField> output = byFieldName(terminal.outputFields());

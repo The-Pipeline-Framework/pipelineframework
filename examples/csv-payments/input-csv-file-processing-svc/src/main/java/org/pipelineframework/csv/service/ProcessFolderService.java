@@ -36,14 +36,7 @@ import org.pipelineframework.csv.common.mapper.CsvPaymentsInputFileMapper;
 import org.pipelineframework.csv.util.HybridResourceLoader;
 
 @ApplicationScoped
-@PipelineStep(
-    inputType = CsvFolder.class,
-    outputType = CsvPaymentsInputFile.class,
-    stepType = org.pipelineframework.step.StepOneToMany.class,
-    backendType = org.pipelineframework.grpc.GrpcReactiveServiceAdapter.class,
-    inboundMapper = CsvFolderMapper.class,
-    outboundMapper = CsvPaymentsInputFileMapper.class
-)
+@PipelineStep
 public class ProcessFolderService implements org.pipelineframework.service.ReactiveStreamingService<CsvFolder, CsvPaymentsInputFile> {
 
   private static final Logger LOG = Logger.getLogger(ProcessFolderService.class);
