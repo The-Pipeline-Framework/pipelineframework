@@ -74,7 +74,7 @@ New internal services should not author those members.
 
 For operator/delegated steps, the following fields were previously supported on the `@PipelineStep` annotation but are now configured exclusively in YAML:
 
-- `operator` (use fully-qualified class name, e.g., `operator: com.example.OperatorClass::method`)
+- `operator` (use a `class::method` reference, e.g., `operator: com.example.OperatorClass::method`)
 - `operatorMapper`
 - `externalMapper`
 

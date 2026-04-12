@@ -9,7 +9,7 @@ This page links to the split guide:
 - [Current Architecture](/guide/evolve/annotation-processor/current-architecture)
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["PipelineStepProcessor"] --> B["PipelineCompiler"]
     B --> P1["Discovery"]
     P1 --> P2["Model Extraction"]
@@ -23,4 +23,4 @@ flowchart LR
 
 Related:
 
-- [Compiler Pipeline Architecture](compiler-pipeline-architecture.md)
+- [Compiler Pipeline Architecture](/guide/evolve/compiler-pipeline-architecture)

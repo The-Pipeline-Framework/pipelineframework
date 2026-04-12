@@ -10,7 +10,7 @@ Invalidation is needed for replay/rewind. TPF supports three levels:
 
 Set a new version tag to avoid reusing stale data:
 
-```
+```yaml
 x-pipeline-version: v3
 ```
 
@@ -37,7 +37,7 @@ This uses the configured cache key strategies to invalidate a single entry.
 
 Invalidation runs only when replay is explicitly requested:
 
-```
+```yaml
 x-pipeline-replay: true
 ```
 
@@ -90,14 +90,14 @@ aspects:
 
 Why these targets?
 
-- `ProcessTokenizeContentService` invalidation is per-item: if you update tokenization logic or fix a tokenizer bug, you can rewind from the tokenize step and ensure each document is re-tokenized instead of served from cache. This clears a single document entry for that step, which is efficient during a replay pass.
+- `ProcessTokenizeContentService` invalidation is per-item: if you update tokenisation logic or fix a tokenizer bug, you can rewind from the tokenize step and ensure each document is re-tokenised instead of served from cache. This clears a single document entry for that step, which is efficient during a replay pass.
 - `ProcessParseDocumentService` bulk invalidation is a step-wide reset: if the HTML parser changes or you need to re-run parsing for all documents, you invalidate everything for that step input type in one go, then replay the pipeline. This avoids stale parse outputs while keeping earlier crawl data intact.
 
 ## TTL backstop
 
 TTL is not a correctness mechanism, but a safety net:
 
-```
+```properties
 pipeline.cache.ttl=PT10M
 ```
 

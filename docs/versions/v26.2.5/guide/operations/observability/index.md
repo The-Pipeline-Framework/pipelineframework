@@ -14,5 +14,5 @@ Observability in The Pipeline Framework is designed for distributed pipelines: y
 - [Health Checks](/versions/v26.2.5/guide/operations/observability/health-checks) and [In-flight Probe](/versions/v26.2.5/guide/operations/in-flight-probe): Liveness, readiness and killswitch for orchestration
 - [Alerting](/versions/v26.2.5/guide/operations/observability/alerting): Dashboards and alert rules tuned for pipeline behavior
 - [Security Notes](/versions/v26.2.5/guide/operations/observability/security): Prevent accidental leakage of sensitive information
-- [Working with NewRelic OTel](/versions/v26.2.5/guide/operations/observability/newrelic): Enabing OTel export to use NewRelic 
-- [Test locally using LGMT](/versions/v26.2.5/guide/operations/observability/lgtm): Enabling Prometheus metrics for Grafana dashboards on Quarkus LGTM stack
+- [Working with NewRelic OTel](/versions/v26.2.5/guide/operations/observability/newrelic): Enabling OTel export to use NewRelic
+- [Test locally using LGTM](/versions/v26.2.5/guide/operations/observability/lgtm): Enabling Prometheus metrics for Grafana dashboards on Quarkus LGTM stack

@@ -65,7 +65,7 @@ To define a delegated step that references an external operator service:
 ```yaml
 steps:
   - name: embed
-    operator: com.example.ai.sdk.service.EmbeddingService
+    operator: com.example.ai.sdk.service.EmbeddingService::embed
     input: com.app.domain.TextChunk
     output: com.app.domain.Vector
     operatorMapper: com.app.mapper.ChunkVectorMapper
@@ -92,7 +92,7 @@ steps:
     
   # Delegated step referencing an external operator service
   - name: embed-text
-    operator: com.example.ai.sdk.service.EmbeddingService
+    operator: com.example.ai.sdk.service.EmbeddingService::embed
     input: com.app.domain.TextChunk
     output: com.app.domain.Embedding
     operatorMapper: com.app.mapper.TextEmbeddingMapper
@@ -153,7 +153,7 @@ When you want to abstract away operator types using an operator mapper:
 ```yaml
 steps:
   - name: embed-text
-    operator: com.example.ai.sdk.service.EmbeddingService
+    operator: com.example.ai.sdk.service.EmbeddingService::embed
     input: com.app.domain.TextChunk
     output: com.app.domain.Embedding
     operatorMapper: com.app.mapper.TextEmbeddingMapper

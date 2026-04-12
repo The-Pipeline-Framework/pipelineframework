@@ -18,7 +18,7 @@ Relevant keys:
 Disable only when you explicitly need to:
 
 ```properties
-quarkus.snapstart.enabled=false
+quarkus.snapstart.enable=false
 ```
 
 ## JVM Startup Tuning

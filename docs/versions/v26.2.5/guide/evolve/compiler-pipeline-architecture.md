@@ -47,7 +47,7 @@ This chain is wired by `PipelineStepProcessor` and executed by `PipelineCompiler
 - Discovery and model extraction: collect annotated elements and build IR models.
 - Runtime mapping and semantic analysis: derive transport/runtime behavior and policy decisions.
 - Target resolution and binding construction: map each model to generation targets and renderer-ready bindings.
-- Generation and infrastructure: emit transport artifacts and metadata to the proper module/output paths.
+- Generation and infrastructure: emit transport artefacts and metadata to the proper module/output paths.
 
 ## Architecture Guardrails
 

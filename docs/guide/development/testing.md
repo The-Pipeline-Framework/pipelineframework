@@ -21,11 +21,13 @@ class ProcessPaymentServiceTest {
 
   @Test
   void processesPayment() {
-    PaymentRecord record = new PaymentRecord();
+    PaymentRecord record = new PaymentRecord("id-1", BigDecimal.TEN);
     Uni<PaymentStatus> result = service.process(record);
     UniAssertSubscriber<PaymentStatus> subscriber =
         result.subscribe().withSubscriber(UniAssertSubscriber.create());
-    subscriber.awaitItem();
+    PaymentStatus status = subscriber.awaitItem().getItem();
+    assertNotNull(status);
+    assertNull(subscriber.getFailure());
   }
 }
 ```
@@ -69,11 +71,16 @@ public class PostgresRedisResource implements QuarkusTestResourceLifecycleManage
 
 @QuarkusTest
 @QuarkusTestResource(value = PostgresRedisResource.class, restrictToAnnotatedClass = true)
-class PersistenceIntegrationTest {
+class PersistenceIntegrationIT {
+
+  @Inject
+  PaymentRepository repository;
 
   @Test
   void persistsRecords() {
-    // exercise repository or pipeline entrypoint
+    PaymentEntity entity = new PaymentEntity("id-1", BigDecimal.TEN);
+    repository.persist(entity);
+    assertTrue(repository.findByIdOptional("id-1").isPresent());
   }
 }
 ```
@@ -87,6 +94,8 @@ class PersistenceIntegrationTest {
 ```bash
 ./mvnw verify
 ```
+
+`./mvnw test` runs the fast `test` phase and is the right home for unit tests such as `*Test`. `./mvnw verify` includes the `verify` phase, where integration tests such as `*IT` and container-backed checks should run.
 
 ## Tips
 

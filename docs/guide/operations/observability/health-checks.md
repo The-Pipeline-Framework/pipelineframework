@@ -26,16 +26,24 @@ Add checks for dependencies such as databases or external APIs.
 @Readiness
 @ApplicationScoped
 public class PaymentProviderHealthCheck implements HealthCheck {
+    @Inject
+    PaymentProviderClient client;
+
     @Override
     public HealthCheckResponse call() {
-        return HealthCheckResponse.up("payment-provider");
+        try {
+            client.ping();
+            return HealthCheckResponse.up("payment-provider");
+        } catch (Exception error) {
+            return HealthCheckResponse.down("payment-provider");
+        }
     }
 }
 ```
 
 ## Design Notes
 
-1. Keep checks fast
-2. Fail readiness when critical dependencies are down
-3. Use graceful degradation when possible
-4. Keep startup checks aligned with pipeline dependencies
+1. Keep checks fast.
+2. Fail readiness when critical dependencies are down.
+3. Use graceful degradation when possible.
+4. Keep startup checks aligned with pipeline dependencies.

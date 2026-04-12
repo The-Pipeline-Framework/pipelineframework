@@ -16,17 +16,17 @@ The following are semantic warnings (not errors) that the compiler/processor may
    - Warning: Aspects applied AFTER reduction steps may have batching implications
    - Impact: Aspects might execute after batching has occurred, affecting metrics or other concerns
 
-3. **Aspect configuration present but enabled=false**
-   - Warning: When an aspect has configuration defined but is disabled (enabled=false)
+3. **Aspect configuration present but `enabled=false`**
+   - Warning: When an aspect has configuration defined but is disabled (`enabled=false`)
    - Impact: Configuration is present but unused, potentially indicating an oversight
 
 4. **STEPS scope with content**
    - Warning: STEPS scope is reserved for future extensions; in the current version, STEPS scope MUST be empty or treated as GLOBAL with a warning
-   - Impact: Future behavior may change when STEPS scope is fully implemented
+   - Impact: Future behaviour may change when STEPS scope is fully implemented
 
 ## Aspect Invariants
 
-The following invariants define the fundamental behavior of pipeline aspects:
+The following invariants define the fundamental behaviour of pipeline aspects:
 
 - Aspects do not change pipeline types or topology
 - Aspects may have side effects

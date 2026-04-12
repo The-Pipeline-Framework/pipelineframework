@@ -4,10 +4,10 @@ search: false
 
 # TPFGo Reference (TPF-Inspired)
 
-This guide is a lightweight index for a "TPFGo" reference implementation in TPF, a TPF-centric interpretation focused on checkpoint pipelines, immutable state progression, and workflow semantics.
+This guide is a lightweight index for the TPFGo reference implementation, focused on checkpoint pipelines, immutable state progression, and workflow semantics.
 
 Current completion scope:
-- TPFGo completion scope is SYNC-path business/workflow and transport-contract scope.
+- The TPFGo completion scope covers the SYNC-path business/workflow and the transport-contract scope.
 - Queue/HA delivery (`QUEUE_ASYNC`, durable providers) is tracked in a separate epic and is not a TPFGo merge blocker.
 
 ## Reading order (recommended)
@@ -38,7 +38,7 @@ Current completion scope:
 ## Core terms used in this guide
 
 - **Connector**: the runtime handoff boundary between pipelines/contexts.
-  In TPF v1 the runtime boundary is enabled by a first-class framework model: YAML declaration, build-time validation, and generated startup wiring (runtime initialization code produced from the YAML declaration).
+  In TPF v1 the runtime boundary is enabled by a first-class framework model: YAML declaration, build-time validation, and generated startup wiring.
   `Bridge` remains the compatibility label for manual application beans that replace that generated Connector lifecycle.
   Responsibilities:
   - idempotency/dedup
@@ -49,4 +49,4 @@ Current completion scope:
   - **Checkpoint observer**: observes stable, persisted outputs.
   - **Mid-step tap**: observes transient outputs with weaker persistence/durability guarantees.
 
-If you are new to the conversation, start with the DDD alignment guide, then the design spectrum, and finish with the roadmap.
+If you are new to the conversation, start with the DDD alignment guide, then the design spectrum, then the Observer and Tap Contract guide, and finish with the roadmap.

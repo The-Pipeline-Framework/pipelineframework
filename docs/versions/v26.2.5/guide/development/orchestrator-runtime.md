@@ -4,7 +4,7 @@ search: false
 
 # Orchestrator Runtime
 
-The orchestrator runtime coordinates step execution for a pipeline and exposes generated transport entrypoints.
+The orchestrator runtime coordinates step execution for a pipeline and exposes generated transport endpoints.
 
 ## Runtime Modes
 

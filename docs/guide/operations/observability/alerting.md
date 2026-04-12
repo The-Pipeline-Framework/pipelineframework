@@ -20,7 +20,7 @@ Pair alerts with dashboards that show step latency, item throughput (while runni
 1. Run failure rate above threshold (orchestrator)
 2. Step error rate above SLO (gRPC server spans)
 3. Item latency above SLO (run average or per-step)
-4. Backpressure pressure rising (buffer queued stays high)
+4. Backpressure rising (buffer queued stays high)
 5. Orchestrator runtime failure or restart loops
 
 ## Practical Defaults

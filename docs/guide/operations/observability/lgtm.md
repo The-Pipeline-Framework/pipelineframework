@@ -1,4 +1,4 @@
-# Dev Mode Behavior (New Relic vs LGTM)
+# Dev Mode Behavior (LGTM)
 
 The Pipeline Framework (TPF) keeps observability lightweight by default in dev. You opt in to external collectors via env vars.
 

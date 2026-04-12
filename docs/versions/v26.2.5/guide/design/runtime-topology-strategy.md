@@ -26,7 +26,7 @@ Choose topology by balancing:
 
 ## Orchestrator boundary
 
-Keeping orchestrator isolated is usually a good default when you want:
+Keeping the orchestrator isolated is usually a good default when you want:
 
 - One external ingress point
 - Reduced attack surface for internal services/plugins

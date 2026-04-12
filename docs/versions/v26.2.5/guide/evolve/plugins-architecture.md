@@ -11,7 +11,7 @@ The plugin and aspect system implements an AOP-like model where cross-cutting co
 Aspects are applied at compile-time during the annotation processing phase. This differs from runtime AOP frameworks and provides:
 - Deterministic behavior
 - No runtime performance overhead for aspect application
-- Clear visibility of all pipeline behavior after compilation
+- Clear visibility of all pipeline behaviour after compilation
 
 ## Synthetic steps concept
 
@@ -89,7 +89,7 @@ By applying aspects at compile-time:
 - The final pipeline structure is known before deployment
 - There's no runtime configuration to manage
 - Deployment packages are self-contained
-- Behavior is predictable and testable
+- Behaviour is predictable and testable
 
 ## Known limitations
 
@@ -99,7 +99,7 @@ By applying aspects at compile-time:
 
 ## Intentional constraints
 
-- Aspects cannot alter the functional behavior of the pipeline
+- Aspects cannot alter the functional behaviour of the pipeline
 - Plugin interfaces are limited to side-effect patterns
 - Aspect configuration is declarative rather than programmatic
 
@@ -120,5 +120,5 @@ By applying aspects at compile-time:
 
 - Richer step selection for STEPS-scoped aspects
 - Enhanced aspect configuration options
-- Visualization tooling to show expanded pipeline structure
+- Visualisation tooling to show expanded pipeline structure
 - More sophisticated ordering and conflict resolution
