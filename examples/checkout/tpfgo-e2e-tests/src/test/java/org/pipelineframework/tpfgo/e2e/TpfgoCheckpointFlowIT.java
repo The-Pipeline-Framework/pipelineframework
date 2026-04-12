@@ -23,6 +23,8 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.Status;
+import io.grpc.StatusRuntimeException;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -179,9 +181,11 @@ class TpfgoCheckpointFlowIT {
             .usePlaintext()
             .build();
         try {
+            CheckpointPublicationServiceGrpc.CheckpointPublicationServiceBlockingStub serviceStub =
+                CheckpointPublicationServiceGrpc.newBlockingStub(channel);
+            warmUpCompensationBoundary(serviceStub);
             CheckpointPublicationServiceGrpc.CheckpointPublicationServiceBlockingStub stub =
-                CheckpointPublicationServiceGrpc.newBlockingStub(channel)
-                    .withDeadlineAfter(10, TimeUnit.SECONDS);
+                serviceStub.withDeadlineAfter(10, TimeUnit.SECONDS);
 
             JsonNode payload = PipelineJson.mapper().valueToTree(Map.of(
                 "orderId", "dddddddd-dddd-dddd-dddd-dddddddddddd",
@@ -205,7 +209,7 @@ class TpfgoCheckpointFlowIT {
 
             assertFalse(first.getDuplicate());
             assertTrue(duplicate.getDuplicate());
-            JsonNode finalPayload = collector.awaitPayload("tpfgo.compensation.terminal-state.v1");
+            JsonNode finalPayload = collector.awaitPayload("tpfgo.compensation.terminal-state.v1", logDirectory, apps);
             assertEquals("FAILED_COMPENSATED", finalPayload.get("outcome").asText());
             assertEquals(1, collector.countFor("tpfgo.compensation.terminal-state.v1"));
         } finally {
@@ -255,6 +259,54 @@ class TpfgoCheckpointFlowIT {
         JsonNode warmupPayload = collector.awaitPayload("tpfgo.compensation.terminal-state.v1", logDirectory, apps);
         assertNotNull(warmupPayload);
         collector.reset();
+    }
+
+    private void warmUpCompensationBoundary(
+        CheckpointPublicationServiceGrpc.CheckpointPublicationServiceBlockingStub stub
+    ) throws IOException {
+        Awaitility.await()
+            .atMost(Duration.ofSeconds(20))
+            .pollInterval(Duration.ofMillis(250))
+            .until(() -> checkpointAdmissionReady(stub));
+
+        JsonNode warmupPayload = PipelineJson.mapper().valueToTree(Map.of(
+            "orderId", DeterministicIds.uuid("warmup-compensation-order", "duplicate-boundary").toString(),
+            "paymentId", "",
+            "processedAt", "2026-03-27T12:00:00Z",
+            "amount", "0",
+            "currency", "EUR",
+            "status", "FAILED",
+            "failureCode", "PAYMENT_CAPTURE_REJECTED",
+            "failureReason", "warmup"));
+
+        CheckpointPublishAcceptedResponse accepted = stub.publish(
+            CheckpointPublishRequest.newBuilder()
+                .setPublication("tpfgo.payment.capture-result.v1")
+                .setPayloadJson(ByteString.copyFrom(PipelineJson.mapper().writeValueAsBytes(warmupPayload)))
+                .setTenantId("default")
+                .setIdempotencyKey("payment-boundary-warmup")
+                .build());
+        assertFalse(accepted.getDuplicate());
+        JsonNode terminal = collector.awaitPayload("tpfgo.compensation.terminal-state.v1", logDirectory, apps);
+        assertEquals("FAILED_COMPENSATED", terminal.get("outcome").asText());
+        collector.reset();
+    }
+
+    private boolean checkpointAdmissionReady(
+        CheckpointPublicationServiceGrpc.CheckpointPublicationServiceBlockingStub stub
+    ) {
+        try {
+            stub.withDeadlineAfter(2, TimeUnit.SECONDS).publish(
+                CheckpointPublishRequest.newBuilder()
+                    .setPublication("")
+                    .setPayloadJson(ByteString.EMPTY)
+                    .setTenantId("")
+                    .setIdempotencyKey("")
+                    .build());
+            return true;
+        } catch (StatusRuntimeException e) {
+            return e.getStatus().getCode() == Status.Code.INVALID_ARGUMENT;
+        }
     }
 
     /**
