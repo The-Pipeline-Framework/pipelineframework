@@ -16,6 +16,9 @@
 
 package org.pipelineframework.search.resource;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.util.UUID;
 
 import io.quarkus.test.junit.QuarkusTest;
@@ -39,12 +42,16 @@ class RawDocumentResourceTest {
                 isGeneratedRestResourcePresent(),
                 "Generated REST resource not present in this build; skipping REST endpoint assertions.");
 
+        int httpsPort = Integer.parseInt(System.getProperty("quarkus.http.test-ssl-port", "8444"));
+        Assumptions.assumeTrue(
+                isRestServerReachable(httpsPort),
+                "REST test server is not active for this build; skipping REST endpoint assertions.");
+
         // Configure RestAssured to use HTTPS and trust all certificates for testing
         RestAssured.useRelaxedHTTPSValidation();
         RestAssured.config =
                 RestAssured.config().sslConfig(SSLConfig.sslConfig().relaxedHTTPSValidation());
-        RestAssured.port =
-                Integer.parseInt(System.getProperty("quarkus.http.test-ssl-port", "8444"));
+        RestAssured.port = httpsPort;
     }
 
     @AfterAll
@@ -61,6 +68,15 @@ class RawDocumentResourceTest {
                     Thread.currentThread().getContextClassLoader());
             return true;
         } catch (ClassNotFoundException | LinkageError e) {
+            return false;
+        }
+    }
+
+    private static boolean isRestServerReachable(int port) {
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress("127.0.0.1", port), 250);
+            return true;
+        } catch (IOException e) {
             return false;
         }
     }

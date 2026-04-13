@@ -50,7 +50,7 @@
         <quarkus.platform.version>3.31.3</quarkus.platform.version>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
-        <protobuf.version>4.32.1</protobuf.version>
+        <protobuf.version>4.33.2</protobuf.version>
         <grpc.version>1.63.0</grpc.version>
         <version.jandex>3.5.0</version.jandex>
         <spotless.plugin.version>2.44.0</spotless.plugin.version>
@@ -88,6 +88,16 @@
                 <version>${project.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java</artifactId>
+                <version>${protobuf.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java-util</artifactId>
+                <version>${protobuf.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -436,7 +446,7 @@
                             <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         </systemPropertyVariables>
                         <!--suppress UnresolvedMavenProperty -->
-                        <argLine>@{argLine} ${surefireArgLine} --enable-preview -XX:+EnableDynamicAgentLoading</argLine>
+                        <argLine>${surefireArgLine} --enable-preview -XX:+EnableDynamicAgentLoading</argLine>
                     </configuration>
                 </plugin>
                 <plugin>
