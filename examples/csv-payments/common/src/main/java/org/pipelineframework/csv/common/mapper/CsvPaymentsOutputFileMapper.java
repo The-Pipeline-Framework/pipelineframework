@@ -59,7 +59,7 @@ public interface CsvPaymentsOutputFileMapper extends org.pipelineframework.mappe
    * @deprecated use {@link #toExternal(CsvPaymentsOutputFile)}. Transitional bridge method retained for
    *             compatibility and scheduled for removal in a future major release.
    */
-  @Deprecated(since = "26.2.5", forRemoval = true)
+  @Deprecated(since = "26.4.3", forRemoval = true)
   default org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsOutputFile toDtoToGrpc(CsvPaymentsOutputFile domain) {
     return toExternal(domain);
   }
@@ -68,7 +68,7 @@ public interface CsvPaymentsOutputFileMapper extends org.pipelineframework.mappe
    * @deprecated use {@link #fromExternal(org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsOutputFile)}. Transitional bridge
    *             method retained for compatibility and scheduled for removal in a future major release.
    */
-  @Deprecated(since = "26.2.5", forRemoval = true)
+  @Deprecated(since = "26.4.3", forRemoval = true)
   default CsvPaymentsOutputFile fromGrpcFromDto(org.pipelineframework.csv.grpc.PipelineTypes.CsvPaymentsOutputFile grpc) {
     return fromExternal(grpc);
   }
