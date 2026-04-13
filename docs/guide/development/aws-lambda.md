@@ -113,7 +113,7 @@ tpf.transport.protocol=PROTOBUF_HTTP_V1
 `PROTOBUF_HTTP_V1` only takes effect when `tpf.function.invocation.mode=REMOTE`.
 It configures payload/error encoding (`application/x-protobuf` + `google.rpc.Status`) while REST remains the wire transport.
 
-Choose `PROTOBUF_HTTP_V1` when you need smaller binary payloads, existing protobuf schema reuse, or tighter runtime serialization costs.
+Choose `PROTOBUF_HTTP_V1` when you need smaller binary payloads, existing protobuf schema reuse, or tighter runtime serialisation costs.
 Trade-offs are reduced ad-hoc readability and stricter schema/tooling compatibility requirements compared with JSON.
 
 When enabled:
@@ -170,7 +170,7 @@ FUNCTION generation supports unary and streaming step cardinalities through brid
 
 | Pipeline shape | Function bridge mapping | Failure semantics |
 |----------------|-------------------------------|-------------------|
-| `UNARY_UNARY` | Generated Lambda handler delegates to generated REST resource for step/orchestrator. | Step/resource failure becomes handler failure for that invocation.<br>Retry/timeout behavior is controlled by Lambda invoke source and TPF retry configuration inside the runtime. |
+| `UNARY_UNARY` | Generated Lambda handler delegates to generated REST resource for step/orchestrator. | Step/resource failure becomes handler failure for that invocation.<br>Retry/timeout behaviour is controlled by Lambda invoke source and TPF retry configuration inside the runtime. |
 | `UNARY_STREAMING` | Generated handler delegates through `FunctionTransportBridge.invokeOneToMany`. | Adapter/bridge path returns list sink output and preserves transport metadata/idempotency policy. |
 | `STREAMING_UNARY` | Generated handler delegates through `FunctionTransportBridge.invokeManyToOne`. | Adapter/bridge path reduces stream input to unary output with bounded collection policy. |
 | `STREAMING_STREAMING` | Generated handler delegates through `FunctionTransportBridge.invokeManyToMany`. | Adapter/bridge path processes streaming input/output with bounded ingress/sink behavior. |
@@ -179,7 +179,7 @@ Failure semantics summary:
 
 - Validation failures in FUNCTION mode are now primarily transport-mode related (`pipeline.transport=REST` required), while supported streaming shapes generate adapter/bridge wiring.
 - Invocation failures in unary handlers fail the current function call.
-- Retries are not implicit in the bridge itself; they follow configured TPF retry behavior and upstream Lambda/event-source policies.
+- Retries are not implicit in the bridge itself; they follow configured TPF retry behaviour and upstream Lambda/event-source policies.
 
 ## Backpressure Model in Function Deployments
 
@@ -197,8 +197,8 @@ Operators should configure bounded waits and clear timeout ownership at function
 - Startup/dependency waits should stay bounded (`pipeline.health.startup-timeout`).
 - Function adapters are boundary adapters, not infinite buffers.
   Retry/backoff should stay bounded (`pipeline.defaults.retry-limit`, `pipeline.defaults.retry-wait-ms`, `pipeline.defaults.max-backoff`).
-- Backpressure behavior inside a runtime remains controlled by step/runtime overflow strategy and capacity settings.
-- Adapters preserve reactive semantics inside a runtime; cross-runtime pacing is bounded by Lambda concurrency, event source behavior, and configured batching/overflow policy.
+- Backpressure behaviour inside a runtime remains controlled by step/runtime overflow strategy and capacity settings.
+- Adapters preserve reactive semantics inside a runtime; cross-runtime pacing is bounded by Lambda concurrency, event source behaviour, and configured batching/overflow policy.
 
 ## Quarkus Integrations You Can Leverage in TPF Apps
 

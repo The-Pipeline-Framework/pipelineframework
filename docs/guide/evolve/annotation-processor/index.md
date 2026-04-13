@@ -6,7 +6,7 @@ It focuses on the phased compiler path that replaced the old monolithic processo
 
 ## Architecture Overview
 
-The processor is organized as a compiler-style phase pipeline:
+The processor is organised as a compiler-style phase pipeline:
 
 ```mermaid
 flowchart LR

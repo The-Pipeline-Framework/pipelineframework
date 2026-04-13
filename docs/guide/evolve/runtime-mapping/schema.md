@@ -56,7 +56,7 @@ synthetics:
     module: <moduleName>
 ```
 
-## Default behavior
+## Default behaviour
 
 - If `pipeline.runtime.yaml` is missing, current scaffold defaults apply.
 - `validation: auto` causes unmapped steps and synthetics to fall back to defaults.
@@ -64,7 +64,7 @@ synthetics:
 - `defaults.module: shared` requires exactly one module (the shared module), or an explicit module name instead.
 - Transport is configured globally in `pipeline.yaml` and applies to all runtimes in the pipeline.
 
-## Layout behavior
+## Layout behaviour
 
 If you are unsure, pick **pipeline-runtime** first. It gives you fewer deployables without fully collapsing isolation, and it keeps the orchestrator in its own runtime.
 
@@ -109,7 +109,7 @@ If you are unsure, pick **pipeline-runtime** first. It gives you fewer deployabl
 
 - Logical placement resolves all steps, synthetics, and orchestrator to the monolith module.
 - Wiring for internal calls is generated as in-process for that single-module target.
-- A real monolith artifact/runtime requires a monolithic build topology.
+- A real monolith artefact/runtime requires a monolithic build topology.
 - In `validation: auto`, unmapped steps/synthetics fall back to the monolith module.
 - Explicit placements are allowed but must all target the monolith module.
   This is the "everything in one place" option. You trade isolation for operational simplicity.

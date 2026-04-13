@@ -97,7 +97,7 @@ This differs from FTGO (Food To Go, from Chris Richardson's Microservices Patter
 
 **ApproveOrder**
 - A separate pipeline that consumes the checkpoint and produces a new immutable state.
-- If not explicitly modeled as a business pipeline step, an approval failure is treated as an operational concern (handled via retries, alerts, monitoring, etc.), whereas modeling it as a business pipeline makes it part of the business workflow and subject to business rules and compensating actions.
+- If not explicitly modelled as a business pipeline step, an approval failure is treated as an operational concern (handled via retries, alerts, monitoring, etc.), whereas modeling it as a business pipeline makes it part of the business workflow and subject to business rules and compensating actions.
 
 ## DDD Layering in TPF
 

@@ -21,13 +21,13 @@
     <parent>
         <groupId>org.pipelineframework</groupId>
         <artifactId>pipeline-framework-root</artifactId>
-        <version>26.2.5-SNAPSHOT</version>
+        <version>26.4.4-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
     <groupId>org.pipelineframework</groupId>
     <artifactId>framework-parent</artifactId>
-    <version>26.2.5-SNAPSHOT</version>
+    <version>26.4.4-SNAPSHOT</version>
     <!-- version is not needed as it is automatically inherited from the parent-->
     <packaging>pom</packaging>
     <name>The Pipeline Framework (Parent)</name>
@@ -62,7 +62,7 @@
         <maven.compiler.target>21</maven.compiler.target>
         <mapstruct.version>1.6.3</mapstruct.version>
         <enablePreview>true</enablePreview>
-        <quarkus.platform.version>3.31.3</quarkus.platform.version>
+        <quarkus.platform.version>3.33.1</quarkus.platform.version>
         <quarkus.amazon.services.bom.version>3.14.1</quarkus.amazon.services.bom.version>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>

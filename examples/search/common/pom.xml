@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.pipelineframework.search</groupId>
         <artifactId>search-pipeline</artifactId>
-        <version>26.2.5-SNAPSHOT</version>
+        <version>26.4.4-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -37,7 +37,7 @@
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-junit5-mockito</artifactId>
+            <artifactId>quarkus-junit-mockito</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -159,6 +159,38 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>compile-orchestrator-client</id>
+                        <configuration>
+                            <skipMain>true</skipMain>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>compile-pipeline-server</id>
+                        <configuration>
+                            <skipMain>true</skipMain>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>compile-plugin-client</id>
+                        <configuration>
+                            <skipMain>true</skipMain>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>compile-plugin-server</id>
+                        <configuration>
+                            <skipMain>true</skipMain>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>compile-rest-server</id>
+                        <configuration>
+                            <skipMain>true</skipMain>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
@@ -232,7 +264,7 @@
                 <executions>
                     <execution>
                         <id>make-index</id>
-                        <phase>package</phase>
+                        <phase>process-classes</phase>
                         <goals>
                             <goal>jandex</goal>
                         </goals>

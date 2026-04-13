@@ -17,12 +17,12 @@ This plan treats runtime mapping as a compiler feature with deterministic inputs
 - Per-module AP uses global mapping and filters to current module.
 - Cross-module client wiring uses the pipeline transport.
 - In-module wiring remains in-process.
-- `layout: monolith` collapses to single module behavior.
+- `layout: monolith` collapses to single module behaviour.
 
 ## Regression tests
 
 - No mapping file present: generated outputs match current scaffold.
-- Partial mapping in `validation: auto` does not change unmapped behavior.
+- Partial mapping in `validation: auto` does not change unmapped behaviour.
 
 ## Suggested naming for tests
 

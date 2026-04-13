@@ -44,7 +44,7 @@ public record DeadLetterEnvelope(
     /**
      * Deprecated positional constructor kept for binary/source compatibility while callers migrate to {@link Builder}.
      */
-    @Deprecated(forRemoval = false, since = "26.2.5")
+    @Deprecated(forRemoval = false, since = "26.4.3")
     public DeadLetterEnvelope {
         Objects.requireNonNull(tenantId, "tenantId must not be null");
         Objects.requireNonNull(executionId, "executionId must not be null");
