@@ -6,7 +6,7 @@ search: false
 
 TPF supports two operator execution models:
 
-- local Java operators resolved at build time with `operator: Class::method`
+- local Java operators resolved at build time with `operator: fully.qualified.Class::method`
 - remote IDL v2 operators declared with `execution.mode: REMOTE`
 
 ## Minimal Example

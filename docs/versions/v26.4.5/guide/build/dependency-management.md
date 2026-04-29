@@ -17,14 +17,14 @@ The parent POM defines common properties and manages dependencies. The pipeline 
     <artifactId>my-pipeline-application-parent</artifactId>
     <version>1.0.0</version>
     <packaging>pom</packaging>
-    
+
     <modules>
         <module>common</module>
         <module>step-one-svc</module>
         <module>step-two-svc</module>
         <module>orchestrator-svc</module>
     </modules>
-    
+
     <dependencyManagement>
         <dependencies>
             <dependency>
@@ -33,9 +33,9 @@ The parent POM defines common properties and manages dependencies. The pipeline 
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.example</groupId>
-                <artifactId>pipeline-framework-runtime</artifactId>
-                <version>${project.version}</version>
+                <groupId>org.pipelineframework</groupId>
+                <artifactId>pipelineframework</artifactId>
+                <version>${tpf.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -54,17 +54,17 @@ Services declare dependencies on the common module and framework. Both runtime a
         <artifactId>my-pipeline-application-parent</artifactId>
         <version>1.0.0</version>
     </parent>
-    
+
     <artifactId>step-one-svc</artifactId>
-    
+
     <dependencies>
         <dependency>
             <groupId>com.example</groupId>
             <artifactId>common</artifactId>
         </dependency>
         <dependency>
-            <groupId>com.example</groupId>
-            <artifactId>pipeline-framework</artifactId>
+            <groupId>org.pipelineframework</groupId>
+            <artifactId>pipelineframework</artifactId>
         </dependency>
     </dependencies>
 </project>

@@ -42,6 +42,7 @@ If no annotation processor options are provided, the framework searches for:
 You can customize the descriptor file location using annotation processor options (these override defaults):
 
 ### Maven Configuration
+
 ```xml
 <plugin>
     <groupId>org.apache.maven.plugins</groupId>
@@ -65,7 +66,7 @@ You can customize the descriptor file location using annotation processor option
 
 The Pipeline Framework maintains a clear ownership model between your pipeline definition and gRPC `.proto` files:
 
-- **Pipeline model is authoritative**: Your `@PipelineStep` annotations define the canonical contract
+- **Pipeline YAML is authoritative**: Your `pipeline.yaml` defines the canonical step contract, while `@PipelineStep` marks internal services and carries Java-local execution hints
 - **`.proto` is a derived artifact**: Generated from your pipeline model but can be manually edited
 - **Manual edits are allowed, but constrained**: You can modify `.proto` files, but they must remain compatible with the pipeline model
 
@@ -122,11 +123,13 @@ When your `.proto` files don't match your pipeline model, you'll see build-time 
 - **Typical failure scenarios**: Incorrect service names, wrong method names, mismatched streaming semantics, incompatible message types
 
 Example error message:
+
 ```text
 [ERROR] Pipeline step 'ValidatePayment' expects service 'ProcessValidatePaymentService' with method 'remoteProcess',
-but found service 'ValidatePaymentService' with method 'validate'. 
+but found service 'ValidatePaymentService' with method 'validate'.
 Update your .proto file to match the expected naming convention.
 ```
+
 ### 7. Troubleshooting
 
 If you encounter errors about missing descriptor files:

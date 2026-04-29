@@ -32,10 +32,11 @@ The execution order would be:
 1. Aspect A executes (BEFORE_STEP, farthest from step)
 2. Aspect B executes (BEFORE_STEP, closest to step)
 3. Actual step executes
-4. Aspect D executes (AFTER_STEP, closest to step)
-5. Aspect C executes (AFTER_STEP, farthest from step)
+4. Aspect C executes (AFTER_STEP, closest to step)
+5. Aspect D executes (AFTER_STEP, farthest from step)
 
 This creates the following logical pipeline:
-```
-Input -> Aspect A -> Aspect B -> Step -> Aspect D -> Aspect C -> Output
+
+```text
+Input -> Aspect A -> Aspect B -> Step -> Aspect C -> Aspect D -> Output
 ```

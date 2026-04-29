@@ -22,7 +22,7 @@ The expensive stage is Crawl. We want to re-index with a new tokenizer without r
 - **Forced rebuild**: `x-pipeline-cache-policy: cache-only` overwrites cached outputs without reads.
 - **Debug or verification**: `x-pipeline-cache-policy: bypass-cache` runs the pipeline without cache I/O.
 
-Invalidation steps are reserved for targeted corrections (bug fixes, schema changes) and only run when `x-pipeline-replay: true` is provided.
+Invalidation steps are reserved for targeted corrections (bug fixes, schema changes). The runtime propagates `x-pipeline-replay` as metadata; replay-aware tooling or custom invalidation logic may consume it as a control signal.
 
 ## Step 1: Choose cache keys
 
@@ -44,14 +44,14 @@ public class ParsedDocumentKeyStrategy implements CacheKeyStrategy {
 
 ## Step 2: Run baseline (v1)
 
-```
+```yaml
 x-pipeline-version: v1
 x-pipeline-cache-policy: cache-only
 ```
 
 This caches every stage output under:
 
-```
+```text
 v1:{Type}:{docId}
 ```
 
@@ -59,7 +59,7 @@ v1:{Type}:{docId}
 
 Change the tokenizer logic and reuse cached outputs from earlier steps by keeping the same version tag:
 
-```
+```yaml
 x-pipeline-version: v1
 x-pipeline-cache-policy: prefer-cache
 ```
@@ -70,7 +70,7 @@ Now:
 - Index runs with new logic.
 - Outputs are cached under `v1:{Type}:{docId}`.
 
-`x-pipeline-replay` is currently propagated as a header only; it is not interpreted by the runtime.
+`x-pipeline-replay` is propagated as a header only by the core runtime. If your deployment adds replay-aware invalidation logic, document that component as the interpreter of the header.
 
 Caching happens in the cache plugin side-effect steps, so the step services remain unchanged.
 
@@ -78,7 +78,7 @@ Caching happens in the cache plugin side-effect steps, so the step services rema
 
 If you want a clean namespace for a new run, bump the version tag:
 
-```
+```yaml
 x-pipeline-version: v2
 x-pipeline-cache-policy: cache-only
 ```

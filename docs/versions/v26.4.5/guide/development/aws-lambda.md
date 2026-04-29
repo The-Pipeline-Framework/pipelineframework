@@ -101,7 +101,7 @@ Current baseline behavior:
 
 - intra-runtime generated handler paths execute with `LOCAL` invocation semantics
 - runtime mapping still controls placement/topology; invocation metadata provides a stable contract for future/optional remote adapters
-- when `REMOTE` is set but no remote adapter is configured, handler wiring should still be treated as local unless an app/runtime-specific adapter overrides it
+- when `REMOTE` is set, but no remote adapter is configured, handler wiring should still be treated as local unless an app/runtime-specific adapter overrides it
 
 ### Protobuf-over-HTTP (Unary v1) in FUNCTION Remote Paths
 
