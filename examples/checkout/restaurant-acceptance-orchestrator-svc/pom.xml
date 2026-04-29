@@ -3,7 +3,7 @@
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <parent><groupId>org.pipelineframework.tpfgo</groupId><artifactId>tpfgo-example</artifactId><version>26.4.4-SNAPSHOT</version><relativePath>../pom.xml</relativePath></parent>
+    <parent><groupId>org.pipelineframework.tpfgo</groupId><artifactId>tpfgo-example</artifactId><version>26.4.5-SNAPSHOT</version><relativePath>../pom.xml</relativePath></parent>
     <artifactId>restaurant-acceptance-orchestrator-svc</artifactId>
     <name>TPFGo Restaurant Acceptance Orchestrator</name>
     <properties><pipeline.generatedSourcesArg>-Apipeline.generatedSourcesDir=${project.build.directory}/generated-sources/pipeline</pipeline.generatedSourcesArg><protobuf.descriptor.fileArg>-Aprotobuf.descriptor.file=${project.build.directory}/generated-sources/grpc/descriptor_set.dsc</protobuf.descriptor.fileArg><generated.proto.dir>${project.build.directory}/generated-sources/proto</generated.proto.dir></properties>
