@@ -252,7 +252,6 @@
                     <version>3.0.1</version>
                     <configuration>
                         <autoVersionSubmodules>true</autoVersionSubmodules>
-                        <pushChanges>false</pushChanges>
                         <useReleaseProfile>false</useReleaseProfile>
                         <releaseProfiles>release</releaseProfiles>
                         <goals>deploy</goals>

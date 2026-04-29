@@ -2,21 +2,18 @@
 
 This document explains how to publish The Pipeline Framework to Maven Central and how to manage the project's versioning and release process properly.
 
-## TL;DR: Guarded Release Process
+## TL;DR: Automatic Release Process
 
-The release process uses the Maven Release Plugin for the root reactor, then GitHub Actions publishes framework artifacts from the release tag. Keep Maven's push step disabled so the generated release and next-development commits can be inspected before they reach `main`.
+The release process is fully automated with GitHub Actions using the Maven Release Plugin for version management:
 
-1. **Prepare locally without pushing**:
-   ```bash
-   ./mvnw release:prepare -DpushChanges=false -Darguments="-DskipTests"
-   ```
-2. **Synchronize release-coupled standalone POMs**: confirm alternate topology and standalone reference POMs moved to the next snapshot, including `examples/csv-payments/pom.pipeline-runtime.xml`, `examples/csv-payments/pom.monolith.xml`, `examples/checkout/pom.xml`, and `ai-sdk/pom.xml`.
-3. **Run the release validation gate**: at minimum run version-drift checks, framework verification, CSV topology checks, and docs build before pushing.
-4. **Push only after validation**: push the prepared commits to `main`, then push the immutable `vX.Y.Z` tag to trigger publishing.
-5. **Verify on Maven Central**: check artifacts at <https://central.sonatype.com/>.
+1. **Run the Maven Release Plugin**: `mvn release:prepare -Darguments="-DskipTests"` (updates versions across all modules and creates local tag)
+2. **Push the main branch**: `git push origin main` (pushes version updates; GitHub Actions runs tests but not full native build)
+3. **Push the tag**: `git push origin vx.y.z` (where x.y.z is your release version; triggers publishing workflow)
+4. **Monitor GitHub Actions**: Go to the Actions tab to monitor the publishing workflow (deploys to Sonatype Central, creates GitHub release)
+5. **Verify on Maven Central**: Check artifacts are published at <https://central.sonatype.com/>
 
 The GitHub Actions workflow automatically:
-- Runs the workflows selected by the pushed paths on `main`
+- Builds and tests the complete project (when pushing to main - though full native build is skipped for release commits)
 - Signs all artifacts with GPG
 - Deploys to Sonatype Central
 - Creates a GitHub release with notes
@@ -37,13 +34,12 @@ The Pipeline Framework is published to Maven Central to make it available to dev
 
 ## Version Management
 
-The framework release version is defined in the root POM (`pom.xml`) as the root reactor's `<version>`. Most root-reactor modules inherit that version through parent links, but several compatibility and reference surfaces are intentionally outside that reactor or use alternate top-level POMs.
+The Pipeline Framework uses a centralized version management system to ensure consistency across all modules:
 
-Keep these categories aligned during every release:
-
-1. **Root reactor**: root, framework, main examples, and plugins listed in the root `pom.xml`.
-2. **Alternate topology POMs**: build-entry POMs such as `examples/csv-payments/pom.pipeline-runtime.xml` and `examples/csv-payments/pom.monolith.xml`.
-3. **Standalone compatibility surfaces**: POMs such as `ai-sdk/pom.xml` and reference examples outside the root reactor.
+1. **Single Source of Truth**: The version is defined in the root POM (`pom.xml`) as the `<version>` element
+2. **Strict Hierarchy**: Every module links back to its parent using `<parent>`, all the way up to the root
+3. **Version Omission in Children**: All child and intermediate parent modules omit their own `<version>` tag entirely, relying solely on inheritance from the root parent
+4. **Updating Versions**: To update the version, change it only in the root POM
 
 ### Version Property Definition
 
@@ -52,11 +48,11 @@ In the root POM (`pom.xml`):
 <version>26.1-SNAPSHOT</version>
 ```
 
-Root-reactor children should inherit this version through the parent relationship and omit their own project `<version>` where possible. Alternate top-level POMs and standalone builds may need an explicit parent version or dependency property, so they must be checked separately.
+All child modules inherit this version through the parent relationship and omit their own `<version>` element entirely.
 
 ### Using Maven Versions Plugin
 
-To update root-reactor versions consistently, use the Maven Versions Plugin:
+To update versions across all modules consistently, use the Maven Versions Plugin:
 
 ```bash
 # Update the version across all modules
@@ -69,7 +65,7 @@ mvn versions:commit
 mvn versions:revert
 ```
 
-This ensures that modules in the selected Maven reactor are updated consistently. It does not automatically update alternate POM entrypoints or standalone surfaces that are not part of that reactor.
+This ensures that all modules in the multimodule project are updated consistently.
 
 ### Documentation Snapshot (Hybrid Versioning)
 
@@ -172,74 +168,33 @@ These secrets must exist in the GitHub repository:
 
 ## Safe Release Process
 
-### Standard Release Workflow
+### Standard Release Workflow (Recommended)
 
-Use the Maven Release Plugin as the versioning tool for the root reactor, but keep publication gated by explicit inspection and CI validation.
+The Maven Release Plugin provides a complete automated solution that handles version updates across all modules.
 
-1. **Start from a clean release branch**:
-   ```bash
-   git status --short
-   git fetch origin --tags
-   ```
-   Confirm the branch contains the intended docs snapshot and no unrelated local changes.
+1. **Prepare the Release**:
+   - Use the Maven Release Plugin to prepare the release:
+     ```bash
+     mvn release:prepare -Darguments="-DskipTests"
+     ```
+   - This will update versions across all modules, create a tag, and set the next development version in one step
+   - The plugin will prompt for:
+     - The release version (e.g., 1.0.0)
+     - The SCM tag (e.g., v1.0.0)
+     - The next development version (e.g., 1.0.1-SNAPSHOT)
 
-2. **Prepare the release locally without pushing**:
-   ```bash
-   ./mvnw release:prepare -DpushChanges=false -Darguments="-DskipTests"
-   ```
-   The root POM also configures `<pushChanges>false</pushChanges>` for the release plugin. Keep the command-line flag anyway so the behavior is explicit in shell history and release notes.
+2. **Push the Changes**:
+   - Push the version update commits to the main branch:
+     ```bash
+     git push origin main
+     ```
 
-   The plugin creates two local commits and a local tag:
-   - `[maven-release-plugin] prepare release vX.Y.Z`
-   - `[maven-release-plugin] prepare for next development iteration`
-   - `vX.Y.Z`
-
-3. **Inspect the release plugin output before any push**:
-   ```bash
-   git log --oneline --decorate -n 5
-   git diff HEAD~2..HEAD -- pom.xml framework/pom.xml examples ai-sdk plugins
-   ```
-   The release commit should contain the release version. The next-development commit should contain the next `-SNAPSHOT` version.
-
-4. **Synchronize release-coupled POMs outside the root reactor**:
-   The release plugin only updates POMs in the Maven reactor it runs. After `release:prepare`, check and fix alternate topology and standalone POMs so they match the next development version on `main`.
-
-   Required checks:
-   ```bash
-   rg -n "X\\.Y\\.Z-SNAPSHOT" --glob "pom*.xml" --glob "!docs/versions/**"
-   rg -n "X\\.Y\\.Z" examples ai-sdk --glob "pom*.xml"
-   ```
-   Replace `X.Y.Z` with the just-released version. There should be no remaining references to the old snapshot in active POMs after the next-development commit.
-
-   At minimum, check:
-   - `examples/csv-payments/pom.pipeline-runtime.xml`
-   - `examples/csv-payments/pom.monolith.xml`
-   - `examples/csv-payments/pipeline-runtime-svc/pom.xml`
-   - `examples/csv-payments/monolith-svc/pom.xml`
-   - `examples/checkout/pom.xml` and its child modules
-   - `ai-sdk/pom.xml`
-
-5. **Run the release validation gate before pushing**:
-   ```bash
-   ./mvnw -f framework/pom.xml verify
-   ./examples/csv-payments/build-pipeline-runtime.sh -pl orchestrator-svc -Dcsv.runtime.layout=pipeline-runtime -Dtest=PipelineRuntimeTopologyTest -Dit.test=CsvPaymentsPipelineRuntimeEndToEndIT verify
-   ./examples/csv-payments/build-monolith.sh -DskipTests
-   ./mvnw -f ai-sdk/pom.xml test
-   npm --prefix docs run build
-   ```
-   If time forces a smaller gate, record exactly which commands were skipped and do not claim full release validation.
-
-6. **Push the validated commits**:
-   ```bash
-   git push origin main
-   ```
-   Watch the `main` workflows. If a workflow fails because of version drift, fix `main` before pushing the tag.
-
-7. **Publish the release**:
-   ```bash
-   git push origin vX.Y.Z
-   ```
-   This triggers the GitHub Actions workflow that runs `mvn deploy` to publish framework artifacts to Maven Central.
+3. **Publish the Release**:
+   - Push the tag to trigger publishing to Maven Central:
+     ```bash
+     git push origin v1.0.0
+     ```
+   - This triggers the GitHub Actions workflow that runs `mvn deploy` to publish to Maven Central
 
 **Note**: The `mvn release:perform` step is not used in this setup since deployment is handled by GitHub Actions when a tag is pushed.
 
@@ -253,20 +208,6 @@ The publish workflow deploys only the framework artifacts (parent, runtime, depl
 - The root POM is included in the reactor but is **not deployed** (`maven.deploy.skip=true` in the root, overridden to false in `framework/pom.xml`).
 
 Note: Publishing the `framework-parent` artifact is expected. It is the BOM/parent POM that consumers import for dependency management, so it will appear in Maven Central autocomplete results.
-
-Publishing only framework artifacts does not mean example and SDK versions can drift. The E2E CI lanes build compatibility surfaces from the same checkout and expect their parent versions and `tpf.version` properties to match the root development version. A stale alternate POM can fail before tests start with `Non-resolvable parent POM` because its `relativePath` points to the checked-out root POM at a different version.
-
-### Main-branch E2E impact
-
-The CSV E2E workflows run from alternate topology POMs. During the `v26.4.4` release, `release:prepare` updated the root reactor to `26.4.5-SNAPSHOT`, but left `examples/csv-payments/pom.pipeline-runtime.xml`, `examples/csv-payments/pom.monolith.xml`, and `ai-sdk/pom.xml` at `26.4.4-SNAPSHOT`. Because the release plugin pushed by default, `main` received the drift before it was reviewed. The next `main` E2E runs then failed at Maven model resolution rather than test execution.
-
-Treat this as a release-blocking condition:
-
-```bash
-rg -n "OLD_VERSION-SNAPSHOT" --glob "pom*.xml" --glob "!docs/versions/**"
-```
-
-The command should return no active POMs after the next-development commit is prepared.
 
 ### Flattening at publish time (property-gated)
 
@@ -299,7 +240,7 @@ Use this manual approach only when you need fine-grained control or the Release 
    - Push the tag to trigger the GitHub Actions release workflow
 
 **Comparison**:
-- **Release Plugin**: Handles version updates across the selected Maven reactor, creates local release commits, and creates the local tag. It must run with push disabled so version drift can be fixed before `main` moves.
+- **Release Plugin**: Handles version updates across all modules automatically, but you still need to push commits and tags manually
 - **Versions Plugin**: Offers more manual control but requires multiple manual steps and careful coordination
 
 ### Alternative: Manual Release Workflow
@@ -342,11 +283,6 @@ This approach allows manual control over when releases happen.
 - Ensure all required artifacts (JARs, sources, javadoc, signatures) are present
 - Check that artifacts meet Maven Central requirements
 
-**Main E2E Fails Before Tests Start**:
-- Check for stale parent versions in alternate POMs: `rg -n "OLD_VERSION-SNAPSHOT" --glob "pom*.xml" --glob "!docs/versions/**"`
-- Check standalone TPF dependency properties such as `ai-sdk/pom.xml`'s `tpf.version`
-- Confirm the local root POM version matches the parent version in `examples/csv-payments/pom.pipeline-runtime.xml` and `examples/csv-payments/pom.monolith.xml`
-
 ### Testing the Setup
 
 Before pushing a tag that triggers the release workflow:
@@ -357,8 +293,8 @@ Before pushing a tag that triggers the release workflow:
 
 ## Important Notes
 
-- Only the framework artifacts are published to Maven Central.
-- Examples and SDK surfaces are not Central artifacts, but they are release-coupled because CI and users build them against the checked-out framework version.
-- The root POM orchestrates the main build while the framework POM handles publishing.
-- Prefer parent inheritance inside the root reactor. Check alternate top-level POMs and standalone POM properties separately during release preparation.
-- Always verify release artifacts on Maven Central after a successful deployment.
+- Only the framework artifacts (not example applications) are published to Maven Central
+- The examples project does NOT depend on the published framework artifacts
+- The root POM orchestrates the overall build while the framework POM handles publishing
+- The project now uses standard Maven practices: strict hierarchy with every module linking back to its parent using `<parent>`, all the way up to the root, and version omission in children where all child and intermediate parent modules omit their own `<version>` tag entirely, relying solely on inheritance from the root parent
+- Always verify your release artifacts on Maven Central after a successful deployment
