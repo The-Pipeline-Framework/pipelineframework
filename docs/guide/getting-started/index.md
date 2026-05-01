@@ -37,9 +37,10 @@ Extract the ZIP file and navigate to the application directory:
 unzip your-pipeline-app.zip
 cd your-pipeline-app
 ./mvnw clean compile
+./mvnw quarkus:dev
 ```
 
-Your application is now ready to run!
+Your application is now running locally.
 
 ## Next Steps
 

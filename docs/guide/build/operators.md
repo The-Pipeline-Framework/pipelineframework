@@ -9,7 +9,7 @@ Operators let you compose pipelines from either:
 
 ```mermaid
 flowchart LR
-  A["pipeline.yaml (operator: Class::method)"] --> B["Build-time resolution (Jandex)"]
+  A["pipeline.yaml (operator: fully.qualified.Class::method)"] --> B["Build-time resolution (Jandex)"]
   B --> C["Operator metadata (input, normalised return, category)"]
   C --> D["Generated invoker bean"]
   D --> E["Transport adapters (REST/gRPC/local)"]

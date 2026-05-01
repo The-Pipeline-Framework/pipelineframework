@@ -6,7 +6,7 @@ Use this matrix for compile-time/operator-resolution failures.
 
 | Signature (exact/close match) | Likely Cause | First Actions |
 | --- | --- | --- |
-| `Class not found` / `method not found` during operator resolution | Operator class not on build classpath, wrong FQCN, or wrong method name | Verify dependency graph, package name, and `operator: Class::method` value in YAML |
+| `Class not found` / `method not found` during operator resolution | Operator class not on build classpath, wrong FQCN, or wrong method name | Verify dependency graph, package name, and `operator: fully.qualified.Class::method` value in YAML |
 | `More than 1 matching method` / overloaded method ambiguity | Operator method overloading unsupported for resolved path | Rename target method or make operator entrypoint unique |
 | `Method has more than 1 parameter` | Operator contract mismatch with invoker expectations | Refactor to single input parameter (or unary input shape) |
 | `gRPC transport requires protobuf descriptors` | Descriptor set unavailable for gRPC delegated/operator path | Verify descriptor generation and build inputs for gRPC modules |

@@ -3,18 +3,26 @@ title: Redirecting...
 ---
 
 <script setup>
-import {onMounted} from 'vue'
+import {onMounted, onUnmounted} from 'vue'
 import {withBase} from 'vitepress'
+
+let redirectTimer
 
 onMounted(() => {
   if (typeof window !== 'undefined') {
-    window.setTimeout(() => {
+    redirectTimer = window.setTimeout(() => {
       try {
         window.location.replace(withBase('/value/business-value'))
       } catch (error) {
         console.error('Redirect to /value/business-value failed', error)
       }
     }, 1500)
+  }
+})
+
+onUnmounted(() => {
+  if (redirectTimer) {
+    window.clearTimeout(redirectTimer)
   }
 })
 </script>

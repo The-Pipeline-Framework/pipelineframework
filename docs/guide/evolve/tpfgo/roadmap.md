@@ -148,57 +148,57 @@ Status legend: TODO, IN_PROGRESS, DONE
 
 ### Merge-blocking items
 
-1) **Connector idempotency and dedup policy closure**  
-Status: DONE  
+1) **Connector idempotency and dedup policy closure**
+Status: DONE
 Done means:
 - Default duplicate-handling policy is documented and versioned.
 - Retry key derivation contract is explicit and deterministic.
 - Unit/integration tests cover duplicate/replay scenarios at connector boundaries.
 
-2) **Connector backpressure and buffering policy closure**  
-Status: DONE  
+1) **Connector backpressure and buffering policy closure**
+Status: DONE
 Done means:
 - End-to-end demand signaling model is documented.
 - Buffer capacity/overflow behavior is explicit and tested.
 - Failure signatures under pressure are observable and documented.
 
-3) **Cross-pipeline handoff contract build-time enforcement**  
-Status: DONE  
+1) **Cross-pipeline handoff contract build-time enforcement**
+Status: DONE
 Done means:
 - Output-to-input contract checks fail fast at build time for incompatible handoffs.
 - Diagnostics include pipeline/step context and expected vs actual contract details.
 - Coverage includes version drift and mapper/payload mismatch cases.
 
-4) **Canonical full FTGo flow implemented end-to-end**  
-Status: DONE  
+1) **Canonical full FTGo flow implemented end-to-end**
+Status: DONE
 Done means:
 - Full checkout -> validation -> restaurant acceptance -> preparation -> dispatch -> delivery -> payment flow exists in TPF.
 - Explicit failure/compensation pipelines are implemented for terminal failure checkpoints.
 - End-to-end test validates business correctness and deterministic lineage continuity.
 
-5) **Transport/platform parity gate (REST, gRPC, FUNCTION + Protobuf-over-HTTP semantic row)**  
-Status: DONE  
+1) **Transport/platform parity gate (REST, gRPC, FUNCTION + Protobuf-over-HTTP semantic row)**
+Status: DONE
 Done means:
 - Equivalent supported-shape behavior is validated across all required paths.
 - Unsupported shapes fail with explicit, consistent diagnostics.
 - Parity matrix tests are green and required in CI, including the semantic parity row for Protobuf-over-HTTP.
 
-6) **Partial-progress and recovery behavior closure**  
-Status: DONE  
+1) **Partial-progress and recovery behavior closure**
+Status: DONE
 Done means:
 - Partial-progress scenarios are explicitly classified and tested.
 - Replay/remediation workflow is codified and verifiable.
 - Parking/retry exhaustion behavior is operationally diagnosable.
 
-7) **Docs/runbooks aligned to shipped behavior**  
-Status: DONE  
+1) **Docs/runbooks aligned to shipped behavior**
+Status: DONE
 Done means:
 - Build/development/operations/evolve docs agree on current capabilities.
 - Troubleshooting guidance maps concrete failure signatures to actions.
 - No planned-but-unimplemented capability is documented as available.
 
-8) **Single merge-blocking CI gate for epic acceptance**  
-Status: DONE  
+1) **Single merge-blocking CI gate for epic acceptance**
+Status: DONE
 Done means:
 - CI includes framework verify + canonical FTGo E2E + parity matrix.
 - CI gate is wired through `CI — TPFGo SYNC Gate` workflow.
@@ -231,27 +231,27 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 - **Stance**: The pipeline process itself guarantees invariants; no status fields, no validators needed.
 - **Status**: RESOLVED
 
-2) **Failure classification**
+1) **Failure classification**
 - **Problem**: Distinguish business unhappy paths vs operational failures.
 - **Stance**: TPF uses a single failure channel; exceptions are operational and go to the error sink. Business unhappy paths are separate pipelines.
 - **Status**: DECIDED
 
-3) **Partial progress across pipelines**
+1) **Partial progress across pipelines**
 - **Problem**: Pipeline A completes, Pipeline B fails.
 - **Stance**: Treated as an ops failure; A's checkpoint remains valid. Optional ops pipelines may handle remediation. **Blocking for cross-pipeline sync composition** until an ops remediation pattern is defined. Action: define an ops remediation pipeline pattern for partial-progress recovery.
 - **Status**: OPEN
 
-4) **Idempotency / duplicate handoff**
+1) **Idempotency / duplicate handoff**
 - **Problem**: Checkpoint publication retries can duplicate downstream processing.
 - **Stance**: Orchestrator-owned checkpoint publication preserves incoming idempotency metadata when present and otherwise derives a deterministic handoff key from declared checkpoint key fields. The public model does not expose publication-local dedupe modes.
 - **Status**: RESOLVED
 
-5) **Traceability / lineage**
+1) **Traceability / lineage**
 - **Problem**: Track the lineage of items through steps and pipelines.
 - **Stance**: "Russian doll" tracing is implemented in current supported runtime paths via `TraceEnvelope`, including deterministic split/merge lineage behavior and parity-oriented test coverage.
 - **Status**: RESOLVED
 
-6) **Type compatibility between pipelines**
+1) **Type compatibility between pipelines**
 - **Problem**: Pipeline B should not depend on Pipeline A internals.
 - **Stance**: Checkpoint publication/subscription declarations validate published output type, subscriber ingress type, and mapper compatibility at build time. Cross-pipeline handoff remains explicit through checkpoint boundary contracts instead of hidden pipeline internals.
 - **Status**: RESOLVED
@@ -261,22 +261,22 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 - **Stance**: Reliable checkpoint publication inherits orchestrator queue-async admission behavior instead of exposing publication-local backpressure policies. Live subscribe/tap remains a weaker observation surface and does not define reliable handoff semantics.
 - **Status**: RESOLVED
 
-8) **Branching outputs (multi-out steps)**
+1) **Branching outputs (multi-out steps)**
 - **Problem**: A step may need to emit different output types based on business decisions.
 - **Stance**: Fan-out/fan-in behavior is implemented in runtime paths and reference lanes, but formal branch policy (primary vs aux, required vs optional) remains design work.
 - **Status**: PARTIAL
 
-9) **Observers and mid-step taps**
+1) **Observers and mid-step taps**
 - **Problem**: Optional features (e.g., marketing) may want to observe outputs that are not stable checkpoints.
 - **Stance**: Distinguish checkpoint observers (stable) from mid-step taps (weak guarantees); allow explicit opt-in.
 - **Status**: PROPOSED
 
-10) **Decision points as checkpoints**
+1) **Decision points as checkpoints**
 - **Problem**: Adding a new decision step can introduce a new step type or complex branching inside a pipeline.
 - **Stance**: Prefer ending the pipeline at a decision and spawning one pipeline per outcome. Over time, checkpoints should remain relatively stable even as steps grow.
 - **Status**: PROPOSED
 
-11) **Remote subscription trigger**
+1) **Remote subscription trigger**
 - **Problem**: Pipeline-to-pipeline chaining currently relies on external triggers (CLI/HTTP).
 - **Stance**: Add a streaming trigger to the orchestrator (subscribe/ingest) with backpressure and buffering.
 - **Status**: PROPOSED
@@ -296,7 +296,7 @@ Status legend: RESOLVED, DECIDED, PROPOSED, PARTIAL, OPEN
 
 ## Near-Term Design Work
 
-- **Error Sink**: define a runtime error sink interface with a default StdErrSink and optional gRPC/REST sink service.
+- **Error Sink**: define a runtime error sink interface with a default stderr sink and optional gRPC/REST sink service.
 - **Checkpoint Publication Contract**: define topic publication/subscription rules, queue-async-only support, and orchestrator-owned handoff behavior. (Pain-point #3, #4, #7)
 - **Build-Time Checks**: existing operator/mapping compatibility checks are extended to explicit checkpoint publication/subscription contracts.
 

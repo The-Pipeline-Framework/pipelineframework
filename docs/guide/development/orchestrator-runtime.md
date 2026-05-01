@@ -90,7 +90,7 @@ In `QUEUE_ASYNC` mode:
 1. committed execution state transitions are exactly-once (OCC/conditional-write guarded),
 2. dispatch and operator invocation are at-least-once,
 3. duplicate invocation can occur and must be handled with idempotency keys,
-4. streaming outputs are rejected for async execution in the current 26.2.x release line,
+4. streaming outputs are rejected for async execution in the current 26.4.x release line,
 5. persisted protobuf payload metadata stores `_tpf_message` as the protobuf schema full name.
 
 ## Queue-Async Control Plane
