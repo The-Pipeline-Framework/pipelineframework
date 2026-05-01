@@ -1,13 +1,13 @@
 # Start Monolith, Split Later
 
-<p class="value-lead">The Pipeline Framework (TPF) supports a practical architecture path: start with one deployable unit, then split when team and scale pressure make it worth it.</p>
+<p class="value-lead">The Pipeline Framework (TPF) supports a practical architecture path: start with one deployable, then split when team ownership or scale makes it worth it.</p>
 
 ## At a Glance
 
 <div class="value-glance">
-  <div class="value-glance-item"><strong>Fast First Release</strong> &middot; Monolith layout helps teams move quickly at the start.</div>
-  <div class="value-glance-item"><strong>Clear Migration Path</strong> &middot; Shift to pipeline-runtime or modular layouts as boundaries mature.</div>
-  <div class="value-glance-item"><strong>No Core Rewrite</strong> &middot; Change topology without rebuilding pipeline behavior.</div>
+  <div class="value-glance-item"><strong>Fast First Release</strong> &middot; Start with one application when that is the fastest path.</div>
+  <div class="value-glance-item"><strong>Clear Migration Path</strong> &middot; Move to grouped or modular layouts as boundaries mature.</div>
+  <div class="value-glance-item"><strong>No Core Rewrite</strong> &middot; Change deployable shape without rewriting the business functions.</div>
 </div>
 
 ## Use This When
@@ -15,6 +15,8 @@
 - You need speed now but know service boundaries will evolve.
 - Team ownership is outgrowing a single deployable unit.
 - Architecture discussions are stalling delivery.
+
+TPF separates **runtime layout** from **build topology**. Runtime layout is where the orchestrator, functions, and side effects logically run. Build topology is the Maven/container structure that physically creates deployables.
 
 ## Jump to Guides
 

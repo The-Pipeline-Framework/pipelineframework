@@ -1,15 +1,15 @@
 # Using plugins
 
 Plugins let you add cross-cutting capabilities (like persistence, metrics, or logging) without pushing that code into every business step.
-You configure behavior through aspects; the framework wires and generates the integration pieces.
+You configure when the plugin should run through aspects; the framework generates the integration code and calls it at the right point.
 
-## Mental model
+## How plugins fit the flow
 
-- **Steps**: your business transformations.
-- **Aspects**: where and when a plugin should run.
-- **Plugins**: implementation modules that provide the side effect.
+- **Steps**: your business functions.
+- **Aspects**: declarations that say where and when a plugin should run, such as before or after a step.
+- **Plugins**: implementation modules that do the cross-cutting work, such as persistence, cache, telemetry, or logging.
 
-This keeps business logic focused while infrastructure concerns stay declarative.
+This keeps business logic focused while infrastructure concerns stay declared in configuration.
 
 ## What you configure
 
@@ -26,8 +26,8 @@ At build time and runtime, TPF handles:
 
 - Adapter and client/server code generation.
 - Transport-specific integration (gRPC/REST/LOCAL).
-- Type-aware side-effect wiring.
-- Runtime injection for generated plugin surfaces.
+- Type-aware side-effect calls.
+- Runtime injection for generated plugin code.
 
 ## Aspect naming and module mapping
 
