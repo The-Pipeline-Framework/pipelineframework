@@ -18,6 +18,10 @@ The parent POM defines common properties and manages dependencies. The pipeline 
     <version>1.0.0</version>
     <packaging>pom</packaging>
 
+    <properties>
+        <tpf.version>26.4.5-SNAPSHOT</tpf.version>
+    </properties>
+
     <modules>
         <module>common</module>
         <module>step-one-svc</module>
@@ -41,6 +45,8 @@ The parent POM defines common properties and manages dependencies. The pipeline 
     </dependencyManagement>
 </project>
 ```
+
+The `${tpf.version}` property is defined in the parent POM so every child service uses the same `org.pipelineframework:pipelineframework` version.
 
 ## Service POMs
 

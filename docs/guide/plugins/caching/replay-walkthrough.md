@@ -18,7 +18,7 @@ The expensive stage is Crawl. We want to re-index with a new tokenizer without r
 - **Forced rebuild**: `x-pipeline-cache-policy: cache-only` overwrites cached outputs without reads.
 - **Debug or verification**: `x-pipeline-cache-policy: bypass-cache` runs the pipeline without cache I/O.
 
-Invalidation steps are reserved for targeted corrections (bug fixes, schema changes). The runtime propagates `x-pipeline-replay` as metadata; replay-aware tooling or custom invalidation logic may consume it as a control signal.
+Invalidation steps are reserved for targeted corrections (bug fixes, schema changes). The runtime only propagates `x-pipeline-replay` as metadata; replay-aware tooling or your custom invalidation logic, not the runtime, must read that header and perform cache invalidation or replay-specific actions.
 
 ## Step 1: Choose cache keys
 
@@ -40,7 +40,7 @@ public class ParsedDocumentKeyStrategy implements CacheKeyStrategy {
 
 ## Step 2: Run baseline (v1)
 
-```yaml
+```http
 x-pipeline-version: v1
 x-pipeline-cache-policy: cache-only
 ```
@@ -55,7 +55,7 @@ v1:{Type}:{docId}
 
 Change the tokenizer logic and reuse cached outputs from earlier steps by keeping the same version tag:
 
-```yaml
+```http
 x-pipeline-version: v1
 x-pipeline-cache-policy: prefer-cache
 ```
@@ -66,15 +66,15 @@ Now:
 - Index runs with new logic.
 - Outputs are cached under `v1:{Type}:{docId}`.
 
-`x-pipeline-replay` is propagated as a header only by the core runtime. If your deployment adds replay-aware invalidation logic, document that component as the interpreter of the header.
+`x-pipeline-replay` is forwarded as a header only by the core runtime. If your deployment adds replay-aware invalidation logic, document that component, not the runtime, as the interpreter of the header.
 
-Caching happens in the cache plugin side-effect steps, so the step services remain unchanged.
+Caching happens in the cache plugin side effect steps, so the step services remain unchanged.
 
 ## Step 4: Fork a new version
 
 If you want a clean namespace for a new run, bump the version tag:
 
-```yaml
+```http
 x-pipeline-version: v2
 x-pipeline-cache-policy: cache-only
 ```
@@ -117,6 +117,8 @@ curl -k -X POST https://localhost:8443/pipeline/run \
 ```
 
 Use invalidation only when replaying:
+
+The runtime only forwards `x-pipeline-replay`; replay-aware tooling or custom invalidation logic must perform any invalidation triggered by this request.
 
 ```bash
 curl -k -X POST https://localhost:8443/pipeline/run \

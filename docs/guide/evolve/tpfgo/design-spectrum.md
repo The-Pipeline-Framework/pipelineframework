@@ -42,7 +42,7 @@ This guide describes the design spectrum we see in pipeline applications and how
 - Idempotency keys to prevent duplicates.
 
 1. **Error Sink**
-- A default stderr sink (planned stderr logger) plus a gRPC/REST sink service.
+- A default stderr sink (planned stderr logger) plus an optional gRPC/REST sink service.
 - Operational failures are centralized and observable.
 
 1. **Build-Time Compatibility**

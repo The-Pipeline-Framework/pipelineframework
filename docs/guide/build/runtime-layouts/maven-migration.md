@@ -32,6 +32,8 @@ In CSV Payments, the concrete migration assets currently implemented are:
 - `examples/csv-payments/pipeline-runtime-svc/pom.xml`
 - `examples/csv-payments/build-pipeline-runtime.sh`
 
+The helper scripts (`build-pipeline-runtime.sh` and commands that invoke `./mvnw`) require a Unix-like shell. Run them on Linux, macOS, or WSL; native Windows shells are not supported for these scripts.
+
 Typical runtime mapping changes:
 
 - `layout: pipeline-runtime`

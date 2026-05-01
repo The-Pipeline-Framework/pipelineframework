@@ -6,11 +6,11 @@ search: false
 
 ## Ordering Rules
 
-1. **Aspects are applied in ascending order** - Aspects with lower order values are applied before aspects with higher order values.
+1. **Aspects are chained/applied in ascending order** - Aspects with lower order values are applied before aspects with higher order values during build/chaining. This is not the same as runtime execution order.
 
 2. **Lower order executes closer to the step boundary** - When aspects are chained around a step, those with lower order values are positioned closer to the actual step execution.
 
-3. **Same position chaining** - If multiple aspects target the same position (BEFORE_STEP or AFTER_STEP), they execute in order (lower order values closest to the step).
+3. **Same position chaining** - If multiple aspects target the same position, lower `order` values are closer to the step boundary. `BEFORE_STEP` executes highest-to-lowest (farthest to closest, so lower order runs later), while `AFTER_STEP` executes lowest-to-highest (closest to farthest).
 
 4. **Default order is 0** - If no order is specified, aspects default to order 0.
 

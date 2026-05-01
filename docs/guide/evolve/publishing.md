@@ -63,13 +63,13 @@ To update root-reactor versions consistently, use the Maven Versions Plugin:
 
 ```bash
 # Update the version across all modules
-mvn versions:set -DnewVersion=1.0.0
+./mvnw versions:set -DnewVersion=1.0.0
 
 # Verify the changes before committing
-mvn versions:commit
+./mvnw versions:commit
 
 # Or rollback if needed
-mvn versions:revert
+./mvnw versions:revert
 ```
 
 This ensures that modules in the selected Maven reactor are updated consistently. It does not automatically update alternate POM entrypoints or standalone surfaces that are not part of that reactor.
@@ -150,7 +150,7 @@ To encrypt your Sonatype password on your local `settings.xml`:
 1. Create the master password:
 
    ```bash
-   mvn --encrypt-master-password
+   ./mvnw --encrypt-master-password
    ```
 
    This creates `~/.m2/settings-security.xml`
@@ -158,7 +158,7 @@ To encrypt your Sonatype password on your local `settings.xml`:
 2. Encrypt your Sonatype password:
 
    ```bash
-   mvn --encrypt-password
+   ./mvnw --encrypt-password
    ```
 
 3. Update settings.xml with the encrypted password (prefixed with `{` and suffixed with `}`).
@@ -312,11 +312,11 @@ Use this manual approach only when you need fine-grained control or the Release 
    - Update the version using the Maven Versions Plugin:
 
      ```bash
-     mvn versions:set -DnewVersion=1.0.0
-     mvn versions:commit
+     ./mvnw versions:set -DnewVersion=1.0.0
+     ./mvnw versions:commit
      ```
 
-   - Test the build with `mvn clean install -P central-publishing`
+   - Test the build with `./mvnw clean install -P central-publishing`
    - Create a Git tag (e.g., `v1.0.0`)
    - Push the tag to trigger the GitHub Actions release workflow
 

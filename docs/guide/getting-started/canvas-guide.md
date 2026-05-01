@@ -124,7 +124,7 @@ Visit https://app.pipelineframework.org in your web browser.
 ### 1. Plan Your Pipeline
 
 - Think through your data flow before starting
-- Identify required input and output types
+- Identify the input and output types required
 - Consider the cardinality of each transformation
 
 ### 2. Use Descriptive Names
@@ -197,7 +197,7 @@ Visit https://app.pipelineframework.org in your web browser.
 
 - Canvas provides real-time validation feedback
 - Invalid configurations are highlighted
-- Error messages guide you to fix issues
+- Error messages help you resolve issues
 
 ## Export and Import
 

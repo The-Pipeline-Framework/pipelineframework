@@ -22,7 +22,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (redirectTimer) {
+  if (redirectTimer != null) {
     window.clearTimeout(redirectTimer)
   }
 })

@@ -66,7 +66,7 @@ You can customize the descriptor file location using annotation processor option
 
 The Pipeline Framework maintains a clear ownership model between your pipeline definition and gRPC `.proto` files:
 
-- **Pipeline YAML is authoritative**: Your `pipeline.yaml` defines the canonical step contract, while `@PipelineStep` marks internal services and carries Java-local execution hints
+- **Pipeline YAML is authoritative for the canonical contract**: Your `pipeline.yaml` defines the canonical step contract and message/schema definitions. `@PipelineStep` controls service binding, local execution hints, and step-type mapping used at build time. Build-time contract elements derived from annotations, such as service binding or step-type mapping, are called out explicitly so generated artifacts remain traceable to their source.
 - **`.proto` is a derived artifact**: Generated from your pipeline model but can be manually edited
 - **Manual edits are allowed, but constrained**: You can modify `.proto` files, but they must remain compatible with the pipeline model
 

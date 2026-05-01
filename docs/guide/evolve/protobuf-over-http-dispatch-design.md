@@ -65,9 +65,9 @@ On restart:
 
 ## Planned follow-up implementation work
 
-- Add a dispatch store SPI for pluggable per-item durability.
-- Add orchestrator worker reconciliation loop for orphaned `SENT` records.
-- Add durable dead-letter routing for `FAILED_FINAL` with operator-facing diagnostics.
+- Introduce a dispatch store SPI for pluggable per-item durability.
+- Implement an orchestrator worker reconciliation loop for orphaned `SENT` records.
+- Provide durable dead-letter routing for `FAILED_FINAL` with operator-facing diagnostics.
 
 ## Additional slice: dispatch parity across all transports
 
@@ -82,11 +82,11 @@ The dispatch metadata/state-machine contract must be enforced consistently beyon
 
 ### Required parity outcomes
 
-- Same canonical dispatch metadata keys and semantics.
-- Same retry-attempt increment rules.
-- Same deadline evaluation behavior (absolute deadline only).
-- Same duplicate suppression contract (`executionId + stepId + idempotencyKey`).
-- Same terminal classification into retryable/non-retryable outcomes.
+- Identical canonical dispatch metadata keys and semantics.
+- Preserve retry-attempt increment rules.
+- Maintain deadline evaluation behavior (absolute deadline only).
+- Preserve duplicate suppression contract (`executionId + stepId + idempotencyKey`).
+- Keep terminal classification into retryable/non-retryable outcomes unchanged.
 
 ### Parity test slice
 

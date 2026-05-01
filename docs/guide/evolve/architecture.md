@@ -231,7 +231,7 @@ REST adapters can be generated to expose pipeline steps as HTTP endpoints.
 
 ### Database Integration
 
-Persistence is provided via a side-effect plugin and configured as an aspect (typically AFTER_STEP). It observes inputs or outputs and persists them without changing the stream.
+Persistence is provided via a side effect plugin and configured as an aspect (typically AFTER_STEP). It observes inputs or outputs and persists them without changing the stream.
 
 ## Configuration Model
 
