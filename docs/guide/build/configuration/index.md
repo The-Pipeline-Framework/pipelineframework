@@ -8,7 +8,7 @@ This page lists every supported configuration option, grouped by build-time and 
 
 ## Build-Time Configuration
 
-These settings are read during build/compile and affect generated code or CLI wiring.
+These settings are read during build/compile and affect generated code or CLI generation.
 
 ### Pipeline YAML
 
@@ -100,7 +100,7 @@ Prefix: `pipeline`
 
 ### Orchestrator Client Wiring (Generated)
 
-The annotation processor generates default client wiring for orchestrators at build time.
+The annotation processor generates default orchestrator client configuration at build time.
 Generated values have lower priority than explicit `application.properties` settings or environment variables.
 
 To override routing or ports, set the following in `application.properties`:
@@ -181,13 +181,15 @@ Prefix: `pipeline`
 | `pipeline.parallelism`     | string  | `AUTO`  | Parallelism policy: `SEQUENTIAL`, `AUTO`, or `PARALLEL`.    |
 | `pipeline.max-concurrency` | integer | `128`   | Per-step maximum in-flight items when parallel execution is enabled. |
 
-### Orchestrator Queue-Async
+### Orchestrator Background Execution
+
+Use these settings when the orchestrator should accept work, store execution state, dispatch work in the background, retry failures, and publish terminal failures. The config value for that execution path is `QUEUE_ASYNC`.
 
 Prefix: `pipeline.orchestrator`
 
 | Property | Type | Default | Description |
 |---|---|---|---|
-| `pipeline.orchestrator.mode` | enum | `SYNC` | Orchestrator mode (`SYNC`, `QUEUE_ASYNC`). |
+| `pipeline.orchestrator.mode` | enum | `SYNC` | `SYNC` waits for the result in the request; `QUEUE_ASYNC` stores execution state and continues work in the background. |
 | `pipeline.orchestrator.default-tenant` | string | `default` | Fallback tenant when caller omits tenant id. |
 | `pipeline.orchestrator.execution-ttl-days` | int | `7` | Execution state retention in days. |
 | `pipeline.orchestrator.lease-ms` | long | `30000` | Lease duration for claimed executions. |
@@ -199,8 +201,8 @@ Prefix: `pipeline.orchestrator`
 | `pipeline.orchestrator.idempotency-policy` | enum | `OPTIONAL_CLIENT_KEY` | `OPTIONAL_CLIENT_KEY`, `CLIENT_KEY_REQUIRED`, `SERVER_KEY_ONLY`. |
 | `pipeline.orchestrator.state-provider` | string | `memory` | `ExecutionStateStore` provider selector. |
 | `pipeline.orchestrator.dispatcher-provider` | string | `event` | `WorkDispatcher` provider selector. |
-| `pipeline.orchestrator.dlq-provider` | string | `log` | `DeadLetterPublisher` provider selector. |
-| `pipeline.orchestrator.dlq-url` | string | none | Durable DLQ queue URL when `dlq-provider=sqs`. |
+| `pipeline.orchestrator.dlq-provider` | string | `log` | Dead-letter publisher provider for terminal execution failures. |
+| `pipeline.orchestrator.dlq-url` | string | none | Dead-letter queue URL when `dlq-provider=sqs`. |
 | `pipeline.orchestrator.queue-url` | string | none | Queue URL for external dispatcher providers. |
 | `pipeline.orchestrator.dynamo.execution-table` | string | `tpf_execution` | DynamoDB table used for execution state rows. |
 | `pipeline.orchestrator.dynamo.execution-key-table` | string | `tpf_execution_key` | DynamoDB table used for submit dedupe keys. |
@@ -211,15 +213,15 @@ Prefix: `pipeline.orchestrator`
 | `pipeline.orchestrator.sqs.local-loopback` | boolean | `true` | Also fire in-process work event after SQS enqueue (dev convenience). |
 | `pipeline.orchestrator.strict-startup` | boolean | `true` | Fail startup if queue mode prerequisites are invalid. |
 
-Queue mode notes:
+Background execution notes:
 
 1. `QUEUE_ASYNC` rejects async streaming output for this milestone.
-2. Keep `strict-startup=true` in production, so invalid provider wiring fails fast.
+2. Keep `strict-startup=true` in production, so invalid provider configuration fails fast.
 3. In queue mode, strict startup also requires `pipeline.orchestrator.idempotency-policy` to be explicitly set to a non-default value.
-4. In-memory providers are for local/dev only; use durable providers for HA.
-5. For durable dead-letter handling, set both `pipeline.orchestrator.dlq-provider=sqs` and `pipeline.orchestrator.dlq-url`.
+4. In-memory providers are for local/dev only; use providers backed by external storage/queues for crash recovery.
+5. For dead-letter handling that survives restarts, set both `pipeline.orchestrator.dlq-provider=sqs` and `pipeline.orchestrator.dlq-url`.
 
-Example durable provider wiring:
+Example crash-recovery provider configuration:
 
 ```properties
 pipeline.orchestrator.mode=QUEUE_ASYNC
@@ -238,10 +240,10 @@ Prefix: `pipeline.item-reject`
 | Property | Type | Default | Description |
 |---|---|---|---|
 | `pipeline.item-reject.provider` | string | `log` | Step-level reject sink provider selector (`log`, `memory`, `sqs`). |
-| `pipeline.item-reject.strict-startup` | boolean | `true` | Fail startup when selected sink provider wiring is invalid. |
+| `pipeline.item-reject.strict-startup` | boolean | `true` | Fail startup when selected sink provider configuration is invalid. |
 | `pipeline.item-reject.include-payload` | boolean | `false` | Include rejected payload in sink envelope. |
 | `pipeline.item-reject.memory-capacity` | int | `512` | Bounded ring size for the `memory` provider. |
-| `pipeline.item-reject.publish-failure-policy` | enum | `CONTINUE` | Sink publish failure behavior (`CONTINUE`, `FAIL_PIPELINE`). |
+| `pipeline.item-reject.publish-failure-policy` | enum | `CONTINUE` | Sink publish failure behaviour (`CONTINUE`, `FAIL_PIPELINE`). |
 | `pipeline.item-reject.sqs.queue-url` | string | none | SQS queue URL when `provider=sqs`. |
 | `pipeline.item-reject.sqs.region` | string | none | Optional SQS region override. |
 | `pipeline.item-reject.sqs.endpoint-override` | string | none | Optional SQS endpoint override (local/dev). |
@@ -284,7 +286,7 @@ Prefix: `pipeline.kill-switch`
 | `pipeline.kill-switch.retry-amplification.enabled`                    | boolean  | `false`     | Enable retry amplification guard.             |
 | `pipeline.kill-switch.retry-amplification.window`                     | duration | `PT30S`     | Evaluation window for sustained inflight growth. |
 | `pipeline.kill-switch.retry-amplification.inflight-slope-threshold`   | double   | `10`        | Inflight slope threshold (items/sec).         |
-| `pipeline.kill-switch.retry-amplification.mode`                       | string   | `fail-fast` | Guard behavior (`fail-fast` or `log-only`).   |
+| `pipeline.kill-switch.retry-amplification.mode`                       | string   | `fail-fast` | Guard behaviour (`fail-fast` or `log-only`).   |
 | `pipeline.kill-switch.retry-amplification.sustain-samples`            | integer  | `3`         | Consecutive samples above the threshold required to trigger. |
 
 ### Global Defaults
@@ -295,7 +297,7 @@ Prefix: `pipeline.defaults`
 |--------------------------------------------------|---------|----------|---------------------------------------------|
 | `pipeline.defaults.retry-limit`                  | integer | `3`      | Max retry attempts for steps.               |
 | `pipeline.defaults.retry-wait-ms`                | long    | `2000`   | Base delay between retries (ms).            |
-| `pipeline.defaults.recover-on-failure`           | boolean | `false`  | Enables recovery behavior on failure.       |
+| `pipeline.defaults.recover-on-failure`           | boolean | `false`  | Enables recovery behaviour on failure.       |
 | `pipeline.defaults.max-backoff`                  | long    | `30000`  | Maximum backoff delay (ms).                 |
 | `pipeline.defaults.jitter`                       | boolean | `false`  | Adds jitter to retry delays.                |
 | `pipeline.defaults.backpressure-buffer-capacity` | integer | `128`   | Per-step backpressure buffer capacity (in items). |

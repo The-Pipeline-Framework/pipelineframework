@@ -6,34 +6,40 @@ then choose how many deployables you actually want to run.
 
 ## Three terms you must separate
 
+These terms sound similar, but they answer different questions:
+
+1. Runtime layout: where TPF logically places the generated runtime pieces.
+2. Build topology: what Maven and CI actually build.
+3. Transport/platform: how generated pieces call each other and what kind of runtime they target.
+
 ### Runtime layout (logical)
 
 Defined in `pipeline.runtime.yaml`.
 
-- Decides where orchestrator, regular steps, and synthetic and plugin side effects are placed.
+- Decides where the orchestrator, regular steps, and plugin side effects logically run.
 - Values include `modular`, `pipeline-runtime`, and `monolith`.
-- Drives generated wiring and validation.
+- Drives generated calls and validation.
 
 ### Build topology (physical)
 
-Defined by Maven modules and POM wiring.
+Defined by Maven modules and POM structure.
 
-- Decides what artifacts are produced (how many JARs/containers).
-- Decides what is actually deployable in CI/prod.
+- Decides what artefacts are produced (how many JARs/containers).
+- Decides what is actually deployable in CI and production.
 - Is not rewritten automatically by runtime mapping.
 
 ### Transport mode (call mechanism)
 
 Values include `GRPC`, `REST`, and `LOCAL`.
 
-- Decides how steps are invoked.
+- Decides how generated components call steps.
 - Orthogonal to layout/topology.
 
 ### Platform mode (deployment target)
 
 Values include `COMPUTE` and `FUNCTION` (legacy aliases: `STANDARD`, `LAMBDA`).
 
-- Decides whether generation targets standard Quarkus runtimes or AWS Lambda packaging/runtime semantics.
+- Decides whether generation targets standard Quarkus services or function-style entry points.
 - Constrained by transport and step-shape compatibility (Function mode requires REST; unary and streaming shapes are supported via generated function bridges).
 - Orthogonal to runtime layout/topology.
 
@@ -47,7 +53,7 @@ Application developers using the normal onboarding path:
 
 ## Why people get confused
 
-You can set `layout: monolith` and still not have a real monolith artifact if the
+You can set `layout: monolith` and still not have a real monolith artefact if the
 Maven topology is still modular.
 
 - Runtime mapping changed the logical placement.
@@ -58,13 +64,13 @@ Both layers must be aligned to achieve your intended runtime shape.
 ## What runtime mapping changes automatically
 
 - Placement rules for regular and synthetic steps.
-- Validation behavior ([`auto` = best-effort fallback placement, `strict` = fail on unmapped/mismatched placement](/guide/evolve/runtime-mapping/schema#validation)).
-- Generated client/server wiring aligned to placement + transport.
+- Validation behaviour ([`auto` = best-effort fallback placement, `strict` = fail on unmapped/mismatched placement](/guide/evolve/runtime-mapping/schema#validation)).
+- Generated client/server calls aligned to placement + transport.
 
 ## What runtime mapping does not change automatically
 
 - Parent/module structure in Maven.
-- Number of runtime artifacts produced.
+- Number of runtime artefacts produced.
 - CI lanes needed to build/test a new topology.
 
 ::: note

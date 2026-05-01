@@ -1,19 +1,19 @@
 # Business Value
 
-<p class="value-lead">The Pipeline Framework (TPF) is built to reduce delivery overhead while keeping you on portable, mainstream runtime foundations.</p>
+<p class="value-lead">The Pipeline Framework (TPF) helps teams ship Java business flows faster while staying on portable Quarkus foundations.</p>
 
 ## At a Glance
 
 <div class="value-glance">
-  <div class="value-glance-item"><strong>Faster Delivery</strong> &middot; Generate adapters and keep steps focused on one `process()` contract.</div>
-  <div class="value-glance-item"><strong>Lower Change Cost</strong> &middot; Consistency reduces integration drift and refactor fear.</div>
-  <div class="value-glance-item"><strong>Less Lock-in</strong> &middot; Plain Java + Quarkus + standard transports keep escape hatches real.</div>
+  <div class="value-glance-item"><strong>Faster Delivery</strong> &middot; Write business functions while TPF generates the calling code around them.</div>
+  <div class="value-glance-item"><strong>Lower Change Cost</strong> &middot; Explicit input/output types reduce surprises when flows change.</div>
+  <div class="value-glance-item"><strong>Less Lock-in</strong> &middot; Plain Java, Quarkus, REST, gRPC, and local calls keep escape hatches real.</div>
 </div>
 
 ## Use This When
 
-- Teams spend significant time on glue code, wiring, and “keeping things consistent”.
-- Changes ripple across multiple services just to update a contract or endpoint shape.
+- Teams spend significant time on glue code and keeping service boundaries consistent.
+- Changes ripple across multiple services just to update a Java type or API shape.
 - You want an architecture path from “works as a monolith” to “split into deployable units/services” without rewriting everything.
 
 ## Observed Impact (CSV Payments)
@@ -27,20 +27,20 @@ This is not a controlled study and results vary by team and process. The signal 
 
 Teams typically aim for:
 
-1. Faster delivery for comparable scope (often by eliminating hand-built adapters and conventions).
-2. Lower cost of change as contracts and transport surfaces stay consistent.
-3. Higher operational readiness because generated artifacts and metadata make deployments more legible.
+1. Faster delivery for comparable scope, often by eliminating hand-built adapters and conventions.
+2. Lower cost of change because Java types, mappers, and generated call paths stay consistent.
+3. Higher operational readiness because generated runtime files make it clearer what is running.
 
 ## What It Enables
 
-1. Faster iteration: change steps independently without reworking the entire pipeline.
-2. Predictable scaling: each step scales on its own workload characteristics.
+1. Faster iteration: change one function without reworking the entire flow.
+2. Predictable scaling: each function can be tuned around its own workload characteristics.
 3. Better ROI: less boilerplate, shorter lead times, and fewer bespoke integration layers.
 
 ## Reuse Existing Compute Logic
 
-Operators let teams wire proven Java logic into `pipeline.yaml` without rewriting step/service code.
-That reduces migration risk and preserves prior engineering investment while still benefiting from TPF build-time validation and generated invocation layers.
+Operators let teams plug proven Java methods into `pipeline.yaml` without rewriting them as new services first.
+That reduces migration risk and preserves prior engineering investment while still benefiting from TPF build-time validation and generated call paths.
 
 Typical reuse targets include domain rule engines, validators/enrichers, and transformation libraries already used in production.
 

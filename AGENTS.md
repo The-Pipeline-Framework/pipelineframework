@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-The Pipeline Framework (TPF) is a Java framework for reactive pipeline systems on Quarkus 3.31.3+.
+The Pipeline Framework (TPF) is a Java framework for reactive pipeline systems on Quarkus 3.33.1+.
 It generates transport adapters at build time from pipeline metadata:
 
 - gRPC server/client artifacts

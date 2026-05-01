@@ -1,7 +1,7 @@
 # Error Handling and Recovery
 
 This guide is for operations triage and recovery.
-It focuses on runtime failure channels and queue-async crash behavior.
+It focuses on runtime failure channels and background execution recovery behaviour.
 
 Step-level Item Reject Sink is intentionally a business processing path, not an execution failure.
 Developer implementation guidance lives in [Item Reject Sink](/guide/development/item-reject-sink).
@@ -20,7 +20,7 @@ Triage rule:
 2. A growing execution DLQ indicates control-plane, dependency, or systemic execution failure.
 3. When checkpoint publication backlog rises, it indicates throughput or admission pressure before downstream execution has started.
 
-## Execution DLQ Configuration (Queue-Async)
+## Execution DLQ Configuration (Background Execution)
 
 ```properties
 pipeline.orchestrator.mode=QUEUE_ASYNC
@@ -28,12 +28,14 @@ pipeline.orchestrator.dlq-provider=sqs
 pipeline.orchestrator.dlq-url=https://sqs.eu-west-1.amazonaws.com/123456789012/tpf-dlq
 ```
 
-Execution DLQ applies to terminal execution failures only.
+`QUEUE_ASYNC` is the mode name used by `pipeline.orchestrator.mode` for background execution.
+
+Execution DLQ applies to terminal execution failures only. A DLQ is a dead-letter channel for failed executions that need investigation or replay.
 It does not replace item-level rejection flows.
 
-## Execution DLQ Envelope (Terminal Metadata)
+## Execution DLQ Envelope (Terminal Details)
 
-Execution DLQ entries include standardized metadata for cross-transport triage:
+Execution DLQ entries include standard fields for triage across REST, gRPC, local, and function-style execution:
 
 - execution fields: `tenantId`, `executionId`, `executionKey`, `transitionKey`
 - correlation/resource fields: `correlationId`, `resourceType`, `resourceName`
@@ -47,13 +49,13 @@ Terminal reason mapping:
 | `retry_exhausted` | retryable failure class reached terminal state after exhausting retry budget (includes zero-retry configurations (`maxRetries = 0`)) | Stabilise dependency/path, then re-drive bounded batches |
 | `non_retryable` | non-retryable failure class (for example `NonRetryableException`) | Correct payload/contract issue before replay |
 
-## Queue-Async Crash Matrix
+## Background Execution Crash Matrix
 
 | Crash point | Behaviour after restart/recovery | Duplicate risk | Required safeguard |
 |---|---|---|---|
-| Before transition state commit | Work is redelivered and re-executed from last durable version | High | Idempotent operator boundary (`executionId:stepIndex:attempt`) |
-| After state commit, before next enqueue | Transition is durable, but next dispatch can stall until due sweeper re-dispatches | Low | Due-execution sweeper + durable state |
-| During retry scheduling | Retry can replay from last durable version if scheduling metadata was not committed | Medium | Persist retry intent (`attempt`, `nextDue`) before enqueue |
+| Before transition state commit | Work is redelivered and re-executed from the last stored version | High | Idempotent operator boundary (`executionId:stepIndex:attempt`) |
+| After state commit, before next enqueue | Transition is stored, but next dispatch can stall until due sweeper re-dispatches | Low | Due-execution sweeper + stored state |
+| During retry scheduling | Retry can replay from the last stored version if scheduling details were not committed | Medium | Persist retry intent (`attempt`, `nextDue`) before enqueue |
 | After external side effect, before commit | Side effect may repeat on replay because effect and commit are not one transaction | High | Downstream dedupe keyed by transition identity |
 | Worker dies while lease held | Lease expires and another worker can claim execution | Low | Short lease window + conditional lease claim (OCC) |
 
@@ -74,7 +76,7 @@ pipeline.defaults.jitter=true
 
 Use `NonRetryableException` to fail fast for non-transient failures.
 
-For at-least-once boundaries (queue delivery, operator invocation, re-drive), enforce idempotency with stable transition identity (`executionId:stepIndex:attempt`).
+For at-least-once boundaries (queue delivery, operator invocation, re-drive), enforce idempotency with stable transition identity (`executionId:stepIndex:attempt`). Idempotency means retries can happen without duplicating the business effect.
 
 ## Operations Runbook
 

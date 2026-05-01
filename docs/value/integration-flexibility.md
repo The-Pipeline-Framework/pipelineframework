@@ -1,20 +1,22 @@
 # Transport Choice
 
-<p class="value-lead">TPF keeps pipeline behavior separate from transport wiring, so APIs can evolve without rewriting core flow logic.</p>
+<p class="value-lead">TPF keeps business functions separate from how they are called, so APIs can evolve without rewriting core flow logic.</p>
 
 ## At a Glance
 
 <div class="value-glance">
-  <div class="value-glance-item"><strong>One Model, Many Surfaces</strong> &middot; Generate gRPC, REST, and local clients from the same definition.</div>
-  <div class="value-glance-item"><strong>Domain First</strong> &middot; Transport details stay in generated adapters.</div>
-  <div class="value-glance-item"><strong>Function Ready</strong> &middot; Function-platform support where it adds value.</div>
+  <div class="value-glance-item"><strong>One Flow, Many Entry Points</strong> &middot; Generate gRPC, REST, local, and function-style callers from the same definition.</div>
+  <div class="value-glance-item"><strong>Domain First</strong> &middot; Protocol details stay in generated code, not business functions.</div>
+  <div class="value-glance-item"><strong>Function Ready</strong> &middot; Run through function-style entry points where that deployment model fits.</div>
 </div>
 
 ## Use This When
 
 - Different clients need different protocols.
 - You are migrating interfaces and need to avoid big-bang rewrites.
-- You need to keep contracts consistent across transports without manual reconciliation.
+- You need Java types and API shapes to stay consistent without manual reconciliation.
+
+In TPF, **transport mode** means how generated components call each other: gRPC, REST, or local in-process calls. It is separate from where the application is deployed.
 
 ## Jump to Guides
 

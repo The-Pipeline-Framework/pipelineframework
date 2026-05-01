@@ -1,16 +1,16 @@
 # Value Overview
 
-<p class="value-lead">The Pipeline Framework (TPF) helps teams move from idea to production pipelines without getting buried in repetitive integration and deployment work.</p>
+<p class="value-lead">The Pipeline Framework (TPF) helps teams move from Java business functions to production-ready flows without getting buried in repetitive integration and deployment work.</p>
 
 ## At a Glance
 
 <div class="value-glance">
   <div class="value-glance-item"><strong>Developer Joy</strong> &middot; Faster delivery with less glue code and safer refactors.</div>
-  <div class="value-glance-item"><strong>Performance</strong> &middot; Reactive-first runtime behavior with lower operational overhead.</div>
-  <div class="value-glance-item"><strong>Transport Choice</strong> &middot; One model, multiple client/server surfaces.</div>
-  <div class="value-glance-item"><strong>Start Monolith, Split Later</strong> &middot; A practical architecture evolution path.</div>
+  <div class="value-glance-item"><strong>Performance</strong> &middot; Keep many items moving without one thread per item.</div>
+  <div class="value-glance-item"><strong>Transport Choice</strong> &middot; One Flow, Many Entry Points: generate gRPC, REST, local, and function-style callers from the same definition.</div>
+  <div class="value-glance-item"><strong>Start Monolith, Split Later</strong> &middot; Change deployable shape when the team is ready.</div>
   <div class="value-glance-item"><strong>Kube-Native</strong> &middot; Container-first, cloud-friendly operation model.</div>
-  <div class="value-glance-item"><strong>Plugins, Not Glue</strong> &middot; Cross-cutting capabilities without domain coupling.</div>
+  <div class="value-glance-item"><strong>Plugins, Not Glue</strong> &middot; Add infrastructure concerns without polluting business functions.</div>
 </div>
 
 ## Explore Tracks
