@@ -17,6 +17,7 @@
 - Performance tuning is blocked by opaque framework behaviour.
 
 Reactive execution means the runtime can keep work moving while waiting for I/O, instead of tying up a thread for each item from start to finish.
+If a step must do blocking work, offload it explicitly to a worker thread pool, executor, or blocking dispatcher so it does not occupy request/event-loop threads.
 
 ## Jump to Guides
 

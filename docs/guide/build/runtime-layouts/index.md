@@ -25,7 +25,7 @@ Defined in `pipeline.runtime.yaml`.
 Defined by Maven modules and POM structure.
 
 - Decides what artefacts are produced (how many JARs/containers).
-- Decides what is actually deployable in CI/prod.
+- Decides what is actually deployable in CI and production.
 - Is not rewritten automatically by runtime mapping.
 
 ### Transport mode (call mechanism)

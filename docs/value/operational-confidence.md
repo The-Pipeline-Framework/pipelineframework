@@ -16,7 +16,7 @@
 - Teams need a consistent operational baseline across services.
 - Container/Kubernetes rollout has outpaced ops maturity.
 
-For background execution, TPF can record accepted work outside the current process so crashes and restarts do not lose it. Terminal execution failures can go to a DLQ, a dead-letter channel for investigation or replay.
+For background execution, TPF can record accepted work outside the current process, so crashes and restarts do not lose it. Terminal execution failures can go to a DLQ, a dead-letter channel for investigation or replay.
 
 ## Jump to Guides
 

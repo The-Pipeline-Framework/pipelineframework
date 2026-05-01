@@ -2,6 +2,8 @@
 
 <p class="value-lead">The Pipeline Framework (TPF) supports a practical architecture path: start with one deployable, then split when team ownership or scale makes it worth it.</p>
 
+See the [Runtime Layouts guide](/guide/build/runtime-layouts/) for the packaging details: choosing a monolith-style runtime does not automatically remove per-step service modules, because build topology and runtime layout are separate decisions.
+
 ## At a Glance
 
 <div class="value-glance">

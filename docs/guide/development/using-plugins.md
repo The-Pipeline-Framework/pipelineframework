@@ -6,7 +6,7 @@ You configure when the plugin should run through aspects; the framework generate
 ## How plugins fit the flow
 
 - **Steps**: your business functions.
-- **Aspects**: declarations that say where and when a plugin should run, such as before or after a step.
+- **Aspects**: declarations that say where and when a plugin should run, such as before or after a step; see the [aspect semantics reference](/guide/evolve/aspects/semantics) for the formal rules.
 - **Plugins**: implementation modules that do the cross-cutting work, such as persistence, cache, telemetry, or logging.
 
 This keeps business logic focused while infrastructure concerns stay declared in configuration.

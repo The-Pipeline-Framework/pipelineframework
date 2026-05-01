@@ -28,6 +28,8 @@ pipeline.orchestrator.dlq-provider=sqs
 pipeline.orchestrator.dlq-url=https://sqs.eu-west-1.amazonaws.com/123456789012/tpf-dlq
 ```
 
+`QUEUE_ASYNC` is the mode name used by `pipeline.orchestrator.mode` for background execution.
+
 Execution DLQ applies to terminal execution failures only. A DLQ is a dead-letter channel for failed executions that need investigation or replay.
 It does not replace item-level rejection flows.
 
