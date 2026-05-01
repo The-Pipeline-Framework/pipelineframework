@@ -36,13 +36,14 @@ This eliminates the need for manual configuration and ensures consistency across
 ## Annotation Processing Workflow
 
 ### Proto Generation (Pre-Processing)
+
 Before annotation processing, pipeline protobuf descriptors are generated from the pipeline template. The authoritative source is:
 
 - `framework/runtime/src/main/java/org/pipelineframework/proto/PipelineProtoGenerator.java`
 
 ### Build Timeline (gRPC)
 
-```
+```text
 Pipeline template
       |
       v
@@ -59,6 +60,7 @@ CDI registration
 ```
 
 ### 1. Build-Time Discovery
+
 During the Maven build process, the compiler reads `pipeline.yaml` and resolves each internal `service:` step against a class annotated with `@PipelineStep`:
 
 ```yaml
@@ -86,6 +88,7 @@ public class ProcessPaymentService implements ReactiveService<PaymentRecord, Pay
 The annotation is the marker plus Java-local execution hints. Current internal-step contract metadata belongs in YAML.
 
 ### 1.1 Orchestrator and Plugin Annotations
+
 The processor also reacts to:
 
 - `@PipelineOrchestrator` on a marker class to enable orchestrator endpoints and (optionally) CLI generation.
@@ -94,6 +97,7 @@ The processor also reacts to:
 These annotations do not define pipeline steps themselves, but they control which orchestrator and plugin artifacts are generated.
 
 ### 2. Compile-time Code Generation
+
 The Pipeline Framework extension processor generates several classes:
 
 - If `transport: GRPC`, gRPC service adapters and gRPC client steps.
@@ -101,6 +105,7 @@ The Pipeline Framework extension processor generates several classes:
 - Synthetic client steps for configured plugin aspects (in a plugin host module).
 
 ### 2.5 Scaffolding
+
 The template generator provides the necessary scaffolding for:
 - Service and orchestrator entry points
 - Step interfaces and DTO placeholders
@@ -110,6 +115,7 @@ The template generator provides the necessary scaffolding for:
 - CI/workflow stubs for build and release
 
 ### 3. Dependency Injection Registration
+
 All generated classes are automatically registered with the CDI container, making them available for injection.
 
 ## Generated Classes in Detail
@@ -165,11 +171,11 @@ The step class acts as a client-side component that:
 // Generated class structure
 @ApplicationScoped
 public class ServiceNameGrpcClientStep implements StepOneToOne<DomainIn, DomainOut> {
-    
+
     @Inject
     @GrpcClient("service-name")
     StubClass grpcClient;
-    
+
     public Uni<DomainOut> applyOneToOne(DomainIn input) {
         // Convert domain to gRPC
         GRpcIn grpcInput = convertDomainToGrpc(input);
@@ -188,20 +194,20 @@ The orchestrator application coordinates pipeline execution by using the Pipelin
 // Orchestrator application that coordinates execution
 @CommandLine.Command(...)
 public class OrchestratorApplication implements QuarkusApplication, Callable<Integer> {
-    
+
     @Inject
     PipelineExecutionService pipelineExecutionService;
-    
+
     public Integer call() {
         // Create input stream from input parameter
         Multi<DomainInput> inputStream = createInputStream(input);
-        
+
         // Execute pipeline using the injected service
         // The service discovers all registered step implementations through dependency injection
         pipelineExecutionService.executePipeline(inputStream)
             .collect().asList()
             .await().indefinitely();
-            
+
         return CommandLine.ExitCode.OK;
     }
 }
@@ -279,7 +285,7 @@ Generated sources can be found in the target directory:
 # Generated sources location
 target/generated-sources/annotations/
 
-# Generated classes location  
+# Generated classes location
 target/classes/
 ```
 
@@ -302,7 +308,7 @@ While generated classes are typically not modified directly, you can extend them
 // Custom extension of generated step
 @ApplicationScoped
 public class CustomProcessPaymentGrpcClientStep extends ProcessPaymentGrpcClientStep {
-    
+
     @Override
     public Uni<PaymentStatus> applyOneToOne(PaymentRecord input) {
         // Add custom logic before/after calling super
@@ -312,7 +318,7 @@ public class CustomProcessPaymentGrpcClientStep extends ProcessPaymentGrpcClient
                 logPaymentStatus(status);
             });
     }
-    
+
     private void logPaymentStatus(PaymentStatus status) {
         // Custom logging logic
     }
@@ -331,6 +337,7 @@ Use configuration and transport settings instead of transport-specific annotatio
 ### Common Issues
 
 #### 1. Missing Dependencies
+
 Ensure the required dependency is present. Both runtime and deployment components are bundled in a single dependency:
 
 ```xml
@@ -341,6 +348,7 @@ Ensure the required dependency is present. Both runtime and deployment component
 ```
 
 #### 2. Annotation Processing Not Running
+
 Verify the processor is on the classpath:
 
 ```bash
@@ -349,6 +357,7 @@ mvn dependency:tree | grep pipeline-framework
 ```
 
 #### 3. Generated Classes Not Found
+
 Check the generated sources directory:
 
 ```bash
@@ -359,6 +368,7 @@ find target/generated-sources -name "*.java" | grep -i pipeline
 ### Debugging Tips
 
 #### Enable Detailed Logging
+
 ```properties
 # application.properties
 quarkus.log.category."org.pipelineframework".level=DEBUG
@@ -366,6 +376,7 @@ quarkus.log.category."org.pipelineframework.processor".level=TRACE
 ```
 
 #### Verify Generated Classes
+
 ```bash
 # Check that step classes were generated
 find target/classes -name "*Step.class" | head -5
@@ -374,6 +385,7 @@ find target/classes -name "*GrpcService.class" | head -5
 ```
 
 #### Clean and Rebuild
+
 ```bash
 # Clean build to force regeneration
 mvn clean compile

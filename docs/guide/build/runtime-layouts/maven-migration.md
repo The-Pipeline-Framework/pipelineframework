@@ -28,9 +28,11 @@ Typical Maven changes:
 
 In CSV Payments, the concrete migration assets currently implemented are:
 
-- `examples/csv-payments/pom.monolith.xml`
-- `examples/csv-payments/monolith-svc/pom.xml`
-- `examples/csv-payments/build-monolith.sh`
+- `examples/csv-payments/pom.pipeline-runtime.xml`
+- `examples/csv-payments/pipeline-runtime-svc/pom.xml`
+- `examples/csv-payments/build-pipeline-runtime.sh`
+
+The helper scripts (`build-pipeline-runtime.sh` and commands that invoke `./mvnw`) require a Unix-like shell. Run them on Linux, macOS, or WSL; native Windows shells are not supported for these scripts.
 
 Typical runtime mapping changes:
 
@@ -61,9 +63,9 @@ Typical runtime mapping changes:
 Prefer explicit flags/scripts over profiles for clarity. Example pattern:
 
 ```bash
-./examples/csv-payments/build-monolith.sh -DskipTests
-./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc \
-  -Dcsv.runtime.layout=monolith -Dtest=CsvPaymentsEndToEndIT test
+./examples/csv-payments/build-pipeline-runtime.sh -DskipTests
+./mvnw -f examples/csv-payments/pom.pipeline-runtime.xml -pl orchestrator-svc \
+  -Dcsv.runtime.layout=pipeline-runtime -Dtest=PipelineRuntimeTopologyTest test
 ```
 
 ## Validation checklist after each migration step

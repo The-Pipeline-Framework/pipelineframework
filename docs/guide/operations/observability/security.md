@@ -16,7 +16,7 @@ When exporting to OTLP over HTTP, prefer TLS endpoints and authenticate with hea
 
 ## Data Minimization
 
-Keep attributes and log fields minimal. Prefer identifiers over payloads.
+Keep attributes and log fields minimal. Prefer identifiers to payloads.
 
 ## Redaction
 

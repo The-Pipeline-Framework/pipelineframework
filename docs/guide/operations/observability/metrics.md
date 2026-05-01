@@ -37,7 +37,7 @@ Queue-async operations involve three distinct channels that should be monitored 
 | Channel | What it means | Core signals |
 |---|---|---|
 | Worker/dispatcher control plane | orchestration coordination and progress | queue depth, worker lag, lease conflicts, stale commits, sweeper recoveries |
-| Execution DLQ | terminal execution failures | DLQ publish count, provider queue depth, oldest message age |
+| Execution DLQ | terminal execution failures | DLQ publish count, provider queue depth, the oldest message age |
 | Item Reject Sink | item-level recover-and-continue business rejects | `tpf.step.reject.total`, provider queue depth (when durable), reject fingerprint concentration |
 
 Operational interpretation:

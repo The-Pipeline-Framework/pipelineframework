@@ -7,13 +7,21 @@ head:
 ---
 
 <script setup>
-import {onMounted} from 'vue'
+import {onMounted, onUnmounted} from 'vue'
+
+let redirectTimer
 
 onMounted(() => {
   if (typeof window !== 'undefined') {
-    window.setTimeout(() => {
+    redirectTimer = window.setTimeout(() => {
       window.location.replace('/guide/development/using-plugins')
     }, 1500)
+  }
+})
+
+onUnmounted(() => {
+  if (redirectTimer != null) {
+    window.clearTimeout(redirectTimer)
   }
 })
 </script>

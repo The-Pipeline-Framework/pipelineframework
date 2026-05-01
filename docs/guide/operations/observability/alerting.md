@@ -35,10 +35,10 @@ Start with:
 
 Queue-async additions:
 
-6. Due-sweeper recoveries stop while due backlog rises (critical)
-7. Lease conflict/stale-commit rate spikes above baseline (warning)
-8. Retry-saturation exceeds threshold (warning/critical by tenant tier)
-9. Queue age/lag exceeds execution SLO budget (critical)
+1. Due-sweeper recoveries stop while due backlog rises (critical)
+2. Lease conflict/stale-commit rate spikes above baseline (warning)
+3. Retry-saturation exceeds threshold (warning/critical by tenant tier)
+4. Queue age/lag exceeds execution SLO budget (critical)
 
 When using New Relic, derive these from `tpf.pipeline.run` spans, `tpf.step.*` metrics (for example `tpf.step.reject.total`), and provider-native queue-depth metrics for DLQ/reject backlog.
 

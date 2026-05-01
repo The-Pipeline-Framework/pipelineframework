@@ -2,11 +2,11 @@
 
 ## Ordering Rules
 
-1. **Aspects are applied in ascending order** - Aspects with lower order values are applied before aspects with higher order values.
+1. **Aspects execute in ascending order** - `AspectExpansionProcessor` sorts applicable aspects with `Comparator.comparingInt(PipelineAspectModel::order)` and appends synthetic steps in that sorted order.
 
-2. **Lower order executes closer to the step boundary** - When aspects are chained around a step, those with lower order values are positioned closer to the actual step execution.
+2. **Lower order executes earlier** - For both `BEFORE_STEP` and `AFTER_STEP`, lower order values are emitted earlier than higher order values.
 
-3. **Same position chaining** - If multiple aspects target the same position (BEFORE_STEP or AFTER_STEP), they execute in order (lower order values closest to the step).
+3. **Same position chaining** - If multiple aspects target the same position, `BEFORE_STEP` aspects execute before the step in ascending `order`, and `AFTER_STEP` aspects execute after the step in ascending `order`. This follows the `AspectExpansionProcessor` sort-and-append logic directly.
 
 4. **Default order is 0** - If no order is specified, aspects default to order 0.
 
@@ -25,13 +25,14 @@ Consider these aspects applied to a single step:
 - Aspect D: position=AFTER_STEP, order=1
 
 The execution order would be:
-1. Aspect A executes (BEFORE_STEP, farthest from step)
-2. Aspect B executes (BEFORE_STEP, closest to step)
+1. Aspect B executes (BEFORE_STEP, order=5)
+2. Aspect A executes (BEFORE_STEP, order=10)
 3. Actual step executes
-4. Aspect D executes (AFTER_STEP, closest to step)
-5. Aspect C executes (AFTER_STEP, farthest from step)
+4. Aspect C executes (AFTER_STEP, order=0)
+5. Aspect D executes (AFTER_STEP, order=1)
 
 This creates the following logical pipeline:
-```
-Input -> Aspect A -> Aspect B -> Step -> Aspect D -> Aspect C -> Output
+
+```text
+Input -> Aspect B -> Aspect A -> Step -> Aspect C -> Aspect D -> Output
 ```

@@ -7,9 +7,11 @@ This document explains how to publish The Pipeline Framework to Maven Central an
 The release process uses the Maven Release Plugin for the root reactor, then GitHub Actions publishes framework artifacts from the release tag. Keep Maven's push step disabled so the generated release and next-development commits can be inspected before they reach `main`.
 
 1. **Prepare locally without pushing**:
+
    ```bash
    ./mvnw release:prepare -DpushChanges=false -Darguments="-DskipTests"
    ```
+
 2. **Synchronize release-coupled standalone POMs**: confirm alternate topology and standalone reference POMs moved to the next snapshot, including `examples/csv-payments/pom.pipeline-runtime.xml`, `examples/csv-payments/pom.monolith.xml`, `examples/checkout/pom.xml`, and `ai-sdk/pom.xml`.
 3. **Run the release validation gate**: at minimum run version-drift checks, framework verification, CSV topology checks, and docs build before pushing.
 4. **Push only after validation**: push the prepared commits to `main`, then push the immutable `vX.Y.Z` tag to trigger publishing.
@@ -48,8 +50,9 @@ Keep these categories aligned during every release:
 ### Version Property Definition
 
 In the root POM (`pom.xml`):
+
 ```xml
-<version>26.1-SNAPSHOT</version>
+<version>26.4.5-SNAPSHOT</version>
 ```
 
 Root-reactor children should inherit this version through the parent relationship and omit their own project `<version>` where possible. Alternate top-level POMs and standalone builds may need an explicit parent version or dependency property, so they must be checked separately.
@@ -60,13 +63,13 @@ To update root-reactor versions consistently, use the Maven Versions Plugin:
 
 ```bash
 # Update the version across all modules
-mvn versions:set -DnewVersion=1.0.0
+./mvnw versions:set -DnewVersion=1.0.0
 
 # Verify the changes before committing
-mvn versions:commit
+./mvnw versions:commit
 
 # Or rollback if needed
-mvn versions:revert
+./mvnw versions:revert
 ```
 
 This ensures that modules in the selected Maven reactor are updated consistently. It does not automatically update alternate POM entrypoints or standalone surfaces that are not part of that reactor.
@@ -85,8 +88,8 @@ Then update `docs/versions.md` to mark the latest version and confirm the versio
 
 ## Maven Central Publishing Setup
 
-The Maven Central publishing configuration is located in the framework's parent POM (`framework/pom.xml`). It is 
-handled by the GitHub Actions workflow, but this is a description of how such setup could be done on your local 
+The Maven Central publishing configuration is located in the framework's parent POM (`framework/pom.xml`). It is
+handled by the GitHub Actions workflow, but this is a description of how such setup could be done on your local
 workstation.
 
 ### Required Plugins
@@ -145,14 +148,17 @@ The publishing workflow handles GPG signing on GitHub Actions, but for reference
 To encrypt your Sonatype password on your local `settings.xml`:
 
 1. Create the master password:
+
    ```bash
-   mvn --encrypt-master-password
+   ./mvnw --encrypt-master-password
    ```
+
    This creates `~/.m2/settings-security.xml`
 
 2. Encrypt your Sonatype password:
+
    ```bash
-   mvn --encrypt-password
+   ./mvnw --encrypt-password
    ```
 
 3. Update settings.xml with the encrypted password (prefixed with `{` and suffixed with `}`).
@@ -177,16 +183,20 @@ These secrets must exist in the GitHub repository:
 Use the Maven Release Plugin as the versioning tool for the root reactor, but keep publication gated by explicit inspection and CI validation.
 
 1. **Start from a clean release branch**:
+
    ```bash
    git status --short
    git fetch origin --tags
    ```
+
    Confirm the branch contains the intended docs snapshot and no unrelated local changes.
 
 2. **Prepare the release locally without pushing**:
+
    ```bash
    ./mvnw release:prepare -DpushChanges=false -Darguments="-DskipTests"
    ```
+
    The root POM also configures `<pushChanges>false</pushChanges>` for the release plugin. Keep the command-line flag anyway so the behavior is explicit in shell history and release notes.
 
    The plugin creates two local commits and a local tag:
@@ -195,20 +205,24 @@ Use the Maven Release Plugin as the versioning tool for the root reactor, but ke
    - `vX.Y.Z`
 
 3. **Inspect the release plugin output before any push**:
+
    ```bash
    git log --oneline --decorate -n 5
    git diff HEAD~2..HEAD -- pom.xml framework/pom.xml examples ai-sdk plugins
    ```
+
    The release commit should contain the release version. The next-development commit should contain the next `-SNAPSHOT` version.
 
 4. **Synchronize release-coupled POMs outside the root reactor**:
    The release plugin only updates POMs in the Maven reactor it runs. After `release:prepare`, check and fix alternate topology and standalone POMs so they match the next development version on `main`.
 
    Required checks:
+
    ```bash
    rg -n "X\\.Y\\.Z-SNAPSHOT" --glob "pom*.xml" --glob "!docs/versions/**"
    rg -n "X\\.Y\\.Z" examples ai-sdk --glob "pom*.xml"
    ```
+
    Replace `X.Y.Z` with the just-released version. There should be no remaining references to the old snapshot in active POMs after the next-development commit.
 
    At minimum, check:
@@ -220,6 +234,7 @@ Use the Maven Release Plugin as the versioning tool for the root reactor, but ke
    - `ai-sdk/pom.xml`
 
 5. **Run the release validation gate before pushing**:
+
    ```bash
    ./mvnw -f framework/pom.xml verify
    ./examples/csv-payments/build-pipeline-runtime.sh -pl orchestrator-svc -Dcsv.runtime.layout=pipeline-runtime -Dtest=PipelineRuntimeTopologyTest -Dit.test=CsvPaymentsPipelineRuntimeEndToEndIT verify
@@ -227,18 +242,23 @@ Use the Maven Release Plugin as the versioning tool for the root reactor, but ke
    ./mvnw -f ai-sdk/pom.xml test
    npm --prefix docs run build
    ```
+
    If time forces a smaller gate, record exactly which commands were skipped and do not claim full release validation.
 
 6. **Push the validated commits**:
+
    ```bash
    git push origin main
    ```
+
    Watch the `main` workflows. If a workflow fails because of version drift, fix `main` before pushing the tag.
 
 7. **Publish the release**:
+
    ```bash
    git push origin vX.Y.Z
    ```
+
    This triggers the GitHub Actions workflow that runs `mvn deploy` to publish framework artifacts to Maven Central.
 
 **Note**: The `mvn release:perform` step is not used in this setup since deployment is handled by GitHub Actions when a tag is pushed.
@@ -290,11 +310,13 @@ Use this manual approach only when you need fine-grained control or the Release 
 
 1. **Manual Version Update**:
    - Update the version using the Maven Versions Plugin:
+
      ```bash
-     mvn versions:set -DnewVersion=1.0.0
-     mvn versions:commit
+     ./mvnw versions:set -DnewVersion=1.0.0
+     ./mvnw versions:commit
      ```
-   - Test the build with `mvn clean install -P central-publishing`
+
+   - Test the build with `./mvnw clean install -P central-publishing`
    - Create a Git tag (e.g., `v1.0.0`)
    - Push the tag to trigger the GitHub Actions release workflow
 

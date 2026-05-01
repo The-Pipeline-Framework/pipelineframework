@@ -105,10 +105,44 @@ async function applySearchExclusion() {
       } else if (entry.isFile() && entry.name.endsWith('.md')) {
         await ensureFrontmatterFlag(entryPath, 'search', 'false')
         await rewriteInternalLinks(entryPath)
+        await applySnapshotSpecificRewrites(entryPath)
       }
     }
   }
   await walk(destRoot)
+}
+
+async function applySnapshotSpecificRewrites(filePath) {
+  const relativePath = path.relative(destRoot, filePath)
+  const content = await fs.readFile(filePath, 'utf8')
+  const updated = applySnapshotSpecificRewritesContent(content, relativePath, version)
+  if (updated !== content) {
+    await fs.writeFile(filePath, updated)
+  }
+}
+
+export function applySnapshotSpecificRewritesContent(content, relativePath, versionValue) {
+  const normalizedVersion = normalizeVersion(versionValue)
+
+  if (relativePath === path.join('guide', 'build', 'using-plugins.md')) {
+    const target = `/versions/${normalizedVersion}/guide/development/using-plugins`
+    return content
+      .replace('content: 2;url=/guide/development/using-plugins', `content: 2;url=${target}`)
+      .replace("window.location.replace('/guide/development/using-plugins')", `window.location.replace('${target}')`)
+  }
+
+  if (relativePath === path.join('guide', 'evolve', 'testing-guidelines.md')) {
+    return `---
+search: false
+---
+
+# Testing Guidelines for This Project
+
+This page is maintainer process guidance rather than versioned user documentation. Contributors should use the current internal policy at [Testing Guidelines](/guide/evolve/testing-guidelines).
+`
+  }
+
+  return content
 }
 
 async function rewriteInternalLinks(filePath) {

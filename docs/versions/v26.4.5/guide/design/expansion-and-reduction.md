@@ -7,7 +7,7 @@ search: false
 
 If you come from an imperative background, think of a pipeline as a loop over items. Each step sees items in order and can emit zero, one, or many items for each input.
 
-The four step shapes describe that behavior in plain terms:
+The four-step shapes describe that behavior in plain terms:
 
 ## One-to-One (1 → 1)
 
@@ -48,4 +48,3 @@ Typical use: filtering, joining, or fan-out with transformation.
 - The shape determines how you place side effects and where you expect backpressure.
 
 If you can reason about a loop and a list, you already understand these shapes.
-

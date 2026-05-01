@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import {
+  applySnapshotSpecificRewritesContent,
   compareVersionsDesc,
   normalizeVersion,
   updateVersionSelectorContent,
@@ -61,4 +62,47 @@ test('updateVersionSelectorContent inserts snapshots using semantic version orde
     updated,
     /\{ name: 'v26\.4', url: '\/', current: true },\n        \{ name: 'v26\.4\.2', url: '\/versions\/v26\.4\.2\/', current: false },\n        \{ name: 'v26\.4\.1', url: '\/versions\/v26\.4\.1\/', current: false },\n        \{ name: 'v2\.6\.4', url: '\/versions\/v2\.6\.4\/', current: false }/
   )
+})
+
+test('applySnapshotSpecificRewritesContent keeps versioned plugin redirects inside the snapshot', () => {
+  const content = `---
+title: Redirecting...
+head:
+  - - meta
+    - http-equiv: refresh
+      content: 2;url=/guide/development/using-plugins
+search: false
+---
+
+<script setup>
+window.location.replace('/guide/development/using-plugins')
+</script>
+`
+
+  const updated = applySnapshotSpecificRewritesContent(content, 'guide/build/using-plugins.md', '26.4.5')
+
+  assert.match(updated, /content: 2;url=\/versions\/v26\.4\.5\/guide\/development\/using-plugins/)
+  assert.match(updated, /window\.location\.replace\('\/versions\/v26\.4\.5\/guide\/development\/using-plugins'\)/)
+})
+
+test('applySnapshotSpecificRewritesContent replaces versioned testing policy with current-policy pointer', () => {
+  const content = `---
+search: false
+---
+
+# Testing Guidelines for This Project
+
+Detailed policy.
+`
+
+  const updated = applySnapshotSpecificRewritesContent(content, 'guide/evolve/testing-guidelines.md', 'v26.4.5')
+
+  assert.equal(updated, `---
+search: false
+---
+
+# Testing Guidelines for This Project
+
+This page is maintainer process guidance rather than versioned user documentation. Contributors should use the current internal policy at [Testing Guidelines](/guide/evolve/testing-guidelines).
+`)
 })

@@ -33,7 +33,7 @@ public class CachePluginHost {
 
 Cache plugin service properties:
 
-```
+```properties
 pipeline.cache.provider=caffeine
 pipeline.cache.provider.class=org.pipelineframework.plugin.cache.provider.CaffeineCacheProvider
 pipeline.cache.policy=prefer-cache

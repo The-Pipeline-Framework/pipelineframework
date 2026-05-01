@@ -7,7 +7,7 @@ search: false
 This guide explains how to use the Pipeline Framework template generator to create complete pipeline applications from YAML configuration files.
 
 <Callout type="tip" title="Canvas Is the Default">
-Use the visual Canvas designer at <a href="https://app.pipelineframework.org" target="_blank">https://app.pipelineframework.org</a> for day-to-day creation. The template generator is a secondary option for automation or CI-only workflows.
+Use the visual Canvas designer at <a href="https://app.pipelineframework.org" target="_blank" rel="noopener noreferrer">https://app.pipelineframework.org</a> for day-to-day creation. The template generator is a secondary option for automation or CI-only workflows.
 </Callout>
 
 ## Overview

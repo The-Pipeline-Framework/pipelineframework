@@ -51,6 +51,7 @@ Explicit non-goals in this milestone:
 ## Core Concepts
 
 ### Pipeline
+
 A pipeline is a sequence of processing steps that transform input data into output data. Each step in the pipeline performs a specific transformation or operation on the data flowing through it. The framework encourages append-only persistence by default; updates are explicit and opt-in.
 
 ```mermaid
@@ -68,6 +69,7 @@ graph TD
 ```
 
 ### Step
+
 A step is a single processing unit within a pipeline. Steps can have different patterns:
 - **One-to-One**: Transforms a single input into a single output
 - **One-to-Many**: Transforms a single input into multiple outputs
@@ -86,12 +88,14 @@ graph TB
 ```
 
 ### Mapper
+
 Mappers handle the conversion between different data representations:
 - **gRPC objects**: Protocol buffer generated classes
 - **Domain objects**: Business logic entities
 - **DTO objects**: Data transfer objects
 
 ### Adapter
+
 Adapters bridge the gap between the pipeline framework and external systems, handling protocol-specific details like gRPC or REST communication.
 
 ## System Architecture
@@ -104,13 +108,14 @@ graph LR
         A[Runtime Module]
         B[Deployment Module]
     end
-    
+
     A --> C[Application Code]
     B --> D[Annotation Processing]
     C --> E[Generated Pipeline Apps]
 ```
 
 ### Runtime Module
+
 The runtime module contains the core framework components:
 
 - **Annotations**: `@PipelineStep` for declarative configuration
@@ -130,7 +135,7 @@ graph TD
         E[Mappers]
         F[Persistence]
     end
-    
+
     A --> B
     B --> C
     C --> D
@@ -139,6 +144,7 @@ graph TD
 ```
 
 ### Deployment Module
+
 The deployment module contains build-time processors:
 
 - **Annotation Processor**: Scans for `@PipelineStep` annotations
@@ -152,7 +158,7 @@ graph TD
         B[Code Generator]
         C[DI Registration]
     end
-    
+
     A --> B
     B --> C
 ```
@@ -160,6 +166,7 @@ graph TD
 ## Data Flow Patterns
 
 ### Reactive Streams
+
 The framework is built on Mutiny reactive streams, supporting both `Uni` (single item) and `Multi` (multiple items) patterns.
 
 ```mermaid
@@ -171,6 +178,7 @@ graph LR
 ```
 
 ### Error Handling
+
 Each step includes built-in error handling with configurable retry policies, circuit breakers, and dead letter queues.
 
 ```mermaid
@@ -185,6 +193,7 @@ graph TD
 ```
 
 ### Concurrency
+
 Steps can be configured to run with different concurrency models and execution contexts to fit throughput and ordering requirements.
 
 ## Module Structure
@@ -217,17 +226,21 @@ Note that the deployment module is typically used with `provided` scope in appli
 ## Integration Patterns
 
 ### gRPC Integration
+
 The framework automatically generates gRPC adapters for pipeline steps, enabling seamless integration with gRPC-based services.
 
 ### REST Integration
+
 REST adapters can be generated to expose pipeline steps as HTTP endpoints.
 
 ### Database Integration
-Persistence is provided via a side-effect plugin and configured as an aspect (typically AFTER_STEP). It observes inputs or outputs and persists them without changing the stream.
+
+Persistence is provided via a side effect plugin and configured as an aspect (typically AFTER_STEP). It observes inputs or outputs and persists them without changing the stream.
 
 ## Configuration Model
 
 ### Step-Level Configuration
+
 Each step can be independently configured with:
 
 - Retry policies (limit, wait time, backoff)
@@ -237,6 +250,7 @@ Each step can be independently configured with:
 - Error recovery strategies
 
 ### Pipeline-Level Configuration
+
 Global pipeline settings control:
 
 - Default step configurations
@@ -247,27 +261,33 @@ Global pipeline settings control:
 ## Extension Points
 
 ### Custom Steps
+
 Developers can create custom step implementations by extending the provided interfaces.
 
 ### Custom Mappers
+
 Mapper interfaces can be implemented to handle specific conversion requirements.
 
 ### Custom Adapters
+
 Additional adapters can be created for new protocols or integration patterns.
 
 ## Best Practices
 
 ### Step Design
+
 - Keep steps focused on a single responsibility
 - Design steps to be stateless when possible
 - Handle errors gracefully with appropriate recovery mechanisms
 
 ### Performance Optimization
+
 - Prefer non-blocking I/O and offload blocking work when needed
 - Configure appropriate concurrency levels
 - Implement efficient mapper implementations
 
 ### Testing
+
 - Test steps in isolation
 - Use the framework's testing utilities
 - Validate mapper correctness

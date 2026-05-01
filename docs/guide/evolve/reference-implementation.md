@@ -87,6 +87,7 @@ java -jar template-generator-1.0.0.jar --config my-pipeline-config.yaml --output
 ## Pipeline Step Types and Cardinalities
 
 ### ONE_TO_ONE (1-1)
+
 Transforms single input to single output:
 
 ```java
@@ -104,6 +105,7 @@ public class ProcessCustomerStep implements ReactiveService<CustomerInput, Custo
 ```
 
 ### EXPANSION (1-Many)
+
 Transforms single input to multiple outputs:
 
 ```java
@@ -121,6 +123,7 @@ public class GenerateOrdersStep implements ReactiveStreamingService<CustomerOutp
 ```
 
 ### REDUCTION (Many-1)
+
 Aggregates multiple inputs to single output:
 
 ```java
@@ -138,6 +141,7 @@ public class AggregateOrdersStep implements ReactiveStreamingClientService<Order
 ```
 
 ### SIDE_EFFECT (1-1 with same input/output)
+
 Performs side effects without changing data:
 
 ```java
@@ -157,15 +161,18 @@ public class LogSummaryStep implements ReactiveService<SummaryOutput, SummaryOut
 ## Quick Start with Visual Canvas
 
 ### 1. Visit the Canvas Designer
+
 Go to https://app.pipelineframework.org to use the visual designer.
 
 ### 2. Create Steps Visually
+
 - Drag and drop new steps onto the canvas
 - Select cardinality for each step
 - Define input/output types and fields
 - Connect steps to establish pipeline flow
 
 ### 3. Download Configuration
+
 - Generate YAML configuration from the visual design
 - Download the configuration file
 - Use it with the template generator:
@@ -178,7 +185,7 @@ java -jar template-generator-1.0.0.jar -c downloaded-config.yaml -o ./my-pipelin
 
 The template generator creates a complete Maven multi-module project:
 
-```
+```text
 my-pipeline-app/
 ├── pom.xml                       # Parent POM with all modules
 ├── common/                       # Shared components
@@ -212,21 +219,25 @@ my-pipeline-app/
 ## Implementation Workflow
 
 ### 1. Define Pipeline Configuration
+
 - Use YAML file or Canvas designer to define steps
 - Specify cardinalities and data types
 - Define field mappings for each step
 
 ### 2. Generate Application
+
 - Run template generator to create full project
 - Generated code includes all necessary components
 - Observability stack is included by default
 
 ### 3. Implement Business Logic
+
 - Fill in the `process()` methods in generated service classes
 - Use reactive patterns with Uni/Multi as appropriate
 - Add domain-specific logic and validations
 
 ### 4. Test and Deploy
+
 - Use generated Docker Compose for local testing
 - Deploy individual services as needed
 - Monitor with integrated observability tools
@@ -254,6 +265,7 @@ Current templates use semantic v2 types. The compiler derives Java bindings and 
 | `path` | `Path` | `string` |
 
 ### Automatic Conversion
+
 - MapStruct handles automatic conversion between Java and protobuf types for built-in types
 - Built-in conversions: primitives, wrappers, UUID, BigDecimal/BigInteger, Java 8 time types, URI/URL/File/Path
 - Custom converters in `CommonConverters` class manage specialized mappings: Currency, AtomicInteger, AtomicLong, `List<String>`

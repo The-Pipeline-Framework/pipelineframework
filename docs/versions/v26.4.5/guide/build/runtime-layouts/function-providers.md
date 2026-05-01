@@ -74,7 +74,7 @@ See [AWS Lambda Platform Guide](/versions/v26.4.5/guide/development/aws-lambda) 
   test
 ```
 
-See [Azure Functions Testing Guide](search-azure-functions.md) for detailed deployment instructions.
+See [Azure Functions Testing Guide](/versions/v26.4.5/guide/build/runtime-layouts/search-azure-functions) for detailed deployment instructions.
 
 ### Google Cloud Functions
 
@@ -181,22 +181,26 @@ This is **cloud-agnostic** and works identically across all providers.
 |----------|-----------|--------------|
 | AWS Lambda | `*-EndToEndIT` | AWS credentials, SAM/CloudFormation |
 | Azure Functions | `AzureFunctionsEndToEndIT` | Azure subscription, Terraform |
-| GCP Cloud Functions | `GcpFunctionsBootstrapSmokeTest` | GCP project, Functions Framework |
+| GCP Cloud Functions | `GcpFunctionsBootstrapSmokeTest` | GCP project, Functions Framework bootstrap/smoke coverage |
 
 ## Troubleshooting
 
 ### Common Issues
 
 **Multiple providers detected:**
-```
+
+```text
 [TPF] Multiple function providers detected. Using AWS Lambda (aws).
 ```
+
 Solution: Set explicit provider: `-Dpipeline.function.provider=azure`
 
 **Extension not on classpath:**
-```
+
+```text
 ClassNotFoundException: com.google.cloud.functions.HttpFunction
 ```
+
 Solution: Build with correct scope: `-Dtpf.build.gcp.scope=compile`
 
 ## Next Steps

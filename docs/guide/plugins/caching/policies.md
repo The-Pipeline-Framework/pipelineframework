@@ -62,7 +62,7 @@ flowchart TD
 
 You can override policy using headers:
 
-```
+```http
 x-pipeline-cache-policy: prefer-cache
 ```
 
@@ -72,7 +72,7 @@ Headers are propagated by the orchestrator to downstream steps.
 
 Use `x-pipeline-version` to segregate cache keys during replay:
 
-```
+```http
 x-pipeline-version: v2
 ```
 

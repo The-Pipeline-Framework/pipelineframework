@@ -21,6 +21,7 @@ Build and CI failures are covered in the development guide:
 | Handler not selected / wrong lambda entrypoint | Multiple generated handlers with ambiguous runtime selection | Set explicit `quarkus.lambda.handler` for target module |
 | Missing generated resource/handler classes | Build target mismatch or generation path drift (that is, build output moved/renamed due to changed generation/build settings) | Re-run CI-equivalent compile lane with expected platform/transport flags |
 | `StepManyToOne.applyReduce` compile mismatch in generated client step | Framework/client-step renderer drift for MANY_TO_ONE shape | Rebuild framework deployment module and regenerate sources; confirm generated client method is `applyReduce(Multi<...>)` |
+
 ## Diagnostics Workflow
 
 1. Confirm commit and artifact match the tested revision.

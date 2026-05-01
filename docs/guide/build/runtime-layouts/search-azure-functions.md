@@ -344,16 +344,21 @@ Tests use dynamically generated test data:
 ### Common Issues
 
 **Function deployment fails:**
-```
+
+```text
 ERROR: Function app name already exists globally
 ```
+
 Solution: Use a unique `function_app_name` in Terraform variables.
 
 **Local testing fails with Core Tools error:**
-```
+
+```text
 Azure Functions Core Tools not found
 ```
+
 Solution: Install Core Tools v4.x:
+
 ```bash
 # macOS
 brew tap azure/functions
@@ -364,18 +369,23 @@ choco install azure-functions-core-tools
 ```
 
 **Authentication errors during deployment:**
-```
+
+```text
 ERROR: Please run az login to setup credentials
 ```
+
 Solution: Authenticate with Azure CLI:
+
 ```bash
 az login --scope https://management.core.windows.net//.default
 ```
 
 **Function timeout during E2E tests:**
-```
+
+```text
 java.net.http.HttpTimeoutException: request timed out
 ```
+
 Solution: Increase timeout in test or check Function App logs in Azure Portal.
 
 ### Logging and Monitoring

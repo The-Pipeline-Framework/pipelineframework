@@ -37,7 +37,7 @@ This keeps dependency resolution deterministic.
 
 ## Side-effect transport contract
 
-Side-effect plugins are modelled as unary services for the selected transport.
+Side-effect plugins are modeled as unary services for the selected transport.
 TPF generates type-indexed service contracts such as `ObservePaymentRecordSideEffectService` with shape `PaymentRecord -> PaymentRecord`.
 It then inserts them at the configured aspect position.
 

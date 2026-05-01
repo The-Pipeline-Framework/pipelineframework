@@ -6,7 +6,7 @@ search: false
 
 TPF supports two operator execution models:
 
-- local Java operators resolved at build time with `operator: Class::method`
+- local Java operators resolved at build time with `operator: fully.qualified.Class::method`
 - remote IDL v2 operators declared with `execution.mode: REMOTE`
 
 ## Minimal Example
@@ -122,8 +122,8 @@ steps:
 
 ## Troubleshooting
 
-- `class not found`: verify module dependency and package name.
-- `method not found/ambiguous`: verify signature and overloads.
+- `class not found`: verify module dependency, package name, and that the operator uses `operator: fully.qualified.Class::method` rather than a shortened class name.
+- `method not found/ambiguous`: verify signature, overloads, and the `fully.qualified.Class::method` double-colon syntax.
 - `unsupported return shape`: verify unary constraints for current invoker scope.
 - `gRPC mapper/proto error`: verify mapper binding and descriptor generation.
 - `remote target missing at startup`: verify the property named by `execution.target.urlConfigKey` resolves to a non-blank URL.
