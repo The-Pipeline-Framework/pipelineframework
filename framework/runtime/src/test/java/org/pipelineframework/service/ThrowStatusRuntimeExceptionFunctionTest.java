@@ -51,4 +51,29 @@ class ThrowStatusRuntimeExceptionFunctionTest {
                 originalThrowable.getMessage(),
                 metadata.get(Metadata.Key.of("error-details", Metadata.ASCII_STRING_MARSHALLER)));
     }
+
+    @Test
+    void apply_ShouldSanitizeMultilineThrowableMessagesForGrpcHeaders() {
+        // Given
+        throwStatusRuntimeExceptionFunction function = new throwStatusRuntimeExceptionFunction();
+        Throwable originalThrowable =
+                new RuntimeException("CSV processing error:\nUnterminated quoted field\r\nBROKEN,USD");
+
+        // When
+        Throwable result = function.apply(originalThrowable);
+
+        // Then
+        assertInstanceOf(StatusRuntimeException.class, result);
+        StatusRuntimeException statusRuntimeException = (StatusRuntimeException) result;
+        String expected = "CSV processing error: Unterminated quoted field BROKEN,USD";
+
+        assertEquals(expected, statusRuntimeException.getStatus().getDescription());
+        assertSame(originalThrowable, statusRuntimeException.getStatus().getCause());
+
+        Metadata metadata = statusRuntimeException.getTrailers();
+        assertNotNull(metadata);
+        assertEquals(
+                expected,
+                metadata.get(Metadata.Key.of("error-details", Metadata.ASCII_STRING_MARSHALLER)));
+    }
 }

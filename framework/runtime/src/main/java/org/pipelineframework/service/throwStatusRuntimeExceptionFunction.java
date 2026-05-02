@@ -40,12 +40,21 @@ public class throwStatusRuntimeExceptionFunction implements Function<Throwable, 
     Metadata metadata = new Metadata();
     Metadata.Key<String> errorKey =
         Metadata.Key.of("error-details", Metadata.ASCII_STRING_MARSHALLER);
-    metadata.put(errorKey, throwable.getMessage());
+    String description = sanitizeForGrpcHeader(throwable);
+    metadata.put(errorKey, description);
 
-    Status status = Status.INTERNAL.withDescription(throwable.getMessage()).withCause(throwable);
+    Status status = Status.INTERNAL.withDescription(description).withCause(throwable);
 
     LOG.debug("Runtime exception thrown: ", throwable);
 
     return new StatusRuntimeException(status, metadata);
+  }
+
+  private static String sanitizeForGrpcHeader(Throwable throwable) {
+    String message = throwable == null ? null : throwable.getMessage();
+    if (message == null || message.isBlank()) {
+      return throwable == null ? "Unknown error" : throwable.getClass().getSimpleName();
+    }
+    return message.replaceAll("[\\r\\n\\t]+", " ").trim();
   }
 }
