@@ -55,6 +55,10 @@ public class throwStatusRuntimeExceptionFunction implements Function<Throwable, 
     if (message == null || message.isBlank()) {
       return throwable == null ? "Unknown error" : throwable.getClass().getSimpleName();
     }
-    return message.replaceAll("[^\\x20-\\x7E]+", " ").trim();
+    String sanitized = message.replaceAll("[^\\x20-\\x7E]+", " ").trim();
+    if (sanitized == null || sanitized.isBlank()) {
+      return throwable == null ? "Unknown error" : throwable.getClass().getSimpleName();
+    }
+    return sanitized;
   }
 }
