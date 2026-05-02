@@ -199,7 +199,17 @@ class PipelineStepExecutorTest {
             if ("bad".equals(in)) {
                 return Multi.createFrom().failure(new RuntimeException("stream boom"));
             }
-            return Multi.createFrom().item(in + "-ok");
+            return Multi.createFrom().emitter(emitter -> {
+                new Thread(() -> {
+                    try {
+                        Thread.sleep(10);
+                        emitter.emit(in + "-ok");
+                        emitter.complete();
+                    } catch (InterruptedException e) {
+                        emitter.fail(e);
+                    }
+                }).start();
+            });
         }
 
         @Override
@@ -232,7 +242,17 @@ class PipelineStepExecutorTest {
             if ("bad".equals(in)) {
                 return Multi.createFrom().failure(new RuntimeException("stream boom"));
             }
-            return Multi.createFrom().item(in + "-ok");
+            return Multi.createFrom().emitter(emitter -> {
+                new Thread(() -> {
+                    try {
+                        Thread.sleep(10);
+                        emitter.emit(in + "-ok");
+                        emitter.complete();
+                    } catch (InterruptedException e) {
+                        emitter.fail(e);
+                    }
+                }).start();
+            });
         }
 
         @Override
