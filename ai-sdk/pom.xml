@@ -13,7 +13,7 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <tpf.version>26.4.5-SNAPSHOT</tpf.version>
+        <tpf.version>26.5.2-SNAPSHOT</tpf.version>
         <mapstruct.version>1.5.5.Final</mapstruct.version>
         <quarkus.version>3.31.3</quarkus.version>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
