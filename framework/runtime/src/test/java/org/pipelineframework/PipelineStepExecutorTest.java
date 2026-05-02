@@ -20,6 +20,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
@@ -94,6 +95,46 @@ class PipelineStepExecutorTest {
     }
 
     @Test
+    void oneToManyParallelRecoveryCompletesAfterRejectedInnerStream() {
+        RecoveringOneToManyStep step = new RecoveringOneToManyStep();
+
+        Object result = PipelineStepExecutor.applyOneToManyUnchecked(
+            step,
+            Multi.createFrom().items("first", "bad", "second"),
+            true,
+            16,
+            null,
+            null,
+            null);
+
+        List<String> values = ((Multi<String>) result).collect().asList().await().atMost(Duration.ofSeconds(5));
+
+        assertEquals(Set.of("first-ok", "second-ok"), Set.copyOf(values));
+        assertEquals(2, values.size());
+        assertTrue(step.rejectCalled());
+    }
+
+    @Test
+    void oneToManyParallelFailureStillFailsWhenRecoveryDisabled() {
+        NonRecoveringOneToManyStep step = new NonRecoveringOneToManyStep();
+
+        Object result = PipelineStepExecutor.applyOneToManyUnchecked(
+            step,
+            Multi.createFrom().items("first", "bad", "second"),
+            true,
+            16,
+            null,
+            null,
+            null);
+
+        io.smallrye.mutiny.helpers.test.AssertSubscriber<String> subscriber =
+            ((Multi<String>) result).subscribe().withSubscriber(
+                io.smallrye.mutiny.helpers.test.AssertSubscriber.create(2));
+        subscriber.awaitFailure(Duration.ofSeconds(5));
+        assertTrue(subscriber.getFailure() instanceof RuntimeException);
+    }
+
+    @Test
     void manyToOneFromMultiReducesItems() {
         Object result = PipelineStepExecutor.applyManyToOneUnchecked(
             (ManyToOne<String, String>) input -> input.collect().asList().map(items -> String.join(",", items)),
@@ -147,6 +188,79 @@ class PipelineStepExecutorTest {
         @Override
         public Multi<String> applyOneToMany(String in) {
             return Multi.createFrom().items(in + "-1", in + "-2");
+        }
+    }
+
+    static final class RecoveringOneToManyStep extends ConfigurableStep implements StepOneToMany<String, String> {
+        private final AtomicBoolean rejectCalled = new AtomicBoolean(false);
+
+        @Override
+        public Multi<String> applyOneToMany(String in) {
+            if ("bad".equals(in)) {
+                return Multi.createFrom().failure(new RuntimeException("stream boom"));
+            }
+            return Multi.createFrom().emitter(emitter -> {
+                new Thread(() -> {
+                    try {
+                        Thread.sleep(10);
+                        emitter.emit(in + "-ok");
+                        emitter.complete();
+                    } catch (InterruptedException e) {
+                        emitter.fail(e);
+                    }
+                }).start();
+            });
+        }
+
+        @Override
+        public org.pipelineframework.config.StepConfig effectiveConfig() {
+            return new org.pipelineframework.config.StepConfig()
+                .recoverOnFailure(true)
+                .retryLimit(1)
+                .retryWait(Duration.ofMillis(1));
+        }
+
+        @Override
+        public Uni<String> rejectStream(
+            List<String> sampleItems,
+            long totalItemCount,
+            Throwable cause,
+            Integer retriesObserved,
+            Integer retryLimit) {
+            rejectCalled.set(true);
+            return Uni.createFrom().nullItem();
+        }
+
+        boolean rejectCalled() {
+            return rejectCalled.get();
+        }
+    }
+
+    static final class NonRecoveringOneToManyStep extends ConfigurableStep implements StepOneToMany<String, String> {
+        @Override
+        public Multi<String> applyOneToMany(String in) {
+            if ("bad".equals(in)) {
+                return Multi.createFrom().failure(new RuntimeException("stream boom"));
+            }
+            return Multi.createFrom().emitter(emitter -> {
+                new Thread(() -> {
+                    try {
+                        Thread.sleep(10);
+                        emitter.emit(in + "-ok");
+                        emitter.complete();
+                    } catch (InterruptedException e) {
+                        emitter.fail(e);
+                    }
+                }).start();
+            });
+        }
+
+        @Override
+        public org.pipelineframework.config.StepConfig effectiveConfig() {
+            return new org.pipelineframework.config.StepConfig()
+                .recoverOnFailure(false)
+                .retryLimit(0)
+                .retryWait(Duration.ofMillis(1));
         }
     }
 

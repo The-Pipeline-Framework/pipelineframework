@@ -32,6 +32,7 @@ install_framework_and_plugins() {
 
 install_csv_prereqs() {
   mvn -f "$ROOT_DIR/examples/csv-payments/pom.xml" -N install
+  mvn -f "$ROOT_DIR/examples/csv-payments/pom.xml" -pl common -DskipTests install
   mvn -f "$ROOT_DIR/plugins/foundational/persistence/pom.xml" -DskipTests install
 }
 
