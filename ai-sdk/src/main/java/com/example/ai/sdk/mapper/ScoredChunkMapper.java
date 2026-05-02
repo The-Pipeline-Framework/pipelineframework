@@ -11,9 +11,19 @@ import org.pipelineframework.mapper.Mapper;
  * MapStruct mapper for ScoredChunk conversion between gRPC, DTO, and Entity layers.
  */
 @org.mapstruct.Mapper(uses = {ChunkMapper.class})
-public interface ScoredChunkMapper extends Mapper<SimilaritySearchSvc.ScoredChunk, ScoredChunkDto, ScoredChunk> {
+public interface ScoredChunkMapper extends Mapper<ScoredChunk, SimilaritySearchSvc.ScoredChunk> {
 
     ScoredChunkMapper INSTANCE = Mappers.getMapper(ScoredChunkMapper.class);
+
+    @Override
+    default ScoredChunk fromExternal(SimilaritySearchSvc.ScoredChunk external) {
+        return fromDto(fromGrpc(external));
+    }
+
+    @Override
+    default SimilaritySearchSvc.ScoredChunk toExternal(ScoredChunk domain) {
+        return toGrpc(toDto(domain));
+    }
 
     /**
      * Converts a gRPC ScoredChunk message to a ScoredChunkDto.
@@ -21,7 +31,6 @@ public interface ScoredChunkMapper extends Mapper<SimilaritySearchSvc.ScoredChun
      * @param grpc the gRPC ScoredChunk to convert
      * @return a ScoredChunkDto with the corresponding chunk and score from the gRPC message
      */
-    @Override
     ScoredChunkDto fromGrpc(SimilaritySearchSvc.ScoredChunk grpc);
 
     /**
@@ -30,7 +39,6 @@ public interface ScoredChunkMapper extends Mapper<SimilaritySearchSvc.ScoredChun
      * @param dto the DTO containing the chunk content and its similarity score
      * @return a gRPC ScoredChunk with `chunk` and `score` populated from the DTO
      */
-    @Override
     default SimilaritySearchSvc.ScoredChunk toGrpc(ScoredChunkDto dto) {
         if (dto == null) {
             return null;
@@ -48,7 +56,6 @@ public interface ScoredChunkMapper extends Mapper<SimilaritySearchSvc.ScoredChun
      * @param dto the data transfer object containing chunk and score values
      * @return the entity populated with values from {@code dto}
      */
-    @Override
     ScoredChunk fromDto(ScoredChunkDto dto);
 
     /**
@@ -57,6 +64,5 @@ public interface ScoredChunkMapper extends Mapper<SimilaritySearchSvc.ScoredChun
      * @param domain the domain entity whose fields are mapped into the DTO
      * @return a ScoredChunkDto with `chunk` and `score` copied from the domain entity
      */
-    @Override
     ScoredChunkDto toDto(ScoredChunk domain);
 }

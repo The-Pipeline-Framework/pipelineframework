@@ -10,9 +10,19 @@ import org.pipelineframework.mapper.Mapper;
  * MapStruct mapper for Document conversion between gRPC, DTO, and Entity layers.
  */
 @org.mapstruct.Mapper
-public interface DocumentChunkingMapper extends Mapper<DocumentChunkingSvc.Document, DocumentDto, Document> {
+public interface DocumentChunkingMapper extends Mapper<Document, DocumentChunkingSvc.Document> {
 
     DocumentChunkingMapper INSTANCE = Mappers.getMapper(DocumentChunkingMapper.class);
+
+    @Override
+    default Document fromExternal(DocumentChunkingSvc.Document external) {
+        return fromDto(fromGrpc(external));
+    }
+
+    @Override
+    default DocumentChunkingSvc.Document toExternal(Document domain) {
+        return toGrpc(toDto(domain));
+    }
 
     /**
      * Converts a gRPC Document into a DocumentDto.
@@ -20,7 +30,6 @@ public interface DocumentChunkingMapper extends Mapper<DocumentChunkingSvc.Docum
      * @param grpc the gRPC Document to convert
      * @return the resulting DocumentDto with its id and content set from the source
      */
-    @Override
     DocumentDto fromGrpc(DocumentChunkingSvc.Document grpc);
 
     /**
@@ -29,7 +38,6 @@ public interface DocumentChunkingMapper extends Mapper<DocumentChunkingSvc.Docum
      * @param dto the DTO to convert; its `id` and `content` fields are mapped to the resulting gRPC Document
      * @return the gRPC Document populated from the given DTO
      */
-    @Override
     default DocumentChunkingSvc.Document toGrpc(DocumentDto dto) {
         if (dto == null) {
             return null;
@@ -46,7 +54,6 @@ public interface DocumentChunkingMapper extends Mapper<DocumentChunkingSvc.Docum
      * @param dto the source DTO containing `id` and `content`
      * @return the domain Document populated with the DTO's `id` and `content`
      */
-    @Override
     Document fromDto(DocumentDto dto);
 
     /**
@@ -55,6 +62,5 @@ public interface DocumentChunkingMapper extends Mapper<DocumentChunkingSvc.Docum
      * @param domain the Document entity to convert
      * @return the corresponding DocumentDto with matching id and content
      */
-    @Override
     DocumentDto toDto(Document domain);
 }

@@ -11,9 +11,19 @@ import org.pipelineframework.mapper.Mapper;
  * MapStruct mapper for Chunk conversion between gRPC, DTO, and Entity layers.
  */
 @org.mapstruct.Mapper
-public interface ChunkMapper extends Mapper<DocumentChunkingSvc.Chunk, ChunkDto, Chunk> {
+public interface ChunkMapper extends Mapper<Chunk, DocumentChunkingSvc.Chunk> {
 
     ChunkMapper INSTANCE = Mappers.getMapper(ChunkMapper.class);
+
+    @Override
+    default Chunk fromExternal(DocumentChunkingSvc.Chunk external) {
+        return fromDto(fromGrpc(external));
+    }
+
+    @Override
+    default DocumentChunkingSvc.Chunk toExternal(Chunk domain) {
+        return toGrpc(toDto(domain));
+    }
 
     /**
      * Convert a gRPC Chunk message to a DTO representation.
@@ -21,7 +31,6 @@ public interface ChunkMapper extends Mapper<DocumentChunkingSvc.Chunk, ChunkDto,
      * @param grpc the gRPC Chunk message to convert
      * @return the DTO populated with `id`, `documentId`, `content`, and `position` from the gRPC message
      */
-    @Override
     @org.mapstruct.Mapping(target = "id", source = "id")
     @org.mapstruct.Mapping(target = "documentId", source = "documentId")
     @org.mapstruct.Mapping(target = "content", source = "content")
@@ -34,7 +43,6 @@ public interface ChunkMapper extends Mapper<DocumentChunkingSvc.Chunk, ChunkDto,
      * @param dto the DTO containing chunk data to convert
      * @return a {@link DocumentChunkingSvc.Chunk} populated with id, documentId, content, and position from the DTO
      */
-    @Override
     @org.mapstruct.Mapping(target = "id", source = "id")
     @org.mapstruct.Mapping(target = "documentId", source = "documentId")
     @org.mapstruct.Mapping(target = "content", source = "content")
@@ -47,7 +55,6 @@ public interface ChunkMapper extends Mapper<DocumentChunkingSvc.Chunk, ChunkDto,
      * @param dto the data transfer object containing id, documentId, content, and position
      * @return a Chunk domain instance with id, documentId, content, and position copied from the DTO
      */
-    @Override
     @org.mapstruct.Mapping(target = "id", source = "id")
     @org.mapstruct.Mapping(target = "documentId", source = "documentId")
     @org.mapstruct.Mapping(target = "content", source = "content")
@@ -60,7 +67,6 @@ public interface ChunkMapper extends Mapper<DocumentChunkingSvc.Chunk, ChunkDto,
      * @param domain the domain Chunk entity to convert
      * @return a ChunkDto representing the provided domain Chunk
      */
-    @Override
     @org.mapstruct.Mapping(target = "id", source = "id")
     @org.mapstruct.Mapping(target = "documentId", source = "documentId")
     @org.mapstruct.Mapping(target = "content", source = "content")

@@ -11,9 +11,19 @@ import org.pipelineframework.mapper.Mapper;
  * MapStruct mapper for Vector conversion between gRPC, DTO, and Entity layers (outbound direction).
  */
 @org.mapstruct.Mapper
-public interface EmbeddingOutboundMapper extends Mapper<EmbeddingSvc.Vector, VectorDto, Vector> {
+public interface EmbeddingOutboundMapper extends Mapper<Vector, EmbeddingSvc.Vector> {
 
     EmbeddingOutboundMapper INSTANCE = Mappers.getMapper(EmbeddingOutboundMapper.class);
+
+    @Override
+    default Vector fromExternal(EmbeddingSvc.Vector external) {
+        return fromDto(fromGrpc(external));
+    }
+
+    @Override
+    default EmbeddingSvc.Vector toExternal(Vector domain) {
+        return toGrpc(toDto(domain));
+    }
 
     /**
      * Convert a gRPC EmbeddingSvc.Vector to a VectorDto.
@@ -21,7 +31,6 @@ public interface EmbeddingOutboundMapper extends Mapper<EmbeddingSvc.Vector, Vec
      * @param grpc the gRPC vector whose fields will be mapped
      * @return a VectorDto with `id` taken from `grpc.id` and `values` taken from `grpc.valuesList`
      */
-    @Override
     @Mapping(target = "id", source = "id")
     @Mapping(target = "values", source = "valuesList")
     VectorDto fromGrpc(EmbeddingSvc.Vector grpc);
@@ -32,7 +41,6 @@ public interface EmbeddingOutboundMapper extends Mapper<EmbeddingSvc.Vector, Vec
      * @param dto the source DTO to convert; may be {@code null}
      * @return the corresponding {@link EmbeddingSvc.Vector}, or {@code null} if {@code dto} is {@code null}
      */
-    @Override
     default EmbeddingSvc.Vector toGrpc(VectorDto dto) {
         if (dto == null) {
             return null;
@@ -53,7 +61,6 @@ public interface EmbeddingOutboundMapper extends Mapper<EmbeddingSvc.Vector, Vec
      * @param dto the source data transfer object
      * @return the domain Vector populated from the given DTO
      */
-    @Override
     Vector fromDto(VectorDto dto);
 
     /**
@@ -62,6 +69,5 @@ public interface EmbeddingOutboundMapper extends Mapper<EmbeddingSvc.Vector, Vec
      * @param domain the domain Vector entity to convert
      * @return the VectorDto with id and values taken from the domain entity
      */
-    @Override
     VectorDto toDto(Vector domain);
 }

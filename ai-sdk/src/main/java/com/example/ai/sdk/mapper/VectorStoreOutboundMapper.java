@@ -10,9 +10,19 @@ import org.pipelineframework.mapper.Mapper;
  * MapStruct mapper for StoreResult conversion between gRPC, DTO, and Entity layers (outbound direction).
  */
 @org.mapstruct.Mapper
-public interface VectorStoreOutboundMapper extends Mapper<VectorStoreSvc.StoreResult, StoreResultDto, StoreResult> {
+public interface VectorStoreOutboundMapper extends Mapper<StoreResult, VectorStoreSvc.StoreResult> {
 
     VectorStoreOutboundMapper INSTANCE = Mappers.getMapper(VectorStoreOutboundMapper.class);
+
+    @Override
+    default StoreResult fromExternal(VectorStoreSvc.StoreResult external) {
+        return fromDto(fromGrpc(external));
+    }
+
+    @Override
+    default VectorStoreSvc.StoreResult toExternal(StoreResult domain) {
+        return toGrpc(toDto(domain));
+    }
 
     /**
      * Convert a gRPC StoreResult to a StoreResultDto.
@@ -20,7 +30,6 @@ public interface VectorStoreOutboundMapper extends Mapper<VectorStoreSvc.StoreRe
      * @param grpc the gRPC StoreResult to convert
      * @return the DTO containing the same `id`, `success`, and `message` values as the gRPC object
      */
-    @Override
     StoreResultDto fromGrpc(VectorStoreSvc.StoreResult grpc);
 
     /**
@@ -29,7 +38,6 @@ public interface VectorStoreOutboundMapper extends Mapper<VectorStoreSvc.StoreRe
      * @param dto the DTO containing id, success, and message fields to map
      * @return a gRPC {@link VectorStoreSvc.StoreResult} with id, success, and message copied from the DTO
      */
-    @Override
     default VectorStoreSvc.StoreResult toGrpc(StoreResultDto dto) {
         if (dto == null) {
             return null;
@@ -47,7 +55,6 @@ public interface VectorStoreOutboundMapper extends Mapper<VectorStoreSvc.StoreRe
      * @param dto the data-transfer object to convert
      * @return the domain StoreResult with `id`, `success`, and `message` copied from the DTO
      */
-    @Override
     StoreResult fromDto(StoreResultDto dto);
 
     /**
@@ -56,6 +63,5 @@ public interface VectorStoreOutboundMapper extends Mapper<VectorStoreSvc.StoreRe
      * @param domain the domain StoreResult to convert
      * @return the StoreResultDto with `id`, `success`, and `message` copied from the domain entity
      */
-    @Override
     StoreResultDto toDto(StoreResult domain);
 }

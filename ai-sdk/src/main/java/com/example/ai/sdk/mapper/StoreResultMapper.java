@@ -10,9 +10,19 @@ import org.pipelineframework.mapper.Mapper;
  * MapStruct mapper for StoreResult conversion between gRPC, DTO, and Entity layers.
  */
 @org.mapstruct.Mapper
-public interface StoreResultMapper extends Mapper<VectorStoreSvc.StoreResult, StoreResultDto, StoreResult> {
+public interface StoreResultMapper extends Mapper<StoreResult, VectorStoreSvc.StoreResult> {
 
     StoreResultMapper INSTANCE = Mappers.getMapper(StoreResultMapper.class);
+
+    @Override
+    default StoreResult fromExternal(VectorStoreSvc.StoreResult external) {
+        return fromDto(fromGrpc(external));
+    }
+
+    @Override
+    default VectorStoreSvc.StoreResult toExternal(StoreResult domain) {
+        return toGrpc(toDto(domain));
+    }
 
     /**
      * Create a StoreResultDto from the provided gRPC StoreResult.
@@ -20,7 +30,6 @@ public interface StoreResultMapper extends Mapper<VectorStoreSvc.StoreResult, St
      * @param grpc the gRPC StoreResult to convert
      * @return the corresponding StoreResultDto with id, success, and message populated
      */
-    @Override
     StoreResultDto fromGrpc(VectorStoreSvc.StoreResult grpc);
 
     /**
@@ -29,7 +38,6 @@ public interface StoreResultMapper extends Mapper<VectorStoreSvc.StoreResult, St
      * @param dto the DTO containing id, success, and message to map
      * @return the corresponding gRPC StoreResult with id, success, and message populated
      */
-    @Override
     default VectorStoreSvc.StoreResult toGrpc(StoreResultDto dto) {
         if (dto == null) {
             return null;
@@ -47,7 +55,6 @@ public interface StoreResultMapper extends Mapper<VectorStoreSvc.StoreResult, St
      * @param dto the DTO representing a store operation result
      * @return the StoreResult entity with `id`, `success`, and `message` populated from the DTO
      */
-    @Override
     StoreResult fromDto(StoreResultDto dto);
 
     /**
@@ -56,6 +63,5 @@ public interface StoreResultMapper extends Mapper<VectorStoreSvc.StoreResult, St
      * @param domain the StoreResult entity to convert
      * @return the corresponding StoreResultDto with `id`, `success`, and `message` mapped
      */
-    @Override
     StoreResultDto toDto(StoreResult domain);
 }

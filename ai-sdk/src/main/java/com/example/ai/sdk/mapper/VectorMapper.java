@@ -10,9 +10,19 @@ import org.pipelineframework.mapper.Mapper;
  * MapStruct mapper for Vector conversion between gRPC, DTO, and Entity layers.
  */
 @org.mapstruct.Mapper
-public interface VectorMapper extends Mapper<EmbeddingSvc.Vector, VectorDto, Vector> {
+public interface VectorMapper extends Mapper<Vector, EmbeddingSvc.Vector> {
 
     VectorMapper INSTANCE = Mappers.getMapper(VectorMapper.class);
+
+    @Override
+    default Vector fromExternal(EmbeddingSvc.Vector external) {
+        return fromDto(fromGrpc(external));
+    }
+
+    @Override
+    default EmbeddingSvc.Vector toExternal(Vector domain) {
+        return toGrpc(toDto(domain));
+    }
 
     /**
      * Convert a gRPC EmbeddingSvc.Vector to a VectorDto.
@@ -20,7 +30,6 @@ public interface VectorMapper extends Mapper<EmbeddingSvc.Vector, VectorDto, Vec
      * @param grpc the gRPC EmbeddingSvc.Vector to convert
      * @return the mapped VectorDto whose `id` is taken from the gRPC vector's id and whose `values` are taken from the gRPC vector's valuesList
      */
-    @Override
     @org.mapstruct.Mapping(target = "id", source = "id")
     @org.mapstruct.Mapping(target = "values", source = "valuesList")
     VectorDto fromGrpc(EmbeddingSvc.Vector grpc);
@@ -31,7 +40,6 @@ public interface VectorMapper extends Mapper<EmbeddingSvc.Vector, VectorDto, Vec
      * @param dto the source DTO; its `id` and `values` (if non-null) are copied into the resulting gRPC vector, may be `null`
      * @return the corresponding {@code EmbeddingSvc.Vector}, or `null` if {@code dto} is `null`
      */
-    @Override
     default EmbeddingSvc.Vector toGrpc(VectorDto dto) {
         if (dto == null) {
             return null;
@@ -52,7 +60,6 @@ public interface VectorMapper extends Mapper<EmbeddingSvc.Vector, VectorDto, Vec
      * @param dto the source DTO containing id and values
      * @return the domain Vector with id and values copied from the DTO
      */
-    @Override
     Vector fromDto(VectorDto dto);
 
     /**
@@ -61,6 +68,5 @@ public interface VectorMapper extends Mapper<EmbeddingSvc.Vector, VectorDto, Vec
      * @param domain the Vector domain entity to convert
      * @return a VectorDto whose id and values are copied from the domain entity
      */
-    @Override
     VectorDto toDto(Vector domain);
 }

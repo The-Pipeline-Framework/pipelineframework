@@ -11,9 +11,19 @@ import org.pipelineframework.mapper.Mapper;
  * MapStruct mapper for ScoredChunk conversion between gRPC, DTO, and Entity layers (outbound direction).
  */
 @org.mapstruct.Mapper(uses = {ChunkMapper.class})
-public interface SimilaritySearchOutboundMapper extends Mapper<SimilaritySearchSvc.ScoredChunk, ScoredChunkDto, ScoredChunk> {
+public interface SimilaritySearchOutboundMapper extends Mapper<ScoredChunk, SimilaritySearchSvc.ScoredChunk> {
 
     SimilaritySearchOutboundMapper INSTANCE = Mappers.getMapper(SimilaritySearchOutboundMapper.class);
+
+    @Override
+    default ScoredChunk fromExternal(SimilaritySearchSvc.ScoredChunk external) {
+        return fromDto(fromGrpc(external));
+    }
+
+    @Override
+    default SimilaritySearchSvc.ScoredChunk toExternal(ScoredChunk domain) {
+        return toGrpc(toDto(domain));
+    }
 
     /**
      * Convert a gRPC ScoredChunk message to a ScoredChunkDto.
@@ -21,7 +31,6 @@ public interface SimilaritySearchOutboundMapper extends Mapper<SimilaritySearchS
      * @param grpc the source gRPC ScoredChunk to convert
      * @return the ScoredChunkDto with `chunk` and `score` mapped from the source
      */
-    @Override
     ScoredChunkDto fromGrpc(SimilaritySearchSvc.ScoredChunk grpc);
 
     /**
@@ -30,7 +39,6 @@ public interface SimilaritySearchOutboundMapper extends Mapper<SimilaritySearchS
      * @param dto the DTO to convert
      * @return the corresponding gRPC ScoredChunk
      */
-    @Override
     default SimilaritySearchSvc.ScoredChunk toGrpc(ScoredChunkDto dto) {
         if (dto == null) {
             return null;
@@ -48,7 +56,6 @@ public interface SimilaritySearchOutboundMapper extends Mapper<SimilaritySearchS
      * @param dto the DTO containing the chunk content and score to map
      * @return the domain ScoredChunk with its chunk and score populated from the dto
      */
-    @Override
     ScoredChunk fromDto(ScoredChunkDto dto);
 
     /**
@@ -57,6 +64,5 @@ public interface SimilaritySearchOutboundMapper extends Mapper<SimilaritySearchS
      * @param domain the domain ScoredChunk entity to convert
      * @return a ScoredChunkDto with the `chunk` and `score` fields copied from the domain entity
      */
-    @Override
     ScoredChunkDto toDto(ScoredChunk domain);
 }

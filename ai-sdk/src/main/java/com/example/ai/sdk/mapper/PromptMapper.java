@@ -11,9 +11,19 @@ import org.pipelineframework.mapper.Mapper;
  * MapStruct mapper for Prompt conversion between gRPC, DTO, and Entity layers.
  */
 @org.mapstruct.Mapper
-public interface PromptMapper extends Mapper<LlmCompletionSvc.Prompt, PromptDto, Prompt> {
+public interface PromptMapper extends Mapper<Prompt, LlmCompletionSvc.Prompt> {
 
     PromptMapper INSTANCE = Mappers.getMapper(PromptMapper.class);
+
+    @Override
+    default Prompt fromExternal(LlmCompletionSvc.Prompt external) {
+        return fromDto(fromGrpc(external));
+    }
+
+    @Override
+    default LlmCompletionSvc.Prompt toExternal(Prompt domain) {
+        return toGrpc(toDto(domain));
+    }
 
     /**
      * Converts a gRPC LlmCompletionSvc.Prompt message into a PromptDto.
@@ -21,7 +31,6 @@ public interface PromptMapper extends Mapper<LlmCompletionSvc.Prompt, PromptDto,
      * @param grpc the gRPC Prompt message to convert
      * @return a PromptDto populated from the gRPC message's fields
      */
-    @Override
     @org.mapstruct.Mapping(target = "id", source = "id")
     @org.mapstruct.Mapping(target = "content", source = "content")
     @org.mapstruct.Mapping(target = "temperature", source = "temperature")
@@ -33,7 +42,6 @@ public interface PromptMapper extends Mapper<LlmCompletionSvc.Prompt, PromptDto,
      * @param dto the DTO containing prompt data
      * @return a gRPC `LlmCompletionSvc.Prompt` populated from the DTO's id, content, and temperature
      */
-    @Override
     @org.mapstruct.Mapping(target = "id", source = "id")
     @org.mapstruct.Mapping(target = "content", source = "content")
     @org.mapstruct.Mapping(target = "temperature", source = "temperature")
@@ -45,7 +53,6 @@ public interface PromptMapper extends Mapper<LlmCompletionSvc.Prompt, PromptDto,
      * @param dto the data transfer object containing prompt fields to map
      * @return a Prompt entity populated from the given DTO's id, content, and temperature
      */
-    @Override
     @org.mapstruct.Mapping(target = "id", source = "id")
     @org.mapstruct.Mapping(target = "content", source = "content")
     @org.mapstruct.Mapping(target = "temperature", source = "temperature")
@@ -57,7 +64,6 @@ public interface PromptMapper extends Mapper<LlmCompletionSvc.Prompt, PromptDto,
      * @param domain the domain Prompt to convert
      * @return the PromptDto with id, content, and temperature copied from the domain
      */
-    @Override
     @org.mapstruct.Mapping(target = "id", source = "id")
     @org.mapstruct.Mapping(target = "content", source = "content")
     @org.mapstruct.Mapping(target = "temperature", source = "temperature")
