@@ -1,0 +1,96 @@
+---
+search: false
+---
+
+# Using plugins
+
+Plugins let you add cross-cutting capabilities (like persistence, metrics, or logging) without pushing that code into every business step.
+You configure when the plugin should run through aspects; the framework generates the integration code and calls it at the right point.
+
+## How plugins fit the flow
+
+- **Steps**: your business functions.
+- **Aspects**: declarations that say where and when a plugin should run, such as before or after a step; see the [aspect semantics reference](/versions/v26.5.1/guide/evolve/aspects/semantics) for the formal rules.
+- **Plugins**: implementation modules that do the cross-cutting work, such as persistence, cache, telemetry, or logging.
+
+This keeps business logic focused while infrastructure concerns stay declared in configuration.
+
+## What you configure
+
+You decide:
+
+- Which plugin aspects are enabled.
+- Scope: `GLOBAL` or selected `STEPS`.
+- Position: `BEFORE_STEP` or `AFTER_STEP`.
+- Any plugin-specific parameters.
+
+## What TPF handles for you
+
+At build time and runtime, TPF handles:
+
+- Adapter and client/server code generation.
+- Transport-specific integration (gRPC/REST/LOCAL).
+- Type-aware side-effect calls.
+- Runtime injection for generated plugin code.
+
+## Aspect naming and module mapping
+
+Aspect names must be `lower-kebab-case` and map to the plugin module base name.
+For example, aspect `persistence` maps to module `persistence-svc`.
+This keeps dependency resolution deterministic.
+
+## Side-effect transport contract
+
+Side-effect plugins are modeled as unary services for the selected transport.
+TPF generates type-indexed service contracts such as `ObservePaymentRecordSideEffectService` with shape `PaymentRecord -> PaymentRecord`.
+It then inserts them at the configured aspect position.
+
+## Build-time requirements
+
+- A pipeline YAML config must be discoverable so that output types can be resolved for side-effect adapters.
+  The loader checks module root and `config/` for `pipeline.yaml`, `pipeline-config.yaml`, or `*-canvas-config.yaml`.
+- For gRPC transport, protobuf/descriptor content must include the required `Observe<T>SideEffectService` definitions.
+
+## Plugin host modules
+
+If you want plugin-server artifacts generated in a dedicated module, add a marker class annotated with `@PipelinePlugin("name")` in that module.
+That scopes plugin-server generation there and avoids leaking plugin implementation dependencies into regular service modules.
+
+## Example
+
+Without aspect:
+
+```json
+{
+  "steps": [
+    {
+      "name": "ProcessOrder",
+      "cardinality": "ONE_TO_ONE",
+      "inputTypeName": "Order",
+      "outputTypeName": "ProcessedOrder"
+    }
+  ]
+}
+```
+
+With persistence aspect:
+
+```json
+{
+  "steps": [
+    {
+      "name": "ProcessOrder",
+      "cardinality": "ONE_TO_ONE",
+      "inputTypeName": "Order",
+      "outputTypeName": "ProcessedOrder"
+    }
+  ],
+  "aspects": {
+    "persistence": {
+      "enabled": true,
+      "scope": "GLOBAL",
+      "position": "AFTER_STEP"
+    }
+  }
+}
+```
