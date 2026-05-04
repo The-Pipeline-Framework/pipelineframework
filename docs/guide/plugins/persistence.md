@@ -1,8 +1,8 @@
 # Persistence Plugin
 
-Persistence stores pipeline data without changing the flow itself. In practical terms, this gives developers durable business state they can query later from downstream APIs, reports, or user interfaces.
+Persistence stores pipeline data without changing the flow itself. In practical terms, this gives developers saved application data they can query later from downstream APIs, reports, or user interfaces.
 
-This is one of the most important state primitives in TPF. You keep the business function focused on processing, while the persistence plugin stores the resulting records in a way that fits reactive execution cleanly.
+This is one of the most important state capabilities in The Pipeline Framework (TPF). You keep the business function focused on processing, while the persistence plugin stores the resulting records in a way that fits reactive execution cleanly.
 
 ## What it does
 
