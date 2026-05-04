@@ -3,8 +3,8 @@ layout: home
 
 hero:
   name: The Pipeline Framework
-  text: Fast Typed Function Chains on Quarkus
-  tagline: Write focused Java business functions; TPF generates, validates, and runs the Quarkus code around them
+  text: Fast Java Function Flows on Quarkus
+  tagline: Write small typed business functions; TPF generates, validates, and reliably runs the Quarkus runtime around them
   image:
     src: /logo.png
     alt: The Pipeline Framework
@@ -17,71 +17,125 @@ hero:
       link: https://app.pipelineframework.org
 
 features:
-  - title: Developer Joy
-    details: Start quickly, keep function inputs and outputs explicit, and spend less time writing glue code
+  - title: Clear Inputs and Outputs
+    details: Each step is one Java function with explicit input and output types, so it is obvious what goes in and what comes out
     link: /value/developer-experience
-  - title: Performance
-    details: Handle more work with less runtime overhead, using generated code paths and non-blocking execution
+  - title: Define the Flow in YAML
+    details: Describe the flow once, then let TPF generate the Quarkus endpoints, callers, handlers, and runtime files around it
+    link: /guide/build/pipeline-compilation
+  - title: Reuse Existing Java Code
+    details: Turn an existing Java method or remote endpoint into a pipeline function without hiding its inputs and outputs
+    link: /guide/development/operators
+  - title: Reliable Background Work
+    details: Store accepted work, retry failed transitions, recover after crashes, and send terminal failures to a dead-letter channel
+    link: /guide/development/orchestrator-runtime
+  - title: Runtime Efficiency
+    details: Keep many items moving through reactive function chains without one thread per item
     link: /value/runtime-efficiency
-  - title: Transport Choice
-    details: Generate gRPC, REST, and local clients from one model, and evolve how you expose the pipeline
+  - title: REST, gRPC, Local, or Functions
+    details: Expose the same business flow through the calling style and deployment model that fits your environment
     link: /value/integration-flexibility
   - title: Start Monolith, Split Later
-    details: Start as a monolith, then split into layouts that fit your team boundaries when you are ready
+    details: Choose a runtime layout without pretending it automatically rewrites your Maven or container topology
     link: /value/deployment-evolution
-  - title: Kube-Native
-    details: Container-first delivery with health, observability, retries, and failure handling that stay understandable
-    link: /value/operational-confidence
-  - title: Plugins, Not Glue
-    details: Add persistence, cache, telemetry, and logging without pushing that code into every business function
-    link: /value/extensibility-and-platform
+  - title: State, Replay, and Queryable Data
+    details: Use persistence for durable business state and caching for fast recomputation, replay, and query-ready outputs
+    link: /value/state-replay-and-queryable-data
 ---
 
-<Callout type="tip" title="Visual Pipeline Designer Available">
-The Pipeline Framework includes a visual canvas designer at <a href="https://app.pipelineframework.org" target="_blank" rel="noopener noreferrer">https://app.pipelineframework.org</a>. Design the flow visually, click "Download Application", and you get a runnable Quarkus scaffold with generated code for the pipeline shape you designed.
+<Callout type="tip" title="Fastest path: design with Canvas">
+Use <a href="https://app.pipelineframework.org" target="_blank" rel="noopener noreferrer">Canvas</a> when you want to sketch the flow visually and download a runnable Quarkus scaffold. The same model can then be refined through YAML, Java functions, existing-method operators, type mappers, and runtime configuration.
 </Callout>
 
 <FeaturedArticles />
 <LatestReleases />
 
-## Key Features
+## What TPF Helps You Build
 
-The Pipeline Framework helps you build fast, forward-only flows of Java functions. A step is one function in the flow: it receives a typed input, produces a typed output, and lets TPF generate the REST, gRPC, local, or function-style code around it.
+TPF pipelines are fast, forward-only flows of Java functions. They are not CI/CD job chains or coarse batch jobs. A **step** is one function in the flow: it receives a typed Java input, produces a typed Java output, and leaves the repeated Quarkus code to TPF.
 
-### Runtime and Processing Model
+<div class="home-proof-grid">
+  <div>
+    <h3>What you write</h3>
+    <p>Focused Java business functions such as validating a payment, enriching a record, parsing a document, or calling an existing Java method.</p>
+  </div>
+  <div>
+    <h3>What TPF generates</h3>
+    <p>REST, gRPC, local, and function-style code that calls those functions, plus runtime files that tell the generated runtime which function comes next.</p>
+  </div>
+  <div>
+    <h3>What TPF runs</h3>
+    <p>The generated runner that starts the flow, calls each step, tracks progress when configured, retries failed work, and routes failures.</p>
+  </div>
+</div>
 
-- **Reactive by default**: Built on Mutiny so many items can move through the flow without blocking one thread per item.
-- **Why it matters**: Better CPU utilization and higher compute density typically mean lower runtime cost for the same workload.
-- **Quarkus foundation**: Uses Quarkus build-time generation and runtime patterns for production-grade services.
-- **Traceable flow**: Preserve enough context to understand what produced each item and where it came from.
-- **Clear step shapes**: Supports one-to-one, one-to-many, many-to-one, many-to-many, and side-effect steps.
+## How It Works
 
-### Extensibility with Plugins
+### Write functions, not glue
 
-- **Plugin-friendly model**: Pipeline plugins add cross-cutting work without coupling business logic to infrastructure code.
-- **Why it matters**: You can add cache, telemetry, persistence, and logging with less code churn in core services.
-- **Clear extension points**: Use [Using Plugins](/guide/development/using-plugins) and the [Aspect guide](/guide/evolve/aspects/semantics) as primary references.
+You write typed Java functions and declare their order in YAML. TPF checks the flow at build time, including whether each function shape is valid, whether outputs match the next inputs, whether [mappers](/guide/development/mappers-and-dtos) convert types correctly, whether [operators](/guide/development/operators) are valid, and whether the generated code can call each function cleanly.
 
-### Integration and Deployment Flexibility
+A **mapper** translates between your domain types and transport or external-system types. An **operator** is an existing Java method or remote endpoint reused as a pipeline function.
 
-- **Transport coverage**: Automatic generation for gRPC, REST, and local in-process calls.
-- **Quarkus Dev Services workflow**: Smooth local development with managed service dependencies (for example, PostgreSQL) in dev/test flows.
-- **Why it matters**: Teams can adapt interfaces to consumers and platform constraints without rewriting core processing logic.
-- **Deployment layouts**: Works across modular, grouped pipeline-runtime, and monolith layouts.
-- **Evolution path**: Start with a monolith for speed, then break into services as scale and ownership boundaries grow.
+Start with [pipeline compilation](/guide/build/pipeline-compilation) when you want the build-time generation model, or [code a step](/guide/development/code-a-step) when you want to implement the function itself.
 
-### Operations
+### Generate the repeated Quarkus code
 
-- **Built-in observability**: Metrics, tracing, and structured logging are generated into the runtime shape.
-- **Resilience features**: Health checks, retries, crash-surviving background execution, and dead-letter handling.
-- **Container-first packaging**: Current delivery flow supports image builds with Jib for predictable CI/CD integration.
-- **Native compilation path**: Quarkus native builds support low cold-start and efficient resource usage where needed.
-- **Why it matters**: Teams get faster incident diagnosis, more predictable deployments, and lower operational overhead at scale.
+TPF creates the REST resources, gRPC services, local clients, function-style handlers, and runtime files that would otherwise become hand-written service glue. An **adapter** is the generated code around your business function: it lets another component call the function through the selected transport.
 
-### Developer Experience
+Generated code keeps business logic independent from whether a caller uses REST, gRPC, local in-process calls, or a function-style entry point. See [Transport Choice](/value/integration-flexibility) and [runtime layouts](/guide/build/runtime-layouts/) when you want the details behind calling style, logical placement, and Maven/container packaging.
 
-- **Shared `common` module**: Central place for entity and DTO definitions used across pipeline components.
-- **Type safety across the pipeline**: Compile-time checks catch mismatched step input/output types early.
-- **Why it matters**: Teams get safer refactors, fewer mapping mistakes, and faster confidence when changing domain models.
-- **Testability gains**: Functional boundaries and generated transport layers make behaviour easier to isolate and test.
-- **Fast onboarding and testing**: Design visually with Canvas and validate behaviour via [Testing with Testcontainers](/guide/development/testing).
+### Run the flow reliably
+
+The generated runtime starts the flow, invokes each step, records execution state when configured, retries failed transitions, and exposes status/result endpoints for background work. For crash-surviving background execution, TPF can store accepted work outside the current JVM, recover it after restart, and send terminal execution failures to a **DLQ**, a dead-letter channel for investigation or replay.
+
+The exact config value for this mode is `QUEUE_ASYNC`; start with the [Orchestrator Runtime](/guide/development/orchestrator-runtime) guide before using it in production.
+
+Persistence and caching matter here more than the word "plugin" suggests. Persistence stores business outputs developers can query later from APIs, reports, or UIs. Caching protects expensive steps, speeds recomputation, and supports replay or rewind scenarios when downstream logic changes. Together they reduce the need to invent separate state stores, replay workflows, or read-model plumbing.
+
+<Callout type="info" title="High availability is a runtime responsibility">
+TPF does not just generate code and walk away. In the background execution path, it owns stored execution state, dispatch, retry, crash recovery, and terminal failure publication. Your team still owns provider choice, duplicate-protection policy, retry budgets, observability thresholds, and deployment rollout.
+</Callout>
+
+### Add cross-cutting work without hiding it
+
+[Plugins](/guide/development/using-plugins) add declared cross-cutting work such as persistence, cache, telemetry, and logging. An **aspect** is the rule that says where the plugin runs, for example before or after a step; the plugin provides the implementation.
+
+That keeps business functions focused on domain behaviour while TPF keeps generated plugin calls aligned across REST, gRPC, and local execution.
+
+See [State, Replay, and Queryable Data](/value/state-replay-and-queryable-data) for the full persistence-and-caching story.
+
+<Callout type="tip" title="Operators preserve existing investment">
+If you already have proven Java libraries or remote endpoints, operators let you reuse them as pipeline functions. TPF still validates the method reference, input/output types, type-translation compatibility, and generated function call instead of turning reuse into hidden service glue.
+</Callout>
+
+## What This Looks Like in Practice
+
+<div class="home-proof-grid">
+  <div>
+    <h3>Payments</h3>
+    <p>Validate and enrich records, produce status output, reject one malformed item, and continue the workload.</p>
+  </div>
+  <div>
+    <h3>Search</h3>
+    <p>Crawl, parse, tokenize, index, cache intermediate results, and replay safely when source content changes.</p>
+  </div>
+  <div>
+    <h3>Checkout and TPFGo</h3>
+    <p>Pass stable checkpoints from one pipeline to the next without inventing custom handoff code.</p>
+  </div>
+  <div>
+    <h3>AI enrichment</h3>
+    <p>Reuse embedding, vector-search, or LLM helper libraries as operators inside a typed Java flow.</p>
+  </div>
+</div>
+
+## Start Here
+
+- [Quick Start](/guide/getting-started/) for the fastest path to a runnable scaffold.
+- [Pipeline Compilation](/guide/build/pipeline-compilation) for YAML-first generation and build-time validation.
+- [Operators](/guide/development/operators) for reusing existing Java methods or remote endpoints.
+- [Runtime Layouts](/guide/build/runtime-layouts/) for logical placement versus Maven/container build topology.
+- [Orchestrator Runtime](/guide/development/orchestrator-runtime) for synchronous execution, background execution, crash recovery, and DLQ behaviour.
+- [Using Plugins](/guide/development/using-plugins) for persistence, cache, telemetry, and logging extensions.
+- [TPFGo Example](/guide/development/tpfgo-example) for checkpoint handoff between pipelines.

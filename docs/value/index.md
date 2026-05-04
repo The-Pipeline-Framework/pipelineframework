@@ -1,16 +1,16 @@
 # Value Overview
 
-<p class="value-lead">The Pipeline Framework (TPF) helps teams move from Java business functions to production-ready flows without getting buried in repetitive integration and deployment work.</p>
+<p class="value-lead">The Pipeline Framework (TPF) helps teams turn small Java functions into production-ready Quarkus applications without getting buried in repeated integration, retry, and deployment work.</p>
 
 ## At a Glance
 
 <div class="value-glance">
-  <div class="value-glance-item"><strong>Developer Joy</strong> &middot; Faster delivery with less glue code and safer refactors.</div>
-  <div class="value-glance-item"><strong>Performance</strong> &middot; Keep many items moving without one thread per item.</div>
-  <div class="value-glance-item"><strong>Transport Choice</strong> &middot; One Flow, Many Entry Points: generate gRPC, REST, local, and function-style callers from the same definition.</div>
-  <div class="value-glance-item"><strong>Start Monolith, Split Later</strong> &middot; Change deployable shape when the team is ready.</div>
-  <div class="value-glance-item"><strong>Kube-Native</strong> &middot; Container-first, cloud-friendly operation model.</div>
-  <div class="value-glance-item"><strong>Plugins, Not Glue</strong> &middot; Add infrastructure concerns without polluting business functions.</div>
+  <div class="value-glance-item"><strong>Developer Joy</strong> &middot; Write focused Java functions while TPF generates repeated Quarkus code.</div>
+  <div class="value-glance-item"><strong>Define the Flow Once</strong> &middot; Describe the flow in YAML and catch function, mapper, and operator mismatches at build time.</div>
+  <div class="value-glance-item"><strong>Transport Choice</strong> &middot; Generate gRPC, REST, local, and cloud-function entry points from the same definition.</div>
+  <div class="value-glance-item"><strong>Reliable Background Work</strong> &middot; Store accepted work, retry failures, recover after crashes, and route terminal failures.</div>
+  <div class="value-glance-item"><strong>Start Monolith, Split Later</strong> &middot; Change runtime layout when the team is ready while keeping build topology explicit.</div>
+  <div class="value-glance-item"><strong>State and Replay</strong> &middot; Persist business data, reuse expensive outputs, and replay safely without bespoke state plumbing.</div>
 </div>
 
 ## Explore Tracks
@@ -19,6 +19,7 @@
 - [Developer Joy](/value/developer-experience)
 - [Performance](/value/runtime-efficiency)
 - [Transport Choice](/value/integration-flexibility)
+- [State, Replay, and Queryable Data](/value/state-replay-and-queryable-data)
 - [Start Monolith, Split Later](/value/deployment-evolution)
-- [Kube-Native](/value/operational-confidence)
+- [Operational Confidence](/value/operational-confidence)
 - [Plugins, Not Glue](/value/extensibility-and-platform)
