@@ -81,9 +81,9 @@ Start with [pipeline compilation](/guide/build/pipeline-compilation) when you wa
 
 ### Generate the repeated Quarkus code
 
-TPF creates the REST resources, gRPC services, local clients, function-style handlers, and runtime files that would otherwise become hand-written service glue. An **adapter** is the generated code around your business function: it lets another component call the function through the selected transport.
+TPF creates the REST resources, gRPC services, local clients, function-style handlers, and runtime files that would otherwise become handwritten service glue. An **adapter** is the generated code around your business function: it lets another component call the function through the selected transport.
 
-Generated code keeps business logic independent from whether a caller uses REST, gRPC, local in-process calls, or a function-style entry point. See [Transport Choice](/value/integration-flexibility) and [runtime layouts](/guide/build/runtime-layouts/) when you want the details behind calling style, logical placement, and Maven/container packaging.
+Generated code keeps business logic independent of whether a caller uses REST, gRPC, local in-process calls, or a function-style entry point. See [Transport Choice](/value/integration-flexibility) and [runtime layouts](/guide/build/runtime-layouts/) when you want the details behind calling style, logical placement, and Maven/container packaging.
 
 ### Run the flow reliably
 

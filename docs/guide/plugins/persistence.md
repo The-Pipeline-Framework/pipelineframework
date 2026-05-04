@@ -19,7 +19,7 @@ The plugin is split into two parts:
 1. **Plugin library**: `plugins/foundational/persistence`
 2. **Service host module**: e.g. `examples/.../persistence-svc`
 
-The host module exists so the build can generate the transport callers and helper classes in a concrete module that already knows your domain types.
+The host module provides a concrete module that knows your domain types and enables runtime discovery. At runtime, `PersistenceManager` and `PersistenceService` are CDI beans that discover providers via `Instance<PersistenceProvider<?>>`. The `PersistencePluginHost` is a marker class annotated with `@PipelinePlugin` to make the module discoverable by the framework. This is a runtime-discovery model, not a build-time code-generation hook.
 
 ## Required dependencies
 
