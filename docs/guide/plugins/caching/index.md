@@ -1,8 +1,12 @@
 # Caching
 
+Caching protects expensive steps, speeds recomputation, and gives TPF a practical replay story when downstream logic changes. Instead of rerunning the whole pipeline, teams can reuse stable outputs and selectively recompute only what should change.
+
 Caching in TPF is provided by cache plugins that run as side-effect steps. Enable the cache aspect to store step outputs and use invalidation aspects to control replay.
 
 Invalidation steps only run when `x-pipeline-replay: true` is present, so normal production runs are unaffected.
+
+Caching works especially well alongside persistence: persistence keeps the durable business record, while cache keeps reusable derived outputs close at hand. See [State, Replay, and Queryable Data](/value/state-replay-and-queryable-data) and [Cache vs Persistence](/guide/plugins/caching/cache-vs-persistence) for that bigger picture.
 
 ## Architecture and execution flow
 

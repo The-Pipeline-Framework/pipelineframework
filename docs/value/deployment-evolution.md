@@ -8,17 +8,17 @@ See the [Runtime Layouts guide](/guide/build/runtime-layouts/) for the packaging
 
 <div class="value-glance">
   <div class="value-glance-item"><strong>Fast First Release</strong> &middot; Start with one application when that is the fastest path.</div>
-  <div class="value-glance-item"><strong>Clear Migration Path</strong> &middot; Move to grouped or modular layouts as boundaries mature.</div>
-  <div class="value-glance-item"><strong>No Core Rewrite</strong> &middot; Change deployable shape without rewriting the business functions.</div>
+  <div class="value-glance-item"><strong>Clear Migration Path</strong> &middot; Move to grouped or modular layouts as service splits become clearer.</div>
+  <div class="value-glance-item"><strong>No Core Rewrite</strong> &middot; Keep the typed business functions stable while runtime layout and build topology evolve.</div>
 </div>
 
 ## Use This When
 
-- You need speed now but know service boundaries will evolve.
+- You need speed now but know service ownership and deployment splits will evolve.
 - Team ownership is outgrowing a single deployable unit.
 - Architecture discussions are stalling delivery.
 
-TPF separates **runtime layout** from **build topology**. Runtime layout is where the orchestrator, functions, and side effects logically run. Build topology is the Maven/container structure that physically creates deployables.
+TPF separates **runtime layout** from **build topology**. Runtime layout is the logical shape of the running system: where the orchestrator, functions, and side effects live. Build topology is the Maven and container structure that physically produces deployables. Changing the runtime layout changes generated placement and calls; it does not automatically rewrite Maven modules.
 
 ## Jump to Guides
 

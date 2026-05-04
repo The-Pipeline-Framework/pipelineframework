@@ -120,6 +120,34 @@ kbd {
   margin-top: 0.25rem;
 }
 
+.vp-doc .home-proof-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 0.9rem;
+  margin: 1rem 0 1.75rem;
+}
+
+.vp-doc .home-proof-grid > div {
+  border: 1px solid var(--vp-c-border);
+  border-radius: 14px;
+  padding: 1rem 1.05rem;
+  background:
+    radial-gradient(circle at top left, var(--vp-c-brand-subtle), transparent 48%),
+    linear-gradient(165deg, var(--vp-c-bg) 0%, var(--vp-c-bg-soft) 100%);
+  box-shadow: 0 8px 22px rgb(2 6 23 / 6%);
+}
+
+.vp-doc .home-proof-grid h3 {
+  margin: 0 0 0.45rem;
+  color: var(--vp-c-text-1);
+}
+
+.vp-doc .home-proof-grid p {
+  margin: 0;
+  color: var(--vp-c-text-2);
+  line-height: 1.55;
+}
+
 .dark:root {
   --vp-c-brand-subtle: rgb(96 165 250 / 16%);
   --vp-c-brand-subtle-soft: rgb(96 165 250 / 12%);

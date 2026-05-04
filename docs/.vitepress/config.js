@@ -31,8 +31,9 @@ const mainSidebar = [
             {text: 'Developer Joy', link: '/value/developer-experience'},
             {text: 'Performance', link: '/value/runtime-efficiency'},
             {text: 'Transport Choice', link: '/value/integration-flexibility'},
+            {text: 'State, Replay, and Queryable Data', link: '/value/state-replay-and-queryable-data'},
             {text: 'Start Monolith, Split Later', link: '/value/deployment-evolution'},
-            {text: 'Kube-Native', link: '/value/operational-confidence'},
+            {text: 'Operational Confidence', link: '/value/operational-confidence'},
             {text: 'Plugins, Not Glue', link: '/value/extensibility-and-platform'}
         ]
     },

@@ -1,12 +1,16 @@
 # Persistence Plugin
 
-The persistence plugin is a foundational side-effect plugin that stores pipeline data without changing the stream. It is designed to be minimal and composable: you bring the provider dependency you want, and the plugin handles the rest.
+Persistence stores pipeline data without changing the flow itself. In practical terms, this gives developers saved application data they can query later from downstream APIs, reports, or user interfaces.
+
+This is one of the most important state capabilities in The Pipeline Framework (TPF). You keep the business function focused on processing, while the persistence plugin stores the resulting records in a way that fits reactive execution cleanly.
 
 ## What it does
 
 - Observes stream elements and persists them
 - Returns the original element unchanged
 - Selects the appropriate persistence provider at runtime
+
+If you are looking for the broader value story behind persistence plus caching, start with [State, Replay, and Queryable Data](/value/state-replay-and-queryable-data) and [Cache vs Persistence](/guide/plugins/caching/cache-vs-persistence).
 
 ## Module layout
 
@@ -15,7 +19,7 @@ The plugin is split into two parts:
 1. **Plugin library**: `plugins/foundational/persistence`
 2. **Service host module**: e.g. `examples/.../persistence-svc`
 
-The host module exists so the annotation processor can generate typed transport adapters and client steps in a concrete module that knows your domain types.
+The host module provides a concrete module that knows your domain types and enables runtime discovery. At runtime, `PersistenceManager` and `PersistenceService` are CDI beans that discover providers via `Instance<PersistenceProvider<?>>`. The `PersistencePluginHost` is a marker class annotated with `@PipelinePlugin` to make the module discoverable by the framework. This is a runtime-discovery model, not a build-time code-generation hook.
 
 ## Required dependencies
 
