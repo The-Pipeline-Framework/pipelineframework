@@ -32,8 +32,8 @@ features:
   - title: Runtime Efficiency
     details: Keep many items moving through reactive function chains without one thread per item
     link: /value/runtime-efficiency
-  - title: REST, gRPC, Local, or Functions
-    details: Expose the same business flow through the calling style and deployment model that fits your environment
+  - title: Portable Serverless Functions
+    details: Generate serverless function entry points and handlers for AWS Lambda, Azure Functions, and Google Cloud Run functions from the same typed Java flow
     link: /value/integration-flexibility
   - title: Start Monolith, Split Later
     details: Choose a runtime layout without pretending it automatically rewrites your Maven or container topology
@@ -45,6 +45,10 @@ features:
 
 <Callout type="tip" title="Fastest path: design with Canvas">
 Use <a href="https://app.pipelineframework.org" target="_blank" rel="noopener noreferrer">Canvas</a> when you want to sketch the flow visually and download a runnable Quarkus scaffold. The same model can then be refined through YAML, Java functions, existing-method operators, type mappers, and runtime configuration.
+</Callout>
+
+<Callout type="info" title="Platform mode and transport mode are different decisions">
+`COMPUTE` and `FUNCTION` are platform modes: they decide whether TPF generates a standard Quarkus service runtime or a function-style runtime. REST, gRPC, and local are transport modes: they decide how generated components call each other.
 </Callout>
 
 <FeaturedArticles />
@@ -83,7 +87,7 @@ Start with [pipeline compilation](/guide/build/pipeline-compilation) when you wa
 
 TPF creates the REST resources, gRPC services, local clients, function-style handlers, and runtime files that would otherwise become handwritten service glue. An **adapter** is the generated code around your business function: it lets another component call the function through the selected transport.
 
-Generated code keeps business logic independent of whether a caller uses REST, gRPC, local in-process calls, or a function-style entry point. See [Transport Choice](/value/integration-flexibility) and [runtime layouts](/guide/build/runtime-layouts/) when you want the details behind calling style, logical placement, and Maven/container packaging.
+Generated code keeps business logic independent of whether a caller uses REST, gRPC, local in-process calls, or a serverless function entry point. See [Portable Serverless Functions](/value/integration-flexibility) and [runtime layouts](/guide/build/runtime-layouts/) when you want the details behind platform mode, transport mode, logical placement, and Maven/container packaging.
 
 ### Run the flow reliably
 
@@ -128,6 +132,10 @@ If you already have proven Java libraries or remote endpoints, operators let you
     <h3>AI enrichment</h3>
     <p>Reuse embedding, vector-search, or LLM helper libraries as operators inside a typed Java flow.</p>
   </div>
+  <div>
+    <h3>Serverless deployments</h3>
+    <p>Run the same typed flow behind AWS Lambda, Azure Functions, or Google Cloud Run functions without rewriting the business code.</p>
+  </div>
 </div>
 
 ## Start Here
@@ -136,6 +144,10 @@ If you already have proven Java libraries or remote endpoints, operators let you
 - [Pipeline Compilation](/guide/build/pipeline-compilation) for YAML-first generation and build-time validation.
 - [Operators](/guide/development/operators) for reusing existing Java methods or remote endpoints.
 - [Runtime Layouts](/guide/build/runtime-layouts/) for logical placement versus Maven/container build topology.
+- [AWS Lambda Platform](/guide/development/aws-lambda) for the canonical `FUNCTION` platform guide.
+- [Azure Functions Platform](/guide/development/azure-functions) for Azure development-time guidance.
+- [Google Cloud Run Functions Platform](/guide/development/google-cloud-run-functions) for the Google function-platform path.
+- [Multi-Cloud Function Providers](/guide/build/runtime-layouts/function-providers) for provider-specific function deployment targets.
 - [Orchestrator Runtime](/guide/development/orchestrator-runtime) for synchronous execution, background execution, crash recovery, and DLQ behaviour.
 - [Using Plugins](/guide/development/using-plugins) for persistence, cache, telemetry, and logging extensions.
 - [TPFGo Example](/guide/development/tpfgo-example) for checkpoint handoff between pipelines.

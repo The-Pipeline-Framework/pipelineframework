@@ -30,7 +30,7 @@ const mainSidebar = [
             {text: 'Business Value', link: '/value/business-value'},
             {text: 'Developer Joy', link: '/value/developer-experience'},
             {text: 'Performance', link: '/value/runtime-efficiency'},
-            {text: 'Transport Choice', link: '/value/integration-flexibility'},
+            {text: 'Portable Serverless Functions', link: '/value/integration-flexibility'},
             {text: 'State, Replay, and Queryable Data', link: '/value/state-replay-and-queryable-data'},
             {text: 'Start Monolith, Split Later', link: '/value/deployment-evolution'},
             {text: 'Operational Confidence', link: '/value/operational-confidence'},
@@ -102,6 +102,8 @@ const mainSidebar = [
             {text: 'Orchestrator Runtime', link: '/guide/development/orchestrator-runtime'},
             {text: 'TPFGo Example', link: '/guide/development/tpfgo-example'},
             {text: 'AWS Lambda Platform', link: '/guide/development/aws-lambda'},
+            {text: 'Azure Functions Platform', link: '/guide/development/azure-functions'},
+            {text: 'Google Cloud Run Functions Platform', link: '/guide/development/google-cloud-run-functions'},
             {text: 'Performance', link: '/guide/development/performance'},
             {text: 'Customization Points', link: '/guide/development/customization-points'}
         ]

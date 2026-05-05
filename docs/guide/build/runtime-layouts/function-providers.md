@@ -1,16 +1,21 @@
 # Multi-Cloud Function Providers Guide
 
-This guide covers deploying TPF (The Pipeline Framework) pipelines to multiple cloud function providers: AWS Lambda, Azure Functions, and Google Cloud Functions.
+This guide is the multi-cloud entry point for TPF function deployments. It shows how the same `FUNCTION` platform mode can target AWS Lambda, Azure Functions, and Google Cloud Run functions while keeping the typed business flow unchanged.
 
 ## Overview
 
-TPF supports three major serverless function platforms:
+TPF supports three major cloud function platforms:
 
 | Provider | Extension | Handler Interface | Local Testing |
 |----------|-----------|-------------------|---------------|
 | **AWS Lambda** | `quarkus-amazon-lambda` | `RequestHandler<I, O>` | Mock event server |
 | **Azure Functions** | `quarkus-azure-functions` | HTTP trigger + REST | Core Tools v4.x |
-| **Google Cloud Functions** | `quarkus-google-cloud-functions` | `HttpFunction` | Functions Framework |
+| **Google Cloud Run functions** | `quarkus-google-cloud-functions` | `HttpFunction` | Functions Framework |
+
+Important runtime constraint:
+
+- `FUNCTION` currently requires `REST` transport. `gRPC` is not a supported `FUNCTION` transport in the current implementation.
+- Google's current product name is Cloud Run functions, while the current Quarkus extension name remains `quarkus-google-cloud-functions`.
 
 ## Architecture
 
@@ -28,9 +33,25 @@ The orchestrator handler (`PipelineRunFunctionHandler`) generates **provider-spe
 
 - **AWS Lambda**: Implements `RequestHandler<I, O>` with Lambda `Context`
 - **Azure Functions**: POJO with `ExecutionContext` parameter
-- **GCP Cloud Functions**: Implements `HttpFunction` with `HttpRequest`/`HttpResponse`
+- **Google Cloud Run functions**: Implements `HttpFunction` with `HttpRequest`/`HttpResponse`
 
-All providers preserve FUNCTION platform semantics (cardinality, failure handling) and support async handlers (run-async, status, result). Azure and GCP deployments can also use the REST transport approach if desired, where HTTP triggers route requests to Quarkus REST endpoints while preserving FUNCTION semantics.
+All providers preserve FUNCTION platform semantics (cardinality, failure handling) and support async handlers (run-async, status, result). Azure and GCP FUNCTION deployments use the required REST transport approach, where HTTP triggers route requests to Quarkus REST endpoints while preserving FUNCTION semantics.
+
+## What this guide covers and does not cover
+
+This guide covers the current repo-supported `FUNCTION` targets:
+
+1. AWS Lambda
+2. Azure Functions
+3. Google Cloud Run functions
+
+It does not currently document or implement:
+
+1. Google Cloud Run services as a generic container/service target,
+2. Azure Durable Functions as a separate TPF runtime model,
+3. `gRPC` as a `FUNCTION` transport.
+
+If you need queue-backed recovery, checkpoint handoff, or orchestrator-managed HA, use the `COMPUTE` + `QUEUE_ASYNC` path instead of treating function providers as a replacement for that runtime model.
 
 ## Quick Start
 
@@ -72,7 +93,7 @@ See [AWS Lambda Platform Guide](/guide/development/aws-lambda) for detailed depl
 
 See [Azure Functions Testing Guide](/guide/build/runtime-layouts/search-azure-functions) for detailed deployment instructions.
 
-### Google Cloud Functions
+### Google Cloud Run functions
 
 ```bash
 # Build
@@ -138,7 +159,7 @@ The framework selects the provider using this precedence:
 - Cold starts on Consumption plan
 - Storage account dependency
 
-### Google Cloud Functions
+### Google Cloud Run functions
 
 **Strengths:**
 - Simple deployment model
@@ -169,7 +190,7 @@ This is **cloud-agnostic** and works identically across all providers.
 |----------|-----------|--------------|
 | AWS Lambda | `LambdaMockEventServerSmokeTest` | None |
 | Azure Functions | `AzureFunctionsBootstrapSmokeTest` | None |
-| GCP Cloud Functions | `GcpFunctionsBootstrapSmokeTest` | None |
+| Google Cloud Run functions | `GcpFunctionsBootstrapSmokeTest` | None |
 
 ### Integration Testing
 
@@ -177,7 +198,7 @@ This is **cloud-agnostic** and works identically across all providers.
 |----------|-----------|--------------|
 | AWS Lambda | `*-EndToEndIT` | AWS credentials, SAM/CloudFormation |
 | Azure Functions | `AzureFunctionsEndToEndIT` | Azure subscription, Terraform |
-| GCP Cloud Functions | `GcpFunctionsBootstrapSmokeTest` | GCP project, Functions Framework bootstrap/smoke coverage |
+| Google Cloud Run functions | `GcpFunctionsBootstrapSmokeTest` | Build with the `gcp-functions` profile; validates Quarkus Functions extension bootstrap and `HttpFunction` loading only |
 
 ## Troubleshooting
 

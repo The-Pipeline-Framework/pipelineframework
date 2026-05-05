@@ -1,12 +1,14 @@
 # AWS Lambda Platform (Development)
 
-This page is the canonical TPF guide for building pipeline applications for AWS Lambda.
+This page is the canonical TPF guide for `FUNCTION` platform builds that target AWS Lambda. For the broader multi-cloud function story, pair it with the [Multi-Cloud Function Providers Guide](/guide/build/runtime-layouts/function-providers).
 
 ## What TPF Supports Today
 
 - Platform mode: `FUNCTION` (default platform remains `COMPUTE`)
 - Transport mode: `REST` (required in Function mode)
 - Step shapes: unary and streaming shapes are supported in FUNCTION mode through generated adapter/bridge wiring
+
+`FUNCTION` does not currently support `gRPC` transport. If you select `FUNCTION`, the generated runtime must use `REST`.
 
 Supported FUNCTION step shapes today:
 
@@ -29,6 +31,29 @@ Set platform mode during build:
 ```
 
 TPF uses build switches for this mode. It does not require a dedicated Maven profile.
+
+## Other Function Targets
+
+AWS Lambda is the most complete provider-specific development guide in the current docs, but it is not the only `FUNCTION` target in the repo.
+
+Current repo-supported function targets are:
+
+1. AWS Lambda
+2. Azure Functions
+3. Google Cloud Run functions
+
+Use these guides for the broader function-platform story:
+
+- [Multi-Cloud Function Providers Guide](/guide/build/runtime-layouts/function-providers)
+- [Azure Functions Platform](/guide/development/azure-functions)
+- [Google Cloud Run Functions Platform](/guide/development/google-cloud-run-functions)
+- [Search Azure Functions Testing Guide](/guide/build/runtime-layouts/search-azure-functions)
+
+Current scope notes:
+
+1. The Google function path is best described today as Cloud Run functions; the current repo implementation still uses the Quarkus Google Cloud Functions extension.
+2. Azure Durable Functions are not a separate TPF platform mode and do not change TPF runtime semantics.
+3. Queue-backed HA and checkpoint handoff remain part of the `COMPUTE` + `QUEUE_ASYNC` orchestrator path rather than the `FUNCTION` path.
 
 ::: warning Checkpoint Handoff Is Not Available In FUNCTION Mode
 Checkpoint publication and subscription are not available in `FUNCTION` mode.
