@@ -40,6 +40,7 @@ Values include `GRPC`, `REST`, and `LOCAL`.
 Values include `COMPUTE` and `FUNCTION` (legacy aliases: `STANDARD`, `LAMBDA`).
 
 - Decides whether generation targets standard Quarkus services or function-style entry points.
+- This page provides the canonical deeper reference for choosing between `COMPUTE` and `FUNCTION`.
 - Constrained by transport and step-shape compatibility (Function mode requires REST; unary and streaming shapes are supported via generated function bridges).
 - Orthogonal to runtime layout/topology.
 
