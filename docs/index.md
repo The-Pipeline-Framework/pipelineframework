@@ -35,8 +35,8 @@ features:
   - title: Portable Serverless Functions
     details: Generate serverless function entry points and handlers for AWS Lambda, Azure Functions, and Google Cloud Run functions from the same typed Java flow
     link: /value/integration-flexibility
-  - title: Start Monolith, Split Later
-    details: Choose a runtime layout without pretending it automatically rewrites your Maven or container topology
+  - title: Container and Kubernetes Ready
+    details: Generate standard Quarkus service runtimes for containers and Kubernetes, then evolve from monolith to split layouts when needed
     link: /value/deployment-evolution
   - title: State, Replay, and Queryable Data
     details: Use persistence for durable business state and caching for fast recomputation, replay, and query-ready outputs
@@ -48,7 +48,7 @@ Use <a href="https://app.pipelineframework.org" target="_blank" rel="noopener no
 </Callout>
 
 <Callout type="info" title="Platform mode and transport mode are different decisions">
-`COMPUTE` and `FUNCTION` are platform modes: they decide whether TPF generates a standard Quarkus service runtime or a function-style runtime. REST, gRPC, and local are transport modes: they decide how generated components call each other.
+`COMPUTE` and `FUNCTION` are platform modes: they decide whether TPF generates a standard Quarkus service runtime for containers and Kubernetes or a function-style runtime. REST, gRPC, and local are transport modes: they decide how generated components call each other.
 </Callout>
 
 <FeaturedArticles />
@@ -87,7 +87,7 @@ Start with [pipeline compilation](/guide/build/pipeline-compilation) when you wa
 
 TPF creates the REST resources, gRPC services, local clients, function-style handlers, and runtime files that would otherwise become handwritten service glue. An **adapter** is the generated code around your business function: it lets another component call the function through the selected transport.
 
-Generated code keeps business logic independent of whether a caller uses REST, gRPC, local in-process calls, or a serverless function entry point. See [Portable Serverless Functions](/value/integration-flexibility) and [runtime layouts](/guide/build/runtime-layouts/) when you want the details behind platform mode, transport mode, logical placement, and Maven/container packaging.
+Generated code keeps business logic independent of whether a caller uses REST, gRPC, local in-process calls, or a serverless function entry point. That same generated runtime can be packaged as a standard Quarkus service for containers and Kubernetes or as a `FUNCTION` deployment when that model fits better. See [Portable Serverless Functions](/value/integration-flexibility) and [runtime layouts](/guide/build/runtime-layouts/) when you want the details behind platform mode, transport mode, logical placement, and Maven/container packaging.
 
 ### Run the flow reliably
 
@@ -135,6 +135,10 @@ If you already have proven Java libraries or remote endpoints, operators let you
   <div>
     <h3>Serverless deployments</h3>
     <p>Run the same typed flow behind AWS Lambda, Azure Functions, or Google Cloud Run functions without rewriting the business code.</p>
+  </div>
+  <div>
+    <h3>Container platforms</h3>
+    <p>Run the same typed flow as a standard Quarkus service in containers or Kubernetes when you want service-style deployment and operations.</p>
   </div>
 </div>
 

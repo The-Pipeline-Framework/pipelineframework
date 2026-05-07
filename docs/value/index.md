@@ -9,7 +9,7 @@
   <div class="value-glance-item"><strong>Define the Flow Once</strong> &middot; Describe the flow in YAML and catch function, mapper, and operator mismatches at build time.</div>
   <div class="value-glance-item"><strong>Portable Serverless Functions</strong> &middot; Generate serverless function runtimes for AWS Lambda, Azure Functions, and Google's Cloud Run functions from the same typed flow.</div>
   <div class="value-glance-item"><strong>Reliable Background Work</strong> &middot; Store accepted work, retry failures, recover after crashes, and route terminal failures.</div>
-  <div class="value-glance-item"><strong>Start Monolith, Split Later</strong> &middot; Change runtime layout when the team is ready while keeping build topology explicit.</div>
+  <div class="value-glance-item"><strong>Container and Kubernetes Ready</strong> &middot; Generate standard Quarkus service runtimes for containers and Kubernetes while keeping runtime layout and build topology explicit.</div>
   <div class="value-glance-item"><strong>State and Replay</strong> &middot; Persist business data, reuse expensive outputs, and replay safely without bespoke state plumbing.</div>
 </div>
 
@@ -20,6 +20,6 @@
 - [Performance](/value/runtime-efficiency)
 - [Portable Serverless Functions](/value/integration-flexibility)
 - [State, Replay, and Queryable Data](/value/state-replay-and-queryable-data)
-- [Start Monolith, Split Later](/value/deployment-evolution)
+- [Container and Kubernetes Ready](/value/deployment-evolution)
 - [Operational Confidence](/value/operational-confidence)
 - [Plugins, Not Glue](/value/extensibility-and-platform)
