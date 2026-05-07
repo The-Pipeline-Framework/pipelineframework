@@ -2,7 +2,7 @@
 
 <p class="value-lead">The Pipeline Framework (TPF) generates standard Quarkus service runtimes that fit container and Kubernetes deployments, while still giving teams a practical path from one deployable to split layouts later.</p>
 
-See the [Runtime Layouts guide](/guide/build/runtime-layouts/) for the packaging details: choosing a monolith-style runtime does not automatically remove per-step service modules, because build topology and runtime layout are separate decisions.
+See the [Runtime Layouts guide](/guide/build/runtime-layouts/) for the packaging details: choosing a monolith-style runtime does not automatically remove per-step service modules because build topology and runtime layout are separate decisions.
 
 ## At a Glance
 
