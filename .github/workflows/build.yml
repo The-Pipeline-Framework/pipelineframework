@@ -29,7 +29,7 @@ env:
   BOOTSTRAP_ARTIFACT: pr-m2-cache
   UNIT_TEST_PATTERN: "*,!*IT,!*ITCase,!RawDocumentResourceTest,!ParsedDocumentResourceTest,!TokenBatchResourceTest,!IndexAckResourceTest,!LambdaMockEventServerSmokeTest"
   # Dedicated Search E2E and resource IT workflows own the excluded Search classes below.
-  GENERIC_VERIFY_IT_PATTERN: "*IT,*ITCase,!CsvPaymentsEndToEndIT,!CsvPaymentsPipelineRuntimeEndToEndIT,!SearchPipelineEndToEndIT,!RawDocumentResourceIT,!ParsedDocumentResourceIT,!TokenBatchResourceIT,!IndexAckResourceIT"
+  GENERIC_VERIFY_IT_PATTERN: "*IT,*ITCase,!CsvPaymentsEndToEndIT,!CsvPaymentsPipelineRuntimeEndToEndIT,!CsvPaymentsProviderRejectEndToEndIT,!SearchPipelineEndToEndIT,!RawDocumentResourceIT,!ParsedDocumentResourceIT,!TokenBatchResourceIT,!IndexAckResourceIT"
 
 jobs:
   bootstrap:
