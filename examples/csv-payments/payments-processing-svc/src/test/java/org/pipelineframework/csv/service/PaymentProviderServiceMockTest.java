@@ -168,6 +168,40 @@ class PaymentProviderServiceMockTest {
     }
 
     @Test
+    @DisplayName("Should deterministically simulate sendPayment timeout")
+    void sendPayment_configuredTimeout_shouldThrowDeadlineExceeded() {
+        PaymentProviderServiceMock paymentProviderServiceMock =
+                new PaymentProviderServiceMock(new SendTimeoutPaymentProviderConfig());
+
+        PaymentRecordDto dtoIn =
+                PaymentRecordDto.builder()
+                        .id(UUID.randomUUID())
+                        .csvId(String.valueOf(UUID.randomUUID()))
+                        .recipient("John Doe")
+                        .amount(BigDecimal.valueOf(100.00))
+                        .currency(java.util.Currency.getInstance("USD"))
+                        .build();
+        PaymentRecordMapper paymentRecordMapper = Mappers.getMapper(PaymentRecordMapper.class);
+        PaymentRecord paymentRecord = paymentRecordMapper.fromDto(dtoIn);
+
+        SendPaymentRequest request =
+                new SendPaymentRequest()
+                        .setAmount(paymentRecord.getAmount())
+                        .setReference(paymentRecord.getRecipient())
+                        .setCurrency(paymentRecord.getCurrency())
+                        .setPaymentRecord(paymentRecord)
+                        .setPaymentRecordId(paymentRecord.getId());
+
+        StatusRuntimeException thrown =
+                assertThrows(
+                        StatusRuntimeException.class,
+                        () -> paymentProviderServiceMock.sendPayment(request));
+        assertThat(thrown.getStatus().getCode()).isEqualTo(Status.Code.DEADLINE_EXCEEDED);
+        assertThat(thrown.getStatus().getDescription())
+                .isEqualTo("Mock payment provider timed out while sending payment.");
+    }
+
+    @Test
     @DisplayName("Should successfully get payment status and return PaymentStatus")
     void getPaymentStatus_happyPath_shouldReturnPaymentStatus() {
         // Given
@@ -273,6 +307,55 @@ class PaymentProviderServiceMockTest {
                         "Failed to acquire permit within timeout period. The payment status service is currently throttled.");
     }
 
+    @Test
+    @DisplayName("Should deterministically simulate poll timeout")
+    void getPaymentStatus_configuredTimeout_shouldThrowDeadlineExceeded() {
+        PaymentProviderServiceMock paymentProviderServiceMock =
+                new PaymentProviderServiceMock(new PollTimeoutPaymentProviderConfig());
+        AckPaymentSent testAckPaymentSent = testAckPaymentSent();
+
+        StatusRuntimeException thrown =
+                assertThrows(
+                        StatusRuntimeException.class,
+                        () -> paymentProviderServiceMock.getPaymentStatus(testAckPaymentSent));
+        assertThat(thrown.getStatus().getCode()).isEqualTo(Status.Code.DEADLINE_EXCEEDED);
+        assertThat(thrown.getStatus().getDescription())
+                .isEqualTo("Mock payment provider timed out while polling payment status.");
+    }
+
+    @Test
+    @DisplayName("Should deterministically return rejected payment status")
+    void getPaymentStatus_configuredReject_shouldReturnRejectedStatus() {
+        PaymentProviderServiceMock paymentProviderServiceMock =
+                new PaymentProviderServiceMock(new PollRejectPaymentProviderConfig());
+        AckPaymentSent testAckPaymentSent = testAckPaymentSent();
+
+        PaymentStatus paymentStatus = paymentProviderServiceMock.getPaymentStatus(testAckPaymentSent);
+
+        assertThat(paymentStatus.getStatus()).isEqualTo("Rejected");
+        assertThat(paymentStatus.getMessage()).isEqualTo("Mock payment provider rejected the payment.");
+        assertThat(paymentStatus.getPaymentRecordId()).isEqualTo(testAckPaymentSent.getPaymentRecordId());
+    }
+
+    private AckPaymentSent testAckPaymentSent() {
+        PaymentRecordDto dtoIn =
+                PaymentRecordDto.builder()
+                        .id(UUID.randomUUID())
+                        .csvId(String.valueOf(UUID.randomUUID()))
+                        .recipient("John Doe")
+                        .amount(BigDecimal.valueOf(100.00))
+                        .currency(java.util.Currency.getInstance("USD"))
+                        .build();
+        PaymentRecordMapper paymentRecordMapper = Mappers.getMapper(PaymentRecordMapper.class);
+        PaymentRecord paymentRecord = paymentRecordMapper.fromDto(dtoIn);
+
+        return new AckPaymentSent(UUID.randomUUID())
+                .setStatus(1000L)
+                .setMessage("OK but this is only a test")
+                .setPaymentRecordId(paymentRecord.getId())
+                .setPaymentRecord(paymentRecord);
+    }
+
     static class FakePaymentProviderConfig implements PaymentProviderConfig {
         @Override
         public double permitsPerSecond() {
@@ -287,6 +370,21 @@ class PaymentProviderServiceMockTest {
         @Override
         public double waitMilliseconds() {
             return 50.0;
+        }
+
+        @Override
+        public double sendTimeoutProbability() {
+            return 0.0;
+        }
+
+        @Override
+        public double pollTimeoutProbability() {
+            return 0.0;
+        }
+
+        @Override
+        public double pollRejectProbability() {
+            return 0.0;
         }
     }
 
@@ -305,6 +403,21 @@ class PaymentProviderServiceMockTest {
         public double waitMilliseconds() {
             return 50.0;
         }
+
+        @Override
+        public double sendTimeoutProbability() {
+            return 0.0;
+        }
+
+        @Override
+        public double pollTimeoutProbability() {
+            return 0.0;
+        }
+
+        @Override
+        public double pollRejectProbability() {
+            return 0.0;
+        }
     }
 
     private static class NegativeTimeoutPaymentProviderConfig implements PaymentProviderConfig {
@@ -322,6 +435,21 @@ class PaymentProviderServiceMockTest {
         public double waitMilliseconds() {
             return 50.0;
         }
+
+        @Override
+        public double sendTimeoutProbability() {
+            return 0.0;
+        }
+
+        @Override
+        public double pollTimeoutProbability() {
+            return 0.0;
+        }
+
+        @Override
+        public double pollRejectProbability() {
+            return 0.0;
+        }
     }
 
     private static class LowRatePaymentProviderConfig implements PaymentProviderConfig {
@@ -338,6 +466,42 @@ class PaymentProviderServiceMockTest {
         @Override
         public double waitMilliseconds() {
             return 50.0;
+        }
+
+        @Override
+        public double sendTimeoutProbability() {
+            return 0.0;
+        }
+
+        @Override
+        public double pollTimeoutProbability() {
+            return 0.0;
+        }
+
+        @Override
+        public double pollRejectProbability() {
+            return 0.0;
+        }
+    }
+
+    private static class SendTimeoutPaymentProviderConfig extends FakePaymentProviderConfig {
+        @Override
+        public double sendTimeoutProbability() {
+            return 1.0;
+        }
+    }
+
+    private static class PollTimeoutPaymentProviderConfig extends FakePaymentProviderConfig {
+        @Override
+        public double pollTimeoutProbability() {
+            return 1.0;
+        }
+    }
+
+    private static class PollRejectPaymentProviderConfig extends FakePaymentProviderConfig {
+        @Override
+        public double pollRejectProbability() {
+            return 1.0;
         }
     }
 }

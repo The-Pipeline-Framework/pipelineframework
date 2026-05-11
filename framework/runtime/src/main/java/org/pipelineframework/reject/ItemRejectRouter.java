@@ -40,6 +40,7 @@ import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.context.TransportDispatchMetadata;
 import org.pipelineframework.context.TransportDispatchMetadataHolder;
+import org.pipelineframework.telemetry.PipelineTelemetry;
 
 /**
  * Central router for step-level reject publication.
@@ -283,6 +284,11 @@ public class ItemRejectRouter {
      */
     private Uni<Void> publishEnvelope(ItemRejectEnvelope envelope) {
         ItemRejectSink selected = ensureSinkInitialized();
+        PipelineTelemetry.recordReject(
+            resolveStepClass(envelope.stepClass()),
+            envelope.rejectScope(),
+            envelope.errorClass(),
+            envelope.errorMessage());
         Uni<Void> publish = Uni.createFrom().deferred(() -> selected.publish(envelope));
         if (itemRejectConfig.publishFailurePolicy() == ItemRejectFailurePolicy.FAIL_PIPELINE) {
             return publish;
@@ -378,6 +384,17 @@ public class ItemRejectRouter {
                 initialize();
             }
             return sink;
+        }
+    }
+
+    private Class<?> resolveStepClass(String stepClassName) {
+        if (stepClassName == null || stepClassName.isBlank() || "unknown".equals(stepClassName)) {
+            return null;
+        }
+        try {
+            return Class.forName(stepClassName);
+        } catch (ClassNotFoundException ignored) {
+            return null;
         }
     }
 

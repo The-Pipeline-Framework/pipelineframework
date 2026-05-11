@@ -29,6 +29,7 @@ import org.pipelineframework.csv.common.mapper.AckPaymentSentMapper;
 import org.pipelineframework.csv.common.mapper.PaymentStatusMapper;
 import org.pipelineframework.grpc.GrpcReactiveServiceAdapter;
 import org.pipelineframework.service.ReactiveService;
+import org.pipelineframework.step.NonRetryableException;
 
 @PipelineStep
 @ApplicationScoped
@@ -63,11 +64,30 @@ public class ProcessAckPaymentSentService
     LOG.debug("Returning Uni from ProcessAckPaymentSentService");
     return result
         .onItem()
+        .transformToUni(paymentStatus -> {
+          if (!isProviderRejected(paymentStatus)) {
+            return Uni.createFrom().item(paymentStatus);
+          }
+
+          String message =
+              String.format(
+                  "Payment provider returned terminal status '%s' for paymentRecordId=%s",
+                  paymentStatus.getStatus(),
+                  paymentStatus.getPaymentRecordId());
+          return Uni.createFrom().failure(new NonRetryableException(message));
+        })
+        .onItem()
         .invoke(paymentStatus -> 
             LOG.debugf("Successfully processed AckPaymentSent, resulting PaymentStatus: id=%s, reference=%s, status=%s", 
                 paymentStatus.getId(), paymentStatus.getReference(), paymentStatus.getStatus()))
         .onFailure()
         .invoke(failure -> 
             LOG.errorf(failure, "Failed to process AckPaymentSent in ProcessAckPaymentSentService"));
+  }
+
+  private static boolean isProviderRejected(PaymentStatus paymentStatus) {
+    return paymentStatus != null
+        && paymentStatus.getStatus() != null
+        && "Rejected".equalsIgnoreCase(paymentStatus.getStatus());
   }
 }

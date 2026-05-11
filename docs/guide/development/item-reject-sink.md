@@ -14,6 +14,11 @@ Choose failure handling by intent:
 2. Use Item Reject Sink when individual items must be rejected, tracked, and re-driven while the execution continues.
 3. Use execution DLQ only for terminal orchestration failures in queue-async mode.
 
+A valid hybrid pattern is to project a business terminal state into the item-reject channel when the
+pipeline must stop processing that item downstream. In practice that usually means the step throws a
+`NonRetryableException` for the terminal business outcome and enables `recover-on-failure` for that
+step, so the item is routed into the reject sink instead of being retried or emitted further.
+
 ## Step APIs
 
 Step contracts expose:

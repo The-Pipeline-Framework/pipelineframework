@@ -143,8 +143,10 @@ class ExecutionHooks {
             return;
           }
           logRetryAmplificationTrigger(trigger, mode);
+          PipelineKillSwitchException exception = PipelineKillSwitchException.retryAmplification(trigger);
           if (mode == RetryAmplificationGuardMode.FAIL_FAST) {
-            emitter.fail(PipelineKillSwitchException.retryAmplification(trigger));
+            telemetry.abortActiveRun(exception);
+            emitter.fail(exception);
             Cancellable active = cancellableRef.get();
             if (active != null) {
               active.cancel();
@@ -258,7 +260,9 @@ class ExecutionHooks {
           if (isDone()) {
             return;
           }
-          super.onFailure(PipelineKillSwitchException.retryAmplification(trigger));
+          PipelineKillSwitchException exception = PipelineKillSwitchException.retryAmplification(trigger);
+          telemetry.abortActiveRun(exception);
+          super.onFailure(exception);
         }
       });
     }

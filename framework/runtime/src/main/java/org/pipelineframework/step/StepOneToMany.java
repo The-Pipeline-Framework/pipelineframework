@@ -77,7 +77,7 @@ public interface StepOneToMany<I, O> extends OneToMany<I, O>, Configurable, Item
                 return o;
             })
             .onFailure(this::shouldRetry)
-            .invoke(t -> PipelineTelemetry.recordRetry(this.getClass()))
+            .invoke(t -> PipelineTelemetry.recordRetry(this.getClass(), t))
             .onFailure(this::shouldRetry)
             .retry()
             .withBackOff(retryWait(), maxBackoff())

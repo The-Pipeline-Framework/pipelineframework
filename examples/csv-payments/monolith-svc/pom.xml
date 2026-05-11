@@ -219,6 +219,7 @@
                                     <filtering>false</filtering>
                                     <includes>
                                         <include>telemetry.json</include>
+                                        <include>replay-topology.json</include>
                                         <include>orchestrator-clients.properties</include>
                                     </includes>
                                 </resource>
