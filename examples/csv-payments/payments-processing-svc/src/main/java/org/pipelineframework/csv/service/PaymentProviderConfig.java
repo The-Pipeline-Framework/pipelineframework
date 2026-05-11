@@ -38,4 +38,22 @@ public interface PaymentProviderConfig {
    */
   @WithDefault("500")
   double waitMilliseconds();
+
+  /**
+   * Deterministic fraction of send-payment requests that should simulate a timeout.
+   */
+  @WithDefault("0.0")
+  double sendTimeoutProbability();
+
+  /**
+   * Deterministic fraction of poll requests that should simulate a timeout.
+   */
+  @WithDefault("0.0")
+  double pollTimeoutProbability();
+
+  /**
+   * Deterministic fraction of poll requests that should return a business rejection.
+   */
+  @WithDefault("0.0")
+  double pollRejectProbability();
 }

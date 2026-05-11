@@ -39,16 +39,25 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
 
   private final RateLimiter rateLimiter;
   private final long timeoutMillis;
+  private final double sendTimeoutProbability;
+  private final double pollTimeoutProbability;
+  private final double pollRejectProbability;
 
   @Inject
   public PaymentProviderServiceMock(PaymentProviderConfig config) {
     rateLimiter = RateLimiter.create(config.permitsPerSecond());
     timeoutMillis = config.timeoutMillis();
+    sendTimeoutProbability = normalizeProbability(config.sendTimeoutProbability());
+    pollTimeoutProbability = normalizeProbability(config.pollTimeoutProbability());
+    pollRejectProbability = normalizeProbability(config.pollRejectProbability());
 
     LOG.infof(
-        "PaymentProviderServiceMock initialized: permitsPerSecond=%s, timeoutMillis=%s",
+        "PaymentProviderServiceMock initialized: permitsPerSecond=%s, timeoutMillis=%s, sendTimeoutProbability=%s, pollTimeoutProbability=%s, pollRejectProbability=%s",
         config.permitsPerSecond(),
-        config.timeoutMillis());
+        config.timeoutMillis(),
+        sendTimeoutProbability,
+        pollTimeoutProbability,
+        pollRejectProbability);
   }
 
   @Override
@@ -66,6 +75,13 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
       throw new StatusRuntimeException(
           Status.RESOURCE_EXHAUSTED.withDescription(
               "Payment service is currently throttled. Please try again later."));
+    }
+
+    if (shouldSimulate(sendTimeoutProbability, sendSimulationKey(requestMap), "send-timeout")) {
+      LOG.warnf("Simulating send-payment timeout for paymentRecordId=%s", requestMap.getPaymentRecordId());
+      throw new StatusRuntimeException(
+          Status.DEADLINE_EXCEEDED.withDescription(
+              "Mock payment provider timed out while sending payment."));
     }
     
     LOG.debug("Rate limiter permit acquired successfully");
@@ -94,17 +110,76 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
           Status.RESOURCE_EXHAUSTED.withDescription(
               "Failed to acquire permit within timeout period. The payment status service is currently throttled."));
     }
+
+    if (shouldSimulate(pollTimeoutProbability, pollSimulationKey(ackPaymentSent), "poll-timeout")) {
+      LOG.warnf("Simulating payment-status timeout for conversationId=%s", ackPaymentSent.getConversationId());
+      throw new StatusRuntimeException(
+          Status.DEADLINE_EXCEEDED.withDescription(
+              "Mock payment provider timed out while polling payment status."));
+    }
     
     LOG.debug("Rate limiter permit acquired successfully");
 
     PaymentStatus paymentStatus = new PaymentStatus();
     paymentStatus.setId(UUID.randomUUID());
     paymentStatus.setReference("101");
-    paymentStatus.setStatus("Complete");
+    if (shouldSimulate(pollRejectProbability, pollSimulationKey(ackPaymentSent), "poll-reject")) {
+      paymentStatus.setStatus("Rejected");
+      paymentStatus.setMessage("Mock payment provider rejected the payment.");
+    } else {
+      paymentStatus.setStatus("Complete");
+      paymentStatus.setMessage("Mock response");
+    }
     paymentStatus.setFee(new BigDecimal("1.01"));
-    paymentStatus.setMessage("Mock response");
     paymentStatus.setAckPaymentSent(ackPaymentSent);
-    paymentStatus.setAckPaymentSentId(ackPaymentSent.getId());
+    paymentStatus.setAckPaymentSentId(
+        ackPaymentSent.getId() != null ? ackPaymentSent.getId() : UUID.randomUUID());
+    paymentStatus.setPaymentRecord(ackPaymentSent.getPaymentRecord());
+    paymentStatus.setPaymentRecordId(
+        ackPaymentSent.getPaymentRecordId() != null ? ackPaymentSent.getPaymentRecordId() : UUID.randomUUID());
     return paymentStatus;
+  }
+
+  private static double normalizeProbability(double probability) {
+    if (Double.isNaN(probability)) {
+      return 0.0;
+    }
+    return Math.max(0.0, Math.min(1.0, probability));
+  }
+
+  private boolean shouldSimulate(double probability, String key, String salt) {
+    if (probability <= 0.0) {
+      return false;
+    }
+    if (probability >= 1.0) {
+      return true;
+    }
+    long normalized = Integer.toUnsignedLong(java.util.Objects.hash(key, salt));
+    long threshold = Math.round(probability * 10_000d);
+    return normalized % 10_000L < threshold;
+  }
+
+  private static String sendSimulationKey(SendPaymentRequest request) {
+    if (request.getPaymentRecord() != null && request.getPaymentRecord().getCsvId() != null) {
+      return request.getPaymentRecord().getCsvId();
+    }
+    if (request.getPaymentRecordId() != null) {
+      return request.getPaymentRecordId().toString();
+    }
+    return "send-unknown";
+  }
+
+  private static String pollSimulationKey(AckPaymentSent ackPaymentSent) {
+    if (ackPaymentSent.getPaymentRecord() != null
+        && ackPaymentSent.getPaymentRecord().getCsvId() != null) {
+      return ackPaymentSent.getPaymentRecord().getCsvId();
+    }
+    if (ackPaymentSent.getPaymentRecordId() != null) {
+      return ackPaymentSent.getPaymentRecordId().toString();
+    }
+    if (ackPaymentSent.getConversationId() != null) {
+      return ackPaymentSent.getConversationId().toString();
+    }
+    return "poll-unknown";
   }
 }

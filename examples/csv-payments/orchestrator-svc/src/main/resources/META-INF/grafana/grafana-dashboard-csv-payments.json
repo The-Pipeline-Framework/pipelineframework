@@ -2299,6 +2299,234 @@
       "type": "timeseries",
       "description": "Produced vs consumed item ratio for the item stream. If no item types are configured, TPF defaults to the first input and last output types. No data is expected when no items are consumed in the selected time range.",
       "minInterval": "10s"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 85
+      },
+      "id": 24,
+      "panels": [],
+      "title": "Topology & Replay Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "unit": "ops/s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 86
+      },
+      "id": 25,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_source_step, tpf_target_step) (rate(tpf_transition_count_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "{{tpf_source_step}} -> {{tpf_target_step}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Transition Throughput",
+      "type": "timeseries",
+      "description": "Per-edge throughput derived from replay-aware transition metrics.",
+      "minInterval": "10s"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 86
+      },
+      "id": 26,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.95, sum by (le, tpf_source_step, tpf_target_step) (rate(tpf_transition_latency_milliseconds_bucket[$__rate_interval])))",
+          "instant": false,
+          "legendFormat": "{{tpf_source_step}} -> {{tpf_target_step}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Transition Latency p95",
+      "type": "timeseries",
+      "description": "Per-edge latency heat for the live pipeline topology.",
+      "minInterval": "10s"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 94
+      },
+      "id": 27,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_step) (tpf_step_inflight_items)",
+          "instant": false,
+          "legendFormat": "inflight {{tpf_step}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_step) (tpf_step_buffer_queued_items)",
+          "instant": false,
+          "legendFormat": "queued {{tpf_step}}",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "sum by (tpf_step) (rate(tpf_step_retry_count_total[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "retries {{tpf_step}}",
+          "range": true,
+          "refId": "C"
+        }
+      ],
+      "title": "Step Pressure",
+      "type": "timeseries",
+      "description": "Live in-flight, queue depth, and retry pressure by logical step."
     }
   ],
   "refresh": "30s",

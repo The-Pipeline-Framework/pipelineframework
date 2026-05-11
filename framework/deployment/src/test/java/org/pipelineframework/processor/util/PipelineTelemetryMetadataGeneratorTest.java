@@ -120,6 +120,47 @@ class PipelineTelemetryMetadataGeneratorTest {
             metadata.get("producerStep").getAsString());
     }
 
+    @Test
+    void writesReplayTopologyMetadataWithOrderedStepsAndEdges() throws IOException {
+        PipelineCompilationContext ctx = buildContext();
+        writeApplicationProperties("com.example.ItemIn", "com.example.ItemOut");
+
+        List<PipelineStepModel> models = List.of(
+            step("ProcessFolderService", "com.example.pipeline", type("InputA"), type("InputB"),
+                StreamingShape.UNARY_UNARY, false),
+            step("ObservePersistenceFolderSideEffectService", "com.example.pipeline", type("InputB"), type("InputB"),
+                StreamingShape.UNARY_UNARY, true),
+            step("ProcessCsvPaymentsInputService", "com.example.pipeline", type("InputB"), type("InputC"),
+                StreamingShape.UNARY_STREAMING, false),
+            step("ProcessPaymentStatusService", "com.example.pipeline", type("InputC"), type("InputD"),
+                StreamingShape.STREAMING_UNARY, false)
+        );
+        ctx.setStepModels(models);
+
+        new PipelineTelemetryMetadataGenerator(ctx.getProcessingEnv()).writeTelemetryMetadata(ctx);
+
+        JsonObject topology = readReplayTopologyJson();
+        assertEquals(4, topology.getAsJsonArray("steps").size());
+        assertEquals(3, topology.getAsJsonArray("transitions").size());
+        JsonObject first = topology.getAsJsonArray("steps").get(0).getAsJsonObject();
+        assertEquals("ProcessFolder", first.get("step").getAsString());
+        assertEquals("ProcessFolderService", first.get("service").getAsString());
+        assertEquals("one-to-one", first.get("cardinality").getAsString());
+        JsonObject second = topology.getAsJsonArray("steps").get(1).getAsJsonObject();
+        assertEquals("ObservePersistenceFolderSideEffect", second.get("step").getAsString());
+        assertEquals(true, second.get("sideEffect").getAsBoolean());
+        assertEquals("ProcessFolder", second.get("parentStep").getAsString());
+        assertEquals("persistence", second.get("pluginKind").getAsString());
+        JsonObject third = topology.getAsJsonArray("steps").get(2).getAsJsonObject();
+        assertEquals("one-to-many", third.get("cardinality").getAsString());
+        JsonObject edge = topology.getAsJsonArray("transitions").get(0).getAsJsonObject();
+        assertEquals("ProcessFolder", edge.get("from").getAsString());
+        assertEquals("ProcessCsvPaymentsInput", edge.get("to").getAsString());
+        JsonObject branchEdge = topology.getAsJsonArray("transitions").get(2).getAsJsonObject();
+        assertEquals("ProcessFolder", branchEdge.get("from").getAsString());
+        assertEquals("ObservePersistenceFolderSideEffect", branchEdge.get("to").getAsString());
+    }
+
     private PipelineCompilationContext buildContext() {
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
         when(processingEnv.getFiler()).thenReturn(new PathResourceFiler(tempDir.resolve("class-output")));
@@ -146,11 +187,27 @@ class PipelineTelemetryMetadataGeneratorTest {
         return new Gson().fromJson(content, JsonObject.class);
     }
 
+    private JsonObject readReplayTopologyJson() throws IOException {
+        Path file = tempDir.resolve("class-output").resolve("META-INF/pipeline/replay-topology.json");
+        String content = Files.readString(file);
+        return new Gson().fromJson(content, JsonObject.class);
+    }
+
     private PipelineStepModel step(
         String generatedName,
         String servicePackage,
         TypeName inputType,
         TypeName outputType,
+        boolean sideEffect) {
+        return step(generatedName, servicePackage, inputType, outputType, StreamingShape.UNARY_UNARY, sideEffect);
+    }
+
+    private PipelineStepModel step(
+        String generatedName,
+        String servicePackage,
+        TypeName inputType,
+        TypeName outputType,
+        StreamingShape shape,
         boolean sideEffect) {
         return new PipelineStepModel.Builder()
             .serviceName(generatedName)
@@ -159,7 +216,7 @@ class PipelineTelemetryMetadataGeneratorTest {
             .serviceClassName(ClassName.get(servicePackage, generatedName))
             .inputMapping(new TypeMapping(inputType, null, false))
             .outputMapping(new TypeMapping(outputType, null, false))
-            .streamingShape(StreamingShape.UNARY_UNARY)
+            .streamingShape(shape)
             .enabledTargets(Set.of(GenerationTarget.CLIENT_STEP))
             .executionMode(ExecutionMode.DEFAULT)
             .deploymentRole(DeploymentRole.PIPELINE_SERVER)

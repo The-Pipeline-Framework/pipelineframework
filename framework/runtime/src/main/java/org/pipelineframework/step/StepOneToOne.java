@@ -81,7 +81,7 @@ public interface StepOneToOne<I, O> extends OneToOne<I, O>, Configurable, ItemRe
         })
         // Step 3: Apply retry policy for transient failures
         .onFailure(this::shouldRetry)
-        .invoke(t -> PipelineTelemetry.recordRetry(this.getClass()))
+        .invoke(t -> PipelineTelemetry.recordRetry(this.getClass(), t))
         .onFailure(this::shouldRetry)
         .retry()
         .withBackOff(retryWait(), maxBackoff())

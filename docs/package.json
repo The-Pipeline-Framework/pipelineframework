@@ -5,9 +5,10 @@
   "main": "index.js",
   "scripts": {
     "test": "node --test ./scripts/*.test.js",
-    "dev": "vitepress dev",
-    "build": "vitepress build",
-    "preview": "vitepress preview",
+    "sync-replay-viewer": "node ./scripts/sync-replay-viewer.js",
+    "dev": "npm run sync-replay-viewer && vitepress dev",
+    "build": "npm run sync-replay-viewer && vitepress build",
+    "preview": "npm run sync-replay-viewer && vitepress preview",
     "snapshot": "node ./scripts/snapshot-docs.js"
   },
   "keywords": [],

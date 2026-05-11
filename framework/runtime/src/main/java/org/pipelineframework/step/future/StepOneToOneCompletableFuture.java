@@ -79,7 +79,7 @@ CompletableFuture<O> applyAsync(I in);
             })
             // retry / backoff / jitter
             .onFailure(this::shouldRetry)
-            .invoke(t -> PipelineTelemetry.recordRetry(this.getClass()))
+            .invoke(t -> PipelineTelemetry.recordRetry(this.getClass(), t))
             .onFailure(this::shouldRetry)
             .retry()
             .withBackOff(retryWait(), maxBackoff())

@@ -1,0 +1,13 @@
+{
+  "pipeline": "test-pipeline",
+  "steps": [
+    {
+      "runtimeStepClass": "org.pipelineframework.telemetry.PipelineTelemetryTest$DummyStep",
+      "step": "DummyStep",
+      "service": "DummyStepService",
+      "cardinality": "one-to-one",
+      "index": 0
+    }
+  ],
+  "transitions": []
+}

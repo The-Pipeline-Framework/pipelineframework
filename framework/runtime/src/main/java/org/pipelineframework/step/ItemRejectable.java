@@ -30,6 +30,7 @@ import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.context.TransportDispatchMetadata;
 import org.pipelineframework.context.TransportDispatchMetadataHolder;
 import org.pipelineframework.reject.ItemRejectRouter;
+import org.pipelineframework.telemetry.PipelineTelemetry;
 
 /**
  * Support for step-level reject-and-continue behaviour.
@@ -75,7 +76,7 @@ public interface ItemRejectable<I, O> {
                 retryLimit,
                 transport,
                 context))
-            .orElseGet(() -> localFallbackReject(normalizedCause));
+            .orElseGet(() -> localFallbackReject(normalizedCause, "ITEM"));
     }
 
     /**
@@ -122,7 +123,7 @@ public interface ItemRejectable<I, O> {
                 retryLimit,
                 transport,
                 context))
-            .orElseGet(() -> localFallbackReject(normalizedCause));
+            .orElseGet(() -> localFallbackReject(normalizedCause, "STREAM"));
     }
 
     private Optional<ItemRejectRouter> resolveRouter() {
@@ -155,7 +156,8 @@ public interface ItemRejectable<I, O> {
         }
     }
 
-    private Uni<O> localFallbackReject(Throwable cause) {
+    private Uni<O> localFallbackReject(Throwable cause, String rejectScope) {
+        PipelineTelemetry.recordReject(this.getClass(), rejectScope, cause);
         LOG.warnf("Item reject sink unavailable, falling back to local log-and-continue: %s", cause.toString());
         LOG.debug("Item reject fallback cause", cause);
         return Uni.createFrom().nullItem();

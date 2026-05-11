@@ -17,6 +17,27 @@ This enables Prometheus metrics for Grafana dashboards and activates the LGTM st
 Note: when LGTM Dev Services are enabled, Quarkus may override some OTel timing defaults
 for dev convenience (for example `quarkus.otel.metric.export.interval=10s`).
 
+## Dashboard discovery
+
+LGTM Dev Services discovers Grafana dashboards from classpath resources under `META-INF/grafana/`
+that use the `grafana-dashboard-*.json` naming convention.
+
+For `csv-payments`, the repo now ships separate resources for:
+
+- Prometheus-backed metrics dashboard
+- Tempo tracing entry surface
+
+Keep Tempo separate from the Prometheus dashboard. Use Tempo for live topology and trace drill-down,
+and use Prometheus-backed panels for throughput, latency, queue depth, inflight, and retries.
+
+## Tempo versus Prometheus
+
+- Tempo receives spans through OTLP exporters in real time.
+- Prometheus scrapes metrics on its own interval.
+
+If a panel looks stale because of scrape timing, that is a metrics issue, not a tracing issue.
+For the full surface split, see [Replay & Live Topology](/guide/operations/observability/replay).
+
 ## Prometheus/Micrometer Defaults
 
 Templates and example services default to:

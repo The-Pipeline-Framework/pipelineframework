@@ -16,43 +16,68 @@
 
 package org.pipelineframework.csv.service;
 
+import java.math.BigDecimal;
+import java.util.UUID;
+
 import io.smallrye.mutiny.Uni;
-import org.junit.jupiter.api.BeforeEach;
+import io.smallrye.mutiny.helpers.test.UniAssertSubscriber;
 import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 import org.pipelineframework.csv.common.domain.AckPaymentSent;
 import org.pipelineframework.csv.common.domain.PaymentStatus;
+import org.pipelineframework.step.NonRetryableException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.when;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ProcessAckPaymentSentServiceTest {
 
-    @Mock private PollAckPaymentSentReactiveService pollAckPaymentSentReactiveService;
+    @Test
+    void processReturnsPolledPaymentStatusWhenProviderCompletes() {
+        PaymentStatus expectedStatus =
+                new PaymentStatus()
+                        .setStatus("Complete")
+                        .setReference("ref-101")
+                        .setMessage("Mock response")
+                        .setPaymentRecordId(UUID.randomUUID())
+                        .setAckPaymentSentId(UUID.randomUUID())
+                        .setFee(BigDecimal.ONE);
 
-    @Mock private AckPaymentSent ackPaymentSent;
+        ProcessAckPaymentSentService service =
+                new ProcessAckPaymentSentService(ack -> Uni.createFrom().item(expectedStatus));
 
-    @InjectMocks private ProcessAckPaymentSentService processAckPaymentSentReactiveService;
+        PaymentStatus result = service.process(testAck()).await().indefinitely();
 
-    @BeforeEach
-    void setUp() {
-        MockitoAnnotations.openMocks(this);
+        assertEquals(expectedStatus, result);
     }
 
     @Test
-    void testExecute() {
-        // Given
-        PaymentStatus expectedStatus = new PaymentStatus();
+    void rejectedProviderStatusBecomesNonRetryableFailure() {
+        PaymentStatus rejectedStatus =
+                new PaymentStatus()
+                        .setStatus("Rejected")
+                        .setReference("ref-101")
+                        .setMessage("Rejected by provider")
+                        .setPaymentRecordId(UUID.randomUUID())
+                        .setAckPaymentSentId(UUID.randomUUID())
+                        .setFee(BigDecimal.ONE);
 
-        when(pollAckPaymentSentReactiveService.process(ackPaymentSent))
-                .thenReturn(Uni.createFrom().item(expectedStatus));
+        ProcessAckPaymentSentService service =
+                new ProcessAckPaymentSentService(ack -> Uni.createFrom().item(rejectedStatus));
 
-        // When
-        Uni<PaymentStatus> result = processAckPaymentSentReactiveService.process(ackPaymentSent);
+        UniAssertSubscriber<PaymentStatus> subscriber =
+                service.process(testAck()).subscribe().withSubscriber(UniAssertSubscriber.create());
 
-        // Then
-        result.subscribe().with(status -> assertEquals(expectedStatus, status));
+        subscriber.awaitFailure();
+        Throwable failure = subscriber.getFailure();
+        NonRetryableException nonRetryable = assertInstanceOf(NonRetryableException.class, failure);
+        assertTrue(
+                nonRetryable
+                        .getMessage()
+                        .contains("Payment provider returned terminal status 'Rejected'"));
+    }
+
+    private static AckPaymentSent testAck() {
+        return new AckPaymentSent(UUID.randomUUID()).setPaymentRecordId(UUID.randomUUID());
     }
 }

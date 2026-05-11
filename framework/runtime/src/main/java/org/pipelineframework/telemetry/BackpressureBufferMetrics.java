@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.common.AttributeKey;
 import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.common.AttributesBuilder;
 import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.api.metrics.ObservableLongMeasurement;
 import io.smallrye.mutiny.Multi;
@@ -38,12 +39,18 @@ public final class BackpressureBufferMetrics {
 
     private static final AttributeKey<String> STEP_CLASS = AttributeKey.stringKey("tpf.step.class");
     private static final AttributeKey<String> STEP_PARENT = AttributeKey.stringKey("tpf.step.parent");
+    private static final AttributeKey<String> PIPELINE = AttributeKey.stringKey("tpf.pipeline");
+    private static final AttributeKey<String> STEP = AttributeKey.stringKey("tpf.step");
+    private static final AttributeKey<String> SERVICE = AttributeKey.stringKey("tpf.service");
+    private static final AttributeKey<String> CARDINALITY = AttributeKey.stringKey("tpf.cardinality");
     private static final String TELEMETRY_ENABLED_KEY = "pipeline.telemetry.enabled";
     private static final String METRICS_ENABLED_KEY = "pipeline.telemetry.metrics.enabled";
     private static final ConcurrentMap<String, AtomicLong> QUEUED_BY_STEP = new ConcurrentHashMap<>();
     private static final ConcurrentMap<String, AtomicLong> CAPACITY_BY_STEP = new ConcurrentHashMap<>();
     private static final AtomicBoolean GAUGES_REGISTERED = new AtomicBoolean(false);
     private static volatile Map<String, String> STEP_PARENTS;
+    private static volatile Map<String, PipelineReplayTopology.Step> TOPOLOGY_STEPS;
+    private static volatile String PIPELINE_NAME;
 
     private BackpressureBufferMetrics() {
     }
@@ -113,18 +120,37 @@ public final class BackpressureBufferMetrics {
 
     private static void recordQueuedGauge(ObservableLongMeasurement measurement) {
         QUEUED_BY_STEP.forEach((step, count) -> {
-            measurement.record(count.get(), Attributes.of(
-                STEP_CLASS, step,
-                STEP_PARENT, resolveStepParent(step)));
+            measurement.record(count.get(), attributes(step));
         });
     }
 
     private static void recordCapacityGauge(ObservableLongMeasurement measurement) {
         CAPACITY_BY_STEP.forEach((step, count) -> {
-            measurement.record(count.get(), Attributes.of(
-                STEP_CLASS, step,
-                STEP_PARENT, resolveStepParent(step)));
+            measurement.record(count.get(), attributes(step));
         });
+    }
+
+    private static Attributes attributes(String stepClassName) {
+        AttributesBuilder builder = Attributes.builder()
+            .put(STEP_CLASS, stepClassName)
+            .put(STEP_PARENT, resolveStepParent(stepClassName));
+        PipelineReplayTopology.Step descriptor = resolveTopologySteps().get(stepClassName);
+        if (descriptor != null) {
+            String pipeline = resolvePipelineName();
+            if (pipeline != null && !pipeline.isBlank()) {
+                builder.put(PIPELINE, pipeline);
+            }
+            if (descriptor.step() != null) {
+                builder.put(STEP, descriptor.step());
+            }
+            if (descriptor.service() != null) {
+                builder.put(SERVICE, descriptor.service());
+            }
+            if (descriptor.cardinality() != null) {
+                builder.put(CARDINALITY, descriptor.cardinality());
+            }
+        }
+        return builder.build();
     }
 
     private static String resolveStepParent(String stepClassName) {
@@ -140,6 +166,26 @@ public final class BackpressureBufferMetrics {
             }
         }
         return parents.getOrDefault(stepClassName, stepClassName);
+    }
+
+    private static Map<String, PipelineReplayTopology.Step> resolveTopologySteps() {
+        Map<String, PipelineReplayTopology.Step> steps = TOPOLOGY_STEPS;
+        if (steps == null) {
+            synchronized (BackpressureBufferMetrics.class) {
+                if (TOPOLOGY_STEPS == null) {
+                    PipelineReplayTopology topology = PipelineReplayTopologyLoader.load().orElse(null);
+                    TOPOLOGY_STEPS = topology == null ? Map.of() : topology.stepsByRuntimeClass();
+                    PIPELINE_NAME = topology == null ? null : topology.pipeline();
+                }
+                steps = TOPOLOGY_STEPS;
+            }
+        }
+        return steps;
+    }
+
+    private static String resolvePipelineName() {
+        resolveTopologySteps();
+        return PIPELINE_NAME;
     }
 
     private static boolean metricsEnabled() {
