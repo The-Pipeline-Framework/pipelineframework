@@ -19,6 +19,7 @@ package org.pipelineframework;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -536,7 +537,7 @@ class PipelineReplayExecutionTest {
     }
 
     static final class CollectingExporter implements PipelineReplayExporter {
-        final List<PipelineExecutionEvent> events = new ArrayList<>();
+        final List<PipelineExecutionEvent> events = Collections.synchronizedList(new ArrayList<>());
         Long durationMs;
         String status;
         String failureType;

@@ -134,7 +134,9 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
     paymentStatus.setFee(new BigDecimal("1.01"));
     paymentStatus.setAckPaymentSent(ackPaymentSent);
     paymentStatus.setAckPaymentSentId(
-        ackPaymentSent.getId() != null ? ackPaymentSent.getId() : UUID.randomUUID());
+        ackPaymentSent.getId() != null
+            ? ackPaymentSent.getId()
+            : UUID.nameUUIDFromBytes((pollSimulationKey(ackPaymentSent) + ":ack-id").getBytes(StandardCharsets.UTF_8)));
     paymentStatus.setPaymentRecord(ackPaymentSent.getPaymentRecord());
     paymentStatus.setPaymentRecordId(
         ackPaymentSent.getPaymentRecordId() != null

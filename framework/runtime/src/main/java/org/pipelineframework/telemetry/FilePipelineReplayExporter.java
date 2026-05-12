@@ -124,9 +124,13 @@ public class FilePipelineReplayExporter implements PipelineReplayExporter {
     void flushOnShutdown() {
         for (Map.Entry<String, RunState> entry : runStates.entrySet()) {
             RunState runState = entry.getValue();
-            if (runState.durationMs() != null) {
-                writeDocument(runState);
+            if (runState.durationMs() == null && runState.startedAt() != null) {
+                runState.durationMs(Math.max(0L, java.time.Duration.between(runState.startedAt(), Instant.now()).toMillis()));
+                if (runState.status() == null || "running".equals(runState.status())) {
+                    runState.status("failed");
+                }
             }
+            writeDocument(runState);
         }
     }
 
@@ -171,6 +175,7 @@ public class FilePipelineReplayExporter implements PipelineReplayExporter {
             if (parent != null) {
                 Files.createDirectories(parent);
             }
+            List<PipelineExecutionEvent> eventsSnapshot = snapshotEvents(runState);
             PipelineReplayDocument document = new PipelineReplayDocument(
                 runState.pipeline(),
                 runState.startedAt(),
@@ -179,16 +184,22 @@ public class FilePipelineReplayExporter implements PipelineReplayExporter {
                 runState.failureType(),
                 runState.failureMessage(),
                 runState.runParameters(),
-                PipelineReplayTopologyAugmenter.augment(runState.topology(), runState.events()),
-                List.copyOf(runState.events()));
+                PipelineReplayTopologyAugmenter.augment(runState.topology(), eventsSnapshot),
+                eventsSnapshot);
             String json = PipelineJson.mapper()
                 .setSerializationInclusion(JsonInclude.Include.NON_NULL)
                 .writerWithDefaultPrettyPrinter()
                 .writeValueAsString(document);
             Files.writeString(outputFile, json + System.lineSeparator(), StandardCharsets.UTF_8);
-            LOG.infof("Wrote replay JSON with %d events to %s.", runState.events().size(), outputFile);
+            LOG.infof("Wrote replay JSON with %d events to %s.", eventsSnapshot.size(), outputFile);
         } catch (IOException e) {
             LOG.warnf(e, "Failed to write replay JSON to %s.", runState.outputFile());
+        }
+    }
+
+    private static List<PipelineExecutionEvent> snapshotEvents(RunState runState) {
+        synchronized (runState.events()) {
+            return List.copyOf(runState.events());
         }
     }
 

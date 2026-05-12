@@ -98,7 +98,7 @@ button:disabled {
 .player-chrome::before {
   content: "";
   position: absolute;
-  inset: auto 0 0 0;
+  inset: auto 0 0;
   height: 160px;
   background: linear-gradient(180deg, rgb(7 16 31 / 0%) 0%, rgb(7 16 31 / 84%) 100%);
 }
@@ -314,7 +314,7 @@ button:disabled {
 
 .file-input input {
   position: absolute;
-  inset: auto 0 0 0;
+  inset: auto 0 0;
   height: 42px;
   opacity: 0;
   cursor: pointer;

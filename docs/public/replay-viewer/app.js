@@ -187,8 +187,10 @@ function validateReplayDocument(document) {
 function normalizeReplayDocument(document) {
   const events = Array.isArray(document.events)
     ? [...document.events].sort((left, right) => {
-        if (left.startTime !== right.startTime) {
-          return left.startTime - right.startTime;
+        const leftTime = playbackTimeForEvent(left);
+        const rightTime = playbackTimeForEvent(right);
+        if (leftTime !== rightTime) {
+          return leftTime - rightTime;
         }
         return (left.sequence ?? 0) - (right.sequence ?? 0);
       })
@@ -202,6 +204,15 @@ function normalizeReplayDocument(document) {
     topology,
     events
   };
+}
+
+function playbackTimeForEvent(event) {
+  if (!event) {
+    return 0;
+  }
+  return event.event === "success" || event.event === "error"
+    ? (event.endTime ?? event.startTime)
+    : event.startTime;
 }
 
 function augmentTopologyWithDisplayNodes(topology, includeRejectNodes = true) {
@@ -1451,7 +1462,7 @@ function processEvent(event) {
 function processEventsUntil(timeSeconds) {
   while (nextEventCursor < replayDocument.events.length) {
     const event = replayDocument.events[nextEventCursor];
-    if (event.startTime > timeSeconds) {
+    if (playbackTimeForEvent(event) > timeSeconds) {
       break;
     }
     processEvent(event);
@@ -1478,7 +1489,7 @@ function rebuildPlaybackToCursor(targetCursor) {
   currentTimeSeconds = 0;
   for (let index = 0; index < safeCursor; index += 1) {
     const event = replayDocument.events[index];
-    currentTimeSeconds = Math.max(currentTimeSeconds, event.startTime);
+    currentTimeSeconds = Math.max(currentTimeSeconds, playbackTimeForEvent(event));
     processEvent(event);
     nextEventCursor = index + 1;
   }
@@ -1667,7 +1678,7 @@ function stepForwardOneEvent() {
   isPlaying = false;
   isFinishingEffects = false;
   const nextEvent = replayDocument.events[nextEventCursor];
-  currentTimeSeconds = nextEvent.startTime;
+  currentTimeSeconds = playbackTimeForEvent(nextEvent);
   processEvent(nextEvent);
   nextEventCursor += 1;
   updateParticles(currentTimeSeconds);
