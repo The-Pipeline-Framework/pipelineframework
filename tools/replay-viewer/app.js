@@ -32,12 +32,12 @@ const loadProgress = document.getElementById("loadProgress");
 const loadProgressFill = document.getElementById("loadProgressFill");
 const loadProgressText = document.getElementById("loadProgressText");
 const runParametersContent = document.getElementById("runParametersContent");
-const CAMERA_PADDING = 1.24;
-const BASE_NODE_RADIUS = 0.82;
-const BRANCH_NODE_RADIUS = 0.74;
-const BASE_LABEL_HEIGHT = 0.88;
-const LABEL_OFFSET_Y = 1.28;
-const COUNTER_LABEL_HEIGHT = 0.5;
+const CAMERA_PADDING = 1.2;
+const BASE_NODE_RADIUS = 0.68;
+const BRANCH_NODE_RADIUS = 0.6;
+const BASE_LABEL_HEIGHT = 0.8;
+const LABEL_OFFSET_Y = 1.12;
+const COUNTER_LABEL_HEIGHT = 0.44;
 const PRIMARY_ROW_Y = 2.45;
 const BRANCH_ROW_OFFSET_Y = 2.05;
 const BUILT_IN_REPLAYS = new Map([
@@ -654,7 +654,7 @@ function buildTopology(topology) {
     sideEffectsByParent.get(parentStep).push(step);
   }
 
-  const spacing = baseSteps.length > 4 ? 3 : 3.8;
+  const spacing = baseSteps.length > 4 ? 3.5 : 4.35;
   const totalWidth = Math.max(0, (baseSteps.length - 1) * spacing);
   baseSteps.forEach((step, index) => {
     const x = index * spacing - totalWidth / 2;
@@ -764,7 +764,7 @@ function registerNode(step, position) {
         borderStyle: null,
         height: 0.24
       });
-      rejectSprite.position.copy(position).add(new THREE.Vector3(0, -0.34, 0));
+      rejectSprite.position.copy(position).add(new THREE.Vector3(0, -0.3, 0));
       scene.add(rejectSprite);
       nodeValueSprites.set(step.step, rejectSprite);
     }
@@ -792,7 +792,7 @@ function buildStepLabelSprite(stepName) {
 }
 
 function buildPluginIconSprite(step) {
-  return buildIconSprite(step.pluginKind, step.pluginKind === "reject" ? 0.64 : 0.86);
+  return buildIconSprite(step.pluginKind, step.pluginKind === "reject" ? 0.54 : 0.72);
 }
 
 function buildTextSprite(text, options = {}) {

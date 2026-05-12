@@ -133,7 +133,9 @@ final class ExecutionReplayTracker {
             return;
         }
         attachInput(scope, inputItem);
-        startIfNecessary(scope);
+        if (shouldStartOnInput(scope)) {
+            startIfNecessary(scope);
+        }
     }
 
     void recordOutput(StepExecutionScope scope, Object outputItem) {
@@ -182,7 +184,11 @@ final class ExecutionReplayTracker {
             return;
         }
         StepExecutionScope scope = resolveActiveScope(runtimeStepClass, spanId);
-        if (scope == null || !scope.started()) {
+        if (scope == null) {
+            return;
+        }
+        startIfNecessary(scope);
+        if (!scope.started()) {
             return;
         }
         int attempt = scope.retryAttempt().incrementAndGet();
@@ -265,8 +271,9 @@ final class ExecutionReplayTracker {
         }
         ItemLineage lineage = lookupOrCreateLineage(scope.runContext(), inputItem);
         scope.inputLineages().add(lineage);
-        if (scope.primaryInput() == null) {
-            scope.primaryInput(lineage);
+        if (scope.firstInputObservedAt() == null) {
+            scope.firstInputObservedAt(Instant.now());
+            scope.firstInputObservedNanos(System.nanoTime());
         }
     }
 
@@ -274,27 +281,31 @@ final class ExecutionReplayTracker {
         if (!enabled() || scope == null || scope.started()) {
             return;
         }
+        ItemLineage parentLineage = resolvePrimaryInput(scope);
+        scope.primaryInput(parentLineage);
         Context parentContext = scope.runContext().context();
-        ItemLineage parentLineage = scope.primaryInput();
         if (parentLineage != null && parentLineage.lastSpanContext() != null && parentLineage.lastSpanContext().isValid()) {
             parentContext = parentContext.with(Span.wrap(parentLineage.lastSpanContext()));
         }
-        Span span = tracer.spanBuilder("tpf.step")
+        var spanBuilder = tracer.spanBuilder("tpf.step")
             .setParent(parentContext)
             .setSpanKind(SpanKind.INTERNAL)
             .setAttribute("tpf.step.class", scope.runtimeStepClass())
             .setAttribute("tpf.step", scope.descriptor().step())
             .setAttribute("tpf.service", scope.descriptor().service())
             .setAttribute("tpf.pipeline", topology.pipeline())
-            .setAttribute("tpf.cardinality", scope.descriptor().cardinality())
-            .startSpan();
+            .setAttribute("tpf.cardinality", scope.descriptor().cardinality());
+        if (scope.firstInputObservedAt() != null) {
+            spanBuilder.setStartTimestamp(scope.firstInputObservedAt());
+        }
+        Span span = spanBuilder.startSpan();
         scope.span(span);
         SpanContext spanContext = span.getSpanContext();
         SpanContext parentSpanContext = Span.fromContext(parentContext).getSpanContext();
         scope.traceId(spanContext.getTraceId());
         scope.spanId(spanContext.getSpanId());
         scope.parentSpanId(parentSpanContext != null && parentSpanContext.isValid() ? parentSpanContext.getSpanId() : null);
-        long startNanos = System.nanoTime();
+        long startNanos = scope.firstInputObservedNanos() > 0L ? scope.firstInputObservedNanos() : System.nanoTime();
         scope.startNanos(startNanos);
         scope.startSeconds(secondsSinceRunStart(scope.runContext(), startNanos));
         scope.started(true);
@@ -363,6 +374,19 @@ final class ExecutionReplayTracker {
             .filter(lineage -> lineage != null && lineage.itemId() != null)
             .sorted(Comparator.comparing(ItemLineage::itemId))
             .toList();
+    }
+
+    private ItemLineage resolvePrimaryInput(StepExecutionScope scope) {
+        List<ItemLineage> inputs = orderedInputs(scope.inputLineages());
+        return inputs.isEmpty() ? null : inputs.getFirst();
+    }
+
+    private boolean shouldStartOnInput(StepExecutionScope scope) {
+        if (scope == null) {
+            return false;
+        }
+        String cardinality = scope.descriptor().cardinality();
+        return !"many-to-one".equals(cardinality) && !"many-to-many".equals(cardinality);
     }
 
     private ItemLineage lookupOrCreateLineage(PipelineTelemetry.RunContext runContext, Object item) {
@@ -547,7 +571,11 @@ final class ExecutionReplayTracker {
     }
 
     void recordCacheHit(StepExecutionScope scope) {
-        if (!enabled() || scope == null || !scope.started()) {
+        if (!enabled() || scope == null) {
+            return;
+        }
+        startIfNecessary(scope);
+        if (!scope.started()) {
             return;
         }
         PipelineReplayTopology.Step cacheStep = resolvePluginStep(scope.descriptor().step(), "cache");
@@ -585,7 +613,11 @@ final class ExecutionReplayTracker {
             return;
         }
         StepExecutionScope scope = resolveActiveScope(runtimeStepClass, spanId);
-        if (scope == null || !scope.started()) {
+        if (scope == null) {
+            return;
+        }
+        startIfNecessary(scope);
+        if (!scope.started()) {
             return;
         }
         PipelineReplayTopology.Step rejectStep = resolvePluginStep(scope.descriptor().step(), "reject");
@@ -726,6 +758,8 @@ final class ExecutionReplayTracker {
         private final AtomicLong outputSequence;
         private final AtomicInteger retryAttempt;
         private ItemLineage primaryInput;
+        private Instant firstInputObservedAt;
+        private long firstInputObservedNanos;
         private Span span;
         private long startNanos;
         private double startSeconds;
@@ -811,6 +845,22 @@ final class ExecutionReplayTracker {
 
         void primaryInput(ItemLineage primaryInput) {
             this.primaryInput = primaryInput;
+        }
+
+        Instant firstInputObservedAt() {
+            return firstInputObservedAt;
+        }
+
+        void firstInputObservedAt(Instant firstInputObservedAt) {
+            this.firstInputObservedAt = firstInputObservedAt;
+        }
+
+        long firstInputObservedNanos() {
+            return firstInputObservedNanos;
+        }
+
+        void firstInputObservedNanos(long firstInputObservedNanos) {
+            this.firstInputObservedNanos = firstInputObservedNanos;
         }
 
         Span span() {
