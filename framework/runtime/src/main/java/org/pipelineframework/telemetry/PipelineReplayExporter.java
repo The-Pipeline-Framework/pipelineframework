@@ -24,6 +24,7 @@ import java.time.Instant;
 public interface PipelineReplayExporter {
 
     default void runStarted(
+        String runId,
         String pipeline,
         Instant startedAt,
         PipelineReplayRunParameters runParameters,
@@ -31,10 +32,11 @@ public interface PipelineReplayExporter {
     ) {
     }
 
-    default void emit(PipelineExecutionEvent event) {
+    default void emit(String runId, PipelineExecutionEvent event) {
     }
 
     default void runCompleted(
+        String runId,
         String pipeline,
         Instant startedAt,
         long durationMs,
@@ -42,6 +44,7 @@ public interface PipelineReplayExporter {
     }
 
     default void runFailed(
+        String runId,
         String pipeline,
         Instant startedAt,
         long durationMs,

@@ -53,12 +53,13 @@ class ProcessAckPaymentSentServiceTest {
 
     @Test
     void rejectedProviderStatusBecomesNonRetryableFailure() {
+        UUID paymentRecordId = UUID.fromString("00000000-0000-0000-0000-000000000101");
         PaymentStatus rejectedStatus =
                 new PaymentStatus()
                         .setStatus("Rejected")
                         .setReference("ref-101")
                         .setMessage("Rejected by provider")
-                        .setPaymentRecordId(UUID.randomUUID())
+                        .setPaymentRecordId(paymentRecordId)
                         .setAckPaymentSentId(UUID.randomUUID())
                         .setFee(BigDecimal.ONE);
 
@@ -66,7 +67,7 @@ class ProcessAckPaymentSentServiceTest {
                 new ProcessAckPaymentSentService(ack -> Uni.createFrom().item(rejectedStatus));
 
         UniAssertSubscriber<PaymentStatus> subscriber =
-                service.process(testAck()).subscribe().withSubscriber(UniAssertSubscriber.create());
+                service.process(testAck(paymentRecordId)).subscribe().withSubscriber(UniAssertSubscriber.create());
 
         subscriber.awaitFailure();
         Throwable failure = subscriber.getFailure();
@@ -75,9 +76,14 @@ class ProcessAckPaymentSentServiceTest {
                 nonRetryable
                         .getMessage()
                         .contains("Payment provider returned terminal status 'Rejected'"));
+        assertTrue(nonRetryable.getMessage().contains(paymentRecordId.toString()));
     }
 
     private static AckPaymentSent testAck() {
-        return new AckPaymentSent(UUID.randomUUID()).setPaymentRecordId(UUID.randomUUID());
+        return testAck(UUID.randomUUID());
+    }
+
+    private static AckPaymentSent testAck(UUID paymentRecordId) {
+        return new AckPaymentSent(UUID.randomUUID()).setPaymentRecordId(paymentRecordId);
     }
 }

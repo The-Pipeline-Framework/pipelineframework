@@ -92,7 +92,7 @@ public record PipelineReplayTopology(
                 }
             }
         }
-        return Map.copyOf(ordered);
+        return java.util.Collections.unmodifiableMap(ordered);
     }
 
     /**

@@ -810,6 +810,12 @@ abstract class AbstractCsvPaymentsEndToEnd {
     void providerRejectsAreRoutedToRejectSink() throws Exception {
         assumeTrue(runProviderRejectScenario(), "Provider-reject scenario disabled for this E2E class.");
         assumeTrue(
+                TELEMETRY_CAPTURE_ACTIVE,
+                "Provider-reject replay assertions require telemetry capture in modular layout.");
+        assumeFalse(
+                TELEMETRY_HAPPY_PATH_ONLY,
+                "Telemetry capture mode runs only the happy-path E2E by default.");
+        assumeTrue(
                 configuredPollRejectProbability() > 0.0d,
                 "Provider-reject scenario requires csv-payments.payment-provider.poll-reject-probability > 0.");
         LOG.info("Running provider-reject end-to-end test");
@@ -1352,7 +1358,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
             return true;
         }
         long currentRecords = outputRecordCount(Paths.get(TEST_E2E_DIR));
-        long expectedRecords = expectedPaymentRecordCount();
+        long expectedRecords = expectedOutputRecordCount();
         if (currentRecords >= expectedRecords) {
             LOG.infof(
                     "Output record count reached expected custom input count: %,d/%s",
@@ -1362,6 +1368,47 @@ abstract class AbstractCsvPaymentsEndToEnd {
         }
         LOG.infof("Waiting for output records: %,d/%,d", currentRecords, expectedRecords);
         return false;
+    }
+
+    private long expectedOutputRecordCount() throws IOException {
+        long inputRecords = expectedPaymentRecordCount();
+        if (!runProviderRejectScenario()) {
+            return inputRecords;
+        }
+        double rejectProbability = configuredPollRejectProbability();
+        if (rejectProbability <= 0.0d) {
+            return inputRecords;
+        }
+        long expectedRejects = expectedProviderRejectCount(rejectProbability);
+        return Math.max(0L, inputRecords - expectedRejects);
+    }
+
+    private long expectedProviderRejectCount(double rejectProbability) throws IOException {
+        if (!CUSTOM_INPUT_FILE) {
+            return 0L;
+        }
+        try (Stream<String> lines = Files.lines(Paths.get(CSV_E2E_INPUT_FILE))) {
+            return lines.skip(1)
+                    .map(String::trim)
+                    .filter(line -> !line.isBlank())
+                    .map(line -> line.split(",", 2))
+                    .filter(columns -> columns.length > 0 && !columns[0].isBlank())
+                    .map(columns -> columns[0].trim())
+                    .filter(csvId -> shouldSimulateProviderReject(rejectProbability, csvId))
+                    .count();
+        }
+    }
+
+    private static boolean shouldSimulateProviderReject(double probability, String simulationKey) {
+        if (probability <= 0.0d) {
+            return false;
+        }
+        if (probability >= 1.0d) {
+            return true;
+        }
+        long normalized = Integer.toUnsignedLong(java.util.Objects.hash(simulationKey, "poll-reject"));
+        long threshold = Math.round(probability * 10_000d);
+        return normalized % 10_000L < threshold;
     }
 
     private void logPipelineTimeoutDiagnostics(long startTimeMillis) {

@@ -364,13 +364,19 @@ class SearchReplayEndToEndIT {
     }
 
     private static PipelineReplayDocument mergeReplayDocuments(Path replayDir, Path outputFile) throws Exception {
-        List<Path> replayFiles = Files.list(replayDir)
-            .filter(path -> path.getFileName().toString().endsWith(".json"))
-            .sorted()
-            .toList();
+        List<Path> replayFiles;
+        try (var files = Files.list(replayDir)) {
+            replayFiles = files
+                .filter(path -> path.getFileName().toString().endsWith(".json"))
+                .sorted()
+                .toList();
+        }
         List<PipelineReplayDocument> documents = new ArrayList<>();
         for (Path replayFile : replayFiles) {
             documents.add(PipelineJson.mapper().readValue(replayFile.toFile(), PipelineReplayDocument.class));
+        }
+        if (documents.isEmpty()) {
+            throw new IllegalStateException("No replay documents found in " + replayDir);
         }
         documents.sort(Comparator.comparing(PipelineReplayDocument::startedAt));
         PipelineReplayDocument first = documents.getFirst();
@@ -422,7 +428,33 @@ class SearchReplayEndToEndIT {
             }
             long leftSequence = left.sequence() == null ? 0 : left.sequence();
             long rightSequence = right.sequence() == null ? 0 : right.sequence();
-            return Long.compare(leftSequence, rightSequence);
+            int sequenceComparison = Long.compare(leftSequence, rightSequence);
+            if (sequenceComparison != 0) {
+                return sequenceComparison;
+            }
+            int itemComparison = nullSafe(left.itemId()).compareTo(nullSafe(right.itemId()));
+            if (itemComparison != 0) {
+                return itemComparison;
+            }
+            int eventComparison = nullSafe(left.event()).compareTo(nullSafe(right.event()));
+            if (eventComparison != 0) {
+                return eventComparison;
+            }
+            int traceComparison = nullSafe(left.traceId()).compareTo(nullSafe(right.traceId()));
+            if (traceComparison != 0) {
+                return traceComparison;
+            }
+            int spanComparison = nullSafe(left.spanId()).compareTo(nullSafe(right.spanId()));
+            if (spanComparison != 0) {
+                return spanComparison;
+            }
+            int attemptComparison = Integer.compare(
+                left.attempt() == null ? 0 : left.attempt(),
+                right.attempt() == null ? 0 : right.attempt());
+            if (attemptComparison != 0) {
+                return attemptComparison;
+            }
+            return nullSafe(left.step()).compareTo(nullSafe(right.step()));
         });
 
         List<PipelineExecutionEvent> renumbered = new ArrayList<>(shiftedEvents.size());
@@ -470,6 +502,10 @@ class SearchReplayEndToEndIT {
         try (var stream = Files.list(replayDir)) {
             return stream.filter(path -> path.getFileName().toString().endsWith(".json")).count();
         }
+    }
+
+    private static String nullSafe(String value) {
+        return value == null ? "" : value;
     }
 
     private static void clearReplayDirectory() throws IOException {

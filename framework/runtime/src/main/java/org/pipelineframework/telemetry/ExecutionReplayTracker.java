@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -59,8 +58,9 @@ final class ExecutionReplayTracker {
     private final DoubleHistogram transitionLatency;
     private final Map<String, PipelineReplayTopology.Step> stepsByRuntimeClass;
     private final Map<String, PipelineReplayTopology.Transition> inboundByRuntimeClass;
-    private final Map<String, PipelineReplayTopology.Transition> outboundByRuntimeClass;
-    private final ConcurrentMap<String, ConcurrentLinkedDeque<StepExecutionScope>> activeScopesByStep;
+    private final Map<String, List<PipelineReplayTopology.Transition>> outboundByRuntimeClass;
+    private final ConcurrentMap<String, StepExecutionScope> activeScopesBySpanId;
+    private final ConcurrentMap<String, java.util.Set<StepExecutionScope>> activeScopesByStepClass;
 
     ExecutionReplayTracker(
         Tracer tracer,
@@ -77,7 +77,8 @@ final class ExecutionReplayTracker {
         this.stepsByRuntimeClass = topology == null ? Map.of() : topology.stepsByRuntimeClass();
         this.inboundByRuntimeClass = indexInbound(topology);
         this.outboundByRuntimeClass = indexOutbound(topology);
-        this.activeScopesByStep = new ConcurrentHashMap<>();
+        this.activeScopesBySpanId = new ConcurrentHashMap<>();
+        this.activeScopesByStepClass = new ConcurrentHashMap<>();
     }
 
     boolean enabled() {
@@ -88,21 +89,21 @@ final class ExecutionReplayTracker {
         if (!enabled() || runContext == null || runContext.replayState() == null) {
             return;
         }
-        exporter.runStarted(topology.pipeline(), runContext.startedAt(), runContext.runParameters(), topology);
+        exporter.runStarted(runContext.runId(), topology.pipeline(), runContext.startedAt(), runContext.runParameters(), topology);
     }
 
     void runCompleted(PipelineTelemetry.RunContext runContext, long durationMs) {
         if (!enabled() || runContext == null || runContext.replayState() == null) {
             return;
         }
-        exporter.runCompleted(topology.pipeline(), runContext.startedAt(), durationMs, topology);
+        exporter.runCompleted(runContext.runId(), topology.pipeline(), runContext.startedAt(), durationMs, topology);
     }
 
     void runFailed(PipelineTelemetry.RunContext runContext, long durationMs, Throwable failure) {
         if (!enabled() || runContext == null || runContext.replayState() == null) {
             return;
         }
-        exporter.runFailed(topology.pipeline(), runContext.startedAt(), durationMs, topology, failure);
+        exporter.runFailed(runContext.runId(), topology.pipeline(), runContext.startedAt(), durationMs, topology, failure);
     }
 
     StepExecutionScope beginStep(
@@ -144,7 +145,7 @@ final class ExecutionReplayTracker {
         if (outputLineage == null) {
             return;
         }
-        PipelineReplayTopology.Transition outbound = scope.outbound();
+        PipelineReplayTopology.Transition outbound = selectDataFlowTransition(scope);
         double nowSeconds = secondsSinceRunStart(scope.runContext(), System.nanoTime());
         if (outbound != null) {
             long latencyMs = Math.max(0L, Math.round((System.nanoTime() - scope.startNanos()) / 1_000_000d));
@@ -167,7 +168,7 @@ final class ExecutionReplayTracker {
             null,
             null,
             Map.of());
-        exporter.emit(event);
+        exporter.emit(scope.runContext().runId(), event);
         addSpanEvent(scope.span(), "tpf.step.emit", Attributes.builder()
             .put(PIPELINE, topology.pipeline())
             .put(SOURCE_STEP, scope.descriptor().step())
@@ -176,15 +177,11 @@ final class ExecutionReplayTracker {
             .build());
     }
 
-    void recordRetry(String runtimeStepClass, Throwable failure) {
+    void recordRetry(String runtimeStepClass, String spanId, Throwable failure) {
         if (!enabled() || runtimeStepClass == null) {
             return;
         }
-        ConcurrentLinkedDeque<StepExecutionScope> scopes = activeScopesByStep.get(runtimeStepClass);
-        if (scopes == null) {
-            return;
-        }
-        StepExecutionScope scope = scopes.peekLast();
+        StepExecutionScope scope = resolveActiveScope(runtimeStepClass, spanId);
         if (scope == null || !scope.started()) {
             return;
         }
@@ -207,7 +204,7 @@ final class ExecutionReplayTracker {
             failure == null ? null : failure.getClass().getName(),
             failure == null ? null : failure.getMessage(),
             Map.of());
-        exporter.emit(event);
+        exporter.emit(scope.runContext().runId(), event);
         addSpanEvent(scope.span(), "tpf.step.retry", Attributes.builder()
             .put(PIPELINE, topology.pipeline())
             .put(TARGET_STEP, scope.descriptor().step())
@@ -249,7 +246,7 @@ final class ExecutionReplayTracker {
                 failure == null ? null : failure.getClass().getName(),
                 failure == null ? null : failure.getMessage(),
                 Map.of());
-            exporter.emit(event);
+            exporter.emit(scope.runContext().runId(), event);
             addSpanEvent(scope.span(), failure == null ? "tpf.step.success" : "tpf.step.error",
                 Attributes.builder()
                     .put(PIPELINE, topology.pipeline())
@@ -301,8 +298,9 @@ final class ExecutionReplayTracker {
         scope.startNanos(startNanos);
         scope.startSeconds(secondsSinceRunStart(scope.runContext(), startNanos));
         scope.started(true);
-        activeScopesByStep
-            .computeIfAbsent(scope.runtimeStepClass(), ignored -> new ConcurrentLinkedDeque<>())
+        activeScopesBySpanId.put(scope.spanId(), scope);
+        activeScopesByStepClass
+            .computeIfAbsent(scope.runtimeStepClass(), ignored -> ConcurrentHashMap.newKeySet())
             .add(scope);
         PipelineExecutionEvent event = newEvent(
             scope,
@@ -321,7 +319,7 @@ final class ExecutionReplayTracker {
             null,
             null,
             Map.of());
-        exporter.emit(event);
+        exporter.emit(scope.runContext().runId(), event);
         addSpanEvent(span, "tpf.step.start", Attributes.builder()
             .put(PIPELINE, topology.pipeline())
             .put(TARGET_STEP, scope.descriptor().step())
@@ -392,14 +390,49 @@ final class ExecutionReplayTracker {
     }
 
     private void removeScope(StepExecutionScope scope) {
-        ConcurrentLinkedDeque<StepExecutionScope> scopes = activeScopesByStep.get(scope.runtimeStepClass());
-        if (scopes == null) {
-            return;
+        if (scope.spanId() != null) {
+            activeScopesBySpanId.remove(scope.spanId(), scope);
         }
-        scopes.remove(scope);
-        if (scopes.isEmpty()) {
-            activeScopesByStep.remove(scope.runtimeStepClass(), scopes);
+        java.util.Set<StepExecutionScope> scopes = activeScopesByStepClass.get(scope.runtimeStepClass());
+        if (scopes != null) {
+            scopes.remove(scope);
+            if (scopes.isEmpty()) {
+                activeScopesByStepClass.remove(scope.runtimeStepClass(), scopes);
+            }
         }
+    }
+
+    private PipelineReplayTopology.Transition selectDataFlowTransition(StepExecutionScope scope) {
+        if (scope == null || scope.outbounds() == null || scope.outbounds().isEmpty()) {
+            return null;
+        }
+        for (PipelineReplayTopology.Transition transition : scope.outbounds()) {
+            if (transition == null) {
+                continue;
+            }
+            PipelineReplayTopology.Step target = descriptor(transition.toRuntimeStepClass());
+            if (!target.sideEffect()) {
+                return transition;
+            }
+        }
+        return scope.outbounds().getFirst();
+    }
+
+    private StepExecutionScope resolveActiveScope(String runtimeStepClass, String spanId) {
+        if (spanId != null && !spanId.isBlank()) {
+            StepExecutionScope bySpan = activeScopesBySpanId.get(spanId);
+            if (bySpan != null) {
+                return bySpan;
+            }
+        }
+        if (runtimeStepClass == null) {
+            return null;
+        }
+        java.util.Set<StepExecutionScope> scopes = activeScopesByStepClass.get(runtimeStepClass);
+        if (scopes == null || scopes.size() != 1) {
+            return null;
+        }
+        return scopes.iterator().next();
     }
 
     private void recordTransitionMetrics(PipelineReplayTopology.Transition transition, long latencyMs) {
@@ -454,7 +487,7 @@ final class ExecutionReplayTracker {
         return inboundByRuntimeClass.get(runtimeStepClass);
     }
 
-    private PipelineReplayTopology.Transition outbound(String runtimeStepClass) {
+    private List<PipelineReplayTopology.Transition> outbound(String runtimeStepClass) {
         return outboundByRuntimeClass.get(runtimeStepClass);
     }
 
@@ -471,17 +504,19 @@ final class ExecutionReplayTracker {
         return Map.copyOf(inbound);
     }
 
-    private Map<String, PipelineReplayTopology.Transition> indexOutbound(PipelineReplayTopology topology) {
+    private Map<String, List<PipelineReplayTopology.Transition>> indexOutbound(PipelineReplayTopology topology) {
         if (topology == null || topology.transitions() == null) {
             return Map.of();
         }
-        LinkedHashMap<String, PipelineReplayTopology.Transition> outbound = new LinkedHashMap<>();
+        LinkedHashMap<String, List<PipelineReplayTopology.Transition>> outbound = new LinkedHashMap<>();
         for (PipelineReplayTopology.Transition transition : topology.transitions()) {
             if (transition != null && transition.fromRuntimeStepClass() != null) {
-                outbound.put(transition.fromRuntimeStepClass(), transition);
+                outbound.computeIfAbsent(transition.fromRuntimeStepClass(), ignored -> new ArrayList<>()).add(transition);
             }
         }
-        return Map.copyOf(outbound);
+        LinkedHashMap<String, List<PipelineReplayTopology.Transition>> ordered = new LinkedHashMap<>();
+        outbound.forEach((key, value) -> ordered.put(key, List.copyOf(value)));
+        return java.util.Collections.unmodifiableMap(ordered);
     }
 
     private double secondsSinceRunStart(PipelineTelemetry.RunContext runContext, long nanos) {
@@ -520,7 +555,7 @@ final class ExecutionReplayTracker {
             return;
         }
         double nowSeconds = secondsSinceRunStart(scope.runContext(), System.nanoTime());
-        exporter.emit(newEvent(
+        exporter.emit(scope.runContext().runId(), newEvent(
             scope,
             scope.eventItemId(),
             scope.descriptor().step(),
@@ -545,15 +580,11 @@ final class ExecutionReplayTracker {
             .build());
     }
 
-    void recordReject(String runtimeStepClass, String rejectScope, String errorType, String errorMessage) {
+    void recordReject(String runtimeStepClass, String spanId, String rejectScope, String errorType, String errorMessage) {
         if (!enabled() || runtimeStepClass == null) {
             return;
         }
-        ConcurrentLinkedDeque<StepExecutionScope> scopes = activeScopesByStep.get(runtimeStepClass);
-        if (scopes == null) {
-            return;
-        }
-        StepExecutionScope scope = scopes.peekLast();
+        StepExecutionScope scope = resolveActiveScope(runtimeStepClass, spanId);
         if (scope == null || !scope.started()) {
             return;
         }
@@ -561,7 +592,7 @@ final class ExecutionReplayTracker {
         String rejectStepName = rejectStep == null ? "Rejects " + scope.descriptor().step() : rejectStep.step();
         String rejectService = rejectStep == null ? "RejectQueue" : rejectStep.service();
         double nowSeconds = secondsSinceRunStart(scope.runContext(), System.nanoTime());
-        exporter.emit(newEvent(
+        exporter.emit(scope.runContext().runId(), newEvent(
             scope,
             scope.eventItemId(),
             rejectStepName,
@@ -688,7 +719,7 @@ final class ExecutionReplayTracker {
         private final String runtimeStepClass;
         private final PipelineReplayTopology.Step descriptor;
         private final PipelineReplayTopology.Transition inbound;
-        private final PipelineReplayTopology.Transition outbound;
+        private final List<PipelineReplayTopology.Transition> outbounds;
         private final PipelineTelemetry.RunContext runContext;
         private final boolean perItemOperation;
         private final List<ItemLineage> inputLineages;
@@ -707,14 +738,14 @@ final class ExecutionReplayTracker {
             String runtimeStepClass,
             PipelineReplayTopology.Step descriptor,
             PipelineReplayTopology.Transition inbound,
-            PipelineReplayTopology.Transition outbound,
+            List<PipelineReplayTopology.Transition> outbounds,
             PipelineTelemetry.RunContext runContext,
             boolean perItemOperation
         ) {
             this.runtimeStepClass = runtimeStepClass;
             this.descriptor = descriptor;
             this.inbound = inbound;
-            this.outbound = outbound;
+            this.outbounds = outbounds == null ? List.of() : List.copyOf(outbounds);
             this.runContext = runContext;
             this.perItemOperation = perItemOperation;
             this.inputLineages = new ArrayList<>();
@@ -750,8 +781,8 @@ final class ExecutionReplayTracker {
             return inbound;
         }
 
-        PipelineReplayTopology.Transition outbound() {
-            return outbound;
+        List<PipelineReplayTopology.Transition> outbounds() {
+            return outbounds;
         }
 
         PipelineTelemetry.RunContext runContext() {

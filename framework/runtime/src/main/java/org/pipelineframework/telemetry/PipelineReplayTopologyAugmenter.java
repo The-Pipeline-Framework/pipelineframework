@@ -17,6 +17,7 @@
 package org.pipelineframework.telemetry;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,15 +33,24 @@ final class PipelineReplayTopologyAugmenter {
         if (baseTopology == null || executionEvents == null || executionEvents.isEmpty()) {
             return baseTopology;
         }
-        List<PipelineReplayTopology.Step> mergedSteps = new ArrayList<>(baseTopology.steps());
-        List<PipelineReplayTopology.Transition> mergedTransitions = new ArrayList<>(baseTopology.transitions());
+        List<PipelineReplayTopology.Step> mergedSteps =
+            new ArrayList<>(baseTopology.steps() == null ? List.of() : baseTopology.steps());
+        List<PipelineReplayTopology.Transition> mergedTransitions =
+            new ArrayList<>(baseTopology.transitions() == null ? List.of() : baseTopology.transitions());
         Map<String, PipelineReplayTopology.Step> stepsByName = new LinkedHashMap<>();
         for (PipelineReplayTopology.Step step : mergedSteps) {
             stepsByName.put(step.step(), step);
         }
 
         int nextIndex = mergedSteps.stream().mapToInt(PipelineReplayTopology.Step::index).max().orElse(-1) + 1;
-        for (PipelineExecutionEvent event : executionEvents) {
+        List<PipelineExecutionEvent> orderedEvents = executionEvents.stream()
+            .sorted(
+                Comparator.comparingDouble(PipelineExecutionEvent::startTime)
+                    .thenComparing(event -> event.sequence() == null ? 0L : event.sequence())
+                    .thenComparing(event -> event.step() == null ? "" : event.step())
+                    .thenComparing(event -> event.service() == null ? "" : event.service()))
+            .toList();
+        for (PipelineExecutionEvent event : orderedEvents) {
             PipelineReplayTopology.Step step = stepsByName.get(event.step());
             if (step == null) {
                 boolean sideEffect = event.from() != null && (event.to() == null || event.to().equals(event.step()));

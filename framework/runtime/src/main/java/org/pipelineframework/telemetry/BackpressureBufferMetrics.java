@@ -131,10 +131,11 @@ public final class BackpressureBufferMetrics {
     }
 
     private static Attributes attributes(String stepClassName) {
+        String normalizedStepClass = normalizeStepClassName(stepClassName);
         AttributesBuilder builder = Attributes.builder()
-            .put(STEP_CLASS, stepClassName)
-            .put(STEP_PARENT, resolveStepParent(stepClassName));
-        PipelineReplayTopology.Step descriptor = resolveTopologySteps().get(stepClassName);
+            .put(STEP_CLASS, normalizedStepClass)
+            .put(STEP_PARENT, resolveStepParent(normalizedStepClass));
+        PipelineReplayTopology.Step descriptor = resolveTopologySteps().get(normalizedStepClass);
         if (descriptor != null) {
             String pipeline = resolvePipelineName();
             if (pipeline != null && !pipeline.isBlank()) {
@@ -166,6 +167,26 @@ public final class BackpressureBufferMetrics {
             }
         }
         return parents.getOrDefault(stepClassName, stepClassName);
+    }
+
+    private static String normalizeStepClassName(String stepClassName) {
+        if (stepClassName == null || stepClassName.isBlank()) {
+            return stepClassName;
+        }
+        if ((stepClassName.contains("_Subclass") || stepClassName.contains("$$") || stepClassName.contains("_ClientProxy"))
+            && stepClassName.contains(".")) {
+            int proxyIndex = stepClassName.indexOf("$$");
+            if (proxyIndex < 0) {
+                proxyIndex = stepClassName.indexOf("_Subclass");
+            }
+            if (proxyIndex < 0) {
+                proxyIndex = stepClassName.indexOf("_ClientProxy");
+            }
+            if (proxyIndex > 0) {
+                return stepClassName.substring(0, proxyIndex);
+            }
+        }
+        return stepClassName;
     }
 
     private static Map<String, PipelineReplayTopology.Step> resolveTopologySteps() {

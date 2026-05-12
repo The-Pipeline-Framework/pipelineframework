@@ -128,7 +128,7 @@
         "to": "ProcessIndexDocument",
         "fromService": "ProcessTokenizeContentService",
         "toService": "ProcessIndexDocumentService",
-        "cardinality": "many-to-one"
+        "cardinality": "one-to-many"
       },
       {
         "id": "index-persist",

@@ -25,8 +25,9 @@ import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -52,6 +53,7 @@ import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.api.metrics.ObservableLongMeasurement;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanKind;
+import io.opentelemetry.api.trace.SpanContext;
 import io.opentelemetry.api.trace.StatusCode;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Context;
@@ -137,9 +139,11 @@ public class PipelineTelemetry {
     private final ExecutionReplayTracker replayTracker;
     private final PipelineStepConfig stepConfig;
     private final RetryAmplificationGuard retryAmplificationGuard;
-    private final AtomicReference<RetryAmplificationMonitor> activeRetryAmplificationMonitor;
-    private final AtomicReference<RunContext> activeRunContext;
-    private static final AtomicReference<PipelineTelemetry> ACTIVE = new AtomicReference<>();
+    private final ConcurrentMap<String, RetryAmplificationMonitor> activeRetryAmplificationMonitors;
+    private final ConcurrentMap<String, RunContext> activeRunContexts;
+    private static final Set<PipelineTelemetry> ACTIVE_INSTANCES = ConcurrentHashMap.newKeySet();
+    private static final ConcurrentMap<String, PipelineTelemetry> ACTIVE_BY_TRACE_ID = new ConcurrentHashMap<>();
+    private static final AtomicReference<PipelineTelemetry> LAST_CREATED = new AtomicReference<>();
 
     /**
      * Create a telemetry helper from the configured pipeline settings.
@@ -231,9 +235,10 @@ public class PipelineTelemetry {
         this.itemBoundary = PipelineTelemetryResourceLoader.loadItemBoundary().orElse(null);
         this.stepParents = itemBoundary != null ? itemBoundary.stepParents() : Map.of();
         this.retryAmplificationGuard = new RetryAmplificationGuard();
-        this.activeRetryAmplificationMonitor = new AtomicReference<>();
-        this.activeRunContext = new AtomicReference<>();
-        ACTIVE.set(this);
+        this.activeRetryAmplificationMonitors = new ConcurrentHashMap<>();
+        this.activeRunContexts = new ConcurrentHashMap<>();
+        ACTIVE_INSTANCES.add(this);
+        LAST_CREATED.set(this);
         if (metricsEnabled) {
             this.pipelineRunCounter = meter.counterBuilder("tpf.pipeline.run.count")
                 .setDescription("Pipeline runs")
@@ -360,7 +365,9 @@ public class PipelineTelemetry {
             context = context.with(span);
         }
         Instant startedAt = Instant.now();
+        String runId = UUID.randomUUID().toString();
         RunContext runContext = new RunContext(
+            runId,
             context,
             span,
             System.nanoTime(),
@@ -379,7 +386,10 @@ public class PipelineTelemetry {
         if (replayTracker != null) {
             replayTracker.runStarted(runContext);
         }
-        activeRunContext.set(runContext);
+        activeRunContexts.put(runContext.runId(), runContext);
+        if (span != null && span.getSpanContext().isValid()) {
+            ACTIVE_BY_TRACE_ID.put(span.getSpanContext().getTraceId(), this);
+        }
         startRetryAmplificationMonitor(runContext);
         return runContext;
     }
@@ -562,11 +572,12 @@ public class PipelineTelemetry {
     }
 
     public void abortActiveRun(Throwable failure) {
-        RunContext runContext = activeRunContext.get();
-        if (runContext == null || !runContext.enabled()) {
-            return;
+        Throwable effectiveFailure = failure == null ? new IllegalStateException("Pipeline aborted.") : failure;
+        for (RunContext runContext : List.copyOf(activeRunContexts.values())) {
+            if (runContext != null && runContext.enabled()) {
+                endRun(runContext, effectiveFailure);
+            }
         }
-        endRun(runContext, failure == null ? new IllegalStateException("Pipeline aborted.") : failure);
     }
 
     /**
@@ -742,8 +753,11 @@ public class PipelineTelemetry {
         if (!runContext.endSignalled().compareAndSet(false, true)) {
             return;
         }
-        activeRunContext.compareAndSet(runContext, null);
-        stopRetryAmplificationMonitor();
+        activeRunContexts.remove(runContext.runId(), runContext);
+        if (runContext.span() != null && runContext.span().getSpanContext().isValid()) {
+            ACTIVE_BY_TRACE_ID.remove(runContext.span().getSpanContext().getTraceId(), this);
+        }
+        stopRetryAmplificationMonitor(runContext);
         long durationMs = Math.max(0L, Math.round(nanosToMillis(runContext.startNanos())));
         if (metricsEnabled) {
             double duration = nanosToMillis(runContext.startNanos());
@@ -964,14 +978,14 @@ public class PipelineTelemetry {
      * @param failure triggering failure
      */
     public static void recordRetry(Class<?> stepClass, Throwable failure) {
-        PipelineTelemetry telemetry = ACTIVE.get();
+        PipelineTelemetry telemetry = resolveActiveTelemetry();
         if (telemetry != null) {
             telemetry.recordRetryInternal(stepClass, failure);
         }
     }
 
     public static void recordReject(Class<?> stepClass, String rejectScope, Throwable failure) {
-        PipelineTelemetry telemetry = ACTIVE.get();
+        PipelineTelemetry telemetry = resolveActiveTelemetry();
         if (telemetry != null) {
             telemetry.recordRejectInternal(
                 stepClass,
@@ -982,7 +996,7 @@ public class PipelineTelemetry {
     }
 
     public static void recordReject(Class<?> stepClass, String rejectScope, String errorType, String errorMessage) {
-        PipelineTelemetry telemetry = ACTIVE.get();
+        PipelineTelemetry telemetry = resolveActiveTelemetry();
         if (telemetry != null) {
             telemetry.recordRejectInternal(stepClass, rejectScope, errorType, errorMessage);
         }
@@ -1001,11 +1015,13 @@ public class PipelineTelemetry {
     }
 
     public java.util.Optional<RetryAmplificationGuard.Trigger> retryAmplificationTrigger() {
-        RetryAmplificationMonitor monitor = activeRetryAmplificationMonitor.get();
-        if (monitor == null) {
-            return java.util.Optional.empty();
+        for (RetryAmplificationMonitor monitor : activeRetryAmplificationMonitors.values()) {
+            java.util.Optional<RetryAmplificationGuard.Trigger> triggered = monitor.triggered();
+            if (triggered.isPresent()) {
+                return triggered;
+            }
         }
-        return monitor.triggered();
+        return java.util.Optional.empty();
     }
 
     private void recordRetryInternal(Class<?> stepClass, Throwable failure) {
@@ -1021,7 +1037,11 @@ public class PipelineTelemetry {
             stepRetryCounter.add(1, stepAttributes(step));
         }
         if (replayTracker != null) {
-            replayTracker.recordRetry(step, failure);
+            SpanContext currentSpanContext = Span.current().getSpanContext();
+            replayTracker.recordRetry(
+                step,
+                currentSpanContext != null && currentSpanContext.isValid() ? currentSpanContext.getSpanId() : null,
+                failure);
         }
     }
 
@@ -1030,7 +1050,13 @@ public class PipelineTelemetry {
             return;
         }
         String step = resolveStepClassName(stepClass);
-        replayTracker.recordReject(step, rejectScope, errorType, errorMessage);
+        SpanContext currentSpanContext = Span.current().getSpanContext();
+        replayTracker.recordReject(
+            step,
+            currentSpanContext != null && currentSpanContext.isValid() ? currentSpanContext.getSpanId() : null,
+            rejectScope,
+            errorType,
+            errorMessage);
     }
 
     private void startRetryAmplificationMonitor(RunContext runContext) {
@@ -1038,15 +1064,15 @@ public class PipelineTelemetry {
             return;
         }
         RetryAmplificationMonitor monitor = new RetryAmplificationMonitor(runContext);
-        RetryAmplificationMonitor previous = activeRetryAmplificationMonitor.getAndSet(monitor);
-        if (previous != null) {
-            previous.stop();
-        }
+        activeRetryAmplificationMonitors.put(runContext.runId(), monitor);
         monitor.start();
     }
 
-    private void stopRetryAmplificationMonitor() {
-        RetryAmplificationMonitor monitor = activeRetryAmplificationMonitor.getAndSet(null);
+    private void stopRetryAmplificationMonitor(RunContext runContext) {
+        if (runContext == null) {
+            return;
+        }
+        RetryAmplificationMonitor monitor = activeRetryAmplificationMonitors.remove(runContext.runId());
         if (monitor != null) {
             monitor.stop();
         }
@@ -1072,7 +1098,29 @@ public class PipelineTelemetry {
         if (retryAmplificationScheduler != null) {
             retryAmplificationScheduler.shutdownNow();
         }
-        ACTIVE.compareAndSet(this, null);
+        ACTIVE_INSTANCES.remove(this);
+        LAST_CREATED.compareAndSet(this, null);
+        activeRunContexts.values().forEach(runContext -> {
+            if (runContext.span() != null && runContext.span().getSpanContext().isValid()) {
+                ACTIVE_BY_TRACE_ID.remove(runContext.span().getSpanContext().getTraceId(), this);
+            }
+        });
+        activeRunContexts.clear();
+        activeRetryAmplificationMonitors.clear();
+    }
+
+    private static PipelineTelemetry resolveActiveTelemetry() {
+        SpanContext currentSpanContext = Span.current().getSpanContext();
+        if (currentSpanContext != null && currentSpanContext.isValid()) {
+            PipelineTelemetry telemetry = ACTIVE_BY_TRACE_ID.get(currentSpanContext.getTraceId());
+            if (telemetry != null) {
+                return telemetry;
+            }
+        }
+        if (ACTIVE_INSTANCES.size() == 1) {
+            return ACTIVE_INSTANCES.iterator().next();
+        }
+        return LAST_CREATED.get();
     }
 
     private Duration resolveSampleInterval(Duration window) {
@@ -1195,6 +1243,7 @@ public class PipelineTelemetry {
     /**
      * Immutable run context used for pipeline telemetry.
      *
+     * @param runId unique run identifier
      * @param context parent context
      * @param span run span
      * @param startNanos start time
@@ -1212,6 +1261,7 @@ public class PipelineTelemetry {
      * @param endSignalled guards run-finalization so abort paths and normal completion cannot flush twice
      */
     public record RunContext(
+        String runId,
         Context context,
         Span span,
         long startNanos,
@@ -1230,6 +1280,7 @@ public class PipelineTelemetry {
 
         static RunContext disabled() {
             return new RunContext(
+                "disabled",
                 Context.current(),
                 null,
                 0L,

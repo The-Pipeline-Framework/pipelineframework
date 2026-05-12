@@ -111,7 +111,6 @@ public class PipelineTelemetryMetadataGenerator {
         List<ReplayTopologyStep> baseSteps = new ArrayList<>();
         Map<String, String> parentByPluginRuntimeClass = resolveStepParents(ctx, orderedBase);
         Map<String, List<PipelineStepModel>> sideEffectsByParent = new LinkedHashMap<>();
-        List<PipelineStepModel> unresolvedSideEffects = new ArrayList<>();
         for (PipelineStepModel model : orderedClientModels) {
             if (model == null || !model.sideEffect()) {
                 continue;
@@ -119,8 +118,7 @@ public class PipelineTelemetryMetadataGenerator {
             String pluginRuntimeClass = resolveClientStepClassName(model, ctx.getTransportMode());
             String parentRuntimeClass = parentByPluginRuntimeClass.get(pluginRuntimeClass);
             if (parentRuntimeClass == null) {
-                unresolvedSideEffects.add(model);
-                continue;
+                throw unresolvedSideEffect(model, "replay-topology", pluginRuntimeClass);
             }
             sideEffectsByParent.computeIfAbsent(parentRuntimeClass, ignored -> new ArrayList<>()).add(model);
         }
@@ -157,21 +155,6 @@ public class PipelineTelemetryMetadataGenerator {
                     logicalStep,
                     resolvePluginKind(sideEffectService, sideEffectStep)));
             }
-        }
-        for (PipelineStepModel sideEffect : unresolvedSideEffects) {
-            String sideEffectService = sideEffect.generatedName();
-            String sideEffectStep = sideEffectService.endsWith("Service")
-                ? sideEffectService.substring(0, sideEffectService.length() - "Service".length())
-                : sideEffectService;
-            steps.add(new ReplayTopologyStep(
-                resolveClientStepClassName(sideEffect, ctx.getTransportMode()),
-                sideEffectStep,
-                sideEffectService,
-                cardinality(sideEffect.streamingShape()),
-                index++,
-                true,
-                null,
-                resolvePluginKind(sideEffectService, sideEffectStep)));
         }
         List<ReplayTopologyTransition> transitions = new ArrayList<>();
         for (int i = 0; i < baseSteps.size() - 1; i++) {
@@ -613,13 +596,32 @@ public class PipelineTelemetryMetadataGenerator {
         for (PipelineStepModel plugin : pluginSteps) {
             PipelineStepModel parent = resolveParentForPlugin(plugin, orderedBase);
             if (parent == null) {
-                continue;
+                throw unresolvedSideEffect(plugin, "step-parent-resolution", resolveClientStepClassName(plugin, ctx.getTransportMode()));
             }
             parents.put(
                 resolveClientStepClassName(plugin, ctx.getTransportMode()),
                 resolveClientStepClassName(parent, ctx.getTransportMode()));
         }
         return parents;
+    }
+
+    private IllegalStateException unresolvedSideEffect(
+        PipelineStepModel model,
+        String phase,
+        String pluginRuntimeClass
+    ) {
+        return new IllegalStateException(
+            "Unable to resolve parent step for side-effect model serviceName='"
+                + (model == null ? "unknown" : model.serviceName())
+                + "', name='"
+                + (model == null ? "unknown" : model.generatedName())
+                + "', service='"
+                + (model == null ? "unknown" : model.serviceClassName())
+                + "', runtimeStepClass='"
+                + pluginRuntimeClass
+                + "', phase='"
+                + phase
+                + "'.");
     }
 
     private PipelineStepModel resolveParentForPlugin(PipelineStepModel plugin, List<PipelineStepModel> orderedBase) {

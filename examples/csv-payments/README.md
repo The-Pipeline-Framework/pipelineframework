@@ -45,7 +45,7 @@ The script uses the health endpoints (`/q/health`) of each service to determine 
 To generate replay JSON for the supported TPF replay viewer:
 
 ```bash
-cd /Users/mari/tpf4
+cd <repo-root>
 ./examples/csv-payments/build-modular-telemetry-images.sh
 ./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc \
   -Dcsv.e2e.telemetry.enabled=true \
@@ -61,13 +61,13 @@ The replay artifact is written to:
 For a smaller first pass, use the 1k input and relax the reader pacer:
 
 ```bash
-cd /Users/mari/tpf4
+cd <repo-root>
 ./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
   -Dcsv.e2e.telemetry.enabled=true \
   -Dquarkus.otel.traces.sampler.arg=1 \
   -Dcsv.e2e.reader-demand-pacer.rows-per-period=20 \
   -Dcsv.e2e.reader-demand-pacer.millis-period=1000 \
-  -Dcsv.e2e.input.file=/Users/mari/tpf4/examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
+  -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
   -Dcsv.e2e.pipeline.wait.seconds=1800 \
   -Dcsv.e2e.orchestrator.wait.seconds=1800 \
   -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \

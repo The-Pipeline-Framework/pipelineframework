@@ -17,6 +17,7 @@
 package org.pipelineframework.csv.service;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -136,7 +137,9 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
         ackPaymentSent.getId() != null ? ackPaymentSent.getId() : UUID.randomUUID());
     paymentStatus.setPaymentRecord(ackPaymentSent.getPaymentRecord());
     paymentStatus.setPaymentRecordId(
-        ackPaymentSent.getPaymentRecordId() != null ? ackPaymentSent.getPaymentRecordId() : UUID.randomUUID());
+        ackPaymentSent.getPaymentRecordId() != null
+            ? ackPaymentSent.getPaymentRecordId()
+            : stableFallbackPaymentRecordId(ackPaymentSent));
     return paymentStatus;
   }
 
@@ -181,5 +184,15 @@ public class PaymentProviderServiceMock implements PaymentProviderService {
       return ackPaymentSent.getConversationId().toString();
     }
     return "poll-unknown";
+  }
+
+  private static UUID stableFallbackPaymentRecordId(AckPaymentSent ackPaymentSent) {
+    String stableSource = String.join("|",
+        ackPaymentSent.getId() == null ? "" : ackPaymentSent.getId().toString(),
+        ackPaymentSent.getConversationId() == null ? "" : ackPaymentSent.getConversationId().toString(),
+        ackPaymentSent.getPaymentRecord() == null || ackPaymentSent.getPaymentRecord().getCsvId() == null
+            ? ""
+            : ackPaymentSent.getPaymentRecord().getCsvId());
+    return UUID.nameUUIDFromBytes(stableSource.getBytes(StandardCharsets.UTF_8));
   }
 }

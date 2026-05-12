@@ -15,13 +15,13 @@
 
             <div id="playerChrome" class="player-chrome" data-visible="true">
               <div class="player-controls">
-                <div class="player-controls__scrubber">
+                <div class="player-controls-scrubber">
                   <input id="timelineSlider" type="range" min="0" max="1000" step="1" value="0" aria-label="Replay timeline" />
                   <div id="playbackText" class="playback-time">0.00s / 0.10s</div>
                 </div>
 
-                <div class="player-controls__bar">
-                  <div class="player-controls__transport">
+                <div class="player-controls-bar">
+                  <div class="player-controls-transport">
                     <button id="playPauseButton" class="icon-button icon-button--transport" type="button" aria-label="Play replay" title="Play replay">▶</button>
                     <button id="stopButton" class="icon-button icon-button--transport" type="button" aria-label="Stop replay" title="Stop replay">⏹</button>
                     <button id="restartButton" class="icon-button icon-button--transport" type="button" aria-label="Restart replay" title="Restart replay">↺</button>
@@ -36,7 +36,7 @@
                     </fieldset>
                   </div>
 
-                  <div class="player-controls__utility">
+                  <div class="player-controls-utility">
                     <button id="sourceButton" class="icon-button" type="button" aria-haspopup="dialog" aria-controls="sourceModal" aria-label="Replay sources" title="Replay sources">☰</button>
                     <button id="infoButton" class="icon-button" type="button" aria-haspopup="dialog" aria-controls="infoModal" aria-label="Replay info" title="Replay info">ⓘ</button>
                     <button id="fullscreenButton" class="icon-button" type="button" aria-label="Full screen" title="Full screen">⛶</button>
@@ -44,10 +44,10 @@
                 </div>
 
                 <div id="loadProgress" class="load-progress" hidden>
-                  <div class="load-progress__bar">
-                    <div id="loadProgressFill" class="load-progress__fill"></div>
+                  <div class="load-progress-bar">
+                    <div id="loadProgressFill" class="load-progress-fill"></div>
                   </div>
-                  <div id="loadProgressText" class="load-progress__text">Loading replay...</div>
+                  <div id="loadProgressText" class="load-progress-text">Loading replay...</div>
                 </div>
               </div>
             </div>
@@ -65,13 +65,13 @@
     </div>
 
     <div id="sourceModal" class="info-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="sourceModalTitle">
-      <div class="info-modal__backdrop" data-close-modal="source"></div>
-      <div class="info-modal__panel info-modal__panel--compact">
-        <div class="info-modal__header">
+      <div class="info-modal-backdrop" data-close-modal="source"></div>
+      <div class="info-modal-panel info-modal-panel--compact">
+        <div class="info-modal-header">
           <h2 id="sourceModalTitle">Replay source</h2>
           <button id="sourceCloseButton" class="icon-button icon-button--close" type="button" aria-label="Close replay source" title="Close replay source">✕</button>
         </div>
-        <div class="info-modal__body info-modal__body--compact">
+        <div class="info-modal-body info-modal-body--compact">
           <label class="modal-field">
             <span>Replay source</span>
             <select id="datasetSelect" aria-label="Select replay source">
@@ -83,7 +83,7 @@
           </label>
           <label id="customReplayInputWrap" class="modal-field file-input" hidden aria-hidden="true">
             <span>Replay JSON file</span>
-            <span class="file-input__button">Choose file</span>
+            <span class="file-input-button">Choose file</span>
             <input id="replayFileInput" type="file" accept="application/json,.json" />
           </label>
           <button id="sourceApplyButton" type="button">Load dataset</button>
@@ -92,19 +92,19 @@
     </div>
 
     <div id="infoModal" class="info-modal" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="infoModalTitle">
-      <div class="info-modal__backdrop" data-close-modal="info"></div>
-      <div class="info-modal__panel">
-        <div class="info-modal__header">
+      <div class="info-modal-backdrop" data-close-modal="info"></div>
+      <div class="info-modal-panel">
+        <div class="info-modal-header">
           <h2 id="infoModalTitle">Replay info</h2>
           <button id="infoCloseButton" class="icon-button icon-button--close" type="button" aria-label="Close replay info" title="Close replay info">✕</button>
         </div>
-        <div class="info-modal__body">
+        <div class="info-modal-body">
           <section class="info-section info-section--run-parameters">
             <h3>Run parameters</h3>
             <div id="runParametersContent" class="run-parameters"></div>
           </section>
           <section class="info-section info-section--aux">
-            <div class="info-section__legend">
+            <div class="info-section-legend">
               <h3>Legend</h3>
               <div class="legend-list">
                 <div class="legend-item"><span class="legend-swatch legend-swatch--start"></span><span>start / success transit</span></div>

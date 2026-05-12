@@ -43,4 +43,7 @@ public record PipelineReplayDocument(
     PipelineReplayTopology topology,
     List<PipelineExecutionEvent> events
 ) {
+    public PipelineReplayDocument {
+        events = events == null ? List.of() : List.copyOf(events);
+    }
 }

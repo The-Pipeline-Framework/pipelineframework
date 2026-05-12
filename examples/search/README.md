@@ -25,7 +25,7 @@ This will compile all modules, run tests, and verify that there are no syntax or
 To produce a replay artifact for the supported TPF replay viewer:
 
 ```bash
-cd /Users/mari/tpf4
+cd <repo-root>
 ./examples/search/build-modular-replay-images.sh
 ./mvnw -f examples/search/pom.xml -pl orchestrator-svc -am \
   -Dtest=SearchReplayEndToEndIT \

@@ -17,6 +17,7 @@
 package org.pipelineframework.telemetry;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Replay-friendly execution event.
@@ -62,6 +63,6 @@ public record PipelineExecutionEvent(
     Integer attempt,
     String errorType,
     String errorMessage,
-    java.util.Map<String, String> attributes
+    Map<String, String> attributes
 ) {
 }

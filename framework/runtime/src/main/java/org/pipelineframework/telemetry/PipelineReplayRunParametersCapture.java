@@ -123,7 +123,9 @@ final class PipelineReplayRunParametersCapture {
             entries.put(propertyName, entry(propertyName, displayLabelForStepOverride(propertyName), value));
         }
         return entries.values().stream()
-            .sorted(Comparator.comparing(PipelineReplayParameterEntry::label))
+            .sorted(
+                Comparator.comparing(PipelineReplayParameterEntry::label)
+                    .thenComparing(PipelineReplayParameterEntry::key))
             .toList();
     }
 
@@ -135,8 +137,11 @@ final class PipelineReplayRunParametersCapture {
         }
         String stepClass = propertyName.substring(firstQuote + 1, secondQuote);
         String suffix = propertyName.substring(secondQuote + 2);
-        String simpleName = stepClass.substring(stepClass.lastIndexOf('.') + 1);
-        return simpleName + "." + suffix;
+        int lastDot = stepClass.lastIndexOf('.');
+        int previousDot = lastDot < 0 ? -1 : stepClass.lastIndexOf('.', lastDot - 1);
+        String displayStep =
+            previousDot >= 0 ? stepClass.substring(previousDot + 1) : stepClass.substring(lastDot + 1);
+        return displayStep + "." + suffix;
     }
 
     private static PipelineReplayParameterSection section(

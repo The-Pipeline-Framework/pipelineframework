@@ -393,7 +393,7 @@ public class ItemRejectRouter {
         }
         try {
             return Class.forName(stepClassName);
-        } catch (ClassNotFoundException ignored) {
+        } catch (ClassNotFoundException | LinkageError ignored) {
             return null;
         }
     }

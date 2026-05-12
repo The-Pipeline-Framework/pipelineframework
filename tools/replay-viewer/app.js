@@ -343,42 +343,66 @@ function resolvePluginStepForDisplay(parentStep, pluginKind) {
   return null;
 }
 
+function disposeMaterial(material) {
+  if (!material) {
+    return;
+  }
+  if (Array.isArray(material)) {
+    material.forEach(disposeMaterial);
+    return;
+  }
+  if (material.map) {
+    material.map.dispose();
+  }
+  material.dispose?.();
+}
+
+function disposeThreeObject(object) {
+  if (!object) {
+    return;
+  }
+  object.geometry?.dispose?.();
+  disposeMaterial(object.material);
+}
+
+function removeAndDispose(object) {
+  if (!object) {
+    return;
+  }
+  scene.remove(object);
+  disposeThreeObject(object);
+}
+
 function clearScene() {
   for (const { line } of edgeLines.values()) {
-    scene.remove(line);
+    removeAndDispose(line);
   }
   edgeLines.clear();
   stepMetadataByName.clear();
   for (const sprite of nodeLabelSprites.values()) {
-    scene.remove(sprite);
-    sprite.material.map?.dispose();
-    sprite.material.dispose();
+    removeAndDispose(sprite);
   }
   nodeLabelSprites.clear();
   for (const sprite of nodeValueSprites.values()) {
-    scene.remove(sprite);
-    sprite.material.map?.dispose();
-    sprite.material.dispose();
+    removeAndDispose(sprite);
   }
   nodeValueSprites.clear();
   for (const sprite of nodeIconSprites.values()) {
-    scene.remove(sprite);
-    sprite.material.map?.dispose();
-    sprite.material.dispose();
+    removeAndDispose(sprite);
   }
   nodeIconSprites.clear();
   for (const mesh of nodeMeshes.values()) {
-    scene.remove(mesh);
+    removeAndDispose(mesh);
   }
   nodeMeshes.clear();
   nodePositions.clear();
   for (const particle of particles.values()) {
-    scene.remove(particle.mesh);
+    removeAndDispose(particle.mesh);
   }
   particles.clear();
-  pulseEffects.splice(0).forEach((effect) => scene.remove(effect.mesh));
-  burstEffects.splice(0).forEach((effect) => scene.remove(effect.mesh));
-  retryLoops.splice(0).forEach((effect) => scene.remove(effect.mesh));
+  pulseEffects.splice(0).forEach((effect) => removeAndDispose(effect.mesh));
+  burstEffects.splice(0).forEach((effect) => removeAndDispose(effect.mesh));
+  retryLoops.splice(0).forEach((effect) => removeAndDispose(effect.mesh));
   backgroundFlashes.splice(0);
   runtimeStepState.clear();
   executionsWithEmit.clear();
@@ -392,12 +416,12 @@ function clearReplayDynamics() {
   highlightExpirations.clear();
   hoveredStepName = null;
   for (const particle of particles.values()) {
-    scene.remove(particle.mesh);
+    removeAndDispose(particle.mesh);
   }
   particles.clear();
-  pulseEffects.splice(0).forEach((effect) => scene.remove(effect.mesh));
-  burstEffects.splice(0).forEach((effect) => scene.remove(effect.mesh));
-  retryLoops.splice(0).forEach((effect) => scene.remove(effect.mesh));
+  pulseEffects.splice(0).forEach((effect) => removeAndDispose(effect.mesh));
+  burstEffects.splice(0).forEach((effect) => removeAndDispose(effect.mesh));
+  retryLoops.splice(0).forEach((effect) => removeAndDispose(effect.mesh));
   backgroundFlashes.splice(0);
   runtimeStepState.clear();
   executionsWithEmit.clear();
@@ -484,7 +508,7 @@ function renderRunParameters(runParameters) {
     : [];
   if (sections.length === 0) {
     const empty = document.createElement("div");
-    empty.className = "run-parameters__empty";
+    empty.className = "run-parameters-empty";
     empty.textContent = "Run parameters unavailable";
     runParametersContent.appendChild(empty);
     return;
@@ -497,26 +521,26 @@ function renderRunParameters(runParameters) {
     }
 
     const sectionElement = document.createElement("section");
-    sectionElement.className = "run-parameters__section";
+    sectionElement.className = "run-parameters-section";
 
     const title = document.createElement("div");
-    title.className = "run-parameters__section-title";
+    title.className = "run-parameters-section-title";
     title.textContent = section.label || section.id || "Parameters";
     sectionElement.appendChild(title);
 
     const list = document.createElement("div");
-    list.className = "run-parameters__list";
+    list.className = "run-parameters-list";
 
     for (const entry of entries) {
       const row = document.createElement("div");
-      row.className = "run-parameters__entry";
+      row.className = "run-parameters-entry";
 
       const label = document.createElement("div");
-      label.className = "run-parameters__label";
+      label.className = "run-parameters-label";
       label.textContent = entry.label || entry.key || "Parameter";
 
       const value = document.createElement("div");
-      value.className = "run-parameters__value";
+      value.className = "run-parameters-value";
       value.textContent = entry.value ?? "";
 
       row.append(label, value);
@@ -529,7 +553,7 @@ function renderRunParameters(runParameters) {
 
   if (!runParametersContent.childElementCount) {
     const empty = document.createElement("div");
-    empty.className = "run-parameters__empty";
+    empty.className = "run-parameters-empty";
     empty.textContent = "Run parameters unavailable";
     runParametersContent.appendChild(empty);
   }
@@ -1473,7 +1497,7 @@ function updateParticles(timeSeconds) {
     const progress = Math.min(1, Math.max(0, (timeSeconds - particle.start) / duration));
     particle.mesh.position.lerpVectors(particle.source, particle.target, progress);
     if (timeSeconds >= particle.end) {
-      scene.remove(particle.mesh);
+      removeAndDispose(particle.mesh);
       particles.delete(key);
     }
   }
@@ -1486,7 +1510,7 @@ function updateEffects(timeSeconds) {
     effect.mesh.scale.setScalar(scale);
     effect.mesh.material.opacity = effect.startOpacity * (1 - progress);
     if (timeSeconds >= effect.end) {
-      scene.remove(effect.mesh);
+      removeAndDispose(effect.mesh);
       pulseEffects.splice(pulseEffects.indexOf(effect), 1);
     }
   }
@@ -1495,7 +1519,7 @@ function updateEffects(timeSeconds) {
     effect.mesh.scale.setScalar(1 + progress * effect.endScale);
     effect.mesh.material.opacity = effect.startOpacity * Math.max(0, 1 - progress * 1.25);
     if (timeSeconds >= effect.end) {
-      scene.remove(effect.mesh);
+      removeAndDispose(effect.mesh);
       burstEffects.splice(burstEffects.indexOf(effect), 1);
     }
   }
@@ -1509,7 +1533,7 @@ function updateEffects(timeSeconds) {
     );
     effect.mesh.material.opacity = Math.max(0.28, effect.startOpacity - progress * 0.32);
     if (timeSeconds >= effect.end) {
-      scene.remove(effect.mesh);
+      removeAndDispose(effect.mesh);
       retryLoops.splice(retryLoops.indexOf(effect), 1);
     }
   }

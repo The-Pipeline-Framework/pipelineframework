@@ -545,6 +545,7 @@ class PipelineReplayExecutionTest {
 
         @Override
         public void runStarted(
+            String runId,
             String pipeline,
             Instant startedAt,
             PipelineReplayRunParameters runParameters,
@@ -554,18 +555,25 @@ class PipelineReplayExecutionTest {
         }
 
         @Override
-        public void emit(PipelineExecutionEvent event) {
+        public void emit(String runId, PipelineExecutionEvent event) {
             events.add(event);
         }
 
         @Override
-        public void runCompleted(String pipeline, Instant startedAt, long durationMs, PipelineReplayTopology topology) {
+        public void runCompleted(
+            String runId,
+            String pipeline,
+            Instant startedAt,
+            long durationMs,
+            PipelineReplayTopology topology
+        ) {
             this.durationMs = durationMs;
             this.status = "completed";
         }
 
         @Override
         public void runFailed(
+            String runId,
             String pipeline,
             Instant startedAt,
             long durationMs,

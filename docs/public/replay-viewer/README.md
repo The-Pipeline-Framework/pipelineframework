@@ -38,7 +38,7 @@ So the viewer only needs one file at import time.
 Serve the viewer directory over HTTP:
 
 ```bash
-cd /Users/mari/tpf4/tools/replay-viewer
+cd tools/replay-viewer
 python3 -m http.server 4173
 ```
 
