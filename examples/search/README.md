@@ -20,7 +20,7 @@ This will compile all modules, run tests, and verify that there are no syntax or
 
 ## Running the Application
 
-## Replay Viewer
+### Replay Viewer
 
 To produce a replay artifact for the supported TPF replay viewer:
 

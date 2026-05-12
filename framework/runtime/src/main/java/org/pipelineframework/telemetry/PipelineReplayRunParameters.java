@@ -26,4 +26,7 @@ import java.util.List;
 public record PipelineReplayRunParameters(
     List<PipelineReplayParameterSection> sections
 ) {
+    public PipelineReplayRunParameters {
+        sections = sections == null ? List.of() : List.copyOf(sections);
+    }
 }

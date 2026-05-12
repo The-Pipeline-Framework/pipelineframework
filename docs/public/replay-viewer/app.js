@@ -1152,7 +1152,8 @@ function spawnTransit(event) {
     return;
   }
   const sources = resolveSourcePositions(event);
-  const duration = Math.max(0.12, event.endTime - event.startTime);
+  const eventEndTime = event.endTime ?? event.startTime;
+  const duration = Math.max(0.12, eventEndTime - event.startTime);
   const color = particleColorForEvent(event.event);
   if (event.from && event.step) {
     boostEdge(event.from, event.step, event.event === "error" ? 1.1 : 0.78);

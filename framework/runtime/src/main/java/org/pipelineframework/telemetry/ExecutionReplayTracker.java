@@ -132,9 +132,11 @@ final class ExecutionReplayTracker {
         if (!enabled() || scope == null || inputItem == null || scope.runContext().replayState() == null) {
             return;
         }
-        attachInput(scope, inputItem);
-        if (shouldStartOnInput(scope)) {
-            startIfNecessary(scope);
+        synchronized (scope) {
+            attachInput(scope, inputItem);
+            if (shouldStartOnInput(scope)) {
+                startIfNecessary(scope);
+            }
         }
     }
 
@@ -142,41 +144,43 @@ final class ExecutionReplayTracker {
         if (!enabled() || scope == null || outputItem == null || scope.runContext().replayState() == null) {
             return;
         }
-        startIfNecessary(scope);
-        ItemLineage outputLineage = createOutputLineage(scope, outputItem);
-        if (outputLineage == null) {
-            return;
+        synchronized (scope) {
+            startIfNecessary(scope);
+            ItemLineage outputLineage = createOutputLineage(scope, outputItem);
+            if (outputLineage == null) {
+                return;
+            }
+            PipelineReplayTopology.Transition outbound = selectDataFlowTransition(scope);
+            double nowSeconds = secondsSinceRunStart(scope.runContext(), System.nanoTime());
+            if (outbound != null) {
+                long latencyMs = Math.max(0L, Math.round((System.nanoTime() - scope.startNanos()) / 1_000_000d));
+                recordTransitionMetrics(outbound, latencyMs);
+            }
+            PipelineExecutionEvent event = newEvent(
+                scope,
+                outputLineage.itemId(),
+                scope.descriptor().step(),
+                scope.descriptor().service(),
+                "emit",
+                nowSeconds,
+                nowSeconds,
+                0L,
+                scope.descriptor().step(),
+                outbound == null ? null : outbound.to(),
+                scope.descriptor().cardinality(),
+                outputLineage.parentItemIds(),
+                scope.retryAttempt().get() == 0 ? null : scope.retryAttempt().get(),
+                null,
+                null,
+                Map.of());
+            exporter.emit(scope.runContext().runId(), event);
+            addSpanEvent(scope.span(), "tpf.step.emit", Attributes.builder()
+                .put(PIPELINE, topology.pipeline())
+                .put(SOURCE_STEP, scope.descriptor().step())
+                .put(TARGET_STEP, outbound == null ? "" : outbound.to())
+                .put(CARDINALITY, scope.descriptor().cardinality())
+                .build());
         }
-        PipelineReplayTopology.Transition outbound = selectDataFlowTransition(scope);
-        double nowSeconds = secondsSinceRunStart(scope.runContext(), System.nanoTime());
-        if (outbound != null) {
-            long latencyMs = Math.max(0L, Math.round((System.nanoTime() - scope.startNanos()) / 1_000_000d));
-            recordTransitionMetrics(outbound, latencyMs);
-        }
-        PipelineExecutionEvent event = newEvent(
-            scope,
-            outputLineage.itemId(),
-            scope.descriptor().step(),
-            scope.descriptor().service(),
-            "emit",
-            nowSeconds,
-            nowSeconds,
-            0L,
-            scope.descriptor().step(),
-            outbound == null ? null : outbound.to(),
-            scope.descriptor().cardinality(),
-            outputLineage.parentItemIds(),
-            scope.retryAttempt().get() == 0 ? null : scope.retryAttempt().get(),
-            null,
-            null,
-            Map.of());
-        exporter.emit(scope.runContext().runId(), event);
-        addSpanEvent(scope.span(), "tpf.step.emit", Attributes.builder()
-            .put(PIPELINE, topology.pipeline())
-            .put(SOURCE_STEP, scope.descriptor().step())
-            .put(TARGET_STEP, outbound == null ? "" : outbound.to())
-            .put(CARDINALITY, scope.descriptor().cardinality())
-            .build());
     }
 
     void recordRetry(String runtimeStepClass, String spanId, Throwable failure) {
@@ -187,35 +191,37 @@ final class ExecutionReplayTracker {
         if (scope == null) {
             return;
         }
-        startIfNecessary(scope);
-        if (!scope.started()) {
-            return;
+        synchronized (scope) {
+            startIfNecessary(scope);
+            if (!scope.started()) {
+                return;
+            }
+            int attempt = scope.retryAttempt().incrementAndGet();
+            double nowSeconds = secondsSinceRunStart(scope.runContext(), System.nanoTime());
+            PipelineExecutionEvent event = newEvent(
+                scope,
+                scope.eventItemId(),
+                scope.descriptor().step(),
+                scope.descriptor().service(),
+                "retry",
+                nowSeconds,
+                nowSeconds,
+                0L,
+                scope.inbound() == null ? null : scope.inbound().from(),
+                scope.descriptor().step(),
+                scope.descriptor().cardinality(),
+                scope.parentItemIds(),
+                attempt,
+                failure == null ? null : failure.getClass().getName(),
+                failure == null ? null : failure.getMessage(),
+                Map.of());
+            exporter.emit(scope.runContext().runId(), event);
+            addSpanEvent(scope.span(), "tpf.step.retry", Attributes.builder()
+                .put(PIPELINE, topology.pipeline())
+                .put(TARGET_STEP, scope.descriptor().step())
+                .put(CARDINALITY, scope.descriptor().cardinality())
+                .build());
         }
-        int attempt = scope.retryAttempt().incrementAndGet();
-        double nowSeconds = secondsSinceRunStart(scope.runContext(), System.nanoTime());
-        PipelineExecutionEvent event = newEvent(
-            scope,
-            scope.eventItemId(),
-            scope.descriptor().step(),
-            scope.descriptor().service(),
-            "retry",
-            nowSeconds,
-            nowSeconds,
-            0L,
-            scope.inbound() == null ? null : scope.inbound().from(),
-            scope.descriptor().step(),
-            scope.descriptor().cardinality(),
-            scope.parentItemIds(),
-            attempt,
-            failure == null ? null : failure.getClass().getName(),
-            failure == null ? null : failure.getMessage(),
-            Map.of());
-        exporter.emit(scope.runContext().runId(), event);
-        addSpanEvent(scope.span(), "tpf.step.retry", Attributes.builder()
-            .put(PIPELINE, topology.pipeline())
-            .put(TARGET_STEP, scope.descriptor().step())
-            .put(CARDINALITY, scope.descriptor().cardinality())
-            .build());
     }
 
     void completeSuccess(StepExecutionScope scope) {
@@ -230,35 +236,37 @@ final class ExecutionReplayTracker {
         if (scope == null) {
             return;
         }
-        if (enabled() && scope.runContext().replayState() != null) {
-            startIfNecessary(scope);
-            long endNanos = System.nanoTime();
-            long durationMs = Math.max(0L, Math.round((endNanos - scope.startNanos()) / 1_000_000d));
-            String eventName = failure == null ? "success" : "error";
-            PipelineExecutionEvent event = newEvent(
-                scope,
-                scope.eventItemId(),
-                scope.descriptor().step(),
-                scope.descriptor().service(),
-                eventName,
-                scope.startSeconds(),
-                secondsSinceRunStart(scope.runContext(), endNanos),
-                durationMs,
-                scope.inbound() == null ? null : scope.inbound().from(),
-                scope.descriptor().step(),
-                scope.descriptor().cardinality(),
-                scope.parentItemIds(),
-                scope.retryAttempt().get() == 0 ? null : scope.retryAttempt().get(),
-                failure == null ? null : failure.getClass().getName(),
-                failure == null ? null : failure.getMessage(),
-                Map.of());
-            exporter.emit(scope.runContext().runId(), event);
-            addSpanEvent(scope.span(), failure == null ? "tpf.step.success" : "tpf.step.error",
-                Attributes.builder()
-                    .put(PIPELINE, topology.pipeline())
-                    .put(TARGET_STEP, scope.descriptor().step())
-                    .put(CARDINALITY, scope.descriptor().cardinality())
-                    .build());
+        synchronized (scope) {
+            if (enabled() && scope.runContext().replayState() != null) {
+                startIfNecessary(scope);
+                long endNanos = System.nanoTime();
+                long durationMs = Math.max(0L, Math.round((endNanos - scope.startNanos()) / 1_000_000d));
+                String eventName = failure == null ? "success" : "error";
+                PipelineExecutionEvent event = newEvent(
+                    scope,
+                    scope.eventItemId(),
+                    scope.descriptor().step(),
+                    scope.descriptor().service(),
+                    eventName,
+                    scope.startSeconds(),
+                    secondsSinceRunStart(scope.runContext(), endNanos),
+                    durationMs,
+                    scope.inbound() == null ? null : scope.inbound().from(),
+                    scope.descriptor().step(),
+                    scope.descriptor().cardinality(),
+                    scope.parentItemIds(),
+                    scope.retryAttempt().get() == 0 ? null : scope.retryAttempt().get(),
+                    failure == null ? null : failure.getClass().getName(),
+                    failure == null ? null : failure.getMessage(),
+                    Map.of());
+                exporter.emit(scope.runContext().runId(), event);
+                addSpanEvent(scope.span(), failure == null ? "tpf.step.success" : "tpf.step.error",
+                    Attributes.builder()
+                        .put(PIPELINE, topology.pipeline())
+                        .put(TARGET_STEP, scope.descriptor().step())
+                        .put(CARDINALITY, scope.descriptor().cardinality())
+                        .build());
+            }
         }
         removeScope(scope);
         endSpan(scope.span(), failure);
@@ -574,38 +582,40 @@ final class ExecutionReplayTracker {
         if (!enabled() || scope == null) {
             return;
         }
-        startIfNecessary(scope);
-        if (!scope.started()) {
-            return;
+        synchronized (scope) {
+            startIfNecessary(scope);
+            if (!scope.started()) {
+                return;
+            }
+            PipelineReplayTopology.Step cacheStep = resolvePluginStep(scope.descriptor().step(), "cache");
+            if (cacheStep == null) {
+                return;
+            }
+            double nowSeconds = secondsSinceRunStart(scope.runContext(), System.nanoTime());
+            exporter.emit(scope.runContext().runId(), newEvent(
+                scope,
+                scope.eventItemId(),
+                scope.descriptor().step(),
+                scope.descriptor().service(),
+                "cache_hit",
+                nowSeconds,
+                nowSeconds,
+                0L,
+                cacheStep.step(),
+                scope.descriptor().step(),
+                scope.descriptor().cardinality(),
+                scope.parentItemIds(),
+                scope.retryAttempt().get() == 0 ? null : scope.retryAttempt().get(),
+                null,
+                null,
+                Map.of("pluginKind", "cache")));
+            addSpanEvent(scope.span(), "tpf.step.cache_hit", Attributes.builder()
+                .put(PIPELINE, topology.pipeline())
+                .put(SOURCE_STEP, cacheStep.step())
+                .put(TARGET_STEP, scope.descriptor().step())
+                .put(CARDINALITY, scope.descriptor().cardinality())
+                .build());
         }
-        PipelineReplayTopology.Step cacheStep = resolvePluginStep(scope.descriptor().step(), "cache");
-        if (cacheStep == null) {
-            return;
-        }
-        double nowSeconds = secondsSinceRunStart(scope.runContext(), System.nanoTime());
-        exporter.emit(scope.runContext().runId(), newEvent(
-            scope,
-            scope.eventItemId(),
-            scope.descriptor().step(),
-            scope.descriptor().service(),
-            "cache_hit",
-            nowSeconds,
-            nowSeconds,
-            0L,
-            cacheStep.step(),
-            scope.descriptor().step(),
-            scope.descriptor().cardinality(),
-            scope.parentItemIds(),
-            scope.retryAttempt().get() == 0 ? null : scope.retryAttempt().get(),
-            null,
-            null,
-            Map.of("pluginKind", "cache")));
-        addSpanEvent(scope.span(), "tpf.step.cache_hit", Attributes.builder()
-            .put(PIPELINE, topology.pipeline())
-            .put(SOURCE_STEP, cacheStep.step())
-            .put(TARGET_STEP, scope.descriptor().step())
-            .put(CARDINALITY, scope.descriptor().cardinality())
-            .build());
     }
 
     void recordReject(String runtimeStepClass, String spanId, String rejectScope, String errorType, String errorMessage) {
@@ -616,37 +626,39 @@ final class ExecutionReplayTracker {
         if (scope == null) {
             return;
         }
-        startIfNecessary(scope);
-        if (!scope.started()) {
-            return;
+        synchronized (scope) {
+            startIfNecessary(scope);
+            if (!scope.started()) {
+                return;
+            }
+            PipelineReplayTopology.Step rejectStep = resolvePluginStep(scope.descriptor().step(), "reject");
+            String rejectStepName = rejectStep == null ? "Rejects " + scope.descriptor().step() : rejectStep.step();
+            String rejectService = rejectStep == null ? "RejectQueue" : rejectStep.service();
+            double nowSeconds = secondsSinceRunStart(scope.runContext(), System.nanoTime());
+            exporter.emit(scope.runContext().runId(), newEvent(
+                scope,
+                scope.eventItemId(),
+                rejectStepName,
+                rejectService,
+                "reject",
+                nowSeconds,
+                nowSeconds,
+                0L,
+                scope.descriptor().step(),
+                rejectStepName,
+                scope.descriptor().cardinality(),
+                scope.parentItemIds(),
+                scope.retryAttempt().get() == 0 ? null : scope.retryAttempt().get(),
+                errorType,
+                errorMessage,
+                rejectScope == null ? Map.of("pluginKind", "reject") : Map.of("pluginKind", "reject", "rejectScope", rejectScope)));
+            addSpanEvent(scope.span(), "tpf.step.reject", Attributes.builder()
+                .put(PIPELINE, topology.pipeline())
+                .put(SOURCE_STEP, scope.descriptor().step())
+                .put(TARGET_STEP, rejectStepName)
+                .put(CARDINALITY, scope.descriptor().cardinality())
+                .build());
         }
-        PipelineReplayTopology.Step rejectStep = resolvePluginStep(scope.descriptor().step(), "reject");
-        String rejectStepName = rejectStep == null ? "Rejects " + scope.descriptor().step() : rejectStep.step();
-        String rejectService = rejectStep == null ? "RejectQueue" : rejectStep.service();
-        double nowSeconds = secondsSinceRunStart(scope.runContext(), System.nanoTime());
-        exporter.emit(scope.runContext().runId(), newEvent(
-            scope,
-            scope.eventItemId(),
-            rejectStepName,
-            rejectService,
-            "reject",
-            nowSeconds,
-            nowSeconds,
-            0L,
-            scope.descriptor().step(),
-            rejectStepName,
-            scope.descriptor().cardinality(),
-            scope.parentItemIds(),
-            scope.retryAttempt().get() == 0 ? null : scope.retryAttempt().get(),
-            errorType,
-            errorMessage,
-            rejectScope == null ? Map.of("pluginKind", "reject") : Map.of("pluginKind", "reject", "rejectScope", rejectScope)));
-        addSpanEvent(scope.span(), "tpf.step.reject", Attributes.builder()
-            .put(PIPELINE, topology.pipeline())
-            .put(SOURCE_STEP, scope.descriptor().step())
-            .put(TARGET_STEP, rejectStepName)
-            .put(CARDINALITY, scope.descriptor().cardinality())
-            .build());
     }
 
     private PipelineExecutionEvent newEvent(

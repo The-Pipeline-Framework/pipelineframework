@@ -404,7 +404,7 @@ class PipelineStepExecutor {
             Uni<I> finalInput = input;
             var replayScope = telemetry == null
                 ? null
-                : telemetry.beginReplayStep(step.getClass(), telemetryContext, false, null);
+                : telemetry.beginPendingReplayStep(step.getClass(), telemetryContext, false);
             if (telemetry != null) {
                 finalInput = finalInput.onItem().invoke(item -> telemetry.recordReplayInput(replayScope, item));
             }

@@ -51,12 +51,16 @@ final class PipelineReplayTopologyAugmenter {
                     .thenComparing(event -> event.service() == null ? "" : event.service()))
             .toList();
         for (PipelineExecutionEvent event : orderedEvents) {
-            PipelineReplayTopology.Step step = stepsByName.get(event.step());
+            String eventStep = event.step();
+            if (eventStep == null || eventStep.isBlank()) {
+                continue;
+            }
+            PipelineReplayTopology.Step step = stepsByName.get(eventStep);
             if (step == null) {
-                boolean sideEffect = event.from() != null && (event.to() == null || event.to().equals(event.step()));
+                boolean sideEffect = event.from() != null && (event.to() == null || event.to().equals(eventStep));
                 step = new PipelineReplayTopology.Step(
-                    "runtime::" + event.step(),
-                    event.step(),
+                    "runtime::" + eventStep,
+                    eventStep,
                     event.service(),
                     event.cardinality(),
                     nextIndex++,
@@ -69,9 +73,8 @@ final class PipelineReplayTopologyAugmenter {
             if (event.from() != null && event.to() != null) {
                 ensureTransition(mergedTransitions, stepsByName, event.from(), event.to(), event.cardinality());
             } else if (event.from() != null
-                && event.step() != null
-                && (event.to() == null || event.to().equals(event.step()))) {
-                ensureTransition(mergedTransitions, stepsByName, event.from(), event.step(), event.cardinality());
+                && (event.to() == null || event.to().equals(eventStep))) {
+                ensureTransition(mergedTransitions, stepsByName, event.from(), eventStep, event.cardinality());
             }
         }
         return new PipelineReplayTopology(baseTopology.pipeline(), List.copyOf(mergedSteps), List.copyOf(mergedTransitions));

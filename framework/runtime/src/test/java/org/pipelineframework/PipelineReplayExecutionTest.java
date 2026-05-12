@@ -277,10 +277,13 @@ class PipelineReplayExecutionTest {
             ((Multi<Payload>) telemetry.instrumentRunCompletion(current, runContext)).collect().asList().await().indefinitely();
         }
 
-        List<Path> replayFiles = Files.list(outputDir)
-            .filter(path -> path.getFileName().toString().endsWith(".json"))
-            .sorted()
-            .toList();
+        List<Path> replayFiles;
+        try (var replayFileStream = Files.list(outputDir)) {
+            replayFiles = replayFileStream
+                .filter(path -> path.getFileName().toString().endsWith(".json"))
+                .sorted()
+                .toList();
+        }
         assertEquals(2, replayFiles.size());
         for (Path replayFile : replayFiles) {
             PipelineReplayDocument document = PipelineJson.mapper().readValue(replayFile.toFile(), PipelineReplayDocument.class);
