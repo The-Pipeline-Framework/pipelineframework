@@ -94,6 +94,10 @@ If any prerequisite is missing, replay export stays off and the runtime logs one
 
 The supported replay viewer is published from the docs site at:
 
+- `/replay-viewer/`
+
+Compatibility entrypoint:
+
 - `/replay-viewer/index.html`
 
 It ships with built-in datasets and also accepts imported replay JSON files generated from your own runs.
@@ -108,12 +112,15 @@ The viewer exposes:
 The viewer uses a video-first layout:
 
 - the replay canvas as the main player surface
+- a persistent shell link back to `/guide/operations/observability/replay`
 - a metadata strip below the player for dataset, pipeline, duration, topology, and event summary
 - hover or tap-revealed player chrome over the canvas for transport controls, the scrubber, and inline speed radios
 - bottom-right utility icons for replay source, replay info, and player fullscreen
 - modal panes for source selection/import and `Run parameters` plus `Legend`
 
-`Custom replay` is only exposed inside the replay-source modal. Selecting a source there stages the choice; the viewer only switches when `Load dataset` is pressed. Older replay files without `runParameters` remain loadable and show `Run parameters unavailable`.
+`Custom replay` is only exposed inside the replay-source modal. Selecting a source there stages the choice, and the viewer only switches when `Load dataset` is pressed.
+
+Closing the modal or re-entering the page from browser history resets staged source state back to the active replay. Older replay files without `runParameters` remain loadable and show `Run parameters unavailable`.
 
 The canonical viewer source lives in:
 

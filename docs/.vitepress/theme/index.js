@@ -24,6 +24,36 @@ import HeroSection from './components/HeroSection.vue'
 import VersionBadge from './components/VersionBadge.vue'
 import LatestReleases from './components/LatestReleases.vue'
 
+function installReplayViewerHardNavigation() {
+  if (typeof window === 'undefined' || window.__tpfReplayViewerHardNavInstalled) {
+    return
+  }
+  window.__tpfReplayViewerHardNavInstalled = true
+  const replayViewerPaths = new Set(['/replay-viewer/', '/replay-viewer/index.html'])
+  window.addEventListener('click', (event) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return
+    }
+    const anchor = event.target instanceof Element ? event.target.closest('a[href]') : null
+    if (!anchor) {
+      return
+    }
+    const href = anchor.getAttribute('href')
+    if (!replayViewerPaths.has(href)) {
+      return
+    }
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    window.location.assign('/replay-viewer/')
+  }, true)
+
+  window.addEventListener('popstate', () => {
+    if (window.location.pathname.startsWith('/replay-viewer/')) {
+      window.location.replace('/replay-viewer/')
+    }
+  })
+}
+
 export default {
   ...DefaultTheme,
   Layout() {
@@ -37,5 +67,6 @@ export default {
     app.component('FeaturedArticles', FeaturedArticles)
     app.component('HeroSection', HeroSection)
     app.component('LatestReleases', LatestReleases)
+    installReplayViewerHardNavigation()
   }
 }

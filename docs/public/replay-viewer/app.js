@@ -4,6 +4,7 @@ const mount = document.getElementById("threeMount");
 const viewport = document.querySelector(".viewport");
 const playerSurface = document.getElementById("playerSurface");
 const playerChrome = document.getElementById("playerChrome");
+const backToDocsLink = document.getElementById("backToDocsLink");
 const playPauseButton = document.getElementById("playPauseButton");
 const stopButton = document.getElementById("stopButton");
 const restartButton = document.getElementById("restartButton");
@@ -152,6 +153,37 @@ let chromeHideTimeout = null;
 let openModal = null;
 let isScrubbingTimeline = false;
 let prefersTapChrome = window.matchMedia("(hover: none), (pointer: coarse)").matches;
+
+function resolveReplayDocsHref() {
+  const replayDocsPath = "/guide/operations/observability/replay";
+  const currentPath = window.location.pathname;
+  if (currentPath.includes("/replay-viewer/")) {
+    return `${window.location.origin}${replayDocsPath}`;
+  }
+  return `https://pipelineframework.org${replayDocsPath}`;
+}
+
+function reloadIfViewerShellRouteChanged() {
+  if (!window.location.pathname.includes("/replay-viewer/")) {
+    window.location.replace(window.location.href);
+    return true;
+  }
+  return false;
+}
+
+function clearReplayFileSelection() {
+  if (replayFileInput) {
+    replayFileInput.value = "";
+  }
+}
+
+function syncStagedReplaySourceToActive() {
+  stagedReplaySourceKey = activeReplaySourceKey;
+  datasetSelect.value = stagedReplaySourceKey;
+  setCustomReplayVisibility(stagedReplaySourceKey === "custom");
+  clearReplayFileSelection();
+  updateSourceApplyButton();
+}
 
 function setCustomReplayVisibility(visible) {
   customReplayInputWrap.hidden = !visible;
@@ -490,6 +522,9 @@ function revealPlayerChrome(sticky = false) {
 }
 
 function openModalElement(name, element) {
+  if (name === "source") {
+    syncStagedReplaySourceToActive();
+  }
   openModal = name;
   element.hidden = false;
   element.setAttribute("aria-hidden", "false");
@@ -499,6 +534,9 @@ function openModalElement(name, element) {
 function closeModalElement(name, element) {
   if (openModal !== name) {
     return;
+  }
+  if (name === "source") {
+    syncStagedReplaySourceToActive();
   }
   openModal = null;
   element.hidden = true;
@@ -1832,10 +1870,6 @@ replayFileInput.addEventListener("change", async (event) => {
 });
 
 sourceButton.addEventListener("click", () => {
-  stagedReplaySourceKey = activeReplaySourceKey;
-  datasetSelect.value = stagedReplaySourceKey;
-  setCustomReplayVisibility(stagedReplaySourceKey === "custom");
-  updateSourceApplyButton();
   openModalElement("source", sourceModal);
 });
 
@@ -1981,9 +2015,47 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
+window.addEventListener("popstate", () => {
+  reloadIfViewerShellRouteChanged();
+});
+
+window.addEventListener("pageshow", () => {
+  if (reloadIfViewerShellRouteChanged()) {
+    return;
+  }
+  if (!sourceModal.hidden) {
+    sourceModal.hidden = true;
+    sourceModal.setAttribute("aria-hidden", "true");
+  }
+  if (!infoModal.hidden) {
+    infoModal.hidden = true;
+    infoModal.setAttribute("aria-hidden", "true");
+  }
+  openModal = null;
+  syncStagedReplaySourceToActive();
+  revealPlayerChrome(prefersTapChrome || isLoadingReplay);
+});
+
 setCustomReplayVisibility(false);
 updateSourceApplyButton();
 renderRunParameters(replayDocument.runParameters);
+if (backToDocsLink) {
+  backToDocsLink.href = resolveReplayDocsHref();
+  backToDocsLink.addEventListener("click", (event) => {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+    event.preventDefault();
+    window.location.assign(backToDocsLink.href);
+  });
+}
 setPlayerChromeVisible(true);
 updateUi();
 requestAnimationFrame(tick);
