@@ -2,7 +2,7 @@
 
 Standalone Three.js viewer for framework replay JSON.
 
-The canonical replay viewer source lives in `tools/replay-viewer/`. The docs site publishes the app at `/replay-viewer/index.html` by copying these files into `docs/public/replay-viewer/` during the docs build.
+The canonical replay viewer source lives in `tools/replay-viewer/`. The docs site publishes the app at `/replay-viewer/` by copying these files into `docs/public/replay-viewer/` during the docs build. `/replay-viewer/index.html` stays valid as a compatibility entrypoint.
 
 ## Supported input
 
@@ -23,6 +23,7 @@ So the viewer only needs one file at import time.
 - transition edges
 - replay metadata in a strip below the player
 - player chrome over the viewport for transport, scrubber, inline speed radios, and utility icons
+- a persistent shell link back to the replay docs page outside the player chrome
 - modal source and info surfaces opened from the bottom-right utility icons
 - semantic effects for:
   - `start`
@@ -52,6 +53,8 @@ You can either:
 The local replay file picker is shown only while `Custom replay` is selected.
 
 If an imported replay predates `runParameters`, the viewer keeps working and shows `Run parameters unavailable`.
+
+When the viewer is hosted from the docs site, the shell exposes a persistent `Back to docs` link to `/guide/operations/observability/replay`. It stays visible even when the player chrome is hidden.
 
 ## Built-in datasets
 

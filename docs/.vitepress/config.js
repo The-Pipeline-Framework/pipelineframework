@@ -128,7 +128,7 @@ const mainSidebar = [
                     {text: 'Metrics', link: '/guide/operations/observability/metrics'},
                     {text: 'Tracing', link: '/guide/operations/observability/tracing'},
                     {text: 'Replay & Live Topology', link: '/guide/operations/observability/replay'},
-                    {text: 'Replay Viewer', link: '/replay-viewer/index.html'},
+                    {text: 'Replay Viewer', link: '/replay-viewer/'},
                     {text: 'Logging', link: '/guide/operations/observability/logging'},
                     {text: 'Health Checks', link: '/guide/operations/observability/health-checks'},
                     {text: 'Alerting', link: '/guide/operations/observability/alerting'},

@@ -47,6 +47,30 @@ button:disabled {
   padding: 16px;
 }
 
+.viewer-shell-bar {
+  display: flex;
+  align-items: center;
+}
+
+.shell-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid rgb(148 163 184 / 20%);
+  border-radius: 999px;
+  background: rgb(12 20 35 / 78%);
+  color: #f8fbff;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  backdrop-filter: blur(10px);
+}
+
+.shell-link:hover {
+  background: rgb(24 35 59 / 96%);
+}
+
 .player-panel {
   display: grid;
   gap: 12px;
@@ -501,6 +525,10 @@ button:disabled {
 @media (max-width: 820px) {
   .viewer-page {
     padding: 12px;
+  }
+
+  .viewer-shell-bar {
+    justify-content: flex-start;
   }
 
   .three-mount {
