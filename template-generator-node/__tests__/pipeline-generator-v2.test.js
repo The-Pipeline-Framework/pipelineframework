@@ -45,6 +45,40 @@ describe('PipelineGenerator v2', () => {
     expect(config.steps[0].outputTypeName).toBe('CustomerOutput');
   });
 
+  test('generateFromConfig emits parent pom aligned to root quarkus platform version', async () => {
+    const generator = new PipelineGenerator();
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pipeline-generator-'));
+    const configPath = path.join(tempDir, 'config.yaml');
+    const outputPath = path.join(tempDir, 'generated-app');
+    fs.writeFileSync(configPath, `version: 2
+appName: Generated App
+basePackage: com.example.generated
+transport: GRPC
+runtimeLayout: MODULAR
+messages:
+  Request:
+    fields:
+      - number: 1
+        name: id
+        type: uuid
+  Response:
+    fields:
+      - number: 1
+        name: status
+        type: string
+steps:
+  - name: Process Request
+    cardinality: ONE_TO_ONE
+    inputTypeName: Request
+    outputTypeName: Response
+`);
+
+    await generator.generateFromConfig(configPath, outputPath);
+
+    const parentPom = fs.readFileSync(path.join(outputPath, 'pom.xml'), 'utf8');
+    expect(parentPom).toContain('<quarkus.platform.version>3.33.1</quarkus.platform.version>');
+  });
+
   test('toScaffoldConfig derives legacy field bindings from v2 messages', () => {
     const generator = new PipelineGenerator();
     const config = {
