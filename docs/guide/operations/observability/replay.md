@@ -118,7 +118,9 @@ The viewer uses a video-first layout:
 - bottom-right utility icons for replay source, replay info, and player fullscreen
 - modal panes for source selection/import and `Run parameters` plus `Legend`
 
-`Custom replay` is only exposed inside the replay-source modal. Selecting a source there stages the choice; the viewer only switches when `Load dataset` is pressed. Closing the modal or re-entering the page from browser history resets staged source state back to the active replay. Older replay files without `runParameters` remain loadable and show `Run parameters unavailable`.
+`Custom replay` is only exposed inside the replay-source modal. Selecting a source there stages the choice, and the viewer only switches when `Load dataset` is pressed.
+
+Closing the modal or re-entering the page from browser history resets staged source state back to the active replay. Older replay files without `runParameters` remain loadable and show `Run parameters unavailable`.
 
 The canonical viewer source lives in:
 
