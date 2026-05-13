@@ -1,0 +1,117 @@
+name: Reusable — CSV Provider Reject E2E
+
+on:
+  workflow_call:
+    inputs:
+      artifact_name:
+        description: "Name of the Maven artifacts tarball"
+        required: false
+        default: "framework-m2-cache"
+        type: string
+      download_artifacts:
+        description: "Whether to download prebuilt framework artifacts instead of bootstrapping locally"
+        required: false
+        default: true
+        type: boolean
+  push:
+    branches:
+      - main
+    paths:
+      - "framework/**"
+      - "examples/csv-payments/**"
+      - "plugins/**"
+      - "pom.xml"
+      - "mvnw"
+      - ".mvn/**"
+      - "scripts/ci/**"
+      - ".github/actions/setup-testcontainers/**"
+      - ".github/workflows/e2e-csv-provider-reject.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-e2e-csv-provider-reject
+  cancel-in-progress: true
+
+env:
+  MAVEN_OPTS: -Xmx1g -Xms512m
+  MAVEN_ARGS_BUILD: -B -T 1C -V -Dmaven.test.redirectTestOutputToFile=true -Dsurefire.parallel=none -Dfailsafe.parallel=none
+
+jobs:
+  csv-provider-reject-e2e:
+    name: CSV Provider Reject Replay E2E
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+
+      - name: Configure Maven
+        run: echo "MAVEN_ARGS=${{ env.MAVEN_ARGS_BUILD }} --no-transfer-progress" >> $GITHUB_ENV
+
+      - name: Download framework artifacts
+        if: ${{ inputs.download_artifacts }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: /tmp/m2-artifacts
+
+      - name: Extract framework artifacts
+        if: ${{ inputs.download_artifacts }}
+        run: |
+          mkdir -p ~/.m2/repository
+          tar -xzf /tmp/m2-artifacts/${{ inputs.artifact_name }}.tar.gz -C ~/.m2/repository
+
+      - name: Bootstrap framework artifacts locally
+        if: ${{ !inputs.download_artifacts }}
+        run: ./scripts/ci/bootstrap-local-repo-prereqs.sh framework
+
+      - name: Setup Testcontainers Docker environment
+        uses: ./.github/actions/setup-testcontainers
+
+      - name: Build csv-payments modular telemetry images
+        run: ./examples/csv-payments/build-modular-telemetry-images.sh
+
+      - name: Run csv-payments provider-reject E2E
+        run: |
+          read -r -a maven_args <<< "$MAVEN_ARGS"
+          ./mvnw "${maven_args[@]}" -f examples/csv-payments/pom.xml \
+            -pl orchestrator-svc \
+            -am \
+            -Dcsv.e2e.telemetry.enabled=true \
+            -Dcsv.e2e.telemetry.interval=100ms \
+            -Dcsv-payments.payment-provider.poll-reject-probability=0.91 \
+            -Dtest=CsvPaymentsProviderRejectEndToEndIT \
+            -Dsurefire.failIfNoSpecifiedTests=false \
+            test
+
+      - name: Dump reports on failure
+        if: failure()
+        run: |
+          find . -path "*/target/failsafe-reports/*.txt" -print -exec tail -n 200 {} \;
+          find . -path "*/target/failsafe-reports/*.dumpstream" -print -exec tail -n 400 {} \;
+          find . -path "*/target/failsafe-reports/*.dump" -print -exec tail -n 200 {} \;
+          find . -path "*/target/surefire-reports/*.txt" -print -exec tail -n 200 {} \;
+          find examples/csv-payments -type d -path "*/target/test-e2e" -print -exec sh -c 'ls -la "$1"' _ {} \;
+
+      - name: Upload reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: csv-provider-reject-e2e-reports
+          path: |
+            **/target/surefire-reports/*.txt
+            **/target/surefire-reports/*.xml
+            **/target/failsafe-reports/*.txt
+            **/target/failsafe-reports/*.xml
+            **/target/failsafe-reports/*.dumpstream
+            **/target/failsafe-reports/*.dump
+            examples/csv-payments/**/target/test-e2e/**
+          retention-days: 7
+          if-no-files-found: warn

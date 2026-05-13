@@ -297,6 +297,13 @@ public interface PipelineStepConfig {
          * @return metrics configuration
          */
         MetricsConfig metrics();
+
+        /**
+         * Replay export configuration.
+         *
+         * @return replay export configuration
+         */
+        ReplayConfig replay();
     }
 
     /**
@@ -409,6 +416,35 @@ public interface PipelineStepConfig {
          */
         @WithDefault("true")
         Boolean enabled();
+    }
+
+    /**
+     * Replay export configuration.
+     */
+    interface ReplayConfig {
+        /**
+         * Enables replay-friendly execution event emission and export.
+         *
+         * @return true to enable replay export
+         */
+        @WithDefault("false")
+        Boolean enabled();
+
+        /**
+         * Selects which replay exporter to use.
+         *
+         * @return exporter name
+         */
+        @WithDefault("none")
+        String exporter();
+
+        /**
+         * Output path used by the file replay exporter.
+         *
+         * @return configured file path, if any
+         */
+        @WithName("file.path")
+        Optional<String> filePath();
     }
 
     /**

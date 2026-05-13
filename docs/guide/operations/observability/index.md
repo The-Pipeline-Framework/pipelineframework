@@ -6,6 +6,7 @@ Observability in The Pipeline Framework is designed for distributed pipelines: y
 
 - [Metrics](/guide/operations/observability/metrics): Step timings, throughput, and failure counts
 - [Tracing](/guide/operations/observability/tracing): End-to-end request visibility across steps
+- [Replay & Live Topology](/guide/operations/observability/replay): Separate the offline replay viewer from live Tempo and Prometheus surfaces
 - [Logging](/guide/operations/observability/logging): Structured logs with correlation identifiers
 - [Health Checks](/guide/operations/observability/health-checks) and [In-flight Probe](/guide/operations/in-flight-probe): Liveness, readiness and killswitch for orchestration
 - [Alerting](/guide/operations/observability/alerting): Dashboards and alert rules tuned for pipeline behavior

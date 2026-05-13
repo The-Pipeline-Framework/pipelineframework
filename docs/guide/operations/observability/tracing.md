@@ -12,6 +12,9 @@ quarkus.otel.exporter.otlp.endpoint=http://otel-collector:4318
 quarkus.otel.exporter.otlp.protocol=http/protobuf
 ```
 
+When OTLP tracing is enabled, spans and span events are emitted to the collector in real time.
+That is the live topology source for Tempo. Prometheus does not ingest or poll spans.
+
 ## Sampling
 
 For high-volume pipelines, use sampling to control overhead while keeping representative traces.
@@ -43,6 +46,19 @@ For streaming pipelines, ensure context is carried across async boundaries and e
 3. Avoid logging sensitive payloads in span attributes
 4. Record step class and pipeline run attributes (`tpf.*`)
 5. Enable per-item spans only when needed (`pipeline.telemetry.tracing.per-item=true`)
+
+TPF runtime tracing also emits:
+
+- `tpf.pipeline.run` spans
+- `tpf.step` spans
+- `tpf.step.start`
+- `tpf.step.emit`
+- `tpf.step.retry`
+- `tpf.step.success`
+- `tpf.step.error`
+
+For replay JSON versus live Tempo usage, see
+[Replay & Live Topology](/guide/operations/observability/replay).
 
 ## AWS Lambda and X-Ray
 

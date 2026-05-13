@@ -33,6 +33,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -40,6 +41,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.jboss.logging.Logger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -56,14 +59,20 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import org.pipelineframework.telemetry.PipelineTelemetry;
 
 abstract class AbstractCsvPaymentsEndToEnd {
 
     private static final Logger LOG = Logger.getLogger(AbstractCsvPaymentsEndToEnd.class);
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private static final Network network = Network.newNetwork();
     private static final String TEST_E2E_DIR = System.getProperty("user.dir") + "/target/test-e2e";
     private static final String TEST_E2E_TARGET_DIR = "/app/test-e2e";
+    private static final Path REPLAY_CAPTURE_DIR = Paths.get(TEST_E2E_DIR, "replay");
+    private static final Path REPLAY_FILE = REPLAY_CAPTURE_DIR.resolve("csv-payments-replay.json");
     private static final Path DEV_CERTS_DIR =
             Paths.get(System.getProperty("user.dir"))
                     .resolve("../target/dev-certs")
@@ -81,6 +90,23 @@ abstract class AbstractCsvPaymentsEndToEnd {
             resolvePipelineWaitTimeoutSeconds();
     private static final long PIPELINE_WAIT_POLL_MILLIS = 1000L;
     private static final String PIPELINE_RUNTIME_IMAGE = resolvePipelineRuntimeImage();
+    private static final boolean TELEMETRY_ENABLED =
+            Boolean.getBoolean("csv.e2e.telemetry.enabled");
+    private static final boolean TELEMETRY_CAPTURE_ACTIVE =
+            TELEMETRY_ENABLED && !MONOLITH_LAYOUT && !PIPELINE_RUNTIME_LAYOUT;
+    private static final boolean TELEMETRY_HAPPY_PATH_ONLY =
+            Boolean.parseBoolean(System.getProperty("csv.e2e.telemetry.happy-path-only", "true"));
+    private static final String MODULAR_IMAGE_TAG =
+            TELEMETRY_CAPTURE_ACTIVE
+                    ? System.getProperty("csv.e2e.telemetry.image.tag", "otel")
+                    : System.getProperty("csv.e2e.image.tag", "latest");
+    private static final String CSV_E2E_INPUT_FILE = System.getProperty("csv.e2e.input.file", "").trim();
+    private static final boolean CUSTOM_INPUT_FILE = !CSV_E2E_INPUT_FILE.isBlank();
+    private static final String READER_DEMAND_PACER_ROWS_PER_PERIOD =
+            System.getProperty("csv.e2e.reader-demand-pacer.rows-per-period", "").trim();
+    private static final String READER_DEMAND_PACER_MILLIS_PERIOD =
+            System.getProperty("csv.e2e.reader-demand-pacer.millis-period", "").trim();
+    private static volatile boolean orchestratorPackagingVerified;
 
     // Containers are lazily created so monolith mode does not require service cert binds.
     static PostgreSQLContainer<?> postgresContainer;
@@ -112,6 +138,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
         return registry + "/" + group + "/" + name + ":" + tag;
     }
 
+    private static String modularImage(String serviceName) {
+        return "localhost/csv-payments/" + serviceName + ":" + MODULAR_IMAGE_TAG;
+    }
+
     /**
          * Prepare test artifacts and start the containers required for the end-to-end CSV payments tests.
          *
@@ -127,6 +157,8 @@ abstract class AbstractCsvPaymentsEndToEnd {
         Path dir = Paths.get(TEST_E2E_DIR);
         Files.createDirectories(dir);
         ensureWritable(dir);
+        ensurePackagedOrchestratorFresh();
+        prepareTelemetryCapture();
         ensureDevCerts();
 
         if (MONOLITH_LAYOUT) {
@@ -183,7 +215,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static GenericContainer<?> getPersistenceService() {
         if (persistenceService == null) {
             persistenceService =
-                    new GenericContainer<>("localhost/csv-payments/persistence-svc:latest")
+                    new GenericContainer<>(modularImage("persistence-svc"))
                             .withNetwork(network)
                             .withNetworkAliases("persistence-svc")
                             .withFileSystemBind(
@@ -206,6 +238,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                             .forPort(8448)
                                             .allowInsecure()
                                             .withStartupTimeout(Duration.ofSeconds(60)));
+            configureTelemetryEnv(persistenceService);
         }
         return persistenceService;
     }
@@ -218,7 +251,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static GenericContainer<?> getInputCsvService() {
         if (inputCsvService == null) {
             inputCsvService =
-                    new GenericContainer<>("localhost/csv-payments/input-csv-file-processing-svc:latest")
+                    new GenericContainer<>(modularImage("input-csv-file-processing-svc"))
                             .withNetwork(network)
                             .withNetworkAliases("input-csv-file-processing-svc")
                             .withFileSystemBind(
@@ -239,6 +272,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                             .forPort(8444)
                                             .allowInsecure()
                                             .withStartupTimeout(Duration.ofSeconds(60)));
+            configureTelemetryEnv(inputCsvService);
         }
         return inputCsvService;
     }
@@ -255,7 +289,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static GenericContainer<?> getPaymentsProcessingService() {
         if (paymentsProcessingService == null) {
             paymentsProcessingService =
-                    new GenericContainer<>("localhost/csv-payments/payments-processing-svc:latest")
+                    new GenericContainer<>(modularImage("payments-processing-svc"))
                             .withNetwork(network)
                             .withNetworkAliases("payments-processing-svc")
                             .withFileSystemBind(
@@ -272,6 +306,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                             .forPort(8445)
                                             .allowInsecure()
                                             .withStartupTimeout(Duration.ofSeconds(60)));
+            configureTelemetryEnv(paymentsProcessingService);
         }
         return paymentsProcessingService;
     }
@@ -288,7 +323,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static GenericContainer<?> getPaymentStatusService() {
         if (paymentStatusService == null) {
             paymentStatusService =
-                    new GenericContainer<>("localhost/csv-payments/payment-status-svc:latest")
+                    new GenericContainer<>(modularImage("payment-status-svc"))
                             .withNetwork(network)
                             .withNetworkAliases("payment-status-svc")
                             .withFileSystemBind(
@@ -304,6 +339,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                             .forPort(8446)
                                             .allowInsecure()
                                             .withStartupTimeout(Duration.ofSeconds(60)));
+            configureTelemetryEnv(paymentStatusService);
         }
         return paymentStatusService;
     }
@@ -322,7 +358,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static GenericContainer<?> getOutputCsvService() {
         if (outputCsvService == null) {
             outputCsvService =
-                    new GenericContainer<>("localhost/csv-payments/output-csv-file-processing-svc:latest")
+                    new GenericContainer<>(modularImage("output-csv-file-processing-svc"))
                             .withNetwork(network)
                             .withNetworkAliases("output-csv-file-processing-svc")
                             .withFileSystemBind(
@@ -343,6 +379,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                             .forPort(8447)
                                             .allowInsecure()
                                             .withStartupTimeout(Duration.ofSeconds(60)));
+            configureTelemetryEnv(outputCsvService);
         }
         return outputCsvService;
     }
@@ -392,6 +429,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                             .forPort(8445)
                                             .allowInsecure()
                                             .withStartupTimeout(Duration.ofSeconds(60)));
+            configureTelemetryEnv(pipelineRuntimeService);
         }
         return pipelineRuntimeService;
     }
@@ -415,6 +453,90 @@ abstract class AbstractCsvPaymentsEndToEnd {
         };
     }
 
+    private static void prepareTelemetryCapture() throws IOException {
+        if (!TELEMETRY_CAPTURE_ACTIVE) {
+            if (TELEMETRY_ENABLED) {
+                LOG.warnf(
+                        "CSV payments OTel telemetry capture currently supports only the modular layout; active layout is %s.",
+                        RUNTIME_LAYOUT);
+            }
+            return;
+        }
+        Files.createDirectories(REPLAY_CAPTURE_DIR);
+        Files.deleteIfExists(REPLAY_FILE);
+        LOG.infof(
+                "CSV payments replay export enabled; writing replay JSON to %s.",
+                REPLAY_FILE);
+    }
+
+    private static void configureTelemetryEnv(GenericContainer<?> container) {
+        if (!TELEMETRY_CAPTURE_ACTIVE) {
+            return;
+        }
+        Map<String, String> env = new LinkedHashMap<>();
+        configureTelemetryEnv(env);
+        env.forEach(container::withEnv);
+    }
+
+    private static void configureTelemetryEnv(Map<String, String> env) {
+        if (!TELEMETRY_CAPTURE_ACTIVE) {
+            return;
+        }
+        env.put("QUARKUS_OTEL_ENABLED", "true");
+        env.put("QUARKUS_OTEL_SDK_DISABLED", "false");
+        env.put("QUARKUS_OTEL_METRICS_ENABLED", "false");
+        env.put("QUARKUS_OTEL_TRACES_ENABLED", "true");
+        env.put("QUARKUS_OTEL_LOGS_ENABLED", "false");
+        env.put("QUARKUS_OTEL_EXPORTER_OTLP_ENABLED", "false");
+        env.put("QUARKUS_OTEL_TRACES_SAMPLER", "parentbased_always_on");
+        env.put("QUARKUS_OTEL_TRACES_SAMPLER_ARG", "1.0");
+        env.put("QUARKUS_OBSERVABILITY_LGTM_ENABLED", "false");
+        env.put("PIPELINE_TELEMETRY_ENABLED", "true");
+        env.put("PIPELINE_TELEMETRY_TRACING_ENABLED", "true");
+        env.put("PIPELINE_TELEMETRY_TRACING_PER_ITEM", "true");
+        env.put("PIPELINE_TELEMETRY_METRICS_ENABLED", "false");
+        env.put("PIPELINE_TELEMETRY_REPLAY_ENABLED", "true");
+        env.put("PIPELINE_TELEMETRY_REPLAY_EXPORTER", "file");
+        env.put("PIPELINE_TELEMETRY_REPLAY_FILE_PATH", REPLAY_FILE.toAbsolutePath().toString());
+        if (!READER_DEMAND_PACER_ROWS_PER_PERIOD.isBlank()) {
+            env.put("CSV_PAYMENTS_READER_DEMAND_PACER_ROWS_PER_PERIOD", READER_DEMAND_PACER_ROWS_PER_PERIOD);
+        }
+        if (!READER_DEMAND_PACER_MILLIS_PERIOD.isBlank()) {
+            env.put("CSV_PAYMENTS_READER_DEMAND_PACER_MILLIS_PERIOD", READER_DEMAND_PACER_MILLIS_PERIOD);
+        }
+        putOptionalEnvOverride(
+                env,
+                "csv-payments.payment-provider.permits-per-second",
+                "CSV_PAYMENTS_PAYMENT_PROVIDER_PERMITS_PER_SECOND");
+        putOptionalEnvOverride(
+                env,
+                "csv-payments.payment-provider.timeout-millis",
+                "CSV_PAYMENTS_PAYMENT_PROVIDER_TIMEOUT_MILLIS");
+        putOptionalEnvOverride(
+                env,
+                "csv-payments.payment-provider.wait-milliseconds",
+                "CSV_PAYMENTS_PAYMENT_PROVIDER_WAIT_MILLISECONDS");
+        putOptionalEnvOverride(
+                env,
+                "csv-payments.payment-provider.send-timeout-probability",
+                "CSV_PAYMENTS_PAYMENT_PROVIDER_SEND_TIMEOUT_PROBABILITY");
+        putOptionalEnvOverride(
+                env,
+                "csv-payments.payment-provider.poll-timeout-probability",
+                "CSV_PAYMENTS_PAYMENT_PROVIDER_POLL_TIMEOUT_PROBABILITY");
+        putOptionalEnvOverride(
+                env,
+                "csv-payments.payment-provider.poll-reject-probability",
+                "CSV_PAYMENTS_PAYMENT_PROVIDER_POLL_REJECT_PROBABILITY");
+    }
+
+    private static void putOptionalEnvOverride(Map<String, String> env, String propertyName, String envName) {
+        String value = System.getProperty(propertyName, "").trim();
+        if (!value.isBlank()) {
+            env.put(envName, value);
+        }
+    }
+
     /**
      * Attempts to set POSIX file permissions to make the given path writable.
      *
@@ -431,6 +553,124 @@ abstract class AbstractCsvPaymentsEndToEnd {
             Files.setPosixFilePermissions(path, perms);
         } catch (IOException | UnsupportedOperationException e) {
             LOG.warnf("Unable to set permissions on %s: %s", path, e.getMessage());
+        }
+    }
+
+    private static void ensurePackagedOrchestratorFresh() throws IOException {
+        if (PIPELINE_RUNTIME_LAYOUT || orchestratorPackagingVerified) {
+            return;
+        }
+        synchronized (AbstractCsvPaymentsEndToEnd.class) {
+            if (PIPELINE_RUNTIME_LAYOUT || orchestratorPackagingVerified) {
+                return;
+            }
+            String jarPath =
+                    MONOLITH_LAYOUT
+                            ? "../monolith-svc/target/quarkus-app/quarkus-run.jar"
+                            : "target/quarkus-app/quarkus-run.jar";
+            Path jar = resolveJarPath(jarPath, MONOLITH_LAYOUT);
+            if (needsPackagedRefresh(jar)) {
+                LOG.infof("Packaged orchestrator at %s is stale or missing; rebuilding executable jar.", jar);
+                rebuildPackagedOrchestrator();
+            }
+            orchestratorPackagingVerified = true;
+        }
+    }
+
+    private static boolean needsPackagedRefresh(Path jar) throws IOException {
+        if (!Files.isRegularFile(jar)) {
+            return true;
+        }
+        long packagedAt = Files.getLastModifiedTime(jar).toMillis();
+        long classesAt = latestModifiedUnder(Paths.get(System.getProperty("user.dir")).resolve("target/classes"));
+        long mainSourcesAt = latestModifiedUnder(Paths.get(System.getProperty("user.dir")).resolve("src/main"));
+        long pomAt = Files.getLastModifiedTime(Paths.get(System.getProperty("user.dir")).resolve("pom.xml")).toMillis();
+        long runtimeAt = codeSourceModified(PipelineTelemetry.class);
+        long latestDependencyAt = Math.max(runtimeAt, pomAt);
+        long latestLocalAt = Math.max(classesAt, mainSourcesAt);
+        return packagedAt < latestDependencyAt || packagedAt < latestLocalAt;
+    }
+
+    private static long latestModifiedUnder(Path root) throws IOException {
+        if (root == null || !Files.exists(root)) {
+            return 0L;
+        }
+        if (Files.isRegularFile(root)) {
+            return Files.getLastModifiedTime(root).toMillis();
+        }
+        try (Stream<Path> files = Files.walk(root)) {
+            return files.filter(Files::isRegularFile)
+                    .mapToLong(
+                            path -> {
+                                try {
+                                    return Files.getLastModifiedTime(path).toMillis();
+                                } catch (IOException e) {
+                                    return 0L;
+                                }
+                            })
+                    .max()
+                    .orElse(0L);
+        }
+    }
+
+    private static long codeSourceModified(Class<?> type) {
+        try {
+            if (type == null
+                    || type.getProtectionDomain() == null
+                    || type.getProtectionDomain().getCodeSource() == null
+                    || type.getProtectionDomain().getCodeSource().getLocation() == null) {
+                return 0L;
+            }
+            Path location = Paths.get(type.getProtectionDomain().getCodeSource().getLocation().toURI());
+            if (!Files.exists(location)) {
+                return 0L;
+            }
+            return Files.getLastModifiedTime(location).toMillis();
+        } catch (Exception e) {
+            LOG.debugf(e, "Unable to determine code-source timestamp for %s.", type);
+            return 0L;
+        }
+    }
+
+    private static void rebuildPackagedOrchestrator() throws IOException {
+        Path moduleDir = Paths.get(System.getProperty("user.dir")).toAbsolutePath().normalize();
+        String[] command;
+        if (MONOLITH_LAYOUT) {
+            command = new String[] {"bash", "../build-monolith.sh", "-DskipTests"};
+        } else {
+            command =
+                    new String[] {
+                        "../../../mvnw",
+                        "-f",
+                        "../pom.xml",
+                        "-pl",
+                        "orchestrator-svc",
+                        "-am",
+                        "-DskipTests",
+                        "package"
+                    };
+        }
+        ProcessBuilder pb = new ProcessBuilder(command);
+        pb.directory(moduleDir.toFile());
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+        StringBuilder output = new StringBuilder();
+        try (BufferedReader reader =
+                new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line).append(System.lineSeparator());
+            }
+        }
+        try {
+            int exitCode = process.waitFor();
+            assertEquals(
+                    0,
+                    exitCode,
+                    "Failed to rebuild packaged orchestrator. Output tail:\n" + tailLines(output.toString(), 120));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while rebuilding packaged orchestrator.", e);
         }
     }
 
@@ -489,6 +729,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
      */
     @Test
     void fullPipelineWorks() throws Exception {
+        assumeTrue(runHappyPathScenario(), "Happy-path scenario disabled for this E2E class.");
         LOG.info("Running full end-to-end pipeline test");
 
         // Create test input directory - already created in @BeforeAll
@@ -522,6 +763,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
     @Test
     void pipelineContinuesWhenMalformedCsvIsRejected() throws Exception {
+        assumeTrue(runMalformedRejectScenario(), "Malformed reject scenario disabled for this E2E class.");
+        assumeFalse(
+                TELEMETRY_CAPTURE_ACTIVE && TELEMETRY_HAPPY_PATH_ONLY,
+                "Telemetry capture mode runs only the happy-path E2E by default.");
         LOG.info("Running malformed-input reject-and-continue end-to-end test");
 
         Path dir = Paths.get(TEST_E2E_DIR);
@@ -559,6 +804,67 @@ abstract class AbstractCsvPaymentsEndToEnd {
             "Expected stream-scope reject log entry for malformed CSV input.");
 
         LOG.info("Malformed-input reject-and-continue end-to-end test completed successfully!");
+    }
+
+    @Test
+    void providerRejectsAreRoutedToRejectSink() throws Exception {
+        assumeTrue(runProviderRejectScenario(), "Provider-reject scenario disabled for this E2E class.");
+        assumeTrue(
+                TELEMETRY_CAPTURE_ACTIVE,
+                "Provider-reject replay assertions require telemetry capture in modular layout.");
+        assumeFalse(
+                TELEMETRY_HAPPY_PATH_ONLY,
+                "Telemetry capture mode runs only the happy-path E2E by default.");
+        assumeTrue(
+                configuredPollRejectProbability() > 0.0d,
+                "Provider-reject scenario requires csv-payments.payment-provider.poll-reject-probability > 0.");
+        LOG.info("Running provider-reject end-to-end test");
+
+        Path dir = Paths.get(TEST_E2E_DIR);
+        Files.createDirectories(dir);
+        cleanTestOutputDirectory(dir);
+        resetDatabasePersistence();
+        createTestCsvFiles();
+
+        String inputPath = MONOLITH_LAYOUT ? TEST_E2E_DIR : TEST_E2E_TARGET_DIR;
+        String inputDirJson = "{ \"path\": \"" + inputPath + "\" }";
+        ProcessRunResult runResult = orchestratorTriggerRun(inputDirJson);
+
+        waitForPipelineComplete();
+
+        JsonNode replayDocument = OBJECT_MAPPER.readTree(Files.readString(REPLAY_FILE));
+        long rejectEvents = replayDocument.path("events").findValuesAsText("event").stream()
+                .filter("reject"::equals)
+                .count();
+        assertTrue(rejectEvents > 0, "Expected replay JSON to contain reject events.");
+
+        long outputRecords = outputRecordCount(Paths.get(TEST_E2E_DIR));
+        assertTrue(outputRecords < expectedPaymentRecordCount(), "Expected fewer output records than input records.");
+
+        String combinedOutput = readCombinedOutput(TEST_E2E_DIR);
+        assertFalse(combinedOutput.contains("John Doe"), "Provider-rejected recipient John Doe should not reach output.");
+        assertFalse(combinedOutput.contains("Alice Brown"), "Provider-rejected recipient Alice Brown should not reach output.");
+        assertTrue(
+                combinedOutput.contains("Jane Smith")
+                        || combinedOutput.contains("Bob Johnson")
+                        || combinedOutput.contains("Charlie Wilson"),
+                "Expected at least one successful recipient to reach output.");
+
+        assertTrue(
+                runResult.output().contains("Item reject stored in memory sink"),
+                "Expected in-memory item reject sink evidence in orchestrator logs.");
+    }
+
+    protected boolean runHappyPathScenario() {
+        return true;
+    }
+
+    protected boolean runMalformedRejectScenario() {
+        return true;
+    }
+
+    protected boolean runProviderRejectScenario() {
+        return false;
     }
 
     /**
@@ -607,6 +913,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         pb.environment().put("QUARKUS_PROFILE", "test");
         pb.environment().put("QUARKUS_JIB_JVM_ADDITIONAL_ARGUMENTS", "--enable-preview");
+        configureTelemetryEnv(pb.environment());
 
         if (MONOLITH_LAYOUT) {
             configureMonolithEnv(pb);
@@ -897,6 +1204,11 @@ abstract class AbstractCsvPaymentsEndToEnd {
      * @throws IOException if an I/O error occurs while writing the files or listing the directory
      */
     private void createTestCsvFiles() throws IOException {
+        if (CUSTOM_INPUT_FILE) {
+            createCustomInputCsvFile();
+            return;
+        }
+
         LOG.info("Creating test CSV files...");
 
         // Create first test file with 3 records
@@ -930,6 +1242,29 @@ abstract class AbstractCsvPaymentsEndToEnd {
             files.filter(path -> path.toString().endsWith(".csv"))
                     .forEach(path -> LOG.infof("- %s", path));
         }
+    }
+
+    private void createCustomInputCsvFile() throws IOException {
+        Path source = Paths.get(CSV_E2E_INPUT_FILE).toAbsolutePath().normalize();
+        assertTrue(Files.isRegularFile(source), "Expected custom CSV input file at " + source);
+
+        String fileName = source.getFileName().toString();
+        if (fileName.endsWith(".skip")) {
+            fileName = fileName.substring(0, fileName.length() - ".skip".length());
+        }
+        if (!fileName.endsWith(".csv")) {
+            fileName = fileName + ".csv";
+        }
+
+        Path target = Paths.get(TEST_E2E_DIR, fileName);
+        Files.copy(source, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        ensureWritable(target);
+
+        LOG.infof(
+                "Created custom E2E CSV input file %s from %s with %,d expected records.",
+                target,
+                source,
+                expectedPaymentRecordCount());
     }
 
     private void createValidAndMalformedCsvFiles() throws IOException {
@@ -989,7 +1324,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 outputFilesExist = files.anyMatch(path -> path.toString().endsWith(".out"));
             }
 
-            if (outputFilesExist) {
+            if (outputFilesExist && outputRecordCountReady()) {
                 LOG.info("Output files detected, pipeline processing completed");
                 return;
             }
@@ -1016,6 +1351,64 @@ abstract class AbstractCsvPaymentsEndToEnd {
                         + " after "
                         + PIPELINE_WAIT_TIMEOUT_SECONDS
                         + "s");
+    }
+
+    private boolean outputRecordCountReady() throws IOException {
+        if (!CUSTOM_INPUT_FILE) {
+            return true;
+        }
+        long currentRecords = outputRecordCount(Paths.get(TEST_E2E_DIR));
+        long expectedRecords = expectedOutputRecordCount();
+        if (currentRecords >= expectedRecords) {
+            LOG.infof(
+                    "Output record count reached expected custom input count: %,d/%s",
+                    currentRecords,
+                    expectedRecords);
+            return true;
+        }
+        LOG.infof("Waiting for output records: %,d/%,d", currentRecords, expectedRecords);
+        return false;
+    }
+
+    private long expectedOutputRecordCount() throws IOException {
+        long inputRecords = expectedPaymentRecordCount();
+        if (!runProviderRejectScenario()) {
+            return inputRecords;
+        }
+        double rejectProbability = configuredPollRejectProbability();
+        if (rejectProbability <= 0.0d) {
+            return inputRecords;
+        }
+        long expectedRejects = expectedProviderRejectCount(rejectProbability);
+        return Math.max(0L, inputRecords - expectedRejects);
+    }
+
+    private long expectedProviderRejectCount(double rejectProbability) throws IOException {
+        if (!CUSTOM_INPUT_FILE) {
+            return 0L;
+        }
+        try (Stream<String> lines = Files.lines(Paths.get(CSV_E2E_INPUT_FILE))) {
+            return lines.skip(1)
+                    .map(String::trim)
+                    .filter(line -> !line.isBlank())
+                    .map(line -> line.split(",", 2))
+                    .filter(columns -> columns.length > 0 && !columns[0].isBlank())
+                    .map(columns -> columns[0].trim())
+                    .filter(csvId -> shouldSimulateProviderReject(rejectProbability, csvId))
+                    .count();
+        }
+    }
+
+    private static boolean shouldSimulateProviderReject(double probability, String simulationKey) {
+        if (probability <= 0.0d) {
+            return false;
+        }
+        if (probability >= 1.0d) {
+            return true;
+        }
+        long normalized = Integer.toUnsignedLong(java.util.Objects.hash(simulationKey, "poll-reject"));
+        long threshold = Math.round(probability * 10_000d);
+        return normalized % 10_000L < threshold;
     }
 
     private void logPipelineTimeoutDiagnostics(long startTimeMillis) {
@@ -1119,28 +1512,19 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         LOG.info("Found output files: " + outputFiles);
 
-        // Count total records in all output files (excluding headers)
-        long totalRecords =
-                outputFiles.stream()
-                        .mapToLong(
-                                path -> {
-                                    try {
-                                        List<String> lines = Files.readAllLines(path);
-                                        // Exclude header line (first line)
-                                        return Math.max(0, lines.size() - 1);
-                                    } catch (IOException e) {
-                                        LOG.warnf(e, "Failed to read file: %s", path);
-                                        return 0L;
-                                    }
-                                })
-                        .sum();
+        long totalRecords = outputRecordCount(Paths.get(testOutputTargetDir));
 
         LOG.infof("Total records across all output files: %d", totalRecords);
 
-        // Expected: at least 5 records total (3 from first file + 2 from second file)
+        long expectedRecords = expectedPaymentRecordCount();
         assertTrue(
-                totalRecords >= 5,
-                String.format("Expected at least 5 records, but found %d", totalRecords));
+                totalRecords >= expectedRecords,
+                String.format("Expected at least %d records, but found %d", expectedRecords, totalRecords));
+
+        if (CUSTOM_INPUT_FILE) {
+            LOG.info("Custom input output record count verified");
+            return;
+        }
 
         Set<String> expectedRecipients = Set.of(
             "John Doe", "Jane Smith", "Bob Johnson", "Alice Brown", "Charlie Wilson");
@@ -1211,6 +1595,55 @@ abstract class AbstractCsvPaymentsEndToEnd {
             "Malformed recipient should not be written to output files: " + unexpectedRecipient);
     }
 
+    private long outputRecordCount(Path outputDir) throws IOException {
+        try (var files = Files.list(outputDir)) {
+            return files.filter(path -> path.toString().endsWith(".out"))
+                    .mapToLong(
+                            path -> {
+                                try (Stream<String> lines = Files.lines(path)) {
+                                    return Math.max(0L, lines.count() - 1L);
+                                } catch (IOException e) {
+                                    LOG.warnf(e, "Failed to read file: %s", path);
+                                    return 0L;
+                                }
+                            })
+                    .sum();
+        }
+    }
+
+    private String readCombinedOutput(String outputDir) throws IOException {
+        try (var files = Files.list(Paths.get(outputDir))) {
+            return files.filter(path -> path.toString().endsWith(".out"))
+                    .map(
+                            path -> {
+                                try {
+                                    return Files.readString(path);
+                                } catch (IOException e) {
+                                    LOG.warnf(e, "Failed reading output file: %s", path);
+                                    return "";
+                                }
+                            })
+                    .reduce("", String::concat);
+        }
+    }
+
+    private long expectedPaymentRecordCount() throws IOException {
+        if (!CUSTOM_INPUT_FILE) {
+            return 5L;
+        }
+        try (Stream<String> lines = Files.lines(Paths.get(CSV_E2E_INPUT_FILE))) {
+            return Math.max(0L, lines.count() - 1L);
+        }
+    }
+
+    private static double configuredPollRejectProbability() {
+        try {
+            return Double.parseDouble(System.getProperty("csv-payments.payment-provider.poll-reject-probability", "0"));
+        } catch (NumberFormatException ignored) {
+            return 0.0d;
+        }
+    }
+
     /**
      * Verify that the expected payment records were persisted to the test PostgreSQL database.
      *
@@ -1248,15 +1681,17 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
                 LOG.infof("Found %d records in paymentrecord table", recordCount);
 
-                // Expected: 5 records total (3 from first file + 2 from second file)
+                long expectedRecords = expectedPaymentRecordCount();
                 assertEquals(
-                        5,
+                        expectedRecords,
                         recordCount,
-                        String.format("Expected 5 records in database, but found %d", recordCount));
+                        String.format("Expected %d records in database, but found %d", expectedRecords, recordCount));
             }
 
-            // Verify specific records exist in the database
-            verifySpecificRecordsInDatabase(connection);
+            if (!CUSTOM_INPUT_FILE) {
+                // Verify specific records exist in the database
+                verifySpecificRecordsInDatabase(connection);
+            }
 
             LOG.info("Database verification completed successfully");
         }
@@ -1362,6 +1797,13 @@ abstract class AbstractCsvPaymentsEndToEnd {
      */
     @AfterAll
     static void tearDown() {
+        if (TELEMETRY_CAPTURE_ACTIVE) {
+            if (Files.exists(REPLAY_FILE)) {
+                LOG.infof("Replay JSON available at %s.", REPLAY_FILE);
+            } else {
+                LOG.warnf("Replay JSON was not produced at %s.", REPLAY_FILE);
+            }
+        }
         // Stop all containers to prevent resource leaks
         if (outputCsvService != null && outputCsvService.isRunning()) {
             outputCsvService.stop();

@@ -53,6 +53,10 @@ from the Prometheus datasource, so Prometheus scraping must be enabled even if O
 is configured. For OTLP-first dashboards, you need a Grafana datasource that reads OTLP
 metrics storage (for example Mimir) instead of Prometheus.
 
+Prometheus cadence only affects the metrics view. It does not affect live trace delivery to Tempo.
+For the split between metrics dashboards, Tempo live topology, and replay playback, see
+[Replay & Live Topology](/guide/operations/observability/replay).
+
 ## Parallelism and Backpressure
 
 TPF emits additional metrics and span attributes to showcase parallelism and buffer pressure:

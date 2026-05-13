@@ -43,6 +43,21 @@ class PaymentProviderConfigTest {
                     public double waitMilliseconds() {
                         return 100.0;
                     }
+
+                    @Override
+                    public double sendTimeoutProbability() {
+                        return 0.0;
+                    }
+
+                    @Override
+                    public double pollTimeoutProbability() {
+                        return 0.0;
+                    }
+
+                    @Override
+                    public double pollRejectProbability() {
+                        return 0.0;
+                    }
                 };
     }
 
@@ -59,5 +74,20 @@ class PaymentProviderConfigTest {
     @Test
     void testDefaultWaitMilliseconds() {
         assertThat(config.waitMilliseconds()).isEqualTo(100.0);
+    }
+
+    @Test
+    void testDefaultSendTimeoutProbability() {
+        assertThat(config.sendTimeoutProbability()).isEqualTo(0.0);
+    }
+
+    @Test
+    void testDefaultPollTimeoutProbability() {
+        assertThat(config.pollTimeoutProbability()).isEqualTo(0.0);
+    }
+
+    @Test
+    void testDefaultPollRejectProbability() {
+        assertThat(config.pollRejectProbability()).isEqualTo(0.0);
     }
 }

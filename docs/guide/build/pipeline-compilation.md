@@ -129,6 +129,16 @@ Build configuration notes:
 - Register the role directories as sources for IDEs via `build-helper-maven-plugin`.
 - If tests reference generated classes (e.g., REST resources), register the same directories as test sources in `generate-test-sources`.
 
+## Generated Pipeline Metadata
+
+The build also emits runtime metadata under `META-INF/pipeline/`:
+
+- `order.json`: resolved runtime execution order
+- `telemetry.json`: item-boundary and parent-step telemetry metadata
+- `replay-topology.json`: replay and live-topology metadata used by execution-event playback and trace-aware topology surfaces
+
+If you package a grouped runtime such as monolith or pipeline-runtime, keep these resources aligned with the runtime artifact that will execute the pipeline.
+
 ### gRPC Adapter Generation
 
 The gRPC adapter acts as a server-side endpoint that:

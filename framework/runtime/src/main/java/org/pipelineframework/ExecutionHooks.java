@@ -1,6 +1,8 @@
 package org.pipelineframework;
 
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -45,10 +47,17 @@ class ExecutionHooks {
         thread.setDaemon(true);
         return thread;
       });
+  private final ExecutorService killSwitchBlockingExecutor = Executors.newSingleThreadExecutor(
+      runnable -> {
+        Thread thread = new Thread(runnable, "tpf-kill-switch-io");
+        thread.setDaemon(true);
+        return thread;
+      });
 
   @PreDestroy
   void shutdownKillSwitchExecutor() {
     killSwitchExecutor.shutdownNow();
+    killSwitchBlockingExecutor.shutdownNow();
   }
 
   <T> Multi<T> attachMultiHooks(Multi<T> multi, StopWatch watch) {
@@ -143,8 +152,10 @@ class ExecutionHooks {
             return;
           }
           logRetryAmplificationTrigger(trigger, mode);
+          PipelineKillSwitchException exception = PipelineKillSwitchException.retryAmplification(trigger);
           if (mode == RetryAmplificationGuardMode.FAIL_FAST) {
-            emitter.fail(PipelineKillSwitchException.retryAmplification(trigger));
+            CompletableFuture.runAsync(() -> telemetry.abortActiveRun(exception), killSwitchBlockingExecutor);
+            emitter.fail(exception);
             Cancellable active = cancellableRef.get();
             if (active != null) {
               active.cancel();
@@ -258,7 +269,9 @@ class ExecutionHooks {
           if (isDone()) {
             return;
           }
-          super.onFailure(PipelineKillSwitchException.retryAmplification(trigger));
+          PipelineKillSwitchException exception = PipelineKillSwitchException.retryAmplification(trigger);
+          CompletableFuture.runAsync(() -> telemetry.abortActiveRun(exception), killSwitchBlockingExecutor);
+          super.onFailure(exception);
         }
       });
     }

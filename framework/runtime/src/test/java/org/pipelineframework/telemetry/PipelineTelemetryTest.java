@@ -401,6 +401,26 @@ class PipelineTelemetryTest {
         public PipelineStepConfig.MetricsConfig metrics() {
             return () -> true;
         }
+
+        @Override
+        public PipelineStepConfig.ReplayConfig replay() {
+            return new PipelineStepConfig.ReplayConfig() {
+                @Override
+                public Boolean enabled() {
+                    return false;
+                }
+
+                @Override
+                public String exporter() {
+                    return "none";
+                }
+
+                @Override
+                public Optional<String> filePath() {
+                    return Optional.empty();
+                }
+            };
+        }
     }
 
     static final class TestKillSwitchConfig implements PipelineStepConfig.KillSwitchConfig {

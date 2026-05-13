@@ -19,6 +19,7 @@ import org.pipelineframework.config.pipeline.PipelineYamlStep;
 import org.pipelineframework.processor.PipelineCompilationContext;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TransportMode;
 import org.pipelineframework.processor.ir.TypeMapping;
 
@@ -28,6 +29,7 @@ import org.pipelineframework.processor.ir.TypeMapping;
 public class PipelineTelemetryMetadataGenerator {
 
     private static final String RESOURCE_PATH = "META-INF/pipeline/telemetry.json";
+    private static final String REPLAY_TOPOLOGY_RESOURCE_PATH = "META-INF/pipeline/replay-topology.json";
     private static final String ITEM_INPUT_TYPE_KEY = "pipeline.telemetry.item-input-type";
     private static final String ITEM_OUTPUT_TYPE_KEY = "pipeline.telemetry.item-output-type";
 
@@ -68,6 +70,7 @@ public class PipelineTelemetryMetadataGenerator {
             return;
         }
         List<PipelineStepModel> ordered = orderBaseSteps(ctx, baseModels);
+        writeReplayTopologyMetadata(ctx, ordered, models);
         ItemTypes itemTypes = resolveItemTypes(ctx, ordered);
         if (itemTypes == null || itemTypes.inputType() == null || itemTypes.outputType() == null) {
             return;
@@ -91,6 +94,109 @@ public class PipelineTelemetryMetadataGenerator {
 
         javax.tools.FileObject resourceFile = processingEnv.getFiler()
             .createResource(StandardLocation.CLASS_OUTPUT, "", RESOURCE_PATH, (javax.lang.model.element.Element[]) null);
+        try (var output = resourceFile.openWriter()) {
+            output.write(writer.toString());
+        }
+    }
+
+    private void writeReplayTopologyMetadata(
+        PipelineCompilationContext ctx,
+        List<PipelineStepModel> orderedBase,
+        List<PipelineStepModel> orderedClientModels) throws IOException {
+        if (orderedBase == null || orderedBase.isEmpty()) {
+            return;
+        }
+        String pipeline = resolvePipelineName(ctx);
+        List<ReplayTopologyStep> steps = new ArrayList<>();
+        List<ReplayTopologyStep> baseSteps = new ArrayList<>();
+        Map<String, String> parentByPluginRuntimeClass = resolveStepParents(ctx, orderedBase);
+        Map<String, List<PipelineStepModel>> sideEffectsByParent = new LinkedHashMap<>();
+        for (PipelineStepModel model : orderedClientModels) {
+            if (model == null || !model.sideEffect()) {
+                continue;
+            }
+            String pluginRuntimeClass = resolveClientStepClassName(model, ctx.getTransportMode());
+            String parentRuntimeClass = parentByPluginRuntimeClass.get(pluginRuntimeClass);
+            if (parentRuntimeClass == null) {
+                throw unresolvedSideEffect(model, "replay-topology", pluginRuntimeClass);
+            }
+            sideEffectsByParent.computeIfAbsent(parentRuntimeClass, ignored -> new ArrayList<>()).add(model);
+        }
+
+        int index = 0;
+        for (PipelineStepModel model : orderedBase) {
+            String service = model.generatedName();
+            String logicalStep = service.endsWith("Service")
+                ? service.substring(0, service.length() - "Service".length())
+                : service;
+            steps.add(new ReplayTopologyStep(
+                resolveClientStepClassName(model, ctx.getTransportMode()),
+                logicalStep,
+                service,
+                cardinality(model.streamingShape()),
+                index++,
+                false,
+                null,
+                null));
+            baseSteps.add(steps.get(steps.size() - 1));
+            String parentRuntimeClass = resolveClientStepClassName(model, ctx.getTransportMode());
+            for (PipelineStepModel sideEffect : sideEffectsByParent.getOrDefault(parentRuntimeClass, List.of())) {
+                String sideEffectService = sideEffect.generatedName();
+                String sideEffectStep = sideEffectService.endsWith("Service")
+                    ? sideEffectService.substring(0, sideEffectService.length() - "Service".length())
+                    : sideEffectService;
+                steps.add(new ReplayTopologyStep(
+                    resolveClientStepClassName(sideEffect, ctx.getTransportMode()),
+                    sideEffectStep,
+                    sideEffectService,
+                    cardinality(sideEffect.streamingShape()),
+                    index++,
+                    true,
+                    logicalStep,
+                    resolvePluginKind(sideEffectService, sideEffectStep)));
+            }
+        }
+        List<ReplayTopologyTransition> transitions = new ArrayList<>();
+        for (int i = 0; i < baseSteps.size() - 1; i++) {
+            ReplayTopologyStep from = baseSteps.get(i);
+            ReplayTopologyStep to = baseSteps.get(i + 1);
+            transitions.add(new ReplayTopologyTransition(
+                from.step() + "->" + to.step(),
+                from.runtimeStepClass(),
+                to.runtimeStepClass(),
+                from.step(),
+                to.step(),
+                from.service(),
+                to.service(),
+                from.cardinality()));
+        }
+        for (ReplayTopologyStep step : steps) {
+            if (!step.sideEffect() || step.parentStep() == null) {
+                continue;
+            }
+            ReplayTopologyStep parent = steps.stream()
+                .filter(candidate -> step.parentStep().equals(candidate.step()))
+                .findFirst()
+                .orElse(null);
+            if (parent == null) {
+                continue;
+            }
+            transitions.add(new ReplayTopologyTransition(
+                parent.step() + "->" + step.step(),
+                parent.runtimeStepClass(),
+                step.runtimeStepClass(),
+                parent.step(),
+                step.step(),
+                parent.service(),
+                step.service(),
+                step.cardinality()));
+        }
+        ReplayTopologyMetadata metadata = new ReplayTopologyMetadata(pipeline, steps, transitions);
+        StringWriter writer = new StringWriter();
+        writer.write(gson.toJson(metadata));
+        javax.tools.FileObject resourceFile = processingEnv.getFiler()
+            .createResource(StandardLocation.CLASS_OUTPUT, "", REPLAY_TOPOLOGY_RESOURCE_PATH,
+                (javax.lang.model.element.Element[]) null);
         try (var output = resourceFile.openWriter()) {
             output.write(writer.toString());
         }
@@ -325,6 +431,55 @@ public class PipelineTelemetryMetadataGenerator {
         return locator.locate(moduleDir);
     }
 
+    private String resolvePipelineName(PipelineCompilationContext ctx) {
+        try {
+            Properties properties = loadApplicationProperties(ctx);
+            String configured = properties.getProperty("pipeline.telemetry.pipeline-name");
+            if (configured != null && !configured.isBlank()) {
+                return configured.trim();
+            }
+        } catch (IOException ignored) {
+            // Fall back to structural inference.
+        }
+        Optional<Path> pipelineConfig = resolvePipelineConfigPath(ctx);
+        if (pipelineConfig.isPresent()) {
+            Path config = pipelineConfig.get().toAbsolutePath().normalize();
+            Path parent = config.getParent();
+            if (parent != null) {
+                Path candidate = "config".equals(parent.getFileName().toString()) ? parent.getParent() : parent;
+                if (candidate != null && candidate.getFileName() != null) {
+                    return candidate.getFileName().toString();
+                }
+            }
+        }
+        Path moduleDir = ctx.getModuleDir();
+        if (moduleDir != null && moduleDir.getParent() != null && moduleDir.getParent().getFileName() != null) {
+            return moduleDir.getParent().getFileName().toString();
+        }
+        if (moduleDir != null && moduleDir.getFileName() != null) {
+            return moduleDir.getFileName().toString();
+        }
+        return "pipeline";
+    }
+
+    private String resolvePluginKind(String serviceName, String stepName) {
+        String combined = ((serviceName == null ? "" : serviceName) + " " + (stepName == null ? "" : stepName))
+            .toLowerCase(Locale.ROOT);
+        if (combined.contains("invalidateall")) {
+            return "cache-invalidate-all";
+        }
+        if (combined.contains("invalidate")) {
+            return "cache-invalidate";
+        }
+        if (combined.contains("cache")) {
+            return "cache";
+        }
+        if (combined.contains("persist")) {
+            return "persistence";
+        }
+        return null;
+    }
+
     /**
      * Selects the pipeline step model whose normalized client-step class name best matches the given token.
      *
@@ -441,13 +596,32 @@ public class PipelineTelemetryMetadataGenerator {
         for (PipelineStepModel plugin : pluginSteps) {
             PipelineStepModel parent = resolveParentForPlugin(plugin, orderedBase);
             if (parent == null) {
-                continue;
+                throw unresolvedSideEffect(plugin, "step-parent-resolution", resolveClientStepClassName(plugin, ctx.getTransportMode()));
             }
             parents.put(
                 resolveClientStepClassName(plugin, ctx.getTransportMode()),
                 resolveClientStepClassName(parent, ctx.getTransportMode()));
         }
         return parents;
+    }
+
+    private IllegalStateException unresolvedSideEffect(
+        PipelineStepModel model,
+        String phase,
+        String pluginRuntimeClass
+    ) {
+        return new IllegalStateException(
+            "Unable to resolve parent step for side-effect model serviceName='"
+                + (model == null ? "unknown" : model.serviceName())
+                + "', name='"
+                + (model == null ? "unknown" : model.generatedName())
+                + "', service='"
+                + (model == null ? "unknown" : model.serviceClassName())
+                + "', runtimeStepClass='"
+                + pluginRuntimeClass
+                + "', phase='"
+                + phase
+                + "'.");
     }
 
     private PipelineStepModel resolveParentForPlugin(PipelineStepModel plugin, List<PipelineStepModel> orderedBase) {
@@ -533,6 +707,18 @@ public class PipelineTelemetryMetadataGenerator {
             model.generatedName().replace("Service", "") + suffix;
     }
 
+    private String cardinality(StreamingShape shape) {
+        if (shape == null) {
+            return "one-to-one";
+        }
+        return switch (shape) {
+            case UNARY_UNARY -> "one-to-one";
+            case UNARY_STREAMING -> "one-to-many";
+            case STREAMING_UNARY -> "many-to-one";
+            case STREAMING_STREAMING -> "many-to-many";
+        };
+    }
+
     private record TelemetryMetadata(
         String itemInputType,
         String itemOutputType,
@@ -544,5 +730,33 @@ public class PipelineTelemetryMetadataGenerator {
     private record ItemTypes(
         String inputType,
         String outputType) {
+    }
+
+    private record ReplayTopologyMetadata(
+        String pipeline,
+        List<ReplayTopologyStep> steps,
+        List<ReplayTopologyTransition> transitions) {
+    }
+
+    private record ReplayTopologyStep(
+        String runtimeStepClass,
+        String step,
+        String service,
+        String cardinality,
+        int index,
+        boolean sideEffect,
+        String parentStep,
+        String pluginKind) {
+    }
+
+    private record ReplayTopologyTransition(
+        String id,
+        String fromRuntimeStepClass,
+        String toRuntimeStepClass,
+        String from,
+        String to,
+        String fromService,
+        String toService,
+        String cardinality) {
     }
 }

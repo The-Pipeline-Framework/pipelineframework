@@ -1,0 +1,86 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "-- Grafana --",
+        "uid": "-- Grafana --"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 14,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "content": "## Tempo live topology\n\nThis dashboard is the tracing entrypoint for `csv-payments`.\n\nUse **Grafana Explore -> Tempo -> Service Graph** for the live topology view. That graph is built from real-time spans and their relationships, not from Prometheus scrape intervals.\n\nRecommended flow:\n\n1. Open **Explore**\n2. Select the **Tempo** datasource\n3. Switch to **Service Graph** for topology\n4. Switch to **Search** or **TraceQL** for single-run drill-down\n\nThe Prometheus dashboard remains separate and focuses on throughput, latency, queue depth, inflight, and retry pressure.\n\nThe replay viewer remains separate and consumes `csv-payments-replay.json` for deterministic playback.",
+        "mode": "markdown"
+      },
+      "pluginVersion": "12.2.0",
+      "title": "How To Use This Surface",
+      "type": "text"
+    },
+    {
+      "datasource": {
+        "type": "-- Grafana --",
+        "uid": "-- Grafana --"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 10,
+        "x": 14,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "content": "## TraceQL quick queries\n\n```traceql\n{ name = \"tpf.pipeline.run\" && resource.service.name = \"orchestrator-svc\" }\n```\n\n```traceql\n{ name = \"tpf.step\" && span[\"tpf.pipeline\"] = \"csv-payments\" }\n```\n\n```traceql\n{ name = \"tpf.step\" && span[\"tpf.step\"] = \"ProcessPaymentStatus\" }\n```\n\nSpan events emitted by the framework:\n\n- `tpf.step.start`\n- `tpf.step.emit`\n- `tpf.step.retry`\n- `tpf.step.success`\n- `tpf.step.error`",
+        "mode": "markdown"
+      },
+      "pluginVersion": "12.2.0",
+      "title": "TraceQL Hints",
+      "type": "text"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 41,
+  "style": "dark",
+  "tags": [
+    "csv-payments",
+    "tempo",
+    "tracing"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "CSV Payments Tempo Tracing",
+  "version": 1,
+  "weekStart": ""
+}

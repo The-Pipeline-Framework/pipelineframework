@@ -22,6 +22,7 @@ This page documents the current monolith topology in `examples/csv-payments`.
 - `maven-resources-plugin` merges role outputs from `target/classes-pipeline/*` into `target/classes` before Quarkus packaging.
 - Monolith additionally copies orchestrator metadata needed by the harness/runtime boundary into `target/classes/META-INF/pipeline`:
   - `telemetry.json`
+  - `replay-topology.json`
   - `orchestrator-clients.properties`
 - `order.json` must come from monolith generation for the active transport/layout. It should not be overwritten by orchestrator metadata.
 

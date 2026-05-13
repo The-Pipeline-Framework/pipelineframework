@@ -20,6 +20,39 @@ This will compile all modules, run tests, and verify that there are no syntax or
 
 ## Running the Application
 
+### Replay Viewer
+
+To produce a replay artifact for the supported TPF replay viewer:
+
+```bash
+cd <repo-root>
+./examples/search/build-modular-replay-images.sh
+./mvnw -f examples/search/pom.xml -pl orchestrator-svc -am \
+  -Dtest=SearchReplayEndToEndIT \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
+```
+
+The replay harness generates 100 deterministic synthetic URLs and writes two datasets:
+
+- warm-cache replay:
+  - `examples/search/orchestrator-svc/target/test-e2e/replay/search-warm-cache-replay.json`
+- cache-hit replay:
+  - `examples/search/orchestrator-svc/target/test-e2e/replay/search-cache-hit-replay.json`
+
+The harness keeps the current process-scoped replay limitation explicit:
+
+- it serializes runs through one orchestrator instance
+- it merges one replay document per request into one dataset per phase
+- it does not claim true overlapping multi-run replay capture yet
+
+The cache-hit dataset is produced by running the same URLs twice with the same pipeline version after the cache has been warmed.
+
+Open the supported replay viewer from the docs site at `/replay-viewer/index.html` and either:
+
+- import the generated JSON files, or
+- use the built-in datasets `Search built-in pre-warm` and `Search built-in`
+
 ### In Development Mode
 
 Use the Quarkus plugin in IntelliJ IDEA or run with:

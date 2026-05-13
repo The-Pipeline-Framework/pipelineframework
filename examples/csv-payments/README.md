@@ -40,6 +40,48 @@ This script will:
 
 The script uses the health endpoints (`/q/health`) of each service to determine when they are ready, rather than waiting a fixed amount of time.
 
+## Replay Viewer
+
+To generate replay JSON for the supported TPF replay viewer:
+
+```bash
+cd <repo-root>
+./examples/csv-payments/build-modular-telemetry-images.sh
+./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc \
+  -Dcsv.e2e.telemetry.enabled=true \
+  -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
+```
+
+The replay artifact is written to:
+
+- `examples/csv-payments/orchestrator-svc/target/test-e2e/replay/csv-payments-replay.json`
+
+For a smaller first pass, use the 1k input and relax the reader pacer:
+
+```bash
+cd <repo-root>
+./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
+  -Dcsv.e2e.telemetry.enabled=true \
+  -Dquarkus.otel.traces.sampler.arg=1 \
+  -Dcsv.e2e.reader-demand-pacer.rows-per-period=20 \
+  -Dcsv.e2e.reader-demand-pacer.millis-period=1000 \
+  -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
+  -Dcsv.e2e.pipeline.wait.seconds=1800 \
+  -Dcsv.e2e.orchestrator.wait.seconds=1800 \
+  -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
+```
+
+Open the supported replay viewer at `/replay-viewer/index.html` and either:
+
+- select `CSV Payments built-in` from the viewer sidebar, or
+- switch the sidebar selector to `Custom replay` and load the generated JSON locally
+
+The built-in CSV dataset is sourced from the 1k-input replay lane and is intended as the longer default demo dataset for the viewer.
+
 ## Runtime-mapping matrix (Phase 2 build/functional smoke tests)
 
 To exercise runtime mapping scenarios from `examples/csv-payments/config/runtime-mapping`:
@@ -235,6 +277,39 @@ sequenceDiagram
 - **Grafana**: Metrics visualization and dashboarding
 - **Tempo**: Distributed tracing backend
 - **Loki**: Log aggregation system
+
+## Mock Payment Provider Simulation
+
+The csv-payments example includes a deterministic mock payment provider. In addition to the
+existing rate-limit timeout behavior, you can now force specific outcomes in modular E2E runs
+by setting Quarkus config properties:
+
+- `csv-payments.payment-provider.send-timeout-probability`
+- `csv-payments.payment-provider.poll-timeout-probability`
+- `csv-payments.payment-provider.poll-reject-probability`
+
+Each value is a probability between `0.0` and `1.0`. The mock applies the decision
+deterministically from stable payment-record identifiers, so the same replay input
+produces the same timeout or reject pattern.
+
+Example:
+
+```bash
+./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
+  -Dcsv.e2e.telemetry.enabled=true \
+  -Dcsv-payments.payment-provider.send-timeout-probability=0.03 \
+  -Dcsv-payments.payment-provider.poll-timeout-probability=0.05 \
+  -Dcsv-payments.payment-provider.poll-reject-probability=0.08 \
+  -Dtest=CsvPaymentsEndToEndIT#fullPipelineWorks \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
+```
+
+`poll-reject-probability` returns a business-level `PaymentStatus.status=Rejected`, and the
+`ProcessAckPaymentSentService` step maps that terminal outcome into the framework item-reject
+channel via `NonRetryableException`. Technical timeouts still surface as exceptions and therefore
+participate in the normal retry path. Malformed CSV handling is separate: today malformed input
+fails at file scope rather than as a per-record reject.
 
 ## Getting Started
 
@@ -443,14 +518,26 @@ The CSV Payments Processing Application includes a comprehensive observability s
 - **Loki**: Aggregates and stores logs from all services
 
 ### Running with Observability
-Simply running Quarkus in dev mode will spin up Quarkus Dev Services with the Observability stack.
+Quarkus LGTM Dev Services are explicit opt-in. Enable them before starting a service in dev mode:
+
+```bash
+export QUARKUS_OBSERVABILITY_LGTM_ENABLED=true
+export QUARKUS_MICROMETER_EXPORT_PROMETHEUS_ENABLED=true
+```
+
+This gives you the live Prometheus/Grafana/Tempo stack. The telemetry-enabled E2E harness is separate and produces offline replay artifacts.
+
+The telemetry harness launches the packaged orchestrator application. If the packaged `target/quarkus-app/quarkus-run.jar` is stale or missing, the test bootstrap rebuilds it automatically before the run starts.
 
 ### Dashboards
 
-The application includes a pre-configured Grafana dashboard that visualizes key metrics:
+The application ships separate observability surfaces:
 
-1. **Throughput Metrics**: Requests per second and average response time by service
-2. **JVM Metrics**: Heap memory usage and garbage collection time percentage
+1. **Grafana metrics dashboard**: Prometheus-backed throughput, latency, queue depth, inflight, and retry panels
+2. **Tempo tracing surface**: live topology and trace drill-down
+3. **Replay viewer**: deterministic playback from `csv-payments-replay.json`
+
+Dashboards are discovered from `META-INF/grafana/grafana-dashboard-*.json` resources when LGTM Dev Services are active.
 
 ### Custom Metrics
 
@@ -468,6 +555,8 @@ OpenTelemetry provides distributed tracing capabilities that allow you to:
 2. Identify bottlenecks and performance issues
 3. Understand the impact of retry mechanisms
 4. Visualize the lazy evaluation of streams across services
+
+Live traces are pushed to Tempo in real time through OTLP exporters. Prometheus scrape cadence only affects metrics panels.
 
 ### Accessing Metrics Endpoints
 
