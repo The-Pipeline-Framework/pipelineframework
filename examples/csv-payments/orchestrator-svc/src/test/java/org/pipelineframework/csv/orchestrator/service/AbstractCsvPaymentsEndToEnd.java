@@ -19,6 +19,11 @@ package org.pipelineframework.csv.orchestrator.service;
 import java.io.IOException;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -73,6 +78,13 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final String TEST_E2E_TARGET_DIR = "/app/test-e2e";
     private static final Path REPLAY_CAPTURE_DIR = Paths.get(TEST_E2E_DIR, "replay");
     private static final Path REPLAY_FILE = REPLAY_CAPTURE_DIR.resolve("csv-payments-replay.json");
+    private static final String LGTM_IMAGE = "docker.io/grafana/otel-lgtm:0.24.0";
+    private static final Duration LGTM_STARTUP_TIMEOUT = Duration.ofMinutes(3);
+    private static final long TEMPO_SEARCH_TIMEOUT_SECONDS = 90L;
+    private static final long TEMPO_SEARCH_POLL_MILLIS = 2_000L;
+    private static final long TEMPO_LOCAL_PAUSE_SECONDS = 600L;
+    private static final HttpClient HTTP_CLIENT =
+            HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
     private static final Path DEV_CERTS_DIR =
             Paths.get(System.getProperty("user.dir"))
                     .resolve("../target/dev-certs")
@@ -94,12 +106,15 @@ abstract class AbstractCsvPaymentsEndToEnd {
             Boolean.getBoolean("csv.e2e.telemetry.enabled");
     private static final boolean TELEMETRY_CAPTURE_ACTIVE =
             TELEMETRY_ENABLED && !MONOLITH_LAYOUT && !PIPELINE_RUNTIME_LAYOUT;
+    private static final boolean TEMPO_ENABLED =
+            Boolean.getBoolean("csv.e2e.tempo.enabled");
+    private static final boolean TEMPO_VERIFICATION_ACTIVE =
+            TEMPO_ENABLED && !MONOLITH_LAYOUT && !PIPELINE_RUNTIME_LAYOUT;
+    private static final boolean TEMPO_PAUSE_BEFORE_TEARDOWN =
+            Boolean.getBoolean("csv.e2e.tempo.pause.before.teardown");
     private static final boolean TELEMETRY_HAPPY_PATH_ONLY =
             Boolean.parseBoolean(System.getProperty("csv.e2e.telemetry.happy-path-only", "true"));
-    private static final String MODULAR_IMAGE_TAG =
-            TELEMETRY_CAPTURE_ACTIVE
-                    ? System.getProperty("csv.e2e.telemetry.image.tag", "otel")
-                    : System.getProperty("csv.e2e.image.tag", "latest");
+    private static final String MODULAR_IMAGE_TAG = resolveModularImageTag();
     private static final String CSV_E2E_INPUT_FILE = System.getProperty("csv.e2e.input.file", "").trim();
     private static final boolean CUSTOM_INPUT_FILE = !CSV_E2E_INPUT_FILE.isBlank();
     private static final String READER_DEMAND_PACER_ROWS_PER_PERIOD =
@@ -116,6 +131,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     static GenericContainer<?> paymentStatusService;
     static GenericContainer<?> outputCsvService;
     static GenericContainer<?> pipelineRuntimeService;
+    static GenericContainer<?> lgtmStack;
 
     private static long resolvePipelineWaitTimeoutSeconds() {
         long configured = Long.getLong("csv.e2e.pipeline.wait.seconds", 120L);
@@ -138,6 +154,16 @@ abstract class AbstractCsvPaymentsEndToEnd {
         return registry + "/" + group + "/" + name + ":" + tag;
     }
 
+    private static String resolveModularImageTag() {
+        if (TEMPO_VERIFICATION_ACTIVE) {
+            return System.getProperty("csv.e2e.tempo.image.tag", "observability");
+        }
+        if (TELEMETRY_CAPTURE_ACTIVE) {
+            return System.getProperty("csv.e2e.telemetry.image.tag", "otel");
+        }
+        return System.getProperty("csv.e2e.image.tag", "latest");
+    }
+
     private static String modularImage(String serviceName) {
         return "localhost/csv-payments/" + serviceName + ":" + MODULAR_IMAGE_TAG;
     }
@@ -153,12 +179,15 @@ abstract class AbstractCsvPaymentsEndToEnd {
          */
     @BeforeAll
     static void startServices() throws IOException {
+        assertFalse(
+                TELEMETRY_CAPTURE_ACTIVE && TEMPO_VERIFICATION_ACTIVE,
+                "Replay capture and Tempo verification modes are mutually exclusive.");
         // Create the test directory if it doesn't exist
         Path dir = Paths.get(TEST_E2E_DIR);
         Files.createDirectories(dir);
         ensureWritable(dir);
         ensurePackagedOrchestratorFresh();
-        prepareTelemetryCapture();
+        prepareObservabilityHarness();
         ensureDevCerts();
 
         if (MONOLITH_LAYOUT) {
@@ -173,15 +202,19 @@ abstract class AbstractCsvPaymentsEndToEnd {
             return;
         }
 
-        Startables.deepStart(
-                        Stream.of(
-                                getPostgresContainer(),
-                                getPersistenceService(),
-                                getInputCsvService(),
-                                getPaymentsProcessingService(),
-                                getPaymentStatusService(),
-                                getOutputCsvService()))
-                .join();
+        Stream.Builder<GenericContainer<?>> services = Stream.builder();
+        services.add(getPostgresContainer());
+        if (TEMPO_VERIFICATION_ACTIVE) {
+            services.add(getLgtmStackContainer());
+        }
+        services.add(getPersistenceService());
+        services.add(getInputCsvService());
+        services.add(getPaymentsProcessingService());
+        services.add(getPaymentStatusService());
+        services.add(getOutputCsvService());
+
+        Startables.deepStart(services.build()).join();
+        logObservabilityEndpoints();
     }
 
     /**
@@ -238,7 +271,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                             .forPort(8448)
                                             .allowInsecure()
                                             .withStartupTimeout(Duration.ofSeconds(60)));
-            configureTelemetryEnv(persistenceService);
+            configureObservabilityContainerEnv(persistenceService);
         }
         return persistenceService;
     }
@@ -272,7 +305,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                             .forPort(8444)
                                             .allowInsecure()
                                             .withStartupTimeout(Duration.ofSeconds(60)));
-            configureTelemetryEnv(inputCsvService);
+            configureObservabilityContainerEnv(inputCsvService);
         }
         return inputCsvService;
     }
@@ -306,7 +339,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                             .forPort(8445)
                                             .allowInsecure()
                                             .withStartupTimeout(Duration.ofSeconds(60)));
-            configureTelemetryEnv(paymentsProcessingService);
+            configureObservabilityContainerEnv(paymentsProcessingService);
         }
         return paymentsProcessingService;
     }
@@ -339,7 +372,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                             .forPort(8446)
                                             .allowInsecure()
                                             .withStartupTimeout(Duration.ofSeconds(60)));
-            configureTelemetryEnv(paymentStatusService);
+            configureObservabilityContainerEnv(paymentStatusService);
         }
         return paymentStatusService;
     }
@@ -379,7 +412,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                             .forPort(8447)
                                             .allowInsecure()
                                             .withStartupTimeout(Duration.ofSeconds(60)));
-            configureTelemetryEnv(outputCsvService);
+            configureObservabilityContainerEnv(outputCsvService);
         }
         return outputCsvService;
     }
@@ -429,9 +462,22 @@ abstract class AbstractCsvPaymentsEndToEnd {
                                             .forPort(8445)
                                             .allowInsecure()
                                             .withStartupTimeout(Duration.ofSeconds(60)));
-            configureTelemetryEnv(pipelineRuntimeService);
+            configureObservabilityContainerEnv(pipelineRuntimeService);
         }
         return pipelineRuntimeService;
+    }
+
+    private static GenericContainer<?> getLgtmStackContainer() {
+        if (lgtmStack == null) {
+            lgtmStack =
+                    new GenericContainer<>(LGTM_IMAGE)
+                            .withNetwork(network)
+                            .withNetworkAliases("lgtm", "otel-collector")
+                            .withExposedPorts(3000, 3200, 4318)
+                            .withLogConsumer(containerLog("lgtm"))
+                            .waitingFor(Wait.forListeningPort().withStartupTimeout(LGTM_STARTUP_TIMEOUT));
+        }
+        return lgtmStack;
     }
 
     /**
@@ -453,6 +499,19 @@ abstract class AbstractCsvPaymentsEndToEnd {
         };
     }
 
+    private static void prepareObservabilityHarness() throws IOException {
+        if (TEMPO_VERIFICATION_ACTIVE) {
+            LOG.info("CSV payments Tempo verification enabled; OTLP export will target the dedicated LGTM stack.");
+            return;
+        }
+        if (TEMPO_ENABLED) {
+            LOG.warnf(
+                    "CSV payments Tempo verification currently supports only the modular layout; active layout is %s.",
+                    RUNTIME_LAYOUT);
+        }
+        prepareTelemetryCapture();
+    }
+
     private static void prepareTelemetryCapture() throws IOException {
         if (!TELEMETRY_CAPTURE_ACTIVE) {
             if (TELEMETRY_ENABLED) {
@@ -469,16 +528,29 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 REPLAY_FILE);
     }
 
-    private static void configureTelemetryEnv(GenericContainer<?> container) {
-        if (!TELEMETRY_CAPTURE_ACTIVE) {
-            return;
-        }
+    private static void configureObservabilityContainerEnv(GenericContainer<?> container) {
         Map<String, String> env = new LinkedHashMap<>();
-        configureTelemetryEnv(env);
+        configureObservabilityContainerEnv(env);
         env.forEach(container::withEnv);
     }
 
-    private static void configureTelemetryEnv(Map<String, String> env) {
+    private static void configureObservabilityContainerEnv(Map<String, String> env) {
+        if (TEMPO_VERIFICATION_ACTIVE) {
+            configureTempoEnv(env, lgtmCollectorContainerEndpoint());
+            return;
+        }
+        configureReplayCaptureEnv(env);
+    }
+
+    private static void configureObservabilityProcessEnv(Map<String, String> env) {
+        if (TEMPO_VERIFICATION_ACTIVE) {
+            configureTempoEnv(env, lgtmCollectorHostEndpoint());
+            return;
+        }
+        configureReplayCaptureEnv(env);
+    }
+
+    private static void configureReplayCaptureEnv(Map<String, String> env) {
         if (!TELEMETRY_CAPTURE_ACTIVE) {
             return;
         }
@@ -528,6 +600,70 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 env,
                 "csv-payments.payment-provider.poll-reject-probability",
                 "CSV_PAYMENTS_PAYMENT_PROVIDER_POLL_REJECT_PROBABILITY");
+    }
+
+    private static void configureTempoEnv(Map<String, String> env, String otlpEndpoint) {
+        if (!TEMPO_VERIFICATION_ACTIVE) {
+            return;
+        }
+        env.put("QUARKUS_OTEL_ENABLED", "true");
+        env.put("QUARKUS_OTEL_SDK_DISABLED", "false");
+        env.put("QUARKUS_OTEL_METRICS_ENABLED", "false");
+        env.put("QUARKUS_OTEL_TRACES_ENABLED", "true");
+        env.put("QUARKUS_OTEL_LOGS_ENABLED", "false");
+        env.put("QUARKUS_OTEL_EXPORTER_OTLP_ENABLED", "true");
+        env.put("QUARKUS_OTEL_EXPORTER_OTLP_ENDPOINT", otlpEndpoint);
+        env.put("QUARKUS_OTEL_EXPORTER_OTLP_PROTOCOL", "http/protobuf");
+        env.put("QUARKUS_OTEL_TRACES_SAMPLER", "parentbased_always_on");
+        env.put("QUARKUS_OTEL_TRACES_SAMPLER_ARG", "1.0");
+        env.put("QUARKUS_OBSERVABILITY_LGTM_ENABLED", "false");
+        env.put("PIPELINE_TELEMETRY_ENABLED", "true");
+        env.put("PIPELINE_TELEMETRY_TRACING_ENABLED", "true");
+        env.put("PIPELINE_TELEMETRY_TRACING_PER_ITEM", "true");
+        env.put("PIPELINE_TELEMETRY_METRICS_ENABLED", "false");
+        if (!READER_DEMAND_PACER_ROWS_PER_PERIOD.isBlank()) {
+            env.put("CSV_PAYMENTS_READER_DEMAND_PACER_ROWS_PER_PERIOD", READER_DEMAND_PACER_ROWS_PER_PERIOD);
+        }
+        if (!READER_DEMAND_PACER_MILLIS_PERIOD.isBlank()) {
+            env.put("CSV_PAYMENTS_READER_DEMAND_PACER_MILLIS_PERIOD", READER_DEMAND_PACER_MILLIS_PERIOD);
+        }
+        putOptionalEnvOverride(
+                env,
+                "csv-payments.payment-provider.permits-per-second",
+                "CSV_PAYMENTS_PAYMENT_PROVIDER_PERMITS_PER_SECOND");
+        putOptionalEnvOverride(
+                env,
+                "csv-payments.payment-provider.timeout-millis",
+                "CSV_PAYMENTS_PAYMENT_PROVIDER_TIMEOUT_MILLIS");
+        putOptionalEnvOverride(
+                env,
+                "csv-payments.payment-provider.wait-milliseconds",
+                "CSV_PAYMENTS_PAYMENT_PROVIDER_WAIT_MILLISECONDS");
+    }
+
+    private static String lgtmCollectorContainerEndpoint() {
+        return "http://otel-collector:4318";
+    }
+
+    private static String lgtmCollectorHostEndpoint() {
+        return "http://localhost:" + getLgtmStackContainer().getMappedPort(4318);
+    }
+
+    private static String tempoApiBaseUrl() {
+        return "http://localhost:" + getLgtmStackContainer().getMappedPort(3200);
+    }
+
+    private static String grafanaBaseUrl() {
+        return "http://localhost:" + getLgtmStackContainer().getMappedPort(3000);
+    }
+
+    private static void logObservabilityEndpoints() {
+        if (!TEMPO_VERIFICATION_ACTIVE) {
+            return;
+        }
+        LOG.infof("Grafana UI available at %s.", grafanaBaseUrl());
+        LOG.infof("Tempo API available at %s.", tempoApiBaseUrl());
+        LOG.infof("OTLP collector endpoint available at %s.", lgtmCollectorHostEndpoint());
     }
 
     private static void putOptionalEnvOverride(Map<String, String> env, String propertyName, String envName) {
@@ -732,6 +868,28 @@ abstract class AbstractCsvPaymentsEndToEnd {
         assumeTrue(runHappyPathScenario(), "Happy-path scenario disabled for this E2E class.");
         LOG.info("Running full end-to-end pipeline test");
 
+        executeHappyPathPipelineAndVerify();
+
+        LOG.info("End-to-end processing test completed successfully!");
+    }
+
+    @Test
+    void tempoSpansReachLgtm() throws Exception {
+        assumeTrue(runTempoVerificationScenario(), "Tempo verification scenario disabled for this E2E class.");
+        assumeTrue(
+                TEMPO_VERIFICATION_ACTIVE,
+                "Tempo verification scenario requires csv.e2e.tempo.enabled in modular layout.");
+        LOG.info("Running Tempo/LGTM verification end-to-end test");
+
+        executeHappyPathPipelineAndVerify();
+        assertTempoTracesAvailable();
+
+        LOG.info("Tempo/LGTM verification test completed successfully!");
+    }
+
+    private void executeHappyPathPipelineAndVerify() throws Exception {
+        LOG.info("Executing happy-path pipeline run and verifying outputs.");
+
         // Create test input directory - already created in @BeforeAll
         Path dir = Paths.get(TEST_E2E_DIR);
         // Make sure the directory exists at the time of test execution too
@@ -757,8 +915,6 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         // Verify database persistence
         verifyDatabasePersistence();
-
-        LOG.info("End-to-end processing test completed successfully!");
     }
 
     @Test
@@ -867,6 +1023,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
         return false;
     }
 
+    protected boolean runTempoVerificationScenario() {
+        return false;
+    }
+
     /**
      * Start the orchestrator JAR in a separate JVM configured to use the test services and process CSV files from the given input directory.
      *
@@ -913,7 +1073,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         pb.environment().put("QUARKUS_PROFILE", "test");
         pb.environment().put("QUARKUS_JIB_JVM_ADDITIONAL_ARGUMENTS", "--enable-preview");
-        configureTelemetryEnv(pb.environment());
+        configureObservabilityProcessEnv(pb.environment());
 
         if (MONOLITH_LAYOUT) {
             configureMonolithEnv(pb);
@@ -1644,6 +1804,121 @@ abstract class AbstractCsvPaymentsEndToEnd {
         }
     }
 
+    private void assertTempoTracesAvailable() throws Exception {
+        JsonNode searchResponse = waitForTempoTraceSearch(List.of(
+                "{ name = \"tpf.pipeline.run\" }",
+                "{ name = \"tpf.step\" }"));
+        Set<String> traceIds = extractTraceIds(searchResponse);
+        assertFalse(
+                traceIds.isEmpty(),
+                "Expected Tempo search to return at least one trace. Search response: " + searchResponse);
+
+        for (String traceId : traceIds) {
+            JsonNode traceDocument = fetchTempoTrace(traceId);
+            if (containsTpfTraceSemantics(traceDocument)) {
+                LOG.infof("Verified Tempo trace %s contains TPF spans.", traceId);
+                return;
+            }
+        }
+
+        fail(
+                "Tempo returned traces, but none contained TPF span names. Trace IDs: "
+                        + traceIds
+                        + ", search response: "
+                        + searchResponse);
+    }
+
+    private JsonNode waitForTempoTraceSearch(List<String> candidateQueries) throws Exception {
+        long deadline = System.currentTimeMillis() + TimeUnit.SECONDS.toMillis(TEMPO_SEARCH_TIMEOUT_SECONDS);
+        JsonNode lastResponse = null;
+
+        while (System.currentTimeMillis() < deadline) {
+            for (String query : candidateQueries) {
+                JsonNode response = searchTempo(query);
+                lastResponse = response;
+                if (!extractTraceIds(response).isEmpty()) {
+                    return response;
+                }
+            }
+            Thread.sleep(TEMPO_SEARCH_POLL_MILLIS);
+        }
+
+        JsonNode serviceNames = tempoServiceNameValues();
+        fail(
+                "Timed out waiting for Tempo traces after "
+                        + TEMPO_SEARCH_TIMEOUT_SECONDS
+                        + "s. Last search response: "
+                        + lastResponse
+                        + ". Service names visible in Tempo: "
+                        + serviceNames);
+        return OBJECT_MAPPER.getNodeFactory().nullNode();
+    }
+
+    private boolean containsTpfTraceSemantics(JsonNode traceDocument) {
+        List<String> spanNames = traceDocument.findValuesAsText("name");
+        if (spanNames.contains("tpf.pipeline.run") || spanNames.contains("tpf.step")) {
+            return true;
+        }
+
+        List<String> attributeKeys = traceDocument.findValuesAsText("key");
+        return attributeKeys.contains("tpf.pipeline")
+                || attributeKeys.contains("tpf.step")
+                || attributeKeys.contains("tpf.step.class")
+                || traceDocument.toString().contains("\"tpf.pipeline.run\"")
+                || traceDocument.toString().contains("\"tpf.step\"");
+    }
+
+    private JsonNode searchTempo(String traceQl) throws Exception {
+        String encoded = URLEncoder.encode(traceQl, StandardCharsets.UTF_8);
+        URI uri = URI.create(tempoApiBaseUrl() + "/api/search?q=" + encoded + "&limit=20");
+        return httpGetJson(uri);
+    }
+
+    private JsonNode tempoServiceNameValues() {
+        try {
+            return httpGetJson(URI.create(tempoApiBaseUrl() + "/api/search/tag/service.name/values"));
+        } catch (Exception e) {
+            LOG.warnf(e, "Unable to query Tempo service.name values.");
+            return OBJECT_MAPPER.getNodeFactory().nullNode();
+        }
+    }
+
+    private JsonNode fetchTempoTrace(String traceId) throws Exception {
+        Exception v2Failure = null;
+        try {
+            return httpGetJson(URI.create(tempoApiBaseUrl() + "/api/v2/traces/" + traceId));
+        } catch (Exception e) {
+            v2Failure = e;
+        }
+        try {
+            return httpGetJson(URI.create(tempoApiBaseUrl() + "/api/traces/" + traceId));
+        } catch (Exception e) {
+            if (v2Failure != null) {
+                e.addSuppressed(v2Failure);
+            }
+            throw e;
+        }
+    }
+
+    private JsonNode httpGetJson(URI uri) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(uri).GET().build();
+        HttpResponse<String> response =
+                HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        assertEquals(
+                200,
+                response.statusCode(),
+                "Expected HTTP 200 from " + uri + " but got " + response.statusCode() + ". Body: " + response.body());
+        return OBJECT_MAPPER.readTree(response.body());
+    }
+
+    private Set<String> extractTraceIds(JsonNode searchResponse) {
+        Set<String> traceIds = new HashSet<>();
+        traceIds.addAll(searchResponse.findValuesAsText("traceID"));
+        traceIds.addAll(searchResponse.findValuesAsText("traceId"));
+        traceIds.removeIf(String::isBlank);
+        return traceIds;
+    }
+
     /**
      * Verify that the expected payment records were persisted to the test PostgreSQL database.
      *
@@ -1804,6 +2079,9 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 LOG.warnf("Replay JSON was not produced at %s.", REPLAY_FILE);
             }
         }
+        if (TEMPO_VERIFICATION_ACTIVE && TEMPO_PAUSE_BEFORE_TEARDOWN) {
+            pauseBeforeTempoTeardown();
+        }
         // Stop all containers to prevent resource leaks
         if (outputCsvService != null && outputCsvService.isRunning()) {
             outputCsvService.stop();
@@ -1826,8 +2104,40 @@ abstract class AbstractCsvPaymentsEndToEnd {
         if (postgresContainer != null && postgresContainer.isRunning()) {
             postgresContainer.stop();
         }
+        if (lgtmStack != null && lgtmStack.isRunning()) {
+            lgtmStack.stop();
+        }
         if (network != null) {
             network.close();
+        }
+    }
+
+    private static void pauseBeforeTempoTeardown() {
+        LOG.infof("Tempo pause requested. Grafana UI: %s", grafanaBaseUrl());
+        LOG.infof("Tempo API: %s", tempoApiBaseUrl());
+        LOG.infof(
+                "Example trace search: curl -G '%s/api/search' --data-urlencode 'q={ .service.name = \"orchestrator-svc\" }'",
+                tempoApiBaseUrl());
+        if (System.console() != null) {
+            System.console().printf("Tempo pause active. Press ENTER to tear down containers.%n");
+            System.console().readLine();
+            return;
+        }
+
+        long remainingMillis = TimeUnit.SECONDS.toMillis(TEMPO_LOCAL_PAUSE_SECONDS);
+        while (remainingMillis > 0L) {
+            LOG.infof(
+                    "Tempo pause active without interactive console; keeping stack alive for %ds more.",
+                    TimeUnit.MILLISECONDS.toSeconds(remainingMillis));
+            try {
+                long sleepMillis = Math.min(30_000L, remainingMillis);
+                Thread.sleep(sleepMillis);
+                remainingMillis -= sleepMillis;
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LOG.warn("Tempo pause interrupted; proceeding with teardown.");
+                return;
+            }
         }
     }
 }
