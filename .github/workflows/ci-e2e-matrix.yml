@@ -81,6 +81,14 @@ jobs:
       artifact_name: framework-m2-cache
     secrets: inherit
 
+  e2e-csv-tempo-verification:
+    name: CSV Tempo Verification E2E
+    needs: build-framework
+    uses: ./.github/workflows/e2e-csv-tempo-verification.yml
+    with:
+      artifact_name: framework-m2-cache
+    secrets: inherit
+
   e2e-search-lambda:
     name: Search Lambda Smoke
     needs: build-framework

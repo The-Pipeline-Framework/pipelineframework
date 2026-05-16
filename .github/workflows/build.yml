@@ -17,6 +17,7 @@ on:
       - '.github/actions/setup-testcontainers/**'
       - '.github/workflows/build.yml'
       - '.github/workflows/e2e-csv-monolith.yml'
+      - '.github/workflows/e2e-csv-tempo-verification.yml'
       - '.github/workflows/e2e-checkout-tpfgo-smoke.yml'
       - '.github/workflows/e2e-search-pipeline-e2e.yml'
       - '.github/workflows/e2e-search-resource-it.yml'
@@ -29,7 +30,7 @@ env:
   BOOTSTRAP_ARTIFACT: pr-m2-cache
   UNIT_TEST_PATTERN: "*,!*IT,!*ITCase,!RawDocumentResourceTest,!ParsedDocumentResourceTest,!TokenBatchResourceTest,!IndexAckResourceTest,!LambdaMockEventServerSmokeTest"
   # Dedicated Search E2E and resource IT workflows own the excluded Search classes below.
-  GENERIC_VERIFY_IT_PATTERN: "*IT,*ITCase,!CsvPaymentsEndToEndIT,!CsvPaymentsPipelineRuntimeEndToEndIT,!CsvPaymentsProviderRejectEndToEndIT,!SearchPipelineEndToEndIT,!SearchReplayEndToEndIT,!RawDocumentResourceIT,!ParsedDocumentResourceIT,!TokenBatchResourceIT,!IndexAckResourceIT"
+  GENERIC_VERIFY_IT_PATTERN: "*IT,*ITCase,!CsvPaymentsEndToEndIT,!CsvPaymentsPipelineRuntimeEndToEndIT,!CsvPaymentsProviderRejectEndToEndIT,!CsvPaymentsTempoVerificationEndToEndIT,!SearchPipelineEndToEndIT,!SearchReplayEndToEndIT,!RawDocumentResourceIT,!ParsedDocumentResourceIT,!TokenBatchResourceIT,!IndexAckResourceIT"
 
 jobs:
   bootstrap:
@@ -169,6 +170,14 @@ jobs:
     name: CSV Monolith E2E
     needs: bootstrap
     uses: ./.github/workflows/e2e-csv-monolith.yml
+    with:
+      artifact_name: ${{ needs.bootstrap.outputs.artifact_name }}
+    secrets: inherit
+
+  e2e-csv-tempo-verification:
+    name: CSV Tempo Verification E2E
+    needs: bootstrap
+    uses: ./.github/workflows/e2e-csv-tempo-verification.yml
     with:
       artifact_name: ${{ needs.bootstrap.outputs.artifact_name }}
     secrets: inherit
