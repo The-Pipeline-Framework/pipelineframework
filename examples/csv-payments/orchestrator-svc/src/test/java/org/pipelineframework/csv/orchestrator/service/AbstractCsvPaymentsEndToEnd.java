@@ -80,6 +80,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     private static final Path REPLAY_FILE = REPLAY_CAPTURE_DIR.resolve("csv-payments-replay.json");
     private static final String LGTM_IMAGE = "docker.io/grafana/otel-lgtm:0.24.0";
     private static final Duration LGTM_STARTUP_TIMEOUT = Duration.ofMinutes(3);
+    private static final Duration TEMPO_HTTP_REQUEST_TIMEOUT = Duration.ofSeconds(10);
     private static final long TEMPO_SEARCH_TIMEOUT_SECONDS = 90L;
     private static final long TEMPO_SEARCH_POLL_MILLIS = 2_000L;
     private static final long TEMPO_LOCAL_PAUSE_SECONDS = 600L;
@@ -1834,7 +1835,14 @@ abstract class AbstractCsvPaymentsEndToEnd {
 
         while (System.currentTimeMillis() < deadline) {
             for (String query : candidateQueries) {
-                JsonNode response = searchTempo(query);
+                JsonNode response;
+                try {
+                    response = searchTempo(query);
+                } catch (Exception e) {
+                    LOG.debugf(e, "Tempo search query failed during warm-up: %s", query);
+                    lastResponse = OBJECT_MAPPER.getNodeFactory().nullNode();
+                    continue;
+                }
                 lastResponse = response;
                 if (!extractTraceIds(response).isEmpty()) {
                     return response;
@@ -1901,7 +1909,10 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private JsonNode httpGetJson(URI uri) throws Exception {
-        HttpRequest request = HttpRequest.newBuilder(uri).GET().build();
+        HttpRequest request = HttpRequest.newBuilder(uri)
+                .timeout(TEMPO_HTTP_REQUEST_TIMEOUT)
+                .GET()
+                .build();
         HttpResponse<String> response =
                 HTTP_CLIENT.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
         assertEquals(
