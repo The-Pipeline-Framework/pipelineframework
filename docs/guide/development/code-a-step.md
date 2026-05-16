@@ -45,7 +45,7 @@ steps:
 
 The `input` and `output` fields specify the service domain types and must match the generic parameters of your service interface (`ReactiveService<I, O>`). The `inboundMapper` and `outboundMapper` fields reference mappers that translate between Domain ↔ External (e.g., `Mapper<Domain, External>`). Mappers should be provided as paired `Mapper<Domain, External>` implementations to validate boundaries and avoid build-time type mismatches.
 
-When a step can produce several closed business outcomes, keep the single-output shape and declare the output as a typed union. See [Typed Union Outputs](/guide/development/typed-union-outputs).
+When a step can produce several closed business outcomes, keep the single-output shape and declare the output as a typed union.
 
 ## 3) Implement the Service
 
