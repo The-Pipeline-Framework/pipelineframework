@@ -25,12 +25,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.junit.jupiter.api.Test;
+import org.pipelineframework.blocking.CloseableIterator;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
 import org.pipelineframework.step.ConfigurableStep;
 import org.pipelineframework.step.StepManyToMany;
 import org.pipelineframework.step.StepOneToMany;
 import org.pipelineframework.step.StepOneToOne;
+import org.pipelineframework.step.blocking.StepManyToManyBlocking;
+import org.pipelineframework.step.blocking.StepManyToOneBlocking;
+import org.pipelineframework.step.blocking.StepOneToManyBlocking;
+import org.pipelineframework.step.blocking.StepOneToManyBlockingIterator;
+import org.pipelineframework.step.blocking.StepOneToOneBlocking;
 import org.pipelineframework.step.functional.ManyToOne;
 import org.pipelineframework.step.future.StepOneToOneCompletableFuture;
 
@@ -158,6 +164,67 @@ class PipelineStepExecutorTest {
         assertEquals(List.of("x-mapped"), ((Multi<String>) result).collect().asList().await().indefinitely());
     }
 
+    @Test
+    void blockingOneToOneOnUniProducesOutput() {
+        Object result = PipelineStepExecutor.applyOneToOneUnchecked(
+            new BlockingSuffixOneToOneStep("-blocking"),
+            Uni.createFrom().item("x"));
+
+        assertEquals("x-blocking", ((Uni<String>) result).await().indefinitely());
+    }
+
+    @Test
+    void blockingOneToManyProducesExpandedItems() {
+        Object result = PipelineStepExecutor.applyOneToManyUnchecked(
+            new BlockingExpandingOneToManyStep(),
+            Uni.createFrom().item("x"),
+            false,
+            16,
+            null,
+            null,
+            null);
+
+        assertEquals(List.of("x-1", "x-2"), ((Multi<String>) result).collect().asList().await().indefinitely());
+    }
+
+    @Test
+    void blockingIteratorOneToManyProducesExpandedItems() {
+        Object result = PipelineStepExecutor.applyOneToManyUnchecked(
+            new BlockingIteratorOneToManyStep(),
+            Uni.createFrom().item("x"),
+            false,
+            16,
+            null,
+            null,
+            null);
+
+        assertEquals(List.of("x-1", "x-2"), ((Multi<String>) result).collect().asList().await().indefinitely());
+    }
+
+    @Test
+    void blockingManyToOneReducesItems() {
+        Object result = PipelineStepExecutor.applyManyToOneUnchecked(
+            new BlockingReducingManyToOneStep(),
+            Multi.createFrom().items("a", "b"),
+            null,
+            null,
+            null);
+
+        assertEquals("a,b", ((Uni<String>) result).await().indefinitely());
+    }
+
+    @Test
+    void blockingManyToManyMapsItems() {
+        Object result = PipelineStepExecutor.applyManyToManyUnchecked(
+            new BlockingMappingManyToManyStep(),
+            Multi.createFrom().items("a", "b"),
+            null,
+            null,
+            null);
+
+        assertEquals(List.of("a-mapped", "b-mapped"), ((Multi<String>) result).collect().asList().await().indefinitely());
+    }
+
     static final class SuffixOneToOneStep extends ConfigurableStep implements StepOneToOne<String, String> {
         private final String suffix;
 
@@ -268,6 +335,64 @@ class PipelineStepExecutorTest {
         @Override
         public Multi<String> applyTransform(Multi<String> input) {
             return input.onItem().transform(item -> item + "-mapped");
+        }
+    }
+
+    static final class BlockingSuffixOneToOneStep extends ConfigurableStep implements StepOneToOneBlocking<String, String> {
+        private final String suffix;
+
+        BlockingSuffixOneToOneStep(String suffix) {
+            this.suffix = suffix;
+        }
+
+        @Override
+        public String applyBlocking(String in) {
+            return in + suffix;
+        }
+    }
+
+    static final class BlockingExpandingOneToManyStep extends ConfigurableStep implements StepOneToManyBlocking<String, String> {
+        @Override
+        public List<String> applyBlocking(String in) {
+            return List.of(in + "-1", in + "-2");
+        }
+    }
+
+    static final class BlockingIteratorOneToManyStep extends ConfigurableStep
+        implements StepOneToManyBlockingIterator<String, String> {
+        @Override
+        public CloseableIterator<String> iterateBlocking(String in) {
+            return new CloseableIterator<>() {
+                private int index;
+
+                @Override
+                public boolean hasNext() {
+                    return index < 2;
+                }
+
+                @Override
+                public String next() {
+                    return in + "-" + ++index;
+                }
+
+                @Override
+                public void close() {
+                }
+            };
+        }
+    }
+
+    static final class BlockingReducingManyToOneStep extends ConfigurableStep implements StepManyToOneBlocking<String, String> {
+        @Override
+        public String applyBatchBlocking(List<String> inputs) {
+            return String.join(",", inputs);
+        }
+    }
+
+    static final class BlockingMappingManyToManyStep extends ConfigurableStep implements StepManyToManyBlocking<String, String> {
+        @Override
+        public List<String> applyBatchBlocking(List<String> inputs) {
+            return inputs.stream().map(item -> item + "-mapped").toList();
         }
     }
 }

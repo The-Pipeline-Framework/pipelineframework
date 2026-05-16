@@ -25,6 +25,7 @@ import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TypeMapping;
 import org.pipelineframework.processor.renderer.ClientStepRenderer;
+import org.pipelineframework.processor.renderer.BlockingReactiveBridgeRenderer;
 import org.pipelineframework.processor.renderer.GenerationContext;
 import org.pipelineframework.processor.renderer.GrpcServiceAdapterRenderer;
 import org.pipelineframework.processor.renderer.LocalClientStepRenderer;
@@ -135,6 +136,7 @@ class StepArtifactGenerationServiceTest {
             mock(RestClientStepRenderer.class),
             mock(RestResourceRenderer.class),
             mock(RestFunctionHandlerRenderer.class),
+            mock(BlockingReactiveBridgeRenderer.class),
             renderer
         );
 
@@ -166,6 +168,7 @@ class StepArtifactGenerationServiceTest {
             mock(RestClientStepRenderer.class),
             mock(RestResourceRenderer.class),
             mock(RestFunctionHandlerRenderer.class),
+            mock(BlockingReactiveBridgeRenderer.class),
             mock(RemoteOperatorAdapterRenderer.class)
         );
     }

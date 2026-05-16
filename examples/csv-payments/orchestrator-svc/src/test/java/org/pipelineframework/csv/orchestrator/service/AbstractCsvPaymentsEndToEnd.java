@@ -126,6 +126,11 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private static String resolvePipelineRuntimeImage() {
+        String propertyImage = System.getProperty("csv.e2e.pipeline.runtime.image");
+        if (propertyImage != null && !propertyImage.isBlank()) {
+            return propertyImage;
+        }
+
         String explicitImage = System.getenv("PIPELINE_RUNTIME_IMAGE");
         if (explicitImage != null && !explicitImage.isBlank()) {
             return explicitImage;

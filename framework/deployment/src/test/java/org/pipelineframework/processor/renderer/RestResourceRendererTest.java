@@ -397,4 +397,58 @@ class RestResourceRendererTest {
 
         assertTrue(source.contains("@RestStreamElementType(\"application/json\")"));
     }
+
+    @Test
+    void blockingServicesInjectGeneratedReactiveBridge() throws IOException {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("ProcessCsvPaymentsInputService")
+            .servicePackage("org.pipelineframework.csv.service")
+            .serviceClassName(ClassName.get("org.pipelineframework.csv.service", "ProcessCsvPaymentsInputService"))
+            .streamingShape(StreamingShape.UNARY_STREAMING)
+            .executionMode(ExecutionMode.DEFAULT)
+            .serviceApiKind(ServiceApiKind.BLOCKING)
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.csv.common.domain", "CsvPaymentsInputFile"),
+                null,
+                false))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.csv.common.domain", "PaymentRecord"),
+                null,
+                false))
+            .enabledTargets(Set.of(GenerationTarget.REST_RESOURCE))
+            .build();
+
+        String source = renderAndReadSource(
+            new RestBinding(model, null),
+            "org/pipelineframework/csv/service/pipeline/ProcessCsvPaymentsInputResource.java");
+
+        assertTrue(source.contains("ProcessCsvPaymentsInputServiceBlockingReactiveBridge domainService;"));
+    }
+
+    @Test
+    void blockingIteratorServicesInjectGeneratedReactiveBridge() throws IOException {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+            .serviceName("ProcessCsvPaymentsInputService")
+            .servicePackage("org.pipelineframework.csv.service")
+            .serviceClassName(ClassName.get("org.pipelineframework.csv.service", "ProcessCsvPaymentsInputService"))
+            .streamingShape(StreamingShape.UNARY_STREAMING)
+            .executionMode(ExecutionMode.DEFAULT)
+            .serviceApiKind(ServiceApiKind.BLOCKING_ITERATOR)
+            .inputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.csv.common.domain", "CsvPaymentsInputFile"),
+                null,
+                false))
+            .outputMapping(new TypeMapping(
+                ClassName.get("org.pipelineframework.csv.common.domain", "PaymentRecord"),
+                null,
+                false))
+            .enabledTargets(Set.of(GenerationTarget.REST_RESOURCE))
+            .build();
+
+        String source = renderAndReadSource(
+            new RestBinding(model, null),
+            "org/pipelineframework/csv/service/pipeline/ProcessCsvPaymentsInputResource.java");
+
+        assertTrue(source.contains("ProcessCsvPaymentsInputServiceBlockingReactiveBridge domainService;"));
+    }
 }
