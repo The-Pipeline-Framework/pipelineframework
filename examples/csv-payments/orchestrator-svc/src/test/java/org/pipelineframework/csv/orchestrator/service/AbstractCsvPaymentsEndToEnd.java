@@ -1815,7 +1815,13 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 "Expected Tempo search to return at least one trace. Search response: " + searchResponse);
 
         for (String traceId : traceIds) {
-            JsonNode traceDocument = fetchTempoTrace(traceId);
+            JsonNode traceDocument;
+            try {
+                traceDocument = fetchTempoTrace(traceId);
+            } catch (Exception e) {
+                LOG.warnf(e, "Unable to fetch Tempo trace %s during verification.", traceId);
+                continue;
+            }
             if (containsTpfTraceSemantics(traceDocument)) {
                 LOG.infof("Verified Tempo trace %s contains TPF spans.", traceId);
                 return;
