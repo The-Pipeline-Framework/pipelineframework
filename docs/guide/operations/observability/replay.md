@@ -44,6 +44,11 @@ Replay JSON is the supported offline input for the TPF replay viewer.
 
 Replay JSON is not a collector input and it is not a live transport. It is a deterministic playback artifact.
 
+For `csv-payments`, the repo keeps those concerns in separate modular E2E lanes:
+
+- replay lane: writes replay JSON and validates offline playback inputs
+- Tempo lane: exports live spans to a dedicated LGTM stack and queries Tempo directly
+
 ## Prometheus polling versus traces
 
 Prometheus polling only affects metrics freshness.

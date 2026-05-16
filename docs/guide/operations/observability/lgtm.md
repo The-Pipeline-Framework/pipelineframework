@@ -30,6 +30,8 @@ For `csv-payments`, the repo now ships separate resources for:
 Keep Tempo separate from the Prometheus dashboard. Use Tempo for live topology and trace drill-down,
 and use Prometheus-backed panels for throughput, latency, queue depth, inflight, and retries.
 
+For `csv-payments`, the dedicated Tempo verification E2E does not rely on nested LGTM Dev Services inside the service containers. It starts an explicit LGTM stack and points the modular services plus packaged orchestrator at its OTLP collector.
+
 ## Tempo versus Prometheus
 
 - Tempo receives spans through OTLP exporters in real time.
