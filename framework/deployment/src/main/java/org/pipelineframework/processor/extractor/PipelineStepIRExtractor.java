@@ -1,6 +1,8 @@
 package org.pipelineframework.processor.extractor;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.AnnotationMirror;
@@ -289,24 +291,88 @@ public class PipelineStepIRExtractor {
 
     private ServiceContract resolveServiceContract(TypeElement serviceClass) {
         Types typeUtils = processingEnv.getTypeUtils();
+        List<ServiceContract> matches = new ArrayList<>();
+        List<String> matchNames = new ArrayList<>();
+        List<SupportedContract> matchedContracts = new ArrayList<>();
+        List<String> directSupportedInterfaces = directSupportedInterfaceNames(typeUtils, serviceClass);
+        if (directSupportedInterfaces.size() > 1) {
+            processingEnv.getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Pipeline step '" + serviceClass.getQualifiedName()
+                    + "' implements multiple supported service interfaces: " + String.join(", ", directSupportedInterfaces)
+                    + ". Please implement exactly one reactive or blocking service contract.",
+                serviceClass);
+            return null;
+        }
         for (SupportedContract contract : SupportedContract.values()) {
             DeclaredType declared = findReactiveSupertype(typeUtils, serviceClass.asType(), contract.interfaceName);
             if (declared == null || declared.getTypeArguments().size() < 2) {
                 continue;
             }
-            if (contract.materializingWarning != null) {
-                processingEnv.getMessager().printMessage(
-                    javax.tools.Diagnostic.Kind.WARNING,
-                    contract.materializingWarning,
-                    serviceClass);
-            }
-            return new ServiceContract(
+            matches.add(new ServiceContract(
                 contract.apiKind,
                 contract.shape,
                 TypeName.get(declared.getTypeArguments().get(0)),
-                TypeName.get(declared.getTypeArguments().get(1)));
+                TypeName.get(declared.getTypeArguments().get(1))));
+            matchNames.add(contract.interfaceName);
+            matchedContracts.add(contract);
         }
-        return null;
+        List<ServiceContract> effectiveMatches = new ArrayList<>();
+        List<String> effectiveMatchNames = new ArrayList<>();
+        List<SupportedContract> effectiveMatchedContracts = new ArrayList<>();
+        for (int i = 0; i < matches.size(); i++) {
+            ServiceContract match = matches.get(i);
+            boolean impliedByBlocking = match.apiKind() == ServiceApiKind.REACTIVE
+                && matches.stream()
+                    .anyMatch(other -> other.apiKind() != ServiceApiKind.REACTIVE
+                        && other.shape() == match.shape());
+            if (!impliedByBlocking) {
+                effectiveMatches.add(match);
+                effectiveMatchNames.add(matchNames.get(i));
+                effectiveMatchedContracts.add(matchedContracts.get(i));
+            }
+        }
+        if (effectiveMatches.size() > 1) {
+            processingEnv.getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Pipeline step '" + serviceClass.getQualifiedName()
+                    + "' implements multiple supported service interfaces: " + String.join(", ", effectiveMatchNames)
+                    + ". Please implement exactly one reactive or blocking service contract.",
+                serviceClass);
+            return null;
+        }
+        if (effectiveMatches.isEmpty()) {
+            return null;
+        }
+        SupportedContract contract = effectiveMatchedContracts.get(0);
+        if (contract.materializingWarning != null) {
+            processingEnv.getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.WARNING,
+                contract.materializingWarning,
+                serviceClass);
+        }
+        return effectiveMatches.get(0);
+    }
+
+    private List<String> directSupportedInterfaceNames(Types typeUtils, TypeElement serviceClass) {
+        List<String> directNames = new ArrayList<>();
+        for (TypeMirror iface : serviceClass.getInterfaces()) {
+            Element element = typeUtils.asElement(iface);
+            if (element instanceof TypeElement typeElement && isSupportedServiceInterface(typeElement)) {
+                directNames.add(typeElement.getQualifiedName().toString());
+            }
+        }
+        return directNames;
+    }
+
+    private boolean isSupportedServiceInterface(TypeElement typeElement) {
+        String qualifiedName = typeElement.getQualifiedName().toString();
+        for (SupportedContract contract : SupportedContract.values()) {
+            if (contract.interfaceName.equals(qualifiedName)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private DeclaredType findReactiveSupertype(Types typeUtils, TypeMirror type, String erasureName) {

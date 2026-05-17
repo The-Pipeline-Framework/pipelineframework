@@ -45,7 +45,7 @@ Internal `service:` steps can now be authored against reactive service interface
 - Transport renderers still target reactive service contracts. They inject the generated bridge instead of the authored blocking service directly.
 - The generated bridge adapts `List`-based blocking contracts with materializing helpers and adapts `BlockingIteratorService` with iterator-to-`Multi` offload helpers.
 
-This keeps gRPC, REST, local, and function generation on one transport contract family while still allowing synchronous user code in internal services.
+This keeps REST, gRPC, and LOCAL generation on one transport contract family while still allowing synchronous user code in internal services, and preserves FUNCTION as a platform-generation path.
 
 ## Scope
 

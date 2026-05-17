@@ -167,7 +167,10 @@ class BlockingExecutionSupportTest {
             }
         }).subscribe().with(item -> {
             if ("first".equals(item)) {
-                cancellable.get().cancel();
+                Cancellable current = cancellable.get();
+                if (current != null) {
+                    current.cancel();
+                }
             }
         });
         cancellable.set(subscription);

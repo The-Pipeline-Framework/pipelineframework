@@ -987,24 +987,6 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             "BlockingBidirectionalStreamingService materializes the full input list and full output list. "
                 + "Batch retries rerun the full callback.");
 
-        if (blockingMatches.size() > 1) {
-            messager.printMessage(
-                javax.tools.Diagnostic.Kind.ERROR,
-                "Internal service '" + serviceElement.getQualifiedName()
-                    + "' implements multiple supported service interfaces: " + String.join(", ", blockingMatchNames)
-                    + ". Please implement exactly one.");
-            return null;
-        }
-        if (!blockingMatches.isEmpty()) {
-            if (blockingMatches.getFirst().materializingWarning() != null) {
-                messager.printMessage(
-                    javax.tools.Diagnostic.Kind.WARNING,
-                    blockingMatches.getFirst().materializingWarning(),
-                    serviceElement);
-            }
-            return blockingMatches.get(0);
-        }
-
         List<SupportedServiceSignature> matches = new ArrayList<>();
         List<String> matchNames = new ArrayList<>();
 
@@ -1020,15 +1002,72 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             "org.pipelineframework.service.ReactiveBidirectionalStreamingService", ServiceApiKind.REACTIVE,
             StreamingShape.STREAMING_STREAMING,
             null);
-        if (matches.size() > 1) {
+
+        List<String> directSupportedInterfaces = directSupportedInterfaceNames(typeUtils, serviceElement);
+        if (directSupportedInterfaces.size() > 1) {
             messager.printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Internal service '" + serviceElement.getQualifiedName()
-                    + "' implements multiple supported service interfaces: " + String.join(", ", matchNames)
+                    + "' implements multiple supported service interfaces: " + String.join(", ", directSupportedInterfaces)
                     + ". Please implement exactly one.");
             return null;
         }
-        return matches.isEmpty() ? null : matches.get(0);
+
+        List<SupportedServiceSignature> combinedMatches = new ArrayList<>(blockingMatches);
+        List<String> combinedMatchNames = new ArrayList<>(blockingMatchNames);
+        for (int i = 0; i < matches.size(); i++) {
+            SupportedServiceSignature reactiveMatch = matches.get(i);
+            boolean impliedByBlocking = blockingMatches.stream()
+                .anyMatch(blockingMatch -> blockingMatch.shape() == reactiveMatch.shape());
+            if (!impliedByBlocking) {
+                combinedMatches.add(reactiveMatch);
+                combinedMatchNames.add(matchNames.get(i));
+            }
+        }
+
+        if (combinedMatches.size() > 1) {
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Internal service '" + serviceElement.getQualifiedName()
+                    + "' implements multiple supported service interfaces: " + String.join(", ", combinedMatchNames)
+                    + ". Please implement exactly one.");
+            return null;
+        }
+        if (combinedMatches.isEmpty()) {
+            return null;
+        }
+        SupportedServiceSignature match = combinedMatches.get(0);
+        if (match.materializingWarning() != null) {
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.WARNING,
+                match.materializingWarning(),
+                serviceElement);
+        }
+        return match;
+    }
+
+    private List<String> directSupportedInterfaceNames(Types typeUtils, TypeElement serviceElement) {
+        List<String> directNames = new ArrayList<>();
+        for (TypeMirror iface : serviceElement.getInterfaces()) {
+            Element element = typeUtils.asElement(iface);
+            if (element instanceof TypeElement typeElement && isSupportedServiceInterface(typeElement)) {
+                directNames.add(typeElement.getQualifiedName().toString());
+            }
+        }
+        return directNames;
+    }
+
+    private boolean isSupportedServiceInterface(TypeElement typeElement) {
+        String qualifiedName = typeElement.getQualifiedName().toString();
+        return qualifiedName.equals("org.pipelineframework.service.blocking.BlockingService")
+            || qualifiedName.equals("org.pipelineframework.service.blocking.BlockingStreamingService")
+            || qualifiedName.equals("org.pipelineframework.service.blocking.BlockingIteratorService")
+            || qualifiedName.equals("org.pipelineframework.service.blocking.BlockingStreamingClientService")
+            || qualifiedName.equals("org.pipelineframework.service.blocking.BlockingBidirectionalStreamingService")
+            || qualifiedName.equals("org.pipelineframework.service.ReactiveService")
+            || qualifiedName.equals("org.pipelineframework.service.ReactiveStreamingService")
+            || qualifiedName.equals("org.pipelineframework.service.ReactiveStreamingClientService")
+            || qualifiedName.equals("org.pipelineframework.service.ReactiveBidirectionalStreamingService");
     }
 
     private void collectSupportedMatch(

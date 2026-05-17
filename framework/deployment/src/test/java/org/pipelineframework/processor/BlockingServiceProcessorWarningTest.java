@@ -1,8 +1,8 @@
 package org.pipelineframework.processor;
 
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.Locale;
 
 import com.google.testing.compile.Compilation;
@@ -93,6 +93,41 @@ class BlockingServiceProcessorWarningTest {
             .anyMatch(message -> message.contains("materializes the full output list")));
     }
 
+    @Test
+    void serviceImplementingBlockingAndReactiveContractsFails() throws Exception {
+        Path generatedSourcesDir = tempDir.resolve("generated-sources-ambiguous");
+        Files.createDirectories(generatedSourcesDir);
+        Path descriptorDir = prepareDescriptorDir("descriptor-ambiguous");
+
+        Compilation compilation = compiler(generatedSourcesDir, descriptorDir).compile(
+            JavaFileObjects.forSourceString("test.blocking.Input", "package test.blocking; public class Input {}"),
+            JavaFileObjects.forSourceString("test.blocking.Output", "package test.blocking; public class Output {}"),
+            JavaFileObjects.forSourceString("test.blocking.AmbiguousService", """
+                package test.blocking;
+
+                import io.smallrye.mutiny.Uni;
+                import org.pipelineframework.annotation.PipelineStep;
+                import org.pipelineframework.service.ReactiveService;
+                import org.pipelineframework.service.blocking.BlockingService;
+
+                @PipelineStep
+                public class AmbiguousService implements BlockingService<Input, Output>, ReactiveService<Input, Output> {
+                    @Override
+                    public Output processBlocking(Input processableObj) {
+                        return new Output();
+                    }
+
+                    @Override
+                    public Uni<Output> process(Input processableObj) {
+                        return Uni.createFrom().item(new Output());
+                    }
+                }
+                """));
+
+        assertThat(compilation).failed();
+        assertThat(compilation).hadErrorContaining("implements multiple supported service interfaces");
+    }
+
     private Compiler compiler(Path generatedSourcesDir, Path descriptorDir) {
         return Compiler.javac()
             .withProcessors(new PipelineStepProcessor())
@@ -104,9 +139,12 @@ class BlockingServiceProcessorWarningTest {
     private Path prepareDescriptorDir(String name) throws Exception {
         Path descriptorDir = tempDir.resolve(name);
         Files.createDirectories(descriptorDir);
-        Files.copy(
-            Paths.get(System.getProperty("user.dir")).resolve("src/test/resources/descriptor_set_search.dsc"),
-            descriptorDir.resolve("descriptor_set.dsc"));
+        try (InputStream descriptor = getClass().getResourceAsStream("/descriptor_set_search.dsc")) {
+            if (descriptor == null) {
+                throw new IllegalStateException("Missing test resource: descriptor_set_search.dsc");
+            }
+            Files.copy(descriptor, descriptorDir.resolve("descriptor_set.dsc"));
+        }
         return descriptorDir;
     }
 }

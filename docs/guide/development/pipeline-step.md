@@ -92,7 +92,7 @@ These operator-specific fields must use fully-qualified class::method references
      - `BlockingIteratorService<I, O>`
      - `BlockingStreamingClientService<I, O>`
      - `BlockingBidirectionalStreamingService<I, O>`
-4. Keep YAML cardinality aligned with the implemented reactive interface.
+4. Keep YAML cardinality aligned with the implemented interface, reactive or blocking.
 
 Parallelism is configured at the pipeline level (`pipeline.parallelism` and `pipeline.max-concurrency`).
 The `ordering` and `threadSafety` values on `@PipelineStep` are propagated to the generated client step,

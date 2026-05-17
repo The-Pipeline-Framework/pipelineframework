@@ -33,12 +33,15 @@ public final class GeneratedServiceTypeResolver {
                 model.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
                 model.serviceName());
         }
-        if (model.serviceApiKind() == ServiceApiKind.BLOCKING
-            || model.serviceApiKind() == ServiceApiKind.BLOCKING_ITERATOR) {
+        boolean useBlockingBridge = (model.serviceApiKind() == ServiceApiKind.BLOCKING
+            || model.serviceApiKind() == ServiceApiKind.BLOCKING_ITERATOR)
+            && model.delegateService() == null
+            && (model.remoteExecution() == null || !model.remoteExecution().isRemote());
+        if (useBlockingBridge) {
             return blockingReactiveBridgeClassName(model);
         }
         if (model.serviceClassName() == null) {
-            throw new IllegalStateException("serviceClassName cannot be null for reactive service injection");
+            throw new IllegalStateException("serviceClassName cannot be null for service injection");
         }
         return model.serviceClassName();
     }
