@@ -1411,7 +1411,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private void createCustomInputCsvFile() throws IOException {
-        Path source = Paths.get(CSV_E2E_INPUT_FILE).toAbsolutePath().normalize();
+        Path source = resolveCustomInputCsvFile();
         assertTrue(Files.isRegularFile(source), "Expected custom CSV input file at " + source);
 
         String fileName = source.getFileName().toString();
@@ -1431,6 +1431,23 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 target,
                 source,
                 expectedPaymentRecordCount());
+    }
+
+    private Path resolveCustomInputCsvFile() {
+        Path configured = Paths.get(CSV_E2E_INPUT_FILE);
+        if (configured.isAbsolute()) {
+            return configured.normalize();
+        }
+
+        Path current = Paths.get(System.getProperty("user.dir")).toAbsolutePath().normalize();
+        while (current != null) {
+            Path candidate = current.resolve(configured).normalize();
+            if (Files.isRegularFile(candidate)) {
+                return candidate;
+            }
+            current = current.getParent();
+        }
+        return configured.toAbsolutePath().normalize();
     }
 
     private void createValidAndMalformedCsvFiles() throws IOException {
