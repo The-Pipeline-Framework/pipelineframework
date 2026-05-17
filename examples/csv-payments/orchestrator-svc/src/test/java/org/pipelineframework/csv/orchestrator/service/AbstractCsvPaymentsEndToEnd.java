@@ -1814,7 +1814,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         if (!CUSTOM_INPUT_FILE) {
             return 5L;
         }
-        try (Stream<String> lines = Files.lines(Paths.get(CSV_E2E_INPUT_FILE))) {
+        try (Stream<String> lines = Files.lines(resolveCustomInputCsvFile())) {
             return Math.max(0L, lines.count() - 1L);
         }
     }
