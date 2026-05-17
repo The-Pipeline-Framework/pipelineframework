@@ -202,17 +202,18 @@ abstract class AbstractCsvPaymentsEndToEnd {
         }
 
         if (PIPELINE_RUNTIME_LAYOUT) {
-            Startables.deepStart(
-                    Stream.of(getPostgresContainer(), getPersistenceService(), getPipelineRuntimeService()))
-                .join();
+            Startables.deepStart(Stream.of(getPostgresContainer())).join();
+            Startables.deepStart(Stream.of(getPersistenceService(), getPipelineRuntimeService())).join();
             return;
         }
 
-        Stream.Builder<GenericContainer<?>> services = Stream.builder();
-        services.add(getPostgresContainer());
         if (TEMPO_VERIFICATION_ACTIVE) {
-            services.add(getLgtmStackContainer());
+            Startables.deepStart(Stream.of(getPostgresContainer(), getLgtmStackContainer())).join();
+        } else {
+            Startables.deepStart(Stream.of(getPostgresContainer())).join();
         }
+
+        Stream.Builder<GenericContainer<?>> services = Stream.builder();
         services.add(getPersistenceService());
         services.add(getInputCsvService());
         services.add(getPaymentsProcessingService());
