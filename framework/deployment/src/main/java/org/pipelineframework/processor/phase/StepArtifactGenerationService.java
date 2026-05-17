@@ -15,6 +15,7 @@ import org.pipelineframework.processor.ir.LocalBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.RestBinding;
 import org.pipelineframework.processor.renderer.ClientStepRenderer;
+import org.pipelineframework.processor.renderer.BlockingReactiveBridgeRenderer;
 import org.pipelineframework.processor.renderer.GenerationContext;
 import org.pipelineframework.processor.renderer.GrpcServiceAdapterRenderer;
 import org.pipelineframework.processor.renderer.LocalClientStepRenderer;
@@ -67,6 +68,7 @@ class StepArtifactGenerationService {
      * @param restClientRenderer renderer used to produce REST client-step artifacts
      * @param restRenderer renderer used to produce REST resource artifacts
      * @param restFunctionHandlerRenderer renderer used to produce REST function handlers when in function mode
+     * @param blockingReactiveBridgeRenderer renderer used to produce reactive bridge artifacts for blocking-authored services
      * @param remoteOperatorAdapterRenderer renderer used to produce remote operator adapter artifacts
      * @throws IOException if any renderer or file output operation fails
      */
@@ -87,6 +89,7 @@ class StepArtifactGenerationService {
             RestClientStepRenderer restClientRenderer,
             RestResourceRenderer restRenderer,
             AbstractFunctionHandlerRenderer restFunctionHandlerRenderer,
+            BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
             RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer) throws IOException {
         for (GenerationTarget target : model.enabledTargets()) {
             switch (target) {
@@ -265,6 +268,19 @@ class StepArtifactGenerationService {
                         cacheKeyGenerator,
                         descriptorSet));
                     roleMetadataGenerator.recordClassWithRole(restClientClassName, restClientRole.name());
+                }
+                case BLOCKING_REACTIVE_BRIDGE -> {
+                    String bridgeClassName = model.servicePackage() + PIPELINE_DOT
+                        + model.generatedName() + "BlockingReactiveBridge";
+                    DeploymentRole bridgeRole = model.deploymentRole();
+                    blockingReactiveBridgeRenderer.render(model, new GenerationContext(
+                        ctx.getProcessingEnv(),
+                        pathResolver.resolveRoleOutputDir(ctx, bridgeRole),
+                        bridgeRole,
+                        enabledAspects,
+                        cacheKeyGenerator,
+                        descriptorSet));
+                    roleMetadataGenerator.recordClassWithRole(bridgeClassName, bridgeRole.name());
                 }
                 case REMOTE_OPERATOR_ADAPTER -> {
                     if (grpcBinding == null) {

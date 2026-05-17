@@ -23,4 +23,6 @@ public enum GenerationTarget {
     EXTERNAL_ADAPTER,
     /** Generated service implementation that dispatches to a remote operator endpoint */
     REMOTE_OPERATOR_ADAPTER,
+    /** Generated reactive bridge for blocking-authored internal services */
+    BLOCKING_REACTIVE_BRIDGE,
 }

@@ -12,6 +12,7 @@ import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.ServiceApiKind;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TransportMode;
 import org.pipelineframework.processor.ir.TypeMapping;
@@ -216,6 +217,44 @@ class PipelineTargetResolutionPhaseTest {
         assertEquals(
             Set.of(GenerationTarget.GRPC_SERVICE, GenerationTarget.REMOTE_OPERATOR_ADAPTER),
             context.getResolvedTargets());
+    }
+
+    @Test
+    void blockingInternalStepsAddReactiveBridgeTarget() throws Exception {
+        PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineStepModel blocking = step("BlockingCsvStep", DeploymentRole.PIPELINE_SERVER)
+            .toBuilder()
+            .serviceApiKind(ServiceApiKind.BLOCKING)
+            .build();
+        context.setStepModels(List.of(blocking));
+        context.setTransportMode(TransportMode.REST);
+
+        phase.execute(context);
+
+        PipelineStepModel updated = context.getStepModels().getFirst();
+        assertEquals(
+            Set.of(GenerationTarget.REST_RESOURCE, GenerationTarget.BLOCKING_REACTIVE_BRIDGE),
+            updated.enabledTargets());
+    }
+
+    @Test
+    void blockingIteratorInternalStepsAddReactiveBridgeTarget() throws Exception {
+        PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineStepModel blocking = step("BlockingIteratorCsvStep", DeploymentRole.PIPELINE_SERVER)
+            .toBuilder()
+            .serviceApiKind(ServiceApiKind.BLOCKING_ITERATOR)
+            .build();
+        context.setStepModels(List.of(blocking));
+        context.setTransportMode(TransportMode.REST);
+
+        phase.execute(context);
+
+        PipelineStepModel updated = context.getStepModels().getFirst();
+        assertEquals(
+            Set.of(GenerationTarget.REST_RESOURCE, GenerationTarget.BLOCKING_REACTIVE_BRIDGE),
+            updated.enabledTargets());
     }
 
     private void assertResolvedTargets(

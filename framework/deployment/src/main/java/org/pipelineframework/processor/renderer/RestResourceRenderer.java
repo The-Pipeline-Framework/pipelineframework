@@ -11,6 +11,7 @@ import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
 import org.pipelineframework.processor.ir.RestBinding;
 import org.pipelineframework.processor.util.DtoTypeUtils;
+import org.pipelineframework.processor.util.GeneratedServiceTypeResolver;
 import org.pipelineframework.processor.util.ResourceNameUtils;
 import org.pipelineframework.processor.util.RestPathResolver;
 
@@ -464,12 +465,7 @@ public class RestResourceRenderer implements PipelineRenderer<RestBinding> {
      * @return the service class to use: the model's declared service class when the step is not a side effect, otherwise the service class located in the pipeline package derived from the model's service package and service name
      */
     private TypeName resolveServiceType(PipelineStepModel model) {
-        if (!model.sideEffect()) {
-            return model.serviceClassName();
-        }
-        return ClassName.get(
-            model.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
-            model.serviceName());
+        return GeneratedServiceTypeResolver.resolveInjectedServiceType(model);
     }
 
     /**

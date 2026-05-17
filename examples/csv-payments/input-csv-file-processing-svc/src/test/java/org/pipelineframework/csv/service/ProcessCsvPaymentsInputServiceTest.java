@@ -24,20 +24,22 @@ import java.util.Currency;
 import java.util.List;
 import java.util.UUID;
 
-import io.smallrye.mutiny.Multi;
-import io.smallrye.mutiny.helpers.test.AssertSubscriber;
 import lombok.SneakyThrows;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.mockito.MockitoAnnotations;
+import org.pipelineframework.blocking.CloseableIterator;
 import org.pipelineframework.csv.common.domain.CsvPaymentsInputFile;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
+import org.pipelineframework.csv.util.BlockingIteratorPacer;
 import org.pipelineframework.csv.util.DemandPacerConfig;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ProcessCsvPaymentsInputServiceTest {
 
@@ -63,7 +65,7 @@ class ProcessCsvPaymentsInputServiceTest {
                         new DemandPacerConfig() {
                             @Override
                             public long rowsPerPeriod() {
-                                return 1;
+                                return 10;
                             }
 
                             @Override
@@ -79,19 +81,20 @@ class ProcessCsvPaymentsInputServiceTest {
     }
 
     @Test
-    void process() {
+    void iterateBlocking() throws Exception {
         // Given
         CsvPaymentsInputFile csvFile = new CsvPaymentsInputFile(tempCsvFile.toFile());
 
         // When
-        Multi<PaymentRecord> resultMulti = service.process(csvFile);
+        List<PaymentRecord> records;
+        try (CloseableIterator<PaymentRecord> iterator = service.iterateBlocking(csvFile)) {
+            records = new java.util.ArrayList<>();
+            while (iterator.hasNext()) {
+                records.add(iterator.next());
+            }
+        }
 
         // Then
-        AssertSubscriber<PaymentRecord> subscriber =
-                resultMulti.subscribe().withSubscriber(AssertSubscriber.create(2));
-        subscriber.awaitCompletion();
-
-        List<PaymentRecord> records = subscriber.getItems();
         assertEquals(2, records.size());
 
         PaymentRecord record1 = records.getFirst();
@@ -110,18 +113,20 @@ class ProcessCsvPaymentsInputServiceTest {
     }
 
     @Test
+    void iterateBlockingReturnsPacedIterator() throws Exception {
+        CsvPaymentsInputFile csvFile = new CsvPaymentsInputFile(tempCsvFile.toFile());
+
+        try (CloseableIterator<PaymentRecord> iterator = service.iterateBlocking(csvFile)) {
+            assertInstanceOf(BlockingIteratorPacer.class, iterator);
+        }
+    }
+
+    @Test
     @SneakyThrows
     void process_fileNotFound() {
         try (CsvPaymentsInputFile csvFile =
                 new CsvPaymentsInputFile(tempDir.resolve("nonexistent.csv").toFile())) {
-            Multi<PaymentRecord> result = service.process(csvFile);
-
-            // Subscribe to trigger the lazy processing
-            AssertSubscriber<PaymentRecord> subscriber =
-                    result.subscribe().withSubscriber(AssertSubscriber.create(1));
-
-            subscriber.awaitFailure();
-            subscriber.assertFailedWith(RuntimeException.class);
+            assertThrows(RuntimeException.class, () -> service.iterateBlocking(csvFile));
         }
     }
 
@@ -136,12 +141,25 @@ class ProcessCsvPaymentsInputServiceTest {
         CsvPaymentsInputFile csvFile = new CsvPaymentsInputFile(tempCsvFile.toFile());
 
         // When
-        Multi<PaymentRecord> resultMulti = service.process(csvFile);
+        assertThrows(RuntimeException.class, () -> {
+            try (CloseableIterator<PaymentRecord> iterator = service.iterateBlocking(csvFile)) {
+                while (iterator.hasNext()) {
+                    iterator.next();
+                }
+            }
+        });
+    }
 
-        // Then
-        AssertSubscriber<PaymentRecord> subscriber =
-                resultMulti.subscribe().withSubscriber(AssertSubscriber.create(1));
-        subscriber.awaitFailure();
-        subscriber.assertFailedWith(RuntimeException.class);
+    @Test
+    void processReactiveAdapterStreamsRecords() {
+        CsvPaymentsInputFile csvFile = new CsvPaymentsInputFile(tempCsvFile.toFile());
+
+        List<PaymentRecord> records = service.process(csvFile)
+            .collect()
+            .asList()
+            .await()
+            .indefinitely();
+
+        assertEquals(2, records.size());
     }
 }

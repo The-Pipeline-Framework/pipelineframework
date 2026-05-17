@@ -21,6 +21,7 @@ import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.LocalBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.util.GeneratedServiceTypeResolver;
 import org.pipelineframework.step.StepManyToOne;
 import org.pipelineframework.step.StepOneToOne;
 
@@ -225,12 +226,7 @@ public class LocalClientStepRenderer implements PipelineRenderer<LocalBinding> {
      * @return `ClassName` for the service in the pipeline package when the step declares side effects; otherwise the service class name declared on the model
      */
     private TypeName resolveServiceType(PipelineStepModel model) {
-        if (model.sideEffect()) {
-            return ClassName.get(
-                model.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
-                model.serviceName());
-        }
-        return model.serviceClassName();
+        return GeneratedServiceTypeResolver.resolveInjectedServiceType(model);
     }
 
     /**

@@ -1,6 +1,8 @@
 package org.pipelineframework.processor.extractor;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.lang.model.element.AnnotationMirror;
@@ -61,18 +63,20 @@ public class PipelineStepIRExtractor {
             return null;
         }
 
-        ReactiveSignature reactiveSignature = resolveReactiveSignature(serviceClass);
+        ServiceContract serviceContract = resolveServiceContract(serviceClass);
 
         // Determine semantic configuration
         StreamingShape streamingShape = determineStreamingShape(
             AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "stepType"),
-            reactiveSignature);
+            serviceContract);
 
         Set<GenerationTarget> targets = EnumSet.noneOf(GenerationTarget.class);
         targets.add(GenerationTarget.GRPC_SERVICE);
         targets.add(GenerationTarget.CLIENT_STEP);
 
-        ExecutionMode executionMode = ExecutionMode.DEFAULT;
+        boolean runOnVirtualThreads = AnnotationProcessingUtils.getAnnotationValueAsBoolean(
+            annotationMirror, "runOnVirtualThreads", false);
+        ExecutionMode executionMode = runOnVirtualThreads ? ExecutionMode.VIRTUAL_THREADS : ExecutionMode.DEFAULT;
         OrderingRequirement orderingRequirement = AnnotationProcessingUtils.getAnnotationValueAsEnum(
             annotationMirror, "ordering", OrderingRequirement.class, OrderingRequirement.RELAXED);
         ThreadSafety threadSafety = AnnotationProcessingUtils.getAnnotationValueAsEnum(
@@ -83,12 +87,12 @@ public class PipelineStepIRExtractor {
         TypeMapping inputMapping = extractTypeMapping(
             AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "inputType"),
             AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "inboundMapper"),
-            reactiveSignature == null ? null : reactiveSignature.inputType());
+            serviceContract == null ? null : serviceContract.inputType());
 
         TypeMapping outputMapping = extractTypeMapping(
             AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "outputType"),
             AnnotationProcessingUtils.getAnnotationValue(annotationMirror, "outboundMapper"),
-            reactiveSignature == null ? null : reactiveSignature.outputType());
+            serviceContract == null ? null : serviceContract.outputType());
 
         ClassName cacheKeyGenerator = resolveCacheKeyGenerator(annotationMirror);
         
@@ -132,6 +136,7 @@ public class PipelineStepIRExtractor {
             .cacheKeyGenerator(cacheKeyGenerator)
             .delegateService(delegateService)
             .externalMapper(externalMapper)
+            .serviceApiKind(serviceContract == null ? ServiceApiKind.REACTIVE : serviceContract.apiKind())
             .build();
 
         return new ExtractResult(model);
@@ -181,7 +186,7 @@ public class PipelineStepIRExtractor {
      *         - `org.pipelineframework.step.StepManyToMany` → `STREAMING_STREAMING`
      *         - `org.pipelineframework.step.StepOneToOne` → `UNARY_UNARY`
      */
-    private StreamingShape determineStreamingShape(TypeMirror stepType, ReactiveSignature reactiveSignature) {
+    private StreamingShape determineStreamingShape(TypeMirror stepType, ServiceContract serviceContract) {
         if (stepType != null) {
             String stepTypeStr = stepType.toString();
             switch (stepTypeStr) {
@@ -197,9 +202,24 @@ public class PipelineStepIRExtractor {
                 case "org.pipelineframework.step.StepOneToOne" -> {
                     return StreamingShape.UNARY_UNARY;
                 }
+                case "org.pipelineframework.step.blocking.StepOneToManyBlocking" -> {
+                    return StreamingShape.UNARY_STREAMING;
+                }
+                case "org.pipelineframework.step.blocking.StepOneToManyBlockingIterator" -> {
+                    return StreamingShape.UNARY_STREAMING;
+                }
+                case "org.pipelineframework.step.blocking.StepManyToOneBlocking" -> {
+                    return StreamingShape.STREAMING_UNARY;
+                }
+                case "org.pipelineframework.step.blocking.StepManyToManyBlocking" -> {
+                    return StreamingShape.STREAMING_STREAMING;
+                }
+                case "org.pipelineframework.step.blocking.StepOneToOneBlocking" -> {
+                    return StreamingShape.UNARY_UNARY;
+                }
             }
         }
-        return reactiveSignature != null ? reactiveSignature.shape() : StreamingShape.UNARY_UNARY;
+        return serviceContract != null ? serviceContract.shape() : StreamingShape.UNARY_UNARY;
     }
 
     /**
@@ -269,19 +289,90 @@ public class PipelineStepIRExtractor {
             || typeMirror.toString().equals("java.lang.Void");
     }
 
-    private ReactiveSignature resolveReactiveSignature(TypeElement serviceClass) {
+    private ServiceContract resolveServiceContract(TypeElement serviceClass) {
         Types typeUtils = processingEnv.getTypeUtils();
-        for (ReactiveContract contract : ReactiveContract.values()) {
+        List<ServiceContract> matches = new ArrayList<>();
+        List<String> matchNames = new ArrayList<>();
+        List<SupportedContract> matchedContracts = new ArrayList<>();
+        List<String> directSupportedInterfaces = directSupportedInterfaceNames(typeUtils, serviceClass);
+        if (directSupportedInterfaces.size() > 1) {
+            processingEnv.getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Pipeline step '" + serviceClass.getQualifiedName()
+                    + "' implements multiple supported service interfaces: " + String.join(", ", directSupportedInterfaces)
+                    + ". Please implement exactly one reactive or blocking service contract.",
+                serviceClass);
+            return null;
+        }
+        for (SupportedContract contract : SupportedContract.values()) {
             DeclaredType declared = findReactiveSupertype(typeUtils, serviceClass.asType(), contract.interfaceName);
             if (declared == null || declared.getTypeArguments().size() < 2) {
                 continue;
             }
-            return new ReactiveSignature(
+            matches.add(new ServiceContract(
+                contract.apiKind,
                 contract.shape,
                 TypeName.get(declared.getTypeArguments().get(0)),
-                TypeName.get(declared.getTypeArguments().get(1)));
+                TypeName.get(declared.getTypeArguments().get(1))));
+            matchNames.add(contract.interfaceName);
+            matchedContracts.add(contract);
         }
-        return null;
+        List<ServiceContract> effectiveMatches = new ArrayList<>();
+        List<String> effectiveMatchNames = new ArrayList<>();
+        List<SupportedContract> effectiveMatchedContracts = new ArrayList<>();
+        for (int i = 0; i < matches.size(); i++) {
+            ServiceContract match = matches.get(i);
+            boolean impliedByBlocking = match.apiKind() == ServiceApiKind.REACTIVE
+                && matches.stream()
+                    .anyMatch(other -> other.apiKind() != ServiceApiKind.REACTIVE
+                        && other.shape() == match.shape());
+            if (!impliedByBlocking) {
+                effectiveMatches.add(match);
+                effectiveMatchNames.add(matchNames.get(i));
+                effectiveMatchedContracts.add(matchedContracts.get(i));
+            }
+        }
+        if (effectiveMatches.size() > 1) {
+            processingEnv.getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Pipeline step '" + serviceClass.getQualifiedName()
+                    + "' implements multiple supported service interfaces: " + String.join(", ", effectiveMatchNames)
+                    + ". Please implement exactly one reactive or blocking service contract.",
+                serviceClass);
+            return null;
+        }
+        if (effectiveMatches.isEmpty()) {
+            return null;
+        }
+        SupportedContract contract = effectiveMatchedContracts.get(0);
+        if (contract.materializingWarning != null) {
+            processingEnv.getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.WARNING,
+                contract.materializingWarning,
+                serviceClass);
+        }
+        return effectiveMatches.get(0);
+    }
+
+    private List<String> directSupportedInterfaceNames(Types typeUtils, TypeElement serviceClass) {
+        List<String> directNames = new ArrayList<>();
+        for (TypeMirror iface : serviceClass.getInterfaces()) {
+            Element element = typeUtils.asElement(iface);
+            if (element instanceof TypeElement typeElement && isSupportedServiceInterface(typeElement)) {
+                directNames.add(typeElement.getQualifiedName().toString());
+            }
+        }
+        return directNames;
+    }
+
+    private boolean isSupportedServiceInterface(TypeElement typeElement) {
+        String qualifiedName = typeElement.getQualifiedName().toString();
+        for (SupportedContract contract : SupportedContract.values()) {
+            if (contract.interfaceName.equals(qualifiedName)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private DeclaredType findReactiveSupertype(Types typeUtils, TypeMirror type, String erasureName) {
@@ -371,21 +462,61 @@ public class PipelineStepIRExtractor {
         return operatorMapper != null ? operatorMapper : externalMapper;
     }
 
-    private record ReactiveSignature(StreamingShape shape, TypeName inputType, TypeName outputType) {
+    private record ServiceContract(ServiceApiKind apiKind, StreamingShape shape, TypeName inputType, TypeName outputType) {
     }
 
-    private enum ReactiveContract {
-        UNARY("org.pipelineframework.service.ReactiveService", StreamingShape.UNARY_UNARY),
-        SERVER_STREAMING("org.pipelineframework.service.ReactiveStreamingService", StreamingShape.UNARY_STREAMING),
-        CLIENT_STREAMING("org.pipelineframework.service.ReactiveStreamingClientService", StreamingShape.STREAMING_UNARY),
-        BIDI_STREAMING("org.pipelineframework.service.ReactiveBidirectionalStreamingService", StreamingShape.STREAMING_STREAMING);
+    private enum SupportedContract {
+        UNARY_BLOCKING("org.pipelineframework.service.blocking.BlockingService", ServiceApiKind.BLOCKING, StreamingShape.UNARY_UNARY, null),
+        SERVER_STREAMING_BLOCKING(
+            "org.pipelineframework.service.blocking.BlockingStreamingService",
+            ServiceApiKind.BLOCKING,
+            StreamingShape.UNARY_STREAMING,
+            "BlockingStreamingService materializes the full output list before downstream emission. "
+                + "Use BlockingIteratorService for incremental non-Mutiny 1->N streaming."),
+        SERVER_STREAMING_BLOCKING_ITERATOR(
+            "org.pipelineframework.service.blocking.BlockingIteratorService",
+            ServiceApiKind.BLOCKING_ITERATOR,
+            StreamingShape.UNARY_STREAMING,
+            null),
+        CLIENT_STREAMING_BLOCKING(
+            "org.pipelineframework.service.blocking.BlockingStreamingClientService",
+            ServiceApiKind.BLOCKING,
+            StreamingShape.STREAMING_UNARY,
+            "BlockingStreamingClientService materializes the full input list before invocation. "
+                + "Batch retries rerun the full callback."),
+        BIDI_STREAMING_BLOCKING(
+            "org.pipelineframework.service.blocking.BlockingBidirectionalStreamingService",
+            ServiceApiKind.BLOCKING,
+            StreamingShape.STREAMING_STREAMING,
+            "BlockingBidirectionalStreamingService materializes the full input list and full output list. "
+                + "Batch retries rerun the full callback."),
+        UNARY_REACTIVE("org.pipelineframework.service.ReactiveService", ServiceApiKind.REACTIVE, StreamingShape.UNARY_UNARY, null),
+        SERVER_STREAMING_REACTIVE(
+            "org.pipelineframework.service.ReactiveStreamingService",
+            ServiceApiKind.REACTIVE,
+            StreamingShape.UNARY_STREAMING,
+            null),
+        CLIENT_STREAMING_REACTIVE(
+            "org.pipelineframework.service.ReactiveStreamingClientService",
+            ServiceApiKind.REACTIVE,
+            StreamingShape.STREAMING_UNARY,
+            null),
+        BIDI_STREAMING_REACTIVE(
+            "org.pipelineframework.service.ReactiveBidirectionalStreamingService",
+            ServiceApiKind.REACTIVE,
+            StreamingShape.STREAMING_STREAMING,
+            null);
 
         private final String interfaceName;
+        private final ServiceApiKind apiKind;
         private final StreamingShape shape;
+        private final String materializingWarning;
 
-        ReactiveContract(String interfaceName, StreamingShape shape) {
+        SupportedContract(String interfaceName, ServiceApiKind apiKind, StreamingShape shape, String materializingWarning) {
             this.interfaceName = interfaceName;
+            this.apiKind = apiKind;
             this.shape = shape;
+            this.materializingWarning = materializingWarning;
         }
     }
 }

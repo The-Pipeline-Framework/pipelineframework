@@ -50,6 +50,7 @@ Use `@PipelineStep` for Java-local execution concerns:
 - `cacheKeyGenerator`
 - `ordering`
 - `threadSafety`
+- `runOnVirtualThreads`
 - `sideEffect`
 - `delegate` (for operator steps only)
 
@@ -85,10 +86,36 @@ These operator-specific fields must use fully-qualified class::method references
    - `ReactiveStreamingService<I, O>`
    - `ReactiveStreamingClientService<I, O>`
    - `ReactiveBidirectionalStreamingService<I, O>`
-4. Keep YAML cardinality aligned with the implemented reactive interface.
+   - or the matching blocking interface when the step is intentionally synchronous:
+     - `BlockingService<I, O>`
+     - `BlockingStreamingService<I, O>`
+     - `BlockingIteratorService<I, O>`
+     - `BlockingStreamingClientService<I, O>`
+     - `BlockingBidirectionalStreamingService<I, O>`
+4. Keep YAML cardinality aligned with the implemented interface, reactive or blocking.
 
 Parallelism is configured at the pipeline level (`pipeline.parallelism` and `pipeline.max-concurrency`).
 The `ordering` and `threadSafety` values on `@PipelineStep` are propagated to the generated client step,
 which the runtime uses to decide parallelism under `AUTO`.
 
+Blocking services are offloaded by default onto worker threads so the framework does not execute them on event-loop threads.
+Set `runOnVirtualThreads = true` when you want the generated blocking bridge and server entrypoints to use virtual threads instead of the default worker pool.
+
 Transport selection (gRPC vs REST) is configured in `pipeline.yaml`, not on the annotation.
+
+## Blocking vs Reactive
+
+Use the blocking path when the business code is naturally synchronous and the team is not going to maintain Mutiny-based implementations.
+
+- The framework still generates reactive transport adapters.
+- Internal blocking services are wrapped in a generated reactive bridge.
+- `BlockingStreamingService`, `BlockingStreamingClientService`, and `BlockingBidirectionalStreamingService` use materialized `List` semantics.
+- `BlockingIteratorService` keeps `ONE_TO_MANY` incremental without forcing Mutiny into user method signatures.
+
+Decision guide:
+
+| Need | Contract |
+| --- | --- |
+| Bounded batch, blocking SDKs, or simple synchronous code | Materializing blocking interfaces |
+| Incremental blocking streaming from an iterator/reader/cursor API | `BlockingIteratorService` |
+| End-to-end backpressure, async I/O, or highest streaming throughput | Reactive interfaces |
