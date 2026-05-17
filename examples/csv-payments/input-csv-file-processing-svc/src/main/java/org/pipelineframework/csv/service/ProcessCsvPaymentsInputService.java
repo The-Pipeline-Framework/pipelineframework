@@ -126,8 +126,14 @@ public class ProcessCsvPaymentsInputService
         emitted++;
         String serviceId = ProcessCsvPaymentsInputService.class.toString();
         MDC.put("serviceId", serviceId);
-        LOG.infof("Executed blocking CSV iteration on %s --> %s", input.getSourceName(), record);
-        MDC.remove("serviceId");
+        try {
+            LOG.debugf(
+                "Executed blocking CSV iteration on %s (csvId=%s)",
+                input.getSourceName(),
+                record.getCsvId());
+        } finally {
+            MDC.remove("serviceId");
+        }
         return record;
     }
 

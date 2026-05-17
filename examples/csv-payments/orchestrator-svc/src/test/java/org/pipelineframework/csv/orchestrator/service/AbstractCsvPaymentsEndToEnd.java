@@ -1571,7 +1571,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         if (!CUSTOM_INPUT_FILE) {
             return 0L;
         }
-        try (Stream<String> lines = Files.lines(Paths.get(CSV_E2E_INPUT_FILE))) {
+        try (Stream<String> lines = Files.lines(resolveCustomInputCsvFile())) {
             return lines.skip(1)
                     .map(String::trim)
                     .filter(line -> !line.isBlank())
