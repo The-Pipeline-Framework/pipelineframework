@@ -15,7 +15,7 @@ Choose the interface family that matches your data flow:
 - `ReactiveStreamingClientService<I, O>`: stream of inputs → one output
 - `ReactiveBidirectionalStreamingService<I, O>`: stream of inputs → stream of outputs
 - `BlockingService<I, O>`: one input → one output, synchronous user code
-- `BlockingStreamingService<I, O>`: one input → many outputs, returns `List<O>` and materializes the full output
+- `BlockingStreamingService<I, O>`: one input → many outputs, returns `List<O>` and materialises the full output
 - `BlockingIteratorService<I, O>`: one input → many outputs, returns `CloseableIterator<O>` for incremental blocking streaming
 - `BlockingStreamingClientService<I, O>`: many inputs → one output, consumes `List<I>`
 - `BlockingBidirectionalStreamingService<I, O>`: many inputs → many outputs, transforms `List<I>` to `List<O>`
@@ -82,7 +82,7 @@ public class ProcessCsvService implements BlockingIteratorService<CsvFile, Payme
 
 The framework keeps transport adapters reactive in both cases. Blocking service interfaces expose synchronous methods such as `processBlocking(...)`, and the framework supplies the reactive `process(...)` adapter. Blocking services are wrapped in a generated reactive bridge and offloaded to worker threads by default, or to virtual threads when `runOnVirtualThreads = true`.
 
-`BlockingStreamingService`, `BlockingStreamingClientService`, and `BlockingBidirectionalStreamingService` are materializing contracts. They trade away automatic backpressure and also increase heap usage, GC pressure, first-item latency, and whole-batch retry cost. `BlockingIteratorService` reduces those materialization costs, but it is still blocking work and should be used only when synchronous authoring is worth the throughput tradeoff.
+`BlockingStreamingService`, `BlockingStreamingClientService`, and `BlockingBidirectionalStreamingService` are materialising contracts. They trade away automatic backpressure and also increase heap usage, GC pressure, first-item latency, and whole-batch retry cost. `BlockingIteratorService` reduces those materialisation costs, but it is still blocking work and should be used only when synchronous authoring is worth the throughput trade-off.
 
 ## 4) Add Mappers
 

@@ -37,13 +37,13 @@ flowchart LR
 
 ## Current Internal-Service Handling
 
-Internal `service:` steps can now be authored against reactive service interfaces, materializing blocking service interfaces, or the incremental blocking iterator service interface.
+Internal `service:` steps can now be authored against reactive service interfaces, materialising blocking service interfaces, or the incremental blocking iterator service interface.
 
 - Model extraction classifies the authored service contract family and validates YAML cardinality against it.
-- Model extraction emits build-time warnings for materializing blocking streaming contracts and points users toward `BlockingIteratorService` for incremental `1 -> N` cases.
+- Model extraction emits build-time warnings for materialising blocking streaming contracts and points users toward `BlockingIteratorService` for incremental `1 -> N` cases.
 - Target resolution adds a generated reactive bridge target for blocking-authored internal services.
 - Transport renderers still target reactive service contracts. They inject the generated bridge instead of the authored blocking service directly.
-- The generated bridge adapts `List`-based blocking contracts with materializing helpers and adapts `BlockingIteratorService` with iterator-to-`Multi` offload helpers.
+- The generated bridge adapts `List`-based blocking contracts with materialising helpers and adapts `BlockingIteratorService` with iterator-to-`Multi` offload helpers.
 
 This keeps REST, gRPC, and LOCAL generation on one transport contract family while still allowing synchronous user code in internal services, and preserves FUNCTION as a platform-generation path.
 
