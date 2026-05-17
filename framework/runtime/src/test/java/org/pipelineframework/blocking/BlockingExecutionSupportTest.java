@@ -7,7 +7,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import io.smallrye.mutiny.subscription.Cancellable;
+import io.smallrye.mutiny.helpers.test.AssertSubscriber;
 import org.junit.jupiter.api.Test;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.service.blocking.BlockingService;
@@ -138,9 +138,8 @@ class BlockingExecutionSupportTest {
     @Test
     void emitIteratorClosesOnCancellation() throws Exception {
         CountDownLatch closed = new CountDownLatch(1);
-        AtomicReference<Cancellable> cancellable = new AtomicReference<>();
 
-        Cancellable subscription = support.emitIterator(false, () -> new CloseableIterator<String>() {
+        AssertSubscriber<String> subscriber = support.emitIterator(false, () -> new CloseableIterator<String>() {
             private int index;
 
             @Override
@@ -165,16 +164,10 @@ class BlockingExecutionSupportTest {
             public void close() {
                 closed.countDown();
             }
-        }).subscribe().with(item -> {
-            if ("first".equals(item)) {
-                Cancellable current = cancellable.get();
-                if (current != null) {
-                    current.cancel();
-                }
-            }
-        });
-        cancellable.set(subscription);
+        }).subscribe().withSubscriber(AssertSubscriber.create(1));
 
+        subscriber.awaitItems(1);
+        subscriber.cancel();
         assertTrue(closed.await(5, TimeUnit.SECONDS));
     }
 
