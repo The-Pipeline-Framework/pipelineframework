@@ -29,6 +29,7 @@ import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.blocking.CloseableIterator;
 import org.pipelineframework.csv.common.domain.CsvPaymentsInputFile;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
+import org.pipelineframework.csv.util.BlockingIteratorPacer;
 import org.pipelineframework.csv.util.DemandPacerConfig;
 import org.pipelineframework.service.blocking.BlockingIteratorService;
 
@@ -77,7 +78,10 @@ public class ProcessCsvPaymentsInputService
                     .withIgnoreEmptyLine(true)
                     .build()
                     .iterator();
-            return new OpenCsvPaymentRecordIterator(reader, delegate, input, rowsPerPeriod, millisPeriod);
+            return new BlockingIteratorPacer<>(
+                new OpenCsvPaymentRecordIterator(reader, delegate, input, rowsPerPeriod, millisPeriod),
+                rowsPerPeriod,
+                millisPeriod);
         } catch (Exception e) {
             reader.close();
             throw e;

@@ -33,9 +33,11 @@ import org.mockito.MockitoAnnotations;
 import org.pipelineframework.blocking.CloseableIterator;
 import org.pipelineframework.csv.common.domain.CsvPaymentsInputFile;
 import org.pipelineframework.csv.common.domain.PaymentRecord;
+import org.pipelineframework.csv.util.BlockingIteratorPacer;
 import org.pipelineframework.csv.util.DemandPacerConfig;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -63,7 +65,7 @@ class ProcessCsvPaymentsInputServiceTest {
                         new DemandPacerConfig() {
                             @Override
                             public long rowsPerPeriod() {
-                                return 1;
+                                return 10;
                             }
 
                             @Override
@@ -108,6 +110,15 @@ class ProcessCsvPaymentsInputServiceTest {
         assertEquals(new BigDecimal("200.50"), record2.getAmount());
         assertEquals(Currency.getInstance("EUR"), record2.getCurrency());
         assertEquals(csvFile.getFilepath(), record2.getCsvPaymentsInputFilePath());
+    }
+
+    @Test
+    void iterateBlockingReturnsPacedIterator() throws Exception {
+        CsvPaymentsInputFile csvFile = new CsvPaymentsInputFile(tempCsvFile.toFile());
+
+        try (CloseableIterator<PaymentRecord> iterator = service.iterateBlocking(csvFile)) {
+            assertInstanceOf(BlockingIteratorPacer.class, iterator);
+        }
     }
 
     @Test
