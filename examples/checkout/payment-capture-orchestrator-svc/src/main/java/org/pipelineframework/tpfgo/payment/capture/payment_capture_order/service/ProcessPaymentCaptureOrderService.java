@@ -12,11 +12,13 @@ import io.smallrye.mutiny.Uni;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.service.ReactiveService;
 import org.pipelineframework.tpfgo.common.domain.OrderDelivered;
-import org.pipelineframework.tpfgo.common.domain.PaymentCaptureResult;
+import org.pipelineframework.tpfgo.common.domain.PaymentCaptured;
+import org.pipelineframework.tpfgo.common.domain.PaymentOutcome;
+import org.pipelineframework.tpfgo.common.domain.PaymentRejected;
 
 @PipelineStep
 @ApplicationScoped
-public class ProcessPaymentCaptureOrderService implements ReactiveService<OrderDelivered, PaymentCaptureResult> {
+public class ProcessPaymentCaptureOrderService implements ReactiveService<OrderDelivered, PaymentOutcome> {
 
     private final Clock clock;
     private final Supplier<UUID> uuidSupplier;
@@ -28,30 +30,25 @@ public class ProcessPaymentCaptureOrderService implements ReactiveService<OrderD
     }
 
     @Override
-    public Uni<PaymentCaptureResult> process(OrderDelivered input) {
+    public Uni<PaymentOutcome> process(OrderDelivered input) {
         if (input == null) {
             return Uni.createFrom().failure(new IllegalArgumentException("input must not be null"));
         }
         Instant now = Instant.now(clock);
         if (input.amount().signum() <= 0) {
-            return Uni.createFrom().item(new PaymentCaptureResult(
+            return Uni.createFrom().item(new PaymentRejected(
                 input.orderId(),
-                null,
                 now,
                 input.amount(),
                 input.currency(),
-                "FAILED",
                 "PAYMENT_CAPTURE_REJECTED",
                 "amount must be positive"));
         }
-        return Uni.createFrom().item(new PaymentCaptureResult(
+        return Uni.createFrom().item(new PaymentCaptured(
             input.orderId(),
             uuidSupplier.get(),
             now,
             input.amount(),
-            input.currency(),
-            "CAPTURED",
-            null,
-            null));
+            input.currency()));
     }
 }

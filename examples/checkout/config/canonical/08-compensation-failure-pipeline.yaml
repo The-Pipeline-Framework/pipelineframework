@@ -4,7 +4,7 @@ basePackage: org.pipelineframework.tpfgo.compensation.failure
 transport: GRPC
 platform: COMPUTE
 messages:
-  PaymentCaptureResult:
+  PaymentCaptured:
     fields:
       - number: 1
         name: orderId
@@ -21,14 +21,42 @@ messages:
       - number: 5
         name: currency
         type: string
-      - number: 6
-        name: status
+  PaymentRejected:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: processedAt
+        type: timestamp
+      - number: 3
+        name: amount
+        type: decimal
+      - number: 4
+        name: currency
         type: string
-      - number: 7
+      - number: 5
         name: failureCode
         type: string
-      - number: 8
+      - number: 6
         name: failureReason
+        type: string
+  PaymentRequiresReview:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: processedAt
+        type: timestamp
+      - number: 3
+        name: amount
+        type: decimal
+      - number: 4
+        name: currency
+        type: string
+      - number: 5
+        name: reviewReason
         type: string
   TerminalOrderState:
     fields:
@@ -53,19 +81,31 @@ messages:
       - number: 7
         name: failureCode
         type: string
+unions:
+  PaymentOutcome:
+    variants:
+      captured:
+        type: PaymentCaptured
+        number: 1
+      rejected:
+        type: PaymentRejected
+        number: 2
+      requiresReview:
+        type: PaymentRequiresReview
+        number: 3
 steps:
   - name: Compensation Finalize Order
     service: org.pipelineframework.tpfgo.compensation.failure.compensation_finalize_order.service.ProcessCompensationFinalizeOrderService
     cardinality: ONE_TO_ONE
-    input: org.pipelineframework.tpfgo.common.domain.PaymentCaptureResult
-    inputTypeName: PaymentCaptureResult
-    inboundMapper: org.pipelineframework.tpfgo.compensation.failure.compensation_finalize_order.service.PaymentCaptureResultMapper
+    input: org.pipelineframework.tpfgo.common.domain.PaymentOutcome
+    inputTypeName: PaymentOutcome
     output: org.pipelineframework.tpfgo.common.domain.TerminalOrderState
     outputTypeName: TerminalOrderState
     outboundMapper: org.pipelineframework.tpfgo.compensation.failure.compensation_finalize_order.service.TerminalOrderStateMapper
 input:
   subscription:
     publication: tpfgo.payment.capture-result.v1
+    mapper: org.pipelineframework.tpfgo.compensation.failure.compensation_finalize_order.service.PaymentOutcomeMapper
 output:
   checkpoint:
     publication: tpfgo.compensation.terminal-state.v1

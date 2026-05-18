@@ -36,7 +36,7 @@ messages:
       - number: 10
         name: lineageDigest
         type: string
-  PaymentCaptureResult:
+  PaymentCaptured:
     fields:
       - number: 1
         name: orderId
@@ -53,15 +53,55 @@ messages:
       - number: 5
         name: currency
         type: string
-      - number: 6
-        name: status
+  PaymentRejected:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: processedAt
+        type: timestamp
+      - number: 3
+        name: amount
+        type: decimal
+      - number: 4
+        name: currency
         type: string
-      - number: 7
+      - number: 5
         name: failureCode
         type: string
-      - number: 8
+      - number: 6
         name: failureReason
         type: string
+  PaymentRequiresReview:
+    fields:
+      - number: 1
+        name: orderId
+        type: uuid
+      - number: 2
+        name: processedAt
+        type: timestamp
+      - number: 3
+        name: amount
+        type: decimal
+      - number: 4
+        name: currency
+        type: string
+      - number: 5
+        name: reviewReason
+        type: string
+unions:
+  PaymentOutcome:
+    variants:
+      captured:
+        type: PaymentCaptured
+        number: 1
+      rejected:
+        type: PaymentRejected
+        number: 2
+      requiresReview:
+        type: PaymentRequiresReview
+        number: 3
 steps:
   - name: Payment Capture Order
     service: org.pipelineframework.tpfgo.payment.capture.payment_capture_order.service.ProcessPaymentCaptureOrderService
@@ -69,9 +109,8 @@ steps:
     input: org.pipelineframework.tpfgo.common.domain.OrderDelivered
     inputTypeName: OrderDelivered
     inboundMapper: org.pipelineframework.tpfgo.payment.capture.payment_capture_order.service.OrderDeliveredMapper
-    output: org.pipelineframework.tpfgo.common.domain.PaymentCaptureResult
-    outputTypeName: PaymentCaptureResult
-    outboundMapper: org.pipelineframework.tpfgo.payment.capture.payment_capture_order.service.PaymentCaptureResultMapper
+    output: org.pipelineframework.tpfgo.common.domain.PaymentOutcome
+    outputTypeName: PaymentOutcome
 input:
   subscription:
     publication: tpfgo.delivery.order-delivered.v1

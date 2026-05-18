@@ -129,6 +129,62 @@ class PipelineProtoGeneratorTest {
     }
 
     @Test
+    void generatesOneofForUnionOutput() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Union Test"
+            basePackage: "com.example.union"
+            transport: "GRPC"
+            messages:
+              PaymentRequest:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+              PaymentCaptured:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+              PaymentRejected:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+                  - number: 2
+                    name: "failureCode"
+                    type: "string"
+            unions:
+              PaymentOutcome:
+                variants:
+                  captured:
+                    type: PaymentCaptured
+                    number: 1
+                  rejected:
+                    type: PaymentRejected
+                    number: 2
+            steps:
+              - name: "Capture Payment"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "PaymentRequest"
+                outputTypeName: "PaymentOutcome"
+            """;
+        Path configPath = tempDir.resolve("union-config.yaml");
+        Files.writeString(configPath, yaml);
+        Path outputDir = tempDir.resolve("proto-union-out");
+
+        new PipelineProtoGenerator().generate(tempDir, configPath, outputDir);
+
+        String stepProto = Files.readString(outputDir.resolve("capture-payment-svc.proto"));
+        String typesProto = Files.readString(outputDir.resolve("pipeline-types.proto"));
+        assertTrue(stepProto.contains("rpc remoteProcess(PaymentRequest) returns (PaymentOutcome);"));
+        assertTrue(typesProto.contains("message PaymentOutcome"));
+        assertTrue(typesProto.contains("oneof outcome"));
+        assertTrue(typesProto.contains("PaymentCaptured captured = 1;"));
+        assertTrue(typesProto.contains("PaymentRejected rejected = 2;"));
+    }
+
+    @Test
     void generatesProtoWithEmptyInputFields() throws Exception {
         String yaml = """
             version: 2

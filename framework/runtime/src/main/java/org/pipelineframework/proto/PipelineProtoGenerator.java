@@ -41,6 +41,8 @@ import org.pipelineframework.config.template.PipelineTemplateField;
 import org.pipelineframework.config.template.PipelineTemplateMessage;
 import org.pipelineframework.config.template.PipelineTemplateReserved;
 import org.pipelineframework.config.template.PipelineTemplateStep;
+import org.pipelineframework.config.template.PipelineTemplateUnion;
+import org.pipelineframework.config.template.PipelineTemplateUnionVariant;
 
 /**
  * Generates protobuf definitions from the pipeline template configuration.
@@ -131,7 +133,7 @@ public class PipelineProtoGenerator {
 
         if (v2) {
             Path typesProtoPath = resolvedOutput.resolve(resolvedTypesProtoName);
-            writeProto(typesProtoPath, renderTypesProto(config.basePackage(), config.messages()));
+            writeProto(typesProtoPath, renderTypesProto(config.basePackage(), config.messages(), config.unions()));
         }
 
         for (int i = 0; i < resolvedSteps.size(); i++) {
@@ -299,8 +301,13 @@ public class PipelineProtoGenerator {
      * @return the complete .proto file content containing syntax, package, java_package options and
      *         the rendered message definitions
      */
-    private String renderTypesProto(String basePackage, Map<String, PipelineTemplateMessage> messages) {
+    private String renderTypesProto(
+        String basePackage,
+        Map<String, PipelineTemplateMessage> messages,
+        Map<String, PipelineTemplateUnion> unions
+    ) {
         Map<String, PipelineTemplateMessage> safeMessages = messages == null ? Map.of() : new LinkedHashMap<>(messages);
+        Map<String, PipelineTemplateUnion> safeUnions = unions == null ? Map.of() : new LinkedHashMap<>(unions);
         StringBuilder builder = new StringBuilder();
         builder.append("syntax = \"proto3\";\n\n");
         builder.append("package ").append(basePackage).append(";\n\n");
@@ -317,6 +324,16 @@ public class PipelineProtoGenerator {
                 builder.append('\n');
             }
             renderMessage(builder, message);
+            first = false;
+        }
+        List<String> unionNames = new ArrayList<>(safeUnions.keySet());
+        Collections.sort(unionNames);
+        for (String unionName : unionNames) {
+            PipelineTemplateUnion union = safeUnions.get(unionName);
+            if (!first) {
+                builder.append('\n');
+            }
+            renderUnion(builder, union);
             first = false;
         }
         return builder.toString();
@@ -416,6 +433,24 @@ public class PipelineProtoGenerator {
                 renderFieldLine(builder, field);
             }
         }
+        builder.append("}\n");
+    }
+
+    private void renderUnion(StringBuilder builder, PipelineTemplateUnion union) {
+        builder.append("message ").append(union.name()).append(" {\n");
+        builder.append("  oneof outcome {\n");
+        List<PipelineTemplateUnionVariant> variants = new ArrayList<>(union.variants().values());
+        variants.sort((left, right) -> Integer.compare(left.number(), right.number()));
+        for (PipelineTemplateUnionVariant variant : variants) {
+            builder.append("    ")
+                .append(variant.type())
+                .append(' ')
+                .append(toProtoFieldName(variant.name()))
+                .append(" = ")
+                .append(variant.number())
+                .append(";\n");
+        }
+        builder.append("  }\n");
         builder.append("}\n");
     }
 
@@ -828,6 +863,40 @@ public class PipelineProtoGenerator {
             if (lower.length() > 1) {
                 builder.append(lower.substring(1));
             }
+        }
+        return builder.toString();
+    }
+
+    private String toProtoFieldName(String input) {
+        if (input == null || input.isBlank()) {
+            return "";
+        }
+        StringBuilder builder = new StringBuilder();
+        char previous = 0;
+        for (int i = 0; i < input.length(); i++) {
+            char current = input.charAt(i);
+            if (!Character.isLetterOrDigit(current)) {
+                if (!builder.isEmpty() && builder.charAt(builder.length() - 1) != '_') {
+                    builder.append('_');
+                }
+                previous = current;
+                continue;
+            }
+            if (Character.isUpperCase(current)
+                && i > 0
+                && previous != 0
+                && previous != '_'
+                && Character.isLowerCase(previous)) {
+                builder.append('_');
+            }
+            builder.append(Character.toLowerCase(current));
+            previous = current;
+        }
+        while (!builder.isEmpty() && builder.charAt(0) == '_') {
+            builder.deleteCharAt(0);
+        }
+        while (!builder.isEmpty() && builder.charAt(builder.length() - 1) == '_') {
+            builder.deleteCharAt(builder.length() - 1);
         }
         return builder.toString();
     }

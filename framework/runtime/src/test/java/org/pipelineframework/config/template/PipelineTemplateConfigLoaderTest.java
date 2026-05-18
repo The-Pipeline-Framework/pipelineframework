@@ -81,6 +81,180 @@ class PipelineTemplateConfigLoaderTest {
     }
 
     @Test
+    void loadsUnionDefinitions() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Union Test App"
+            basePackage: "com.example.test"
+            transport: "GRPC"
+            messages:
+              PaymentRequest:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+              PaymentCaptured:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+              PaymentRejected:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+            unions:
+              PaymentOutcome:
+                variants:
+                  captured:
+                    type: "PaymentCaptured"
+                    number: 1
+                  rejected:
+                    type: "PaymentRejected"
+                    number: 2
+            steps:
+              - name: "Capture Payment"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "PaymentRequest"
+                outputTypeName: "PaymentOutcome"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-union.yaml");
+        Files.writeString(configPath, yaml);
+
+        PipelineTemplateConfig config = new PipelineTemplateConfigLoader().load(configPath);
+
+        assertTrue(config.unions().containsKey("PaymentOutcome"));
+        PipelineTemplateUnion union = config.unions().get("PaymentOutcome");
+        assertEquals("PaymentCaptured", union.variants().get("captured").type());
+        assertEquals(2, union.variants().get("rejected").number());
+        assertEquals("PaymentOutcome", config.steps().getFirst().outputTypeName());
+        assertTrue(config.steps().getFirst().outputFields().isEmpty());
+    }
+
+    @Test
+    void rejectsUnionVariantWithUnknownMessage() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Union Test App"
+            basePackage: "com.example.test"
+            transport: "GRPC"
+            messages:
+              PaymentRequest:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+            unions:
+              PaymentOutcome:
+                variants:
+                  captured:
+                    type: "PaymentCaptured"
+                    number: 1
+            steps:
+              - name: "Capture Payment"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "PaymentRequest"
+                outputTypeName: "PaymentOutcome"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-unknown-union-message.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException exception = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(exception.getMessage().contains("references unknown message 'PaymentCaptured'"));
+    }
+
+    @Test
+    void rejectsDuplicateUnionVariantNumbers() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Union Test App"
+            basePackage: "com.example.test"
+            transport: "GRPC"
+            messages:
+              PaymentRequest:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+              PaymentCaptured:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+              PaymentRejected:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+            unions:
+              PaymentOutcome:
+                variants:
+                  captured:
+                    type: "PaymentCaptured"
+                    number: 1
+                  rejected:
+                    type: "PaymentRejected"
+                    number: 1
+            steps:
+              - name: "Capture Payment"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "PaymentRequest"
+                outputTypeName: "PaymentOutcome"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-duplicate-union-number.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException exception = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertTrue(exception.getMessage().contains("Duplicate variant number 1"));
+    }
+
+    @Test
+    void rejectsUnionNameThatCollidesWithMessageName() throws Exception {
+        String yaml = """
+            version: 2
+            appName: "Union Test App"
+            basePackage: "com.example.test"
+            transport: "GRPC"
+            messages:
+              PaymentRequest:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+              PaymentOutcome:
+                fields:
+                  - number: 1
+                    name: "orderId"
+                    type: "uuid"
+            unions:
+              PaymentOutcome:
+                variants:
+                  captured:
+                    type: "PaymentOutcome"
+                    number: 1
+            steps:
+              - name: "Capture Payment"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "PaymentRequest"
+                outputTypeName: "PaymentOutcome"
+            """;
+        Path configPath = tempDir.resolve("pipeline-config-union-message-collision.yaml");
+        Files.writeString(configPath, yaml);
+
+        IllegalStateException exception = assertThrows(
+            IllegalStateException.class,
+            () -> new PipelineTemplateConfigLoader().load(configPath));
+
+        assertEquals("Union name 'PaymentOutcome' conflicts with a message name", exception.getMessage());
+    }
+
+    @Test
     void stillLoadsLegacyTemplateFieldDefinitions() throws Exception {
         String yaml = """
             appName: "Legacy Test App"

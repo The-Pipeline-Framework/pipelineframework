@@ -4,7 +4,9 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 import org.junit.jupiter.api.Test;
-import org.pipelineframework.tpfgo.common.domain.PaymentCaptureResult;
+import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.tpfgo.common.domain.PaymentCaptured;
+import org.pipelineframework.tpfgo.common.domain.PaymentOutcome;
 import org.pipelineframework.tpfgo.common.domain.PlaceOrderRequest;
 import org.pipelineframework.tpfgo.common.domain.TerminalOrderState;
 import org.pipelineframework.tpfgo.common.util.DeterministicIds;
@@ -12,6 +14,7 @@ import org.pipelineframework.tpfgo.common.util.DeterministicIds;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CanonicalTpfgoModelTest {
 
@@ -54,7 +57,7 @@ class CanonicalTpfgoModelTest {
     }
 
     @Test
-    void paymentResultKeepsFailureFieldsOptional() {
+    void paymentOutcomeModelsCapturedVariant() {
         PlaceOrderRequest request = new PlaceOrderRequest(
             DeterministicIds.uuid("request", "r1"),
             DeterministicIds.uuid("customer", "c1"),
@@ -62,17 +65,57 @@ class CanonicalTpfgoModelTest {
             "burger x1",
             new BigDecimal("42.50"),
             "EUR");
-        PaymentCaptureResult captured = new PaymentCaptureResult(
+        PaymentCaptured captured = new PaymentCaptured(
             DeterministicIds.uuid("order", request.requestId().toString()),
             DeterministicIds.uuid("payment", request.requestId().toString()),
             Instant.parse("2026-03-27T11:00:00Z"),
             request.totalAmount(),
-            request.currency(),
-            "CAPTURED",
-            null,
-            null);
+            request.currency());
 
         assertEquals("CAPTURED", captured.status());
-        assertNull(captured.failureCode());
+    }
+
+    @Test
+    void paymentOutcomeUsesDiscriminatedJsonObject() throws Exception {
+        PaymentOutcome captured = new PaymentCaptured(
+            DeterministicIds.uuid("order", "json"),
+            DeterministicIds.uuid("payment", "json"),
+            Instant.parse("2026-03-27T11:00:00Z"),
+            new BigDecimal("42.50"),
+            "EUR");
+
+        String json = PipelineJson.mapper().writerFor(PaymentOutcome.class).writeValueAsString(captured);
+        PaymentOutcome roundTripped = PipelineJson.mapper().readValue(json, PaymentOutcome.class);
+
+        assertTrue(json.contains("\"type\":\"captured\""));
+        assertTrue(json.contains("\"paymentId\""));
+        assertEquals(captured, roundTripped);
+    }
+
+    @Test
+    void paymentOutcomeReadsProtobufOneofJsonShape() throws Exception {
+        PaymentOutcome expected = new PaymentCaptured(
+            DeterministicIds.uuid("order", "proto-json"),
+            DeterministicIds.uuid("payment", "proto-json"),
+            Instant.parse("2026-03-27T11:00:00Z"),
+            new BigDecimal("42.50"),
+            "EUR");
+        String json = """
+            {
+              "captured": {
+                "orderId": "%s",
+                "paymentId": "%s",
+                "processedAt": "2026-03-27T11:00:00Z",
+                "amount": "42.50",
+                "currency": "EUR"
+              }
+            }
+            """.formatted(
+            DeterministicIds.uuid("order", "proto-json"),
+            DeterministicIds.uuid("payment", "proto-json"));
+
+        PaymentOutcome roundTripped = PipelineJson.mapper().readValue(json, PaymentOutcome.class);
+
+        assertEquals(expected, roundTripped);
     }
 }

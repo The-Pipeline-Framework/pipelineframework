@@ -60,6 +60,38 @@ messages:
         type: currency
 ```
 
+## Closed Unions
+
+Use top-level `unions:` when a step output is one closed set of typed outcomes.
+Each union variant references a top-level message and receives a stable protobuf field number:
+
+```yaml
+messages:
+  PaymentCaptured:
+    fields:
+      - number: 1
+        name: paymentId
+        type: uuid
+  PaymentRejected:
+    fields:
+      - number: 1
+        name: failureCode
+        type: string
+
+unions:
+  PaymentOutcome:
+    variants:
+      captured:
+        type: PaymentCaptured
+        number: 1
+      rejected:
+        type: PaymentRejected
+        number: 2
+```
+
+Unions can be used as step input or output types. They cannot be nested as fields inside messages in this first version.
+For application-level usage, see [Typed Union Outputs](/guide/development/typed-union-outputs).
+
 ## Default Compiler Mappings
 
 Default wire and Java bindings:

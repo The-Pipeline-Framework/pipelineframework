@@ -188,12 +188,11 @@ class TpfgoCheckpointFlowIT {
                 serviceStub.withDeadlineAfter(10, TimeUnit.SECONDS);
 
             JsonNode payload = PipelineJson.mapper().valueToTree(Map.of(
+                "type", "rejected",
                 "orderId", "dddddddd-dddd-dddd-dddd-dddddddddddd",
-                "paymentId", "",
                 "processedAt", "2026-03-27T12:00:00Z",
                 "amount", "0",
                 "currency", "EUR",
-                "status", "FAILED",
                 "failureCode", "PAYMENT_CAPTURE_REJECTED",
                 "failureReason", "amount must be positive"));
 
@@ -270,12 +269,11 @@ class TpfgoCheckpointFlowIT {
             .until(() -> checkpointAdmissionReady(stub));
 
         JsonNode warmupPayload = PipelineJson.mapper().valueToTree(Map.of(
+            "type", "rejected",
             "orderId", DeterministicIds.uuid("warmup-compensation-order", "duplicate-boundary").toString(),
-            "paymentId", "",
             "processedAt", "2026-03-27T12:00:00Z",
             "amount", "0",
             "currency", "EUR",
-            "status", "FAILED",
             "failureCode", "PAYMENT_CAPTURE_REJECTED",
             "failureReason", "warmup"));
 

@@ -50,11 +50,4 @@ public final class CommonDomainValidation {
         return normalized;
     }
 
-    public static String blankToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String normalized = value.trim();
-        return normalized.isEmpty() ? null : normalized;
-    }
 }

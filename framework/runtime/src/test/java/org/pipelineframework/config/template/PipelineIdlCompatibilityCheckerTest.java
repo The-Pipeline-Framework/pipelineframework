@@ -239,6 +239,33 @@ class PipelineIdlCompatibilityCheckerTest {
         assertThrows(UnsupportedOperationException.class, () -> errors.add("mutate"));
     }
 
+    @Test
+    void changingUnionVariantTypeIsIncompatible() {
+        PipelineIdlSnapshot baseline = unionSnapshot(
+            List.of(new PipelineIdlSnapshot.UnionVariantSnapshot("captured", "PaymentCaptured", 1)));
+        PipelineIdlSnapshot current = unionSnapshot(
+            List.of(new PipelineIdlSnapshot.UnionVariantSnapshot("captured", "AltPaymentCaptured", 1)));
+
+        List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
+
+        assertTrue(errors.stream().anyMatch(msg -> msg.contains("changed variant 'captured' type")),
+            "expected errors containing union variant type change, got: " + errors);
+    }
+
+    @Test
+    void removingUnionVariantIsIncompatible() {
+        PipelineIdlSnapshot baseline = unionSnapshot(List.of(
+            new PipelineIdlSnapshot.UnionVariantSnapshot("captured", "PaymentCaptured", 1),
+            new PipelineIdlSnapshot.UnionVariantSnapshot("rejected", "PaymentRejected", 2)));
+        PipelineIdlSnapshot current = unionSnapshot(
+            List.of(new PipelineIdlSnapshot.UnionVariantSnapshot("captured", "PaymentCaptured", 1)));
+
+        List<String> errors = new PipelineIdlCompatibilityChecker().compare(baseline, current);
+
+        assertTrue(errors.stream().anyMatch(msg -> msg.contains("removed variant 'rejected'")),
+            "expected errors containing removed union variant, got: " + errors);
+    }
+
     private PipelineIdlSnapshot snapshot(List<PipelineIdlSnapshot.FieldSnapshot> fields) {
         return snapshotWith(
             Map.of(
@@ -257,6 +284,20 @@ class PipelineIdlCompatibilityCheckerTest {
             "com.example",
             messages,
             steps);
+    }
+
+    private PipelineIdlSnapshot unionSnapshot(List<PipelineIdlSnapshot.UnionVariantSnapshot> variants) {
+        return new PipelineIdlSnapshot(
+            2,
+            "App",
+            "com.example",
+            Map.of(
+                "PaymentCaptured",
+                message("PaymentCaptured", List.of(simpleField(1, "orderId", "uuid")), List.of(), List.of()),
+                "PaymentRejected",
+                message("PaymentRejected", List.of(simpleField(1, "orderId", "uuid")), List.of(), List.of())),
+            Map.of("PaymentOutcome", new PipelineIdlSnapshot.UnionSnapshot("PaymentOutcome", variants)),
+            List.of(new PipelineIdlSnapshot.StepSnapshot("Charge Card", "ChargeRequest", "PaymentOutcome")));
     }
 
     private PipelineIdlSnapshot.MessageSnapshot message(

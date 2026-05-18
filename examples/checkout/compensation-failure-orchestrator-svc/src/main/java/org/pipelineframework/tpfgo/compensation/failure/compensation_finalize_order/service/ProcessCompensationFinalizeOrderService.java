@@ -9,13 +9,13 @@ import jakarta.inject.Inject;
 import io.smallrye.mutiny.Uni;
 import org.pipelineframework.annotation.PipelineStep;
 import org.pipelineframework.service.ReactiveService;
-import org.pipelineframework.tpfgo.common.domain.PaymentCaptureResult;
+import org.pipelineframework.tpfgo.common.domain.PaymentOutcome;
 import org.pipelineframework.tpfgo.common.domain.TerminalOrderState;
 
 @PipelineStep
 @ApplicationScoped
 public class ProcessCompensationFinalizeOrderService
-    implements ReactiveService<PaymentCaptureResult, TerminalOrderState> {
+    implements ReactiveService<PaymentOutcome, TerminalOrderState> {
 
     private final Clock clock;
 
@@ -25,28 +25,11 @@ public class ProcessCompensationFinalizeOrderService
     }
 
     @Override
-    public Uni<TerminalOrderState> process(PaymentCaptureResult input) {
+    public Uni<TerminalOrderState> process(PaymentOutcome input) {
         if (input == null) {
             return Uni.createFrom().failure(new IllegalArgumentException("input must not be null"));
         }
         Instant now = Instant.now(clock);
-        if ("CAPTURED".equals(input.status())) {
-            return Uni.createFrom().item(new TerminalOrderState(
-                input.orderId(),
-                "COMPLETED",
-                now,
-                "none",
-                input.status(),
-                input.paymentId(),
-                null));
-        }
-        return Uni.createFrom().item(new TerminalOrderState(
-            input.orderId(),
-            "FAILED_COMPENSATED",
-            now,
-            "manual-review",
-            input.status(),
-            input.paymentId(),
-            input.failureCode()));
+        return Uni.createFrom().item(input.toTerminalOrderState(now));
     }
 }

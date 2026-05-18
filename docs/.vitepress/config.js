@@ -92,6 +92,7 @@ const mainSidebar = [
         items: [
             {text: '@PipelineStep Annotation', link: '/guide/development/pipeline-step'},
             {text: 'Code a Step', link: '/guide/development/code-a-step'},
+            {text: 'Typed Union Outputs', link: '/guide/development/typed-union-outputs'},
             {text: 'Item Reject Sink', link: '/guide/development/item-reject-sink'},
             {text: 'Operators', link: '/guide/development/operators'},
             {text: 'Operator Build Troubleshooting', link: '/guide/development/operators-build-troubleshooting'},
@@ -181,6 +182,7 @@ const mainSidebar = [
             {text: 'Compiler Pipeline Architecture', link: '/guide/evolve/compiler-pipeline-architecture'},
             {text: 'Operators Internals', link: '/guide/evolve/operators-internals'},
             {text: 'Data Types', link: '/guide/evolve/data-types'},
+            {text: 'Typed Union Output Contracts', link: '/guide/evolve/typed-union-output-contracts'},
             {
                 text: 'Runtime Mapping',
                 collapsed: true,
