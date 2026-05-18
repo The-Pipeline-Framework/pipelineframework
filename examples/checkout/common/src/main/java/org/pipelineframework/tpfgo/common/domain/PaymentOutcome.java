@@ -4,15 +4,11 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
-import com.fasterxml.jackson.annotation.JsonSubTypes;
-import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 
-@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
-@JsonSubTypes({
-    @JsonSubTypes.Type(value = PaymentCaptured.class, name = "captured"),
-    @JsonSubTypes.Type(value = PaymentRejected.class, name = "rejected"),
-    @JsonSubTypes.Type(value = PaymentRequiresReview.class, name = "requiresReview")
-})
+@JsonSerialize(using = PaymentOutcomeJsonSerializer.class)
+@JsonDeserialize(using = PaymentOutcomeJsonDeserializer.class)
 public sealed interface PaymentOutcome permits PaymentCaptured, PaymentRejected, PaymentRequiresReview {
     UUID orderId();
 
