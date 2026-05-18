@@ -12,9 +12,12 @@ import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.ServiceApiKind;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TransportMode;
 import org.pipelineframework.processor.ir.TypeMapping;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -216,6 +219,121 @@ class PipelineTargetResolutionPhaseTest {
         assertEquals(
             Set.of(GenerationTarget.GRPC_SERVICE, GenerationTarget.REMOTE_OPERATOR_ADAPTER),
             context.getResolvedTargets());
+    }
+
+    @Test
+    void blockingInternalStepsAddReactiveBridgeTarget() throws Exception {
+        PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineStepModel blocking = step("BlockingCsvStep", DeploymentRole.PIPELINE_SERVER)
+            .toBuilder()
+            .serviceApiKind(ServiceApiKind.BLOCKING)
+            .build();
+        context.setStepModels(List.of(blocking));
+        context.setTransportMode(TransportMode.REST);
+
+        phase.execute(context);
+
+        PipelineStepModel updated = context.getStepModels().getFirst();
+        assertEquals(
+            Set.of(GenerationTarget.REST_RESOURCE, GenerationTarget.BLOCKING_REACTIVE_BRIDGE),
+            updated.enabledTargets());
+    }
+
+    @Test
+    void blockingIteratorInternalStepsAddReactiveBridgeTarget() throws Exception {
+        PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineStepModel blocking = step("BlockingIteratorCsvStep", DeploymentRole.PIPELINE_SERVER)
+            .toBuilder()
+            .serviceApiKind(ServiceApiKind.BLOCKING_ITERATOR)
+            .build();
+        context.setStepModels(List.of(blocking));
+        context.setTransportMode(TransportMode.REST);
+
+        phase.execute(context);
+
+        PipelineStepModel updated = context.getStepModels().getFirst();
+        assertEquals(
+            Set.of(GenerationTarget.REST_RESOURCE, GenerationTarget.BLOCKING_REACTIVE_BRIDGE),
+            updated.enabledTargets());
+    }
+
+    @Test
+    void blockingInternalStepWithDelegateDoesNotAddReactiveBridgeTarget() throws Exception {
+        PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineStepModel blocking = step("BlockingDelegatedStep", DeploymentRole.PIPELINE_SERVER)
+            .toBuilder()
+            .serviceApiKind(ServiceApiKind.BLOCKING)
+            .delegateService(ClassName.get("com.external.lib", "ExternalService"))
+            .build();
+        context.setStepModels(List.of(blocking));
+        context.setTransportMode(TransportMode.REST);
+
+        phase.execute(context);
+
+        PipelineStepModel updated = context.getStepModels().getFirst();
+        assertFalse(updated.enabledTargets().contains(GenerationTarget.BLOCKING_REACTIVE_BRIDGE),
+            "Delegated steps should not get a blocking reactive bridge target");
+    }
+
+    @Test
+    void blockingInternalStepWithRemoteExecutionDoesNotAddReactiveBridgeTarget() throws Exception {
+        PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineStepModel blocking = step("BlockingRemoteStep", DeploymentRole.PIPELINE_SERVER)
+            .toBuilder()
+            .serviceApiKind(ServiceApiKind.BLOCKING)
+            .remoteExecution(new PipelineTemplateStepExecution(
+                "REMOTE", "remote-operator", "PROTOBUF_HTTP_V1", 3000,
+                new PipelineTemplateRemoteTarget("https://operator.example/process", null)))
+            .build();
+        context.setStepModels(List.of(blocking));
+        context.setTransportMode(TransportMode.REST);
+
+        phase.execute(context);
+
+        PipelineStepModel updated = context.getStepModels().getFirst();
+        assertFalse(updated.enabledTargets().contains(GenerationTarget.BLOCKING_REACTIVE_BRIDGE),
+            "Remote steps should not get a blocking reactive bridge target");
+    }
+
+    @Test
+    void reactiveServerStepDoesNotAddReactiveBridgeTarget() throws Exception {
+        PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineStepModel reactive = step("ReactiveStep", DeploymentRole.PIPELINE_SERVER)
+            .toBuilder()
+            .serviceApiKind(ServiceApiKind.REACTIVE)
+            .build();
+        context.setStepModels(List.of(reactive));
+        context.setTransportMode(TransportMode.REST);
+
+        phase.execute(context);
+
+        PipelineStepModel updated = context.getStepModels().getFirst();
+        assertFalse(updated.enabledTargets().contains(GenerationTarget.BLOCKING_REACTIVE_BRIDGE),
+            "Reactive steps must never get a blocking reactive bridge target");
+    }
+
+    @Test
+    void blockingIteratorStepWithDelegateDoesNotAddReactiveBridgeTarget() throws Exception {
+        PipelineTargetResolutionPhase phase = new PipelineTargetResolutionPhase();
+        PipelineCompilationContext context = new PipelineCompilationContext(null, null);
+        PipelineStepModel blocking = step("BlockingIteratorDelegatedStep", DeploymentRole.PIPELINE_SERVER)
+            .toBuilder()
+            .serviceApiKind(ServiceApiKind.BLOCKING_ITERATOR)
+            .delegateService(ClassName.get("com.external.lib", "ExternalIteratorService"))
+            .build();
+        context.setStepModels(List.of(blocking));
+        context.setTransportMode(TransportMode.GRPC);
+
+        phase.execute(context);
+
+        PipelineStepModel updated = context.getStepModels().getFirst();
+        assertFalse(updated.enabledTargets().contains(GenerationTarget.BLOCKING_REACTIVE_BRIDGE),
+            "Delegated blocking iterator steps should not get a reactive bridge target");
     }
 
     private void assertResolvedTargets(

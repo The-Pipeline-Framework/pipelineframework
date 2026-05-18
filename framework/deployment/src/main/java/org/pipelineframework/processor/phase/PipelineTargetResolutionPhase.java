@@ -14,6 +14,7 @@ import org.pipelineframework.processor.PipelineCompilationPhase;
 import org.pipelineframework.processor.ir.DeploymentRole;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.ServiceApiKind;
 import org.pipelineframework.processor.ir.TransportMode;
 
 /**
@@ -128,6 +129,12 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
             && model.deploymentRole() == DeploymentRole.PLUGIN_SERVER) {
             return Set.of(GenerationTarget.LOCAL_CLIENT_STEP);
         }
-        return Collections.unmodifiableSet(new LinkedHashSet<>(resolveTargetsForRole(model.deploymentRole(), transportMode)));
+        LinkedHashSet<GenerationTarget> targets = new LinkedHashSet<>(resolveTargetsForRole(model.deploymentRole(), transportMode));
+        if (model.serviceApiKind() != ServiceApiKind.REACTIVE
+            && model.delegateService() == null
+            && (model.remoteExecution() == null || !model.remoteExecution().isRemote())) {
+            targets.add(GenerationTarget.BLOCKING_REACTIVE_BRIDGE);
+        }
+        return Collections.unmodifiableSet(targets);
     }
 }

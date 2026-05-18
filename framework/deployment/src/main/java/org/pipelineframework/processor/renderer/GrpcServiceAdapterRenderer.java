@@ -13,6 +13,7 @@ import org.pipelineframework.processor.PipelineStepProcessor;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.GrpcBinding;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.util.GeneratedServiceTypeResolver;
 import org.pipelineframework.processor.util.GrpcJavaTypeResolver;
 
 /**
@@ -550,12 +551,7 @@ public record GrpcServiceAdapterRenderer(GenerationTarget target) implements Pip
      *         otherwise the generated pipeline service class located in the model's package plus the pipeline package suffix
      */
     private TypeName resolveServiceType(PipelineStepModel model) {
-        if (!model.sideEffect()) {
-            return model.serviceClassName();
-        }
-        return ClassName.get(
-            model.servicePackage() + PipelineStepProcessor.PIPELINE_PACKAGE_SUFFIX,
-            model.serviceName());
+        return GeneratedServiceTypeResolver.resolveInjectedServiceType(model);
     }
 
     /**

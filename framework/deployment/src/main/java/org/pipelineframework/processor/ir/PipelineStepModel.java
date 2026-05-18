@@ -31,6 +31,7 @@ import org.pipelineframework.parallelism.ThreadSafety;
  * @param externalMapper Gets the operator mapper class if operator mapping is used, otherwise null.
  * @param mapperFallbackMode Gets mapper fallback mode used when no explicit/inferred mapper matches.
  * @param remoteExecution Gets remote operator execution metadata when the step is remote, otherwise null.
+ * @param serviceApiKind Distinguishes reactive-authored from blocking-authored internal services.
  */
 public record PipelineStepModel(
         String serviceName,
@@ -50,7 +51,8 @@ public record PipelineStepModel(
         ClassName delegateService,
         ClassName externalMapper,
         MapperFallbackMode mapperFallbackMode,
-        PipelineTemplateStepExecution remoteExecution
+        PipelineTemplateStepExecution remoteExecution,
+        ServiceApiKind serviceApiKind
 ) {
     /**
          * Creates a new PipelineStepModel with the supplied service identity, type mappings and generation configuration.
@@ -92,7 +94,8 @@ public record PipelineStepModel(
             ClassName delegateService,
             ClassName externalMapper,
             MapperFallbackMode mapperFallbackMode,
-            PipelineTemplateStepExecution remoteExecution) {
+            PipelineTemplateStepExecution remoteExecution,
+            ServiceApiKind serviceApiKind) {
         // Validate non-null invariants
         if (serviceName == null)
             throw new IllegalArgumentException("serviceName cannot be null");
@@ -129,6 +132,7 @@ public record PipelineStepModel(
         this.externalMapper = externalMapper;
         this.mapperFallbackMode = mapperFallbackMode == null ? MapperFallbackMode.NONE : mapperFallbackMode;
         this.remoteExecution = remoteExecution;
+        this.serviceApiKind = serviceApiKind == null ? ServiceApiKind.REACTIVE : serviceApiKind;
     }
 
     /**
@@ -168,7 +172,8 @@ public record PipelineStepModel(
             delegateService,
             externalMapper,
             MapperFallbackMode.NONE,
-            null);
+            null,
+            ServiceApiKind.REACTIVE);
     }
 
     /**
@@ -209,7 +214,8 @@ public record PipelineStepModel(
             delegateService,
             externalMapper,
             mapperFallbackMode,
-            null);
+            null,
+            ServiceApiKind.REACTIVE);
     }
 
     /**
@@ -261,7 +267,8 @@ public record PipelineStepModel(
             null,
             null,
             MapperFallbackMode.NONE,
-            null);
+            null,
+            ServiceApiKind.REACTIVE);
     }
 
     /**
@@ -311,6 +318,7 @@ public record PipelineStepModel(
         private ClassName externalMapper;
         private MapperFallbackMode mapperFallbackMode = MapperFallbackMode.NONE;
         private PipelineTemplateStepExecution remoteExecution;
+        private ServiceApiKind serviceApiKind = ServiceApiKind.REACTIVE;
 
         /**
          * Sets the service name.
@@ -522,6 +530,17 @@ public record PipelineStepModel(
         }
 
         /**
+         * Sets the authored service API kind for this step model.
+         *
+         * @param serviceApiKind distinguishes reactive-authored from blocking-authored services
+         * @return this {@link PipelineStepModel.Builder} for chaining
+         */
+        public Builder serviceApiKind(ServiceApiKind serviceApiKind) {
+            this.serviceApiKind = serviceApiKind;
+            return this;
+        }
+
+        /**
          * Create a PipelineStepModel populated from the builder's current state.
          *
          * @return a PipelineStepModel populated with the builder's state
@@ -564,7 +583,8 @@ public record PipelineStepModel(
                 delegateService,
                 externalMapper,
                 mapperFallbackMode,
-                remoteExecution);
+                remoteExecution,
+                serviceApiKind);
         }
     }
     
@@ -593,7 +613,8 @@ public record PipelineStepModel(
             delegateService,
             externalMapper,
             mapperFallbackMode,
-            remoteExecution
+            remoteExecution,
+            serviceApiKind
         );
     }
 
@@ -628,6 +649,7 @@ public record PipelineStepModel(
             .delegateService(delegateService)
             .externalMapper(externalMapper)
             .mapperFallbackMode(mapperFallbackMode)
-            .remoteExecution(remoteExecution);
+            .remoteExecution(remoteExecution)
+            .serviceApiKind(serviceApiKind);
     }
 }

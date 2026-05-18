@@ -86,6 +86,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
         RestClientStepRenderer restClientRenderer = new RestClientStepRenderer();
         RestResourceRenderer restRenderer = new RestResourceRenderer();
         RestFunctionHandlerRenderer restFunctionHandlerRenderer = new RestFunctionHandlerRenderer();
+        BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer = new BlockingReactiveBridgeRenderer();
         RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer = new RemoteOperatorAdapterRenderer();
         OrchestratorGrpcRenderer orchestratorGrpcRenderer = new OrchestratorGrpcRenderer();
         OrchestratorRestResourceRenderer orchestratorRestRenderer = new OrchestratorRestResourceRenderer();
@@ -234,6 +235,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
                 restClientRenderer,
                 restRenderer,
                 restFunctionHandlerRenderer,
+                blockingReactiveBridgeRenderer,
                 remoteOperatorAdapterRenderer);
         }
 
@@ -469,6 +471,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             RestClientStepRenderer restClientRenderer,
             RestResourceRenderer restRenderer,
             RestFunctionHandlerRenderer restFunctionHandlerRenderer,
+            BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
             RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer) throws IOException {
         stepArtifactGenerationService.generateArtifactsForModel(
             ctx,
@@ -487,6 +490,7 @@ public class PipelineGenerationPhase implements PipelineCompilationPhase {
             restClientRenderer,
             restRenderer,
             restFunctionHandlerRenderer,
+            blockingReactiveBridgeRenderer,
             remoteOperatorAdapterRenderer);
     }
 

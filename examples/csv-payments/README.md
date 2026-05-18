@@ -103,6 +103,28 @@ cd <repo-root>
 
 That lane starts a dedicated LGTM stack, points the modular services and packaged orchestrator at its OTLP collector, and then queries Tempo directly to prove traces arrived and are queryable.
 
+### Blocking CSV Input Demand Pacing
+
+The input CSV step is authored as a blocking iterator service. It still reads rows incrementally from OpenCSV, and it also applies demand pacing before each row is pulled from the iterator.
+
+This pacing is a blocking-thread throttle, not end-to-end reactive backpressure. The framework offloads the iterator to worker or virtual threads, and the example pacer deliberately blocks that offloaded thread when the configured row budget is exhausted.
+
+Configure the default row budget in the input service:
+
+```properties
+csv-payments.reader-demand-pacer.rows-per-period=10
+csv-payments.reader-demand-pacer.millis-period=100
+```
+
+The E2E harness can override those settings for large-input observability runs:
+
+```bash
+-Dcsv.e2e.reader-demand-pacer.rows-per-period=20
+-Dcsv.e2e.reader-demand-pacer.millis-period=1000
+```
+
+Use lower rates when you need the demo to expose pipeline timing, retry, and tracing behaviour clearly. Use higher rates when you want throughput-oriented local validation.
+
 For local manual inspection before teardown:
 
 ```bash

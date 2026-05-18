@@ -143,6 +143,11 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private static String resolvePipelineRuntimeImage() {
+        String propertyImage = System.getProperty("csv.e2e.pipeline.runtime.image");
+        if (propertyImage != null && !propertyImage.isBlank()) {
+            return propertyImage;
+        }
+
         String explicitImage = System.getenv("PIPELINE_RUNTIME_IMAGE");
         if (explicitImage != null && !explicitImage.isBlank()) {
             return explicitImage;
@@ -197,17 +202,18 @@ abstract class AbstractCsvPaymentsEndToEnd {
         }
 
         if (PIPELINE_RUNTIME_LAYOUT) {
-            Startables.deepStart(
-                    Stream.of(getPostgresContainer(), getPersistenceService(), getPipelineRuntimeService()))
-                .join();
+            Startables.deepStart(Stream.of(getPostgresContainer())).join();
+            Startables.deepStart(Stream.of(getPersistenceService(), getPipelineRuntimeService())).join();
             return;
         }
 
-        Stream.Builder<GenericContainer<?>> services = Stream.builder();
-        services.add(getPostgresContainer());
         if (TEMPO_VERIFICATION_ACTIVE) {
-            services.add(getLgtmStackContainer());
+            Startables.deepStart(Stream.of(getPostgresContainer(), getLgtmStackContainer())).join();
+        } else {
+            Startables.deepStart(Stream.of(getPostgresContainer())).join();
         }
+
+        Stream.Builder<GenericContainer<?>> services = Stream.builder();
         services.add(getPersistenceService());
         services.add(getInputCsvService());
         services.add(getPaymentsProcessingService());
@@ -1406,7 +1412,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
     }
 
     private void createCustomInputCsvFile() throws IOException {
-        Path source = Paths.get(CSV_E2E_INPUT_FILE).toAbsolutePath().normalize();
+        Path source = resolveCustomInputCsvFile();
         assertTrue(Files.isRegularFile(source), "Expected custom CSV input file at " + source);
 
         String fileName = source.getFileName().toString();
@@ -1426,6 +1432,23 @@ abstract class AbstractCsvPaymentsEndToEnd {
                 target,
                 source,
                 expectedPaymentRecordCount());
+    }
+
+    private Path resolveCustomInputCsvFile() {
+        Path configured = Paths.get(CSV_E2E_INPUT_FILE);
+        if (configured.isAbsolute()) {
+            return configured.normalize();
+        }
+
+        Path current = Paths.get(System.getProperty("user.dir")).toAbsolutePath().normalize();
+        while (current != null) {
+            Path candidate = current.resolve(configured).normalize();
+            if (Files.isRegularFile(candidate)) {
+                return candidate;
+            }
+            current = current.getParent();
+        }
+        return configured.toAbsolutePath().normalize();
     }
 
     private void createValidAndMalformedCsvFiles() throws IOException {
@@ -1548,7 +1571,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         if (!CUSTOM_INPUT_FILE) {
             return 0L;
         }
-        try (Stream<String> lines = Files.lines(Paths.get(CSV_E2E_INPUT_FILE))) {
+        try (Stream<String> lines = Files.lines(resolveCustomInputCsvFile())) {
             return lines.skip(1)
                     .map(String::trim)
                     .filter(line -> !line.isBlank())
@@ -1792,7 +1815,7 @@ abstract class AbstractCsvPaymentsEndToEnd {
         if (!CUSTOM_INPUT_FILE) {
             return 5L;
         }
-        try (Stream<String> lines = Files.lines(Paths.get(CSV_E2E_INPUT_FILE))) {
+        try (Stream<String> lines = Files.lines(resolveCustomInputCsvFile())) {
             return Math.max(0L, lines.count() - 1L);
         }
     }
