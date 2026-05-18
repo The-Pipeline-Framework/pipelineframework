@@ -91,4 +91,31 @@ class CanonicalTpfgoModelTest {
         assertTrue(json.contains("\"paymentId\""));
         assertEquals(captured, roundTripped);
     }
+
+    @Test
+    void paymentOutcomeReadsProtobufOneofJsonShape() throws Exception {
+        PaymentOutcome expected = new PaymentCaptured(
+            DeterministicIds.uuid("order", "proto-json"),
+            DeterministicIds.uuid("payment", "proto-json"),
+            Instant.parse("2026-03-27T11:00:00Z"),
+            new BigDecimal("42.50"),
+            "EUR");
+        String json = """
+            {
+              "captured": {
+                "orderId": "%s",
+                "paymentId": "%s",
+                "processedAt": "2026-03-27T11:00:00Z",
+                "amount": "42.50",
+                "currency": "EUR"
+              }
+            }
+            """.formatted(
+            DeterministicIds.uuid("order", "proto-json"),
+            DeterministicIds.uuid("payment", "proto-json"));
+
+        PaymentOutcome roundTripped = PipelineJson.mapper().readValue(json, PaymentOutcome.class);
+
+        assertEquals(expected, roundTripped);
+    }
 }

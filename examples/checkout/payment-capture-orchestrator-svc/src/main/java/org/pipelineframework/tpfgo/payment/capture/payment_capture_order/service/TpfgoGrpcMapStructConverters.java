@@ -8,7 +8,7 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Named;
 import org.pipelineframework.tpfgo.common.util.GrpcMappingSupport;
 
-@Mapper(componentModel = "jakarta")
+@Mapper(componentModel = "jakarta", implementationName = "PaymentCaptureGrpcMapStructConvertersImpl")
 public class TpfgoGrpcMapStructConverters {
     @Named("stringToUUID")
     public UUID stringToUUID(String value) {

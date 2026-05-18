@@ -8,6 +8,7 @@ import org.pipelineframework.tpfgo.payment.capture.grpc.PipelineTypes;
 
 @org.mapstruct.Mapper(
     componentModel = "jakarta",
+    implementationName = "PaymentCapturePaymentRequiresReviewMapperImpl",
     uses = TpfgoGrpcMapStructConverters.class,
     unmappedTargetPolicy = ReportingPolicy.WARN)
 public interface PaymentRequiresReviewMapper

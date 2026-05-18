@@ -15,7 +15,7 @@ public final class PaymentOutcomeJsonDeserializer extends JsonDeserializer<Payme
     @Override
     public PaymentOutcome deserialize(JsonParser parser, DeserializationContext context) throws IOException {
         JsonNode node = parser.getCodec().readTree(parser);
-        String type = node.path("type").asText(null);
+        String type = resolveType(node);
         if ("captured".equals(type)) {
             JsonNode captured = required(node, "captured");
             return new PaymentCaptured(
@@ -45,6 +45,23 @@ public final class PaymentOutcomeJsonDeserializer extends JsonDeserializer<Payme
                 text(review, "reviewReason"));
         }
         throw new IOException("Unsupported PaymentOutcome type: " + type);
+    }
+
+    private String resolveType(JsonNode node) {
+        String type = node.path("type").asText(null);
+        if (type != null && !type.isBlank()) {
+            return type;
+        }
+        if (node.hasNonNull("captured")) {
+            return "captured";
+        }
+        if (node.hasNonNull("rejected")) {
+            return "rejected";
+        }
+        if (node.hasNonNull("requiresReview")) {
+            return "requiresReview";
+        }
+        return null;
     }
 
     private JsonNode required(JsonNode node, String fieldName) throws IOException {
