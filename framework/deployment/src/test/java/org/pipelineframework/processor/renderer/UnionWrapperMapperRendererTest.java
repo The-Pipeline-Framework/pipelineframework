@@ -37,8 +37,7 @@ class UnionWrapperMapperRendererTest {
             DeploymentRole.PIPELINE_SERVER,
             Set.of(),
             null,
-            null,
-            Set.of("PaymentOutcome"));
+            null);
 
         new UnionWrapperMapperRenderer().render(
             "org.example.payment",
