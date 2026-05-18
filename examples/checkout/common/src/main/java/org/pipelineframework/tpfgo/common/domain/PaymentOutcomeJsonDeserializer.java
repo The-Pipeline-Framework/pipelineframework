@@ -17,7 +17,7 @@ public final class PaymentOutcomeJsonDeserializer extends JsonDeserializer<Payme
         JsonNode node = parser.getCodec().readTree(parser);
         String type = resolveType(node);
         if ("captured".equals(type)) {
-            JsonNode captured = required(node, "captured");
+            JsonNode captured = node.has("captured") ? node.get("captured") : node;
             return new PaymentCaptured(
                 uuid(captured, "orderId"),
                 uuid(captured, "paymentId"),
@@ -26,7 +26,7 @@ public final class PaymentOutcomeJsonDeserializer extends JsonDeserializer<Payme
                 text(captured, "currency"));
         }
         if ("rejected".equals(type)) {
-            JsonNode rejected = required(node, "rejected");
+            JsonNode rejected = node.has("rejected") ? node.get("rejected") : node;
             return new PaymentRejected(
                 uuid(rejected, "orderId"),
                 instant(rejected, "processedAt"),
@@ -36,7 +36,7 @@ public final class PaymentOutcomeJsonDeserializer extends JsonDeserializer<Payme
                 text(rejected, "failureReason"));
         }
         if ("requiresReview".equals(type)) {
-            JsonNode review = required(node, "requiresReview");
+            JsonNode review = node.has("requiresReview") ? node.get("requiresReview") : node;
             return new PaymentRequiresReview(
                 uuid(review, "orderId"),
                 instant(review, "processedAt"),
@@ -64,13 +64,6 @@ public final class PaymentOutcomeJsonDeserializer extends JsonDeserializer<Payme
         return null;
     }
 
-    private JsonNode required(JsonNode node, String fieldName) throws IOException {
-        JsonNode value = node.get(fieldName);
-        if (value == null || value.isNull()) {
-            throw new IOException("PaymentOutcome is missing payload field: " + fieldName);
-        }
-        return value;
-    }
 
     private UUID uuid(JsonNode node, String fieldName) {
         return UUID.fromString(text(node, fieldName));

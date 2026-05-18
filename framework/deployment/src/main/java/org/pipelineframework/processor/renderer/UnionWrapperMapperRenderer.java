@@ -217,6 +217,15 @@ public class UnionWrapperMapperRenderer {
             builder.append(Character.toLowerCase(current));
             previous = current;
         }
-        return builder.toString();
+        String result = builder.toString();
+        int start = 0;
+        int end = result.length();
+        while (start < end && result.charAt(start) == '_') {
+            start++;
+        }
+        while (end > start && result.charAt(end - 1) == '_') {
+            end--;
+        }
+        return result.substring(start, end);
     }
 }

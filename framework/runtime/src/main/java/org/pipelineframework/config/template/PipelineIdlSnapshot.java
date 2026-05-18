@@ -210,10 +210,10 @@ public record PipelineIdlSnapshot(
     }
 
     private static UnionSnapshot toUnionSnapshot(PipelineTemplateUnion union) {
-        List<UnionVariantSnapshot> variants = new ArrayList<>();
-        for (PipelineTemplateUnionVariant variant : union.variants().values()) {
-            variants.add(new UnionVariantSnapshot(variant.name(), variant.type(), variant.number()));
-        }
+        List<UnionVariantSnapshot> variants = union.variants().values().stream()
+            .sorted(java.util.Comparator.comparingInt(PipelineTemplateUnionVariant::number))
+            .map(variant -> new UnionVariantSnapshot(variant.name(), variant.type(), variant.number()))
+            .toList();
         return new UnionSnapshot(union.name(), variants);
     }
 

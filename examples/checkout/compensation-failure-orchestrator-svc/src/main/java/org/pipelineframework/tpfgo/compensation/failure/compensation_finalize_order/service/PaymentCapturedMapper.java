@@ -18,6 +18,7 @@ public interface PaymentCapturedMapper
     @Mapping(target = "paymentId", qualifiedByName = "uuidToString")
     @Mapping(target = "processedAt", qualifiedByName = "instantToString")
     @Mapping(target = "amount", qualifiedByName = "bigDecimalToString")
+    @Mapping(target = "currency", source = "currency")
     @BeanMapping(ignoreByDefault = true)
     PipelineTypes.PaymentCaptured toGrpc(PaymentCaptured domain);
 
@@ -25,6 +26,7 @@ public interface PaymentCapturedMapper
     @Mapping(target = "paymentId", qualifiedByName = "stringToUUID")
     @Mapping(target = "processedAt", qualifiedByName = "stringToInstant")
     @Mapping(target = "amount", qualifiedByName = "stringToBigDecimal")
+    @Mapping(target = "currency", source = "currency")
     PaymentCaptured fromGrpc(PipelineTypes.PaymentCaptured grpc);
 
     @Override

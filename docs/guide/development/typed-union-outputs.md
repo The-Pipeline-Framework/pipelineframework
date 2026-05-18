@@ -52,7 +52,7 @@ steps:
     outputTypeName: PaymentOutcome
 ```
 
-For protobuf-backed boundaries, provide normal mappers for each variant payload. TPF generates the union wrapper mapper and composes those variant mappers, so application code does not need to write or declare a `PaymentOutcome` mapper. REST, function-over-REST, checkpoint JSON, and local transport use the sealed union type directly.
+For protobuf-backed boundaries, provide normal mappers for each variant payload. TPF generates the union wrapper mapper and composes those variant mappers, so application code does not need to write or declare a `PaymentOutcome` mapper. The FUNCTION platform mode (over REST, gRPC, or LOCAL transport), checkpoint JSON, and REST boundaries use the sealed union type directly.
 
 ## Implement the Domain Type
 

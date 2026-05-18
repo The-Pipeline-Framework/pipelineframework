@@ -17,12 +17,18 @@ public interface PaymentRejectedMapper
     @Mapping(target = "orderId", qualifiedByName = "uuidToString")
     @Mapping(target = "processedAt", qualifiedByName = "instantToString")
     @Mapping(target = "amount", qualifiedByName = "bigDecimalToString")
+    @Mapping(target = "currency", source = "currency")
+    @Mapping(target = "failureCode", source = "failureCode")
+    @Mapping(target = "failureReason", source = "failureReason")
     @BeanMapping(ignoreByDefault = true)
     PipelineTypes.PaymentRejected toGrpc(PaymentRejected domain);
 
     @Mapping(target = "orderId", qualifiedByName = "stringToUUID")
     @Mapping(target = "processedAt", qualifiedByName = "stringToInstant")
     @Mapping(target = "amount", qualifiedByName = "stringToBigDecimal")
+    @Mapping(target = "currency", source = "currency")
+    @Mapping(target = "failureCode", source = "failureCode")
+    @Mapping(target = "failureReason", source = "failureReason")
     PaymentRejected fromGrpc(PipelineTypes.PaymentRejected grpc);
 
     @Override
