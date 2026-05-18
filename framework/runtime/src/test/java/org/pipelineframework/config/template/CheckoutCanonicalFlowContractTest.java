@@ -94,16 +94,23 @@ class CheckoutCanonicalFlowContractTest {
         assertEquals(1, compensation.steps().size(), "Compensation pipeline should stay single-purpose.");
 
         PipelineTemplateStep terminal = compensation.steps().getFirst();
-        assertEquals("PaymentCaptureResult", terminal.inputTypeName(),
-            "Compensation input must remain the stable payment-capture result type used for success or failure outcomes.");
+        assertEquals("PaymentOutcome", terminal.inputTypeName(),
+            "Compensation input must remain the stable payment outcome union used for success or failure outcomes.");
         assertEquals("TerminalOrderState", terminal.outputTypeName(),
             "Compensation output must remain the stable terminal state type.");
 
         Map<String, PipelineTemplateField> input = byFieldName(terminal.inputFields());
         Map<String, PipelineTemplateField> output = byFieldName(terminal.outputFields());
 
-        assertTrue(input.containsKey("orderId"), "Compensation input must include orderId.");
-        assertTrue(input.containsKey("failureCode"), "Compensation input must include failureCode.");
+        assertTrue(input.isEmpty(), "Compensation union input should be represented by the PaymentOutcome union contract.");
+        PipelineTemplateUnion outcome = compensation.unions().get("PaymentOutcome");
+        assertTrue(outcome != null, "Compensation must declare the PaymentOutcome input union.");
+        assertTrue(outcome.variants().containsKey("captured"),
+            "Compensation input union must include the captured payment variant.");
+        assertTrue(outcome.variants().containsKey("rejected"),
+            "Compensation input union must include the rejected payment variant.");
+        assertTrue(outcome.variants().containsKey("requiresReview"),
+            "Compensation input union must include the manual-review payment variant.");
         assertTrue(output.containsKey("resolutionAction"),
             "Compensation terminal must include resolutionAction for deterministic remediation signatures.");
     }
