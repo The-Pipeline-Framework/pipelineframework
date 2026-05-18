@@ -262,4 +262,174 @@ class PipelineStepModelTest {
 
         assertEquals(MapperFallbackMode.NONE, model.mapperFallbackMode());
     }
+
+    // --- serviceApiKind tests (added in blocking service support PR) ---
+
+    @Test
+    void builderDefaultsServiceApiKindToReactive() {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+                .serviceName("TestService")
+                .generatedName("TestService")
+                .servicePackage("com.example")
+                .serviceClassName(ClassName.get("com.example", "TestService"))
+                .inputMapping(new TypeMapping(TypeName.INT, TypeName.INT, false))
+                .outputMapping(new TypeMapping(TypeName.INT, TypeName.INT, false))
+                .streamingShape(StreamingShape.UNARY_UNARY)
+                .enabledTargets(Set.of(GenerationTarget.CLIENT_STEP))
+                .executionMode(ExecutionMode.DEFAULT)
+                .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+                .build();
+
+        assertEquals(ServiceApiKind.REACTIVE, model.serviceApiKind());
+    }
+
+    @Test
+    void builderCanSetBlockingServiceApiKind() {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+                .serviceName("TestService")
+                .generatedName("TestService")
+                .servicePackage("com.example")
+                .serviceClassName(ClassName.get("com.example", "TestService"))
+                .inputMapping(new TypeMapping(TypeName.INT, TypeName.INT, false))
+                .outputMapping(new TypeMapping(TypeName.INT, TypeName.INT, false))
+                .streamingShape(StreamingShape.UNARY_UNARY)
+                .enabledTargets(Set.of(GenerationTarget.CLIENT_STEP))
+                .executionMode(ExecutionMode.DEFAULT)
+                .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+                .serviceApiKind(ServiceApiKind.BLOCKING)
+                .build();
+
+        assertEquals(ServiceApiKind.BLOCKING, model.serviceApiKind());
+    }
+
+    @Test
+    void builderCanSetBlockingIteratorServiceApiKind() {
+        PipelineStepModel model = new PipelineStepModel.Builder()
+                .serviceName("TestService")
+                .generatedName("TestService")
+                .servicePackage("com.example")
+                .serviceClassName(ClassName.get("com.example", "TestService"))
+                .inputMapping(new TypeMapping(TypeName.INT, TypeName.INT, false))
+                .outputMapping(new TypeMapping(TypeName.INT, TypeName.INT, false))
+                .streamingShape(StreamingShape.UNARY_STREAMING)
+                .enabledTargets(Set.of(GenerationTarget.GRPC_SERVICE))
+                .executionMode(ExecutionMode.DEFAULT)
+                .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+                .serviceApiKind(ServiceApiKind.BLOCKING_ITERATOR)
+                .build();
+
+        assertEquals(ServiceApiKind.BLOCKING_ITERATOR, model.serviceApiKind());
+    }
+
+    @Test
+    void toBuilderPreservesServiceApiKind() {
+        PipelineStepModel original = new PipelineStepModel.Builder()
+                .serviceName("TestService")
+                .generatedName("TestService")
+                .servicePackage("com.example")
+                .serviceClassName(ClassName.get("com.example", "TestService"))
+                .inputMapping(new TypeMapping(TypeName.INT, TypeName.INT, false))
+                .outputMapping(new TypeMapping(TypeName.INT, TypeName.INT, false))
+                .streamingShape(StreamingShape.UNARY_UNARY)
+                .enabledTargets(Set.of(GenerationTarget.CLIENT_STEP))
+                .executionMode(ExecutionMode.DEFAULT)
+                .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+                .serviceApiKind(ServiceApiKind.BLOCKING)
+                .build();
+
+        PipelineStepModel rebuilt = original.toBuilder().build();
+
+        assertEquals(ServiceApiKind.BLOCKING, rebuilt.serviceApiKind());
+    }
+
+    @Test
+    void toBuilderAllowsChangingServiceApiKind() {
+        PipelineStepModel original = new PipelineStepModel.Builder()
+                .serviceName("TestService")
+                .generatedName("TestService")
+                .servicePackage("com.example")
+                .serviceClassName(ClassName.get("com.example", "TestService"))
+                .inputMapping(new TypeMapping(TypeName.INT, TypeName.INT, false))
+                .outputMapping(new TypeMapping(TypeName.INT, TypeName.INT, false))
+                .streamingShape(StreamingShape.UNARY_UNARY)
+                .enabledTargets(Set.of(GenerationTarget.CLIENT_STEP))
+                .executionMode(ExecutionMode.DEFAULT)
+                .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+                .serviceApiKind(ServiceApiKind.REACTIVE)
+                .build();
+
+        PipelineStepModel modified = original.toBuilder()
+                .serviceApiKind(ServiceApiKind.BLOCKING_ITERATOR)
+                .build();
+
+        assertEquals(ServiceApiKind.REACTIVE, original.serviceApiKind());
+        assertEquals(ServiceApiKind.BLOCKING_ITERATOR, modified.serviceApiKind());
+    }
+
+    @Test
+    void constructorNullServiceApiKindDefaultsToReactive() {
+        PipelineStepModel model = new PipelineStepModel(
+                "TestService",
+                "TestService",
+                "com.example",
+                ClassName.get("com.example", "TestService"),
+                new TypeMapping(TypeName.INT, TypeName.INT, false),
+                new TypeMapping(TypeName.INT, TypeName.INT, false),
+                StreamingShape.UNARY_UNARY,
+                Set.of(GenerationTarget.CLIENT_STEP),
+                ExecutionMode.DEFAULT,
+                DeploymentRole.PIPELINE_SERVER,
+                false,
+                null,
+                OrderingRequirement.RELAXED,
+                ThreadSafety.SAFE,
+                null,
+                null,
+                null,
+                null,
+                null /* serviceApiKind */);
+
+        assertEquals(ServiceApiKind.REACTIVE, model.serviceApiKind());
+    }
+
+    @Test
+    void withDeploymentRolePreservesServiceApiKind() {
+        PipelineStepModel original = new PipelineStepModel.Builder()
+                .serviceName("TestService")
+                .generatedName("TestService")
+                .servicePackage("com.example")
+                .serviceClassName(ClassName.get("com.example", "TestService"))
+                .inputMapping(new TypeMapping(TypeName.INT, TypeName.INT, false))
+                .outputMapping(new TypeMapping(TypeName.INT, TypeName.INT, false))
+                .streamingShape(StreamingShape.UNARY_UNARY)
+                .enabledTargets(Set.of(GenerationTarget.CLIENT_STEP))
+                .executionMode(ExecutionMode.DEFAULT)
+                .deploymentRole(DeploymentRole.PIPELINE_SERVER)
+                .serviceApiKind(ServiceApiKind.BLOCKING_ITERATOR)
+                .build();
+
+        PipelineStepModel modified = original.withDeploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT);
+
+        assertEquals(ServiceApiKind.BLOCKING_ITERATOR, modified.serviceApiKind());
+        assertEquals(DeploymentRole.ORCHESTRATOR_CLIENT, modified.deploymentRole());
+    }
+
+    @Test
+    void twelveParamConstructorDefaultsServiceApiKindToReactive() {
+        PipelineStepModel model = new PipelineStepModel(
+                "TestService",
+                "TestService",
+                "com.example",
+                ClassName.get("com.example", "TestService"),
+                new TypeMapping(TypeName.INT, TypeName.INT, false),
+                new TypeMapping(TypeName.INT, TypeName.INT, false),
+                StreamingShape.UNARY_UNARY,
+                Set.of(GenerationTarget.CLIENT_STEP),
+                ExecutionMode.DEFAULT,
+                DeploymentRole.PIPELINE_SERVER,
+                false,
+                null);
+
+        assertEquals(ServiceApiKind.REACTIVE, model.serviceApiKind());
+    }
 }
