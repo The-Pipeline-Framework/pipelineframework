@@ -36,4 +36,29 @@ For step shapes and how to reason about expansion vs. reduction, see
 
 ## Server Execution Strategy
 
-Service-side execution context (event loop vs. worker threads) affects throughput for I/O-heavy steps. Prefer non-blocking I/O and offload truly blocking work using the framework or runtime facilities (for example, Vert.x `executeBlocking`) to avoid starving the event loop.
+Service-side execution context (event loop vs. worker threads) affects throughput for I/O-heavy steps. Prefer non-blocking I/O and offload truly blocking work using the framework or runtime facilities to avoid starving the event loop.
+
+## Blocking Steps
+
+TPF now supports a first-class blocking authoring path for internal `service:` steps.
+
+- Blocking services are executed on worker threads by default.
+- `@PipelineStep(runOnVirtualThreads = true)` switches the generated blocking bridge and service entrypoints to virtual threads.
+- Blocking authoring is split into two modes:
+  - materialized blocking: `BlockingStreamingService`, `BlockingStreamingClientService`, `BlockingBidirectionalStreamingService`
+  - incremental blocking: `BlockingIteratorService`
+
+Materialized blocking does not just lose reactive backpressure. It also:
+
+- increases heap usage because full input or output collections live in memory at once
+- increases GC pressure and whole-batch retry cost
+- delays first output until the full blocking callback finishes
+- wastes more CPU work when downstream later fails or cancels
+
+Iterator blocking reduces those materialization costs, but it is still blocking I/O or CPU work running on an offload executor rather than on the event loop.
+
+Use blocking steps when synchronous business code is the practical choice. Refactor to reactive services when you need:
+
+- sustained high throughput under streaming load
+- partial consumption without full list materialization and your blocking library cannot express it through an iterator
+- native non-blocking I/O instead of worker or virtual-thread offload

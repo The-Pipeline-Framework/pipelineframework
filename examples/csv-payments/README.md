@@ -75,12 +75,71 @@ cd <repo-root>
   test
 ```
 
-Open the supported replay viewer at `/replay-viewer/index.html` and either:
+Open the supported replay viewer at `/replay-viewer/` and either:
 
 - select `CSV Payments built-in` from the viewer sidebar, or
 - switch the sidebar selector to `Custom replay` and load the generated JSON locally
 
 The built-in CSV dataset is sourced from the 1k-input replay lane and is intended as the longer default demo dataset for the viewer.
+
+## Tempo / LGTM Verification
+
+Replay export and live Tempo verification are separate lanes.
+
+To run the dedicated modular Tempo/LGTM verification path:
+
+```bash
+cd <repo-root>
+./examples/csv-payments/build-modular-observability-images.sh
+./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
+  -Dcsv.e2e.tempo.enabled=true \
+  -Dcsv.e2e.reader-demand-pacer.rows-per-period=20 \
+  -Dcsv.e2e.reader-demand-pacer.millis-period=1000 \
+  -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
+  -Dtest=CsvPaymentsTempoVerificationEndToEndIT \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
+```
+
+That lane starts a dedicated LGTM stack, points the modular services and packaged orchestrator at its OTLP collector, and then queries Tempo directly to prove traces arrived and are queryable.
+
+### Blocking CSV Input Demand Pacing
+
+The input CSV step is authored as a blocking iterator service. It still reads rows incrementally from OpenCSV, and it also applies demand pacing before each row is pulled from the iterator.
+
+This pacing is a blocking-thread throttle, not end-to-end reactive backpressure. The framework offloads the iterator to worker or virtual threads, and the example pacer deliberately blocks that offloaded thread when the configured row budget is exhausted.
+
+Configure the default row budget in the input service:
+
+```properties
+csv-payments.reader-demand-pacer.rows-per-period=10
+csv-payments.reader-demand-pacer.millis-period=100
+```
+
+The E2E harness can override those settings for large-input observability runs:
+
+```bash
+-Dcsv.e2e.reader-demand-pacer.rows-per-period=20
+-Dcsv.e2e.reader-demand-pacer.millis-period=1000
+```
+
+Use lower rates when you need the demo to expose pipeline timing, retry, and tracing behaviour clearly. Use higher rates when you want throughput-oriented local validation.
+
+For local manual inspection before teardown:
+
+```bash
+./mvnw -f examples/csv-payments/pom.xml -pl orchestrator-svc -am \
+  -Dcsv.e2e.tempo.enabled=true \
+  -Dcsv.e2e.tempo.pause.before.teardown=true \
+  -Dcsv.e2e.reader-demand-pacer.rows-per-period=20 \
+  -Dcsv.e2e.reader-demand-pacer.millis-period=1000 \
+  -Dcsv.e2e.input.file=examples/csv-payments/input-csv-file-processing-svc/csv/payments_1k.csv \
+  -Dtest=CsvPaymentsTempoVerificationEndToEndIT \
+  -Dsurefire.failIfNoSpecifiedTests=false \
+  test
+```
+
+The harness logs the Grafana UI URL and Tempo API URL before pausing. Use that mode for manual inspection only; the CI proof comes from the Tempo API assertion.
 
 ## Runtime-mapping matrix (Phase 2 build/functional smoke tests)
 
@@ -525,7 +584,7 @@ export QUARKUS_OBSERVABILITY_LGTM_ENABLED=true
 export QUARKUS_MICROMETER_EXPORT_PROMETHEUS_ENABLED=true
 ```
 
-This gives you the live Prometheus/Grafana/Tempo stack. The telemetry-enabled E2E harness is separate and produces offline replay artifacts.
+This gives you the live Prometheus/Grafana/Tempo stack in dev mode. The replay-enabled E2E harness is separate and produces offline replay artifacts, and the Tempo verification lane is separate again and proves live trace visibility against a dedicated LGTM stack.
 
 The telemetry harness launches the packaged orchestrator application. If the packaged `target/quarkus-app/quarkus-run.jar` is stale or missing, the test bootstrap rebuilds it automatically before the run starts.
 

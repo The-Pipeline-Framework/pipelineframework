@@ -266,6 +266,11 @@ public final class PipelineOrderExpander {
             || name.endsWith("StepOneToMany")
             || name.endsWith("StepManyToOne")
             || name.endsWith("StepManyToMany")
+            || name.endsWith("StepOneToOneBlocking")
+            || name.endsWith("StepOneToManyBlocking")
+            || name.endsWith("StepOneToManyBlockingIterator")
+            || name.endsWith("StepManyToOneBlocking")
+            || name.endsWith("StepManyToManyBlocking")
             || name.endsWith("StepOneToOneCompletableFuture"));
     }
 

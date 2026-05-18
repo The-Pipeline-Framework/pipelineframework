@@ -31,6 +31,7 @@ import org.pipelineframework.processor.ir.ExecutionMode;
 import org.pipelineframework.processor.ir.GenerationTarget;
 import org.pipelineframework.processor.ir.MapperFallbackMode;
 import org.pipelineframework.processor.ir.PipelineStepModel;
+import org.pipelineframework.processor.ir.ServiceApiKind;
 import org.pipelineframework.processor.ir.StreamingShape;
 import org.pipelineframework.processor.ir.TypeMapping;
 import org.pipelineframework.processor.mapping.PipelineRuntimeMapping;
@@ -297,25 +298,25 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         }
         PipelineStepModel extractedModel = extracted.model();
 
-        ReactiveSignature reactiveSignature = resolveReactiveSignature(
+        SupportedServiceSignature serviceSignature = resolveSupportedInternalSignature(
             serviceClass,
             ctx.getProcessingEnv().getTypeUtils(),
             ctx.getProcessingEnv().getMessager());
-        if (reactiveSignature == null) {
+        if (serviceSignature == null) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Internal step service '" + stepDef.executionClass().canonicalName()
-                    + "' must implement exactly one supported reactive service interface for step '" + stepDef.name() + "'");
+                    + "' must implement exactly one supported service interface for step '" + stepDef.name() + "'");
             return null;
         }
 
         StreamingShape yamlShape = stepDef.streamingShapeHint();
-        if (yamlShape != null && yamlShape != reactiveSignature.shape()) {
+        if (yamlShape != null && yamlShape != serviceSignature.shape()) {
             ctx.getProcessingEnv().getMessager().printMessage(
                 javax.tools.Diagnostic.Kind.ERROR,
                 "Internal step '" + stepDef.name() + "' declares cardinality "
                     + yamlShape + " in YAML, but service '" + stepDef.executionClass().canonicalName()
-                    + "' implements " + reactiveSignature.shape() + " semantics.");
+                    + "' implements " + serviceSignature.shape() + " semantics.");
             return null;
         }
 
@@ -325,7 +326,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             "input",
             stepDef.inputType(),
             extractedModel.inboundDomainType(),
-            reactiveSignature.inputType());
+            serviceSignature.inputType());
         if (inputType == null) {
             return null;
         }
@@ -335,7 +336,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             "output",
             stepDef.outputType(),
             extractedModel.outboundDomainType(),
-            reactiveSignature.outputType());
+            serviceSignature.outputType());
         if (outputType == null) {
             return null;
         }
@@ -367,7 +368,8 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             .generatedName(serviceName)
             .inputMapping(new TypeMapping(inputType, inboundMapper, inboundMapper != null, inputType))
             .outputMapping(new TypeMapping(outputType, outboundMapper, outboundMapper != null, outputType))
-            .streamingShape(reactiveSignature.shape())
+            .streamingShape(serviceSignature.shape())
+            .serviceApiKind(serviceSignature.apiKind())
             .build();
     }
 
@@ -956,6 +958,140 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
         return matches.isEmpty() ? null : matches.get(0);
     }
 
+    private SupportedServiceSignature resolveSupportedInternalSignature(
+            TypeElement serviceElement,
+            Types typeUtils,
+            javax.annotation.processing.Messager messager) {
+        List<SupportedServiceSignature> blockingMatches = new ArrayList<>();
+        List<String> blockingMatchNames = new ArrayList<>();
+
+        collectSupportedMatch(blockingMatches, blockingMatchNames, typeUtils, serviceElement,
+            "org.pipelineframework.service.blocking.BlockingService", ServiceApiKind.BLOCKING, StreamingShape.UNARY_UNARY, null);
+        collectSupportedMatch(blockingMatches, blockingMatchNames, typeUtils, serviceElement,
+            "org.pipelineframework.service.blocking.BlockingStreamingService", ServiceApiKind.BLOCKING,
+            StreamingShape.UNARY_STREAMING,
+            "BlockingStreamingService materializes the full output list before downstream emission. "
+                + "Use BlockingIteratorService for incremental non-Mutiny 1->N streaming.");
+        collectSupportedMatch(blockingMatches, blockingMatchNames, typeUtils, serviceElement,
+            "org.pipelineframework.service.blocking.BlockingIteratorService", ServiceApiKind.BLOCKING_ITERATOR,
+            StreamingShape.UNARY_STREAMING,
+            null);
+        collectSupportedMatch(blockingMatches, blockingMatchNames, typeUtils, serviceElement,
+            "org.pipelineframework.service.blocking.BlockingStreamingClientService", ServiceApiKind.BLOCKING,
+            StreamingShape.STREAMING_UNARY,
+            "BlockingStreamingClientService materializes the full input list before invocation. "
+                + "Batch retries rerun the full callback.");
+        collectSupportedMatch(blockingMatches, blockingMatchNames, typeUtils, serviceElement,
+            "org.pipelineframework.service.blocking.BlockingBidirectionalStreamingService", ServiceApiKind.BLOCKING,
+            StreamingShape.STREAMING_STREAMING,
+            "BlockingBidirectionalStreamingService materializes the full input list and full output list. "
+                + "Batch retries rerun the full callback.");
+
+        List<SupportedServiceSignature> matches = new ArrayList<>();
+        List<String> matchNames = new ArrayList<>();
+
+        collectSupportedMatch(matches, matchNames, typeUtils, serviceElement,
+            "org.pipelineframework.service.ReactiveService", ServiceApiKind.REACTIVE, StreamingShape.UNARY_UNARY, null);
+        collectSupportedMatch(matches, matchNames, typeUtils, serviceElement,
+            "org.pipelineframework.service.ReactiveStreamingService", ServiceApiKind.REACTIVE, StreamingShape.UNARY_STREAMING, null);
+        collectSupportedMatch(matches, matchNames, typeUtils, serviceElement,
+            "org.pipelineframework.service.ReactiveStreamingClientService", ServiceApiKind.REACTIVE,
+            StreamingShape.STREAMING_UNARY,
+            null);
+        collectSupportedMatch(matches, matchNames, typeUtils, serviceElement,
+            "org.pipelineframework.service.ReactiveBidirectionalStreamingService", ServiceApiKind.REACTIVE,
+            StreamingShape.STREAMING_STREAMING,
+            null);
+
+        List<String> directSupportedInterfaces = directSupportedInterfaceNames(typeUtils, serviceElement);
+        if (directSupportedInterfaces.size() > 1) {
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Internal service '" + serviceElement.getQualifiedName()
+                    + "' implements multiple supported service interfaces: " + String.join(", ", directSupportedInterfaces)
+                    + ". Please implement exactly one.");
+            return null;
+        }
+
+        List<SupportedServiceSignature> combinedMatches = new ArrayList<>(blockingMatches);
+        List<String> combinedMatchNames = new ArrayList<>(blockingMatchNames);
+        for (int i = 0; i < matches.size(); i++) {
+            SupportedServiceSignature reactiveMatch = matches.get(i);
+            boolean impliedByBlocking = blockingMatches.stream()
+                .anyMatch(blockingMatch -> blockingMatch.shape() == reactiveMatch.shape());
+            if (!impliedByBlocking) {
+                combinedMatches.add(reactiveMatch);
+                combinedMatchNames.add(matchNames.get(i));
+            }
+        }
+
+        if (combinedMatches.size() > 1) {
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Internal service '" + serviceElement.getQualifiedName()
+                    + "' implements multiple supported service interfaces: " + String.join(", ", combinedMatchNames)
+                    + ". Please implement exactly one.");
+            return null;
+        }
+        if (combinedMatches.isEmpty()) {
+            return null;
+        }
+        SupportedServiceSignature match = combinedMatches.get(0);
+        if (match.materializingWarning() != null) {
+            messager.printMessage(
+                javax.tools.Diagnostic.Kind.WARNING,
+                match.materializingWarning(),
+                serviceElement);
+        }
+        return match;
+    }
+
+    private List<String> directSupportedInterfaceNames(Types typeUtils, TypeElement serviceElement) {
+        List<String> directNames = new ArrayList<>();
+        for (TypeMirror iface : serviceElement.getInterfaces()) {
+            Element element = typeUtils.asElement(iface);
+            if (element instanceof TypeElement typeElement && isSupportedServiceInterface(typeElement)) {
+                directNames.add(typeElement.getQualifiedName().toString());
+            }
+        }
+        return directNames;
+    }
+
+    private boolean isSupportedServiceInterface(TypeElement typeElement) {
+        String qualifiedName = typeElement.getQualifiedName().toString();
+        return qualifiedName.equals("org.pipelineframework.service.blocking.BlockingService")
+            || qualifiedName.equals("org.pipelineframework.service.blocking.BlockingStreamingService")
+            || qualifiedName.equals("org.pipelineframework.service.blocking.BlockingIteratorService")
+            || qualifiedName.equals("org.pipelineframework.service.blocking.BlockingStreamingClientService")
+            || qualifiedName.equals("org.pipelineframework.service.blocking.BlockingBidirectionalStreamingService")
+            || qualifiedName.equals("org.pipelineframework.service.ReactiveService")
+            || qualifiedName.equals("org.pipelineframework.service.ReactiveStreamingService")
+            || qualifiedName.equals("org.pipelineframework.service.ReactiveStreamingClientService")
+            || qualifiedName.equals("org.pipelineframework.service.ReactiveBidirectionalStreamingService");
+    }
+
+    private void collectSupportedMatch(
+            List<SupportedServiceSignature> matches,
+            List<String> matchNames,
+            Types typeUtils,
+            TypeElement serviceElement,
+            String interfaceName,
+            ServiceApiKind apiKind,
+            StreamingShape shape,
+            String materializingWarning) {
+        DeclaredType declared = findReactiveSupertype(typeUtils, serviceElement.asType(), interfaceName);
+        if (declared == null || declared.getTypeArguments().size() < 2) {
+            return;
+        }
+        matches.add(new SupportedServiceSignature(
+            apiKind,
+            shape,
+            TypeName.get(declared.getTypeArguments().get(0)),
+            TypeName.get(declared.getTypeArguments().get(1)),
+            materializingWarning));
+        matchNames.add(interfaceName);
+    }
+
     private static final ClassName INVALID_CLASS_NAME = ClassName.get("java.lang", "Void");
 
     private TypeName resolveInternalDomainType(
@@ -980,7 +1116,7 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
                 ctx.getProcessingEnv().getMessager().printMessage(
                     javax.tools.Diagnostic.Kind.ERROR,
                     "Internal step '" + stepName + "' has deprecated @PipelineStep " + direction + "Type '"
-                        + annotationType + "' that does not match the reactive service interface " + direction + " type '"
+                        + annotationType + "' that does not match the implemented service interface " + direction + " type '"
                         + reactiveType + "'.");
                 return null;
             }
@@ -1142,6 +1278,15 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
     }
 
     private record ReactiveSignature(StreamingShape shape, TypeName inputType, TypeName outputType) {
+    }
+
+    private record SupportedServiceSignature(
+        ServiceApiKind apiKind,
+        StreamingShape shape,
+        TypeName inputType,
+        TypeName outputType,
+        String materializingWarning
+    ) {
     }
 
     private List<PipelineStepModel> deduplicateByServiceName(List<PipelineStepModel> stepModels) {
