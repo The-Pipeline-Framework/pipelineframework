@@ -31,6 +31,7 @@ import java.util.Set;
  * @param appName application name
  * @param basePackage base package
  * @param messages normalized messages
+ * @param unions normalized closed unions
  * @param steps normalized step input/output references
  */
 public record PipelineIdlSnapshot(
@@ -38,11 +39,23 @@ public record PipelineIdlSnapshot(
     String appName,
     String basePackage,
     Map<String, MessageSnapshot> messages,
+    Map<String, UnionSnapshot> unions,
     List<StepSnapshot> steps
 ) {
     public PipelineIdlSnapshot {
         messages = messages == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(messages));
+        unions = unions == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(unions));
         steps = steps == null ? List.of() : List.copyOf(steps);
+    }
+
+    public PipelineIdlSnapshot(
+        int version,
+        String appName,
+        String basePackage,
+        Map<String, MessageSnapshot> messages,
+        List<StepSnapshot> steps
+    ) {
+        this(version, appName, basePackage, messages, Map.of(), steps);
     }
 
     /**
@@ -65,11 +78,17 @@ public record PipelineIdlSnapshot(
         } else {
             collectLegacyMessages(messages, configSteps);
         }
+        Map<String, UnionSnapshot> unions = new LinkedHashMap<>();
+        if (config.unions() != null && !config.unions().isEmpty()) {
+            for (Map.Entry<String, PipelineTemplateUnion> entry : config.unions().entrySet()) {
+                unions.put(entry.getKey(), toUnionSnapshot(entry.getValue()));
+            }
+        }
         List<StepSnapshot> steps = new ArrayList<>();
         for (PipelineTemplateStep step : configSteps) {
             steps.add(new StepSnapshot(step.name(), step.inputTypeName(), step.outputTypeName()));
         }
-        return new PipelineIdlSnapshot(config.version(), config.appName(), config.basePackage(), messages, steps);
+        return new PipelineIdlSnapshot(config.version(), config.appName(), config.basePackage(), messages, unions, steps);
     }
 
     /**
@@ -190,6 +209,14 @@ public record PipelineIdlSnapshot(
             reserved.names());
     }
 
+    private static UnionSnapshot toUnionSnapshot(PipelineTemplateUnion union) {
+        List<UnionVariantSnapshot> variants = new ArrayList<>();
+        for (PipelineTemplateUnionVariant variant : union.variants().values()) {
+            variants.add(new UnionVariantSnapshot(variant.name(), variant.type(), variant.number()));
+        }
+        return new UnionSnapshot(union.name(), variants);
+    }
+
     public record MessageSnapshot(
         String name,
         List<FieldSnapshot> fields,
@@ -214,6 +241,22 @@ public record PipelineIdlSnapshot(
         boolean repeated,
         boolean deprecated,
         String protoType
+    ) {
+    }
+
+    public record UnionSnapshot(
+        String name,
+        List<UnionVariantSnapshot> variants
+    ) {
+        public UnionSnapshot {
+            variants = variants == null ? List.of() : List.copyOf(variants);
+        }
+    }
+
+    public record UnionVariantSnapshot(
+        String name,
+        String type,
+        int number
     ) {
     }
 

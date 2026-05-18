@@ -38,17 +38,15 @@ class CommonDomainValidationTest {
     }
 
     @Test
-    void paymentCaptureResultRejectsNegativeAmount() {
+    void paymentRejectedRejectsNegativeAmount() {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class,
-            () -> new PaymentCaptureResult(
-                UUID.randomUUID(),
+            () -> new PaymentRejected(
                 UUID.randomUUID(),
                 Instant.parse("2026-03-27T10:15:30Z"),
                 new BigDecimal("-0.01"),
                 "EUR",
-                "FAILED",
-                null,
-                null));
+                "PAYMENT_CAPTURE_REJECTED",
+                "amount must be positive"));
         assertEquals("amount must be non-negative", exception.getMessage());
     }
 

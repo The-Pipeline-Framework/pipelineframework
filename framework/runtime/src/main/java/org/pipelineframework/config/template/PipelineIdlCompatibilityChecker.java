@@ -42,6 +42,7 @@ public final class PipelineIdlCompatibilityChecker {
         List<String> errors = new ArrayList<>();
         compareSteps(baseline.steps(), current.steps(), errors);
         compareMessages(baseline.messages(), current.messages(), errors);
+        compareUnions(baseline.unions(), current.unions(), errors);
         return List.copyOf(errors);
     }
 
@@ -103,6 +104,51 @@ public final class PipelineIdlCompatibilityChecker {
                 continue;
             }
             compareMessage(messageName, baselineMessage, currentMessage, errors);
+        }
+    }
+
+    private void compareUnions(
+        Map<String, PipelineIdlSnapshot.UnionSnapshot> baselineUnions,
+        Map<String, PipelineIdlSnapshot.UnionSnapshot> currentUnions,
+        List<String> errors
+    ) {
+        for (Map.Entry<String, PipelineIdlSnapshot.UnionSnapshot> entry : baselineUnions.entrySet()) {
+            String unionName = entry.getKey();
+            PipelineIdlSnapshot.UnionSnapshot baselineUnion = entry.getValue();
+            PipelineIdlSnapshot.UnionSnapshot currentUnion = currentUnions.get(unionName);
+            if (currentUnion == null) {
+                errors.add("Missing union in current IDL: " + unionName);
+                continue;
+            }
+            compareUnion(unionName, baselineUnion, currentUnion, errors);
+        }
+    }
+
+    private void compareUnion(
+        String unionName,
+        PipelineIdlSnapshot.UnionSnapshot baselineUnion,
+        PipelineIdlSnapshot.UnionSnapshot currentUnion,
+        List<String> errors
+    ) {
+        Map<Integer, PipelineIdlSnapshot.UnionVariantSnapshot> currentByNumber = new LinkedHashMap<>();
+        for (PipelineIdlSnapshot.UnionVariantSnapshot variant : currentUnion.variants()) {
+            currentByNumber.put(variant.number(), variant);
+        }
+        for (PipelineIdlSnapshot.UnionVariantSnapshot baselineVariant : baselineUnion.variants()) {
+            PipelineIdlSnapshot.UnionVariantSnapshot currentVariant = currentByNumber.get(baselineVariant.number());
+            if (currentVariant == null) {
+                errors.add("Union '" + unionName + "' removed variant '" + baselineVariant.name()
+                    + "' at number " + baselineVariant.number());
+                continue;
+            }
+            if (!Objects.equals(baselineVariant.name(), currentVariant.name())) {
+                errors.add("Union '" + unionName + "' changed variant name at number " + baselineVariant.number()
+                    + " from '" + baselineVariant.name() + "' to '" + currentVariant.name() + "'");
+            }
+            if (!Objects.equals(baselineVariant.type(), currentVariant.type())) {
+                errors.add("Union '" + unionName + "' changed variant '" + baselineVariant.name()
+                    + "' type from '" + baselineVariant.type() + "' to '" + currentVariant.type() + "'");
+            }
         }
     }
 

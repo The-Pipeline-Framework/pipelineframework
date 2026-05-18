@@ -96,6 +96,9 @@ public class PipelineTemplateConfigLoader {
         Map<String, PipelineTemplateMessage> rawMessages = version >= 2
             ? readMessages(rootMap)
             : new LinkedHashMap<>();
+        Map<String, PipelineTemplateUnion> rawUnions = version >= 2
+            ? readUnions(rootMap)
+            : new LinkedHashMap<>();
         List<PipelineTemplateStep> steps = readSteps(rootMap, version);
         Map<String, PipelineTemplateAspect> aspects = readAspects(rootMap);
         rejectLegacyConnectors(rootMap);
@@ -105,7 +108,8 @@ public class PipelineTemplateConfigLoader {
         if (version >= 2) {
             collectInlineMessages(rawMessages, steps);
             Map<String, PipelineTemplateMessage> normalizedMessages = normalizeMessages(rawMessages);
-            steps = resolveV2Steps(steps, normalizedMessages);
+            Map<String, PipelineTemplateUnion> normalizedUnions = normalizeUnions(rawUnions, normalizedMessages);
+            steps = resolveV2Steps(steps, normalizedMessages, normalizedUnions);
             return new PipelineTemplateConfig(
                 version,
                 appName,
@@ -113,6 +117,7 @@ public class PipelineTemplateConfigLoader {
                 transport,
                 resolvedPlatform,
                 normalizedMessages,
+                normalizedUnions,
                 steps,
                 aspects,
                 input,
@@ -125,6 +130,7 @@ public class PipelineTemplateConfigLoader {
             basePackage,
             transport,
             resolvedPlatform,
+            Map.of(),
             Map.of(),
             steps,
             aspects,
@@ -255,6 +261,68 @@ public class PipelineTemplateConfigLoader {
         return messages;
     }
 
+    private Map<String, PipelineTemplateUnion> readUnions(Map<?, ?> rootMap) {
+        Object unionsObj = rootMap.get("unions");
+        Map<?, ?> unionsMap = asMap(unionsObj);
+        if (unionsMap == null) {
+            return new LinkedHashMap<>();
+        }
+
+        Map<String, PipelineTemplateUnion> unions = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : unionsMap.entrySet()) {
+            String name = stringify(entry.getKey());
+            if (name == null || name.isBlank()) {
+                continue;
+            }
+            if (PipelineTemplateTypeMappings.isBuiltinType(name)) {
+                throw new IllegalStateException("Union name '" + name + "' conflicts with a built-in semantic type");
+            }
+            Map<?, ?> unionMap = asMap(entry.getValue());
+            if (unionMap == null) {
+                LOG.warning("Skipping malformed union entry: key=" + name
+                    + " valueType=" + (entry.getValue() == null ? "null" : entry.getValue().getClass().getName()));
+                continue;
+            }
+            unions.put(name, new PipelineTemplateUnion(name, readUnionVariants(name, unionMap.get("variants"))));
+        }
+        return unions;
+    }
+
+    private Map<String, PipelineTemplateUnionVariant> readUnionVariants(String unionName, Object variantsObj) {
+        Map<?, ?> variantsMap = asMap(variantsObj);
+        if (variantsMap == null) {
+            throw new IllegalStateException("Union '" + unionName + "' must declare variants as a YAML map");
+        }
+        Map<String, PipelineTemplateUnionVariant> variants = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : variantsMap.entrySet()) {
+            String name = stringify(entry.getKey());
+            if (name == null || name.isBlank()) {
+                throw new IllegalStateException("Union '" + unionName + "' declares a blank variant name");
+            }
+            Map<?, ?> variantMap = asMap(entry.getValue());
+            if (variantMap == null) {
+                throw new IllegalStateException("Union '" + unionName + "' variant '" + name + "' must be a YAML map");
+            }
+            Integer number = readIntegerObject(variantMap, "number");
+            if (number == null) {
+                throw new IllegalStateException("Union '" + unionName + "' variant '" + name + "' must declare number");
+            }
+            variants.put(name, new PipelineTemplateUnionVariant(
+                name,
+                readString(variantMap, "type"),
+                number));
+        }
+        return variants;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<?, ?> asMap(Object value) {
+        if (!Map.class.isInstance(value)) {
+            return null;
+        }
+        return (Map<?, ?>) value;
+    }
+
     /**
      * Scans steps for inline message definitions and adds them to the provided messages map.
      *
@@ -332,6 +400,58 @@ public class PipelineTemplateConfigLoader {
         return normalized;
     }
 
+    private Map<String, PipelineTemplateUnion> normalizeUnions(
+        Map<String, PipelineTemplateUnion> rawUnions,
+        Map<String, PipelineTemplateMessage> messages
+    ) {
+        if (rawUnions == null || rawUnions.isEmpty()) {
+            return Map.of();
+        }
+        Map<String, PipelineTemplateUnion> normalized = new LinkedHashMap<>();
+        for (Map.Entry<String, PipelineTemplateUnion> entry : rawUnions.entrySet()) {
+            String unionName = entry.getKey();
+            PipelineTemplateUnion union = entry.getValue();
+            if (messages.containsKey(unionName)) {
+                throw new IllegalStateException("Union name '" + unionName + "' conflicts with a message name");
+            }
+            Set<String> variantNames = new LinkedHashSet<>();
+            Set<Integer> variantNumbers = new LinkedHashSet<>();
+            Map<String, PipelineTemplateUnionVariant> variants = new LinkedHashMap<>();
+            for (PipelineTemplateUnionVariant variant : union.variants().values()) {
+                if (variant.name() == null || variant.name().isBlank()) {
+                    throw new IllegalStateException("Union '" + unionName + "' declares a blank variant name");
+                }
+                if (!variantNames.add(variant.name())) {
+                    throw new IllegalStateException(
+                        "Duplicate variant name '" + variant.name() + "' in union '" + unionName + "'");
+                }
+                if (variant.number() <= 0) {
+                    throw new IllegalStateException(
+                        "Union '" + unionName + "' variant '" + variant.name() + "' number must be positive");
+                }
+                if (!variantNumbers.add(variant.number())) {
+                    throw new IllegalStateException(
+                        "Duplicate variant number " + variant.number() + " in union '" + unionName + "'");
+                }
+                if (variant.type() == null || variant.type().isBlank()) {
+                    throw new IllegalStateException(
+                        "Union '" + unionName + "' variant '" + variant.name() + "' must declare type");
+                }
+                if (!messages.containsKey(variant.type())) {
+                    throw new IllegalStateException(
+                        "Union '" + unionName + "' variant '" + variant.name()
+                            + "' references unknown message '" + variant.type() + "'");
+                }
+                variants.put(variant.name(), variant);
+            }
+            if (variants.isEmpty()) {
+                throw new IllegalStateException("Union '" + unionName + "' must declare at least one variant");
+            }
+            normalized.put(unionName, new PipelineTemplateUnion(unionName, variants));
+        }
+        return normalized;
+    }
+
     /**
      * Resolve each step's input and output field lists against the provided top-level message definitions.
      *
@@ -341,12 +461,15 @@ public class PipelineTemplateConfigLoader {
      */
     private List<PipelineTemplateStep> resolveV2Steps(
         List<PipelineTemplateStep> steps,
-        Map<String, PipelineTemplateMessage> messages
+        Map<String, PipelineTemplateMessage> messages,
+        Map<String, PipelineTemplateUnion> unions
     ) {
         List<PipelineTemplateStep> resolved = new ArrayList<>();
         for (PipelineTemplateStep step : steps) {
-            List<PipelineTemplateField> inputFields = resolveStepFields(step.inputTypeName(), step.inputFields(), messages, step.name(), "input");
-            List<PipelineTemplateField> outputFields = resolveStepFields(step.outputTypeName(), step.outputFields(), messages, step.name(), "output");
+            List<PipelineTemplateField> inputFields = resolveStepFields(
+                step.inputTypeName(), step.inputFields(), messages, unions, step.name(), "input");
+            List<PipelineTemplateField> outputFields = resolveStepFields(
+                step.outputTypeName(), step.outputFields(), messages, unions, step.name(), "output");
             if (step.execution() != null && step.execution().isRemote()
                 && !"ONE_TO_ONE".equalsIgnoreCase(step.cardinality())) {
                 throw new IllegalStateException(
@@ -384,6 +507,7 @@ public class PipelineTemplateConfigLoader {
         String typeName,
         List<PipelineTemplateField> inlineFields,
         Map<String, PipelineTemplateMessage> messages,
+        Map<String, PipelineTemplateUnion> unions,
         String stepName,
         String direction
     ) {
@@ -400,9 +524,18 @@ public class PipelineTemplateConfigLoader {
                 new PipelineTemplateReserved(List.of(), List.of()));
             return List.copyOf(normalizedInline);
         }
+        if (unions.containsKey(typeName)) {
+            if (inlineFields != null && !inlineFields.isEmpty()) {
+                throw new IllegalStateException(
+                    "Step '" + stepName + "' cannot define inline " + direction
+                        + " fields for union '" + typeName + "'");
+            }
+            return List.of();
+        }
         PipelineTemplateMessage message = messages.get(typeName);
         if (message == null) {
-            throw new IllegalStateException("Step '" + stepName + "' references unknown " + direction + " message '" + typeName + "'");
+            throw new IllegalStateException(
+                "Step '" + stepName + "' references unknown " + direction + " message or union '" + typeName + "'");
         }
         if (inlineFields != null && !inlineFields.isEmpty()) {
             List<PipelineTemplateField> normalizedInline = new ArrayList<>();

@@ -32,6 +32,7 @@ import org.pipelineframework.config.boundary.PipelineOutputBoundaryConfig;
  * @param transport global transport
  * @param platform runtime/deployment platform mode
  * @param messages top-level named messages
+ * @param unions top-level named closed unions
  * @param steps pipeline steps
  * @param aspects aspect configurations keyed by aspect name
  * @param input reliable pipeline input boundary
@@ -44,6 +45,7 @@ public record PipelineTemplateConfig(
     String transport,
     PipelinePlatform platform,
     Map<String, PipelineTemplateMessage> messages,
+    Map<String, PipelineTemplateUnion> unions,
     List<PipelineTemplateStep> steps,
     Map<String, PipelineTemplateAspect> aspects,
     PipelineInputBoundaryConfig input,
@@ -60,8 +62,10 @@ public record PipelineTemplateConfig(
             throw new IllegalArgumentException("platform must not be null");
         }
         validateMap(messages, "messages");
+        validateMap(unions, "unions");
         validateMap(aspects, "aspects");
         messages = messages == null ? Map.of() : Map.copyOf(messages);
+        unions = unions == null ? Map.of() : Map.copyOf(unions);
         // Preserve null step placeholders so downstream phases/tests can explicitly skip them.
         steps = steps == null ? List.of() : Collections.unmodifiableList(new ArrayList<>(steps));
         aspects = aspects == null ? Map.of() : Map.copyOf(aspects);
@@ -120,7 +124,7 @@ public record PipelineTemplateConfig(
         List<PipelineTemplateStep> steps,
         Map<String, PipelineTemplateAspect> aspects
     ) {
-        this(1, appName, basePackage, transport, PipelinePlatform.COMPUTE, Map.of(), steps, aspects, null, null);
+        this(1, appName, basePackage, transport, PipelinePlatform.COMPUTE, Map.of(), Map.of(), steps, aspects, null, null);
     }
 
     /**
@@ -141,6 +145,21 @@ public record PipelineTemplateConfig(
         List<PipelineTemplateStep> steps,
         Map<String, PipelineTemplateAspect> aspects
     ) {
-        this(1, appName, basePackage, transport, platform, Map.of(), steps, aspects, null, null);
+        this(1, appName, basePackage, transport, platform, Map.of(), Map.of(), steps, aspects, null, null);
+    }
+
+    public PipelineTemplateConfig(
+        int version,
+        String appName,
+        String basePackage,
+        String transport,
+        PipelinePlatform platform,
+        Map<String, PipelineTemplateMessage> messages,
+        List<PipelineTemplateStep> steps,
+        Map<String, PipelineTemplateAspect> aspects,
+        PipelineInputBoundaryConfig input,
+        PipelineOutputBoundaryConfig output
+    ) {
+        this(version, appName, basePackage, transport, platform, messages, Map.of(), steps, aspects, input, output);
     }
 }
