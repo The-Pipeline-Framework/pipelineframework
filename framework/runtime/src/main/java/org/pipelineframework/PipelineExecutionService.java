@@ -321,6 +321,16 @@ public class PipelineExecutionService {
           record.executionId(),
           record.currentStepIndex()));
       try {
+        RuntimeException healthFailure = healthCheckFailure();
+        if (healthFailure != null) {
+          restoreAwaitContext(previous);
+          return Multi.createFrom().failure(healthFailure);
+        }
+        RuntimeException inputFailure = validateInputShape(reactiveInput);
+        if (inputFailure != null) {
+          restoreAwaitContext(previous);
+          return Multi.createFrom().failure(inputFailure);
+        }
         Object result = executePipelineStreamingInternalFromStep(reactiveInput, record.currentStepIndex());
         Multi<?> stream;
         if (result instanceof Multi<?> multi) {
@@ -352,7 +362,13 @@ public class PipelineExecutionService {
     if (result instanceof Uni<?> uni) {
       return executionHooks.attachMultiHooks(uni.toMulti(), watch);
     }
-    return result;
+    String resultType = result == null ? "null" : result.getClass().getName();
+    Multi<?> failed = Multi.createFrom().failure(new IllegalStateException(
+        MessageFormat.format(
+            "PipelineRunner returned unexpected type from step index {0}: {1}",
+            startStepIndex,
+            resultType)));
+    return executionHooks.attachMultiHooks(failed, watch);
   }
 
   private void restoreAwaitContext(AwaitExecutionContext previous) {

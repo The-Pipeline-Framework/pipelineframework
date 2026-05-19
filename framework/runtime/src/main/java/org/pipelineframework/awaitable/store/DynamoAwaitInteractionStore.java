@@ -212,24 +212,33 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
                 ":cancelled", avS(AwaitInteractionStatus.CANCELLED.name()),
                 ":expired", avS(AwaitInteractionStatus.EXPIRED.name()),
                 ":nowSec", avN(Instant.ofEpochMilli(nowEpochMs).getEpochSecond()));
-            var response = dynamoClient().scan(ScanRequest.builder()
-                .tableName(interactionTable())
-                .filterExpression("#deadline <= :now AND #status <> :completed AND #status <> :failed "
-                    + "AND #status <> :timedOut AND #status <> :cancelled AND #status <> :expired "
-                    + "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
-                .expressionAttributeNames(names)
-                .expressionAttributeValues(values)
-                .limit(limit)
-                .build());
-            if (response.items() == null || response.items().isEmpty()) {
-                return List.of();
-            }
             List<AwaitInteractionRecord> records = new ArrayList<>();
-            for (Map<String, AttributeValue> item : response.items()) {
-                records.add(toRecord(item));
-            }
+            Map<String, AttributeValue> lastEvaluatedKey = null;
+            do {
+                ScanRequest.Builder request = ScanRequest.builder()
+                    .tableName(interactionTable())
+                    .filterExpression("#deadline <= :now AND #status <> :completed AND #status <> :failed "
+                        + "AND #status <> :timedOut AND #status <> :cancelled AND #status <> :expired "
+                        + "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
+                    .expressionAttributeNames(names)
+                    .expressionAttributeValues(values)
+                    .limit(scanPageLimit(limit));
+                if (lastEvaluatedKey != null && !lastEvaluatedKey.isEmpty()) {
+                    request.exclusiveStartKey(lastEvaluatedKey);
+                }
+                var response = dynamoClient().scan(request.build());
+                if (response.items() != null) {
+                    for (Map<String, AttributeValue> item : response.items()) {
+                        records.add(toRecord(item));
+                        if (records.size() >= limit) {
+                            break;
+                        }
+                    }
+                }
+                lastEvaluatedKey = response.lastEvaluatedKey();
+            } while (records.size() < limit && lastEvaluatedKey != null && !lastEvaluatedKey.isEmpty());
             records.sort(java.util.Comparator.comparingLong(AwaitInteractionRecord::deadlineEpochMs));
-            return List.copyOf(records);
+            return List.copyOf(records.subList(0, Math.min(records.size(), limit)));
         });
     }
 
@@ -253,32 +262,41 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
                 ":cancelled", avS(AwaitInteractionStatus.CANCELLED.name()),
                 ":expired", avS(AwaitInteractionStatus.EXPIRED.name()),
                 ":nowSec", avN(Instant.now().getEpochSecond()));
-            var response = dynamoClient().scan(ScanRequest.builder()
-                .tableName(interactionTable())
-                .filterExpression("#tenant = :tenant AND #status <> :completed AND #status <> :failed "
-                    + "AND #status <> :timedOut AND #status <> :cancelled AND #status <> :expired "
-                    + "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
-                .expressionAttributeNames(names)
-                .expressionAttributeValues(values)
-                .limit(Math.max(limit * 3, limit))
-                .build());
-            if (response.items() == null || response.items().isEmpty()) {
-                return List.of();
-            }
             List<AwaitInteractionRecord> records = new ArrayList<>();
-            for (Map<String, AttributeValue> item : response.items()) {
-                AwaitInteractionRecord record = toRecord(item);
-                if (assignee != null && !Objects.equals(assignee, record.assignee())) {
-                    continue;
+            Map<String, AttributeValue> lastEvaluatedKey = null;
+            do {
+                ScanRequest.Builder request = ScanRequest.builder()
+                    .tableName(interactionTable())
+                    .filterExpression("#tenant = :tenant AND #status <> :completed AND #status <> :failed "
+                        + "AND #status <> :timedOut AND #status <> :cancelled AND #status <> :expired "
+                        + "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
+                    .expressionAttributeNames(names)
+                    .expressionAttributeValues(values)
+                    .limit(scanPageLimit(limit));
+                if (lastEvaluatedKey != null && !lastEvaluatedKey.isEmpty()) {
+                    request.exclusiveStartKey(lastEvaluatedKey);
                 }
-                if (group != null && !Objects.equals(group, record.group())) {
-                    continue;
+                var response = dynamoClient().scan(request.build());
+                if (response.items() != null) {
+                    for (Map<String, AttributeValue> item : response.items()) {
+                        AwaitInteractionRecord record = toRecord(item);
+                        if (assignee != null && !Objects.equals(assignee, record.assignee())) {
+                            continue;
+                        }
+                        if (group != null && !Objects.equals(group, record.group())) {
+                            continue;
+                        }
+                        if (stepId != null && !Objects.equals(stepId, record.stepId())) {
+                            continue;
+                        }
+                        records.add(record);
+                        if (records.size() >= limit) {
+                            break;
+                        }
+                    }
                 }
-                if (stepId != null && !Objects.equals(stepId, record.stepId())) {
-                    continue;
-                }
-                records.add(record);
-            }
+                lastEvaluatedKey = response.lastEvaluatedKey();
+            } while (records.size() < limit && lastEvaluatedKey != null && !lastEvaluatedKey.isEmpty());
             records.sort(java.util.Comparator.comparingLong(AwaitInteractionRecord::deadlineEpochMs));
             return List.copyOf(records.subList(0, Math.min(records.size(), limit)));
         });
@@ -534,9 +552,9 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         item.put(IDEMPOTENCY_KEY, avS(record.idempotencyKey()));
         item.put(VERSION, avN(record.version()));
         item.put(STATUS, avS(record.status().name()));
-        item.put(REQUEST_PAYLOAD_JSON, avS(toJson(record.requestPayload())));
+        putIfPresent(item, REQUEST_PAYLOAD_JSON, toJson(record.requestPayload()));
         item.put(TRANSPORT_TYPE, avS(record.transportType()));
-        item.put(TRANSPORT_METADATA_JSON, avS(toJson(record.transportMetadata())));
+        putIfPresent(item, TRANSPORT_METADATA_JSON, toJson(record.transportMetadata()));
         item.put(DEADLINE_EPOCH_MS, avN(record.deadlineEpochMs()));
         item.put(CREATED_AT_EPOCH_MS, avN(record.createdAtEpochMs()));
         item.put(UPDATED_AT_EPOCH_MS, avN(record.updatedAtEpochMs()));
@@ -657,7 +675,11 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     }
 
     private static AttributeValue avS(String value) {
-        return AttributeValue.builder().s(value == null ? "" : value).build();
+        return value == null ? null : AttributeValue.builder().s(value).build();
+    }
+
+    private static int scanPageLimit(int limit) {
+        return (int) Math.min(Math.max((long) limit * 3L, (long) limit), 1_000L);
     }
 
     private static AttributeValue avN(long value) {

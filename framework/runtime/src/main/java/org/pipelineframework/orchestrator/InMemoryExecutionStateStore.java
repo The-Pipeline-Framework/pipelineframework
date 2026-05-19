@@ -235,7 +235,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
             synchronized (lock) {
                 String scopedId = scopedExecutionId(tenantId, executionId);
                 ExecutionRecord<Object, Object> current = getActiveRecord(scopedId, nowEpochMs);
-                if (current == null || current.status().terminal()) {
+                if (current == null || current.status() != ExecutionStatus.WAITING_EXTERNAL) {
                     return Optional.empty();
                 }
                 if (current.awaitInteractionId() != null && !current.awaitInteractionId().equals(awaitInteractionId)) {

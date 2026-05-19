@@ -366,14 +366,17 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
 
         @Override
         public void printMessage(Diagnostic.Kind kind, CharSequence msg) {
+            print(kind, msg, null, null, null);
         }
 
         @Override
         public void printMessage(Diagnostic.Kind kind, CharSequence msg, Element e) {
+            print(kind, msg, e, null, null);
         }
 
         @Override
         public void printMessage(Diagnostic.Kind kind, CharSequence msg, Element e, AnnotationMirror a) {
+            print(kind, msg, e, a, null);
         }
 
         @Override
@@ -383,6 +386,24 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
             Element e,
             AnnotationMirror a,
             AnnotationValue v) {
+            print(kind, msg, e, a, v);
+        }
+
+        private void print(Diagnostic.Kind kind, CharSequence msg, Element e, AnnotationMirror a, AnnotationValue v) {
+            StringBuilder line = new StringBuilder("OrchestratorGrpcRenderer diagnostic [")
+                .append(kind)
+                .append("] ")
+                .append(msg);
+            if (e != null) {
+                line.append(" element=").append(e);
+            }
+            if (a != null) {
+                line.append(" annotation=").append(a);
+            }
+            if (v != null) {
+                line.append(" value=").append(v);
+            }
+            System.err.println(line);
         }
     }
 

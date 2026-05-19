@@ -47,6 +47,7 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
         ClassName pathParam = ClassName.get("jakarta.ws.rs", "PathParam");
         ClassName queryParam = ClassName.get("jakarta.ws.rs", "QueryParam");
         ClassName headerParam = ClassName.get("jakarta.ws.rs", "HeaderParam");
+        ClassName badRequestException = ClassName.get("jakarta.ws.rs", "BadRequestException");
         ClassName consumes = ClassName.get("jakarta.ws.rs", "Consumes");
         ClassName produces = ClassName.get("jakarta.ws.rs", "Produces");
         ClassName restStream = ClassName.get("org.jboss.resteasy.reactive", "RestStreamElementType");
@@ -74,6 +75,10 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
         FieldSpec defaultPendingAwaitLimitField = FieldSpec.builder(int.class, "DEFAULT_PENDING_AWAIT_LIMIT",
                 Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
             .initializer("$L", 50)
+            .build();
+        FieldSpec maxPendingAwaitLimitField = FieldSpec.builder(int.class, "MAX_PENDING_AWAIT_LIMIT",
+                Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
+            .initializer("$L", 500)
             .build();
 
         MethodSpec.Builder runMethod = MethodSpec.methodBuilder("run")
@@ -237,7 +242,11 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
             .addParameter(ParameterSpec.builder(Integer.class, "limit")
                 .addAnnotation(AnnotationSpec.builder(queryParam).addMember("value", "$S", "limit").build())
                 .build())
-            .addStatement("return pipelineExecutionService.queryPendingAwaitInteractions(tenantId, assignee, group, stepId, limit == null ? DEFAULT_PENDING_AWAIT_LIMIT : limit).onItem().transform(records -> records.stream().map($T::toDto).toList())",
+            .beginControlFlow("if (limit != null && limit < 0)")
+            .addStatement("throw new $T($S)", badRequestException, "limit must be >= 0")
+            .endControlFlow()
+            .addStatement("int validatedLimit = limit == null ? DEFAULT_PENDING_AWAIT_LIMIT : $T.min(limit, MAX_PENDING_AWAIT_LIMIT)", Math.class)
+            .addStatement("return pipelineExecutionService.queryPendingAwaitInteractions(tenantId, assignee, group, stepId, validatedLimit).onItem().transform(records -> records.stream().map($T::toDto).toList())",
                 awaitDtoMapper)
             .build();
 
@@ -258,6 +267,7 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
             .addAnnotation(applicationScoped)
             .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/pipeline").build())
             .addField(defaultPendingAwaitLimitField)
+            .addField(maxPendingAwaitLimitField)
             .addField(executionField)
             .addField(outputBusField)
             .addMethod(runMethod.build())

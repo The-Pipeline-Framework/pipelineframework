@@ -552,6 +552,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             Map.entry("#ttl", TTL_EPOCH_S));
         Map<String, AttributeValue> values = Map.ofEntries(
             Map.entry(":queued", avS(ExecutionStatus.QUEUED.name())),
+            Map.entry(":waitingExternal", avS(ExecutionStatus.WAITING_EXTERNAL.name())),
             Map.entry(":step", avN(nextStepIndex)),
             Map.entry(":awaitInteraction", avS(awaitInteractionId)),
             Map.entry(":resume", avS(toJson(resumePayload))),
@@ -564,7 +565,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             .tableName(executionTable())
             .key(executionPrimaryKey(tenantId, executionId))
             .conditionExpression(
-                "(attribute_not_exists(#awaitInteraction) OR #awaitInteraction = :awaitInteraction) " +
+                "#status = :waitingExternal " +
+                    "AND (attribute_not_exists(#awaitInteraction) OR #awaitInteraction = :awaitInteraction) " +
                     "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
             .updateExpression(
                 "SET #status = :queued, #version = #version + :one, #step = :step, #nextDue = :now, " +

@@ -438,7 +438,7 @@ class QueueAsyncCoordinator {
       return payload;
     }
     try {
-      Class<?> outputType = Class.forName(record.outputType());
+      Class<?> outputType = Thread.currentThread().getContextClassLoader().loadClass(record.outputType());
       if (outputType.isInstance(payload)) {
         return payload;
       }
