@@ -356,12 +356,12 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
     private Messager messager(GenerationContext ctx) {
         ProcessingEnvironment processingEnv = ctx.processingEnv();
         if (processingEnv == null || processingEnv.getMessager() == null) {
-            return NoopMessager.INSTANCE;
+            return StderrMessager.INSTANCE;
         }
         return processingEnv.getMessager();
     }
 
-    private enum NoopMessager implements Messager {
+    private enum StderrMessager implements Messager {
         INSTANCE;
 
         @Override
@@ -717,6 +717,17 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
             .addParameter(requestType, "request")
             .addStatement("long startTime = System.nanoTime()")
             .addCode("""
+                if (request.getTenantId() == null || request.getTenantId().isBlank()) {
+                    return $T.createFrom().failure($T.INVALID_ARGUMENT
+                        .withDescription("tenantId is required")
+                        .asRuntimeException());
+                }
+                if ((request.getInteractionId() == null || request.getInteractionId().isBlank())
+                        && (request.getCorrelationId() == null || request.getCorrelationId().isBlank())) {
+                    return $T.createFrom().failure($T.INVALID_ARGUMENT
+                        .withDescription("interactionId or correlationId is required")
+                        .asRuntimeException());
+                }
                 return pipelineExecutionService.completeAwaitInteraction(new $T(
                         request.getTenantId(),
                         request.getInteractionId(),
@@ -736,6 +747,10 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
                     .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
                         System.nanoTime() - startTime));
                 """,
+                uni,
+                ClassName.get("io.grpc", "Status"),
+                uni,
+                ClassName.get("io.grpc", "Status"),
                 command,
                 System.class,
                 responseType,
@@ -772,12 +787,23 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
             .addParameter(requestType, "request")
             .addStatement("long startTime = System.nanoTime()")
             .addCode("""
+                if (request.getTenantId() == null || request.getTenantId().isBlank()) {
+                    return $T.createFrom().failure($T.INVALID_ARGUMENT
+                        .withDescription("tenantId is required")
+                        .asRuntimeException());
+                }
+                if (request.getLimit() < 0) {
+                    return $T.createFrom().failure($T.INVALID_ARGUMENT
+                        .withDescription("limit must be >= 0")
+                        .asRuntimeException());
+                }
+                int validatedLimit = request.getLimit() == 0 ? 50 : $T.min(request.getLimit(), 500);
                 return pipelineExecutionService.queryPendingAwaitInteractions(
                         request.getTenantId(),
                         request.getAssignee(),
                         request.getGroup(),
                         request.getStepId(),
-                        request.getLimit())
+                        validatedLimit)
                     .onItem().transform(records -> {
                         $T.Builder builder = $T.newBuilder();
                         for (var record : records) {
@@ -800,6 +826,11 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
                     .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
                         System.nanoTime() - startTime));
                 """,
+                uni,
+                ClassName.get("io.grpc", "Status"),
+                uni,
+                ClassName.get("io.grpc", "Status"),
+                Math.class,
                 responseType,
                 responseType,
                 ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),

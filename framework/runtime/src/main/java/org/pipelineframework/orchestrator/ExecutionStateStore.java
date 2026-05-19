@@ -98,6 +98,15 @@ public interface ExecutionStateStore {
 
     /**
      * Marks an execution as durably waiting on an external await interaction.
+     *
+     * @param tenantId tenant identifier
+     * @param executionId execution identifier
+     * @param expectedVersion current execution record version for optimistic concurrency
+     * @param transitionKey idempotency key for the suspend transition
+     * @param awaitInteractionId external await interaction id used to correlate and deduplicate completions
+     * @param awaitStepIndex index of the await step that suspended execution
+     * @param nowEpochMs transition timestamp
+     * @return updated waiting execution when the transition wins optimistic concurrency, otherwise empty
      */
     default Uni<Optional<ExecutionRecord<Object, Object>>> markWaitingExternal(
         String tenantId,
@@ -112,6 +121,19 @@ public interface ExecutionStateStore {
 
     /**
      * Stores a completed await payload and makes the execution due for continuation.
+     *
+     * <p>This method matches by {@link ExecutionStatus#WAITING_EXTERNAL} plus
+     * {@code awaitInteractionId}, not by expected version. Completion admission is idempotent and can race
+     * with duplicate external callbacks, so stores should return empty when the execution is no longer
+     * waiting for that interaction.</p>
+     *
+     * @param tenantId tenant identifier
+     * @param executionId execution identifier
+     * @param awaitInteractionId external await interaction id used to match the waiting execution
+     * @param resumePayload payload used as input for the step after the await boundary
+     * @param nextStepIndex next pipeline step index to execute
+     * @param nowEpochMs transition timestamp
+     * @return updated queued execution when completion is accepted, otherwise empty
      */
     default Uni<Optional<ExecutionRecord<Object, Object>>> markAwaitCompleted(
         String tenantId,

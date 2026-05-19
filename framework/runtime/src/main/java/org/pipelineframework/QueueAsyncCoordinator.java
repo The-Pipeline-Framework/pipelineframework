@@ -327,23 +327,28 @@ class QueueAsyncCoordinator {
                 + ", correlationId=" + normalized.correlationId(),
             failure))
         .onItem().transformToUni(result -> validateAwaitCompletionTenant(result, normalized)
-            .onItem().transformToUni(validated -> coerceAwaitPayloadAsync(validated.record()))
-            .onItem().transformToUni(resumePayload -> executionStateStore.markAwaitCompleted(
-                result.record().tenantId(),
-                result.record().executionId(),
-                result.record().interactionId(),
-                resumePayload,
-                result.record().stepIndex() + 1,
-                normalized.nowEpochMs())
-            .onItem().transformToUni(updated -> {
-              if (updated.isPresent()) {
-                return workDispatcher.enqueueNow(new ExecutionWorkItem(
-                        updated.get().tenantId(),
-                        updated.get().executionId()))
-                    .replaceWith(result);
+            .onItem().transformToUni(validated -> {
+              if (validated.duplicate()) {
+                return Uni.createFrom().item(validated);
               }
-              return Uni.createFrom().item(result);
-            })));
+              return coerceAwaitPayloadAsync(validated.record())
+                  .onItem().transformToUni(resumePayload -> executionStateStore.markAwaitCompleted(
+                      validated.record().tenantId(),
+                      validated.record().executionId(),
+                      validated.record().interactionId(),
+                      resumePayload,
+                      validated.record().stepIndex() + 1,
+                      normalized.nowEpochMs()))
+                  .onItem().transformToUni(updated -> {
+                    if (updated.isPresent()) {
+                      return workDispatcher.enqueueNow(new ExecutionWorkItem(
+                              updated.get().tenantId(),
+                              updated.get().executionId()))
+                          .replaceWith(validated);
+                    }
+                    return Uni.createFrom().item(validated);
+                  });
+            }));
   }
 
   Uni<List<AwaitInteractionRecord>> queryPendingAwaitInteractions(

@@ -214,6 +214,15 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
                     .addMember("value", "$S", "x-tenant-id")
                     .build())
                 .build())
+            .beginControlFlow("if (tenantId == null || tenantId.isBlank())")
+            .addStatement("throw new $T($S)", badRequestException, "tenantId header is required")
+            .endControlFlow()
+            .beginControlFlow("if (request == null)")
+            .addStatement("throw new $T($S)", badRequestException, "completion request is required")
+            .endControlFlow()
+            .beginControlFlow("if ((request.interactionId() == null || request.interactionId().isBlank()) && (request.correlationId() == null || request.correlationId().isBlank()))")
+            .addStatement("throw new $T($S)", badRequestException, "interactionId or correlationId is required")
+            .endControlFlow()
             .addStatement("return pipelineExecutionService.completeAwaitInteraction(new $T(tenantId, request.interactionId(), request.correlationId(), request.idempotencyKey(), request.responsePayload(), request.actor(), $T.currentTimeMillis())).onItem().transform($T::toCompletionResponse)",
                 awaitCompletionCommand,
                 System.class,
@@ -242,6 +251,9 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
             .addParameter(ParameterSpec.builder(Integer.class, "limit")
                 .addAnnotation(AnnotationSpec.builder(queryParam).addMember("value", "$S", "limit").build())
                 .build())
+            .beginControlFlow("if (tenantId == null || tenantId.isBlank())")
+            .addStatement("throw new $T($S)", badRequestException, "tenantId header is required")
+            .endControlFlow()
             .beginControlFlow("if (limit != null && limit < 0)")
             .addStatement("throw new $T($S)", badRequestException, "limit must be >= 0")
             .endControlFlow()

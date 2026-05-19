@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -253,23 +252,39 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             if (limit <= 0) {
                 return List.of();
             }
-            Map<String, String> names = Map.of("#tenant", TENANT_ID, "#status", STATUS, "#ttl", TTL_EPOCH_S);
-            Map<String, AttributeValue> values = Map.of(
+            Map<String, String> names = new HashMap<>(Map.of("#tenant", TENANT_ID, "#status", STATUS, "#ttl", TTL_EPOCH_S));
+            Map<String, AttributeValue> values = new HashMap<>(Map.of(
                 ":tenant", avS(tenantId),
                 ":completed", avS(AwaitInteractionStatus.COMPLETED.name()),
                 ":failed", avS(AwaitInteractionStatus.FAILED.name()),
                 ":timedOut", avS(AwaitInteractionStatus.TIMED_OUT.name()),
                 ":cancelled", avS(AwaitInteractionStatus.CANCELLED.name()),
                 ":expired", avS(AwaitInteractionStatus.EXPIRED.name()),
-                ":nowSec", avN(Instant.now().getEpochSecond()));
+                ":nowSec", avN(Instant.now().getEpochSecond())));
+            StringBuilder filter = new StringBuilder("#tenant = :tenant AND #status <> :completed AND #status <> :failed "
+                + "AND #status <> :timedOut AND #status <> :cancelled AND #status <> :expired "
+                + "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)");
+            if (assignee != null) {
+                names.put("#assignee", ASSIGNEE);
+                values.put(":assignee", avS(assignee));
+                filter.append(" AND #assignee = :assignee");
+            }
+            if (group != null) {
+                names.put("#group", GROUP);
+                values.put(":group", avS(group));
+                filter.append(" AND #group = :group");
+            }
+            if (stepId != null) {
+                names.put("#stepId", STEP_ID);
+                values.put(":stepId", avS(stepId));
+                filter.append(" AND #stepId = :stepId");
+            }
             List<AwaitInteractionRecord> records = new ArrayList<>();
             Map<String, AttributeValue> lastEvaluatedKey = null;
             do {
                 ScanRequest.Builder request = ScanRequest.builder()
                     .tableName(interactionTable())
-                    .filterExpression("#tenant = :tenant AND #status <> :completed AND #status <> :failed "
-                        + "AND #status <> :timedOut AND #status <> :cancelled AND #status <> :expired "
-                        + "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
+                    .filterExpression(filter.toString())
                     .expressionAttributeNames(names)
                     .expressionAttributeValues(values)
                     .limit(scanPageLimit(limit));
@@ -280,15 +295,6 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
                 if (response.items() != null) {
                     for (Map<String, AttributeValue> item : response.items()) {
                         AwaitInteractionRecord record = toRecord(item);
-                        if (assignee != null && !Objects.equals(assignee, record.assignee())) {
-                            continue;
-                        }
-                        if (group != null && !Objects.equals(group, record.group())) {
-                            continue;
-                        }
-                        if (stepId != null && !Objects.equals(stepId, record.stepId())) {
-                            continue;
-                        }
                         records.add(record);
                         if (records.size() >= limit) {
                             break;
@@ -328,7 +334,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             lookupKey("idempotency", command.tenantId(), command.stepId() + ":" + command.idempotencyKey()),
             command.tenantId(),
             command.nowEpochMs());
-        if (existing.isPresent() && !existing.get().status().terminal()) {
+        if (existing.isPresent()) {
             return new AwaitCreateResult(existing.get(), true);
         }
 
@@ -400,7 +406,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             throw new IllegalStateException("Await interaction is terminal: " + current.status());
         }
         if (current.deadlineEpochMs() <= command.nowEpochMs()) {
-            transitionStatus(
+            Optional<AwaitInteractionRecord> timedOut = transitionStatus(
                 current.tenantId(),
                 current.interactionId(),
                 current.version(),
@@ -409,6 +415,15 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
                 null,
                 null,
                 command.nowEpochMs());
+            if (timedOut.isEmpty()) {
+                Optional<AwaitInteractionRecord> refreshed = getBlocking(
+                    current.tenantId(),
+                    current.interactionId(),
+                    command.nowEpochMs());
+                if (refreshed.isPresent() && refreshed.get().status() == AwaitInteractionStatus.COMPLETED) {
+                    return new AwaitCompletionResult(refreshed.get(), true);
+                }
+            }
             throw new IllegalStateException("Await interaction timed out before completion");
         }
         AwaitInteractionRecord completed = transitionStatus(
@@ -573,7 +588,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             readString(item, TENANT_ID),
             readString(item, EXECUTION_ID),
             readString(item, STEP_ID),
-            (int) readLong(item, STEP_INDEX),
+            Math.toIntExact(readLong(item, STEP_INDEX)),
             readString(item, OUTPUT_TYPE),
             readString(item, INTERACTION_ID),
             readString(item, CORRELATION_ID),
@@ -609,7 +624,9 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
                 return active;
             }
             var builder = DynamoDbClient.builder();
-            builder.httpClientBuilder(UrlConnectionHttpClient.builder());
+            builder.httpClientBuilder(UrlConnectionHttpClient.builder()
+                .connectionTimeout(java.time.Duration.ofSeconds(10))
+                .socketTimeout(java.time.Duration.ofSeconds(30)));
             orchestratorConfig.dynamo().region().filter(region -> !region.isBlank())
                 .ifPresent(region -> builder.region(Region.of(region)));
             orchestratorConfig.dynamo().endpointOverride()
