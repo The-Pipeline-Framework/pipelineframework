@@ -444,6 +444,10 @@ public class StepDefinitionParser {
                 report(Diagnostic.Kind.ERROR, message);
                 return null;
             }
+            List<String> idempotencyKeyFields = parseStringList(stepData.get("idempotencyKeyFields"), name, "idempotencyKeyFields");
+            if (idempotencyKeyFields == null) {
+                return null;
+            }
             return new StepDefinition(
                 name,
                 StepKind.AWAIT,
@@ -451,7 +455,7 @@ public class StepDefinitionParser {
                 null,
                 awaitConfig,
                 timeout,
-                parseStringList(stepData.get("idempotencyKeyFields"), name, "idempotencyKeyFields"),
+                idempotencyKeyFields,
                 null,
                 null,
                 null,
@@ -508,7 +512,7 @@ public class StepDefinitionParser {
             String message = "Skipping step '" + stepName + "': " + fieldName + " must be a list";
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
-            return List.of();
+            return null;
         }
         List<String> result = new ArrayList<>();
         for (Object item : iterable) {

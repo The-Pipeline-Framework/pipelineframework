@@ -37,14 +37,32 @@ public class AwaitStepDescriptorFactory {
         if (!"await".equalsIgnoreCase(step.kind())) {
             throw new IllegalStateException("Generated await service " + serviceName + " maps to non-await YAML step");
         }
-        if (step.awaitConfig() == null || step.awaitConfig().transport() == null) {
+        if (step.awaitConfig() == null) {
+            throw new IllegalStateException("Await step " + serviceName + " is missing await configuration");
+        }
+        if (step.awaitConfig().transport() == null) {
             throw new IllegalStateException("Await step " + serviceName + " is missing await.transport configuration");
+        }
+        if (step.awaitConfig().correlation() == null) {
+            throw new IllegalStateException("Await step " + serviceName + " is missing await.correlation configuration");
+        }
+        if (step.awaitConfig().correlation().strategy() == null || step.awaitConfig().correlation().strategy().isBlank()) {
+            throw new IllegalArgumentException("Await step " + serviceName + " is missing await.correlation.strategy");
+        }
+        if (step.timeout() == null || step.timeout().isBlank()) {
+            throw new IllegalArgumentException("Await step " + serviceName + " is missing timeout");
+        }
+        Duration timeout;
+        try {
+            timeout = Duration.parse(step.timeout());
+        } catch (java.time.format.DateTimeParseException ex) {
+            throw new IllegalArgumentException("Await step " + serviceName + " has invalid timeout format: " + step.timeout(), ex);
         }
         return new AwaitStepDescriptor(
             serviceName,
             inputType,
             outputType,
-            Duration.parse(step.timeout()),
+            timeout,
             step.awaitConfig().correlation().strategy(),
             step.awaitConfig().transport().type(),
             step.awaitConfig().transport().config(),

@@ -184,7 +184,7 @@ public class PipelineOrderMetadataGenerator {
                 ? "AwaitClientStep"
                 : suffix;
             String className = model.servicePackage() + ".pipeline." +
-                model.generatedName().replace("Service", "") + resolvedSuffix;
+                stripTrailingService(model.generatedName()) + resolvedSuffix;
             ordered.add(className);
         }
         return new ArrayList<>(ordered);
@@ -220,16 +220,26 @@ public class PipelineOrderMetadataGenerator {
         for (PipelineStepModel model : models) {
             if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
                 generated.add(model.servicePackage() + ".pipeline."
-                    + model.generatedName().replace("Service", "") + "AwaitClientStep");
+                    + stripTrailingService(model.generatedName()) + "AwaitClientStep");
                 continue;
             }
             if (clientTarget != null && !model.enabledTargets().contains(clientTarget)) {
                 continue;
             }
             generated.add(model.servicePackage() + ".pipeline."
-                + model.generatedName().replace("Service", "") + suffix);
+                + stripTrailingService(model.generatedName()) + suffix);
         }
         return generated;
+    }
+
+    private static String stripTrailingService(String generatedName) {
+        if (generatedName == null) {
+            return "";
+        }
+        if (generatedName.endsWith("Service")) {
+            return generatedName.substring(0, generatedName.length() - "Service".length());
+        }
+        return generatedName;
     }
 
     private boolean isSideEffectClientStep(String className) {

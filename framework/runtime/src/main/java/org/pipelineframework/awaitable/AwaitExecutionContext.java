@@ -15,6 +15,9 @@ public final class AwaitExecutionContext {
         if (executionId == null || executionId.isBlank()) {
             throw new IllegalArgumentException("executionId must not be blank");
         }
+        if (currentStepIndex < 0) {
+            throw new IllegalArgumentException("currentStepIndex must be non-negative");
+        }
         this.tenantId = tenantId;
         this.executionId = executionId;
         this.currentStepIndex = currentStepIndex;
@@ -33,6 +36,9 @@ public final class AwaitExecutionContext {
     }
 
     public void currentStepIndex(int currentStepIndex) {
+        if (currentStepIndex < 0) {
+            throw new IllegalArgumentException("currentStepIndex must be non-negative");
+        }
         this.currentStepIndex = currentStepIndex;
     }
 }

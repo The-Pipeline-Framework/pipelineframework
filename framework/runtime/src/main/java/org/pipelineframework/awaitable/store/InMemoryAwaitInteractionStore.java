@@ -226,6 +226,7 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
     public Uni<List<AwaitInteractionRecord>> findTimedOut(long nowEpochMs, int limit) {
         return Uni.createFrom().item(() -> {
             synchronized (lock) {
+                purgeExpired(nowEpochMs);
                 List<AwaitInteractionRecord> records = interactionsByScopedId.values().stream()
                     .filter(record -> !record.status().terminal())
                     .filter(record -> record.deadlineEpochMs() <= nowEpochMs)

@@ -96,8 +96,11 @@ class StepArtifactGenerationService {
         for (GenerationTarget target : model.enabledTargets()) {
             switch (target) {
                 case AWAIT_CLIENT_STEP -> {
-                    String awaitClientClassName = model.servicePackage() + PIPELINE_DOT
-                        + ResourceNameUtils.normalizeBaseName(model.generatedName()).replace("Service", "") + "AwaitClientStep";
+                    String baseName = ResourceNameUtils.normalizeBaseName(model.generatedName());
+                    if (baseName.endsWith("Service")) {
+                        baseName = baseName.substring(0, baseName.length() - "Service".length());
+                    }
+                    String awaitClientClassName = model.servicePackage() + PIPELINE_DOT + baseName + "AwaitClientStep";
                     DeploymentRole clientRole = resolveClientRole(model.deploymentRole());
                     awaitClientStepRenderer.render(model, new GenerationContext(
                         ctx.getProcessingEnv(),

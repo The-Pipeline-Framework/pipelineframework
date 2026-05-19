@@ -88,6 +88,8 @@ public record AwaitCreateCommand(
         }
         if (ttlEpochS <= 0) {
             ttlEpochS = Instant.ofEpochMilli(deadlineEpochMs).plusSeconds(86_400).getEpochSecond();
+        } else if (ttlEpochS < Instant.ofEpochMilli(deadlineEpochMs).getEpochSecond()) {
+            throw new IllegalArgumentException("ttlEpochS must not be before deadlineEpochMs");
         }
     }
 }

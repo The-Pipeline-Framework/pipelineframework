@@ -294,7 +294,6 @@ public class PipelineYamlConfigLoader {
         return new PipelineYamlAwaitTransport(type, config);
     }
 
-    @SuppressWarnings("unchecked")
     private Object normalizeConfigValue(Object value) {
         if (value instanceof Map<?, ?> map) {
             java.util.LinkedHashMap<String, Object> normalized = new java.util.LinkedHashMap<>();

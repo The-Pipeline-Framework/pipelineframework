@@ -71,19 +71,29 @@ public class AwaitCoordinator {
     @SuppressWarnings("unchecked")
     public Uni<AwaitInteractionRecord> dispatch(AwaitStepDescriptor descriptor, AwaitInteractionRecord interaction) {
         AwaitTransportAdapter<Object, Object> adapter = (AwaitTransportAdapter<Object, Object>) adapter(descriptor.transportType());
-        return adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
-                descriptor,
-                interaction,
-                interaction.requestPayload()))
-            .onItem().transformToUni(result -> store().markDispatched(
+        long nowEpochMs = System.currentTimeMillis();
+        return store().markDispatched(
                 interaction.tenantId(),
                 interaction.interactionId(),
                 interaction.version(),
-                result.metadata(),
-                System.currentTimeMillis()))
+                Map.of(),
+                nowEpochMs)
             .onItem().transform(optional -> optional.orElseThrow(() ->
                 new IllegalStateException("Await interaction dispatch transition lost OCC race: "
-                    + interaction.interactionId())));
+                    + interaction.interactionId())))
+            .onItem().transformToUni(claimedInteraction -> adapter.dispatch(new AwaitTransportAdapter.AwaitDispatchRequest<>(
+                    descriptor,
+                    claimedInteraction,
+                    claimedInteraction.requestPayload()))
+                .onItem().transformToUni(result -> store().markDispatched(
+                    claimedInteraction.tenantId(),
+                    claimedInteraction.interactionId(),
+                    claimedInteraction.version(),
+                    result.metadata(),
+                    System.currentTimeMillis()))
+                .onItem().transform(optional -> optional.orElseThrow(() ->
+                    new IllegalStateException("Await interaction metadata update lost OCC race: "
+                        + claimedInteraction.interactionId()))));
     }
 
     /**
@@ -123,17 +133,32 @@ public class AwaitCoordinator {
         String provider = orchestratorConfig == null ? null : orchestratorConfig.stateProvider();
         return stores.stream()
             .filter(candidate -> provider == null || provider.isBlank() || provider.equalsIgnoreCase(candidate.providerName()))
-            .sorted((left, right) -> Integer.compare(right.priority(), left.priority()))
+            .sorted((left, right) -> {
+                int priorityComparison = Integer.compare(right.priority(), left.priority());
+                if (priorityComparison != 0) {
+                    return priorityComparison;
+                }
+                return left.providerName().compareToIgnoreCase(right.providerName());
+            })
             .findFirst()
             .orElseThrow(() -> new IllegalStateException("No AwaitInteractionStore provider is available"
                 + (provider == null || provider.isBlank() ? "" : " for provider " + provider)));
     }
 
     private AwaitTransportAdapter<?, ?> adapter(String type) {
-        return adapters.stream()
+        List<AwaitTransportAdapter<?, ?>> matching = adapters.stream()
             .filter(candidate -> type.equalsIgnoreCase(candidate.type()))
-            .findFirst()
-            .orElseThrow(() -> new IllegalStateException("No AwaitTransportAdapter provider is available for type " + type));
+            .toList();
+        if (matching.isEmpty()) {
+            throw new IllegalStateException("No AwaitTransportAdapter provider is available for type " + type);
+        }
+        if (matching.size() > 1) {
+            String providerInfo = matching.stream()
+                .map(candidate -> candidate.getClass().getName())
+                .collect(java.util.stream.Collectors.joining(", "));
+            throw new IllegalStateException("Ambiguous AwaitTransportAdapter providers for type " + type + ": " + providerInfo);
+        }
+        return matching.get(0);
     }
 
     private String deriveCorrelationId(

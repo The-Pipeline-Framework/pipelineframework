@@ -135,6 +135,9 @@ class StepDefinitionParserTest {
         assertEquals("PT10M", step.timeout());
         assertEquals(List.of("orderId"), step.idempotencyKeyFields());
         assertEquals("webhook", ((java.util.Map<?, ?>) step.awaitConfig().get("transport")).get("type"));
+        assertEquals("interactionId", ((java.util.Map<?, ?>) step.awaitConfig().get("correlation")).get("strategy"));
+        assertEquals("https://partner.example/check",
+            ((java.util.Map<?, ?>) ((java.util.Map<?, ?>) step.awaitConfig().get("transport")).get("dispatch")).get("url"));
         assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
     }
 
