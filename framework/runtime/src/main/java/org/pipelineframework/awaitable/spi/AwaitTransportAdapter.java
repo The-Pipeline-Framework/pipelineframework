@@ -8,9 +8,8 @@ import org.pipelineframework.awaitable.AwaitStepDescriptor;
  * Adapter SPI for dispatching await interactions to external systems.
  *
  * @param <I> request payload type
- * @param <O> completion payload type
  */
-public interface AwaitTransportAdapter<I, O> {
+public interface AwaitTransportAdapter<I> {
 
     /**
      * Adapter type used in YAML.

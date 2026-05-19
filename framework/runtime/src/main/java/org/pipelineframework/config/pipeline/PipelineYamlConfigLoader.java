@@ -44,6 +44,7 @@ import org.yaml.snakeyaml.Yaml;
  */
 public class PipelineYamlConfigLoader {
     private static final Logger LOG = Logger.getLogger(PipelineYamlConfigLoader.class.getName());
+    private static final int MAX_NESTING_DEPTH = 100;
     private final Function<String, String> propertyLookup;
     private final Function<String, String> envLookup;
 
@@ -216,7 +217,7 @@ public class PipelineYamlConfigLoader {
      * Parse the "steps" entry from the YAML root map into a list of PipelineYamlStep objects.
      *
      * @param rootMap the parsed YAML root map potentially containing a "steps" entry
-     * @return a list of PipelineYamlStep instances for entries that have a non-blank name and non-blank output type; returns an empty list if no valid "steps" section is present
+     * @return a list of PipelineYamlStep instances for entries that have a non-blank name; returns an empty list if no valid "steps" section is present
      */
     private List<PipelineYamlStep> readSteps(Map<?, ?> rootMap) {
         Object stepsObj = rootMap.get("steps");
@@ -232,14 +233,14 @@ public class PipelineYamlConfigLoader {
             String name = readString(stepMap, "name");
             String kind = readString(stepMap, "kind");
             String cardinality = readString(stepMap, "cardinality");
-            String inputType = readString(stepMap, "inputTypeName");
+            String inputType = firstNonBlank(readString(stepMap, "inputTypeName"), readString(stepMap, "input"));
             String inboundMapper = readString(stepMap, "inboundMapper");
-            String outputType = readString(stepMap, "outputTypeName");
+            String outputType = firstNonBlank(readString(stepMap, "outputTypeName"), readString(stepMap, "output"));
             String outboundMapper = readString(stepMap, "outboundMapper");
             String timeout = readString(stepMap, "timeout");
             List<String> idempotencyKeyFields = readStringList(stepMap, "idempotencyKeyFields");
             PipelineYamlAwaitConfig awaitConfig = readAwaitConfig(stepMap, name);
-            if (name != null && !name.isBlank() && outputType != null && !outputType.isBlank()) {
+            if (name != null && !name.isBlank()) {
                 stepInfos.add(new PipelineYamlStep(
                     name,
                     kind,
@@ -299,11 +300,19 @@ public class PipelineYamlConfigLoader {
     }
 
     private Object normalizeConfigValue(Object value) {
+        return normalizeConfigValue(value, 0);
+    }
+
+    private Object normalizeConfigValue(Object value, int depth) {
+        if (depth >= MAX_NESTING_DEPTH) {
+            throw new IllegalArgumentException(
+                "pipeline YAML nested configuration exceeds maximum depth of " + MAX_NESTING_DEPTH);
+        }
         if (value instanceof Map<?, ?> map) {
             java.util.LinkedHashMap<String, Object> normalized = new java.util.LinkedHashMap<>();
             for (Map.Entry<?, ?> entry : map.entrySet()) {
                 if (entry.getKey() != null) {
-                    normalized.put(entry.getKey().toString(), normalizeConfigValue(entry.getValue()));
+                    normalized.put(entry.getKey().toString(), normalizeConfigValue(entry.getValue(), depth + 1));
                 }
             }
             return java.util.Map.copyOf(normalized);
@@ -311,11 +320,15 @@ public class PipelineYamlConfigLoader {
         if (value instanceof Iterable<?> iterable) {
             java.util.ArrayList<Object> normalized = new java.util.ArrayList<>();
             for (Object item : iterable) {
-                normalized.add(normalizeConfigValue(item));
+                normalized.add(normalizeConfigValue(item, depth + 1));
             }
             return java.util.List.copyOf(normalized);
         }
         return value;
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        return primary == null || primary.isBlank() ? fallback : primary;
     }
 
     /**

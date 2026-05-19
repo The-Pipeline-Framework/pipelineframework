@@ -3,6 +3,7 @@ package org.pipelineframework.awaitable;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
@@ -24,10 +25,13 @@ public class AwaitCoordinator {
     Instance<AwaitInteractionStore> stores;
 
     @Inject
-    Instance<AwaitTransportAdapter<?, ?>> adapters;
+    Instance<AwaitTransportAdapter<?>> adapters;
 
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
+
+    private volatile AwaitInteractionStore resolvedStore;
+    private final Map<String, AwaitTransportAdapter<?>> resolvedAdapters = new ConcurrentHashMap<>();
 
     /**
      * Creates or returns an active interaction for an await step.
@@ -70,7 +74,7 @@ public class AwaitCoordinator {
      */
     @SuppressWarnings("unchecked")
     public Uni<AwaitInteractionRecord> dispatch(AwaitStepDescriptor descriptor, AwaitInteractionRecord interaction) {
-        AwaitTransportAdapter<Object, Object> adapter = (AwaitTransportAdapter<Object, Object>) adapter(descriptor.transportType());
+        AwaitTransportAdapter<Object> adapter = (AwaitTransportAdapter<Object>) adapter(descriptor.transportType());
         long nowEpochMs = System.currentTimeMillis();
         return store().markDispatched(
                 interaction.tenantId(),
@@ -85,6 +89,13 @@ public class AwaitCoordinator {
                     descriptor,
                     claimedInteraction,
                     claimedInteraction.requestPayload()))
+                .onFailure().call(failure -> store().fail(
+                    claimedInteraction.tenantId(),
+                    claimedInteraction.interactionId(),
+                    claimedInteraction.version(),
+                    failure.getMessage(),
+                    System.currentTimeMillis())
+                    .replaceWith(failure))
                 .onItem().transformToUni(result -> store().markDispatched(
                     claimedInteraction.tenantId(),
                     claimedInteraction.interactionId(),
@@ -93,14 +104,7 @@ public class AwaitCoordinator {
                     System.currentTimeMillis()))
                 .onItem().transform(optional -> optional.orElseThrow(() ->
                     new IllegalStateException("Await interaction metadata update lost OCC race: "
-                        + claimedInteraction.interactionId())))
-                .onFailure().call(failure -> store().fail(
-                    claimedInteraction.tenantId(),
-                    claimedInteraction.interactionId(),
-                    claimedInteraction.version(),
-                    failure.getMessage(),
-                    System.currentTimeMillis())
-                    .replaceWith(failure)));
+                        + claimedInteraction.interactionId()))));
     }
 
     /**
@@ -137,23 +141,36 @@ public class AwaitCoordinator {
     }
 
     private AwaitInteractionStore store() {
+        AwaitInteractionStore cached = resolvedStore;
+        if (cached != null) {
+            return cached;
+        }
         String provider = orchestratorConfig == null ? null : orchestratorConfig.stateProvider();
-        return stores.stream()
-            .filter(candidate -> provider == null || provider.isBlank() || provider.equalsIgnoreCase(candidate.providerName()))
-            .sorted((left, right) -> {
-                int priorityComparison = Integer.compare(right.priority(), left.priority());
-                if (priorityComparison != 0) {
-                    return priorityComparison;
-                }
-                return left.providerName().compareToIgnoreCase(right.providerName());
-            })
-            .findFirst()
-            .orElseThrow(() -> new IllegalStateException("No AwaitInteractionStore provider is available"
-                + (provider == null || provider.isBlank() ? "" : " for provider " + provider)));
+        synchronized (this) {
+            if (resolvedStore == null) {
+                resolvedStore = stores.stream()
+                    .filter(candidate -> provider == null || provider.isBlank() || provider.equalsIgnoreCase(candidate.providerName()))
+                    .sorted((left, right) -> {
+                        int priorityComparison = Integer.compare(right.priority(), left.priority());
+                        if (priorityComparison != 0) {
+                            return priorityComparison;
+                        }
+                        return left.providerName().compareToIgnoreCase(right.providerName());
+                    })
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException("No AwaitInteractionStore provider is available"
+                        + (provider == null || provider.isBlank() ? "" : " for provider " + provider)));
+            }
+            return resolvedStore;
+        }
     }
 
-    private AwaitTransportAdapter<?, ?> adapter(String type) {
-        List<AwaitTransportAdapter<?, ?>> matching = adapters.stream()
+    private AwaitTransportAdapter<?> adapter(String type) {
+        return resolvedAdapters.computeIfAbsent(type.toLowerCase(java.util.Locale.ROOT), ignored -> resolveAdapter(type));
+    }
+
+    private AwaitTransportAdapter<?> resolveAdapter(String type) {
+        List<AwaitTransportAdapter<?>> matching = adapters.stream()
             .filter(candidate -> type.equalsIgnoreCase(candidate.type()))
             .toList();
         if (matching.isEmpty()) {

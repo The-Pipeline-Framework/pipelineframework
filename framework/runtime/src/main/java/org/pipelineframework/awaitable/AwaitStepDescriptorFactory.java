@@ -3,12 +3,16 @@ package org.pipelineframework.awaitable;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
 
+import io.smallrye.mutiny.Uni;
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLoader;
 import org.pipelineframework.config.pipeline.PipelineYamlConfigLocator;
@@ -19,31 +23,43 @@ import org.pipelineframework.config.pipeline.PipelineYamlStep;
  */
 @ApplicationScoped
 public class AwaitStepDescriptorFactory {
+    private static final int DESCRIPTOR_LOADER_THREADS = Math.max(2, Runtime.getRuntime().availableProcessors());
+    private static final int DESCRIPTOR_LOADER_QUEUE_SIZE = 256;
+
     private final Map<String, AwaitStepDescriptor> descriptors = new ConcurrentHashMap<>();
-    private final Executor blockingExecutor = Executors.newCachedThreadPool(r -> {
-        Thread t = new Thread(r);
-        t.setDaemon(true);
-        t.setName("await-descriptor-loader");
-        return t;
-    });
+    private final AtomicInteger threadCounter = new AtomicInteger();
+    private final ExecutorService blockingExecutor = new ThreadPoolExecutor(
+        1,
+        DESCRIPTOR_LOADER_THREADS,
+        60L,
+        TimeUnit.SECONDS,
+        new ArrayBlockingQueue<>(DESCRIPTOR_LOADER_QUEUE_SIZE),
+        r -> {
+            Thread t = new Thread(r);
+            t.setDaemon(true);
+            t.setName("await-descriptor-loader-" + threadCounter.incrementAndGet());
+            return t;
+        });
 
     /**
      * Resolves the descriptor for a generated await step.
      */
-    public AwaitStepDescriptor descriptor(String serviceName, String inputType, String outputType) {
+    public Uni<AwaitStepDescriptor> descriptor(String serviceName, String inputType, String outputType) {
         AwaitStepDescriptor cached = descriptors.get(serviceName);
         if (cached != null) {
-            return cached;
+            return Uni.createFrom().item(cached);
         }
-        return CompletableFuture.supplyAsync(() -> loadDescriptor(serviceName, inputType, outputType), blockingExecutor)
-            .join();
+        return Uni.createFrom()
+            .item(() -> descriptors.computeIfAbsent(serviceName, key -> loadDescriptor(key, inputType, outputType)))
+            .runSubscriptionOn(blockingExecutor);
+    }
+
+    @PreDestroy
+    void shutdown() {
+        blockingExecutor.shutdown();
     }
 
     private AwaitStepDescriptor loadDescriptor(String serviceName, String inputType, String outputType) {
-        AwaitStepDescriptor existing = descriptors.get(serviceName);
-        if (existing != null) {
-            return existing;
-        }
         Path base = Path.of("").toAbsolutePath();
         Path configPath = new PipelineYamlConfigLocator().locate(base)
             .orElseThrow(() -> new IllegalStateException("No pipeline YAML found for await step " + serviceName));
@@ -85,7 +101,6 @@ public class AwaitStepDescriptorFactory {
             step.awaitConfig().transport().type(),
             step.awaitConfig().transport().config(),
             step.idempotencyKeyFields());
-        descriptors.putIfAbsent(serviceName, descriptor);
         return descriptor;
     }
 

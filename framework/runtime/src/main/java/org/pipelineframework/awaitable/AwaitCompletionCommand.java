@@ -19,6 +19,9 @@ public record AwaitCompletionCommand(
         if ((interactionId == null || interactionId.isBlank()) && (correlationId == null || correlationId.isBlank())) {
             throw new IllegalArgumentException("interactionId or correlationId must be supplied");
         }
+        if (idempotencyKey == null || idempotencyKey.isBlank()) {
+            throw new IllegalArgumentException("idempotencyKey must not be blank");
+        }
         if (nowEpochMs <= 0) {
             nowEpochMs = System.currentTimeMillis();
         }

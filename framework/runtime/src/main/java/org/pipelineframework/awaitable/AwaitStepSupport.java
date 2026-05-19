@@ -56,4 +56,11 @@ public class AwaitStepSupport {
                         stepIndex)));
             });
     }
+
+    /**
+     * Resolves an await descriptor reactively before creating/dispatching the await interaction.
+     */
+    public <I, O> Uni<O> awaitOneToOne(Uni<AwaitStepDescriptor> descriptor, I input) {
+        return descriptor.onItem().transformToUni(resolved -> awaitOneToOne(resolved, input));
+    }
 }

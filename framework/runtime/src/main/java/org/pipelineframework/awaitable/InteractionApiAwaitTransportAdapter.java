@@ -9,7 +9,7 @@ import org.pipelineframework.awaitable.spi.AwaitTransportAdapter;
  * Built-in no-op dispatch adapter for UI/mock-provider interaction APIs.
  */
 @ApplicationScoped
-public class InteractionApiAwaitTransportAdapter implements AwaitTransportAdapter<Object, Object> {
+public class InteractionApiAwaitTransportAdapter implements AwaitTransportAdapter<Object> {
     @Override
     public String type() {
         return "interaction-api";

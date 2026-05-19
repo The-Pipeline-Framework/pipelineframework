@@ -16,6 +16,7 @@ class AwaitCompletionCommandTest {
 
         assertEquals("tenant1", command.tenantId());
         assertEquals("interaction-123", command.interactionId());
+        assertEquals("idem-1", command.idempotencyKey());
         assertEquals("alice", command.actor());
         assertEquals("response", command.responsePayload());
         assertEquals(1000L, command.nowEpochMs());
@@ -52,6 +53,18 @@ class AwaitCompletionCommandTest {
     void rejectsBothBlankInteractionIdAndBlankCorrelationId() {
         assertThrows(IllegalArgumentException.class, () -> new AwaitCompletionCommand(
             "tenant1", "  ", "  ", "idem-1", null, null, 1000L));
+    }
+
+    @Test
+    void rejectsNullIdempotencyKey() {
+        assertThrows(IllegalArgumentException.class, () -> new AwaitCompletionCommand(
+            "tenant1", "interaction-123", null, null, null, null, 1000L));
+    }
+
+    @Test
+    void rejectsBlankIdempotencyKey() {
+        assertThrows(IllegalArgumentException.class, () -> new AwaitCompletionCommand(
+            "tenant1", "interaction-123", null, "  ", null, null, 1000L));
     }
 
     @Test

@@ -23,6 +23,7 @@ import org.pipelineframework.processor.ir.TransportMode;
  * and decides client/server roles for each step.
  */
 public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
+    public static final String AWAIT_STEP_DESCRIPTOR_CLASS = "org.pipelineframework.awaitable.AwaitStepDescriptor";
 
     private final EnumMap<DeploymentRole, TargetResolutionStrategy> strategiesByRole;
 
@@ -114,7 +115,7 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
      */
     private Set<GenerationTarget> resolveTargetsForModel(PipelineStepModel model, TransportMode transportMode) {
         if (model.serviceClassName() != null
-            && "org.pipelineframework.awaitable.AwaitStepDescriptor".equals(model.serviceClassName().canonicalName())) {
+            && AWAIT_STEP_DESCRIPTOR_CLASS.equals(model.serviceClassName().canonicalName())) {
             return Set.of(GenerationTarget.AWAIT_CLIENT_STEP);
         }
         var remoteExecution = model.remoteExecution();

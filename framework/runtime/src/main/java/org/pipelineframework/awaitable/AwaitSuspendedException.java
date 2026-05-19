@@ -10,11 +10,27 @@ public class AwaitSuspendedException extends RuntimeException {
     private final int stepIndex;
 
     public AwaitSuspendedException(String tenantId, String executionId, String interactionId, int stepIndex) {
-        super("Pipeline execution is waiting for await interaction " + interactionId);
+        super(message(tenantId, executionId, interactionId, stepIndex));
         this.tenantId = tenantId;
         this.executionId = executionId;
         this.interactionId = interactionId;
         this.stepIndex = stepIndex;
+    }
+
+    private static String message(String tenantId, String executionId, String interactionId, int stepIndex) {
+        if (tenantId == null || tenantId.isBlank()) {
+            throw new IllegalArgumentException("tenantId must not be blank");
+        }
+        if (executionId == null || executionId.isBlank()) {
+            throw new IllegalArgumentException("executionId must not be blank");
+        }
+        if (interactionId == null || interactionId.isBlank()) {
+            throw new IllegalArgumentException("interactionId must not be blank");
+        }
+        if (stepIndex < 0) {
+            throw new IllegalArgumentException("stepIndex must be >= 0");
+        }
+        return "Pipeline execution is waiting for await interaction " + interactionId;
     }
 
     public String tenantId() {

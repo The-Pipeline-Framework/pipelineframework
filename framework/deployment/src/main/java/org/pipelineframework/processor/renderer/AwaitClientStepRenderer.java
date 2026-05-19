@@ -51,7 +51,7 @@ public class AwaitClientStepRenderer {
             .addModifiers(Modifier.PUBLIC)
             .returns(ParameterizedTypeName.get(ClassName.get(Uni.class), outputType))
             .addParameter(inputType, "input")
-            .addStatement("return support.awaitOneToOne(descriptorFactory.descriptor($S, $S, $S), input)",
+            .addStatement("return descriptorFactory.descriptor($S, $S, $S).onItem().transformToUni(descriptor -> support.awaitOneToOne(descriptor, input))",
                 model.serviceName(),
                 inputType.toString(),
                 outputType.toString())

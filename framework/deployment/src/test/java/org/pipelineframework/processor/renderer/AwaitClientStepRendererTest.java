@@ -53,8 +53,9 @@ class AwaitClientStepRendererTest {
         assertTrue(source.contains("implements StepOneToOne<FraudCheckRequest, FraudCheckDecision>"));
         assertTrue(source.contains("AwaitStepSupport support"));
         assertTrue(source.contains("AwaitStepDescriptorFactory descriptorFactory"));
-        assertTrue(source.contains("support.awaitOneToOne(descriptorFactory.descriptor(\"FraudCheck\", "
-            + "\"com.example.fraud.FraudCheckRequest\", \"com.example.fraud.FraudCheckDecision\"), input)"));
+        assertTrue(source.contains("descriptorFactory.descriptor(\"FraudCheck\", "
+            + "\"com.example.fraud.FraudCheckRequest\", \"com.example.fraud.FraudCheckDecision\")"
+            + ".onItem().transformToUni(descriptor -> support.awaitOneToOne(descriptor, input))"));
     }
 
     private GenerationContext generationContext() {

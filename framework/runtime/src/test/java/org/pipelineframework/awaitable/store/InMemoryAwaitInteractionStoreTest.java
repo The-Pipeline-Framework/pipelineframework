@@ -403,7 +403,7 @@ class InMemoryAwaitInteractionStoreTest {
     private AwaitCreateCommand createCommand(String idempotencyKey, long nowEpochMs, long deadlineEpochMs) {
         return new AwaitCreateCommand(
             "tenant",
-
+            "execution-1",
             "review",
             "execution-1",
             idempotencyKey,

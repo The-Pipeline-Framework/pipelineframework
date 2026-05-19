@@ -32,6 +32,7 @@ import org.pipelineframework.processor.ir.TransportMode;
 import org.pipelineframework.processor.ir.TypeMapping;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -184,7 +185,7 @@ class PipelineOrderMetadataGeneratorTest {
 
         // No file should be written
         Path orderFile = classOutput.resolve("META-INF/pipeline/order.json");
-        assertTrue(!Files.exists(orderFile), "No order.json should be written when no step models");
+        assertFalse(Files.exists(orderFile), "No order.json should be written when no step models");
     }
 
     @Test

@@ -79,8 +79,11 @@ class AwaitStepSupportTest {
             org.mockito.ArgumentMatchers.isNull(),
             org.mockito.ArgumentMatchers.isNull()))
             .thenReturn(io.smallrye.mutiny.Uni.createFrom().item(mockCreateResult));
+        when(awaitCoordinator.dispatch(testDescriptor, mockRecord))
+            .thenReturn(io.smallrye.mutiny.Uni.createFrom().item(mockRecord));
 
-        support.awaitOneToOne(testDescriptor, "input").await().indefinitely();
+        assertThrows(AwaitSuspendedException.class,
+            () -> support.awaitOneToOne(testDescriptor, "input").await().indefinitely());
 
         org.mockito.Mockito.verify(awaitCoordinator).createOrGet(
             org.mockito.ArgumentMatchers.eq(testDescriptor),
@@ -91,6 +94,7 @@ class AwaitStepSupportTest {
             org.mockito.ArgumentMatchers.eq("input"),
             org.mockito.ArgumentMatchers.isNull(),
             org.mockito.ArgumentMatchers.isNull());
+        org.mockito.Mockito.verify(awaitCoordinator).dispatch(testDescriptor, mockRecord);
     }
 
     private AwaitStepSupport support() {
