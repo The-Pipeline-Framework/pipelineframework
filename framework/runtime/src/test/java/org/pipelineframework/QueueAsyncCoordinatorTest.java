@@ -276,6 +276,7 @@ class QueueAsyncCoordinatorTest {
         when(awaitCoordinator.complete(command))
             .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(interaction, false)));
         ExecutionRecord<Object, Object> resumed = createRecord("tenant-1", "exec-1", "key-1");
+        // Uses a Map payload intentionally so coerceAwaitPayload exercises PipelineJson conversion into Decision.
         when(executionStateStore.markAwaitCompleted(
                 org.mockito.ArgumentMatchers.eq("tenant-1"),
                 org.mockito.ArgumentMatchers.eq("exec-1"),
@@ -320,6 +321,8 @@ class QueueAsyncCoordinatorTest {
             null,
             "input",
             "interaction-1",
+            null,
+            null,
             null,
             null,
             1L,

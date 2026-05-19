@@ -345,10 +345,13 @@ public class PipelineExecutionService {
     if (steps == null) {
       return Multi.createFrom().failure(new IllegalStateException("Pipeline steps could not be loaded."));
     }
-    watch.start();
     Object result = pipelineRunner.runFromStep(input, steps, startStepIndex);
-    watch.stop();
-    LOG.infof("Pipeline assembly from step %d completed in %d ms", startStepIndex, watch.getTime());
+    if (result instanceof Multi<?> multi) {
+      return executionHooks.attachMultiHooks(multi, watch);
+    }
+    if (result instanceof Uni<?> uni) {
+      return executionHooks.attachMultiHooks(uni.toMulti(), watch);
+    }
     return result;
   }
 

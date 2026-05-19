@@ -20,6 +20,7 @@ import jakarta.ws.rs.NotFoundException;
 
 import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.jboss.logging.Logger;
 import org.pipelineframework.checkpoint.CheckpointPublicationService;
 import org.pipelineframework.config.pipeline.PipelineJson;
@@ -320,11 +321,18 @@ class QueueAsyncCoordinator {
         command.actor(),
         command.nowEpochMs());
     return awaitCoordinator.complete(normalized)
-        .onItem().transformToUni(result -> executionStateStore.markAwaitCompleted(
+        .onFailure().transform(failure -> new IllegalStateException(
+            "Failed completing await interaction tenant=" + normalized.tenantId()
+                + ", interactionId=" + normalized.interactionId()
+                + ", correlationId=" + normalized.correlationId(),
+            failure))
+        .onItem().transformToUni(result -> validateAwaitCompletionTenant(result, normalized)
+            .onItem().transformToUni(validated -> coerceAwaitPayloadAsync(validated.record()))
+            .onItem().transformToUni(resumePayload -> executionStateStore.markAwaitCompleted(
                 result.record().tenantId(),
                 result.record().executionId(),
                 result.record().interactionId(),
-                coerceAwaitPayload(result.record()),
+                resumePayload,
                 result.record().stepIndex() + 1,
                 normalized.nowEpochMs())
             .onItem().transformToUni(updated -> {
@@ -335,7 +343,7 @@ class QueueAsyncCoordinator {
                     .replaceWith(result);
               }
               return Uni.createFrom().item(result);
-            }));
+            })));
   }
 
   Uni<List<AwaitInteractionRecord>> queryPendingAwaitInteractions(
@@ -382,6 +390,10 @@ class QueueAsyncCoordinator {
                     return Uni.createFrom().voidItem();
                   }
                   ExecutionRecord<Object, Object> executionRecord = execution.get();
+                  if (executionRecord.status() != ExecutionStatus.WAITING_EXTERNAL
+                      || !record.interactionId().equals(executionRecord.awaitInteractionId())) {
+                    return Uni.createFrom().voidItem();
+                  }
                   return executionStateStore.markTerminalFailure(
                           executionRecord.tenantId(),
                           executionRecord.executionId(),
@@ -440,6 +452,22 @@ class QueueAsyncCoordinator {
     } catch (Exception e) {
       throw new IllegalStateException("Failed converting await response payload to " + record.outputType(), e);
     }
+  }
+
+  private Uni<Object> coerceAwaitPayloadAsync(AwaitInteractionRecord record) {
+    return Uni.createFrom().item(() -> coerceAwaitPayload(record))
+        .runSubscriptionOn(Infrastructure.getDefaultWorkerPool());
+  }
+
+  private Uni<AwaitCompletionResult> validateAwaitCompletionTenant(
+      AwaitCompletionResult result,
+      AwaitCompletionCommand command) {
+    if (!command.tenantId().equals(result.record().tenantId())) {
+      return Uni.createFrom().failure(new IllegalStateException(
+          "Await completion tenant mismatch: command tenant=" + command.tenantId()
+              + ", record tenant=" + result.record().tenantId()));
+    }
+    return Uni.createFrom().item(result);
   }
 
   private ExecutionStateStore selectExecutionStateStore(String providerName) {

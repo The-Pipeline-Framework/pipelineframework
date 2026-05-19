@@ -71,6 +71,10 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
         FieldSpec outputBusField = FieldSpec.builder(outputBus, "pipelineOutputBus", Modifier.PRIVATE)
             .addAnnotation(inject)
             .build();
+        FieldSpec defaultPendingAwaitLimitField = FieldSpec.builder(int.class, "DEFAULT_PENDING_AWAIT_LIMIT",
+                Modifier.PRIVATE, Modifier.STATIC, Modifier.FINAL)
+            .initializer("$L", 50)
+            .build();
 
         MethodSpec.Builder runMethod = MethodSpec.methodBuilder("run")
             .addModifiers(Modifier.PUBLIC)
@@ -233,7 +237,7 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
             .addParameter(ParameterSpec.builder(Integer.class, "limit")
                 .addAnnotation(AnnotationSpec.builder(queryParam).addMember("value", "$S", "limit").build())
                 .build())
-            .addStatement("return pipelineExecutionService.queryPendingAwaitInteractions(tenantId, assignee, group, stepId, limit == null ? 0 : limit).onItem().transform(records -> records.stream().map($T::toDto).toList())",
+            .addStatement("return pipelineExecutionService.queryPendingAwaitInteractions(tenantId, assignee, group, stepId, limit == null ? DEFAULT_PENDING_AWAIT_LIMIT : limit).onItem().transform(records -> records.stream().map($T::toDto).toList())",
                 awaitDtoMapper)
             .build();
 
@@ -253,6 +257,7 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
             .addModifiers(Modifier.PUBLIC)
             .addAnnotation(applicationScoped)
             .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/pipeline").build())
+            .addField(defaultPendingAwaitLimitField)
             .addField(executionField)
             .addField(outputBusField)
             .addMethod(runMethod.build())
