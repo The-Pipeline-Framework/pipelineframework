@@ -45,6 +45,7 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
         ClassName post = ClassName.get("jakarta.ws.rs", "POST");
         ClassName get = ClassName.get("jakarta.ws.rs", "GET");
         ClassName pathParam = ClassName.get("jakarta.ws.rs", "PathParam");
+        ClassName queryParam = ClassName.get("jakarta.ws.rs", "QueryParam");
         ClassName headerParam = ClassName.get("jakarta.ws.rs", "HeaderParam");
         ClassName consumes = ClassName.get("jakarta.ws.rs", "Consumes");
         ClassName produces = ClassName.get("jakarta.ws.rs", "Produces");
@@ -55,6 +56,11 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
         ClassName outputBus = ClassName.get("org.pipelineframework", "PipelineOutputBus");
         ClassName runAsyncAcceptedDto = ClassName.get("org.pipelineframework.orchestrator.dto", "RunAsyncAcceptedDto");
         ClassName executionStatusDto = ClassName.get("org.pipelineframework.orchestrator.dto", "ExecutionStatusDto");
+        ClassName awaitCompletionCommand = ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionCommand");
+        ClassName awaitCompletionRequestDto = ClassName.get("org.pipelineframework.awaitable.dto", "AwaitCompletionRequestDto");
+        ClassName awaitCompletionResponseDto = ClassName.get("org.pipelineframework.awaitable.dto", "AwaitCompletionResponseDto");
+        ClassName awaitInteractionDto = ClassName.get("org.pipelineframework.awaitable.dto", "AwaitInteractionDto");
+        ClassName awaitDtoMapper = ClassName.get("org.pipelineframework.awaitable.dto", "AwaitDtoMapper");
 
         ClassName inputType = ClassName.get(binding.basePackage() + ".common.dto", binding.inputTypeName() + "Dto");
         ClassName outputType = ClassName.get(binding.basePackage() + ".common.dto", binding.outputTypeName() + "Dto");
@@ -188,6 +194,50 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
                 binding.outputStreaming())
             .build();
 
+        MethodSpec completeAwaitMethod = MethodSpec.methodBuilder("completeAwait")
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(post)
+            .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/interactions/complete").build())
+            .returns(ParameterizedTypeName.get(uni, awaitCompletionResponseDto))
+            .addParameter(awaitCompletionRequestDto, "request")
+            .addParameter(ParameterSpec.builder(String.class, "tenantId")
+                .addAnnotation(AnnotationSpec.builder(headerParam)
+                    .addMember("value", "$S", "x-tenant-id")
+                    .build())
+                .build())
+            .addStatement("return pipelineExecutionService.completeAwaitInteraction(new $T(tenantId == null || tenantId.isBlank() ? $S : tenantId, request.interactionId(), request.correlationId(), request.idempotencyKey(), request.responsePayload(), request.actor(), $T.currentTimeMillis())).onItem().transform($T::toCompletionResponse)",
+                awaitCompletionCommand,
+                "default",
+                System.class,
+                awaitDtoMapper)
+            .build();
+
+        MethodSpec pendingAwaitMethod = MethodSpec.methodBuilder("pendingAwait")
+            .addModifiers(Modifier.PUBLIC)
+            .addAnnotation(get)
+            .addAnnotation(AnnotationSpec.builder(path).addMember("value", "$S", "/interactions/pending").build())
+            .returns(ParameterizedTypeName.get(uni, ParameterizedTypeName.get(ClassName.get(List.class), awaitInteractionDto)))
+            .addParameter(ParameterSpec.builder(String.class, "tenantId")
+                .addAnnotation(AnnotationSpec.builder(headerParam)
+                    .addMember("value", "$S", "x-tenant-id")
+                    .build())
+                .build())
+            .addParameter(ParameterSpec.builder(String.class, "assignee")
+                .addAnnotation(AnnotationSpec.builder(queryParam).addMember("value", "$S", "assignee").build())
+                .build())
+            .addParameter(ParameterSpec.builder(String.class, "group")
+                .addAnnotation(AnnotationSpec.builder(queryParam).addMember("value", "$S", "group").build())
+                .build())
+            .addParameter(ParameterSpec.builder(String.class, "stepId")
+                .addAnnotation(AnnotationSpec.builder(queryParam).addMember("value", "$S", "stepId").build())
+                .build())
+            .addParameter(ParameterSpec.builder(int.class, "limit")
+                .addAnnotation(AnnotationSpec.builder(queryParam).addMember("value", "$S", "limit").build())
+                .build())
+            .addStatement("return pipelineExecutionService.queryPendingAwaitInteractions(tenantId, assignee, group, stepId, limit).onItem().transform(records -> records.stream().map($T::toDto).toList())",
+                awaitDtoMapper)
+            .build();
+
         MethodSpec subscribeMethod = MethodSpec.methodBuilder("subscribe")
             .addModifiers(Modifier.PUBLIC)
             .addAnnotation(get)
@@ -211,6 +261,8 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
             .addMethod(ingestMethod)
             .addMethod(statusMethod)
             .addMethod(resultMethod)
+            .addMethod(completeAwaitMethod)
+            .addMethod(pendingAwaitMethod)
             .addMethod(subscribeMethod)
             .build();
 

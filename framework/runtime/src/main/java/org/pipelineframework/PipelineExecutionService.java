@@ -34,7 +34,13 @@ import lombok.Getter;
 import org.apache.commons.lang3.time.StopWatch;
 import org.jboss.logging.Logger;
 import org.pipelineframework.config.PipelineConfig;
+import org.pipelineframework.awaitable.AwaitCompletionCommand;
+import org.pipelineframework.awaitable.AwaitCompletionResult;
+import org.pipelineframework.awaitable.AwaitExecutionContext;
+import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
+import org.pipelineframework.awaitable.AwaitInteractionRecord;
 import org.pipelineframework.orchestrator.ExecutionWorkItem;
+import org.pipelineframework.orchestrator.ExecutionRecord;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
 import org.pipelineframework.orchestrator.dto.RunAsyncAcceptedDto;
 
@@ -65,6 +71,9 @@ public class PipelineExecutionService {
 
   @Inject
   ExecutionHooks executionHooks;
+
+  @Inject
+  ExecutionInputPolicy executionInputPolicy;
 
   @Inject
   QueueAsyncCoordinator queueAsyncCoordinator;
@@ -198,6 +207,25 @@ public class PipelineExecutionService {
   }
 
   /**
+   * Completes a durable await interaction and schedules owning execution continuation.
+   */
+  public Uni<AwaitCompletionResult> completeAwaitInteraction(AwaitCompletionCommand command) {
+    return queueAsyncCoordinator.completeAwait(command);
+  }
+
+  /**
+   * Queries pending durable await interactions.
+   */
+  public Uni<List<AwaitInteractionRecord>> queryPendingAwaitInteractions(
+      String tenantId,
+      String assignee,
+      String group,
+      String stepId,
+      int limit) {
+    return queueAsyncCoordinator.queryPendingAwaitInteractions(tenantId, assignee, group, stepId, limit);
+  }
+
+  /**
    * Handles queue-dispatched work items when using the local event dispatcher.
    */
   void onExecutionWork(@ObservesAsync ExecutionWorkItem workItem) {
@@ -216,7 +244,7 @@ public class PipelineExecutionService {
    * Processes one execution work item and advances lifecycle state.
    */
   public Uni<Void> processExecutionWorkItem(ExecutionWorkItem workItem) {
-    return queueAsyncCoordinator.processExecutionWorkItem(workItem, this::executePipelineStreaming);
+    return queueAsyncCoordinator.processExecutionWorkItem(workItem, this::executePipelineStreamingFromRecord);
   }
 
   /**
@@ -279,6 +307,47 @@ public class PipelineExecutionService {
             MessageFormat.format("PipelineRunner returned unexpected type: {0}", result.getClass().getName())));
       }
     });
+  }
+
+  private Multi<?> executePipelineStreamingFromRecord(ExecutionRecord<Object, Object> record) {
+    Object sourcePayload = record.currentStepIndex() > 0
+        ? record.resumePayload()
+        : record.inputPayload();
+    Object reactiveInput = executionInputPolicy.toReplayInput(sourcePayload);
+    AwaitExecutionContext previous = AwaitExecutionContextHolder.get();
+    AwaitExecutionContextHolder.set(new AwaitExecutionContext(
+        record.tenantId(),
+        record.executionId(),
+        record.currentStepIndex()));
+    try {
+      Object result = executePipelineStreamingInternalFromStep(reactiveInput, record.currentStepIndex());
+      if (result instanceof Multi<?> multi) {
+        return multi;
+      }
+      if (result instanceof Uni<?> uni) {
+        return uni.toMulti();
+      }
+      return Multi.createFrom().failure(new IllegalStateException("Pipeline runner returned unsupported result"));
+    } finally {
+      if (previous == null) {
+        AwaitExecutionContextHolder.clear();
+      } else {
+        AwaitExecutionContextHolder.set(previous);
+      }
+    }
+  }
+
+  private Object executePipelineStreamingInternalFromStep(Object input, int startStepIndex) {
+    StopWatch watch = new StopWatch();
+    List<Object> steps = loadStepsForExecution();
+    if (steps == null) {
+      return Multi.createFrom().failure(new IllegalStateException("Pipeline steps could not be loaded."));
+    }
+    watch.start();
+    Object result = pipelineRunner.runFromStep(input, steps, startStepIndex);
+    watch.stop();
+    LOG.infof("Pipeline execution assembled from step %d in %d ms", startStepIndex, watch.getTime());
+    return result;
   }
 
   private Uni<?> executePipelineUnaryInternal(Object input) {

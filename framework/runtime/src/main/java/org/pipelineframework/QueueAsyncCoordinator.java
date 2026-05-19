@@ -22,6 +22,12 @@ import io.smallrye.mutiny.Multi;
 import io.smallrye.mutiny.Uni;
 import org.jboss.logging.Logger;
 import org.pipelineframework.checkpoint.CheckpointPublicationService;
+import org.pipelineframework.config.pipeline.PipelineJson;
+import org.pipelineframework.awaitable.AwaitCompletionCommand;
+import org.pipelineframework.awaitable.AwaitCompletionResult;
+import org.pipelineframework.awaitable.AwaitCoordinator;
+import org.pipelineframework.awaitable.AwaitInteractionRecord;
+import org.pipelineframework.awaitable.AwaitSuspendedException;
 import org.pipelineframework.orchestrator.CreateExecutionResult;
 import org.pipelineframework.orchestrator.DeadLetterPublisher;
 import org.pipelineframework.orchestrator.ExecutionCreateCommand;
@@ -64,6 +70,9 @@ class QueueAsyncCoordinator {
 
   @Inject
   CheckpointPublicationService checkpointPublicationService;
+
+  @Inject
+  AwaitCoordinator awaitCoordinator;
 
   private final ScheduledExecutorService queueSweepExecutor = Executors.newSingleThreadScheduledExecutor(
       runnable -> {
@@ -228,7 +237,7 @@ class QueueAsyncCoordinator {
         });
   }
 
-  Uni<Void> processExecutionWorkItem(ExecutionWorkItem workItem, Function<Object, Multi<?>> executeStreaming) {
+  Uni<Void> processExecutionWorkItem(ExecutionWorkItem workItem, Function<ExecutionRecord<Object, Object>, Multi<?>> executeStreaming) {
     if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC || workItem == null) {
       return Uni.createFrom().voidItem();
     }
@@ -245,7 +254,7 @@ class QueueAsyncCoordinator {
           }
           ExecutionRecord<Object, Object> record = claimed.get();
           String transitionKey = transitionKey(record.executionId(), record.currentStepIndex(), record.attempt());
-          return runAsyncExecution(record.inputPayload(), executeStreaming)
+          return runAsyncExecution(record, executeStreaming)
               .onItem().transformToUni(resultPayload -> checkpointPublicationService
                   .publishIfConfigured(record, singleResult(resultPayload))
                   .replaceWith(resultPayload))
@@ -257,6 +266,8 @@ class QueueAsyncCoordinator {
                       resultPayload,
                       System.currentTimeMillis()))
               .onItem().transformToUni(updated -> Uni.createFrom().voidItem())
+              .onFailure(AwaitSuspendedException.class).recoverWithUni(
+                  failure -> markWaitingExternal(record, (AwaitSuspendedException) failure, transitionKey))
               .onFailure().recoverWithUni(
                   failure -> executionFailureHandler.handleExecutionFailure(
                       record,
@@ -273,7 +284,8 @@ class QueueAsyncCoordinator {
       return;
     }
     long now = System.currentTimeMillis();
-    executionStateStore.findDueExecutions(now, orchestratorConfig.sweepLimit())
+    sweepTimedOutAwaitInteractions(now)
+        .onItem().transformToUni(ignored -> executionStateStore.findDueExecutions(now, orchestratorConfig.sweepLimit()))
         .onItem().transformToUni(due -> {
           if (due.isEmpty()) {
             return Uni.createFrom().voidItem();
@@ -294,9 +306,97 @@ class QueueAsyncCoordinator {
             failure -> LOG.errorf(failure, "Failed sweeping due async executions"));
   }
 
-  private Uni<List<?>> runAsyncExecution(Object inputPayload, Function<Object, Multi<?>> executeStreaming) {
-    Object reactiveInput = executionInputPolicy.toReplayInput(inputPayload);
-    return executeStreaming.apply(reactiveInput)
+  Uni<AwaitCompletionResult> completeAwait(AwaitCompletionCommand command) {
+    if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
+      return Uni.createFrom().failure(new IllegalStateException(
+          "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
+    }
+    return awaitCoordinator.complete(command)
+        .onItem().transformToUni(result -> executionStateStore.markAwaitCompleted(
+                result.record().tenantId(),
+                result.record().executionId(),
+                result.record().interactionId(),
+                coerceAwaitPayload(result.record()),
+                result.record().stepIndex() + 1,
+                command.nowEpochMs())
+            .onItem().transformToUni(updated -> {
+              if (updated.isPresent()) {
+                return workDispatcher.enqueueNow(new ExecutionWorkItem(
+                        updated.get().tenantId(),
+                        updated.get().executionId()))
+                    .replaceWith(result);
+              }
+              return Uni.createFrom().item(result);
+            }));
+  }
+
+  Uni<List<AwaitInteractionRecord>> queryPendingAwaitInteractions(
+      String tenantId,
+      String assignee,
+      String group,
+      String stepId,
+      int limit) {
+    if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
+      return Uni.createFrom().failure(new IllegalStateException(
+          "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
+    }
+    String resolvedTenant = executionInputPolicy.normalizeTenant(tenantId);
+    return awaitCoordinator.queryPending(resolvedTenant, assignee, group, stepId, limit <= 0 ? 100 : limit);
+  }
+
+  private Uni<Void> markWaitingExternal(
+      ExecutionRecord<Object, Object> record,
+      AwaitSuspendedException suspended,
+      String transitionKey) {
+    return executionStateStore.markWaitingExternal(
+            record.tenantId(),
+            record.executionId(),
+            record.version(),
+            transitionKey,
+            suspended.interactionId(),
+            suspended.stepIndex(),
+            System.currentTimeMillis())
+        .replaceWithVoid();
+  }
+
+  private Uni<Void> sweepTimedOutAwaitInteractions(long now) {
+    if (awaitCoordinator == null) {
+      return Uni.createFrom().voidItem();
+    }
+    return awaitCoordinator.findTimedOut(now, orchestratorConfig.sweepLimit())
+        .onItem().transformToUni(records -> {
+          if (records.isEmpty()) {
+            return Uni.createFrom().voidItem();
+          }
+          List<Uni<Void>> operations = new ArrayList<>(records.size());
+          for (AwaitInteractionRecord record : records) {
+            operations.add(awaitCoordinator.markTimedOut(record, now)
+                .onItem().transformToUni(updated -> executionStateStore.getExecution(record.tenantId(), record.executionId()))
+                .onItem().transformToUni(execution -> {
+                  if (execution.isEmpty() || execution.get().status().terminal()) {
+                    return Uni.createFrom().voidItem();
+                  }
+                  ExecutionRecord<Object, Object> executionRecord = execution.get();
+                  return executionStateStore.markTerminalFailure(
+                          executionRecord.tenantId(),
+                          executionRecord.executionId(),
+                          executionRecord.version(),
+                          ExecutionStatus.FAILED,
+                          transitionKey(executionRecord.executionId(), executionRecord.currentStepIndex(), executionRecord.attempt()),
+                          "AWAIT_TIMEOUT",
+                          "Await interaction timed out: " + record.interactionId(),
+                          now)
+                      .replaceWithVoid();
+                }));
+          }
+          return Uni.join().all(operations).andCollectFailures().replaceWithVoid();
+        });
+  }
+
+  private Uni<List<?>> runAsyncExecution(
+      ExecutionRecord<Object, Object> record,
+      Function<ExecutionRecord<Object, Object>, Multi<?>> executeStreaming) {
+    return executeStreaming.apply(record)
         .select().first(2)
         .collect().asList()
         .onItem().transformToUni(items -> {
@@ -313,6 +413,25 @@ class QueueAsyncCoordinator {
       return null;
     }
     return items.getFirst();
+  }
+
+  private Object coerceAwaitPayload(AwaitInteractionRecord record) {
+    Object payload = record.responsePayload();
+    if (payload == null || record.outputType() == null || record.outputType().isBlank()) {
+      return payload;
+    }
+    try {
+      Class<?> outputType = Class.forName(record.outputType());
+      if (outputType.isInstance(payload)) {
+        return payload;
+      }
+      if (payload instanceof String json && (json.startsWith("{") || json.startsWith("["))) {
+        return PipelineJson.mapper().readValue(json, outputType);
+      }
+      return PipelineJson.mapper().convertValue(payload, outputType);
+    } catch (Exception e) {
+      throw new IllegalStateException("Failed converting await response payload to " + record.outputType(), e);
+    }
   }
 
   private ExecutionStateStore selectExecutionStateStore(String providerName) {

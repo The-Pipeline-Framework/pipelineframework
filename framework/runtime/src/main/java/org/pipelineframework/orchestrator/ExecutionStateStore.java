@@ -97,6 +97,33 @@ public interface ExecutionStateStore {
         long nowEpochMs);
 
     /**
+     * Marks an execution as durably waiting on an external await interaction.
+     */
+    default Uni<Optional<ExecutionRecord<Object, Object>>> markWaitingExternal(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        String transitionKey,
+        String awaitInteractionId,
+        int awaitStepIndex,
+        long nowEpochMs) {
+        return Uni.createFrom().failure(new UnsupportedOperationException("markWaitingExternal is not implemented"));
+    }
+
+    /**
+     * Stores a completed await payload and makes the execution due for continuation.
+     */
+    default Uni<Optional<ExecutionRecord<Object, Object>>> markAwaitCompleted(
+        String tenantId,
+        String executionId,
+        String awaitInteractionId,
+        Object resumePayload,
+        int nextStepIndex,
+        long nowEpochMs) {
+        return Uni.createFrom().failure(new UnsupportedOperationException("markAwaitCompleted is not implemented"));
+    }
+
+    /**
      * Schedules a retry if expected version matches.
      *
      * @param tenantId tenant identifier

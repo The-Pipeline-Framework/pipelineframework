@@ -68,6 +68,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     null,
                     null,
                     null,
+                    null,
+                    null,
                     command.nowEpochMs(),
                     command.nowEpochMs(),
                     command.ttlEpochS());
@@ -101,7 +103,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
             synchronized (lock) {
                 String scopedId = scopedExecutionId(tenantId, executionId);
                 ExecutionRecord<Object, Object> current = getActiveRecord(scopedId, nowEpochMs);
-                if (current == null || current.status().terminal()) {
+                if (current == null || current.status().terminal() || current.status() == ExecutionStatus.WAITING_EXTERNAL) {
                     return Optional.empty();
                 }
                 boolean leaseExpired = current.leaseOwner() == null || current.leaseExpiresEpochMs() <= nowEpochMs;
@@ -122,6 +124,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     current.nextDueEpochMs(),
                     current.lastTransitionKey(),
                     current.inputPayload(),
+                    current.awaitInteractionId(),
+                    current.resumePayload(),
                     current.resultPayload(),
                     current.errorCode(),
                     current.errorMessage(),
@@ -162,7 +166,97 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     nowEpochMs,
                     transitionKey,
                     current.inputPayload(),
+                    null,
+                    null,
                     resultPayload,
+                    null,
+                    null,
+                    current.createdAtEpochMs(),
+                    nowEpochMs,
+                    current.ttlEpochS());
+                executionsByScopedId.put(scopedId, updated);
+                return Optional.of(updated);
+            }
+        });
+    }
+
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markWaitingExternal(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        String transitionKey,
+        String awaitInteractionId,
+        int awaitStepIndex,
+        long nowEpochMs) {
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                String scopedId = scopedExecutionId(tenantId, executionId);
+                ExecutionRecord<Object, Object> current = getActiveRecord(scopedId, nowEpochMs);
+                if (current == null || current.version() != expectedVersion) {
+                    return Optional.empty();
+                }
+                ExecutionRecord<Object, Object> updated = new ExecutionRecord<>(
+                    current.tenantId(),
+                    current.executionId(),
+                    current.executionKey(),
+                    ExecutionStatus.WAITING_EXTERNAL,
+                    current.version() + 1,
+                    awaitStepIndex,
+                    current.attempt(),
+                    null,
+                    0L,
+                    Long.MAX_VALUE,
+                    transitionKey,
+                    current.inputPayload(),
+                    awaitInteractionId,
+                    null,
+                    null,
+                    null,
+                    null,
+                    current.createdAtEpochMs(),
+                    nowEpochMs,
+                    current.ttlEpochS());
+                executionsByScopedId.put(scopedId, updated);
+                return Optional.of(updated);
+            }
+        });
+    }
+
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markAwaitCompleted(
+        String tenantId,
+        String executionId,
+        String awaitInteractionId,
+        Object resumePayload,
+        int nextStepIndex,
+        long nowEpochMs) {
+        return Uni.createFrom().item(() -> {
+            synchronized (lock) {
+                String scopedId = scopedExecutionId(tenantId, executionId);
+                ExecutionRecord<Object, Object> current = getActiveRecord(scopedId, nowEpochMs);
+                if (current == null || current.status().terminal()) {
+                    return Optional.empty();
+                }
+                if (current.awaitInteractionId() != null && !current.awaitInteractionId().equals(awaitInteractionId)) {
+                    return Optional.empty();
+                }
+                ExecutionRecord<Object, Object> updated = new ExecutionRecord<>(
+                    current.tenantId(),
+                    current.executionId(),
+                    current.executionKey(),
+                    ExecutionStatus.QUEUED,
+                    current.version() + 1,
+                    nextStepIndex,
+                    current.attempt(),
+                    null,
+                    0L,
+                    nowEpochMs,
+                    current.lastTransitionKey(),
+                    current.inputPayload(),
+                    awaitInteractionId,
+                    resumePayload,
+                    null,
                     null,
                     null,
                     current.createdAtEpochMs(),
@@ -205,6 +299,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     nextDueEpochMs,
                     transitionKey,
                     current.inputPayload(),
+                    null,
+                    null,
                     null,
                     errorCode,
                     truncate(errorMessage),
@@ -250,6 +346,8 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     nowEpochMs,
                     transitionKey,
                     current.inputPayload(),
+                    current.awaitInteractionId(),
+                    current.resumePayload(),
                     null,
                     errorCode,
                     truncate(errorMessage),
@@ -276,7 +374,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                         executionIdByScopedKey.remove(scopedExecutionKey(record.tenantId(), record.executionKey()));
                         continue;
                     }
-                    if (record.status().terminal()) {
+                    if (record.status().terminal() || record.status() == ExecutionStatus.WAITING_EXTERNAL) {
                         continue;
                     }
                     boolean dueNow = record.nextDueEpochMs() <= nowEpochMs;

@@ -31,6 +31,10 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         OrchestratorRpcConstants.GET_EXECUTION_STATUS_METHOD;
     private static final String ORCHESTRATOR_GET_EXECUTION_RESULT_METHOD =
         OrchestratorRpcConstants.GET_EXECUTION_RESULT_METHOD;
+    private static final String ORCHESTRATOR_COMPLETE_AWAIT_METHOD =
+        OrchestratorRpcConstants.COMPLETE_AWAIT_METHOD;
+    private static final String ORCHESTRATOR_LIST_PENDING_AWAIT_METHOD =
+        OrchestratorRpcConstants.LIST_PENDING_AWAIT_METHOD;
     private static final String ORCHESTRATOR_INGEST_METHOD = OrchestratorRpcConstants.INGEST_METHOD;
     private static final String ORCHESTRATOR_SUBSCRIBE_METHOD = OrchestratorRpcConstants.SUBSCRIBE_METHOD;
 
@@ -98,6 +102,10 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
             binding, descriptorSet, ctx, ORCHESTRATOR_GET_EXECUTION_STATUS_METHOD, false, false);
         var resultBinding = safeResolveBinding(
             binding, descriptorSet, ctx, ORCHESTRATOR_GET_EXECUTION_RESULT_METHOD, false, false);
+        var completeAwaitBinding = safeResolveBinding(
+            binding, descriptorSet, ctx, ORCHESTRATOR_COMPLETE_AWAIT_METHOD, false, false);
+        var listPendingAwaitBinding = safeResolveBinding(
+            binding, descriptorSet, ctx, ORCHESTRATOR_LIST_PENDING_AWAIT_METHOD, false, false);
 
         FieldSpec executionField = FieldSpec.builder(executionService, "pipelineExecutionService", Modifier.PRIVATE)
             .addAnnotation(inject)
@@ -280,6 +288,8 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
             resultBinding,
             outputType,
             uni);
+        MethodSpec completeAwaitMethod = buildCompleteAwaitMethod(typeResolver, ctx, completeAwaitBinding, uni);
+        MethodSpec listPendingAwaitMethod = buildListPendingAwaitMethod(typeResolver, ctx, listPendingAwaitBinding, uni);
 
         TypeSpec.Builder serviceBuilder = TypeSpec.classBuilder(GRPC_CLASS)
             .addModifiers(Modifier.PUBLIC)
@@ -298,6 +308,12 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
         }
         if (executionResultMethod != null) {
             serviceBuilder.addMethod(executionResultMethod);
+        }
+        if (completeAwaitMethod != null) {
+            serviceBuilder.addMethod(completeAwaitMethod);
+        }
+        if (listPendingAwaitMethod != null) {
+            serviceBuilder.addMethod(listPendingAwaitMethod);
         }
 
         TypeSpec service = serviceBuilder.build();
@@ -616,5 +632,124 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
                 ClassName.get("io.grpc", "Status"));
         }
         return method.build();
+    }
+
+    private MethodSpec buildCompleteAwaitMethod(
+        GrpcJavaTypeResolver typeResolver,
+        GenerationContext ctx,
+        org.pipelineframework.processor.ir.GrpcBinding completeAwaitBinding,
+        ClassName uni
+    ) {
+        if (completeAwaitBinding == null) {
+            return null;
+        }
+        var types = typeResolver.resolve(completeAwaitBinding, ctx.processingEnv().getMessager());
+        ClassName requestType = types.grpcParameterType();
+        ClassName responseType = types.grpcReturnType();
+        if (requestType == null || responseType == null) {
+            return null;
+        }
+        ClassName command = ClassName.get("org.pipelineframework.awaitable", "AwaitCompletionCommand");
+        return MethodSpec.methodBuilder("completeAwait")
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(ParameterizedTypeName.get(uni, responseType))
+            .addParameter(requestType, "request")
+            .addStatement("long startTime = System.nanoTime()")
+            .addCode("""
+                return pipelineExecutionService.completeAwaitInteraction(new $T(
+                        request.getTenantId(),
+                        request.getInteractionId(),
+                        request.getCorrelationId(),
+                        request.getIdempotencyKey(),
+                        request.getResponseJson(),
+                        request.getActor(),
+                        $T.currentTimeMillis()))
+                    .onItem().transform(result -> $T.newBuilder()
+                        .setInteractionId(result.record().interactionId())
+                        .setExecutionId(result.record().executionId())
+                        .setStepId(result.record().stepId())
+                        .setStatus(result.record().status().name())
+                        .setDuplicate(result.duplicate())
+                        .build())
+                    .onItem().invoke(item -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime))
+                    .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
+                        System.nanoTime() - startTime));
+                """,
+                command,
+                System.class,
+                responseType,
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_COMPLETE_AWAIT_METHOD,
+                ClassName.get("io.grpc", "Status"),
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_COMPLETE_AWAIT_METHOD,
+                ClassName.get("io.grpc", "Status"))
+            .build();
+    }
+
+    private MethodSpec buildListPendingAwaitMethod(
+        GrpcJavaTypeResolver typeResolver,
+        GenerationContext ctx,
+        org.pipelineframework.processor.ir.GrpcBinding listPendingAwaitBinding,
+        ClassName uni
+    ) {
+        if (listPendingAwaitBinding == null) {
+            return null;
+        }
+        var types = typeResolver.resolve(listPendingAwaitBinding, ctx.processingEnv().getMessager());
+        ClassName requestType = types.grpcParameterType();
+        ClassName responseType = types.grpcReturnType();
+        if (requestType == null || responseType == null) {
+            return null;
+        }
+        return MethodSpec.methodBuilder("listPendingAwait")
+            .addAnnotation(Override.class)
+            .addModifiers(Modifier.PUBLIC)
+            .returns(ParameterizedTypeName.get(uni, responseType))
+            .addParameter(requestType, "request")
+            .addStatement("long startTime = System.nanoTime()")
+            .addCode("""
+                return pipelineExecutionService.queryPendingAwaitInteractions(
+                        request.getTenantId(),
+                        request.getAssignee(),
+                        request.getGroup(),
+                        request.getStepId(),
+                        request.getLimit())
+                    .onItem().transform(records -> {
+                        $T.Builder builder = $T.newBuilder();
+                        for (var record : records) {
+                            builder.addInteractionsBuilder()
+                                .setInteractionId(record.interactionId())
+                                .setCorrelationId(record.correlationId())
+                                .setExecutionId(record.executionId())
+                                .setStepId(record.stepId())
+                                .setStepIndex(record.stepIndex())
+                                .setOutputType(record.outputType())
+                                .setStatus(record.status().name())
+                                .setTransportType(record.transportType())
+                                .setDeadlineEpochMs(record.deadlineEpochMs())
+                                .setCreatedAtEpochMs(record.createdAtEpochMs())
+                                .setUpdatedAtEpochMs(record.updatedAtEpochMs());
+                        }
+                        return builder.build();
+                    })
+                    .onItem().invoke(item -> $T.recordGrpcServer($S, $S, $T.OK, System.nanoTime() - startTime))
+                    .onFailure().invoke(failure -> $T.recordGrpcServer($S, $S, $T.fromThrowable(failure),
+                        System.nanoTime() - startTime));
+                """,
+                responseType,
+                responseType,
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_LIST_PENDING_AWAIT_METHOD,
+                ClassName.get("io.grpc", "Status"),
+                ClassName.get("org.pipelineframework.telemetry", "RpcMetrics"),
+                ORCHESTRATOR_SERVICE,
+                ORCHESTRATOR_LIST_PENDING_AWAIT_METHOD,
+                ClassName.get("io.grpc", "Status"))
+            .build();
     }
 }

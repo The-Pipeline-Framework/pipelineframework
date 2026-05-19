@@ -6,6 +6,7 @@ package org.pipelineframework.orchestrator;
 public enum ExecutionStatus {
     QUEUED,
     RUNNING,
+    WAITING_EXTERNAL,
     WAIT_RETRY,
     SUCCEEDED,
     FAILED,

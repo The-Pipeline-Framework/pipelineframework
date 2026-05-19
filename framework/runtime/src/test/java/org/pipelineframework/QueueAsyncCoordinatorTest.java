@@ -29,6 +29,12 @@ import org.pipelineframework.orchestrator.PipelineOrchestratorConfig;
 import org.pipelineframework.orchestrator.WorkDispatcher;
 import org.pipelineframework.orchestrator.DynamoExecutionStateStore;
 import org.pipelineframework.orchestrator.dto.ExecutionStatusDto;
+import org.pipelineframework.awaitable.AwaitCompletionCommand;
+import org.pipelineframework.awaitable.AwaitCompletionResult;
+import org.pipelineframework.awaitable.AwaitCoordinator;
+import org.pipelineframework.awaitable.AwaitInteractionRecord;
+import org.pipelineframework.awaitable.AwaitInteractionStatus;
+import org.pipelineframework.awaitable.AwaitSuspendedException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -59,6 +65,9 @@ class QueueAsyncCoordinatorTest {
     private DeadLetterPublisher deadLetterPublisher;
 
     @Mock
+    private AwaitCoordinator awaitCoordinator;
+
+    @Mock
     private Instance<ExecutionStateStore> executionStateStores;
 
     @Mock
@@ -80,6 +89,7 @@ class QueueAsyncCoordinatorTest {
         coordinator.executionStateStore = executionStateStore;
         coordinator.workDispatcher = workDispatcher;
         coordinator.deadLetterPublisher = deadLetterPublisher;
+        coordinator.awaitCoordinator = awaitCoordinator;
         coordinator.executionStateStores = executionStateStores;
         coordinator.workDispatchers = workDispatchers;
         coordinator.deadLetterPublishers = deadLetterPublishers;
@@ -201,6 +211,8 @@ class QueueAsyncCoordinatorTest {
     void sweepRedispatchesPersistedDueExecutions() {
         when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
         when(orchestratorConfig.sweepLimit()).thenReturn(100);
+        when(awaitCoordinator.findTimedOut(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.eq(100)))
+            .thenReturn(Uni.createFrom().item(java.util.List.of()));
         when(executionStateStore.findDueExecutions(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyInt()))
             .thenReturn(Uni.createFrom().item(java.util.List.of(
                 createRecord("tenant-a", "exec-5", "key-5"),
@@ -211,6 +223,138 @@ class QueueAsyncCoordinatorTest {
 
         ArgumentCaptor<ExecutionWorkItem> itemCaptor = ArgumentCaptor.forClass(ExecutionWorkItem.class);
         verify(workDispatcher, timeout(500).times(2)).enqueueNow(itemCaptor.capture());
+    }
+
+    @Test
+    void processExecutionWorkItemMarksWaitingExternalWhenAwaitSuspends() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.leaseMs()).thenReturn(1000L);
+        ExecutionRecord<Object, Object> claimed = createRecord("tenant-1", "exec-await", "key-await");
+        when(executionStateStore.claimLease(any(), any(), any(), org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+        when(executionStateStore.markWaitingExternal(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-await"),
+                org.mockito.ArgumentMatchers.eq(0L),
+                org.mockito.ArgumentMatchers.eq("exec-await:0:0"),
+                org.mockito.ArgumentMatchers.eq("interaction-1"),
+                org.mockito.ArgumentMatchers.eq(0),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(claimed)));
+
+        coordinator.processExecutionWorkItem(
+                new ExecutionWorkItem("tenant-1", "exec-await"),
+                record -> Multi.createFrom().failure(new AwaitSuspendedException(
+                    "tenant-1",
+                    "exec-await",
+                    "interaction-1",
+                    0)))
+            .await().indefinitely();
+
+        verify(executionStateStore).markWaitingExternal(
+            org.mockito.ArgumentMatchers.eq("tenant-1"),
+            org.mockito.ArgumentMatchers.eq("exec-await"),
+            org.mockito.ArgumentMatchers.eq(0L),
+            org.mockito.ArgumentMatchers.eq("exec-await:0:0"),
+            org.mockito.ArgumentMatchers.eq("interaction-1"),
+            org.mockito.ArgumentMatchers.eq(0),
+            org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test
+    void completeAwaitStoresResumePayloadAndEnqueuesExecution() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        AwaitInteractionRecord interaction = awaitRecord();
+        AwaitCompletionCommand command = new AwaitCompletionCommand(
+            "tenant-1",
+            "interaction-1",
+            null,
+            null,
+            java.util.Map.of("value", "approved"),
+            "user-1",
+            System.currentTimeMillis());
+        when(awaitCoordinator.complete(command))
+            .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(interaction, false)));
+        ExecutionRecord<Object, Object> resumed = createRecord("tenant-1", "exec-1", "key-1");
+        when(executionStateStore.markAwaitCompleted(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-1"),
+                org.mockito.ArgumentMatchers.eq("interaction-1"),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.eq(3),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(resumed)));
+        when(workDispatcher.enqueueNow(any())).thenReturn(Uni.createFrom().voidItem());
+
+        AwaitCompletionResult result = coordinator.completeAwait(command).await().indefinitely();
+
+        assertEquals("interaction-1", result.record().interactionId());
+        ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(executionStateStore).markAwaitCompleted(
+            org.mockito.ArgumentMatchers.eq("tenant-1"),
+            org.mockito.ArgumentMatchers.eq("exec-1"),
+            org.mockito.ArgumentMatchers.eq("interaction-1"),
+            payloadCaptor.capture(),
+            org.mockito.ArgumentMatchers.eq(3),
+            org.mockito.ArgumentMatchers.anyLong());
+        assertEquals(new Decision("approved"), payloadCaptor.getValue());
+        verify(workDispatcher).enqueueNow(new ExecutionWorkItem("tenant-1", "exec-1"));
+    }
+
+    @Test
+    void sweepTimesOutAwaitInteractionsAndFailsOwningExecution() {
+        when(orchestratorConfig.mode()).thenReturn(OrchestratorMode.QUEUE_ASYNC);
+        when(orchestratorConfig.sweepLimit()).thenReturn(100);
+        AwaitInteractionRecord interaction = awaitRecord();
+        ExecutionRecord<Object, Object> waiting = new ExecutionRecord<>(
+            "tenant-1",
+            "exec-1",
+            "key-1",
+            ExecutionStatus.WAITING_EXTERNAL,
+            7L,
+            2,
+            0,
+            null,
+            0L,
+            0L,
+            null,
+            "input",
+            "interaction-1",
+            null,
+            null,
+            1L,
+            1L,
+            99999999L);
+        when(awaitCoordinator.findTimedOut(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.eq(100)))
+            .thenReturn(Uni.createFrom().item(java.util.List.of(interaction)));
+        when(awaitCoordinator.markTimedOut(org.mockito.ArgumentMatchers.eq(interaction), org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(interaction)));
+        when(executionStateStore.getExecution("tenant-1", "exec-1"))
+            .thenReturn(Uni.createFrom().item(Optional.of(waiting)));
+        when(executionStateStore.markTerminalFailure(
+                org.mockito.ArgumentMatchers.eq("tenant-1"),
+                org.mockito.ArgumentMatchers.eq("exec-1"),
+                org.mockito.ArgumentMatchers.eq(7L),
+                org.mockito.ArgumentMatchers.eq(ExecutionStatus.FAILED),
+                org.mockito.ArgumentMatchers.eq("exec-1:2:0"),
+                org.mockito.ArgumentMatchers.eq("AWAIT_TIMEOUT"),
+                org.mockito.ArgumentMatchers.contains("interaction-1"),
+                org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(Uni.createFrom().item(Optional.of(waiting)));
+        when(executionStateStore.findDueExecutions(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.eq(100)))
+            .thenReturn(Uni.createFrom().item(java.util.List.of()));
+
+        coordinator.sweepDueExecutions();
+
+        verify(executionStateStore, timeout(500)).markTerminalFailure(
+            org.mockito.ArgumentMatchers.eq("tenant-1"),
+            org.mockito.ArgumentMatchers.eq("exec-1"),
+            org.mockito.ArgumentMatchers.eq(7L),
+            org.mockito.ArgumentMatchers.eq(ExecutionStatus.FAILED),
+            org.mockito.ArgumentMatchers.eq("exec-1:2:0"),
+            org.mockito.ArgumentMatchers.eq("AWAIT_TIMEOUT"),
+            org.mockito.ArgumentMatchers.contains("interaction-1"),
+            org.mockito.ArgumentMatchers.anyLong());
     }
 
     private void configureQueueModeDefaults() {
@@ -239,5 +383,34 @@ class QueueAsyncCoordinatorTest {
             1L,
             1L,
             99999999L);
+    }
+
+    private AwaitInteractionRecord awaitRecord() {
+        return new AwaitInteractionRecord(
+            "tenant-1",
+            "exec-1",
+            "ProcessApprovalService",
+            2,
+            Decision.class.getName(),
+            "interaction-1",
+            "corr-1",
+            "cause-1",
+            "idem-1",
+            1L,
+            AwaitInteractionStatus.COMPLETED,
+            java.util.Map.of("value", "request"),
+            java.util.Map.of("value", "approved"),
+            "user-1",
+            null,
+            null,
+            "interaction-api",
+            java.util.Map.of(),
+            System.currentTimeMillis() + 1000,
+            1L,
+            2L,
+            99999999L);
+    }
+
+    private record Decision(String value) {
     }
 }
