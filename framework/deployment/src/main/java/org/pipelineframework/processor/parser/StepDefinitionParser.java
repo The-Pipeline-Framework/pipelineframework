@@ -501,6 +501,26 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
+        Object correlationObj = awaitMap.get("correlation");
+        if (correlationObj instanceof Map<?, ?> correlationMap) {
+            String strategy = stringValue(correlationMap.get("strategy"));
+            if (isBlank(strategy)) {
+                String message = "Skipping step '" + stepName + "': await.correlation.strategy must be declared";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+        } else if (correlationObj != null) {
+            String message = "Skipping step '" + stepName + "': await.correlation.strategy must be declared";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        } else {
+            String message = "Skipping step '" + stepName + "': await.correlation.strategy must be declared";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
         return (Map<String, Object>) normalizeMap(awaitMap);
     }
 

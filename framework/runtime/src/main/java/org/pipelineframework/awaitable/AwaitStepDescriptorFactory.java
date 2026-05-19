@@ -3,7 +3,10 @@ package org.pipelineframework.awaitable;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import org.pipelineframework.config.pipeline.PipelineYamlConfig;
@@ -17,15 +20,30 @@ import org.pipelineframework.config.pipeline.PipelineYamlStep;
 @ApplicationScoped
 public class AwaitStepDescriptorFactory {
     private final Map<String, AwaitStepDescriptor> descriptors = new ConcurrentHashMap<>();
+    private final Executor blockingExecutor = Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r);
+        t.setDaemon(true);
+        t.setName("await-descriptor-loader");
+        return t;
+    });
 
     /**
      * Resolves the descriptor for a generated await step.
      */
     public AwaitStepDescriptor descriptor(String serviceName, String inputType, String outputType) {
-        return descriptors.computeIfAbsent(serviceName, key -> loadDescriptor(key, inputType, outputType));
+        AwaitStepDescriptor cached = descriptors.get(serviceName);
+        if (cached != null) {
+            return cached;
+        }
+        return CompletableFuture.supplyAsync(() -> loadDescriptor(serviceName, inputType, outputType), blockingExecutor)
+            .join();
     }
 
     private AwaitStepDescriptor loadDescriptor(String serviceName, String inputType, String outputType) {
+        AwaitStepDescriptor existing = descriptors.get(serviceName);
+        if (existing != null) {
+            return existing;
+        }
         Path base = Path.of("").toAbsolutePath();
         Path configPath = new PipelineYamlConfigLocator().locate(base)
             .orElseThrow(() -> new IllegalStateException("No pipeline YAML found for await step " + serviceName));
@@ -58,7 +76,7 @@ public class AwaitStepDescriptorFactory {
         } catch (java.time.format.DateTimeParseException ex) {
             throw new IllegalArgumentException("Await step " + serviceName + " has invalid timeout format: " + step.timeout(), ex);
         }
-        return new AwaitStepDescriptor(
+        AwaitStepDescriptor descriptor = new AwaitStepDescriptor(
             serviceName,
             inputType,
             outputType,
@@ -67,6 +85,8 @@ public class AwaitStepDescriptorFactory {
             step.awaitConfig().transport().type(),
             step.awaitConfig().transport().config(),
             step.idempotencyKeyFields());
+        descriptors.putIfAbsent(serviceName, descriptor);
+        return descriptor;
     }
 
     private static String toServiceName(String stepName) {

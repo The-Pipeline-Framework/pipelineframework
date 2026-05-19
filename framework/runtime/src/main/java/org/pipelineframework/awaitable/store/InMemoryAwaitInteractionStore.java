@@ -118,6 +118,7 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
         long expectedVersion,
         Map<String, Object> transportMetadata,
         long nowEpochMs) {
+        Map<String, Object> safeMetadata = transportMetadata == null ? Map.of() : Map.copyOf(new HashMap<>(transportMetadata));
         return transition(tenantId, interactionId, expectedVersion, nowEpochMs, current -> new AwaitInteractionRecord(
             current.tenantId(),
             current.executionId(),
@@ -136,7 +137,7 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
             current.assignee(),
             current.group(),
             current.transportType(),
-            transportMetadata,
+            safeMetadata,
             current.deadlineEpochMs(),
             current.createdAtEpochMs(),
             nowEpochMs,

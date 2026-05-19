@@ -271,9 +271,13 @@ public class PipelineYamlConfigLoader {
 
     private PipelineYamlAwaitCorrelation readAwaitCorrelation(Map<?, ?> awaitMap) {
         Object correlationObj = awaitMap.get("correlation");
-        if (!(correlationObj instanceof Map<?, ?> correlationMap)) {
+        if (correlationObj == null) {
             return new PipelineYamlAwaitCorrelation("interactionId");
         }
+        if (!(correlationObj instanceof Map<?, ?>)) {
+            throw new IllegalArgumentException("await.correlation must be a map, but got: " + correlationObj.getClass().getName());
+        }
+        Map<?, ?> correlationMap = (Map<?, ?>) correlationObj;
         return new PipelineYamlAwaitCorrelation(readString(correlationMap, "strategy"));
     }
 

@@ -93,7 +93,14 @@ public class AwaitCoordinator {
                     System.currentTimeMillis()))
                 .onItem().transform(optional -> optional.orElseThrow(() ->
                     new IllegalStateException("Await interaction metadata update lost OCC race: "
-                        + claimedInteraction.interactionId()))));
+                        + claimedInteraction.interactionId())))
+                .onFailure().call(failure -> store().fail(
+                    claimedInteraction.tenantId(),
+                    claimedInteraction.interactionId(),
+                    claimedInteraction.version(),
+                    failure.getMessage(),
+                    System.currentTimeMillis())
+                    .replaceWith(failure)));
     }
 
     /**

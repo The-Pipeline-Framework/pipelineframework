@@ -80,7 +80,7 @@ class AwaitStepSupportTest {
             org.mockito.ArgumentMatchers.isNull()))
             .thenReturn(io.smallrye.mutiny.Uni.createFrom().item(mockCreateResult));
 
-        String result = support.awaitOneToOne(testDescriptor, "input").await().indefinitely();
+        support.awaitOneToOne(testDescriptor, "input").await().indefinitely();
 
         org.mockito.Mockito.verify(awaitCoordinator).createOrGet(
             org.mockito.ArgumentMatchers.eq(testDescriptor),

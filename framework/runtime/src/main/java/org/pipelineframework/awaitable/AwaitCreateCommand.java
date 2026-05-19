@@ -68,6 +68,9 @@ public record AwaitCreateCommand(
         if (stepId == null || stepId.isBlank()) {
             throw new IllegalArgumentException("stepId must not be blank");
         }
+        if (stepIndex < 0) {
+            throw new IllegalArgumentException("stepIndex must not be negative");
+        }
         if (outputType == null || outputType.isBlank()) {
             throw new IllegalArgumentException("outputType must not be blank");
         }
