@@ -310,31 +310,33 @@ public class PipelineExecutionService {
   }
 
   private Multi<?> executePipelineStreamingFromRecord(ExecutionRecord<Object, Object> record) {
-    Object sourcePayload = record.currentStepIndex() > 0
-        ? record.resumePayload()
-        : record.inputPayload();
-    Object reactiveInput = executionInputPolicy.toReplayInput(sourcePayload);
-    AwaitExecutionContext previous = AwaitExecutionContextHolder.get();
-    AwaitExecutionContextHolder.set(new AwaitExecutionContext(
-        record.tenantId(),
-        record.executionId(),
-        record.currentStepIndex()));
-    try {
-      Object result = executePipelineStreamingInternalFromStep(reactiveInput, record.currentStepIndex());
-      if (result instanceof Multi<?> multi) {
-        return multi;
+    return Multi.createFrom().deferred(() -> {
+      Object sourcePayload = record.currentStepIndex() > 0
+          ? record.resumePayload()
+          : record.inputPayload();
+      Object reactiveInput = executionInputPolicy.toReplayInput(sourcePayload);
+      AwaitExecutionContext previous = AwaitExecutionContextHolder.get();
+      AwaitExecutionContextHolder.set(new AwaitExecutionContext(
+          record.tenantId(),
+          record.executionId(),
+          record.currentStepIndex()));
+      try {
+        Object result = executePipelineStreamingInternalFromStep(reactiveInput, record.currentStepIndex());
+        Multi<?> stream;
+        if (result instanceof Multi<?> multi) {
+          stream = multi;
+        } else if (result instanceof Uni<?> uni) {
+          stream = uni.toMulti();
+        } else {
+          restoreAwaitContext(previous);
+          return Multi.createFrom().failure(new IllegalStateException("Pipeline runner returned unsupported result"));
+        }
+        return stream.onTermination().invoke((failure, cancelled) -> restoreAwaitContext(previous));
+      } catch (Throwable failure) {
+        restoreAwaitContext(previous);
+        return Multi.createFrom().failure(failure);
       }
-      if (result instanceof Uni<?> uni) {
-        return uni.toMulti();
-      }
-      return Multi.createFrom().failure(new IllegalStateException("Pipeline runner returned unsupported result"));
-    } finally {
-      if (previous == null) {
-        AwaitExecutionContextHolder.clear();
-      } else {
-        AwaitExecutionContextHolder.set(previous);
-      }
-    }
+    });
   }
 
   private Object executePipelineStreamingInternalFromStep(Object input, int startStepIndex) {
@@ -346,8 +348,16 @@ public class PipelineExecutionService {
     watch.start();
     Object result = pipelineRunner.runFromStep(input, steps, startStepIndex);
     watch.stop();
-    LOG.infof("Pipeline execution assembled from step %d in %d ms", startStepIndex, watch.getTime());
+    LOG.infof("Pipeline assembly from step %d completed in %d ms", startStepIndex, watch.getTime());
     return result;
+  }
+
+  private void restoreAwaitContext(AwaitExecutionContext previous) {
+    if (previous == null) {
+      AwaitExecutionContextHolder.clear();
+    } else {
+      AwaitExecutionContextHolder.set(previous);
+    }
   }
 
   private Uni<?> executePipelineUnaryInternal(Object input) {

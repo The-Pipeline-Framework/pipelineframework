@@ -311,14 +311,22 @@ class QueueAsyncCoordinator {
       return Uni.createFrom().failure(new IllegalStateException(
           "Async queue mode is disabled. Set pipeline.orchestrator.mode=QUEUE_ASYNC."));
     }
-    return awaitCoordinator.complete(command)
+    AwaitCompletionCommand normalized = new AwaitCompletionCommand(
+        executionInputPolicy.normalizeTenant(command.tenantId()),
+        command.interactionId(),
+        command.correlationId(),
+        command.idempotencyKey(),
+        command.responsePayload(),
+        command.actor(),
+        command.nowEpochMs());
+    return awaitCoordinator.complete(normalized)
         .onItem().transformToUni(result -> executionStateStore.markAwaitCompleted(
                 result.record().tenantId(),
                 result.record().executionId(),
                 result.record().interactionId(),
                 coerceAwaitPayload(result.record()),
                 result.record().stepIndex() + 1,
-                command.nowEpochMs())
+                normalized.nowEpochMs())
             .onItem().transformToUni(updated -> {
               if (updated.isPresent()) {
                 return workDispatcher.enqueueNow(new ExecutionWorkItem(
@@ -360,9 +368,6 @@ class QueueAsyncCoordinator {
   }
 
   private Uni<Void> sweepTimedOutAwaitInteractions(long now) {
-    if (awaitCoordinator == null) {
-      return Uni.createFrom().voidItem();
-    }
     return awaitCoordinator.findTimedOut(now, orchestratorConfig.sweepLimit())
         .onItem().transformToUni(records -> {
           if (records.isEmpty()) {
@@ -425,8 +430,11 @@ class QueueAsyncCoordinator {
       if (outputType.isInstance(payload)) {
         return payload;
       }
-      if (payload instanceof String json && (json.startsWith("{") || json.startsWith("["))) {
-        return PipelineJson.mapper().readValue(json, outputType);
+      if (payload instanceof String json) {
+        String trimmed = json.trim();
+        if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+          return PipelineJson.mapper().readValue(trimmed, outputType);
+        }
       }
       return PipelineJson.mapper().convertValue(payload, outputType);
     } catch (Exception e) {

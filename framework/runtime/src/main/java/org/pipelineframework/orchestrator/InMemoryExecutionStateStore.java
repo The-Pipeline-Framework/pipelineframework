@@ -347,7 +347,7 @@ public class InMemoryExecutionStateStore implements ExecutionStateStore {
                     transitionKey,
                     current.inputPayload(),
                     current.awaitInteractionId(),
-                    current.resumePayload(),
+                    null,
                     null,
                     errorCode,
                     truncate(errorMessage),

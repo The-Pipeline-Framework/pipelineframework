@@ -112,7 +112,10 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
 
     @Override
     public Uni<Optional<AwaitInteractionRecord>> findByCorrelation(String tenantId, String correlationId) {
-        return blocking(() -> findByLookup(lookupKey("correlation", tenantId, correlationId), tenantId));
+        return blocking(() -> findByLookup(
+            lookupKey("correlation", tenantId, correlationId),
+            tenantId,
+            System.currentTimeMillis()));
     }
 
     @Override
@@ -305,7 +308,8 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     private AwaitCreateResult createOrGetBlocking(AwaitCreateCommand command) {
         Optional<AwaitInteractionRecord> existing = findByLookup(
             lookupKey("idempotency", command.tenantId(), command.stepId() + ":" + command.idempotencyKey()),
-            command.tenantId());
+            command.tenantId(),
+            command.nowEpochMs());
         if (existing.isPresent() && !existing.get().status().terminal()) {
             return new AwaitCreateResult(existing.get(), true);
         }
@@ -361,7 +365,8 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         } catch (TransactionCanceledException | ConditionalCheckFailedException ignored) {
             return findByLookup(
                 lookupKey("idempotency", command.tenantId(), command.stepId() + ":" + command.idempotencyKey()),
-                command.tenantId())
+                command.tenantId(),
+                command.nowEpochMs())
                 .map(record -> new AwaitCreateResult(record, true))
                 .orElseThrow(() -> ignored);
         }
@@ -406,7 +411,10 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             return getBlocking(command.tenantId(), command.interactionId(), command.nowEpochMs());
         }
         if (command.correlationId() != null && !command.correlationId().isBlank()) {
-            return findByLookup(lookupKey("correlation", command.tenantId(), command.correlationId()), command.tenantId());
+            return findByLookup(
+                lookupKey("correlation", command.tenantId(), command.correlationId()),
+                command.tenantId(),
+                command.nowEpochMs());
         }
         return Optional.empty();
     }
@@ -484,7 +492,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             : Optional.of(record);
     }
 
-    private Optional<AwaitInteractionRecord> findByLookup(String lookupKey, String tenantId) {
+    private Optional<AwaitInteractionRecord> findByLookup(String lookupKey, String tenantId, long nowEpochMs) {
         Map<String, AttributeValue> item = dynamoClient().getItem(GetItemRequest.builder()
             .tableName(lookupTable())
             .key(Map.of(LOOKUP_KEY, avS(lookupKey)))
@@ -496,7 +504,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         String interactionId = readString(item, INTERACTION_ID);
         return interactionId == null || interactionId.isBlank()
             ? Optional.empty()
-            : getBlocking(tenantId, interactionId, System.currentTimeMillis());
+            : getBlocking(tenantId, interactionId, nowEpochMs);
     }
 
     private Put lookupPut(String kind, String tenantId, String key, String interactionId, long ttlEpochS) {

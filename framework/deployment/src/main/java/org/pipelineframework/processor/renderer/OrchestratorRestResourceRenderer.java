@@ -205,9 +205,8 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
                     .addMember("value", "$S", "x-tenant-id")
                     .build())
                 .build())
-            .addStatement("return pipelineExecutionService.completeAwaitInteraction(new $T(tenantId == null || tenantId.isBlank() ? $S : tenantId, request.interactionId(), request.correlationId(), request.idempotencyKey(), request.responsePayload(), request.actor(), $T.currentTimeMillis())).onItem().transform($T::toCompletionResponse)",
+            .addStatement("return pipelineExecutionService.completeAwaitInteraction(new $T(tenantId, request.interactionId(), request.correlationId(), request.idempotencyKey(), request.responsePayload(), request.actor(), $T.currentTimeMillis())).onItem().transform($T::toCompletionResponse)",
                 awaitCompletionCommand,
-                "default",
                 System.class,
                 awaitDtoMapper)
             .build();
@@ -231,10 +230,10 @@ public class OrchestratorRestResourceRenderer implements PipelineRenderer<Orches
             .addParameter(ParameterSpec.builder(String.class, "stepId")
                 .addAnnotation(AnnotationSpec.builder(queryParam).addMember("value", "$S", "stepId").build())
                 .build())
-            .addParameter(ParameterSpec.builder(int.class, "limit")
+            .addParameter(ParameterSpec.builder(Integer.class, "limit")
                 .addAnnotation(AnnotationSpec.builder(queryParam).addMember("value", "$S", "limit").build())
                 .build())
-            .addStatement("return pipelineExecutionService.queryPendingAwaitInteractions(tenantId, assignee, group, stepId, limit).onItem().transform(records -> records.stream().map($T::toDto).toList())",
+            .addStatement("return pipelineExecutionService.queryPendingAwaitInteractions(tenantId, assignee, group, stepId, limit == null ? 0 : limit).onItem().transform(records -> records.stream().map($T::toDto).toList())",
                 awaitDtoMapper)
             .build();
 
