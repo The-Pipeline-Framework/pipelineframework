@@ -103,6 +103,65 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void parsesAwaitStepDefinition() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Fraud Check"
+                kind: "await"
+                cardinality: "ONE_TO_ONE"
+                input: "com.example.FraudCheckRequest"
+                output: "com.example.FraudCheckDecision"
+                timeout: "PT10M"
+                idempotencyKeyFields: ["orderId"]
+                await:
+                  correlation:
+                    strategy: "interactionId"
+                  transport:
+                    type: "webhook"
+                    dispatch:
+                      url: "https://partner.example/check"
+            """, diagnostics);
+
+        assertEquals(1, steps.size());
+        StepDefinition step = steps.getFirst();
+        assertEquals(StepKind.AWAIT, step.kind());
+        assertNull(step.executionClass());
+        assertEquals(ClassName.get("com.example", "FraudCheckRequest"), step.inputType());
+        assertEquals(ClassName.get("com.example", "FraudCheckDecision"), step.outputType());
+        assertEquals("PT10M", step.timeout());
+        assertEquals(List.of("orderId"), step.idempotencyKeyFields());
+        assertEquals("webhook", ((java.util.Map<?, ?>) step.awaitConfig().get("transport")).get("type"));
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
+    }
+
+    @Test
+    void rejectsAwaitStepWithStreamingCardinality() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Bad Await"
+                kind: "await"
+                cardinality: "ONE_TO_MANY"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  transport:
+                    type: "webhook"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("ONE_TO_ONE")), diagnostics.toString());
+    }
+
+    @Test
     void rejectsDelegatedStepWhenOnlyOneTypeIsProvided() throws IOException {
         List<StepDefinition> steps = parse("""
             appName: "Test"

@@ -230,15 +230,89 @@ public class PipelineYamlConfigLoader {
                 continue;
             }
             String name = readString(stepMap, "name");
+            String kind = readString(stepMap, "kind");
+            String cardinality = readString(stepMap, "cardinality");
             String inputType = readString(stepMap, "inputTypeName");
             String inboundMapper = readString(stepMap, "inboundMapper");
             String outputType = readString(stepMap, "outputTypeName");
             String outboundMapper = readString(stepMap, "outboundMapper");
+            String timeout = readString(stepMap, "timeout");
+            List<String> idempotencyKeyFields = readStringList(stepMap, "idempotencyKeyFields");
+            PipelineYamlAwaitConfig awaitConfig = readAwaitConfig(stepMap, name);
             if (name != null && !name.isBlank() && outputType != null && !outputType.isBlank()) {
-                stepInfos.add(new PipelineYamlStep(name, inputType, inboundMapper, outputType, outboundMapper));
+                stepInfos.add(new PipelineYamlStep(
+                    name,
+                    kind,
+                    cardinality,
+                    inputType,
+                    inboundMapper,
+                    outputType,
+                    outboundMapper,
+                    timeout,
+                    idempotencyKeyFields,
+                    awaitConfig));
             }
         }
         return stepInfos;
+    }
+
+    private PipelineYamlAwaitConfig readAwaitConfig(Map<?, ?> stepMap, String stepName) {
+        Object awaitObj = stepMap.get("await");
+        if (awaitObj == null) {
+            return null;
+        }
+        if (!(awaitObj instanceof Map<?, ?> awaitMap)) {
+            throw new IllegalArgumentException("step '" + stepName + "' await must be defined as a map");
+        }
+        PipelineYamlAwaitCorrelation correlation = readAwaitCorrelation(awaitMap);
+        PipelineYamlAwaitTransport transport = readAwaitTransport(awaitMap, stepName);
+        return new PipelineYamlAwaitConfig(correlation, transport);
+    }
+
+    private PipelineYamlAwaitCorrelation readAwaitCorrelation(Map<?, ?> awaitMap) {
+        Object correlationObj = awaitMap.get("correlation");
+        if (!(correlationObj instanceof Map<?, ?> correlationMap)) {
+            return new PipelineYamlAwaitCorrelation("interactionId");
+        }
+        return new PipelineYamlAwaitCorrelation(readString(correlationMap, "strategy"));
+    }
+
+    private PipelineYamlAwaitTransport readAwaitTransport(Map<?, ?> awaitMap, String stepName) {
+        Object transportObj = awaitMap.get("transport");
+        if (!(transportObj instanceof Map<?, ?> transportMap)) {
+            throw new IllegalArgumentException("step '" + stepName + "' await.transport must be defined as a map");
+        }
+        String type = readRequiredString(transportMap, "type", "step '" + stepName + "' await.transport");
+        java.util.LinkedHashMap<String, Object> config = new java.util.LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : transportMap.entrySet()) {
+            String key = entry.getKey() == null ? null : entry.getKey().toString();
+            if (key == null || "type".equals(key)) {
+                continue;
+            }
+            config.put(key, normalizeConfigValue(entry.getValue()));
+        }
+        return new PipelineYamlAwaitTransport(type, config);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Object normalizeConfigValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            java.util.LinkedHashMap<String, Object> normalized = new java.util.LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                if (entry.getKey() != null) {
+                    normalized.put(entry.getKey().toString(), normalizeConfigValue(entry.getValue()));
+                }
+            }
+            return java.util.Map.copyOf(normalized);
+        }
+        if (value instanceof Iterable<?> iterable) {
+            java.util.ArrayList<Object> normalized = new java.util.ArrayList<>();
+            for (Object item : iterable) {
+                normalized.add(normalizeConfigValue(item));
+            }
+            return java.util.List.copyOf(normalized);
+        }
+        return value;
     }
 
     /**

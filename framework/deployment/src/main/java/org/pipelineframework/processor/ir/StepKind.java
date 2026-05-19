@@ -36,5 +36,11 @@ public enum StepKind {
      * A remote step whose execution is delegated to an external operator endpoint
      * resolved from v2 template execution metadata.
      */
-    REMOTE
+    REMOTE,
+
+    /**
+     * An await step that dispatches external work, stores durable interaction state,
+     * and resumes from a correlated completion.
+     */
+    AWAIT
 }

@@ -25,4 +25,6 @@ public enum GenerationTarget {
     REMOTE_OPERATOR_ADAPTER,
     /** Generated reactive bridge for blocking-authored internal services */
     BLOCKING_REACTIVE_BRIDGE,
+    /** Generated await client step that suspends queue-async execution */
+    AWAIT_CLIENT_STEP,
 }

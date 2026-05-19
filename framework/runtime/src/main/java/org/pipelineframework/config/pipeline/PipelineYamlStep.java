@@ -20,19 +20,45 @@ package org.pipelineframework.config.pipeline;
  * Pipeline step entry parsed from pipeline.yaml.
  *
  * @param name the step name
+ * @param kind the step kind, for example internal, delegated, remote, or await
+ * @param cardinality the declared cardinality
  * @param inputType the input type name
  * @param inboundMapper the optional inbound mapper class name
  * @param outputType the output type name
  * @param outboundMapper the optional outbound mapper class name
+ * @param timeout the await timeout, if this is an await step
+ * @param idempotencyKeyFields fields used to derive await idempotency keys
+ * @param awaitConfig await-step configuration, if this is an await step
  */
 public record PipelineYamlStep(
     String name,
+    String kind,
+    String cardinality,
     String inputType,
     String inboundMapper,
     String outputType,
-    String outboundMapper
+    String outboundMapper,
+    String timeout,
+    java.util.List<String> idempotencyKeyFields,
+    PipelineYamlAwaitConfig awaitConfig
 ) {
+    public PipelineYamlStep {
+        kind = kind == null || kind.isBlank() ? "internal" : kind;
+        cardinality = cardinality == null || cardinality.isBlank() ? "ONE_TO_ONE" : cardinality;
+        idempotencyKeyFields = idempotencyKeyFields == null ? java.util.List.of() : java.util.List.copyOf(idempotencyKeyFields);
+    }
+
+    public PipelineYamlStep(
+        String name,
+        String inputType,
+        String inboundMapper,
+        String outputType,
+        String outboundMapper
+    ) {
+        this(name, "internal", "ONE_TO_ONE", inputType, inboundMapper, outputType, outboundMapper, null, java.util.List.of(), null);
+    }
+
     public PipelineYamlStep(String name, String inputType, String outputType) {
-        this(name, inputType, null, outputType, null);
+        this(name, "internal", "ONE_TO_ONE", inputType, null, outputType, null, null, java.util.List.of(), null);
     }
 }

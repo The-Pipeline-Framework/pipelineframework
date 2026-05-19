@@ -22,6 +22,7 @@ import org.pipelineframework.processor.renderer.LocalClientStepRenderer;
 import org.pipelineframework.processor.renderer.RemoteOperatorAdapterRenderer;
 import org.pipelineframework.processor.renderer.RestClientStepRenderer;
 import org.pipelineframework.processor.renderer.AbstractFunctionHandlerRenderer;
+import org.pipelineframework.processor.renderer.AwaitClientStepRenderer;
 import org.pipelineframework.processor.renderer.RestResourceRenderer;
 import org.pipelineframework.processor.util.ResourceNameUtils;
 import org.pipelineframework.processor.util.RoleMetadataGenerator;
@@ -90,9 +91,23 @@ class StepArtifactGenerationService {
             RestResourceRenderer restRenderer,
             AbstractFunctionHandlerRenderer restFunctionHandlerRenderer,
             BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
-            RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer) throws IOException {
+            RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer,
+            AwaitClientStepRenderer awaitClientStepRenderer) throws IOException {
         for (GenerationTarget target : model.enabledTargets()) {
             switch (target) {
+                case AWAIT_CLIENT_STEP -> {
+                    String awaitClientClassName = model.servicePackage() + PIPELINE_DOT
+                        + ResourceNameUtils.normalizeBaseName(model.generatedName()).replace("Service", "") + "AwaitClientStep";
+                    DeploymentRole clientRole = resolveClientRole(model.deploymentRole());
+                    awaitClientStepRenderer.render(model, new GenerationContext(
+                        ctx.getProcessingEnv(),
+                        pathResolver.resolveRoleOutputDir(ctx, clientRole),
+                        clientRole,
+                        enabledAspects,
+                        cacheKeyGenerator,
+                        descriptorSet));
+                    roleMetadataGenerator.recordClassWithRole(awaitClientClassName, clientRole.name());
+                }
                 case GRPC_SERVICE -> {
                     if (model.deploymentRole() == DeploymentRole.PLUGIN_SERVER
                         && !generationPolicy.allowPluginServerArtifacts(ctx)) {
@@ -310,6 +325,47 @@ class StepArtifactGenerationService {
                 }
             }
         }
+    }
+
+    void generateArtifactsForModel(
+            PipelineCompilationContext ctx,
+            PipelineStepModel model,
+            GrpcBinding grpcBinding,
+            RestBinding restBinding,
+            LocalBinding localBinding,
+            Set<String> generatedSideEffectBeans,
+            Set<String> enabledAspects,
+            DescriptorProtos.FileDescriptorSet descriptorSet,
+            ClassName cacheKeyGenerator,
+            RoleMetadataGenerator roleMetadataGenerator,
+            GrpcServiceAdapterRenderer grpcRenderer,
+            ClientStepRenderer clientRenderer,
+            LocalClientStepRenderer localClientRenderer,
+            RestClientStepRenderer restClientRenderer,
+            RestResourceRenderer restRenderer,
+            AbstractFunctionHandlerRenderer restFunctionHandlerRenderer,
+            BlockingReactiveBridgeRenderer blockingReactiveBridgeRenderer,
+            RemoteOperatorAdapterRenderer remoteOperatorAdapterRenderer) throws IOException {
+        generateArtifactsForModel(
+            ctx,
+            model,
+            grpcBinding,
+            restBinding,
+            localBinding,
+            generatedSideEffectBeans,
+            enabledAspects,
+            descriptorSet,
+            cacheKeyGenerator,
+            roleMetadataGenerator,
+            grpcRenderer,
+            clientRenderer,
+            localClientRenderer,
+            restClientRenderer,
+            restRenderer,
+            restFunctionHandlerRenderer,
+            blockingReactiveBridgeRenderer,
+            remoteOperatorAdapterRenderer,
+            new AwaitClientStepRenderer());
     }
 
     private DeploymentRole resolveClientRole(DeploymentRole serverRole) {

@@ -61,6 +61,42 @@ class PipelineYamlConfigLoaderTest {
     }
 
     @Test
+    void loadsAwaitStepConfiguration() {
+        PipelineYamlConfig config = new PipelineYamlConfigLoader().load(new StringReader("""
+            basePackage: "com.example"
+            transport: "GRPC"
+            platform: "COMPUTE"
+            steps:
+              - name: "Fraud Check"
+                kind: "await"
+                cardinality: "ONE_TO_ONE"
+                inputTypeName: "com.example.FraudCheckRequest"
+                outputTypeName: "com.example.FraudCheckDecision"
+                timeout: "PT10M"
+                idempotencyKeyFields: ["orderId"]
+                await:
+                  correlation:
+                    strategy: "interactionId"
+                  transport:
+                    type: "webhook"
+                    dispatch:
+                      url: "https://partner.example/check"
+                    completion:
+                      path: "/pipeline/await/fraud-check/complete"
+            """));
+
+        PipelineYamlStep step = config.steps().getFirst();
+        assertEquals("await", step.kind());
+        assertEquals("ONE_TO_ONE", step.cardinality());
+        assertEquals("PT10M", step.timeout());
+        assertEquals(List.of("orderId"), step.idempotencyKeyFields());
+        assertNotNull(step.awaitConfig());
+        assertEquals("interactionId", step.awaitConfig().correlation().strategy());
+        assertEquals("webhook", step.awaitConfig().transport().type());
+        assertNotNull(step.awaitConfig().transport().config().get("dispatch"));
+    }
+
+    @Test
     void rejectsLegacyConnectorSection() {
         IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
             new PipelineYamlConfigLoader().load(new StringReader("""

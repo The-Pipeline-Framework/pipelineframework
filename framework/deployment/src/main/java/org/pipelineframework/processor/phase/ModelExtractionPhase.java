@@ -208,7 +208,50 @@ public class ModelExtractionPhase implements PipelineCompilationPhase {
             case REMOTE -> {
                 yield createRemoteStepModel(ctx, stepDef, ctxWarningLogger);
             }
+            case AWAIT -> {
+                yield createAwaitStepModel(ctx, stepDef, ctxWarningLogger);
+            }
         };
+    }
+
+    private PipelineStepModel createAwaitStepModel(
+            PipelineCompilationContext ctx,
+            org.pipelineframework.processor.ir.StepDefinition stepDef,
+            Consumer<String> ctxWarningLogger) {
+        if (stepDef.inputType() == null || stepDef.outputType() == null) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Await step '" + stepDef.name() + "' must resolve both input and output domain types");
+            return null;
+        }
+        StreamingShape streamingShape = stepDef.streamingShapeHint() != null
+            ? stepDef.streamingShapeHint()
+            : StreamingShape.UNARY_UNARY;
+        if (streamingShape != StreamingShape.UNARY_UNARY) {
+            ctx.getProcessingEnv().getMessager().printMessage(
+                javax.tools.Diagnostic.Kind.ERROR,
+                "Await step '" + stepDef.name() + "' currently supports only ONE_TO_ONE cardinality");
+            return null;
+        }
+
+        String serviceName = toYamlServiceName(stepDef.name());
+        String servicePackage = deriveYamlServicePackage(stepDef.inputType(), ctxWarningLogger);
+        return new PipelineStepModel.Builder()
+            .serviceName(serviceName)
+            .generatedName(serviceName)
+            .servicePackage(servicePackage)
+            .serviceClassName(ClassName.get("org.pipelineframework.awaitable", "AwaitStepDescriptor"))
+            .inputMapping(new TypeMapping(stepDef.inputType(), null, false, stepDef.inputType()))
+            .outputMapping(new TypeMapping(stepDef.outputType(), null, false, stepDef.outputType()))
+            .streamingShape(StreamingShape.UNARY_UNARY)
+            .enabledTargets(java.util.Set.of(GenerationTarget.AWAIT_CLIENT_STEP))
+            .executionMode(ExecutionMode.DEFAULT)
+            .deploymentRole(DeploymentRole.ORCHESTRATOR_CLIENT)
+            .sideEffect(false)
+            .cacheKeyGenerator(null)
+            .orderingRequirement(OrderingRequirement.RELAXED)
+            .threadSafety(ThreadSafety.SAFE)
+            .build();
     }
 
     private PipelineStepModel createRemoteStepModel(

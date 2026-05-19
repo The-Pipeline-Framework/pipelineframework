@@ -113,6 +113,10 @@ public class PipelineTargetResolutionPhase implements PipelineCompilationPhase {
      * @return a set of GenerationTarget values applicable to the given step model
      */
     private Set<GenerationTarget> resolveTargetsForModel(PipelineStepModel model, TransportMode transportMode) {
+        if (model.serviceClassName() != null
+            && "org.pipelineframework.awaitable.AwaitStepDescriptor".equals(model.serviceClassName().canonicalName())) {
+            return Set.of(GenerationTarget.AWAIT_CLIENT_STEP);
+        }
         var remoteExecution = model.remoteExecution();
         if (remoteExecution != null && remoteExecution.isRemote()) {
             Set<GenerationTarget> targets = new LinkedHashSet<>(resolveTargetsForRole(model.deploymentRole(), transportMode));
