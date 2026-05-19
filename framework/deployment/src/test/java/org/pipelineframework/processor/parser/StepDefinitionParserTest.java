@@ -165,6 +165,215 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void rejectsAwaitStepWithServiceField() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Bad Await"
+                kind: "await"
+                service: "com.example.SomeService"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  transport:
+                    type: "webhook"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsAwaitStepWithoutTimeout() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "No Timeout Await"
+                kind: "await"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                await:
+                  transport:
+                    type: "webhook"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsAwaitStepWithoutAwaitMap() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "No Await Map"
+                kind: "await"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsAwaitStepWithoutTransportTypeInAwaitMap() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Missing Transport Type"
+                kind: "await"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "interactionId"
+                  transport:
+                    url: "https://example.com"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsAwaitStepWithoutInputType() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "No Input Await"
+                kind: "await"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  transport:
+                    type: "webhook"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsUnsupportedKindValue() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Unknown Kind"
+                kind: "unknown"
+                service: "com.example.Service"
+                input: "com.example.Input"
+                output: "com.example.Output"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())),
+            diagnostics.toString());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("unsupported kind")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void acceptsAwaitStepWithMultipleIdempotencyKeyFields() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Multi Key Await"
+                kind: "await"
+                input: "com.example.MultiKeyRequest"
+                output: "com.example.MultiKeyResult"
+                timeout: "PT30M"
+                idempotencyKeyFields: ["orderId", "customerId", "amount"]
+                await:
+                  transport:
+                    type: "webhook"
+            """, diagnostics);
+
+        assertEquals(1, steps.size());
+        StepDefinition step = steps.getFirst();
+        assertEquals(StepKind.AWAIT, step.kind());
+        assertEquals(List.of("orderId", "customerId", "amount"), step.idempotencyKeyFields());
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
+    }
+
+    @Test
+    void acceptsAwaitStepWithEmptyIdempotencyKeyFields() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Empty Keys Await"
+                kind: "await"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT5M"
+                idempotencyKeyFields: []
+                await:
+                  transport:
+                    type: "webhook"
+            """, diagnostics);
+
+        assertEquals(1, steps.size());
+        StepDefinition step = steps.getFirst();
+        assertEquals(List.of(), step.idempotencyKeyFields());
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
+    }
+
+    @Test
+    void awaitKindIsCaseInsensitive() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "AWAIT Step"
+                kind: "AWAIT"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT5M"
+                await:
+                  transport:
+                    type: "webhook"
+            """, diagnostics);
+
+        assertEquals(1, steps.size());
+        assertEquals(StepKind.AWAIT, steps.getFirst().kind());
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
+    }
+
+    @Test
     void rejectsDelegatedStepWhenOnlyOneTypeIsProvided() throws IOException {
         List<StepDefinition> steps = parse("""
             appName: "Test"
