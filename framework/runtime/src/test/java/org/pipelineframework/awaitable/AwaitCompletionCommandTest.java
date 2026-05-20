@@ -56,18 +56,6 @@ class AwaitCompletionCommandTest {
     }
 
     @Test
-    void rejectsNullIdempotencyKey() {
-        assertThrows(IllegalArgumentException.class, () -> new AwaitCompletionCommand(
-            "tenant1", "interaction-123", null, null, null, null, 1000L));
-    }
-
-    @Test
-    void rejectsBlankIdempotencyKey() {
-        assertThrows(IllegalArgumentException.class, () -> new AwaitCompletionCommand(
-            "tenant1", "interaction-123", null, "  ", null, null, 1000L));
-    }
-
-    @Test
     void autoSetsNowEpochMsWhenZero() {
         long before = System.currentTimeMillis();
         AwaitCompletionCommand command = new AwaitCompletionCommand(

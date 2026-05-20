@@ -63,6 +63,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
     private static final String LAST_TRANSITION_KEY = "last_transition_key";
     private static final String INPUT_SHAPE = "input_shape";
     private static final String INPUT_PAYLOAD_JSON = "input_payload_json";
+    private static final String AWAIT_INTERACTION_ID = "await_interaction_id";
+    private static final String RESUME_PAYLOAD_JSON = "resume_payload_json";
     private static final String RESULT_PAYLOAD_JSON = "result_payload_json";
     private static final String ERROR_CODE = "error_code";
     private static final String ERROR_MESSAGE = "error_message";
@@ -278,6 +280,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             null,
             null,
             null,
+            null,
+            null,
             command.nowEpochMs(),
             command.nowEpochMs(),
             command.ttlEpochS());
@@ -340,6 +344,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             ":running", avS(ExecutionStatus.RUNNING.name()),
             ":one", avN(1),
             ":succeeded", avS(ExecutionStatus.SUCCEEDED.name()),
+            ":waitingExternal", avS(ExecutionStatus.WAITING_EXTERNAL.name()),
             ":failed", avS(ExecutionStatus.FAILED.name()),
             ":dlq", avS(ExecutionStatus.DLQ.name()),
             ":nowSec", avN(Instant.ofEpochMilli(nowEpochMs).getEpochSecond()));
@@ -350,7 +355,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             .conditionExpression(
                 "#nextDue <= :now " +
                     "AND (attribute_not_exists(#leaseOwner) OR #leaseExpires <= :now) " +
-                    "AND #status <> :succeeded AND #status <> :failed AND #status <> :dlq " +
+                    "AND #status <> :succeeded AND #status <> :waitingExternal AND #status <> :failed AND #status <> :dlq " +
                     "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
             .updateExpression(
                 "SET #status = :running, #leaseOwner = :leaseOwner, #leaseExpires = :leaseExpires, " +
@@ -383,6 +388,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         names.put("#version", VERSION);
         names.put("#transition", LAST_TRANSITION_KEY);
         names.put("#result", RESULT_PAYLOAD_JSON);
+        names.put("#awaitInteraction", AWAIT_INTERACTION_ID);
+        names.put("#resume", RESUME_PAYLOAD_JSON);
         names.put("#errorCode", ERROR_CODE);
         names.put("#errorMessage", ERROR_MESSAGE);
         names.put("#leaseOwner", LEASE_OWNER);
@@ -408,7 +415,163 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             .updateExpression(
                 "SET #status = :succeeded, #version = #version + :one, #transition = :transition, " +
                     "#result = :result, #leaseExpires = :zero, #nextDue = :now, #updated = :now " +
-                    "REMOVE #errorCode, #errorMessage, #leaseOwner")
+                    "REMOVE #errorCode, #errorMessage, #leaseOwner, #awaitInteraction, #resume")
+            .expressionAttributeNames(names)
+            .expressionAttributeValues(values)
+            .returnValues(ReturnValue.ALL_NEW)
+            .build();
+        try {
+            Map<String, AttributeValue> attributes = dynamoClient().updateItem(request).attributes();
+            if (attributes == null || attributes.isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.of(toRecord(attributes));
+        } catch (ConditionalCheckFailedException ignored) {
+            return Optional.empty();
+        }
+    }
+
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markWaitingExternal(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        String transitionKey,
+        String awaitInteractionId,
+        int awaitStepIndex,
+        long nowEpochMs
+    ) {
+        return blocking(() -> markWaitingExternalBlocking(
+            tenantId,
+            executionId,
+            expectedVersion,
+            transitionKey,
+            awaitInteractionId,
+            awaitStepIndex,
+            nowEpochMs));
+    }
+
+    @Override
+    public Uni<Optional<ExecutionRecord<Object, Object>>> markAwaitCompleted(
+        String tenantId,
+        String executionId,
+        String awaitInteractionId,
+        Object resumePayload,
+        int nextStepIndex,
+        long nowEpochMs
+    ) {
+        return blocking(() -> markAwaitCompletedBlocking(
+            tenantId,
+            executionId,
+            awaitInteractionId,
+            resumePayload,
+            nextStepIndex,
+            nowEpochMs));
+    }
+
+    private Optional<ExecutionRecord<Object, Object>> markWaitingExternalBlocking(
+        String tenantId,
+        String executionId,
+        long expectedVersion,
+        String transitionKey,
+        String awaitInteractionId,
+        int awaitStepIndex,
+        long nowEpochMs
+    ) {
+        Map<String, String> names = Map.ofEntries(
+            Map.entry("#status", STATUS),
+            Map.entry("#version", VERSION),
+            Map.entry("#step", CURRENT_STEP_INDEX),
+            Map.entry("#nextDue", NEXT_DUE_EPOCH_MS),
+            Map.entry("#transition", LAST_TRANSITION_KEY),
+            Map.entry("#awaitInteraction", AWAIT_INTERACTION_ID),
+            Map.entry("#resume", RESUME_PAYLOAD_JSON),
+            Map.entry("#result", RESULT_PAYLOAD_JSON),
+            Map.entry("#errorCode", ERROR_CODE),
+            Map.entry("#errorMessage", ERROR_MESSAGE),
+            Map.entry("#leaseOwner", LEASE_OWNER),
+            Map.entry("#leaseExpires", LEASE_EXPIRES_EPOCH_MS),
+            Map.entry("#updated", UPDATED_AT_EPOCH_MS),
+            Map.entry("#ttl", TTL_EPOCH_S));
+        Map<String, AttributeValue> values = Map.ofEntries(
+            Map.entry(":expected", avN(expectedVersion)),
+            Map.entry(":waiting", avS(ExecutionStatus.WAITING_EXTERNAL.name())),
+            Map.entry(":step", avN(awaitStepIndex)),
+            Map.entry(":awaitInteraction", avS(awaitInteractionId)),
+            Map.entry(":nextDue", avN(Long.MAX_VALUE)),
+            Map.entry(":transition", avS(transitionKey == null ? "" : transitionKey)),
+            Map.entry(":zero", avN(0)),
+            Map.entry(":now", avN(nowEpochMs)),
+            Map.entry(":one", avN(1)),
+            Map.entry(":nowSec", avN(Instant.ofEpochMilli(nowEpochMs).getEpochSecond())));
+
+        UpdateItemRequest request = UpdateItemRequest.builder()
+            .tableName(executionTable())
+            .key(executionPrimaryKey(tenantId, executionId))
+            .conditionExpression("#version = :expected AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
+            .updateExpression(
+                "SET #status = :waiting, #version = #version + :one, #step = :step, #nextDue = :nextDue, " +
+                    "#transition = :transition, #awaitInteraction = :awaitInteraction, #leaseExpires = :zero, " +
+                    "#updated = :now REMOVE #resume, #result, #errorCode, #errorMessage, #leaseOwner")
+            .expressionAttributeNames(names)
+            .expressionAttributeValues(values)
+            .returnValues(ReturnValue.ALL_NEW)
+            .build();
+        try {
+            Map<String, AttributeValue> attributes = dynamoClient().updateItem(request).attributes();
+            if (attributes == null || attributes.isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.of(toRecord(attributes));
+        } catch (ConditionalCheckFailedException ignored) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<ExecutionRecord<Object, Object>> markAwaitCompletedBlocking(
+        String tenantId,
+        String executionId,
+        String awaitInteractionId,
+        Object resumePayload,
+        int nextStepIndex,
+        long nowEpochMs
+    ) {
+        Map<String, String> names = Map.ofEntries(
+            Map.entry("#status", STATUS),
+            Map.entry("#version", VERSION),
+            Map.entry("#step", CURRENT_STEP_INDEX),
+            Map.entry("#nextDue", NEXT_DUE_EPOCH_MS),
+            Map.entry("#awaitInteraction", AWAIT_INTERACTION_ID),
+            Map.entry("#resume", RESUME_PAYLOAD_JSON),
+            Map.entry("#result", RESULT_PAYLOAD_JSON),
+            Map.entry("#errorCode", ERROR_CODE),
+            Map.entry("#errorMessage", ERROR_MESSAGE),
+            Map.entry("#leaseOwner", LEASE_OWNER),
+            Map.entry("#leaseExpires", LEASE_EXPIRES_EPOCH_MS),
+            Map.entry("#updated", UPDATED_AT_EPOCH_MS),
+            Map.entry("#ttl", TTL_EPOCH_S));
+        Map<String, AttributeValue> values = Map.ofEntries(
+            Map.entry(":queued", avS(ExecutionStatus.QUEUED.name())),
+            Map.entry(":waitingExternal", avS(ExecutionStatus.WAITING_EXTERNAL.name())),
+            Map.entry(":step", avN(nextStepIndex)),
+            Map.entry(":awaitInteraction", avS(awaitInteractionId)),
+            Map.entry(":resume", avS(toJson(resumePayload))),
+            Map.entry(":zero", avN(0)),
+            Map.entry(":now", avN(nowEpochMs)),
+            Map.entry(":one", avN(1)),
+            Map.entry(":nowSec", avN(Instant.ofEpochMilli(nowEpochMs).getEpochSecond())));
+
+        UpdateItemRequest request = UpdateItemRequest.builder()
+            .tableName(executionTable())
+            .key(executionPrimaryKey(tenantId, executionId))
+            .conditionExpression(
+                "#status = :waitingExternal " +
+                    "AND (attribute_not_exists(#awaitInteraction) OR #awaitInteraction = :awaitInteraction) " +
+                    "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
+            .updateExpression(
+                "SET #status = :queued, #version = #version + :one, #step = :step, #nextDue = :now, " +
+                    "#awaitInteraction = :awaitInteraction, #resume = :resume, #leaseExpires = :zero, #updated = :now " +
+                    "REMOVE #result, #errorCode, #errorMessage, #leaseOwner")
             .expressionAttributeNames(names)
             .expressionAttributeValues(values)
             .returnValues(ReturnValue.ALL_NEW)
@@ -444,6 +607,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             Map.entry("#errorCode", ERROR_CODE),
             Map.entry("#errorMessage", ERROR_MESSAGE),
             Map.entry("#result", RESULT_PAYLOAD_JSON),
+            Map.entry("#awaitInteraction", AWAIT_INTERACTION_ID),
+            Map.entry("#resume", RESUME_PAYLOAD_JSON),
             Map.entry("#leaseOwner", LEASE_OWNER),
             Map.entry("#leaseExpires", LEASE_EXPIRES_EPOCH_MS),
             Map.entry("#updated", UPDATED_AT_EPOCH_MS),
@@ -468,7 +633,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             .updateExpression(
                 "SET #status = :retry, #version = #version + :one, #attempt = :attempt, #nextDue = :nextDue, " +
                     "#transition = :transition, #errorCode = :errorCode, #errorMessage = :errorMessage, " +
-                    "#leaseExpires = :zero, #updated = :now REMOVE #result, #leaseOwner")
+                    "#leaseExpires = :zero, #updated = :now REMOVE #result, #awaitInteraction, #resume, #leaseOwner")
             .expressionAttributeNames(names)
             .expressionAttributeValues(values)
             .returnValues(ReturnValue.ALL_NEW)
@@ -502,6 +667,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             Map.entry("#errorCode", ERROR_CODE),
             Map.entry("#errorMessage", ERROR_MESSAGE),
             Map.entry("#result", RESULT_PAYLOAD_JSON),
+            Map.entry("#resume", RESUME_PAYLOAD_JSON),
             Map.entry("#leaseOwner", LEASE_OWNER),
             Map.entry("#leaseExpires", LEASE_EXPIRES_EPOCH_MS),
             Map.entry("#updated", UPDATED_AT_EPOCH_MS),
@@ -524,7 +690,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             .updateExpression(
                 "SET #status = :finalStatus, #version = #version + :one, #nextDue = :now, #transition = :transition, " +
                     "#errorCode = :errorCode, #errorMessage = :errorMessage, #leaseExpires = :zero, #updated = :now " +
-                    "REMOVE #result, #leaseOwner")
+                    "REMOVE #result, #resume, #leaseOwner")
             .expressionAttributeNames(names)
             .expressionAttributeValues(values)
             .returnValues(ReturnValue.ALL_NEW)
@@ -550,6 +716,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         Map<String, AttributeValue> values = Map.of(
             ":now", avN(nowEpochMs),
             ":succeeded", avS(ExecutionStatus.SUCCEEDED.name()),
+            ":waitingExternal", avS(ExecutionStatus.WAITING_EXTERNAL.name()),
             ":failed", avS(ExecutionStatus.FAILED.name()),
             ":dlq", avS(ExecutionStatus.DLQ.name()),
             ":nowSec", avN(Instant.ofEpochMilli(nowEpochMs).getEpochSecond()));
@@ -564,7 +731,7 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
                 .filterExpression(
                     "#nextDue <= :now " +
                         "AND (attribute_not_exists(#leaseOwner) OR #leaseExpires <= :now) " +
-                        "AND #status <> :succeeded AND #status <> :failed AND #status <> :dlq " +
+                        "AND #status <> :succeeded AND #status <> :waitingExternal AND #status <> :failed AND #status <> :dlq " +
                         "AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
                 .expressionAttributeNames(names)
                 .expressionAttributeValues(values)
@@ -702,6 +869,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         putIfPresent(item, LEASE_OWNER, record.leaseOwner());
         putIfPresent(item, LAST_TRANSITION_KEY, record.lastTransitionKey());
         putInputPayload(item, record.inputPayload());
+        putIfPresent(item, AWAIT_INTERACTION_ID, record.awaitInteractionId());
+        putIfPresent(item, RESUME_PAYLOAD_JSON, toJson(record.resumePayload()));
         putIfPresent(item, RESULT_PAYLOAD_JSON, toJson(record.resultPayload()));
         putIfPresent(item, ERROR_CODE, record.errorCode());
         putIfPresent(item, ERROR_MESSAGE, record.errorMessage());
@@ -740,6 +909,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
         long nextDue = readLong(item, NEXT_DUE_EPOCH_MS);
         String transitionKey = readString(item, LAST_TRANSITION_KEY);
         Object inputPayload = readInputPayload(item);
+        String awaitInteractionId = readString(item, AWAIT_INTERACTION_ID);
+        Object resumePayload = readPayload(item.get(RESUME_PAYLOAD_JSON));
         Object resultPayload = readPayload(item.get(RESULT_PAYLOAD_JSON));
         String errorCode = readString(item, ERROR_CODE);
         String errorMessage = readString(item, ERROR_MESSAGE);
@@ -759,6 +930,8 @@ public class DynamoExecutionStateStore implements ExecutionStateStore {
             nextDue,
             transitionKey,
             inputPayload,
+            awaitInteractionId,
+            resumePayload,
             resultPayload,
             errorCode,
             errorMessage,

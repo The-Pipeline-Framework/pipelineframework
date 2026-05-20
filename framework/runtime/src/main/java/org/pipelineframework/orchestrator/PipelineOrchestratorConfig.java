@@ -196,6 +196,24 @@ public interface PipelineOrchestratorConfig {
         String executionKeyTable();
 
         /**
+         * Await interaction table name.
+         *
+         * @return await interaction table name
+         */
+        @WithName("await-interaction-table")
+        @WithDefault("tpf_await_interaction")
+        String awaitInteractionTable();
+
+        /**
+         * Await interaction lookup table name.
+         *
+         * @return await lookup table name
+         */
+        @WithName("await-interaction-key-table")
+        @WithDefault("tpf_await_interaction_key")
+        String awaitInteractionKeyTable();
+
+        /**
          * Optional region override.
          *
          * @return region when configured
