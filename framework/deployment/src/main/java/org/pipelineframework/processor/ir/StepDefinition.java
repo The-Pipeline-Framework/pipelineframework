@@ -70,7 +70,7 @@ public record StepDefinition(
     ) {
         this(
             name,
-            kind,
+            requireNonRemoteKind(kind),
             executionClass,
             null,
             Map.of(),
@@ -98,7 +98,7 @@ public record StepDefinition(
     ) {
         this(
             name,
-            kind,
+            requireNonRemoteKind(kind),
             executionClass,
             null,
             Map.of(),
