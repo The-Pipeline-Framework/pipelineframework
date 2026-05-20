@@ -148,6 +148,14 @@ public interface PipelineOrchestratorConfig {
     Optional<String> dlqUrl();
 
     /**
+     * Secret used to sign and verify await resume tokens.
+     *
+     * @return configured token secret
+     */
+    @WithName("resume-token-secret")
+    Optional<String> resumeTokenSecret();
+
+    /**
      * DynamoDB provider configuration.
      *
      * @return dynamo provider config

@@ -42,6 +42,11 @@ class OrchestratorRestResourceRendererTest {
         assertTrue(source.contains("executePipelineAsync"));
         assertTrue(source.contains("@Path(\"/executions/{executionId}\")"));
         assertTrue(source.contains("@Path(\"/executions/{executionId}/result\")"));
+        assertTrue(source.contains("@Path(\"/interactions/complete\")"));
+        assertTrue(source.contains("SecurityContext securityContext"));
+        assertTrue(source.contains("request.resumeToken()"));
+        assertTrue(source.contains("Principal principal = securityContext == null ? null : securityContext.getUserPrincipal()"));
+        assertTrue(source.contains("actor = principal.getName()"));
         assertTrue(source.contains("@Path(\"/ingest\")"));
         assertTrue(source.contains("@Path(\"/subscribe\")"));
     }

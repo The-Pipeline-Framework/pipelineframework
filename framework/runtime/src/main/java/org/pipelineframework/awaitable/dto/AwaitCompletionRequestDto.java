@@ -6,6 +6,7 @@ package org.pipelineframework.awaitable.dto;
 public record AwaitCompletionRequestDto(
     String interactionId,
     String correlationId,
+    String resumeToken,
     String idempotencyKey,
     Object responsePayload,
     String actor

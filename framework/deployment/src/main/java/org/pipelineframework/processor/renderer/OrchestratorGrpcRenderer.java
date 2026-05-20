@@ -732,6 +732,7 @@ public class OrchestratorGrpcRenderer implements PipelineRenderer<OrchestratorBi
                         request.getTenantId(),
                         request.getInteractionId(),
                         request.getCorrelationId(),
+                        request.getResumeToken(),
                         request.getIdempotencyKey(),
                         request.getResponseJson(),
                         request.getActor(),

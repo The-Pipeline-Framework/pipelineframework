@@ -7,17 +7,31 @@ public record AwaitCompletionCommand(
     String tenantId,
     String interactionId,
     String correlationId,
+    String resumeToken,
     String idempotencyKey,
     Object responsePayload,
     String actor,
     long nowEpochMs
 ) {
+    public AwaitCompletionCommand(
+        String tenantId,
+        String interactionId,
+        String correlationId,
+        String idempotencyKey,
+        Object responsePayload,
+        String actor,
+        long nowEpochMs
+    ) {
+        this(tenantId, interactionId, correlationId, null, idempotencyKey, responsePayload, actor, nowEpochMs);
+    }
+
     public AwaitCompletionCommand {
         if (tenantId == null || tenantId.isBlank()) {
             throw new IllegalArgumentException("tenantId must not be blank");
         }
         interactionId = normalizeOptionalIdentifier(interactionId);
         correlationId = normalizeOptionalIdentifier(correlationId);
+        resumeToken = normalizeOptionalIdentifier(resumeToken);
         if (interactionId == null && correlationId == null) {
             throw new IllegalArgumentException("interactionId or correlationId must be supplied");
         }

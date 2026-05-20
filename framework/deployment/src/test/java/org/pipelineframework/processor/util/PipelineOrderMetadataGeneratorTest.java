@@ -61,6 +61,8 @@ class PipelineOrderMetadataGeneratorTest {
                 await:
                   transport:
                     type: "webhook"
+                    request:
+                      url: "https://partner.example/fraud-check"
             """);
 
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);
@@ -208,6 +210,8 @@ class PipelineOrderMetadataGeneratorTest {
                 await:
                   transport:
                     type: "webhook"
+                    request:
+                      url: "https://partner.example/fraud-check"
             """);
 
         ProcessingEnvironment processingEnv = mock(ProcessingEnvironment.class);

@@ -10,6 +10,7 @@ import jakarta.inject.Inject;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import io.smallrye.mutiny.Uni;
+import io.smallrye.mutiny.infrastructure.Infrastructure;
 import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
 import org.pipelineframework.awaitable.spi.AwaitTransportAdapter;
 import org.pipelineframework.config.pipeline.PipelineJson;
@@ -29,6 +30,9 @@ public class AwaitCoordinator {
 
     @Inject
     PipelineOrchestratorConfig orchestratorConfig;
+
+    @Inject
+    AwaitResumeTokenService resumeTokenService;
 
     private volatile AwaitInteractionStore resolvedStore;
     private final Map<String, AwaitTransportAdapter<?>> resolvedAdapters = new ConcurrentHashMap<>();
@@ -110,7 +114,23 @@ public class AwaitCoordinator {
      * Accepts a correlated completion.
      */
     public Uni<AwaitCompletionResult> complete(AwaitCompletionCommand command) {
-        return store().complete(command);
+        if (command.resumeToken() == null) {
+            return store().complete(command);
+        }
+        return resolveForCompletion(command)
+            .onItem().transformToUni(record -> {
+                if (record.status().terminal() && record.status() != AwaitInteractionStatus.COMPLETED) {
+                    return Uni.createFrom().failure(
+                        new IllegalStateException("Await interaction is terminal: " + record.status()));
+                }
+                return Uni.createFrom().item(() -> {
+                        resumeTokenService.validate(command.resumeToken(), record, command.nowEpochMs());
+                        return record;
+                    })
+                    .runSubscriptionOn(Infrastructure.getDefaultExecutor())
+                    .replaceWith(record);
+            })
+            .onItem().transformToUni(ignored -> store().complete(command));
     }
 
     /**
@@ -182,6 +202,14 @@ public class AwaitCoordinator {
             throw new IllegalStateException("Ambiguous AwaitTransportAdapter providers for type " + type + ": " + providerInfo);
         }
         return matching.get(0);
+    }
+
+    private Uni<AwaitInteractionRecord> resolveForCompletion(AwaitCompletionCommand command) {
+        Uni<java.util.Optional<AwaitInteractionRecord>> lookup = command.interactionId() != null
+            ? store().get(command.tenantId(), command.interactionId())
+            : store().findByCorrelation(command.tenantId(), command.correlationId());
+        return lookup.onItem().transform(optional -> optional.orElseThrow(
+            () -> new IllegalArgumentException("No await interaction matches completion")));
     }
 
     private String deriveCorrelationId(

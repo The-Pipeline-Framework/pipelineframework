@@ -749,6 +749,7 @@ public class PipelineProtoGenerator {
         builder.append("  string idempotency_key = 4;\n");
         builder.append("  string response_json = 5;\n");
         builder.append("  string actor = 6;\n");
+        builder.append("  string resume_token = 7;\n");
         builder.append("}\n\n");
         builder.append("message CompleteAwaitResponse {\n");
         builder.append("  string interaction_id = 1;\n");
