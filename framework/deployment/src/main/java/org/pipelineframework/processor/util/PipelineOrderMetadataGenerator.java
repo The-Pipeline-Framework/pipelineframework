@@ -180,8 +180,11 @@ public class PipelineOrderMetadataGenerator {
             if (model.deploymentRole() != DeploymentRole.ORCHESTRATOR_CLIENT || model.sideEffect()) {
                 continue;
             }
+            String resolvedSuffix = model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)
+                ? "AwaitClientStep"
+                : suffix;
             String className = model.servicePackage() + ".pipeline." +
-                model.generatedName().replace("Service", "") + suffix;
+                stripTrailingService(model.generatedName()) + resolvedSuffix;
             ordered.add(className);
         }
         return new ArrayList<>(ordered);
@@ -215,13 +218,28 @@ public class PipelineOrderMetadataGenerator {
         String suffix = ctx.getTransportMode().clientStepSuffix();
         Set<String> generated = new LinkedHashSet<>();
         for (PipelineStepModel model : models) {
+            if (model.enabledTargets().contains(GenerationTarget.AWAIT_CLIENT_STEP)) {
+                generated.add(model.servicePackage() + ".pipeline."
+                    + stripTrailingService(model.generatedName()) + "AwaitClientStep");
+                continue;
+            }
             if (clientTarget != null && !model.enabledTargets().contains(clientTarget)) {
                 continue;
             }
             generated.add(model.servicePackage() + ".pipeline."
-                + model.generatedName().replace("Service", "") + suffix);
+                + stripTrailingService(model.generatedName()) + suffix);
         }
         return generated;
+    }
+
+    private static String stripTrailingService(String generatedName) {
+        if (generatedName == null) {
+            return "";
+        }
+        if (generatedName.endsWith("Service")) {
+            return generatedName.substring(0, generatedName.length() - "Service".length());
+        }
+        return generatedName;
     }
 
     private boolean isSideEffectClientStep(String className) {
@@ -297,7 +315,7 @@ public class PipelineOrderMetadataGenerator {
         if (lastDot != -1) {
             simple = simple.substring(lastDot + 1);
         }
-        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep|LocalClientStep)(_Subclass)?$", "");
+        simple = simple.replaceAll("(Service|GrpcClientStep|RestClientStep|LocalClientStep|AwaitClientStep)(_Subclass)?$", "");
         return toClassToken(simple);
     }
 

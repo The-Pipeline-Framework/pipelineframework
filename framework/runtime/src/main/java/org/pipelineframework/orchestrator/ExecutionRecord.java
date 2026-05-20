@@ -16,6 +16,8 @@ public record ExecutionRecord<I, R>(
     long nextDueEpochMs,
     String lastTransitionKey,
     I inputPayload,
+    String awaitInteractionId,
+    Object resumePayload,
     R resultPayload,
     String errorCode,
     String errorMessage,
@@ -23,6 +25,52 @@ public record ExecutionRecord<I, R>(
     long updatedAtEpochMs,
     long ttlEpochS
 ) {
+    /**
+     * Backward-compatible constructor for records without await resume fields.
+     */
+    public ExecutionRecord(
+        String tenantId,
+        String executionId,
+        String executionKey,
+        ExecutionStatus status,
+        long version,
+        int currentStepIndex,
+        int attempt,
+        String leaseOwner,
+        long leaseExpiresEpochMs,
+        long nextDueEpochMs,
+        String lastTransitionKey,
+        I inputPayload,
+        R resultPayload,
+        String errorCode,
+        String errorMessage,
+        long createdAtEpochMs,
+        long updatedAtEpochMs,
+        long ttlEpochS
+    ) {
+        this(
+            tenantId,
+            executionId,
+            executionKey,
+            status,
+            version,
+            currentStepIndex,
+            attempt,
+            leaseOwner,
+            leaseExpiresEpochMs,
+            nextDueEpochMs,
+            lastTransitionKey,
+            inputPayload,
+            null,
+            null,
+            resultPayload,
+            errorCode,
+            errorMessage,
+            createdAtEpochMs,
+            updatedAtEpochMs,
+            ttlEpochS);
+    }
+
     /**
      * Returns a copy with a new status and timestamp.
      *
@@ -44,6 +92,8 @@ public record ExecutionRecord<I, R>(
             nextDueEpochMs,
             lastTransitionKey,
             inputPayload,
+            awaitInteractionId,
+            resumePayload,
             resultPayload,
             errorCode,
             errorMessage,

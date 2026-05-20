@@ -68,7 +68,11 @@ public class StepDefinitionParser {
         "inputFields",
         "outputTypeName",
         "outputFields",
-        "execution");
+        "execution",
+        "kind",
+        "await",
+        "timeout",
+        "idempotencyKeyFields");
     private final BiConsumer<Diagnostic.Kind, String> diagnosticReporter;
     private final String legacyInternalPackageSuffix;
 
@@ -181,6 +185,8 @@ public class StepDefinitionParser {
         String operatorClassName = getStringValue(stepData, "operator");
         String delegateClassName = getStringValue(stepData, "delegate");
         String serviceClassName = getStringValue(stepData, "service");
+        String rawKind = getStringValue(stepData, "kind");
+        boolean awaitStep = "await".equalsIgnoreCase(rawKind);
         String delegatedClassName = null;
 
         if (!isBlank(operatorClassName) && !isBlank(delegateClassName)) {
@@ -201,6 +207,25 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
+        if (awaitStep && (!isBlank(delegatedClassName) || !isBlank(serviceClassName) || remoteExecution != null)) {
+            String message = "Skipping step '" + name
+                + "': await steps cannot declare 'service', 'operator', 'delegate', or remote 'execution'";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
+        if (!isBlank(rawKind)
+            && !awaitStep
+            && !"internal".equalsIgnoreCase(rawKind)
+            && !"delegated".equalsIgnoreCase(rawKind)
+            && !"delegate".equalsIgnoreCase(rawKind)
+            && !"remote".equalsIgnoreCase(rawKind)) {
+            String message = "Skipping step '" + name + "': unsupported kind '" + rawKind
+                + "'. Allowed values: internal, delegated, remote, await";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
         if (remoteExecution != null && (!isBlank(delegatedClassName) || !isBlank(serviceClassName))) {
             String message = "Skipping step '" + name
                 + "': remote execution is mutually exclusive with 'service', 'operator', and 'delegate'";
@@ -208,12 +233,15 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
-        boolean inferredLegacyInternal = isBlank(delegatedClassName) && isBlank(serviceClassName);
+        boolean inferredLegacyInternal = !awaitStep && isBlank(delegatedClassName) && isBlank(serviceClassName);
 
         StepKind kind;
         String executionClassName;
 
-        if (remoteExecution != null) {
+        if (awaitStep) {
+            kind = StepKind.AWAIT;
+            executionClassName = null;
+        } else if (remoteExecution != null) {
             kind = StepKind.REMOTE;
             executionClassName = null;
         } else if (!isBlank(delegatedClassName)) {
@@ -372,6 +400,62 @@ public class StepDefinitionParser {
                 kind,
                 null,
                 remoteExecution,
+                Map.of(),
+                null,
+                List.of(),
+                null,
+                null,
+                null,
+                MapperFallbackMode.NONE,
+                inputType,
+                outputType,
+                StreamingShape.UNARY_UNARY);
+        }
+
+        if (kind == StepKind.AWAIT) {
+            if (inboundMapper != null || outboundMapper != null || externalMapper != null || mapperFallback != MapperFallbackMode.NONE) {
+                String message = "Skipping step '" + name
+                    + "': await steps cannot declare mapper fields in this slice; use typed input/output contracts";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            if (inputType == null || outputType == null) {
+                String message = "Skipping step '" + name + "': await steps must provide input and output types";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            StreamingShape shape = parseStreamingShapeHint(stepData, name);
+            if (shape != null && shape != StreamingShape.UNARY_UNARY) {
+                String message = "Skipping step '" + name + "': await steps support only ONE_TO_ONE cardinality in this slice";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            Map<String, Object> awaitConfig = parseAwaitConfig(stepData, name);
+            if (awaitConfig == null) {
+                return null;
+            }
+            String timeout = getStringValue(stepData, "timeout");
+            if (isBlank(timeout)) {
+                String message = "Skipping step '" + name + "': await steps must declare timeout";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+            List<String> idempotencyKeyFields = parseStringList(stepData.get("idempotencyKeyFields"), name, "idempotencyKeyFields");
+            if (idempotencyKeyFields == null) {
+                return null;
+            }
+            return new StepDefinition(
+                name,
+                StepKind.AWAIT,
+                null,
+                null,
+                awaitConfig,
+                timeout,
+                idempotencyKeyFields,
                 null,
                 null,
                 null,
@@ -399,6 +483,88 @@ public class StepDefinitionParser {
             inputType,
             outputType,
             parseStreamingShapeHint(stepData, name));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> parseAwaitConfig(Map<String, Object> stepData, String stepName) {
+        Object awaitObj = stepData.get("await");
+        if (!(awaitObj instanceof Map<?, ?> awaitMap)) {
+            String message = "Skipping step '" + stepName + "': await steps must declare an await map";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
+        Object transportObj = awaitMap.get("transport");
+        if (!(transportObj instanceof Map<?, ?> transportMap) || isBlank(stringValue(transportMap.get("type")))) {
+            String message = "Skipping step '" + stepName + "': await.transport.type must be declared";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
+        Object correlationObj = awaitMap.get("correlation");
+        if (correlationObj instanceof Map<?, ?> correlationMap) {
+            String strategy = stringValue(correlationMap.get("strategy"));
+            if (isBlank(strategy)) {
+                String message = "Skipping step '" + stepName + "': await.correlation.strategy must be declared";
+                LOG.warn(message);
+                report(Diagnostic.Kind.ERROR, message);
+                return null;
+            }
+        } else if (correlationObj != null) {
+            String message = "Skipping step '" + stepName + "': await.correlation.strategy must be declared";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
+        return (Map<String, Object>) normalizeMap(awaitMap);
+    }
+
+    private List<String> parseStringList(Object value, String stepName, String fieldName) {
+        if (value == null) {
+            return List.of();
+        }
+        if (!(value instanceof Iterable<?> iterable)) {
+            String message = "Skipping step '" + stepName + "': " + fieldName + " must be a list";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
+        List<String> result = new ArrayList<>();
+        for (Object item : iterable) {
+            String text = item == null ? null : item.toString().trim();
+            if (!isBlank(text)) {
+                result.add(text);
+            }
+        }
+        return List.copyOf(result);
+    }
+
+    private Map<String, Object> normalizeMap(Map<?, ?> map) {
+        java.util.LinkedHashMap<String, Object> normalized = new java.util.LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : map.entrySet()) {
+            if (entry.getKey() != null) {
+                normalized.put(entry.getKey().toString(), normalizeValue(entry.getValue()));
+            }
+        }
+        return Map.copyOf(normalized);
+    }
+
+    private Object normalizeValue(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            return normalizeMap(map);
+        }
+        if (value instanceof Iterable<?> iterable) {
+            List<Object> normalized = new ArrayList<>();
+            for (Object item : iterable) {
+                normalized.add(normalizeValue(item));
+            }
+            return List.copyOf(normalized);
+        }
+        return value;
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : value.toString();
     }
 
     private ClassName parseOptionalStepMapper(String mapperName, String stepName, String fieldName) {

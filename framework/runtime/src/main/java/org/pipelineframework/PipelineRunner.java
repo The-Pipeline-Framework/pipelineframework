@@ -32,6 +32,8 @@ import org.pipelineframework.config.ParallelismPolicy;
 import org.pipelineframework.config.PipelineConfig;
 import org.pipelineframework.context.PipelineContext;
 import org.pipelineframework.context.PipelineContextHolder;
+import org.pipelineframework.awaitable.AwaitExecutionContext;
+import org.pipelineframework.awaitable.AwaitExecutionContextHolder;
 import org.pipelineframework.step.Configurable;
 import org.pipelineframework.step.ConfigFactory;
 import org.pipelineframework.step.StepOneToOne;
@@ -90,6 +92,18 @@ public class PipelineRunner implements AutoCloseable {
      * @throws IllegalArgumentException if {@code input} is not a Uni or a Multi
      */
     public Object run(Object input, List<Object> steps) {
+        return runFromStep(input, steps, 0);
+    }
+
+    /**
+     * Run a configured sequence starting at a specific ordered step index.
+     *
+     * @param input reactive source to process
+     * @param steps ordered or orderable step instances
+     * @param startStepIndex first ordered step index to execute
+     * @return final reactive result
+     */
+    public Object runFromStep(Object input, List<Object> steps, int startStepIndex) {
         Objects.requireNonNull(steps, "Steps list must not be null");
         if (!(input instanceof Uni<?> || input instanceof Multi<?>)) {
             throw new IllegalArgumentException(MessageFormat.format(
@@ -98,6 +112,9 @@ public class PipelineRunner implements AutoCloseable {
         }
 
         List<Object> orderedSteps = stepOrderer.orderSteps(steps);
+        if (startStepIndex < 0 || startStepIndex > orderedSteps.size()) {
+            throw new IllegalArgumentException("startStepIndex is out of range: " + startStepIndex);
+        }
 
         Object current = input;
         ParallelismPolicy parallelismPolicy = parallelismPolicyResolver.resolveParallelismPolicy(pipelineConfig);
@@ -108,10 +125,15 @@ public class PipelineRunner implements AutoCloseable {
 
         PipelineContext contextSnapshot = PipelineContextHolder.get();
         CacheReadSupport cacheReadSupport = cacheSupportFactory.buildCacheReadSupport();
-        for (Object step : orderedSteps) {
+        AwaitExecutionContext awaitContext = AwaitExecutionContextHolder.get();
+        for (int index = startStepIndex; index < orderedSteps.size(); index++) {
+            Object step = orderedSteps.get(index);
             if (step == null) {
                 logger.warn("Warning: Found null step in configuration, skipping...");
                 continue;
+            }
+            if (awaitContext != null) {
+                awaitContext.currentStepIndex(index);
             }
 
             if (step instanceof Configurable configurable) {

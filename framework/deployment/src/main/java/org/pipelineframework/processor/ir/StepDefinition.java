@@ -16,6 +16,8 @@
 
 package org.pipelineframework.processor.ir;
 
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import javax.annotation.Nullable;
 import com.squareup.javapoet.ClassName;
@@ -29,6 +31,9 @@ import org.pipelineframework.config.template.PipelineTemplateStepExecution;
  * @param kind The kind of step (INTERNAL, DELEGATED, or REMOTE)
  * @param executionClass The class that provides the execution implementation
  * @param remoteExecution remote execution metadata for REMOTE steps
+ * @param awaitConfig raw await configuration for AWAIT steps
+ * @param timeout await timeout string for AWAIT steps
+ * @param idempotencyKeyFields fields used to derive await idempotency keys
  * @param inboundMapper The inbound mapper class for internal service steps (nullable)
  * @param outboundMapper The outbound mapper class for internal service steps (nullable)
  * @param externalMapper The operator mapper class for mapping between domain and operator types (nullable)
@@ -42,6 +47,9 @@ public record StepDefinition(
         StepKind kind,
         @Nullable ClassName executionClass,
         @Nullable PipelineTemplateStepExecution remoteExecution,
+        Map<String, Object> awaitConfig,
+        @Nullable String timeout,
+        List<String> idempotencyKeyFields,
         @Nullable ClassName inboundMapper,
         @Nullable ClassName outboundMapper,
         @Nullable ClassName externalMapper,
@@ -62,8 +70,12 @@ public record StepDefinition(
     ) {
         this(
             name,
-            kind,
+            requireNonRemoteKind(kind),
             executionClass,
+            null,
+            Map.of(),
+            null,
+            List.of(),
             null,
             null,
             externalMapper,
@@ -86,8 +98,12 @@ public record StepDefinition(
     ) {
         this(
             name,
-            kind,
+            requireNonRemoteKind(kind),
             executionClass,
+            null,
+            Map.of(),
+            null,
+            List.of(),
             inboundMapper,
             outboundMapper,
             null,
@@ -114,6 +130,9 @@ public record StepDefinition(
             requireNonRemoteKind(kind),
             executionClass,
             null,
+            Map.of(),
+            null,
+            List.of(),
             inboundMapper,
             outboundMapper,
             externalMapper,
@@ -134,15 +153,23 @@ public record StepDefinition(
         }
         if (kind == StepKind.REMOTE) {
             Objects.requireNonNull(remoteExecution, "Remote execution cannot be null for REMOTE steps");
+        } else if (kind == StepKind.AWAIT) {
+            if (executionClass != null || remoteExecution != null) {
+                throw new IllegalArgumentException("AWAIT steps cannot declare executionClass or remoteExecution");
+            }
+            Objects.requireNonNull(inputType, "Input type cannot be null for AWAIT steps");
+            Objects.requireNonNull(outputType, "Output type cannot be null for AWAIT steps");
         } else {
             Objects.requireNonNull(executionClass, "Execution class cannot be null");
         }
         mapperFallback = mapperFallback == null ? MapperFallbackMode.NONE : mapperFallback;
+        awaitConfig = awaitConfig == null ? Map.of() : Map.copyOf(awaitConfig);
+        idempotencyKeyFields = idempotencyKeyFields == null ? List.of() : List.copyOf(idempotencyKeyFields);
     }
 
     private static StepKind requireNonRemoteKind(StepKind kind) {
-        if (kind == StepKind.REMOTE) {
-            throw new IllegalArgumentException("Convenience constructor cannot be used for StepKind.REMOTE; provide remoteExecution");
+        if (kind == StepKind.REMOTE || kind == StepKind.AWAIT) {
+            throw new IllegalArgumentException("Convenience constructor cannot be used for " + kind);
         }
         return kind;
     }

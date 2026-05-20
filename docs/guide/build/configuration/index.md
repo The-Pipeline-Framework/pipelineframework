@@ -206,6 +206,8 @@ Prefix: `pipeline.orchestrator`
 | `pipeline.orchestrator.queue-url` | string | none | Queue URL for external dispatcher providers. |
 | `pipeline.orchestrator.dynamo.execution-table` | string | `tpf_execution` | DynamoDB table used for execution state rows. |
 | `pipeline.orchestrator.dynamo.execution-key-table` | string | `tpf_execution_key` | DynamoDB table used for submit dedupe keys. |
+| `pipeline.orchestrator.dynamo.await-interaction-table` | string | `tpf_await_interaction` | DynamoDB table used for durable await interaction rows. |
+| `pipeline.orchestrator.dynamo.await-interaction-key-table` | string | `tpf_await_interaction_key` | DynamoDB table used for await idempotency and correlation lookup keys. |
 | `pipeline.orchestrator.dynamo.region` | string | none | Optional DynamoDB region override. |
 | `pipeline.orchestrator.dynamo.endpoint-override` | string | none | Optional DynamoDB endpoint override (local/dev). |
 | `pipeline.orchestrator.sqs.region` | string | none | Optional SQS region override. |
