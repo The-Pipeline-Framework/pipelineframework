@@ -509,17 +509,26 @@ public class StepDefinitionParser {
             report(Diagnostic.Kind.ERROR, message);
             return null;
         }
+        if ("kafka".equalsIgnoreCase(transportType) && !validateKafkaAwaitTransport(transportMap, stepName)) {
+            return null;
+        }
         Object correlationObj = awaitMap.get("correlation");
-        if (correlationObj instanceof Map<?, ?> correlationMap) {
-            String strategy = stringValue(correlationMap.get("strategy"));
-            if (isBlank(strategy)) {
-                String message = "Skipping step '" + stepName + "': await.correlation.strategy must be declared";
-                LOG.warn(message);
-                report(Diagnostic.Kind.ERROR, message);
-                return null;
-            }
-        } else if (correlationObj != null) {
-            String message = "Skipping step '" + stepName + "': await.correlation must be a map";
+        if (!(correlationObj instanceof Map<?, ?> correlationMap)) {
+            String message = "Skipping step '" + stepName + "': await.correlation.strategy must be declared";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
+        String strategy = stringValue(correlationMap.get("strategy"));
+        strategy = strategy == null ? null : strategy.trim();
+        if (isBlank(strategy)) {
+            String message = "Skipping step '" + stepName + "': await.correlation.strategy must be declared";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return null;
+        }
+        if (!"interactionId".equals(strategy) && !"signedResumeToken".equals(strategy)) {
+            String message = "Skipping step '" + stepName + "': unsupported await.correlation.strategy '" + strategy + "'";
             LOG.warn(message);
             report(Diagnostic.Kind.ERROR, message);
             return null;
@@ -537,6 +546,32 @@ public class StepDefinitionParser {
         }
         Object dispatchObj = transportMap.get("dispatch");
         return dispatchObj instanceof Map<?, ?> dispatchMap && !isBlank(stringValue(dispatchMap.get("url")));
+    }
+
+    private boolean validateKafkaAwaitTransport(Map<?, ?> transportMap, String stepName) {
+        Object requestObj = transportMap.get("request");
+        if (!(requestObj instanceof Map<?, ?> requestMap) || isBlank(stringValue(requestMap.get("topic")))) {
+            String message = "Skipping step '" + stepName + "': kafka await transport must declare request.topic";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return false;
+        }
+        String key = stringValue(requestMap.get("key"));
+        key = key == null ? null : key.trim();
+        if (!isBlank(key) && !"interactionId".equals(key) && !"correlationId".equals(key)) {
+            String message = "Skipping step '" + stepName + "': kafka await transport request.key must be interactionId or correlationId";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return false;
+        }
+        Object responseObj = transportMap.get("response");
+        if (!(responseObj instanceof Map<?, ?> responseMap) || isBlank(stringValue(responseMap.get("topic")))) {
+            String message = "Skipping step '" + stepName + "': kafka await transport must declare response.topic";
+            LOG.warn(message);
+            report(Diagnostic.Kind.ERROR, message);
+            return false;
+        }
+        return true;
     }
 
     private List<String> parseStringList(Object value, String stepName, String fieldName) {

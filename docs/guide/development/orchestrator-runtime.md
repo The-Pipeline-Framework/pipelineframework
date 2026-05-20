@@ -180,7 +180,7 @@ Failure channel split:
 
 Await steps suspend `QUEUE_ASYNC` execution at an external boundary. TPF persists the interaction, dispatches through the configured adapter, and resumes the owning execution after a correlated completion is admitted.
 
-The built-in `interaction-api` adapter is for human/UI inboxes and mock-provider style flows where another client queries pending interactions and later calls the generated completion API. The built-in `webhook` adapter dispatches an HTTP request to an external system and includes a signed resume token in the envelope.
+The built-in `interaction-api` adapter is for human/UI inboxes and mock-provider style flows where another client queries pending interactions and later calls the generated completion API. The built-in `webhook` adapter dispatches an HTTP request to an external system and includes a signed resume token in the envelope. The built-in `kafka` adapter publishes a request envelope to Kafka and admits response envelopes from a configured response channel.
 
 ```yaml
 steps:
@@ -204,7 +204,44 @@ steps:
 
 Webhook dispatch sends an envelope containing the interaction id, correlation id, resume token, deadline, request payload, tenant id, step id, output type, and callback metadata when configured. Completion is submitted through the generated REST/gRPC completion APIs; TPF validates the token before accepting the response snapshot.
 
-`pipeline.orchestrator.resume-token-secret` must be stable for the lifetime of outstanding webhook interactions. If `pipeline.orchestrator.resume-token-secret` is missing, webhook dispatch and token validation fail with a clear error rather than allowing insecure or unsigned resumptions.
+```yaml
+steps:
+  - name: "Brokered Fraud Check"
+    kind: "await"
+    cardinality: "ONE_TO_ONE"
+    input: "com.example.FraudCheckRequest"
+    output: "com.example.FraudCheckDecision"
+    timeout: "PT10M"
+    idempotencyKeyFields: ["orderId"]
+    await:
+      correlation:
+        strategy: "signedResumeToken"
+      transport:
+        type: "kafka"
+        request:
+          topic: "fraud-check.requests"
+          key: "correlationId" # optional: interactionId or correlationId
+        response:
+          topic: "fraud-check.decisions"
+        consumer:
+          group: "fraud-check-orchestrator" # optional; channel config remains authoritative
+        headers:
+          x-source: "tpf"
+```
+
+Kafka dispatch sends a framework-owned JSON envelope containing tenant id, execution id, interaction id, correlation id, step id, deadline, input/output types, resume token, request payload, and dispatch metadata. The response envelope is consumed by TPF and completed directly through `AwaitCoordinator`, not by looping back through REST. Use the generated REST/gRPC completion APIs for human/UI or webhook clients that are not broker consumers.
+
+Add the Quarkus Kafka messaging extension to the application that hosts the orchestrator, enable the default Kafka bridge with `pipeline.await.kafka.reactive-messaging.enabled=true`, then configure the SmallRye channels:
+
+```properties
+mp.messaging.outgoing.tpf-await-kafka-requests.connector=smallrye-kafka
+mp.messaging.outgoing.tpf-await-kafka-requests.value.serializer=org.apache.kafka.common.serialization.StringSerializer
+mp.messaging.incoming.tpf-await-kafka-responses.connector=smallrye-kafka
+mp.messaging.incoming.tpf-await-kafka-responses.topic=fraud-check.decisions
+mp.messaging.incoming.tpf-await-kafka-responses.value.deserializer=org.apache.kafka.common.serialization.StringDeserializer
+```
+
+`pipeline.orchestrator.resume-token-secret` must be stable for the lifetime of outstanding webhook and Kafka interactions. If `pipeline.orchestrator.resume-token-secret` is missing, signed dispatch and token validation fail with a clear error rather than allowing insecure or unsigned resumptions.
 
 Execution lifecycle (one transition per worker claim):
 

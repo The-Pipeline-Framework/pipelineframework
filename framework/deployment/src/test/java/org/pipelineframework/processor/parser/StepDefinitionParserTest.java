@@ -201,6 +201,8 @@ class StepDefinitionParserTest {
                 input: "com.example.Input"
                 output: "com.example.Output"
                 await:
+                  correlation:
+                    strategy: "interactionId"
                   transport:
                     type: "interaction-api"
             """, diagnostics);
@@ -281,6 +283,176 @@ class StepDefinitionParserTest {
     }
 
     @Test
+    void parsesKafkaAwaitStepDefinition() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Kafka Fraud Check"
+                kind: "await"
+                input: "com.example.FraudCheckRequest"
+                output: "com.example.FraudCheckDecision"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "signedResumeToken"
+                  transport:
+                    type: "kafka"
+                    request:
+                      topic: "fraud-check.requests"
+                      key: "correlationId"
+                    response:
+                      topic: "fraud-check.decisions"
+            """, diagnostics);
+
+        assertEquals(1, steps.size());
+        StepDefinition step = steps.getFirst();
+        assertEquals(StepKind.AWAIT, step.kind());
+        java.util.Map<?, ?> transport = (java.util.Map<?, ?>) step.awaitConfig().get("transport");
+        assertEquals("kafka", transport.get("type"));
+        assertEquals("fraud-check.requests", ((java.util.Map<?, ?>) transport.get("request")).get("topic"));
+        assertEquals("fraud-check.decisions", ((java.util.Map<?, ?>) transport.get("response")).get("topic"));
+        assertTrue(diagnostics.stream().noneMatch(message -> message.contains(Diagnostic.Kind.ERROR.name())));
+    }
+
+    @Test
+    void rejectsKafkaAwaitStepWithoutRequestTopic() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Kafka Missing Request Topic"
+                kind: "await"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "interactionId"
+                  transport:
+                    type: "kafka"
+                    request:
+                      key: "interactionId"
+                    response:
+                      topic: "decisions"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("request.topic")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsKafkaAwaitStepWithoutResponseTopic() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Kafka Missing Response Topic"
+                kind: "await"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "interactionId"
+                  transport:
+                    type: "kafka"
+                    request:
+                      topic: "requests"
+                    response: {}
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("response.topic")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsKafkaAwaitStepWithInvalidKeyStrategy() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Kafka Invalid Key"
+                kind: "await"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "interactionId"
+                  transport:
+                    type: "kafka"
+                    request:
+                      topic: "requests"
+                      key: "orderId"
+                    response:
+                      topic: "responses"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("request.key")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsAwaitStepWithoutCorrelationStrategy() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Missing Correlation"
+                kind: "await"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  transport:
+                    type: "interaction-api"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("await.correlation.strategy must be declared")),
+            diagnostics.toString());
+    }
+
+    @Test
+    void rejectsAwaitStepWithUnsupportedCorrelationStrategy() throws IOException {
+        List<String> diagnostics = new ArrayList<>();
+        List<StepDefinition> steps = parse("""
+            version: 2
+            appName: "Test"
+            basePackage: "com.example"
+            steps:
+              - name: "Unsupported Correlation"
+                kind: "await"
+                input: "com.example.Input"
+                output: "com.example.Output"
+                timeout: "PT10M"
+                await:
+                  correlation:
+                    strategy: "custom"
+                  transport:
+                    type: "interaction-api"
+            """, diagnostics);
+
+        assertTrue(steps.isEmpty());
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("unsupported await.correlation.strategy")),
+            diagnostics.toString());
+    }
+
+    @Test
     void rejectsAwaitStepWithNonMapCorrelation() throws IOException {
         List<String> diagnostics = new ArrayList<>();
         List<StepDefinition> steps = parse("""
@@ -300,7 +472,7 @@ class StepDefinitionParserTest {
             """, diagnostics);
 
         assertTrue(steps.isEmpty());
-        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("await.correlation must be a map")),
+        assertTrue(diagnostics.stream().anyMatch(message -> message.contains("await.correlation.strategy must be declared")),
             diagnostics.toString());
     }
 
@@ -317,6 +489,8 @@ class StepDefinitionParserTest {
                 output: "com.example.Output"
                 timeout: "PT10M"
                 await:
+                  correlation:
+                    strategy: "interactionId"
                   transport:
                     type: "webhook"
                     request:
@@ -365,6 +539,8 @@ class StepDefinitionParserTest {
                 timeout: "PT30M"
                 idempotencyKeyFields: ["orderId", "customerId", "amount"]
                 await:
+                  correlation:
+                    strategy: "interactionId"
                   transport:
                     type: "interaction-api"
             """, diagnostics);
@@ -391,6 +567,8 @@ class StepDefinitionParserTest {
                 timeout: "PT5M"
                 idempotencyKeyFields: []
                 await:
+                  correlation:
+                    strategy: "interactionId"
                   transport:
                     type: "interaction-api"
             """, diagnostics);
@@ -415,6 +593,8 @@ class StepDefinitionParserTest {
                 output: "com.example.Output"
                 timeout: "PT5M"
                 await:
+                  correlation:
+                    strategy: "interactionId"
                   transport:
                     type: "interaction-api"
             """, diagnostics);
