@@ -149,6 +149,9 @@ public class KafkaAwaitTransportAdapter implements AwaitTransportAdapter<Object>
         Map<String, String> headers
     ) {
         static KafkaConfig from(Map<String, Object> transportConfig) {
+            if (transportConfig == null) {
+                throw new IllegalArgumentException("transportConfig must not be null");
+            }
             Map<?, ?> request = requiredMap(transportConfig.get("request"), "kafka await transport requires request.topic");
             Map<?, ?> response = requiredMap(transportConfig.get("response"), "kafka await transport requires response.topic");
             String requestTopic = requiredString(request.get("topic"), "kafka await transport requires request.topic");

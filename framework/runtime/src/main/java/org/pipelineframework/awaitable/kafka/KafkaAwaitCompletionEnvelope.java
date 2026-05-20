@@ -23,7 +23,8 @@ public record KafkaAwaitCompletionEnvelope(
     String actor
 ) {
     public KafkaAwaitCompletionEnvelope {
-        if (tenantId == null || tenantId.isBlank()) {
+        tenantId = normalize(tenantId);
+        if (tenantId == null) {
             throw new IllegalArgumentException("tenantId must not be blank");
         }
         interactionId = normalize(interactionId);

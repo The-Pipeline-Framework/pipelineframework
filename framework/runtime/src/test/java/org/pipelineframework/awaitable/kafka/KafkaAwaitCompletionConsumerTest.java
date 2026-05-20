@@ -3,12 +3,14 @@ package org.pipelineframework.awaitable.kafka;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import io.smallrye.mutiny.Uni;
@@ -26,7 +28,7 @@ class KafkaAwaitCompletionConsumerTest {
 
     @Test
     void consumesCompletionEnvelopeThroughCoordinator() throws Exception {
-        AwaitCoordinator coordinator = org.mockito.Mockito.mock(AwaitCoordinator.class);
+        AwaitCoordinator coordinator = mock(AwaitCoordinator.class);
         when(coordinator.complete(any(AwaitCompletionCommand.class)))
             .thenReturn(Uni.createFrom().item(new AwaitCompletionResult(record(), false)));
         KafkaAwaitCompletionConsumer consumer = new KafkaAwaitCompletionConsumer(coordinator);
@@ -42,7 +44,8 @@ class KafkaAwaitCompletionConsumerTest {
 
         consumer.consume(message(body, acked, new AtomicReference<>()))
             .toCompletableFuture()
-            .get();
+            .orTimeout(5, TimeUnit.SECONDS)
+            .join();
 
         assertEquals(Boolean.TRUE, acked.get());
         ArgumentCaptor<AwaitCompletionCommand> captor = ArgumentCaptor.forClass(AwaitCompletionCommand.class);
@@ -57,7 +60,7 @@ class KafkaAwaitCompletionConsumerTest {
 
     @Test
     void invalidEnvelopeNacksMessage() {
-        AwaitCoordinator coordinator = org.mockito.Mockito.mock(AwaitCoordinator.class);
+        AwaitCoordinator coordinator = mock(AwaitCoordinator.class);
         KafkaAwaitCompletionConsumer consumer = new KafkaAwaitCompletionConsumer(coordinator);
         AtomicReference<Throwable> nacked = new AtomicReference<>();
 
@@ -71,7 +74,7 @@ class KafkaAwaitCompletionConsumerTest {
 
     @Test
     void coordinatorFailureNacksMessage() {
-        AwaitCoordinator coordinator = org.mockito.Mockito.mock(AwaitCoordinator.class);
+        AwaitCoordinator coordinator = mock(AwaitCoordinator.class);
         when(coordinator.complete(any(AwaitCompletionCommand.class)))
             .thenReturn(Uni.createFrom().failure(new IllegalStateException("stale")));
         KafkaAwaitCompletionConsumer consumer = new KafkaAwaitCompletionConsumer(coordinator);

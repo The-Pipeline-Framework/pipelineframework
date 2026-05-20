@@ -12,9 +12,11 @@ public record KafkaAwaitPublishRequest(
     String body
 ) {
     public KafkaAwaitPublishRequest {
-        if (topic == null || topic.isBlank()) {
+        String trimmed = topic == null ? null : topic.trim();
+        if (trimmed == null || trimmed.isBlank()) {
             throw new IllegalArgumentException("topic must not be blank");
         }
+        topic = trimmed;
         headers = headers == null ? Map.of() : Map.copyOf(headers);
     }
 }
