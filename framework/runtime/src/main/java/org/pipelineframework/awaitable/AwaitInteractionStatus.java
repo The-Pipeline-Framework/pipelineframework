@@ -5,6 +5,7 @@ package org.pipelineframework.awaitable;
  */
 public enum AwaitInteractionStatus {
     WAITING,
+    DISPATCHING,
     DISPATCHED,
     COMPLETED,
     FAILED,

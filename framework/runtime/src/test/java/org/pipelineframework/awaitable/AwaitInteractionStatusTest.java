@@ -18,6 +18,11 @@ class AwaitInteractionStatusTest {
     }
 
     @Test
+    void dispatchingIsNotTerminal() {
+        assertFalse(AwaitInteractionStatus.DISPATCHING.terminal());
+    }
+
+    @Test
     void completedIsTerminal() {
         assertTrue(AwaitInteractionStatus.COMPLETED.terminal());
     }
@@ -47,15 +52,15 @@ class AwaitInteractionStatusTest {
         long nonTerminalCount = java.util.Arrays.stream(AwaitInteractionStatus.values())
             .filter(s -> !s.terminal())
             .count();
-        // WAITING and DISPATCHED are the only non-terminal states
-        assertTrue(nonTerminalCount == 2,
-            "Expected 2 non-terminal states (WAITING, DISPATCHED), found " + nonTerminalCount);
+        // WAITING, DISPATCHING, and DISPATCHED are the only non-terminal states
+        assertTrue(nonTerminalCount == 3,
+            "Expected 3 non-terminal states (WAITING, DISPATCHING, DISPATCHED), found " + nonTerminalCount);
     }
 
     @Test
     void allEnumValuesAreDeclared() {
         AwaitInteractionStatus[] values = AwaitInteractionStatus.values();
-        assertTrue(values.length == 7,
-            "Expected 7 enum values but found " + values.length);
+        assertTrue(values.length == 8,
+            "Expected 8 enum values but found " + values.length);
     }
 }

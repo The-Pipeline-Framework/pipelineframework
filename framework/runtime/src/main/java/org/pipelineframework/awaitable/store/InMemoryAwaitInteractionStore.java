@@ -117,6 +117,17 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
     }
 
     @Override
+    public Uni<Optional<AwaitInteractionRecord>> markDispatching(
+        String tenantId,
+        String interactionId,
+        long expectedVersion,
+        long nowEpochMs) {
+        return transition(tenantId, interactionId, expectedVersion, nowEpochMs,
+            AwaitInteractionStatus.WAITING,
+            current -> updateStatus(current, AwaitInteractionStatus.DISPATCHING, nowEpochMs, null, null));
+    }
+
+    @Override
     public Uni<Optional<AwaitInteractionRecord>> markDispatched(
         String tenantId,
         String interactionId,
@@ -124,7 +135,9 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
         Map<String, Object> transportMetadata,
         long nowEpochMs) {
         Map<String, Object> safeMetadata = transportMetadata == null ? Map.of() : Map.copyOf(transportMetadata);
-        return transition(tenantId, interactionId, expectedVersion, nowEpochMs, current -> new AwaitInteractionRecord(
+        return transition(tenantId, interactionId, expectedVersion, nowEpochMs,
+            AwaitInteractionStatus.DISPATCHING,
+            current -> new AwaitInteractionRecord(
             current.tenantId(),
             current.executionId(),
             current.stepId(),
@@ -203,7 +216,7 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
         long expectedVersion,
         String reason,
         long nowEpochMs) {
-        return transition(tenantId, interactionId, expectedVersion, nowEpochMs,
+        return transition(tenantId, interactionId, expectedVersion, nowEpochMs, null,
             current -> updateStatus(current, AwaitInteractionStatus.FAILED, nowEpochMs, null, null));
     }
 
@@ -214,7 +227,7 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
         long expectedVersion,
         String reason,
         long nowEpochMs) {
-        return transition(tenantId, interactionId, expectedVersion, nowEpochMs,
+        return transition(tenantId, interactionId, expectedVersion, nowEpochMs, null,
             current -> updateStatus(current, AwaitInteractionStatus.CANCELLED, nowEpochMs, null, null));
     }
 
@@ -224,7 +237,7 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
         String interactionId,
         long expectedVersion,
         long nowEpochMs) {
-        return transition(tenantId, interactionId, expectedVersion, nowEpochMs,
+        return transition(tenantId, interactionId, expectedVersion, nowEpochMs, null,
             current -> updateStatus(current, AwaitInteractionStatus.TIMED_OUT, nowEpochMs, null, null));
     }
 
@@ -282,6 +295,7 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
         String interactionId,
         long expectedVersion,
         long nowEpochMs,
+        AwaitInteractionStatus requiredStatus,
         java.util.function.Function<AwaitInteractionRecord, AwaitInteractionRecord> transition) {
         return Uni.createFrom().item(() -> {
             synchronized (lock) {
@@ -289,6 +303,9 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
                 String scopedId = scopedInteractionId(tenantId, interactionId);
                 AwaitInteractionRecord current = interactionsByScopedId.get(scopedId);
                 if (current == null || current.version() != expectedVersion || current.status().terminal()) {
+                    return Optional.empty();
+                }
+                if (requiredStatus != null && current.status() != requiredStatus) {
                     return Optional.empty();
                 }
                 AwaitInteractionRecord updated = transition.apply(current);

@@ -60,7 +60,17 @@ public interface AwaitInteractionStore {
     Uni<Optional<AwaitInteractionRecord>> findByCorrelation(String tenantId, String correlationId);
 
     /**
-     * Marks an interaction as dispatched.
+     * Claims an interaction for dispatch. Only WAITING interactions may be claimed.
+     */
+    Uni<Optional<AwaitInteractionRecord>> markDispatching(
+        String tenantId,
+        String interactionId,
+        long expectedVersion,
+        long nowEpochMs);
+
+    /**
+     * Marks a claimed interaction as dispatched and stores adapter metadata.
+     * Only DISPATCHING interactions may be completed as dispatched.
      *
      * @param tenantId tenant id
      * @param interactionId interaction id

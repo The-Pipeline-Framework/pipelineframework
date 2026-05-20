@@ -76,11 +76,10 @@ public class AwaitCoordinator {
     public Uni<AwaitInteractionRecord> dispatch(AwaitStepDescriptor descriptor, AwaitInteractionRecord interaction) {
         AwaitTransportAdapter<Object> adapter = (AwaitTransportAdapter<Object>) adapter(descriptor.transportType());
         long nowEpochMs = System.currentTimeMillis();
-        return store().markDispatched(
+        return store().markDispatching(
                 interaction.tenantId(),
                 interaction.interactionId(),
                 interaction.version(),
-                Map.of(),
                 nowEpochMs)
             .onItem().transform(optional -> optional.orElseThrow(() ->
                 new IllegalStateException("Await interaction dispatch transition lost OCC race: "

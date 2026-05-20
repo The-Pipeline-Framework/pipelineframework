@@ -37,23 +37,54 @@ class InMemoryAwaitInteractionStoreTest {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
         var created = store.createOrGet(createCommand("idem-1", 10_000L, 70_000L)).await().indefinitely();
 
-        var stale = store.markDispatched(
+        var stale = store.markDispatching(
             "tenant",
             created.record().interactionId(),
             99L,
-            Map.of("messageId", "m-1"),
+            11_000L).await().indefinitely();
+        var claimed = store.markDispatching(
+            "tenant",
+            created.record().interactionId(),
+            created.record().version(),
             11_000L).await().indefinitely();
         var updated = store.markDispatched(
             "tenant",
             created.record().interactionId(),
-            created.record().version(),
+            claimed.orElseThrow().version(),
             Map.of("messageId", "m-1"),
-            11_000L).await().indefinitely();
+            12_000L).await().indefinitely();
 
         assertTrue(stale.isEmpty());
+        assertTrue(claimed.isPresent());
+        assertEquals(AwaitInteractionStatus.DISPATCHING, claimed.get().status());
         assertTrue(updated.isPresent());
         assertEquals(AwaitInteractionStatus.DISPATCHED, updated.get().status());
         assertEquals("m-1", updated.get().transportMetadata().get("messageId"));
+    }
+
+    @Test
+    void dispatchedInteractionCannotBeClaimedAgain() {
+        InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
+        var created = store.createOrGet(createCommand("idem-1", 10_000L, 70_000L)).await().indefinitely();
+        var claimed = store.markDispatching(
+            "tenant",
+            created.record().interactionId(),
+            created.record().version(),
+            11_000L).await().indefinitely().orElseThrow();
+        var dispatched = store.markDispatched(
+            "tenant",
+            created.record().interactionId(),
+            claimed.version(),
+            Map.of("messageId", "m-1"),
+            12_000L).await().indefinitely().orElseThrow();
+
+        var duplicateClaim = store.markDispatching(
+            "tenant",
+            created.record().interactionId(),
+            dispatched.version(),
+            13_000L).await().indefinitely();
+
+        assertTrue(duplicateClaim.isEmpty());
     }
 
     @Test
@@ -392,12 +423,15 @@ class InMemoryAwaitInteractionStoreTest {
         var created = store.createOrGet(createCommand("idem-1", 10_000L, 70_000L)).await().indefinitely();
         assertEquals(0L, created.record().version());
 
+        var claimed = store.markDispatching(
+            "tenant", created.record().interactionId(), 0L, 11_000L)
+            .await().indefinitely().orElseThrow();
         var dispatched = store.markDispatched(
-            "tenant", created.record().interactionId(), 0L, Map.of(), 11_000L)
+            "tenant", created.record().interactionId(), claimed.version(), Map.of(), 12_000L)
             .await().indefinitely();
 
         assertTrue(dispatched.isPresent());
-        assertEquals(1L, dispatched.get().version());
+        assertEquals(2L, dispatched.get().version());
     }
 
     private AwaitCreateCommand createCommand(String idempotencyKey, long nowEpochMs, long deadlineEpochMs) {
