@@ -502,6 +502,7 @@ public class StepDefinitionParser {
             return null;
         }
         String transportType = stringValue(transportMap.get("type"));
+        transportType = transportType == null ? null : transportType.trim();
         if ("webhook".equalsIgnoreCase(transportType) && !hasWebhookUrl(transportMap)) {
             String message = "Skipping step '" + stepName + "': webhook await transport must declare a URL in one of: url, request.url, or dispatch.url";
             LOG.warn(message);
