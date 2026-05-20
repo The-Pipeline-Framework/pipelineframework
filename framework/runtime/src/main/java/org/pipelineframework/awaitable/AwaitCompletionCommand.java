@@ -16,7 +16,9 @@ public record AwaitCompletionCommand(
         if (tenantId == null || tenantId.isBlank()) {
             throw new IllegalArgumentException("tenantId must not be blank");
         }
-        if ((interactionId == null || interactionId.isBlank()) && (correlationId == null || correlationId.isBlank())) {
+        interactionId = normalizeOptionalIdentifier(interactionId);
+        correlationId = normalizeOptionalIdentifier(correlationId);
+        if (interactionId == null && correlationId == null) {
             throw new IllegalArgumentException("interactionId or correlationId must be supplied");
         }
         if (idempotencyKey == null || idempotencyKey.isBlank()) {
@@ -25,5 +27,12 @@ public record AwaitCompletionCommand(
         if (nowEpochMs <= 0) {
             nowEpochMs = System.currentTimeMillis();
         }
+    }
+
+    private static String normalizeOptionalIdentifier(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 }

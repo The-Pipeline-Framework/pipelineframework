@@ -24,6 +24,9 @@ public class AwaitStepSupport {
      */
     @SuppressWarnings("unchecked")
     public <I, O> Uni<O> awaitOneToOne(AwaitStepDescriptor descriptor, I input) {
+        if (descriptor == null) {
+            throw new IllegalArgumentException("descriptor must not be null");
+        }
         if (orchestratorConfig.mode() != OrchestratorMode.QUEUE_ASYNC) {
             return Uni.createFrom().failure(new IllegalStateException(
                 "Await steps require pipeline.orchestrator.mode=QUEUE_ASYNC."));
@@ -61,6 +64,9 @@ public class AwaitStepSupport {
      * Resolves an await descriptor reactively before creating/dispatching the await interaction.
      */
     public <I, O> Uni<O> awaitOneToOne(Uni<AwaitStepDescriptor> descriptor, I input) {
+        if (descriptor == null) {
+            throw new IllegalArgumentException("descriptor must not be null");
+        }
         return descriptor.onItem().transformToUni(resolved -> awaitOneToOne(resolved, input));
     }
 }

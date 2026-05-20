@@ -148,5 +148,14 @@ class AwaitCreateCommandTest {
 
         assertTrue(command.nowEpochMs() >= before);
         assertTrue(command.nowEpochMs() <= after);
+
+        before = System.currentTimeMillis();
+        AwaitCreateCommand negativeNowCommand = new AwaitCreateCommand(
+            "tenant1", "exec-1", "step-1", 0, "Out.class",
+            "cause", "idem", "corr", null, null, null, "webhook", -1L, futureDeadline, Long.MAX_VALUE);
+        after = System.currentTimeMillis();
+
+        assertTrue(negativeNowCommand.nowEpochMs() >= before);
+        assertTrue(negativeNowCommand.nowEpochMs() <= after);
     }
 }

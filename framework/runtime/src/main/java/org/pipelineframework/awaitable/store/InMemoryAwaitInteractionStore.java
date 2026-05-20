@@ -26,6 +26,11 @@ import org.pipelineframework.awaitable.spi.AwaitInteractionStore;
 @ApplicationScoped
 public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
 
+    private static final Comparator<AwaitInteractionRecord> PENDING_ORDER =
+        Comparator.comparingLong(AwaitInteractionRecord::deadlineEpochMs)
+            .thenComparingLong(AwaitInteractionRecord::createdAtEpochMs)
+            .thenComparing(AwaitInteractionRecord::interactionId);
+
     private final Object lock = new Object();
     private final Map<String, AwaitInteractionRecord> interactionsByScopedId = new HashMap<>();
     private final Map<String, String> interactionIdByScopedIdempotencyKey = new HashMap<>();
@@ -231,7 +236,7 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
                 List<AwaitInteractionRecord> records = interactionsByScopedId.values().stream()
                     .filter(record -> !record.status().terminal())
                     .filter(record -> record.deadlineEpochMs() <= nowEpochMs)
-                    .sorted(Comparator.comparingLong(AwaitInteractionRecord::deadlineEpochMs))
+                    .sorted(PENDING_ORDER)
                     .limit(Math.max(0, limit))
                     .toList();
                 return List.copyOf(records);
@@ -266,7 +271,7 @@ public class InMemoryAwaitInteractionStore implements AwaitInteractionStore {
                     }
                     records.add(record);
                 }
-                records.sort(Comparator.comparingLong(AwaitInteractionRecord::deadlineEpochMs));
+                records.sort(PENDING_ORDER);
                 return List.copyOf(records.subList(0, Math.min(records.size(), Math.max(0, limit))));
             }
         });

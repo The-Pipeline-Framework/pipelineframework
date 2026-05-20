@@ -531,8 +531,9 @@ public class StepDefinitionParser {
         }
         List<String> result = new ArrayList<>();
         for (Object item : iterable) {
-            if (item != null && !item.toString().isBlank()) {
-                result.add(item.toString());
+            String text = item == null ? null : item.toString().trim();
+            if (!isBlank(text)) {
+                result.add(text);
             }
         }
         return List.copyOf(result);

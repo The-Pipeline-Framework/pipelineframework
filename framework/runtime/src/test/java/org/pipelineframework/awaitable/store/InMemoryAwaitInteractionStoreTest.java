@@ -349,7 +349,7 @@ class InMemoryAwaitInteractionStoreTest {
     void completionThrowsWhenNoMatchFound() {
         InMemoryAwaitInteractionStore store = new InMemoryAwaitInteractionStore();
 
-        assertThrows(Exception.class, () -> store.complete(new AwaitCompletionCommand(
+        assertThrows(IllegalArgumentException.class, () -> store.complete(new AwaitCompletionCommand(
             "tenant", "nonexistent-id", null, "completion-1", null, null, 12_000L))
             .await().indefinitely());
     }
@@ -362,7 +362,7 @@ class InMemoryAwaitInteractionStoreTest {
         store.cancel("tenant", created.record().interactionId(), 0L, "cancelled", 15_000L)
             .await().indefinitely();
 
-        assertThrows(Exception.class, () -> store.complete(new AwaitCompletionCommand(
+        assertThrows(IllegalStateException.class, () -> store.complete(new AwaitCompletionCommand(
             "tenant", created.record().interactionId(), null, "completion-1", "result", "alice", 16_000L))
             .await().indefinitely());
     }
