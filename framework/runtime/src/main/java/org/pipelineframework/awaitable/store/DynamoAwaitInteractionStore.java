@@ -118,6 +118,24 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
     }
 
     @Override
+    public Uni<Optional<AwaitInteractionRecord>> markDispatching(
+        String tenantId,
+        String interactionId,
+        long expectedVersion,
+        long nowEpochMs) {
+        return blocking(() -> transitionStatus(
+            tenantId,
+            interactionId,
+            expectedVersion,
+            AwaitInteractionStatus.WAITING,
+            AwaitInteractionStatus.DISPATCHING,
+            null,
+            null,
+            null,
+            nowEpochMs));
+    }
+
+    @Override
     public Uni<Optional<AwaitInteractionRecord>> markDispatched(
         String tenantId,
         String interactionId,
@@ -128,6 +146,7 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
             tenantId,
             interactionId,
             expectedVersion,
+            AwaitInteractionStatus.DISPATCHING,
             AwaitInteractionStatus.DISPATCHED,
             null,
             null,
@@ -461,6 +480,28 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         String actor,
         Map<String, Object> transportMetadata,
         long nowEpochMs) {
+        return transitionStatus(
+            tenantId,
+            interactionId,
+            expectedVersion,
+            null,
+            status,
+            responsePayload,
+            actor,
+            transportMetadata,
+            nowEpochMs);
+    }
+
+    private Optional<AwaitInteractionRecord> transitionStatus(
+        String tenantId,
+        String interactionId,
+        long expectedVersion,
+        AwaitInteractionStatus requiredStatus,
+        AwaitInteractionStatus status,
+        Object responsePayload,
+        String actor,
+        Map<String, Object> transportMetadata,
+        long nowEpochMs) {
         Map<String, String> names = new HashMap<>();
         names.put("#version", VERSION);
         names.put("#status", STATUS);
@@ -475,6 +516,9 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         values.put(":one", avN(1));
         values.put(":now", avN(nowEpochMs));
         values.put(":nowSec", avN(Instant.ofEpochMilli(nowEpochMs).getEpochSecond()));
+        if (requiredStatus != null) {
+            values.put(":requiredStatus", avS(requiredStatus.name()));
+        }
         if (responsePayload != null) {
             values.put(":response", avS(toJson(responsePayload)));
         }
@@ -494,11 +538,15 @@ public class DynamoAwaitInteractionStore implements AwaitInteractionStore {
         if (transportMetadata != null) {
             update.append(", #metadata = :metadata");
         }
+        String condition = "#version = :expected AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)";
+        if (requiredStatus != null) {
+            condition = "#version = :expected AND #status = :requiredStatus AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)";
+        }
         try {
             Map<String, AttributeValue> attributes = dynamoClient().updateItem(UpdateItemRequest.builder()
                 .tableName(interactionTable())
                 .key(primaryKey(tenantId, interactionId))
-                .conditionExpression("#version = :expected AND (attribute_not_exists(#ttl) OR #ttl > :nowSec)")
+                .conditionExpression(condition)
                 .updateExpression(update.toString())
                 .expressionAttributeNames(names)
                 .expressionAttributeValues(values)
